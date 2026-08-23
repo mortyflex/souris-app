@@ -8,7 +8,7 @@ export function useColorScheme() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
-    setHasHydrated(true);
+    setHasHydrated(true); // eslint-disable-line react-hooks/set-state-in-effect
   }, []);
 
   const colorScheme = useRNColorScheme();

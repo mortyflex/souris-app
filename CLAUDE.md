@@ -197,8 +197,8 @@ Souris uses a pragmatic feature-first architecture with an explicit framework-in
 Target direction:
 
 ```text
-app/
 src/
+├── app/
 ├── domain/
 ├── features/
 ├── shared/
@@ -209,7 +209,7 @@ src/
 └── config/
 ```
 
-Expo Router owns application routes under `app/`.
+Expo Router owns application routes under `src/app/`.
 
 Do not create every folder immediately.
 
@@ -218,10 +218,10 @@ Create architectural folders only when an actual feature requires them.
 Dependency direction:
 
 ```text
-app
- ↓
+src/app
+  ↓
 features
- ↓
+  ↓
 domain
 ```
 

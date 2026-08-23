@@ -127,10 +127,10 @@ If you discover an unrelated concern:
 Respect the dependency direction:
 
 ```text
-app
- ↓
+src/app
+  ↓
 features
- ↓
+  ↓
 domain
 ```
 

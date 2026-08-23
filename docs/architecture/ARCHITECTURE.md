@@ -43,8 +43,8 @@ Larger displays and foldables may be supported progressively.
 The intended direction is:
 
 ```text
-app/
 src/
+├── app/
 ├── domain/
 ├── features/
 ├── shared/
@@ -69,7 +69,7 @@ Create folders when real code requires them.
 Expo Router owns route definitions under:
 
 ```text
-app/
+src/app/
 ```
 
 Route files should remain thin.
@@ -254,10 +254,10 @@ Do not move business rules into configuration merely to avoid domain code.
 Preferred direction:
 
 ```text
-app
- ↓
+src/app
+  ↓
 features
- ↓
+  ↓
 domain
 ```
 
@@ -267,7 +267,7 @@ The domain must never depend upward on:
 
 ```text
 features
-app
+src/app
 React Native UI
 ```
 
