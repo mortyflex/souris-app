@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Souris — Rayons & ombres</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<link rel="stylesheet" href="preview.css" />
+<style>
+  .rg{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-top:16px; }
+  .rg__i{ text-align:center; }
+  .rg__b{ height:92px; background:var(--lav-050); border:1px solid var(--lav-200); }
+  .rg__n{ font-size:13.5px; font-weight:600; margin-top:10px; }
+  .rg__v{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .rg__u{ font-size:12.5px; color:var(--fg-soft); margin-top:5px; line-height:1.45; }
+  .sh{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:22px; margin-top:20px; }
+  .sh__b{ height:104px; background:var(--bg); border-radius:var(--r-lg); display:grid; place-items:center;
+    font-size:13px; color:var(--fg-soft); }
+  .sh__n{ font-size:13.5px; font-weight:600; margin-top:14px; }
+  .sh__v{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--muted); margin-top:3px; line-height:1.5; word-break:break-all; }
+  .plat{ display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:18px; margin-top:16px; }
+  .plat__i{ border:1px solid var(--border); border-radius:var(--r); padding:18px; background:var(--bg); }
+  .plat__k{ font-size:11.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-soft); margin-bottom:12px; }
+  .plat__row{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+</style>
+</head>
+<body class="pv">
+<div class="pv__wrap">
+  <a class="btn btn--quiet pv__back" href="index.html">Toutes les cartes</a>
+  <p class="pv__eyebrow">Forme</p>
+  <h1 class="pv__h">Rayons &amp; ombres</h1>
+  <p class="pv__lede">Trois rayons, trois ombres. Les ombres sont teintées navy et volontairement au bord du
+     visible : rien ne flotte sans raison, et aucune ombre n’est noire.</p>
+  <p class="pv__src">Source : <code>--r</code>, <code>--r-lg</code>, <code>--r-pill</code>, <code>--shadow-*</code> de <code>assets/souris.css</code> → <code>tokens.css</code></p>
+
+  <section class="pv__sec">
+    <h2>Rayons</h2>
+    <div class="rg">
+      <div class="rg__i"><div class="rg__b" style="border-radius:8px"></div>
+        <div class="rg__n">Défaut</div><div class="rg__v">--r · 8 px</div>
+        <div class="rg__u">Bouton, champ, puce, événement, pastille d’icône.</div></div>
+      <div class="rg__i"><div class="rg__b" style="border-radius:16px 16px 0 0"></div>
+        <div class="rg__n">Feuille iOS</div><div class="rg__v">--r-lg · 16 px</div>
+        <div class="rg__u">Uniquement en haut : la feuille est ancrée au bas de l’écran.</div></div>
+      <div class="rg__i"><div class="rg__b" style="border-radius:999px"></div>
+        <div class="rg__n">Pilule</div><div class="rg__v">--r-pill · 999 px</div>
+        <div class="rg__u">Avatar, FAB iOS, point de puce, poignée, indicateur.</div></div>
+    </div>
+    <p class="pv__note">Sur Android, <code class="pv__mono">--r</code> passe à 12 px, <code class="pv__mono">--r-lg</code> à 28 px, le FAB à 16 px et les
+      boutons deviennent des pilules — par convention Material, pas par goût.</p>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Ombres</h2>
+    <div class="sh">
+      <div><div class="sh__b" style="box-shadow:var(--shadow-raise)">Élévation légère</div>
+        <div class="sh__n">--shadow-raise</div>
+        <div class="sh__v">0 1px 2px oklch(.25 .06 285 / .10), 0 6px 16px −10px oklch(.25 .06 285 / .28)</div>
+        <p class="pv__note">Onglet segmenté sélectionné, toast, seconde cliente placée pendant une pose.</p></div>
+      <div><div class="sh__b" style="box-shadow:var(--shadow-sheet)">Feuille modale</div>
+        <div class="sh__n">--shadow-sheet</div>
+        <div class="sh__v">0 −1px 0 var(--border), 0 −12px 32px −18px oklch(.25 .06 285 / .35)</div>
+        <p class="pv__note">Ombre dirigée vers le haut : la feuille monte depuis le bas de l’écran.</p></div>
+      <div><div class="sh__b" style="box-shadow:var(--shadow-fab)">FAB</div>
+        <div class="sh__n">--shadow-fab</div>
+        <div class="sh__v">0 4px 14px −4px oklch(.46 .14 300 / .5)</div>
+        <p class="pv__note">Teintée lavande, pas grise : l’ombre appartient au bouton qui la porte.</p></div>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Deux plateformes, un seul jeu de tokens</h2>
+    <p>L’adaptation Android est un simple basculement de <code class="pv__mono">body[data-platform="android"]</code>. Aucune feuille de style séparée.</p>
+    <div class="plat">
+      <div class="plat__i"><div class="plat__k">iOS — 44 px · rayon 8</div>
+        <div class="plat__row">
+          <button class="btn btn--primary" type="button">Créer le rendez-vous</button>
+          <span class="chip chip--lav">Confirmé</span>
+        </div></div>
+      <div class="plat__i" data-platform="android" style="--tap:48px;--r:12px"><div class="plat__k">Android — 48 dp · rayon 12</div>
+        <div class="plat__row">
+          <button class="btn btn--ghost" type="button" style="border-radius:999px;font-weight:500">Créer le rendez-vous</button>
+          <span class="chip chip--lav" style="border-radius:8px">Confirmé</span>
+        </div></div>
+    </div>
+    <p class="pv__note">Le bouton Android est montré en variante fantôme : une carte de revue n’affiche pas
+      deux boutons pleins pour la même action.</p>
+  </section>
+</div>
+</body>
+</html>

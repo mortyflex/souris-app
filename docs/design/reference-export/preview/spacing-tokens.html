@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Souris — Espacement & grille</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<link rel="stylesheet" href="preview.css" />
+<style>
+  .st{ display:flex; align-items:center; gap:16px; padding:10px 0; border-bottom:1px solid var(--border); }
+  .st:last-child{ border-bottom:0; }
+  .st__bar{ height:16px; background:var(--lav-200); border-radius:3px; flex:0 0 auto; }
+  .st__k{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--muted); flex:0 0 118px; }
+  .st__u{ font-size:13px; color:var(--fg-soft); }
+  .tap{ display:flex; flex-wrap:wrap; gap:20px; align-items:flex-end; margin-top:16px; }
+  .tap__i{ text-align:center; }
+  .tap__box{ border:1px dashed var(--accent); border-radius:var(--r); display:grid; place-items:center;
+    background:var(--lav-025); }
+  .tap__l{ font-size:12px; color:var(--fg-soft); margin-top:8px; }
+  .hour{ position:relative; border:1px solid var(--border); border-radius:var(--r); overflow:hidden; margin-top:16px;
+    background:var(--bg); }
+  .hour__h{ position:relative; height:68px; border-top:1px solid var(--border); }
+  .hour__h:first-child{ border-top:0; }
+  .hour__l{ position:absolute; left:12px; top:-9px; font-size:12px; font-weight:600; color:var(--fg-soft);
+    background:var(--bg); padding:0 4px; font-variant-numeric:tabular-nums; }
+  .hour__m{ position:absolute; right:12px; top:24px; font-size:12px; color:var(--muted); }
+  .gut{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin-top:16px; }
+  .gut__i{ border:1px solid var(--border); border-radius:var(--r); background:var(--bg); overflow:hidden; }
+  .gut__k{ font-size:11.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-soft);
+    padding:12px 14px 8px; }
+  .gut__v{ background:var(--lav-025); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+  .gut__c{ background:var(--bg); border-inline:1px dashed var(--lav-200); padding:14px 0; text-align:center;
+    font-size:13px; color:var(--fg-soft); }
+</style>
+</head>
+<body class="pv">
+<div class="pv__wrap">
+  <a class="btn btn--quiet pv__back" href="index.html">Toutes les cartes</a>
+  <p class="pv__eyebrow">Espacement</p>
+  <h1 class="pv__h">Rythme de 8 pixels</h1>
+  <p class="pv__lede">Toute la mise en page est calée sur un multiple de 8. Deux exceptions assumées et
+     mesurées : la gouttière de 20 px sur iOS, et l’heure d’agenda à 68 px.</p>
+  <p class="pv__src">Source : <code>assets/souris.css</code> (<code>--r</code>, <code>--tap</code>, <code>.pad</code>, <code>.grp</code>, <code>PX = 68</code> dans <code>assets/agenda-view.js</code>) → <code>tokens.css</code></p>
+
+  <section class="pv__sec">
+    <h2>Échelle</h2>
+    <div class="pv__panel" style="padding-top:8px;padding-bottom:8px">
+      <div class="st"><span class="st__k">--sp-1</span><span class="st__bar" style="width:4px"></span><span class="st__u">4 px — écart d’icône, décalage de méta</span></div>
+      <div class="st"><span class="st__k">--sp-2</span><span class="st__bar" style="width:8px"></span><span class="st__u">8 px — écart de bouton, bas de groupe</span></div>
+      <div class="st"><span class="st__k">--sp-3</span><span class="st__bar" style="width:12px"></span><span class="st__u">12 px — pied de feuille, colonnes de champ</span></div>
+      <div class="st"><span class="st__k">--sp-4</span><span class="st__bar" style="width:16px"></span><span class="st__u">16 px — gouttière Android, premier groupe</span></div>
+      <div class="st"><span class="st__k">--sp-5</span><span class="st__bar" style="width:20px"></span><span class="st__u">20 px — gouttière iOS <code class="pv__mono">.pad</code></span></div>
+      <div class="st"><span class="st__k">--sp-6</span><span class="st__bar" style="width:24px"></span><span class="st__u">24 px — marge de bas d’onboarding</span></div>
+      <div class="st"><span class="st__k">--sp-7</span><span class="st__bar" style="width:28px"></span><span class="st__u">28 px — respiration entre groupes de liste</span></div>
+      <div class="st"><span class="st__k">--sp-8</span><span class="st__bar" style="width:32px"></span><span class="st__u">32 px — séparation de sections longues</span></div>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Gouttières</h2>
+    <div class="gut">
+      <div class="gut__i"><div class="gut__k">iOS — 20 px</div>
+        <div class="gut__v" style="padding:0 20px"><div class="gut__c">contenu</div></div></div>
+      <div class="gut__i"><div class="gut__k">Android — 16 px</div>
+        <div class="gut__v" style="padding:0 16px"><div class="gut__c">contenu</div></div></div>
+    </div>
+    <p class="pv__note">Bas du contenu défilant : 104 px sur iOS, 128 px sur Android, pour dégager la barre
+      d’onglets et le FAB. Un contenu qui passe sous le FAB est un défaut, pas un détail.</p>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Cibles tactiles</h2>
+    <p>Le token <code class="pv__mono">--tap</code> pilote la hauteur des boutons, des boutons icônes, des champs, des jours du
+       bandeau et des onglets. Il bascule à 48 px sur Android.</p>
+    <div class="tap">
+      <div class="tap__i"><div class="tap__box" style="width:44px;height:44px"><span class="pv__mono">44</span></div>
+        <div class="tap__l">iOS — minimum</div></div>
+      <div class="tap__i"><div class="tap__box" style="width:48px;height:48px"><span class="pv__mono">48</span></div>
+        <div class="tap__l">Android — minimum</div></div>
+      <div class="tap__i"><div class="tap__box" style="width:56px;height:56px"><span class="pv__mono">56</span></div>
+        <div class="tap__l">FAB</div></div>
+      <div class="tap__i"><div class="tap__box" style="width:60px;height:60px"><span class="pv__mono">60</span></div>
+        <div class="tap__l">Ligne de liste</div></div>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>La grille de l’Agenda</h2>
+    <p>Journée affichée de 8 h à 20 h. Une heure vaut exactement 68 px, la colonne des heures 62 px.
+       C’est cette constante qui rend la journée lisible d’un coup d’œil.</p>
+    <div class="hour">
+      <div class="hour__h"><span class="hour__l">10 h</span><span class="hour__m">68 px</span></div>
+      <div class="hour__h"><span class="hour__l">11 h</span><span class="hour__m">68 px</span></div>
+      <div class="hour__h"><span class="hour__l">12 h</span><span class="hour__m">68 px</span></div>
+    </div>
+    <p class="pv__note">Une prestation de 45 min occupe 51 px : au-dessous de 34 px de hauteur utile, l’événement
+      bascule sur la variante compacte <code class="pv__mono">.ev--sm</code>.</p>
+  </section>
+</div>
+</body>
+</html>

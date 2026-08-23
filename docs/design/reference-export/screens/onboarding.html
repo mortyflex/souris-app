@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Souris — Bienvenue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<style>
+  .ob{ display:flex; flex-direction:column; height:100%; background:var(--bg); }
+  .ob__top{ display:flex; justify-content:flex-end; align-items:center; padding:8px 12px 0; min-height:52px; }
+  .ob__stage{ flex:1 1 auto; position:relative; overflow:hidden; }
+  .ob__panel{
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    padding:0 28px; opacity:0; transform:translateY(10px);
+    transition:opacity .34s ease, transform .34s cubic-bezier(.32,.72,0,1);
+    pointer-events:none; visibility:hidden;
+  }
+  .ob__panel[data-on="true"]{ opacity:1; transform:none; pointer-events:auto; visibility:visible; }
+  .ob__panel[hidden]{ display:none; }
+  .ob__art{ flex:1 1 auto; display:flex; align-items:center; justify-content:center; min-height:0; padding:8px 0 20px; }
+  .ob__copy{ flex:0 0 auto; padding-bottom:20px; }
+  .ob__eyebrow{ font-size:12px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); }
+  .ob__h{ font-size:31px; line-height:1.1; letter-spacing:-0.032em; margin-top:10px; }
+  .ob__p{ font-size:15px; line-height:1.5; color:var(--fg-soft); margin-top:10px; max-width:30ch; }
+  .ob__foot{ flex:0 0 auto; padding:0 28px calc(24px + var(--safe-b)); display:flex; align-items:center; gap:16px; }
+  .dots{ display:flex; gap:6px; flex:0 0 auto; }
+  .dot{ width:7px; height:7px; border-radius:var(--r-pill); background:var(--border); transition:background-color .25s ease, width .25s ease; }
+  .dot[data-on="true"]{ background:var(--accent); width:20px; }
+
+  /* Aperçu d'agenda — écran 1 */
+  .mini{ width:100%; max-width:280px; }
+  .mini__row{ display:flex; gap:12px; align-items:flex-start; padding:0 0 3px; }
+  .mini__t{ flex:0 0 40px; text-align:right; font-size:11px; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums; padding-top:8px; }
+  .mini__ev{ flex:1 1 auto; border-radius:var(--r); border:1px solid var(--lav-200); background:var(--lav-050);
+    padding:9px 12px; position:relative; overflow:hidden; }
+  .mini__ev::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent); }
+  .mini__ev--rose{ border-color:var(--rose-200); background:var(--rose-050); }
+  .mini__ev--rose::before{ background:var(--rose-600); }
+  .mini__ev--peach{ border-color:var(--peach-200); background:var(--peach-050); }
+  .mini__ev--peach::before{ background:var(--peach-700); }
+  .mini__n{ font-size:13.5px; font-weight:700; letter-spacing:-0.012em; }
+  .mini__s{ font-size:12px; color:var(--fg-soft); margin-top:1px; }
+  .mini__line{ height:1px; background:var(--border); margin:6px 0 9px 52px; }
+
+  /* Démonstration du temps de pose — écran 2 */
+  .demo{ width:100%; max-width:290px; position:relative; }
+  .demo__col{ position:relative; height:246px; }
+  .demo__block{ position:absolute; border-radius:var(--r); border:1px solid var(--rose-200); background:var(--rose-050);
+    left:44px; right:0; padding:9px 12px; overflow:hidden; }
+  .demo__block::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--rose-600); }
+  .demo__pose{ position:absolute; left:3px; right:0;
+    background:repeating-linear-gradient(135deg, oklch(0.90 0.062 62 / .55) 0 6px, oklch(0.975 0.018 62 / .55) 6px 12px);
+    border-top:1px dashed var(--peach-200); border-bottom:1px dashed var(--peach-200); }
+  .demo__second{ position:absolute; left:150px; right:-6px; border-radius:var(--r);
+    border:1px solid var(--peach-200); background:var(--peach-050); padding:8px 10px; overflow:hidden;
+    box-shadow:var(--shadow-raise); }
+  .demo__second::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--peach-700); }
+  .demo__t{ position:absolute; left:0; width:36px; text-align:right; font-size:11px; font-weight:600;
+    color:var(--muted); font-variant-numeric:tabular-nums; }
+  .demo__cap{ font-size:11px; font-weight:700; letter-spacing:.055em; text-transform:uppercase; color:var(--peach-700); }
+  .demo__n{ font-size:13px; font-weight:700; letter-spacing:-0.012em; }
+  .demo__s{ font-size:11.5px; color:var(--fg-soft); margin-top:1px; }
+
+  /* Trois zones — écran 3 */
+  .zones{ width:100%; max-width:280px; }
+  .zone{ display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid var(--border); }
+  .zone:last-child{ border-bottom:0; }
+  .zone__i{ flex:0 0 auto; width:38px; height:38px; border-radius:var(--r); display:grid; place-items:center;
+    background:var(--lav-050); color:var(--accent); }
+  .zone__i svg{ width:20px; height:20px; }
+  .zone__n{ font-size:15px; font-weight:600; letter-spacing:-0.011em; }
+  .zone__d{ font-size:12.5px; color:var(--fg-soft); margin-top:1px; }
+</style>
+</head>
+<body>
+<div class="ob" data-od-id="screen-onboarding">
+
+  <div class="ob__top">
+    <a class="btn btn--quiet" href="agenda.html" id="skip" data-od-id="onboarding-skip">Passer</a>
+  </div>
+
+  <div class="ob__stage" id="stage">
+
+    <section class="ob__panel" data-on="true" data-step="0" aria-label="Écran 1 sur 3" data-od-id="onboarding-1">
+      <div class="ob__art">
+        <div class="mini" aria-hidden="true">
+          <div class="mini__row"><span class="mini__t">09:00</span>
+            <div class="mini__ev"><div class="mini__n">Léa Marchand</div><div class="mini__s">Coupe + brushing</div></div></div>
+          <div class="mini__line"></div>
+          <div class="mini__row"><span class="mini__t">10:30</span>
+            <div class="mini__ev mini__ev--rose"><div class="mini__n">Inès Ferrand</div><div class="mini__s">Coloration racines</div></div></div>
+          <div class="mini__line"></div>
+          <div class="mini__row"><span class="mini__t">14:00</span>
+            <div class="mini__ev mini__ev--peach"><div class="mini__n">Sofia Benali</div><div class="mini__s">Balayage + soin</div></div></div>
+        </div>
+      </div>
+      <div class="ob__copy">
+        <img src="../logo-mark.png" alt="Souris" width="46" height="46"
+             style="display:block;margin-bottom:14px;mix-blend-mode:multiply" />
+        <h1 class="ob__h">Votre journée,<br />plus légère.</h1>
+        <p class="ob__p">Souris réunit l’essentiel de votre activité, en commençant par votre agenda.</p>
+      </div>
+    </section>
+
+    <section class="ob__panel" data-step="1" aria-label="Écran 2 sur 3" data-od-id="onboarding-2" hidden>
+      <div class="ob__art">
+        <div class="demo" aria-hidden="true">
+          <div class="demo__col">
+            <span class="demo__t" style="top:-6px">10:30</span>
+            <span class="demo__t" style="top:59px">11:15</span>
+            <span class="demo__t" style="top:145px">12:15</span>
+            <div class="demo__block" style="top:0;height:216px">
+              <span class="demo__pose" style="top:65px;height:86px"></span>
+              <div style="position:relative">
+                <div class="demo__n">Inès Ferrand</div>
+                <div class="demo__s">Coloration racines</div>
+              </div>
+              <div style="position:absolute;left:14px;top:72px;right:12px">
+                <span class="demo__cap">Temps de pose</span>
+                <div class="demo__s" style="color:var(--peach-700);font-weight:600">Vous êtes libre 1 h</div>
+              </div>
+            </div>
+            <div class="demo__second" style="top:86px;height:65px">
+              <div class="demo__n">Camille Roy</div>
+              <div class="demo__s">Coupe enfant · 45 min</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ob__copy">
+        <p class="ob__eyebrow">Temps de pose</p>
+        <h2 class="ob__h">Voyez votre temps autrement.</h2>
+        <p class="ob__p">Pendant une pose, votre cliente reste en rendez-vous et vous restez libre. Placez-y une autre cliente.</p>
+      </div>
+    </section>
+
+    <section class="ob__panel" data-step="2" aria-label="Écran 3 sur 3" data-od-id="onboarding-3" hidden>
+      <div class="ob__art">
+        <div class="zones" id="zones" aria-hidden="true"></div>
+      </div>
+      <div class="ob__copy">
+        <h2 class="ob__h">Votre activité.<br />Sans la lourdeur.</h2>
+        <p class="ob__p">Trois zones, et rien de plus. Le reste attend sagement dans « Plus ».</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="ob__foot">
+    <div class="dots" id="dots" aria-hidden="true">
+      <span class="dot" data-on="true"></span><span class="dot"></span><span class="dot"></span>
+    </div>
+    <button class="btn btn--primary" type="button" id="next" style="flex:1" data-od-id="onboarding-cta">Continuer</button>
+  </div>
+  <p class="sr-only" id="live" role="status" aria-live="polite">Écran 1 sur 3</p>
+</div>
+
+<script src="../assets/souris.js"></script>
+<script>
+(function () {
+  var I = Souris.icon;
+  document.getElementById('zones').innerHTML = [
+    ['agenda', 'Agenda', 'Votre journée, phase par phase'],
+    ['clientes', 'Clientes', 'Historique, notes, habitudes'],
+    ['produits', 'Produits', 'Ce qu’il reste en réserve']
+  ].map(function (z) {
+    return '<div class="zone"><span class="zone__i">' + I(z[0], 20) + '</span>' +
+      '<span><span class="zone__n">' + z[1] + '</span>' +
+      '<span class="zone__d" style="display:block">' + z[2] + '</span></span></div>';
+  }).join('');
+
+  var panels = [].slice.call(document.querySelectorAll('.ob__panel'));
+  var dots = [].slice.call(document.querySelectorAll('.dot'));
+  var next = document.getElementById('next');
+  var live = document.getElementById('live');
+  var i = 0;
+
+  function go(n) {
+    i = Math.max(0, Math.min(panels.length - 1, n));
+    panels.forEach(function (p, k) {
+      var on = k === i;
+      p.setAttribute('data-on', on ? 'true' : 'false');
+      if (on) { p.removeAttribute('hidden'); } else { setTimeout(function () { if (p.getAttribute('data-on') !== 'true') p.hidden = true; }, 340); }
+    });
+    dots.forEach(function (d, k) { d.setAttribute('data-on', k === i ? 'true' : 'false'); });
+    next.textContent = i === panels.length - 1 ? 'Commencer' : 'Continuer';
+    document.getElementById('skip').style.visibility = i === panels.length - 1 ? 'hidden' : 'visible';
+    live.textContent = 'Écran ' + (i + 1) + ' sur ' + panels.length;
+  }
+
+  next.addEventListener('click', function () {
+    if (i === panels.length - 1) { location.href = 'agenda.html'; return; }
+    go(i + 1);
+  });
+
+  /* Balayage horizontal */
+  var x0 = null;
+  var stage = document.getElementById('stage');
+  stage.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener('touchend', function (e) {
+    if (x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 44) go(dx < 0 ? i + 1 : i - 1);
+    x0 = null;
+  }, { passive: true });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') go(i + 1);
+    if (e.key === 'ArrowLeft') go(i - 1);
+  });
+
+  go(0);
+})();
+</script>
+</body>
+</html>

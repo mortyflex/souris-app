@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Souris — Clientes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/souris.css" />
+</head>
+<body>
+<div class="app" data-od-id="screen-clientes">
+  <header class="hd" data-od-id="clientes-header">
+    <div class="hd__row">
+      <div>
+        <h1 class="hd__title">Clientes</h1>
+        <p class="hd__sub" id="count"></p>
+      </div>
+    </div>
+    <div class="search">
+      <span id="search-icon"></span>
+      <input class="input" type="search" id="q" placeholder="Nom, prestation ou téléphone"
+             aria-label="Rechercher une cliente" autocomplete="off" autocorrect="off"
+             autocapitalize="off" enterkeyhint="search" />
+    </div>
+    <p class="sr-only" id="results" role="status" aria-live="polite"></p>
+  </header>
+
+  <div class="scroll" id="scroll">
+    <div class="pad pad-b list--az" id="content"></div>
+  </div>
+
+  <button class="fab" type="button" data-open-sheet="sheet-new" data-od-id="clientes-fab" aria-label="Ajouter une cliente"></button>
+  <nav data-tabbar></nav>
+  <div class="scrim" data-scrim></div>
+
+  <section class="sheet" id="sheet-detail" role="dialog" aria-modal="true" aria-labelledby="cd-title" aria-hidden="true" data-od-id="sheet-cliente">
+    <div class="sheet__grab"></div>
+    <div class="sheet__hd">
+      <h2 class="sheet__title" id="cd-title">Cliente</h2>
+      <button class="ibtn" type="button" data-close-sheet aria-label="Fermer"></button>
+    </div>
+    <div class="sheet__body" id="cd-body"></div>
+    <div class="sheet__foot">
+      <button class="btn btn--ghost" type="button" style="flex:1" data-od-id="cliente-edit">Modifier</button>
+      <button class="btn btn--primary" type="button" style="flex:1.4" id="cd-book">Créer le rendez-vous</button>
+    </div>
+  </section>
+
+  <section class="sheet" id="sheet-new" role="dialog" aria-modal="true" aria-labelledby="nc-title" aria-hidden="true" data-od-id="sheet-cliente-new">
+    <div class="sheet__grab"></div>
+    <div class="sheet__hd">
+      <h2 class="sheet__title" id="nc-title">Nouvelle cliente</h2>
+      <button class="ibtn" type="button" data-close-sheet aria-label="Fermer"></button>
+    </div>
+    <div class="sheet__body">
+      <form id="nc-form" novalidate>
+        <label class="field" for="n-nom"><span class="field__label">Nom</span>
+          <input class="input" id="n-nom" placeholder="Prénom et nom" autocomplete="name"
+                 enterkeyhint="next" aria-describedby="n-nom-err" /></label>
+        <p class="field__error" id="n-nom-err" hidden></p>
+        <label class="field" for="n-tel"><span class="field__label">Téléphone</span>
+          <input class="input" id="n-tel" type="tel" inputmode="tel" autocomplete="tel"
+                 placeholder="06 00 00 00 00" /></label>
+        <label class="field" for="n-note"><span class="field__label">Note</span>
+          <input class="input" id="n-note" placeholder="Couleur habituelle, sensibilités…"
+                 enterkeyhint="done" /></label>
+      </form>
+    </div>
+    <div class="sheet__foot">
+      <button class="btn btn--ghost" type="button" data-close-sheet style="flex:1">Annuler</button>
+      <button class="btn btn--primary" type="submit" form="nc-form" style="flex:1.6">Ajouter la cliente</button>
+    </div>
+  </section>
+
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+</div>
+
+<script src="../assets/souris.js"></script>
+<script>
+(function () {
+  var I = Souris.icon;
+  Souris.tabbar('clientes'); Souris.sheets(); Souris.stickyHeader();
+  document.getElementById('search-icon').outerHTML = I('search', 18);
+  document.querySelector('[data-od-id="clientes-fab"]').innerHTML = I('add', 26);
+  document.querySelectorAll('[data-close-sheet].ibtn').forEach(function (b) { b.innerHTML = I('close', 20); });
+
+  /* Contenu de démonstration. « today » reprend les heures de l'Agenda du 23. */
+  var C = [
+    { n: 'Sofia Benali', last: 'Balayage + soin · 3 sem.', today: '14 h',
+      tel: '06 12 44 08 21', since: 'septembre 2024', visits: 7, spend: '612 €',
+      note: 'Balayage caramel, longueurs fragiles. Évite les sulfates.' },
+    { n: 'Nadia Cohen', last: 'Frange + brushing · 2 mois', flag: '2 absences',
+      tel: '06 74 19 55 02', since: 'juin 2024', visits: 4, spend: '148 €',
+      note: 'A annulé deux fois le matin même.' },
+    { n: 'Inès Ferrand', last: 'Coloration racines · 6 sem.', today: '10 h 30',
+      tel: '06 03 82 77 41', since: 'janvier 2022', visits: 23, spend: '1 794 €',
+      note: 'Coloration 6.3 — allergie testée en 2022.' },
+    { n: 'Léa Marchand', last: 'Coupe + brushing · 5 sem.', today: '9 h',
+      tel: '06 55 30 12 67', since: 'mars 2023', visits: 14, spend: '742 €',
+      note: 'Carré sans dégradé, raie au milieu.' },
+    { n: 'Camille Roy', last: 'Première visite', today: '11 h 30',
+      tel: '06 41 90 26 13', since: 'aujourd’hui', visits: 0, spend: '—',
+      note: 'Placée pendant le temps de pose d’Inès.' },
+    { n: 'Amina Traoré', last: 'Soin protéiné · 10 j',
+      tel: '06 88 17 40 55', since: 'avril 2023', visits: 11, spend: '583 €',
+      note: 'Cheveux bouclés, soin toutes les 6 semaines.' },
+    { n: 'Élise Vasseur', last: 'Coupe + brushing · 4 mois',
+      tel: '06 29 61 03 88', since: 'novembre 2021', visits: 19, spend: '1 045 €',
+      note: 'Préfère les rendez-vous en fin de journée.' }
+  ];
+
+  var ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
+  function esc(v) { return String(v).replace(/[&<>"]/g, function (m) { return ESC[m]; }); }
+  function flat(v) { return String(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function initials(n) { return n.split(' ').map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase(); }
+  function slug(n) { return flat(n).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+  /* Regroupement sur le prénom : c'est le mot que l'œil lit en premier dans la ligne. */
+  function letter(n) { return flat(n).charAt(0).toUpperCase(); }
+  function cut(v, max) { return v.length > max ? v.slice(0, max - 1) + '…' : v; }
+
+  var content = document.getElementById('content');
+  var live = document.getElementById('results');
+  var state = new URLSearchParams(location.search).get('state') || 'default';
+  var term = '';
+
+  function refreshCount() {
+    document.getElementById('count').innerHTML =
+      '<span class="num">' + C.length + '</span> fiche' + (C.length > 1 ? 's' : '');
+  }
+
+  function noResult() {
+    var q = cut(term, 22);
+    return '<div class="state" data-od-id="clientes-noresult">' +
+      '<span class="state__mark">' + I('search', 26) + '</span>' +
+      '<p class="state__title">Aucun résultat</p>' +
+      '<p class="state__text">Rien ne correspond à « ' + esc(q) + ' ».</p>' +
+      '<button class="btn btn--ghost" type="button" id="add-from-search" data-open-sheet="sheet-new"' +
+      ' data-od-id="clientes-add-from-search">Créer la fiche « ' + esc(q) + ' »</button></div>';
+  }
+
+  function row(c) {
+    var side = c.today
+      ? '<span class="chip chip--lav" data-od-id="chip-today-' + slug(c.n) + '"><span class="chip__dot"></span>' +
+        '<span class="sr-only">Rendez-vous aujourd’hui à </span>' + c.today + '</span>'
+      : (c.flag
+        ? '<span class="chip chip--rose" data-od-id="chip-flag-' + slug(c.n) + '"><span class="chip__dot"></span>' + c.flag + '</span>'
+        : '');
+    return '<button class="row" type="button" data-c="' + C.indexOf(c) + '" data-od-id="cliente-' + slug(c.n) + '">' +
+      '<span class="avatar' + (c.flag ? ' avatar--rose' : '') + '" aria-hidden="true">' + initials(c.n) + '</span>' +
+      '<span class="row__body"><span class="row__title">' + c.n + '</span>' +
+      '<span class="row__meta">' + c.last + '</span></span>' + side +
+      '<span class="row__chev">' + I('chevron', 18) + '</span></button>';
+  }
+
+  function render(list) {
+    if (!list.length) return noResult();
+    var groups = {}, order = [];
+    list.slice()
+      .sort(function (a, b) { return a.n.localeCompare(b.n, 'fr', { sensitivity: 'base' }); })
+      .forEach(function (c) {
+        var L = letter(c.n);
+        if (!groups[L]) { groups[L] = []; order.push(L); }
+        groups[L].push(c);
+      });
+    return order.map(function (L) {
+      return '<div class="grp"><span class="grp__label">' + L + '</span></div>' +
+        groups[L].map(row).join('');
+    }).join('');
+  }
+
+  function announce(n) {
+    if (!term) { live.textContent = ''; return; }
+    live.textContent = n === 0 ? 'Aucune cliente trouvée'
+      : n + (n > 1 ? ' clientes trouvées' : ' cliente trouvée');
+  }
+
+  /* Correspondance par préfixe de mot sur le nom, la prestation et le téléphone.
+     La partie « il y a 3 semaines » est exclue : elle renvoyait « ines » sur trois fiches. */
+  function matches(c, v) {
+    if (!v) return true;
+    if (c.tel.replace(/\s/g, '').indexOf(v.replace(/\s/g, '')) > -1) return true;
+    var words = flat(c.n + ' ' + c.last.split(' · ')[0]).split(/[^a-z0-9]+/);
+    return v.split(/[^a-z0-9]+/).filter(Boolean).every(function (q) {
+      return words.some(function (w) { return w.indexOf(q) === 0; });
+    });
+  }
+
+  function paint() {
+    var list = C.filter(function (c) { return matches(c, flat(term)); });
+    content.innerHTML = render(list);
+    announce(list.length);
+  }
+
+  /* ---------- États ---------- */
+  if (state === 'error') {
+    content.innerHTML = '<div class="state" role="alert" data-od-id="clientes-error">' +
+      '<span class="state__mark state__mark--rose">' + I('wifi', 26) + '</span>' +
+      '<p class="state__title">Fichier clientes indisponible</p>' +
+      '<p class="state__text">Souris n’a pas pu récupérer vos fiches. Vos rendez-vous du jour restent accessibles.</p>' +
+      '<button class="btn btn--ghost" type="button" id="retry" data-od-id="clientes-retry">Réessayer</button></div>';
+    document.getElementById('retry').addEventListener('click', function () {
+      this.textContent = 'Nouvelle tentative…';
+      this.setAttribute('aria-disabled', 'true');
+    });
+  } else if (state === 'loading') {
+    content.setAttribute('aria-busy', 'true');
+    var W = [[132, 178], [154, 162], [118, 190], [146, 170], [126, 158], [160, 182]];
+    content.innerHTML = '<p class="sr-only">Chargement de vos fiches…</p>' +
+      '<div aria-hidden="true"><div class="grp"><span class="skel skel--line" style="display:block;width:18px"></span></div>' +
+      W.map(function (w) {
+        return '<div class="row" style="cursor:default">' +
+          '<span class="skel" style="width:40px;height:40px;border-radius:999px;flex:0 0 auto"></span>' +
+          '<span class="row__body"><span class="skel skel--title" style="display:block;width:' + w[0] + 'px"></span>' +
+          '<span class="skel skel--line" style="display:block;width:' + w[1] + 'px;margin-top:8px"></span></span></div>';
+      }).join('') + '</div>';
+  } else if (state === 'empty') {
+    content.innerHTML = '<div class="state" data-od-id="clientes-first">' +
+      '<span class="state__mark">' + I('clientes', 26) + '</span>' +
+      '<p class="state__title">Votre fichier est vide</p>' +
+      '<p class="state__text">Ajoutez votre première cliente, ou laissez Souris la créer au premier rendez-vous.</p>' +
+      '<button class="btn btn--ghost" type="button" data-open-sheet="sheet-new"' +
+      ' data-od-id="clientes-add-first">Ajouter une cliente</button></div>';
+  } else {
+    paint();
+  }
+  refreshCount();
+
+  /* ---------- Recherche : nom, prestation ou téléphone, accents ignorés ---------- */
+  document.getElementById('q').addEventListener('input', function () {
+    if (state !== 'default') return;
+    term = this.value.trim();
+    paint();
+  });
+
+  /* ---------- Fiche ---------- */
+  var openC = null;
+
+  content.addEventListener('click', function (e) {
+    var add = e.target.closest('#add-from-search');
+    if (add) { document.getElementById('n-nom').value = term; return; }
+
+    var b = e.target.closest('[data-c]'); if (!b) return;
+    var c = C[+b.getAttribute('data-c')]; if (!c) return;
+    openC = c;
+    document.getElementById('cd-title').textContent = c.n;
+    document.getElementById('cd-body').innerHTML =
+      '<div style="display:flex;gap:14px;align-items:center;padding:4px 0 10px">' +
+        '<span class="avatar' + (c.flag ? ' avatar--rose' : '') +
+          '" aria-hidden="true" style="width:52px;height:52px;font-size:17px">' + initials(c.n) + '</span>' +
+        '<span><span style="display:block;font-size:14px;color:var(--fg-soft)">Cliente depuis ' + c.since + '</span>' +
+        '<a href="tel:' + c.tel.replace(/\s/g, '') + '" class="btn btn--quiet num" style="margin-left:-8px">' +
+        c.tel + '</a></span></div>' +
+      (c.today ? '<p class="chip chip--lav" style="margin-bottom:4px"><span class="chip__dot"></span>' +
+        'Rendez-vous aujourd’hui à ' + c.today + '</p>' : '') +
+      (c.flag ? '<p class="chip chip--rose" style="margin-bottom:4px"><span class="chip__dot"></span>' +
+        c.flag + ' ces six derniers mois</p>' : '') +
+      '<div class="grp"><span class="grp__label">Habitudes</span></div>' +
+      '<div class="kv"><span class="kv__k">Visites</span><span class="kv__v num">' + c.visits + '</span></div>' +
+      '<div class="kv"><span class="kv__k">Total dépensé</span><span class="kv__v num">' + c.spend + '</span></div>' +
+      '<div class="kv"><span class="kv__k">Dernière fois</span><span class="kv__v">' + c.last.split(' · ')[0] + '</span></div>' +
+      '<div class="grp"><span class="grp__label">Note</span></div>' +
+      '<p style="font-size:14.5px;line-height:1.5">' + c.note + '</p>';
+    document.querySelector('[data-scrim]').setAttribute('data-open', 'true');
+    var sh = document.getElementById('sheet-detail');
+    sh.setAttribute('data-open', 'true'); sh.removeAttribute('aria-hidden');
+  });
+
+  /* La cliente part avec le rendez-vous : l'Agenda ouvre la création pré-remplie. */
+  document.getElementById('cd-book').addEventListener('click', function () {
+    location.href = 'agenda.html' + (openC ? '?cliente=' + encodeURIComponent(openC.n) : '');
+  });
+
+  /* ---------- Nouvelle fiche ---------- */
+  var nom = document.getElementById('n-nom');
+  var err = document.getElementById('n-nom-err');
+
+  document.getElementById('nc-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!nom.value.trim()) {
+      nom.setAttribute('aria-invalid', 'true');
+      err.hidden = false;
+      err.innerHTML = I('alert', 15) + '<span>Indiquez au moins un nom.</span>';
+      nom.focus();
+      return;
+    }
+    nom.removeAttribute('aria-invalid');
+    err.hidden = true;
+    C.push({
+      n: nom.value.trim(),
+      last: 'Nouvelle fiche',
+      tel: document.getElementById('n-tel').value.trim() || '—',
+      since: 'aujourd’hui',
+      visits: 0,
+      spend: '—',
+      note: document.getElementById('n-note').value.trim() || 'Aucune note pour l’instant.'
+    });
+    document.querySelector('[data-close-sheet]').click();
+    Souris.toast('Cliente ajoutée');
+    this.reset();
+    term = '';
+    document.getElementById('q').value = '';
+    if (state === 'default' || state === 'empty') { state = 'default'; paint(); }
+    refreshCount();
+  });
+
+  nom.addEventListener('input', function () {
+    if (this.value.trim()) { this.removeAttribute('aria-invalid'); err.hidden = true; }
+  });
+})();
+</script>
+</body>
+</html>

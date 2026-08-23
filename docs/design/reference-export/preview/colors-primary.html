@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Souris — Couleurs de marque</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<link rel="stylesheet" href="preview.css" />
+<style>
+  .sw{ border:1px solid var(--border); border-radius:var(--r); overflow:hidden; background:var(--bg); }
+  .sw__chip{ height:96px; }
+  .sw__b{ padding:12px 14px 14px; border-top:1px solid var(--border); }
+  .sw__n{ font-size:14px; font-weight:700; letter-spacing:-0.011em; }
+  .sw__v{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--muted); margin-top:3px; }
+  .sw__r{ font-size:12.5px; color:var(--fg-soft); margin-top:7px; line-height:1.45; }
+  .brand{ grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); }
+  .ramp{ display:flex; border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
+  .ramp div{ flex:1 1 0; height:64px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:6px;
+    font-size:10.5px; font-weight:700; letter-spacing:.04em; }
+  .rampline{ margin-top:18px; }
+  .rampline h3{ font-size:14px; letter-spacing:-0.008em; }
+  .rampline p{ font-size:12.5px; color:var(--fg-soft); margin-top:3px; }
+  .use{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
+</style>
+</head>
+<body class="pv">
+<div class="pv__wrap">
+  <a class="btn btn--quiet pv__back" href="index.html">Toutes les cartes</a>
+  <p class="pv__eyebrow">Couleur · 1/2</p>
+  <h1 class="pv__h">Palette de marque</h1>
+  <p class="pv__lede">Six valeurs hex enregistrées, et rien d’autre. Tout le reste du système est dérivé
+     en <code>oklch()</code> depuis ces teintes. Le violet est un signal d’action : au plus deux
+     occurrences par écran, jamais en aplat large.</p>
+  <p class="pv__src">Source : bloc <code>:root</code> de <code>assets/souris.css</code> → <code>colors_and_type.css</code></p>
+
+  <section class="pv__sec">
+    <h2>Les six tokens enregistrés</h2>
+    <div class="pv__grid brand">
+      <div class="sw"><div class="sw__chip" style="background:var(--bg);box-shadow:inset 0 0 0 1px var(--border)"></div>
+        <div class="sw__b"><div class="sw__n">Fond</div><div class="sw__v">--bg · #ffffff</div>
+        <div class="sw__r">Fond de toutes les surfaces d’application.</div></div></div>
+      <div class="sw"><div class="sw__chip" style="background:var(--fg)"></div>
+        <div class="sw__b"><div class="sw__n">Texte</div><div class="sw__v">--fg · #19163f</div>
+        <div class="sw__r">Texte principal, jour sélectionné, fond du toast.</div></div></div>
+      <div class="sw"><div class="sw__chip" style="background:var(--accent)"></div>
+        <div class="sw__b"><div class="sw__n">Action</div><div class="sw__v">--accent · #7354c7</div>
+        <div class="sw__r">Bouton plein, FAB, onglet actif, anneau de focus. Rien d’autre.</div></div></div>
+      <div class="sw"><div class="sw__chip" style="background:var(--surface)"></div>
+        <div class="sw__b"><div class="sw__n">Surface</div><div class="sw__v">--surface · #f6f6f7</div>
+        <div class="sw__r">Recherche, segmenté, désactivé, bloc « pause ».</div></div></div>
+      <div class="sw"><div class="sw__chip" style="background:var(--muted)"></div>
+        <div class="sw__b"><div class="sw__n">Discret</div><div class="sw__v">--muted · #9896a9</div>
+        <div class="sw__r">Chevrons, mentions, version. Pas pour du texte lu.</div></div></div>
+      <div class="sw"><div class="sw__chip" style="background:var(--border)"></div>
+        <div class="sw__b"><div class="sw__n">Filet</div><div class="sw__v">--border · #dfdee4</div>
+        <div class="sw__r">Séparateurs d’un pixel, contours de champ.</div></div></div>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Texte secondaire</h2>
+    <p><code class="pv__mono">--fg-soft</code> est le gris réellement lisible du système. <code class="pv__mono">--muted</code> reste réservé aux éléments décoratifs et aux mentions.</p>
+    <div class="pv__panel">
+      <p style="font-size:15.5px;font-weight:600">Léa Marchand</p>
+      <p style="font-size:13px;color:var(--fg-soft);margin-top:2px">Coupe + brushing · 1 h 30 — <code class="pv__mono">--fg-soft</code></p>
+      <p style="font-size:13px;color:var(--muted);margin-top:6px">Souris <span class="num">1.0</span> — <code class="pv__mono">--muted</code></p>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Rampe d’action — lavande</h2>
+    <p>La seule rampe dérivée du violet de marque. Elle porte la structure, le survol et l’état enfoncé.</p>
+    <div class="rampline">
+      <div class="ramp">
+        <div style="background:var(--lav-025)"></div>
+        <div style="background:var(--lav-050)"></div>
+        <div style="background:var(--lav-100)"></div>
+        <div style="background:var(--lav-200)"></div>
+        <div style="background:var(--accent);color:#fff">accent</div>
+        <div style="background:var(--lav-700);color:#fff">700</div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
+        --lav-025 · --lav-050 · --lav-100 · --lav-200 · --accent · --lav-700</p>
+      <p>025 fond hors frame · 050 pastille et survol · 100 avatar et puce · 200 contour d’événement ·
+         accent action · 700 survol du bouton plein.</p>
+    </div>
+    <div class="use">
+      <button class="btn btn--primary" type="button">Créer le rendez-vous</button>
+      <button class="btn btn--ghost" type="button">Annuler</button>
+      <button class="btn btn--quiet" type="button">Passer</button>
+      <span class="chip chip--lav"><span class="chip__dot"></span>Prestation</span>
+      <span class="avatar">LM</span>
+    </div>
+    <p class="pv__note">Un seul bouton plein est visible ici : c’est la règle de l’écran, reproduite dans la carte de revue.</p>
+  </section>
+</div>
+</body>
+</html>

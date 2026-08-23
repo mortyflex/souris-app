@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Souris — Prototype mobile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/souris.css" />
+<style>
+  body{ background:var(--lav-025); }
+  .wrap{ max-width:1240px; margin:0 auto; padding:0 clamp(20px,4vw,48px); }
+  .top{ padding:clamp(40px,6vw,72px) 0 clamp(28px,4vw,44px); }
+  .top__logo{ display:block; height:64px; width:auto; margin-bottom:24px; mix-blend-mode:multiply; }
+  .top h1{ font-size:clamp(32px,5vw,46px); line-height:1.06; letter-spacing:-0.033em; max-width:16ch; }
+  .top p{ font-size:clamp(15px,1.6vw,17px); line-height:1.55; color:var(--fg-soft); max-width:56ch; margin-top:14px; }
+  .top__meta{ display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
+
+  section{ padding:clamp(30px,4vw,46px) 0; border-top:1px solid var(--border); }
+  .sec__hd{ display:flex; flex-wrap:wrap; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec__hd h2{ font-size:clamp(21px,2.4vw,26px); letter-spacing:-0.024em; }
+  .sec__hd p{ font-size:14.5px; color:var(--fg-soft); max-width:52ch; }
+
+  .rail{ display:flex; flex-wrap:wrap; gap:clamp(24px,3vw,40px); padding:26px 0 10px; }
+  .card{ flex:0 0 auto; }
+  .card__frame{ line-height:0; }
+  .card iframe{ display:block; border:0; }
+  .card__cap{ margin-top:14px; max-width:390px; }
+  .card__n{ font-size:15.5px; font-weight:700; letter-spacing:-0.014em; }
+  .card__d{ font-size:13.5px; color:var(--fg-soft); margin-top:3px; line-height:1.45; }
+  .card__a{ display:inline-flex; margin-top:6px; margin-left:-8px; }
+
+
+  .tokens{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:16px; margin-top:22px; }
+  .tok__sw{ height:60px; border-radius:var(--r); border:1px solid var(--border); }
+  .tok__n{ font-size:13px; font-weight:600; margin-top:8px; }
+  .tok__v{ font-size:12px; color:var(--fg-soft); font-variant-numeric:tabular-nums; }
+
+  .notes{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:28px 34px; margin-top:22px; }
+  .note h3{ font-size:14px; letter-spacing:-0.008em; }
+  .note p{ font-size:13.5px; color:var(--fg-soft); line-height:1.55; margin-top:6px; }
+
+  @media (max-width:720px){
+    .rail{ gap:20px; }
+    .card__frame{ transform:scale(.86); transform-origin:top left; }
+    .card{ width:340px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top" data-od-id="launcher-header">
+    <img class="top__logo" src="logo-wordmark.png" alt="Souris" />
+    <h1>Votre journée, plus légère.</h1>
+    <p>Prototype mobile natif de Souris — gestion quotidienne pour les professionnelles travaillant sur rendez-vous.
+       L’Agenda est l’écran d’accueil : il montre les phases d’une prestation, les temps de pose et les rendez-vous
+       volontairement simultanés.</p>
+    <div class="top__meta">
+      <span class="chip chip--lav"><span class="chip__dot"></span>iOS · 6 écrans</span>
+      <span class="chip chip--peach"><span class="chip__dot"></span>Android · 2 écrans</span>
+      <span class="chip">États vide · chargement · erreur</span>
+    </div>
+  </header>
+
+  <section data-od-id="launcher-ios">
+    <div class="sec__hd">
+      <h2>iOS</h2>
+      <p>iPhone 15 Pro · cibles tactiles 44 px · feuilles modales, grands titres, barre d’onglets iOS.</p>
+    </div>
+    <div class="rail" id="rail-ios"></div>
+  </section>
+
+  <section data-od-id="launcher-android">
+    <div class="sec__hd">
+      <h2>Android</h2>
+      <p>Pixel · cibles 48 dp · barre de navigation Material 3 avec indicateur, FAB carré arrondi, feuilles à 28 dp.</p>
+    </div>
+    <div class="rail rail--md" id="rail-md"></div>
+  </section>
+
+  <section data-od-id="launcher-states">
+    <div class="sec__hd">
+      <h2>États</h2>
+      <p>Chargement, journée libre et perte de synchronisation — vérifiés sur les deux écrans les plus consultés.</p>
+    </div>
+    <div class="rail" id="rail-states"></div>
+  </section>
+
+  <section data-od-id="launcher-system">
+    <div class="sec__hd">
+      <h2>Système</h2>
+      <p>Un seul jeu de tokens pour les deux plateformes. Le violet ne sert qu’aux actions ; les pastels ne servent
+         qu’à distinguer rendez-vous, phases et états.</p>
+    </div>
+    <div class="tokens">
+      <div><div class="tok__sw" style="background:var(--bg)"></div><div class="tok__n">Fond</div><div class="tok__v">#ffffff</div></div>
+      <div><div class="tok__sw" style="background:var(--fg)"></div><div class="tok__n">Texte</div><div class="tok__v">#19163f</div></div>
+      <div><div class="tok__sw" style="background:var(--accent)"></div><div class="tok__n">Action</div><div class="tok__v">#7354c7</div></div>
+      <div><div class="tok__sw" style="background:var(--lav-100)"></div><div class="tok__n">Lavande</div><div class="tok__v">prestation</div></div>
+      <div><div class="tok__sw" style="background:var(--peach-100)"></div><div class="tok__n">Pêche</div><div class="tok__v">temps de pose</div></div>
+      <div><div class="tok__sw" style="background:var(--rose-100)"></div><div class="tok__n">Rose</div><div class="tok__v">alerte · maintenant</div></div>
+    </div>
+    <div class="notes">
+      <div class="note"><h3>Hiérarchie sans cartes</h3>
+        <p>Les listes sont structurées par intertitres, filets d’un pixel et graisses. Aucune section n’est
+           transformée en carte par défaut ; seules les feuilles modales sont des surfaces.</p></div>
+      <div class="note"><h3>Une heure = 68 px</h3>
+        <p>La timeline reste lisible d’un coup d’œil. Les rendez-vous simultanés se répartissent en colonnes
+           calculées, jamais superposées.</p></div>
+      <div class="note"><h3>Le temps de pose est une phase</h3>
+        <p>Rayures pêche à l’intérieur du rendez-vous : la cliente reste en rendez-vous, la professionnelle
+           redevient disponible. C’est le seul motif graphique du produit.</p></div>
+      <div class="note"><h3>Une action primaire par écran</h3>
+        <p>Le bouton plein est réservé au FAB de création, ou au bouton d’engagement d’une feuille. Tout le
+           reste est fantôme, discret ou lien.</p></div>
+    </div>
+  </section>
+
+  <footer style="padding:32px 0 56px;border-top:1px solid var(--border)">
+    <p style="font-size:13px;color:var(--muted)">Contenu de démonstration — noms, tarifs et volumes sont fictifs.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var IOS = [
+    ['onboarding.html', 'Onboarding', 'Trois écrans avant l’authentification. Le deuxième explique le temps de pose sans une ligne de jargon.'],
+    ['agenda.html', 'Agenda — accueil', 'Journée réelle : phases, temps de pose pêche, Camille placée pendant la pose d’Inès.'],
+    ['clientes.html', 'Clientes', 'Recherche, regroupement alphabétique, fiche avec habitudes et note.'],
+    ['produits.html', 'Produits', 'Réserve et seuils d’alerte, ajustement au pas de un.'],
+    ['prestations.html', 'Prestations & tarifs', 'Fonction métier, pas un réglage : durée, prix et découpage en phases.'],
+    ['plus.html', 'Plus', 'Rangé par usage — Gestion, Salon, Préférences, Compte.']
+  ];
+  var MD = [
+    ['android-agenda.html', 'Agenda — Android', 'Même agenda, chrome Material : barre supérieure, indicateur de navigation, FAB carré arrondi.'],
+    ['android-plus.html', 'Plus — Android', 'Mêmes regroupements, densité et cibles 48 dp.']
+  ];
+  var STATES = [
+    ['agenda.html?state=loading', 'Agenda — chargement', 'Squelettes calés sur la grille horaire ; le bouton de création reste inactif.'],
+    ['agenda.html?state=empty', 'Agenda — journée libre', 'Message court, une seule sortie possible.'],
+    ['clientes.html?state=error', 'Clientes — erreur', 'Dit ce qui marche encore, propose de réessayer.']
+  ];
+
+  function screenParam(rel) {
+    try { return encodeURIComponent(new URL('screens/' + rel, location.href).href); }
+    catch (e) { return encodeURIComponent('screens/' + rel); }
+  }
+
+  function card(list, frame, w, h) {
+    return list.map(function (s) {
+      return '<div class="card" data-od-id="card-' + s[0].replace(/[^a-z]+/g, '-') + '">' +
+        '<div class="card__frame"><iframe src="/frames/' + frame + '?screen=' +
+        screenParam(s[0]) +
+        '" width="' + w + '" height="' + h + '" loading="lazy" title="' + s[1] + '"></iframe></div>' +
+        '<div class="card__cap"><div class="card__n">' + s[1] + '</div>' +
+        '<div class="card__d">' + s[2] + '</div>' +
+        '<a class="btn btn--quiet card__a" href="screens/' + s[0] + '" target="_blank" rel="noopener">Ouvrir l’écran seul</a>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  document.getElementById('rail-ios').innerHTML = card(IOS, 'iphone-15-pro.html', 414, 868);
+  document.getElementById('rail-md').innerHTML = card(MD, 'android-pixel.html', 436, 924);
+  document.getElementById('rail-states').innerHTML = card(STATES, 'iphone-15-pro.html', 414, 868);
+})();
+</script>
+</body>
+</html>

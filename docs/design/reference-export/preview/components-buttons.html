@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Souris — Boutons & états</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<link rel="stylesheet" href="preview.css" />
+<style>
+  .row3{ display:grid; grid-template-columns:118px repeat(3,1fr); gap:14px; align-items:center;
+    padding:14px 0; border-bottom:1px solid var(--border); }
+  .row3:last-child{ border-bottom:0; }
+  .row3__k{ font-size:13px; font-weight:600; color:var(--fg-soft); }
+  .row3__k span{ display:block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
+    color:var(--muted); font-weight:400; margin-top:2px; }
+  .hdr{ display:grid; grid-template-columns:118px repeat(3,1fr); gap:14px; padding-bottom:8px;
+    border-bottom:1px solid var(--border); }
+  .hdr span{ font-size:11.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-soft); }
+  /* Simulation d'état pour la revue : reproduit à l'identique les règles :hover / :active de souris.css */
+  .is-hover.btn--primary{ background:var(--lav-700); color:var(--bg); }
+  .is-hover.btn--ghost{ background:var(--surface); border-color:var(--muted); }
+  .is-hover.btn--quiet{ background:var(--lav-050); color:var(--lav-700); }
+  .is-hover.btn--danger{ background:var(--rose-050); border-color:var(--rose-600); }
+  .is-focus{ outline:2px solid var(--accent); outline-offset:2px; }
+  .grpb{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
+  .fabdemo{ position:relative; height:120px; border:1px solid var(--border); border-radius:var(--r);
+    background:var(--lav-025); margin-top:16px; overflow:hidden; }
+  .fabdemo .fab{ position:absolute; right:16px; bottom:16px; }
+  .fabdemo .fab--md{ border-radius:16px; right:88px; }
+  .foot{ display:flex; gap:10px; margin-top:16px; border-top:1px solid var(--border); padding-top:14px; }
+</style>
+</head>
+<body class="pv">
+<div class="pv__wrap">
+  <a class="btn btn--quiet pv__back" href="index.html">Toutes les cartes</a>
+  <p class="pv__eyebrow">Composants · 1/3</p>
+  <h1 class="pv__h">Boutons &amp; états</h1>
+  <p class="pv__lede">Une action, un seul bouton plein. Toutes les autres entrées vers la même action sont
+     fantômes, discrètes ou de simples liens. Au survol, c’est le fond qui bouge — jamais le texte.</p>
+  <p class="pv__src">Source : <code>.btn</code>, <code>.ibtn</code>, <code>.fab</code> de <code>assets/souris.css</code></p>
+
+  <section class="pv__sec">
+    <h2>Quatre variantes, trois états</h2>
+    <div class="pv__panel" style="padding-top:14px">
+      <div class="hdr"><span></span><span>Défaut</span><span>Survol</span><span>Focus clavier</span></div>
+      <div class="row3"><div class="row3__k">Primaire<span>.btn--primary</span></div>
+        <button class="btn btn--primary" type="button">Créer</button>
+        <button class="btn btn--primary is-hover" type="button" tabindex="-1">Créer</button>
+        <button class="btn btn--primary is-focus" type="button" tabindex="-1">Créer</button></div>
+      <div class="row3"><div class="row3__k">Fantôme<span>.btn--ghost</span></div>
+        <button class="btn btn--ghost" type="button">Annuler</button>
+        <button class="btn btn--ghost is-hover" type="button" tabindex="-1">Annuler</button>
+        <button class="btn btn--ghost is-focus" type="button" tabindex="-1">Annuler</button></div>
+      <div class="row3"><div class="row3__k">Discret<span>.btn--quiet</span></div>
+        <button class="btn btn--quiet" type="button">Passer</button>
+        <button class="btn btn--quiet is-hover" type="button" tabindex="-1">Passer</button>
+        <button class="btn btn--quiet is-focus" type="button" tabindex="-1">Passer</button></div>
+      <div class="row3"><div class="row3__k">Destructif<span>.btn--danger</span></div>
+        <button class="btn btn--danger" type="button">Absence</button>
+        <button class="btn btn--danger is-hover" type="button" tabindex="-1">Absence</button>
+        <button class="btn btn--danger is-focus" type="button" tabindex="-1">Absence</button></div>
+      <div class="row3"><div class="row3__k">Désactivé<span>[disabled]</span></div>
+        <button class="btn btn--primary" type="button" disabled>Créer</button>
+        <div style="font-size:12.5px;color:var(--fg-soft);grid-column:span 2">Le seul état autorisé à baisser
+          le contraste. Le curseur passe à <code class="pv__mono">not-allowed</code>, l’enfoncement est neutralisé.</div></div>
+    </div>
+    <p class="pv__note">Les colonnes « survol » et « focus » reproduisent à l’identique les règles
+      <code class="pv__mono">:hover</code> et <code class="pv__mono">:focus-visible</code> du système ; passez la souris sur la première colonne pour vérifier.</p>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Bouton icône</h2>
+    <p>Carré <code class="pv__mono">--tap</code> garanti, icône 22 px, fond transparent qui passe à <code class="pv__mono">--surface</code> au survol.</p>
+    <div class="grpb" id="ibtns"></div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>FAB — l’action primaire de l’écran</h2>
+    <p>56 px, ancré au-dessus de la barre d’onglets. Rond sur iOS, carré arrondi 16 px sur Android.
+       Quand un FAB est présent, aucun autre bouton plein n’est visible dans le même viewport.</p>
+    <div class="fabdemo">
+      <button class="fab" type="button" id="fab-ios" aria-label="Créer le rendez-vous"></button>
+      <button class="fab fab--md" type="button" id="fab-md" aria-label="Créer le rendez-vous (Android)"></button>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Pied de feuille modale</h2>
+    <p>La combinaison la plus fréquente du produit : une sortie fantôme, un seul engagement plein,
+       et un libellé qui nomme l’action en entier.</p>
+    <div class="pv__panel" style="padding-bottom:14px">
+      <div class="foot" style="border-top:0;padding-top:0">
+        <button class="btn btn--ghost" type="button" style="flex:1">Annuler</button>
+        <button class="btn btn--primary" type="button" style="flex:1.6">Créer le rendez-vous</button>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="../assets/souris.js"></script>
+<script>
+  var I = Souris.icon;
+  document.getElementById('ibtns').innerHTML =
+    ['search','add','close','back','chevron','bell','clock','alert'].map(function(n){
+      return '<button class="ibtn" type="button" aria-label="'+n+'">'+I(n,22)+'</button>';
+    }).join('');
+  document.getElementById('fab-ios').innerHTML = I('add',26);
+  document.getElementById('fab-md').innerHTML = I('add',26);
+</script>
+</body>
+</html>

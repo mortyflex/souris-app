@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Souris — Produits</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<style>
+  .stepper{ display:flex; align-items:center; gap:2px; flex:0 0 auto; }
+  .stepper__b{
+    width:36px; height:36px; border-radius:var(--r); border:1px solid var(--border);
+    background:var(--bg); color:var(--fg); display:grid; place-items:center; cursor:pointer;
+    transition:background-color .15s ease, border-color .15s ease;
+  }
+  .stepper__b:hover{ background:var(--surface); border-color:var(--muted); }
+  .stepper__b:active{ background:var(--lav-050); }
+  .stepper__b[aria-disabled="true"]{ background:var(--surface); color:var(--muted); cursor:not-allowed; }
+  .stepper__v{ min-width:34px; text-align:center; font-size:15px; font-weight:700; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="app" data-od-id="screen-produits">
+  <header class="hd" data-od-id="produits-header">
+    <div class="hd__row">
+      <div>
+        <p class="hd__eyebrow">Réserve</p>
+        <h1 class="hd__title">Produits</h1>
+      </div>
+      <div class="seg" role="tablist" aria-label="Filtrer les produits">
+        <button class="seg__btn" type="button" role="tab" aria-selected="true" data-f="all">Tout</button>
+        <button class="seg__btn" type="button" role="tab" aria-selected="false" data-f="low">À racheter</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="scroll" id="scroll">
+    <div class="pad pad-b" id="content"></div>
+  </div>
+
+  <button class="fab" type="button" data-open-sheet="sheet-new" data-od-id="produits-fab" aria-label="Ajouter un produit"></button>
+  <nav data-tabbar></nav>
+  <div class="scrim" data-scrim></div>
+
+  <section class="sheet" id="sheet-new" role="dialog" aria-modal="true" aria-labelledby="np-title" aria-hidden="true" data-od-id="sheet-produit-new">
+    <div class="sheet__grab"></div>
+    <div class="sheet__hd">
+      <h2 class="sheet__title" id="np-title">Nouveau produit</h2>
+      <button class="ibtn" type="button" data-close-sheet aria-label="Fermer"></button>
+    </div>
+    <div class="sheet__body">
+      <form id="np-form" novalidate>
+        <label class="field" for="p-nom"><span class="field__label">Nom</span>
+          <input class="input" id="p-nom" placeholder="Marque et référence" aria-describedby="p-nom-err" /></label>
+        <p class="field__error" id="p-nom-err" hidden></p>
+        <div style="display:flex;gap:12px">
+          <label class="field" for="p-qte" style="flex:1"><span class="field__label">Quantité</span>
+            <input class="input num" id="p-qte" type="number" min="0" value="6" /></label>
+          <label class="field" for="p-seuil" style="flex:1"><span class="field__label">Seuil d’alerte</span>
+            <input class="input num" id="p-seuil" type="number" min="0" value="2" /></label>
+        </div>
+      </form>
+    </div>
+    <div class="sheet__foot">
+      <button class="btn btn--ghost" type="button" data-close-sheet style="flex:1">Annuler</button>
+      <button class="btn btn--primary" type="submit" form="np-form" style="flex:1.6">Ajouter le produit</button>
+    </div>
+  </section>
+
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+</div>
+
+<script src="../assets/souris.js"></script>
+<script>
+(function () {
+  var I = Souris.icon;
+  Souris.tabbar('produits'); Souris.sheets(); Souris.stickyHeader();
+  document.querySelector('[data-od-id="produits-fab"]').innerHTML = I('add', 26);
+  document.querySelectorAll('[data-close-sheet].ibtn').forEach(function (b) { b.innerHTML = I('close', 20); });
+
+  var P = [
+    { c: 'Couleur', n: 'Oxydant 20 vol · 1 L', q: 4, s: 2 },
+    { c: 'Couleur', n: 'Coloration 6.3 · 60 ml', q: 1, s: 2 },
+    { c: 'Couleur', n: 'Poudre décolorante · 500 g', q: 2, s: 2 },
+    { c: 'Soin', n: 'Shampooing doux · 1 L', q: 3, s: 2 },
+    { c: 'Soin', n: 'Masque réparateur · 500 ml', q: 0, s: 1 },
+    { c: 'Soin', n: 'Sérum pointes · 100 ml', q: 7, s: 3 },
+    { c: 'Coiffage', n: 'Laque fixation forte', q: 5, s: 2 },
+    { c: 'Coiffage', n: 'Mousse volume · 250 ml', q: 2, s: 3 }
+  ];
+
+  function statusOf(p) {
+    if (p.q === 0) return { t: 'Épuisé', k: 'rose' };
+    if (p.q <= p.s) return { t: 'À racheter', k: 'peach' };
+    return null;
+  }
+
+  function render(filter) {
+    var list = filter === 'low' ? P.filter(statusOf) : P;
+    if (!list.length) {
+      return '<div class="state" data-od-id="produits-empty-low">' +
+        '<span class="state__mark">' + I('check', 26) + '</span>' +
+        '<p class="state__title">Réserve complète</p>' +
+        '<p class="state__text">Aucun produit sous son seuil d’alerte. Rien à racheter cette semaine.</p></div>';
+    }
+    var cats = {};
+    list.forEach(function (p) { (cats[p.c] = cats[p.c] || []).push(p); });
+    return Object.keys(cats).map(function (c) {
+      return '<div class="grp"><span class="grp__label">' + c + '</span></div>' +
+        cats[c].map(function (p) {
+          var st = statusOf(p);
+          var i = P.indexOf(p);
+          return '<div class="row" style="cursor:default" data-od-id="produit-' + i + '">' +
+            '<span class="row__body"><span class="row__title" style="display:block">' + p.n + '</span>' +
+            '<span class="row__meta" style="display:block">' +
+              (st ? '<span class="chip chip--' + st.k + '"><span class="chip__dot"></span>' + st.t + '</span>'
+                  : 'Seuil ' + p.s) + '</span></span>' +
+            '<span class="stepper">' +
+              '<button class="stepper__b" type="button" data-d="-1" data-i="' + i + '" aria-label="Retirer une unité de ' + p.n + '"' +
+                (p.q === 0 ? ' aria-disabled="true"' : '') + '>' + I('minus', 14) + '</button>' +
+              '<span class="stepper__v num" aria-live="off">' + p.q + '</span>' +
+              '<button class="stepper__b" type="button" data-d="1" data-i="' + i + '" aria-label="Ajouter une unité de ' + p.n + '">' + I('add', 14) + '</button>' +
+            '</span></div>';
+        }).join('');
+    }).join('');
+  }
+
+  var content = document.getElementById('content');
+  var filter = 'all';
+  var state = new URLSearchParams(location.search).get('state') || 'default';
+
+  if (state === 'empty') {
+    content.innerHTML = '<div class="state" data-od-id="produits-first">' +
+      '<span class="state__mark">' + I('box', 26) + '</span>' +
+      '<p class="state__title">Aucun produit suivi</p>' +
+      '<p class="state__text">Ajoutez ce que vous utilisez le plus. Souris vous prévient avant la rupture.</p>' +
+      '<button class="btn btn--ghost" type="button" data-open-sheet="sheet-new">Ajouter un produit</button></div>';
+  } else {
+    content.innerHTML = render(filter);
+  }
+
+  document.querySelector('.seg').addEventListener('click', function (e) {
+    var b = e.target.closest('.seg__btn'); if (!b || state !== 'default') return;
+    this.querySelectorAll('.seg__btn').forEach(function (x) { x.setAttribute('aria-selected', 'false'); });
+    b.setAttribute('aria-selected', 'true');
+    filter = b.getAttribute('data-f');
+    content.innerHTML = render(filter);
+  });
+
+  content.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-d]'); if (!b) return;
+    var p = P[+b.getAttribute('data-i')], d = +b.getAttribute('data-d');
+    if (p.q + d < 0) return;
+    p.q += d;
+    content.innerHTML = render(filter);
+  });
+
+  document.getElementById('np-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var f = document.getElementById('p-nom'), err = document.getElementById('p-nom-err');
+    if (!f.value.trim()) {
+      f.setAttribute('aria-invalid', 'true'); err.hidden = false;
+      err.innerHTML = I('alert', 15) + '<span>Donnez un nom au produit.</span>'; f.focus(); return;
+    }
+    f.removeAttribute('aria-invalid'); err.hidden = true;
+    document.querySelector('[data-close-sheet]').click();
+    Souris.toast('Produit ajouté'); this.reset();
+  });
+  document.getElementById('p-nom').addEventListener('input', function () {
+    if (this.value.trim()) { this.removeAttribute('aria-invalid'); document.getElementById('p-nom-err').hidden = true; }
+  });
+})();
+</script>
+</body>
+</html>

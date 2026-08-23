@@ -1,0 +1,19 @@
+/* Chrome de revue — commun aux cartes de preview. Ne fait pas partie du système livré. */
+body.pv{ background:var(--lav-025); padding:0; }
+.pv__wrap{ max-width:940px; margin:0 auto; padding:clamp(24px,4vw,44px) clamp(20px,4vw,36px) 72px; }
+.pv__eyebrow{ font-size:12px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--accent); }
+.pv__h{ font-size:clamp(24px,3.4vw,31px); line-height:1.1; letter-spacing:-0.03em; margin-top:8px; }
+.pv__lede{ font-size:15px; line-height:1.55; color:var(--fg-soft); max-width:62ch; margin-top:10px; }
+.pv__src{ font-size:12.5px; color:var(--muted); margin-top:10px; }
+.pv__src code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+.pv__sec{ margin-top:clamp(28px,4vw,42px); }
+.pv__sec > h2{ font-size:17px; letter-spacing:-0.017em; }
+.pv__sec > p{ font-size:13.5px; color:var(--fg-soft); margin-top:5px; max-width:60ch; }
+.pv__grid{ display:grid; gap:16px; margin-top:16px; }
+.pv__panel{ background:var(--bg); border:1px solid var(--border); border-radius:var(--r-lg); padding:22px; margin-top:16px; }
+.pv__rule{ height:1px; background:var(--border); border:0; margin:0; }
+.pv__note{ font-size:12.5px; color:var(--fg-soft); margin-top:10px; line-height:1.55; }
+.pv__mono{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--muted); }
+.pv__back{ display:inline-flex; margin-left:-8px; margin-bottom:14px; }
+.pv__frame{ border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; background:var(--bg); line-height:0; }
+.pv__frame iframe{ display:block; border:0; width:100%; }

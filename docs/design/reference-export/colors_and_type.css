@@ -1,0 +1,102 @@
+/* ============================================================
+   SOURIS — Couleurs & typographie
+   Fondations réutilisables extraites de assets/souris.css
+   (projet source « Web Prototype », prototype mobile iOS + Android).
+   Aucune valeur inventée : les six hex sont la palette de marque
+   enregistrée, les tons dérivés sont ceux du prototype (oklch).
+   ============================================================ */
+
+:root{
+  /* ---- Palette de marque enregistrée (6 valeurs, seules autorisées en hex) ---- */
+  --bg:#ffffff;        /* fond principal */
+  --fg:#19163f;        /* texte principal — violet navy profond */
+  --accent:#7354c7;    /* action : violet lavande. Signal fort, usage rare */
+  --surface:#f6f6f7;   /* surface neutre : champ de recherche, segmenté, état inactif */
+  --muted:#9896a9;     /* texte tertiaire, chevrons, mentions */
+  --border:#dfdee4;    /* filets d'un pixel, séparateurs, contours */
+
+  /* ---- Tons dérivés (oklch, générés depuis la palette — pas de hex inventé) ---- */
+  /* Lavande — structure, sélection, prestation « standard » */
+  --lav-025: oklch(0.985 0.006 300);   /* fond d'app hors frame, hover de ligne */
+  --lav-050: oklch(0.972 0.014 300);   /* pastille d'icône, fond d'événement */
+  --lav-100: oklch(0.945 0.028 300);   /* avatar, puce, indicateur Material actif */
+  --lav-200: oklch(0.895 0.050 300);   /* contour d'événement, remplissage de barre */
+  --lav-700: oklch(0.46  0.14  300);   /* hover du bouton plein, texte sur lavande */
+
+  /* Rose — accent chaleureux : maintenant, alerte, annulation */
+  --rose-050: oklch(0.972 0.016 6);
+  --rose-100: oklch(0.938 0.038 6);
+  --rose-200: oklch(0.885 0.062 6);
+  --rose-600: oklch(0.58  0.19  6);
+
+  /* Pêche — accent secondaire : temps de pose, disponibilité retrouvée */
+  --peach-050: oklch(0.975 0.018 62);
+  --peach-100: oklch(0.945 0.038 62);
+  --peach-200: oklch(0.900 0.062 62);
+  --peach-700: oklch(0.52  0.11  62);
+
+  /* Texte secondaire : plus lisible que --muted, réservé aux méta et sous-titres */
+  --fg-soft: oklch(0.42 0.055 285);
+
+  /* ---- Typographie ---- */
+  /* Une seule famille : brief utilitaire et dense en données.
+     Le contraste vient de la graisse, de la taille et de l'interlettrage. */
+  --font:"Inter", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-android:"Inter", Roboto, "Noto Sans", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+
+  /* Échelle typographique observée dans le prototype (px, base 16) */
+  --t-display:31px;   /* titre d'onboarding — l'unique grande taille */
+  --t-title:27px;     /* grand titre d'écran iOS (24px sur Android) */
+  --t-sheet:19px;     /* titre de feuille modale */
+  --t-state:17px;     /* titre d'état vide/erreur */
+  --t-body:16px;      /* base du document */
+  --t-row:15.5px;     /* titre de ligne de liste */
+  --t-control:15px;   /* bouton, champ */
+  --t-meta:13px;      /* méta de ligne, sous-titre d'en-tête */
+  --t-label:12px;     /* intertitre majuscule, eyebrow */
+  --t-chip:11.5px;    /* puce, heure d'événement, légende */
+  --t-tab:10.5px;     /* libellé d'onglet iOS (12px sur Android) */
+
+  --w-regular:400;
+  --w-medium:500;     /* Android : boutons et onglets */
+  --w-semibold:600;   /* libellés, méta, contrôles */
+  --w-bold:700;       /* titres, valeurs, noms de clientes */
+
+  --ls-display:-0.032em;
+  --ls-title:-0.028em;
+  --ls-heading:-0.021em;
+  --ls-row:-0.011em;
+  --ls-caps:0.09em;   /* intertitres en capitales */
+
+  --lh-tight:1.12;    /* titres d'écran */
+  --lh-body:1.45;     /* texte courant */
+  --lh-read:1.55;     /* paragraphes longs */
+}
+
+body{
+  background:var(--bg);
+  color:var(--fg);
+  font-family:var(--font);
+  font-size:var(--t-body);
+  line-height:var(--lh-body);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+body[data-platform="android"]{ font-family:var(--font-android); }
+
+h1,h2,h3,h4{ margin:0; font-weight:var(--w-bold); letter-spacing:var(--ls-heading); text-wrap:balance; }
+p{ margin:0; text-wrap:pretty; }
+
+/* Chiffres alignés partout où une valeur peut changer : heures, prix, stocks. */
+.num,
+.day__n,.ev__t,.sum__v,.row__side{ font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
+
+::selection{ background:var(--lav-200); color:var(--fg); }
+
+/* ---- Rôles sémantiques ----
+   accent  → action et sélection uniquement (bouton plein, FAB, onglet actif, focus)
+   lavande → prestation courante, structure, hover
+   pêche   → temps de pose, « vous êtes libre »
+   rose    → maintenant, erreur de champ, annulation, action destructive
+   surface → inactif, désactivé, fond de recherche
+   Ne jamais utiliser un pastel comme fond de page, ni l'accent comme aplat large. */

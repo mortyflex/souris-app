@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Souris — Listes, champs & états</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<link rel="stylesheet" href="preview.css" />
+<style>
+  .two{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:22px; margin-top:16px; }
+  .box{ border:1px solid var(--border); border-radius:var(--r-lg); background:var(--bg); padding:18px 20px; }
+  .box__k{ font-size:11.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-soft); }
+  .nav__i{ flex:0 0 auto; width:34px; height:34px; border-radius:var(--r); display:grid; place-items:center;
+    background:var(--lav-050); color:var(--accent); }
+  .nav__i svg{ width:19px; height:19px; }
+  .stepper{ display:flex; align-items:center; gap:2px; flex:0 0 auto; }
+  .stepper__b{ width:36px; height:36px; border-radius:var(--r); border:1px solid var(--border);
+    background:var(--bg); color:var(--fg); display:grid; place-items:center; cursor:pointer;
+    transition:background-color .15s ease, border-color .15s ease; }
+  .stepper__b:hover{ background:var(--surface); border-color:var(--muted); }
+  .stepper__v{ min-width:34px; text-align:center; font-size:15px; font-weight:700; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body class="pv">
+<div class="pv__wrap">
+  <a class="btn btn--quiet pv__back" href="index.html">Toutes les cartes</a>
+  <p class="pv__eyebrow">Composants · 2/3</p>
+  <h1 class="pv__h">Listes, champs &amp; états</h1>
+  <p class="pv__lede">La règle structurante du système : <strong>ne pas transformer une section en carte</strong>.
+     Une liste est faite d’intertitres, de filets d’un pixel et de graisses. Les seules vraies surfaces
+     sont la feuille modale, l’événement d’agenda et le toast.</p>
+  <p class="pv__src">Source : <code>.row</code>, <code>.grp</code>, <code>.input</code>, <code>.seg</code>, <code>.state</code>, <code>.skel</code>, <code>.toast</code> de <code>assets/souris.css</code></p>
+
+  <section class="pv__sec">
+    <h2>Liste — hiérarchie sans conteneur</h2>
+    <div class="box">
+      <div class="grp" style="margin-top:4px"><span class="grp__label">Gestion</span></div>
+      <div id="navlist"></div>
+    </div>
+    <p class="pv__note">Ligne de 60 px minimum, titre et méta tronqués à l’ellipse, filet inférieur sauf sur
+      le dernier élément. Le survol pose un fond <code class="pv__mono">--lav-025</code> : le texte ne change jamais.</p>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Liste de contenu — avatar, méta, valeur</h2>
+    <div class="box">
+      <div class="grp" style="margin-top:4px"><span class="grp__label">C</span></div>
+      <a class="row" href="#c1"><span class="avatar">CR</span>
+        <span class="row__body"><span class="row__title">Camille Roy</span>
+          <span class="row__meta">Coupe enfant · première visite</span></span>
+        <span class="row__side num">18 €</span></a>
+      <a class="row" href="#c2"><span class="avatar avatar--rose">IF</span>
+        <span class="row__body"><span class="row__title">Inès Ferrand</span>
+          <span class="row__meta">Coloration racines · cliente depuis janvier 2022</span></span>
+        <span class="row__side num">78 €</span></a>
+      <a class="row" href="#c3"><span class="avatar avatar--peach">SB</span>
+        <span class="row__body"><span class="row__title">Sofia Benali</span>
+          <span class="row__meta">Balayage + soin · longueurs fragiles</span></span>
+        <span class="row__side num">95 €</span></a>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Champs</h2>
+    <div class="two">
+      <div class="box"><div class="box__k">Saisie</div>
+        <label class="field" for="d-nom"><span class="field__label">Nom</span>
+          <input class="input" id="d-nom" placeholder="Prénom et nom" /></label>
+        <label class="field" for="d-tel"><span class="field__label">Téléphone</span>
+          <input class="input" id="d-tel" type="tel" inputmode="tel" placeholder="06 00 00 00 00" /></label>
+        <label class="field" for="d-err"><span class="field__label">Cliente</span>
+          <input class="input" id="d-err" aria-invalid="true" placeholder="Nom de la cliente" aria-describedby="d-err-m" /></label>
+        <p class="field__error" id="d-err-m">Indiquez le nom de la cliente.</p>
+      </div>
+      <div class="box"><div class="box__k">Recherche &amp; segmenté</div>
+        <div class="search" style="margin-top:12px">
+          <span id="s-icon"></span>
+          <input class="input" type="search" placeholder="Nom, prestation ou téléphone" aria-label="Rechercher" />
+        </div>
+        <p class="pv__note" style="margin-top:4px">Fond <code class="pv__mono">--surface</code> sans bordure, qui redevient blanc au focus.</p>
+        <div class="seg" role="tablist" aria-label="Filtrer" style="margin-top:16px">
+          <button class="seg__btn" type="button" role="tab" aria-selected="true">Tout</button>
+          <button class="seg__btn" type="button" role="tab" aria-selected="false">À racheter</button>
+        </div>
+        <p class="pv__note">Le segmenté est le <strong>seul</strong> contrôle arrondi du système, un par écran maximum.</p>
+        <div class="box__k" style="margin-top:20px">Pas de un</div>
+        <div class="stepper" style="margin-top:10px">
+          <button class="stepper__b" type="button" aria-label="Retirer" id="st-m"></button>
+          <span class="stepper__v num">6</span>
+          <button class="stepper__b" type="button" aria-label="Ajouter" id="st-p"></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Vide, chargement, erreur</h2>
+    <div class="two">
+      <div class="box" style="padding:0">
+        <div class="state"><div class="state__mark" id="st-cal"></div>
+          <div class="state__title">Journée libre</div>
+          <p class="state__text">Aucun rendez-vous mardi 23. Vous pouvez en créer un ou consulter un autre jour.</p>
+          <button class="btn btn--ghost" type="button">Créer le rendez-vous</button></div>
+      </div>
+      <div class="box" style="padding:0">
+        <div class="state"><div class="state__mark state__mark--rose" id="st-wifi"></div>
+          <div class="state__title">Synchronisation interrompue</div>
+          <p class="state__text">Vos clientes enregistrées restent consultables. Les modifications partiront à la reconnexion.</p>
+          <button class="btn btn--ghost" type="button">Réessayer</button></div>
+      </div>
+    </div>
+    <div class="box" style="margin-top:22px">
+      <div class="box__k">Chargement — squelettes calés sur la grille réelle</div>
+      <div style="display:flex;gap:14px;align-items:center;margin-top:14px">
+        <div class="skel" style="width:40px;height:40px;border-radius:999px"></div>
+        <div style="flex:1">
+          <div class="skel skel--title" style="width:44%"></div>
+          <div class="skel skel--line" style="width:66%;margin-top:8px"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center;margin-top:18px">
+        <div class="skel" style="width:40px;height:40px;border-radius:999px"></div>
+        <div style="flex:1">
+          <div class="skel skel--title" style="width:36%"></div>
+          <div class="skel skel--line" style="width:54%;margin-top:8px"></div>
+        </div>
+      </div>
+      <p class="pv__note">Un shimmer de 1,4 s, pas un spinner. Pendant le chargement, l’action primaire reste inactive.</p>
+    </div>
+    <div class="box" style="margin-top:22px">
+      <div class="box__k">Confirmation</div>
+      <div class="toast" data-open="true" style="position:static;margin-top:12px;opacity:1;transform:none;box-shadow:none"
+           id="toast-demo" role="status"></div>
+      <p class="pv__note">Fond <code class="pv__mono">--fg</code>, texte <code class="pv__mono">--bg</code>, 2,6 s, annoncé en <code class="pv__mono">aria-live="polite"</code>.</p>
+    </div>
+  </section>
+</div>
+<script src="../assets/souris.js"></script>
+<script>
+  var I = Souris.icon;
+  var NAV = [
+    ['tag','Prestations &amp; tarifs','6 prestations · phases et temps de pose',false],
+    ['percent','Remises','3 remises actives',false],
+    ['globe','Réservation en ligne','Choisissez les créneaux réservables',true]
+  ];
+  document.getElementById('navlist').innerHTML = NAV.map(function(it){
+    var inner = '<span class="nav__i">'+I(it[0],19)+'</span>'+
+      '<span class="row__body"><span class="row__title">'+it[1]+'</span>'+
+      '<span class="row__meta">'+it[2]+'</span></span>'+
+      (it[3] ? '<span class="chip">Bientôt</span>' : '<span class="row__chev">'+I('chevron',18)+'</span>');
+    return it[3]
+      ? '<div class="row" aria-disabled="true" style="cursor:default">'+inner+'</div>'
+      : '<button class="row" type="button">'+inner+'</button>';
+  }).join('');
+  document.getElementById('s-icon').innerHTML = I('search',18);
+  document.getElementById('st-m').innerHTML = I('minus',18);
+  document.getElementById('st-p').innerHTML = I('add',18);
+  document.getElementById('st-cal').innerHTML = I('calOff',26);
+  document.getElementById('st-wifi').innerHTML = I('wifi',26);
+  document.getElementById('toast-demo').innerHTML = I('check',18)+'<span>Rendez-vous créé</span>';
+</script>
+</body>
+</html>

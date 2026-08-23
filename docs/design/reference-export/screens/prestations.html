@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Souris — Prestations & tarifs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<style>
+  .bar{ display:flex; height:8px; border-radius:4px; overflow:hidden; margin-top:8px; background:var(--surface); }
+  .bar__s{ height:100%; }
+  .bar__s--act{ background:var(--lav-200); }
+  .bar__s--pose{ background:repeating-linear-gradient(135deg, oklch(0.90 0.062 62) 0 5px, oklch(0.965 0.025 62) 5px 10px); }
+</style>
+</head>
+<body>
+<div class="app" data-od-id="screen-prestations">
+  <header class="hd" data-od-id="prestations-header">
+    <div class="hd__row" style="align-items:center">
+      <a class="ibtn" href="plus.html" aria-label="Retour à Plus" data-od-id="prestations-back" style="margin-left:-10px"></a>
+      <div style="flex:1 1 auto">
+        <p class="hd__eyebrow">Gestion</p>
+        <h1 class="hd__title" style="font-size:23px">Prestations &amp; tarifs</h1>
+      </div>
+    </div>
+  </header>
+
+  <div class="scroll" id="scroll">
+    <div class="pad pad-b" id="content"></div>
+  </div>
+
+  <button class="fab" type="button" style="bottom:calc(20px + var(--safe-b))" data-open-sheet="sheet-new" data-od-id="prestations-fab" aria-label="Ajouter une prestation"></button>
+  <div class="scrim" data-scrim></div>
+
+  <section class="sheet" id="sheet-detail" role="dialog" aria-modal="true" aria-labelledby="pd-title" aria-hidden="true" data-od-id="sheet-prestation">
+    <div class="sheet__grab"></div>
+    <div class="sheet__hd">
+      <h2 class="sheet__title" id="pd-title">Prestation</h2>
+      <button class="ibtn" type="button" data-close-sheet aria-label="Fermer"></button>
+    </div>
+    <div class="sheet__body" id="pd-body"></div>
+    <div class="sheet__foot">
+      <button class="btn btn--ghost" type="button" data-close-sheet style="flex:1">Fermer</button>
+      <button class="btn btn--primary" type="button" style="flex:1.4" id="pd-save">Enregistrer</button>
+    </div>
+  </section>
+
+  <section class="sheet" id="sheet-new" role="dialog" aria-modal="true" aria-labelledby="pn-title" aria-hidden="true" data-od-id="sheet-prestation-new">
+    <div class="sheet__grab"></div>
+    <div class="sheet__hd">
+      <h2 class="sheet__title" id="pn-title">Nouvelle prestation</h2>
+      <button class="ibtn" type="button" data-close-sheet aria-label="Fermer"></button>
+    </div>
+    <div class="sheet__body">
+      <form id="pn-form" novalidate>
+        <label class="field" for="s-nom"><span class="field__label">Nom</span>
+          <input class="input" id="s-nom" placeholder="Coupe, coloration, soin…" aria-describedby="s-nom-err" /></label>
+        <p class="field__error" id="s-nom-err" hidden></p>
+        <label class="field" for="s-cat"><span class="field__label">Catégorie</span>
+          <select class="input" id="s-cat"><option>Coupe</option><option>Couleur</option><option>Soin</option><option>Coiffage</option></select></label>
+        <div style="display:flex;gap:12px">
+          <label class="field" for="s-prix" style="flex:1"><span class="field__label">Prix</span>
+            <input class="input num" id="s-prix" type="number" min="0" value="55" /></label>
+          <label class="field" for="s-duree" style="flex:1"><span class="field__label">Durée totale</span>
+            <input class="input num" id="s-duree" type="number" min="5" step="5" value="90" /></label>
+        </div>
+        <div class="grp"><span class="grp__label">Phases</span></div>
+        <p style="font-size:13.5px;color:var(--fg-soft);padding-bottom:8px">
+          Découpez la prestation pour libérer vos temps de pose. Une autre cliente pourra y être placée.</p>
+        <div id="pn-phases"></div>
+        <button class="btn btn--ghost btn--block" type="button" id="add-phase" style="margin-top:12px">Ajouter une phase</button>
+      </form>
+    </div>
+    <div class="sheet__foot">
+      <button class="btn btn--ghost" type="button" data-close-sheet style="flex:1">Annuler</button>
+      <button class="btn btn--primary" type="submit" form="pn-form" style="flex:1.6">Ajouter la prestation</button>
+    </div>
+  </section>
+
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+</div>
+
+<script src="../assets/souris.js"></script>
+<script>
+(function () {
+  var I = Souris.icon;
+  Souris.sheets(); Souris.stickyHeader();
+  document.querySelector('[data-od-id="prestations-back"]').innerHTML = I('back', 22);
+  document.querySelector('[data-od-id="prestations-fab"]').innerHTML = I('add', 26);
+  document.querySelectorAll('[data-close-sheet].ibtn').forEach(function (b) { b.innerHTML = I('close', 20); });
+
+  var S = [
+    { c: 'Coupe', n: 'Coupe + brushing', price: 55, ph: [['Shampooing & coupe', 60, 0], ['Brushing', 30, 0]] },
+    { c: 'Coupe', n: 'Coupe enfant', price: 18, ph: [['Coupe', 45, 0]] },
+    { c: 'Coupe', n: 'Retouche frange', price: 12, ph: [['Retouche', 20, 0]] },
+    { c: 'Couleur', n: 'Coloration racines', price: 78, ph: [['Application couleur', 45, 0], ['Temps de pose', 60, 1], ['Rinçage & brushing', 45, 0]] },
+    { c: 'Couleur', n: 'Balayage + soin', price: 95, ph: [['Balayage', 60, 0], ['Temps de pose', 30, 1], ['Rinçage & soin', 30, 0]] },
+    { c: 'Soin', n: 'Soin protéiné', price: 34, ph: [['Application', 15, 0], ['Temps de pose', 20, 1], ['Rinçage', 10, 0]] }
+  ];
+
+  function total(p) { return p.ph.reduce(function (a, x) { return a + x[1]; }, 0); }
+  function poseMin(p) { return p.ph.filter(function (x) { return x[2]; }).reduce(function (a, x) { return a + x[1]; }, 0); }
+  function hm(m) { var h = Math.floor(m / 60), r = m % 60; return (h ? h + ' h' : '') + (r ? (h ? ' ' : '') + r + ' min' : ''); }
+
+  function bar(p) {
+    var t = total(p);
+    return '<span class="bar">' + p.ph.map(function (x) {
+      return '<span class="bar__s ' + (x[2] ? 'bar__s--pose' : 'bar__s--act') + '" style="width:' + (x[1] / t * 100) + '%"></span>';
+    }).join('') + '</span>';
+  }
+
+  var cats = {};
+  S.forEach(function (p) { (cats[p.c] = cats[p.c] || []).push(p); });
+  document.getElementById('content').innerHTML =
+    '<p style="font-size:13.5px;color:var(--fg-soft);padding:14px 0 2px;max-width:34ch">' +
+      'Les phases découpent une prestation. Un temps de pose vous laisse libre pour une autre cliente.</p>' +
+    Object.keys(cats).map(function (c) {
+      return '<div class="grp"><span class="grp__label">' + c + '</span></div>' +
+        cats[c].map(function (p) {
+          var i = S.indexOf(p), pm = poseMin(p);
+          return '<button class="row" type="button" data-p="' + i + '" style="align-items:flex-start"' +
+            ' data-od-id="prestation-' + i + '">' +
+            '<span class="row__body"><span class="row__title" style="display:block">' + p.n + '</span>' +
+            '<span class="row__meta" style="display:block">' + hm(total(p)) + ' · ' + p.ph.length + ' phase' +
+              (p.ph.length > 1 ? 's' : '') + (pm ? ' · pose ' + hm(pm) : '') + '</span>' + bar(p) + '</span>' +
+            '<span class="row__side num" style="font-weight:700;color:var(--fg);padding-top:1px">' + p.price + ' €</span>' +
+            '<span class="row__chev" style="margin-top:2px">' + I('chevron', 18) + '</span></button>';
+        }).join('');
+    }).join('');
+
+  document.getElementById('content').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-p]'); if (!b) return;
+    var p = S[+b.getAttribute('data-p')];
+    document.getElementById('pd-title').textContent = p.n;
+    document.getElementById('pd-body').innerHTML =
+      '<div class="kv"><span class="kv__k">Catégorie</span><span class="kv__v">' + p.c + '</span></div>' +
+      '<div class="kv"><span class="kv__k">Prix</span><span class="kv__v num">' + p.price + ' €</span></div>' +
+      '<div class="kv"><span class="kv__k">Durée totale</span><span class="kv__v num">' + hm(total(p)) + '</span></div>' +
+      '<div class="grp"><span class="grp__label">Phases</span></div>' +
+      p.ph.map(function (x, k) {
+        var start = p.ph.slice(0, k).reduce(function (a, y) { return a + y[1]; }, 0);
+        return '<div class="phase"><span class="phase__bar' + (x[2] ? ' phase__bar--pose' : '') + '"></span>' +
+          '<span class="phase__t num">+' + start + ' min</span>' +
+          '<span class="phase__b"><span class="phase__n">' + x[0] + ' · ' + x[1] + ' min</span>' +
+          '<span class="phase__d">' + (x[2] ? 'Vous êtes libre — un autre rendez-vous peut être placé ici' : 'Vous êtes occupée') +
+          '</span></span></div>';
+      }).join('');
+    document.querySelector('[data-scrim]').setAttribute('data-open', 'true');
+    var s = document.getElementById('sheet-detail');
+    s.setAttribute('data-open', 'true'); s.removeAttribute('aria-hidden');
+  });
+
+  document.getElementById('pd-save').addEventListener('click', function () {
+    document.querySelector('[data-close-sheet]').click();
+    Souris.toast('Prestation enregistrée');
+  });
+
+  /* Éditeur de phases */
+  var draft = [['Application', 30, 0]];
+  function drawPhases() {
+    document.getElementById('pn-phases').innerHTML = draft.map(function (x, k) {
+      return '<div class="phase" style="align-items:center">' +
+        '<span class="phase__bar' + (x[2] ? ' phase__bar--pose' : '') + '"></span>' +
+        '<span class="phase__b"><input class="input" value="' + x[0] + '" data-k="' + k +
+          '" data-f="n" aria-label="Nom de la phase ' + (k + 1) + '" style="min-height:38px;font-size:14px" /></span>' +
+        '<span style="flex:0 0 76px"><input class="input num" type="number" min="5" step="5" value="' + x[1] +
+          '" data-k="' + k + '" data-f="d" aria-label="Durée en minutes" style="min-height:38px;font-size:14px;padding:6px 8px;text-align:center" /></span>' +
+        '<label style="flex:0 0 auto;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--fg-soft)">' +
+          '<input type="checkbox" data-k="' + k + '" data-f="p"' + (x[2] ? ' checked' : '') +
+          ' style="width:18px;height:18px;accent-color:var(--accent)" /> Pose</label></div>';
+    }).join('');
+  }
+  drawPhases();
+  document.getElementById('pn-phases').addEventListener('change', function (e) {
+    var t = e.target, k = +t.getAttribute('data-k');
+    if (isNaN(k)) return;
+    var f = t.getAttribute('data-f');
+    if (f === 'n') draft[k][0] = t.value;
+    if (f === 'd') draft[k][1] = +t.value;
+    if (f === 'p') { draft[k][2] = t.checked ? 1 : 0; drawPhases(); }
+  });
+  document.getElementById('add-phase').addEventListener('click', function () {
+    draft.push(['Nouvelle phase', 15, 0]); drawPhases();
+  });
+
+  document.getElementById('pn-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var f = document.getElementById('s-nom'), err = document.getElementById('s-nom-err');
+    if (!f.value.trim()) {
+      f.setAttribute('aria-invalid', 'true'); err.hidden = false;
+      err.innerHTML = I('alert', 15) + '<span>Nommez la prestation.</span>'; f.focus(); return;
+    }
+    f.removeAttribute('aria-invalid'); err.hidden = true;
+    document.querySelector('[data-close-sheet]').click();
+    Souris.toast('Prestation ajoutée'); this.reset();
+  });
+  document.getElementById('s-nom').addEventListener('input', function () {
+    if (this.value.trim()) { this.removeAttribute('aria-invalid'); document.getElementById('s-nom-err').hidden = true; }
+  });
+})();
+</script>
+</body>
+</html>

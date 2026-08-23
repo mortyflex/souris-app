@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Souris — Pastels & états</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<link rel="stylesheet" href="preview.css" />
+<style>
+  .ramp{ display:flex; border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
+  .ramp div{ flex:1 1 0; height:56px; }
+  .rl{ margin-top:22px; }
+  .rl h3{ font-size:14.5px; letter-spacing:-0.01em; }
+  .rl p{ font-size:12.5px; color:var(--fg-soft); margin-top:4px; max-width:58ch; line-height:1.5; }
+  .rl .pv__mono{ display:block; margin-top:6px; }
+  .evs{ position:relative; height:190px; margin-top:16px; }
+  .evs .ev{ left:0; right:0; }
+  .pair{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:16px; }
+  .pair__i{ border:1px solid var(--border); border-radius:var(--r); padding:14px; background:var(--bg); }
+  .pair__k{ font-size:11.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-soft); margin-bottom:8px; }
+</style>
+</head>
+<body class="pv">
+<div class="pv__wrap">
+  <a class="btn btn--quiet pv__back" href="index.html">Toutes les cartes</a>
+  <p class="pv__eyebrow">Couleur · 2/2</p>
+  <h1 class="pv__h">Pastels sémantiques</h1>
+  <p class="pv__lede">Les pastels ne décorent rien. Ils distinguent des rendez-vous, des phases et des états —
+     et jamais autre chose. Aucun d’eux ne doit devenir un fond de page.</p>
+  <p class="pv__src">Source : rampes <code>--lav-*</code>, <code>--rose-*</code>, <code>--peach-*</code> et variantes <code>.ev--*</code> de <code>assets/souris.css</code></p>
+
+  <section class="pv__sec">
+    <h2>Trois rampes, trois significations</h2>
+    <div class="rl">
+      <div class="ramp">
+        <div style="background:var(--lav-050)"></div><div style="background:var(--lav-100)"></div>
+        <div style="background:var(--lav-200)"></div><div style="background:var(--lav-700)"></div>
+      </div>
+      <h3>Lavande — prestation, structure</h3>
+      <p>Rendez-vous standard, avatar par défaut, hover de ligne, indicateur de navigation Android.</p>
+      <span class="pv__mono">--lav-050 · --lav-100 · --lav-200 · --lav-700</span>
+    </div>
+    <div class="rl">
+      <div class="ramp">
+        <div style="background:var(--rose-050)"></div><div style="background:var(--rose-100)"></div>
+        <div style="background:var(--rose-200)"></div><div style="background:var(--rose-600)"></div>
+      </div>
+      <h3>Rose — maintenant, alerte, annulation</h3>
+      <p>Ligne de l’heure courante, erreur de champ, stock sous le seuil, action destructive, absence.</p>
+      <span class="pv__mono">--rose-050 · --rose-100 · --rose-200 · --rose-600</span>
+    </div>
+    <div class="rl">
+      <div class="ramp">
+        <div style="background:var(--peach-050)"></div><div style="background:var(--peach-100)"></div>
+        <div style="background:var(--peach-200)"></div><div style="background:var(--peach-700)"></div>
+      </div>
+      <h3>Pêche — temps de pose, disponibilité</h3>
+      <p>Le seul motif graphique du produit : pendant une pose, la cliente reste en rendez-vous et la
+         professionnelle redevient libre.</p>
+      <span class="pv__mono">--peach-050 · --peach-100 · --peach-200 · --peach-700</span>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Les quatre événements d’agenda</h2>
+    <p>Chaque variante combine un fond 050, un contour 200 et un filet-clé de 3 px en 600/700.</p>
+    <div class="pv__panel">
+      <div class="evs">
+        <button class="ev ev--lav" type="button" style="top:0;height:42px">
+          <span class="ev__t">9 h – 10 h 30</span><span class="ev__name">Léa Marchand</span></button>
+        <button class="ev ev--rose" type="button" style="top:50px;height:42px">
+          <span class="ev__t">10 h 30 – 13 h</span><span class="ev__name">Inès Ferrand</span></button>
+        <button class="ev ev--peach" type="button" style="top:100px;height:42px">
+          <span class="ev__t">11 h 30 – 12 h 15</span><span class="ev__name">Camille Roy</span></button>
+        <div class="ev ev--off" style="top:150px;height:38px">
+          <span class="ev__name" style="font-weight:600;color:var(--fg-soft)">Pause déjeuner</span></div>
+      </div>
+      <p class="pv__note"><code class="pv__mono">.ev--lav</code> prestation · <code class="pv__mono">.ev--rose</code> couleur en cours ·
+        <code class="pv__mono">.ev--peach</code> cliente placée pendant une pose · <code class="pv__mono">.ev--off</code> indisponible.</p>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>Le motif du temps de pose</h2>
+    <p>Rayures à 135° entre <code class="pv__mono">--peach-200</code> et <code class="pv__mono">--peach-050</code>, filets pointillés, libellé en capitales.
+       C’est le seul motif autorisé dans le produit.</p>
+    <div class="pv__panel">
+      <div style="position:relative;height:150px">
+        <button class="ev ev--rose" type="button" style="left:0;right:0;top:0;height:146px">
+          <span class="ev__t">10 h 30 – 13 h</span>
+          <span class="ev__name">Inès Ferrand</span>
+          <span class="ev__svc">Coloration racines</span>
+          <span class="ev__pose" style="top:52px;height:56px">
+            <span class="ev__poseLabel">Temps de pose · vous êtes libre 1 h</span></span>
+        </button>
+      </div>
+    </div>
+    <div class="legend" style="padding-left:0">
+      <span class="legend__i"><span class="legend__sw"></span>Prestation</span>
+      <span class="legend__i"><span class="legend__sw legend__sw--pose"></span>Temps de pose</span>
+      <span class="legend__i"><span class="legend__sw legend__sw--off"></span>Indisponible</span>
+    </div>
+  </section>
+
+  <section class="pv__sec">
+    <h2>États de retour</h2>
+    <div class="pair">
+      <div class="pair__i"><div class="pair__k">Puces</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span class="chip chip--lav"><span class="chip__dot"></span>Confirmé</span>
+          <span class="chip chip--peach"><span class="chip__dot"></span>Pose</span>
+          <span class="chip chip--rose"><span class="chip__dot"></span>À racheter</span>
+          <span class="chip">Bientôt</span>
+        </div></div>
+      <div class="pair__i"><div class="pair__k">Avatars</div>
+        <div style="display:flex;gap:10px">
+          <span class="avatar">LM</span><span class="avatar avatar--rose">IF</span><span class="avatar avatar--peach">CR</span>
+        </div></div>
+      <div class="pair__i"><div class="pair__k">Champ invalide</div>
+        <input class="input" value="" placeholder="Nom de la cliente" aria-invalid="true" aria-label="Nom de la cliente" />
+        <p class="field__error">Indiquez le nom de la cliente.</p></div>
+      <div class="pair__i"><div class="pair__k">Action destructive</div>
+        <button class="btn btn--danger btn--block" type="button">Marquer comme absence</button></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

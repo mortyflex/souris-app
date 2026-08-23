@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Souris — Agenda (Android)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/souris.css" />
+</head>
+<body data-platform="android">
+<div class="app" data-od-id="screen-agenda-android">
+
+  <header class="hd" data-od-id="agenda-header">
+    <div class="hd__row" style="align-items:center">
+      <div>
+        <h1 class="hd__title">Aujourd’hui</h1>
+        <p class="hd__sub">Mardi 23 septembre</p>
+      </div>
+      <div style="display:flex;gap:2px">
+        <button class="ibtn" type="button" data-od-id="agenda-search" aria-label="Rechercher un rendez-vous"></button>
+        <button class="ibtn" type="button" data-od-id="agenda-view" aria-label="Changer d’affichage"></button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="daystrip" id="daystrip" aria-label="Semaine du 22 au 28 septembre" data-od-id="agenda-daystrip"></nav>
+
+  <div class="scroll" id="scroll">
+    <div id="content"></div>
+    <div style="height:96px"></div>
+  </div>
+
+  <button class="fab" type="button" data-open-sheet="sheet-create" data-od-id="agenda-fab" aria-label="Créer le rendez-vous"></button>
+
+  <nav data-tabbar></nav>
+
+  <div class="scrim" data-scrim></div>
+
+  <!-- Détail d’un rendez-vous -->
+  <section class="sheet" id="sheet-detail" role="dialog" aria-modal="true" aria-labelledby="detail-title" aria-hidden="true" data-od-id="sheet-rdv-detail">
+    <div class="sheet__grab"></div>
+    <div class="sheet__hd">
+      <h2 class="sheet__title" id="detail-title">Rendez-vous</h2>
+      <button class="ibtn" type="button" data-close-sheet aria-label="Fermer"></button>
+    </div>
+    <div class="sheet__body" id="detail-body"></div>
+    <div class="sheet__foot">
+      <button class="btn btn--ghost" type="button" style="flex:1" data-od-id="rdv-edit">Modifier</button>
+      <button class="btn btn--primary" type="button" style="flex:1.4" data-od-id="rdv-done" id="rdv-done">Terminer</button>
+    </div>
+  </section>
+
+  <!-- Création -->
+  <section class="sheet" id="sheet-create" role="dialog" aria-modal="true" aria-labelledby="create-title" aria-hidden="true" data-od-id="sheet-rdv-create">
+    <div class="sheet__grab"></div>
+    <div class="sheet__hd">
+      <h2 class="sheet__title" id="create-title">Nouveau rendez-vous</h2>
+      <button class="ibtn" type="button" data-close-sheet aria-label="Fermer"></button>
+    </div>
+    <div class="sheet__body">
+      <form id="create-form" novalidate>
+        <label class="field" for="f-cliente">
+          <span class="field__label">Cliente</span>
+          <input class="input" id="f-cliente" name="cliente" placeholder="Nom de la cliente" autocomplete="off" aria-describedby="f-cliente-err" />
+        </label>
+        <p class="field__error" id="f-cliente-err" hidden></p>
+
+        <label class="field" for="f-presta">
+          <span class="field__label">Prestation</span>
+          <select class="input" id="f-presta" name="presta">
+            <option value="coupe">Coupe + brushing · 1 h 30 · 55 €</option>
+            <option value="couleur">Coloration racines · 2 h 30 · 78 €</option>
+            <option value="balayage">Balayage + soin · 2 h 00 · 95 €</option>
+            <option value="frange">Retouche frange · 20 min · 12 €</option>
+          </select>
+        </label>
+
+        <div style="display:flex;gap:12px">
+          <label class="field" for="f-date" style="flex:1">
+            <span class="field__label">Date</span>
+            <input class="input" id="f-date" type="date" value="2025-09-23" />
+          </label>
+          <label class="field" for="f-heure" style="flex:1">
+            <span class="field__label">Début</span>
+            <input class="input" id="f-heure" type="time" value="17:30" />
+          </label>
+        </div>
+
+        <div class="grp"><span class="grp__label">Déroulé</span></div>
+        <div id="phase-preview"></div>
+      </form>
+    </div>
+    <div class="sheet__foot">
+      <button class="btn btn--ghost" type="button" data-close-sheet style="flex:1">Annuler</button>
+      <button class="btn btn--primary" type="submit" form="create-form" style="flex:1.6" data-od-id="rdv-create-submit">Créer le rendez-vous</button>
+    </div>
+  </section>
+
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+</div>
+
+<script src="../assets/souris.js"></script>
+<script src="../assets/agenda-view.js"></script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Souris — Plus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/souris.css" />
+<style>
+  .nav__i{ flex:0 0 auto; width:34px; height:34px; border-radius:var(--r); display:grid; place-items:center;
+    background:var(--lav-050); color:var(--accent); }
+  .nav__i svg{ width:19px; height:19px; }
+  .row[aria-disabled="true"]{ cursor:default; }
+  .row[aria-disabled="true"]:hover{ background:transparent; }
+  .row[aria-disabled="true"] .row__title{ color:var(--fg-soft); }
+  .row[aria-disabled="true"] .nav__i{ background:var(--surface); color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="app" data-od-id="screen-plus">
+  <header class="hd" data-od-id="plus-header">
+    <div class="hd__row">
+      <div>
+        <p class="hd__eyebrow">Salon Nour · Lyon 3<sup>e</sup></p>
+        <h1 class="hd__title">Plus</h1>
+      </div>
+    </div>
+  </header>
+
+  <div class="scroll" id="scroll">
+    <div class="pad pad-b" id="content"></div>
+  </div>
+
+  <nav data-tabbar></nav>
+  <div class="scrim" data-scrim></div>
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+</div>
+
+<script src="../assets/souris.js"></script>
+<script>
+(function () {
+  var I = Souris.icon;
+  Souris.tabbar('plus'); Souris.sheets(); Souris.stickyHeader();
+
+  var GROUPS = [
+    ['Gestion', [
+      ['tag', 'Prestations & tarifs', '6 prestations · phases et temps de pose', 'prestations.html'],
+      ['percent', 'Remises', '3 remises actives', null],
+      ['globe', 'Réservation en ligne', 'Choisissez les créneaux réservables', 'soon']
+    ]],
+    ['Salon', [
+      ['store', 'Informations du salon', 'Nom, adresse, coordonnées', null],
+      ['clock', 'Horaires & disponibilités', 'Mar – sam · 9 h – 19 h', null],
+      ['clientes', 'Équipe', 'Travailler à plusieurs', 'soon']
+    ]],
+    ['Préférences', [
+      ['bell', 'Notifications', 'Rappels de rendez-vous activés', null],
+      ['agenda', 'Préférences Agenda', 'Journée 8 h – 20 h · pas de 15 min', null]
+    ]],
+    ['Compte', [
+      ['user', 'Profil', 'Nour B.', null],
+      ['lock', 'Sécurité', 'Code et Face ID', null],
+      ['help', 'Aide', 'Questions fréquentes et contact', null]
+    ]]
+  ];
+
+  document.getElementById('content').innerHTML = GROUPS.map(function (g) {
+    return '<div class="grp"><span class="grp__label">' + g[0] + '</span></div>' +
+      g[1].map(function (it) {
+        var soon = it[3] === 'soon';
+        var id = 'plus-' + it[1].toLowerCase().normalize('NFD').replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
+        var inner =
+          '<span class="nav__i">' + I(it[0], 19) + '</span>' +
+          '<span class="row__body"><span class="row__title" style="display:block">' + it[1] + '</span>' +
+          '<span class="row__meta" style="display:block">' + it[2] + '</span></span>' +
+          (soon ? '<span class="chip">Bientôt</span>' : '<span class="row__chev">' + I('chevron', 18) + '</span>');
+        return it[3] && !soon
+          ? '<a class="row" href="' + it[3] + '" data-od-id="' + id + '">' + inner + '</a>'
+          : '<' + (soon ? 'div' : 'button type="button"') + ' class="row"' +
+            (soon ? ' aria-disabled="true"' : '') + ' data-od-id="' + id + '">' + inner +
+            '</' + (soon ? 'div' : 'button') + '>';
+      }).join('');
+  }).join('') +
+  '<p style="font-size:12.5px;color:var(--muted);padding:28px 0 8px;text-align:center">Souris <span class="num">1.0</span></p>';
+})();
+</script>
+</body>
+</html>

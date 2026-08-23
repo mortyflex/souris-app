@@ -1,0 +1,60 @@
+/* ============================================================
+   SOURIS — Espacement, rayons, ombres, cibles, motion
+   À charger après colors_and_type.css.
+   Valeurs relevées dans assets/souris.css (prototype iOS + Android).
+   ============================================================ */
+
+:root{
+  /* ---- Rythme 8px ---- */
+  --sp-1:4px;
+  --sp-2:8px;
+  --sp-3:12px;
+  --sp-4:16px;
+  --sp-5:20px;   /* gouttière horizontale iOS (.pad) */
+  --sp-6:24px;
+  --sp-7:28px;   /* respiration entre groupes de liste */
+  --sp-8:32px;
+
+  --gutter-ios:20px;
+  --gutter-android:16px;
+  --pad-bottom-ios:104px;      /* place pour barre d'onglets + FAB */
+  --pad-bottom-android:128px;
+
+  /* ---- Rayons ---- */
+  --r:8px;          /* défaut : bouton, champ, ligne, puce, événement */
+  --r-lg:16px;      /* feuille modale iOS */
+  --r-pill:999px;   /* avatar, FAB iOS, point, indicateur */
+
+  /* ---- Ombres — très discrètes, teintées navy, jamais noires ---- */
+  --shadow-sheet:0 -1px 0 var(--border), 0 -12px 32px -18px oklch(0.25 0.06 285 / 0.35);
+  --shadow-raise:0 1px 2px oklch(0.25 0.06 285 / 0.10), 0 6px 16px -10px oklch(0.25 0.06 285 / 0.28);
+  --shadow-fab:0 4px 14px -4px oklch(0.46 0.14 300 / 0.5);
+
+  /* ---- Cibles tactiles & zones sûres ---- */
+  --tap:44px;       /* iOS ; 48px sur Android */
+  --safe-b:16px;    /* ; 8px sur Android */
+
+  /* ---- Grille de l'Agenda ---- */
+  --hour:68px;          /* 1 heure = 68px */
+  --tl-gutter:62px;     /* colonne des heures */
+  --day-start:8;        /* journée affichée 8 h → 20 h */
+  --day-end:20;
+
+  /* ---- Motion ---- */
+  --ease-out:cubic-bezier(.32,.72,0,1);   /* feuilles, panneaux d'onboarding */
+  --d-tap:.08s;      /* enfoncement */
+  --d-state:.15s;    /* hover, couleur */
+  --d-panel:.28s;    /* feuille modale */
+}
+
+/* Android : mêmes tokens, densité Material 3 */
+body[data-platform="android"]{
+  --tap:48px;
+  --r:12px;
+  --r-lg:28px;
+  --safe-b:8px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
