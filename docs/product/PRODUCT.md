@@ -119,6 +119,12 @@ through unattended processing time, but that interval is not rendered as an occu
 grid remains visible so the professional can see the available time. Later staff-required phases appear again
 as separate visible segments of the same Appointment.
 
+Agenda provides two complementary views:
+
+- **Jour** is the detailed operational view of professional occupancy, processing gaps, reprises, and overlaps;
+- **Semaine** is a compact smartphone overview grouped vertically by day, showing appointment summaries without
+  exposing internal phases.
+
 ---
 
 ## 6. Real Service Timing

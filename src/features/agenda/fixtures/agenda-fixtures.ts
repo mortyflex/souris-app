@@ -1,5 +1,7 @@
 import type { Appointment, AppointmentItem, AppointmentPhase } from '@/domain/appointments';
 
+import { getWeekDays, isSameLocalDay } from '../calendar/week';
+
 export interface AgendaFixtureAppointment {
   readonly appointment: Appointment;
   readonly clientName: string;
@@ -24,11 +26,12 @@ function item(
   serviceName: string,
   serviceType: AppointmentItem['serviceType'],
   phases: readonly AppointmentPhase[],
+  order = 0,
 ): AppointmentItem {
   return {
     id,
     serviceId,
-    order: 0,
+    order,
     serviceName,
     serviceType,
     price: serviceType === 'TECHNIQUE' ? 95 : 42,
@@ -43,6 +46,7 @@ function fixture(
   hour: number,
   minute: number,
   itemValue: AppointmentItem,
+  additionalItems: readonly AppointmentItem[] = [],
 ): AgendaFixtureAppointment {
   return {
     clientName,
@@ -53,13 +57,19 @@ function fixture(
       staffMemberId: 'staff-amelie',
       startAt: localTime(day, hour, minute),
       status: 'SCHEDULED',
-      items: [itemValue],
+      items: [itemValue, ...additionalItems],
     },
   };
 }
 
 /** Initial in-memory Agenda data; history and persistence are intentionally absent. */
 export function createAgendaFixtures(day: Date): readonly AgendaFixtureAppointment[] {
+  const weekDays = getWeekDays(day);
+  const additionalDays = weekDays.filter((weekDay) => !isSameLocalDay(weekDay, day));
+  const busyDay = additionalDays[0];
+  const mediumDay = additionalDays[1];
+  const lightDay = additionalDays[2];
+
   return [
     fixture(
       day,
@@ -113,6 +123,51 @@ export function createAgendaFixtures(day: Date): readonly AgendaFixtureAppointme
       30,
       item('item-nadia', 'service-treatment', 'Soin profond', 'SERVICE', [
         phase('nadia-treatment', 'Soin profond', 45, true),
+      ]),
+    ),
+    fixture(
+      busyDay,
+      'agenda-elodie',
+      'Élodie Moreau',
+      9,
+      30,
+      item('item-elodie', 'service-cut', 'Coupe', 'SERVICE', [
+        phase('elodie-cut', 'Coupe', 45, true),
+      ]),
+    ),
+    fixture(
+      busyDay,
+      'agenda-hugo',
+      'Hugo Lefèvre',
+      13,
+      0,
+      item('item-hugo', 'service-beard', 'Taille', 'SERVICE', [
+        phase('hugo-beard', 'Taille', 30, true),
+      ]),
+    ),
+    fixture(
+      mediumDay,
+      'agenda-julie',
+      'Julie Garcia',
+      10,
+      0,
+      item('item-julie-color', 'service-color', 'Coloration', 'TECHNIQUE', [
+        phase('julie-color', 'Application', 30, true),
+      ]),
+      [
+        item('item-julie-cut', 'service-cut', 'Coupe', 'SERVICE', [
+          phase('julie-cut', 'Coupe', 30, true),
+        ], 1),
+      ],
+    ),
+    fixture(
+      lightDay,
+      'agenda-anais',
+      'Anaïs Petit',
+      11,
+      15,
+      item('item-anais', 'service-treatment', 'Soin profond', 'SERVICE', [
+        phase('anais-treatment', 'Soin profond', 45, true),
       ]),
     ),
   ];

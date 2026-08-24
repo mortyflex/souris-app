@@ -129,4 +129,9 @@ The operational Souris Agenda intentionally overrides that treatment:
 - short active segments use a compact single-line identity instead of becoming blank;
 - reprise content preserves service continuity.
 
+The exported design does not define the approved smartphone Week view. Souris uses a vertical list of seven day
+sections rather than a compressed seven-column calendar. Week rows summarize appointments once, keep the Day/Week
+palette identity, and do not render processing or reprise phases. Tapping a day opens its detailed Day view; a
+future larger-screen layout may use a multi-day grid but is outside this phase.
+
 Processing details remain available for future appointment details, service configuration, and editing workflows.
