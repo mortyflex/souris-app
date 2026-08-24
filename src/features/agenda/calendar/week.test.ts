@@ -52,4 +52,41 @@ describe('Agenda week calendar helpers', () => {
     expect(isSameLocalDay(next, localDate(2026, 9, 2))).toBe(true);
     expect(addLocalDays(previous, 14).getDate()).toBe(2);
   });
+
+  it('preserves the weekday when shifting weeks', () => {
+    const wednesday = localDate(2026, 8, 19);
+    const nextWeek = shiftWeek(wednesday, 1);
+    const prevWeek = shiftWeek(wednesday, -1);
+
+    expect(nextWeek.getDay()).toBe(wednesday.getDay());
+    expect(prevWeek.getDay()).toBe(wednesday.getDay());
+    expect(nextWeek.getDate()).toBe(26);
+    expect(prevWeek.getDate()).toBe(12);
+  });
+
+  it('handles week shift crossing month boundary', () => {
+    const monday = localDate(2026, 8, 31);
+    const nextWeek = shiftWeek(monday, 1);
+
+    expect(nextWeek.getMonth() + 1).toBe(9);
+    expect(nextWeek.getDate()).toBe(7);
+  });
+
+  it('handles week shift crossing year boundary', () => {
+    const monday = localDate(2026, 12, 28);
+    const nextWeek = shiftWeek(monday, 1);
+
+    expect(nextWeek.getFullYear()).toBe(2027);
+    expect(nextWeek.getMonth() + 1).toBe(1);
+    expect(nextWeek.getDate()).toBe(4);
+  });
+
+  it('always includes the selected day in its week', () => {
+    const wednesday = localDate(2026, 8, 19);
+    const weekDays = getWeekDays(wednesday);
+    const containsWednesday = weekDays.some((day) => isSameLocalDay(day, wednesday));
+
+    expect(containsWednesday).toBe(true);
+    expect(weekDays.length).toBe(7);
+  });
 });

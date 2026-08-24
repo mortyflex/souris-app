@@ -8,13 +8,34 @@ import { colors, foregroundSoft, gutter, lavender, spacing } from '@/shared/ui/t
 import { AgendaViewSwitcher, type AgendaViewMode } from './components/AgendaViewSwitcher';
 import { DayTimeline } from './components/DayTimeline';
 import { WeekView } from './components/WeekView';
-import { getWeekDays, isSameLocalDay, shiftWeek, startOfLocalDay } from './calendar/week';
+import { addLocalDays, getStartOfWeek, getWeekDays, isSameLocalDay, shiftWeek, startOfLocalDay } from './calendar/week';
 import { createAgendaFixtures } from './fixtures/agenda-fixtures';
 
 const dayNames = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
+const monthFormatter = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
+const yearFormatter = new Intl.DateTimeFormat('fr-FR', { year: 'numeric' });
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(date);
+}
+
+function formatWeekRange(date: Date): string {
+  const start = getStartOfWeek(date);
+  const end = addLocalDays(start, 6);
+  const startMonth = monthFormatter.format(start).replace(/\.$/, '');
+  const endMonth = monthFormatter.format(end).replace(/\.$/, '');
+  const startYear = yearFormatter.format(start);
+  const endYear = yearFormatter.format(end);
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+
+  if (startYear !== endYear) {
+    return `${startDay} ${startMonth} ${startYear} – ${endDay} ${endMonth} ${endYear}`;
+  }
+  if (startMonth !== endMonth) {
+    return `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
+  }
+  return `${startDay} – ${endDay} ${endMonth}`;
 }
 
 export function AgendaScreen() {
@@ -36,6 +57,10 @@ export function AgendaScreen() {
     setSelectedDay(shiftWeek(selectedDay, amount));
   };
 
+  const goToToday = () => {
+    setSelectedDay(today);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={[styles.header, { paddingHorizontal: horizontalGutter }]}>
@@ -47,6 +72,47 @@ export function AgendaScreen() {
       </View>
       {mode === 'day' ? (
         <>
+          <View style={[styles.dayNavigation, { paddingHorizontal: horizontalGutter }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Semaine précédente"
+              hitSlop={6}
+              onPress={() => shiftSelectedWeek(-1)}
+              style={({ pressed }) => [styles.navControl, pressed && styles.pressedControl]}
+            >
+              <AppText variant="control" style={styles.navText}>
+                ‹
+              </AppText>
+            </Pressable>
+            <AppText variant="control" style={styles.weekRange}>
+              {formatWeekRange(selectedDay)}
+            </AppText>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Semaine suivante"
+              hitSlop={6}
+              onPress={() => shiftSelectedWeek(1)}
+              style={({ pressed }) => [styles.navControl, pressed && styles.pressedControl]}
+            >
+              <AppText variant="control" style={styles.navText}>
+                ›
+              </AppText>
+            </Pressable>
+          </View>
+          {!isSameLocalDay(selectedDay, today) && (
+            <View style={[styles.todayRow, { paddingHorizontal: horizontalGutter }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Aujourd'hui"
+                onPress={goToToday}
+                style={({ pressed }) => [styles.todayButton, pressed && styles.pressedControl]}
+              >
+                <AppText variant="metadata" style={styles.todayText}>
+                  Aujourd&apos;hui
+                </AppText>
+              </Pressable>
+            </View>
+          )}
           <View style={[styles.dayStrip, { paddingHorizontal: horizontalGutter }]}>
             {getWeekDays(selectedDay).map((day, index) => {
               const selected = isSameLocalDay(day, selectedDay);
@@ -112,6 +178,31 @@ function AgendaDayButton({ day, dayName, hasAppointments, selected, onPress }: A
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: colors.background, flex: 1 },
   header: { gap: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.md },
+  dayNavigation: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  navControl: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  navText: { color: colors.foreground, fontSize: 22, lineHeight: 24 },
+  pressedControl: { opacity: 0.7 },
+  weekRange: { color: colors.foreground, flex: 1, textAlign: 'center' },
+  todayRow: {
+    alignItems: 'flex-end',
+    paddingBottom: spacing.xs,
+  },
+  todayButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  todayText: { color: lavender.lav700 },
   dayStrip: {
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,

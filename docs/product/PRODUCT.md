@@ -125,6 +125,10 @@ Agenda provides two complementary views:
 - **Semaine** is a compact smartphone overview grouped vertically by day, showing appointment summaries without
   exposing internal phases.
 
+Both views share a single calendar context (`selectedDay`). Switching between Day and Week preserves the selected
+calendar day. Day view supports direct week navigation (previous/next) and a shortcut to return to today, so the
+professional never needs to switch to Week view solely to navigate the calendar period.
+
 Tapping an appointment from either Agenda view opens its read-only Appointment Details experience.
 
 ---
