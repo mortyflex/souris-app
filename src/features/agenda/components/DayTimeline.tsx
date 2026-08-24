@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
 import { Platform, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
@@ -20,6 +21,7 @@ const quarterCount = (agenda.dayEndHour - agenda.dayStartHour) * 4;
 const timelineHeight = (agenda.dayEndHour - agenda.dayStartHour) * agenda.hourHeight;
 
 export function DayTimeline({ day, appointments }: DayTimelineProps) {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const [now, setNow] = useState(() => new Date());
   const visibleSegments = appointments.flatMap(({ appointment, clientName }) =>
@@ -103,6 +105,12 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
               <AppointmentBlock
                 clientName={segment.clientName}
                 height={height}
+                onPress={() =>
+                  router.push({
+                    pathname: '/appointments/[appointmentId]',
+                    params: { appointmentId: segment.appointmentId },
+                  })
+                }
                 palette={segment.palette}
                 segment={segment}
               />

@@ -1,4 +1,5 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { AppText } from '@/shared/ui/AppText';
 import { colors, foregroundSoft, spacing } from '@/shared/ui/theme';
@@ -12,6 +13,7 @@ interface WeekAppointmentRowProps {
 }
 
 export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
+  const router = useRouter();
   const { appointment, clientName } = value;
   const palette = getAgendaAppointmentPalette(appointment.id);
   const startAt = appointment.startAt;
@@ -22,10 +24,17 @@ export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
   const serviceSummary = getWeekAppointmentServiceSummary(appointment);
 
   return (
-    <View
+    <Pressable
       accessible
+      accessibilityRole="button"
       accessibilityLabel={`${time}, ${clientName}, ${serviceSummary}`}
-      style={styles.row}
+      onPress={() =>
+        router.push({
+          pathname: '/appointments/[appointmentId]',
+          params: { appointmentId: appointment.id },
+        })
+      }
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       <View style={[styles.marker, { backgroundColor: palette.accent }]} />
       <AppText variant="metadata" style={styles.time}>
@@ -39,7 +48,7 @@ export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
           {serviceSummary}
         </AppText>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -56,4 +65,5 @@ const styles = StyleSheet.create({
   time: { color: foregroundSoft, width: 54 },
   body: { flex: 1, minWidth: 0, paddingRight: spacing.sm },
   clientName: { lineHeight: 18 },
+  pressed: { opacity: 0.78 },
 });

@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet } from "react-native";
 
 import { AppText } from "@/shared/ui/AppText";
 import { radii } from "@/shared/ui/theme";
@@ -15,6 +15,7 @@ interface AppointmentBlockProps {
   readonly segment: AgendaStaffSegment;
   readonly height: number;
   readonly palette: AgendaAppointmentPalette;
+  readonly onPress: () => void;
 }
 
 export function AppointmentBlock({
@@ -22,6 +23,7 @@ export function AppointmentBlock({
   segment,
   height,
   palette,
+  onPress,
 }: AppointmentBlockProps) {
   const content = getAgendaSegmentContent(
     segment,
@@ -31,9 +33,11 @@ export function AppointmentBlock({
   const accessibilityLabel = `${clientName}, ${segment.serviceName}, ${segment.phaseNames.join(", ")}`;
 
   return (
-    <View
+    <Pressable
       accessible
+      accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
       style={[
         styles.container,
         {
@@ -103,7 +107,7 @@ export function AppointmentBlock({
           </AppText>
         </AppText>
       )}
-    </View>
+    </Pressable>
   );
 }
 

@@ -43,8 +43,12 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: colors.background },
-        }}
-      />
+        }}>
+        <Stack.Screen
+          name="appointments/[appointmentId]"
+          options={{ presentation: 'modal', headerShown: false }}
+        />
+      </Stack>
     </>
   );
 }

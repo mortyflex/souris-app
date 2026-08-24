@@ -125,6 +125,8 @@ Agenda provides two complementary views:
 - **Semaine** is a compact smartphone overview grouped vertically by day, showing appointment summaries without
   exposing internal phases.
 
+Tapping an appointment from either Agenda view opens its read-only Appointment Details experience.
+
 ---
 
 ## 6. Real Service Timing
