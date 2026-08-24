@@ -46,7 +46,12 @@ export default function RootLayout() {
         }}>
         <Stack.Screen
           name="appointments/[appointmentId]"
-          options={{ presentation: 'modal', headerShown: false }}
+          options={{
+            presentation: 'formSheet',
+            headerShown: false,
+            sheetAllowedDetents: 'fitToContents',
+            sheetGrabberVisible: true,
+          }}
         />
       </Stack>
     </>

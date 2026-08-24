@@ -86,14 +86,16 @@ const styles = StyleSheet.create({
   label: { color: colors.foreground, marginBottom: spacing.sm },
   timeSurface: {
     backgroundColor: colors.surface,
+    borderColor: lavender.lav100,
     borderRadius: radii.ios.default,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
   row: { alignItems: 'center', flexDirection: 'row', minHeight: 36 },
   rowAccent: { borderRadius: radii.ios.pill, height: 8, marginRight: spacing.sm, width: 8 },
   rowLabel: { flex: 1 },
-  value: { color: foregroundSoft },
+  value: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   finalSummary: {
     borderTopColor: lavender.lav200,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -103,10 +105,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   finalLabel: { color: foregroundSoft },
-  finalValue: { color: colors.foreground, marginTop: spacing.xs },
+  finalValue: { color: colors.foreground, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
   priceColumn: { alignItems: 'flex-end' },
   totalValue: {
     color: lavender.lav700,
+    fontVariant: ['tabular-nums'],
     marginTop: spacing.xs,
   },
 });

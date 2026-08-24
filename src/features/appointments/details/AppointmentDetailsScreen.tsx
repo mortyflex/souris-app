@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/shared/ui/AppText';
@@ -31,7 +30,6 @@ interface AppointmentDetailsScreenProps {
 }
 
 export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsScreenProps) {
-  const router = useRouter();
   const [expandedItemIds, setExpandedItemIds] = useState<ReadonlySet<string>>(() => new Set());
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
   const fixture = getAgendaFixtureAppointmentById(appointmentId, new Date());
@@ -48,143 +46,102 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
     });
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.topBar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Fermer le rendez-vous"
-          onPress={() => router.back()}
-          style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
-        >
-          <AppText variant="control" style={styles.closeIcon}>
-            ×
-          </AppText>
-        </Pressable>
-      </View>
-      {fixture ? (
-        <AppointmentContent
-          fixture={fixture}
-          expandedItemIds={expandedItemIds}
-          horizontalGutter={horizontalGutter}
-          onToggleItem={toggleItem}
-        />
-      ) : (
+  if (!fixture) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Rendez-vous introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
-            Ce rendez-vous n’est plus disponible.
+            Ce rendez-vous n&apos;est plus disponible.
           </AppText>
         </View>
-      )}
-    </SafeAreaView>
-  );
-}
+      </SafeAreaView>
+    );
+  }
 
-interface AppointmentContentProps {
-  readonly fixture: NonNullable<ReturnType<typeof getAgendaFixtureAppointmentById>>;
-  readonly expandedItemIds: ReadonlySet<string>;
-  readonly horizontalGutter: number;
-  readonly onToggleItem: (itemId: string) => void;
-}
-
-function AppointmentContent({
-  fixture,
-  expandedItemIds,
-  horizontalGutter,
-  onToggleItem,
-}: AppointmentContentProps) {
   const { appointment, clientName } = fixture;
   const services = getAppointmentDetailServices(appointment);
   const summary = getAppointmentDetailSummary(appointment);
   const endAt = getAppointmentEnd(appointment);
 
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
-    >
-      <View style={styles.appointmentHeader}>
-        <View style={styles.identityHeader}>
-          <View style={styles.identityAccent} />
-          <View style={styles.identityCopy}>
-            <AppText variant="eyebrow" style={styles.identityEyebrow}>
-              Rendez-vous
-            </AppText>
-            <AppText
-              variant="sheetTitle"
-              accessibilityRole="header"
-              selectable
-              style={styles.clientName}
-            >
-              {clientName}
-            </AppText>
-          </View>
-        </View>
-        <View style={styles.metaSurface}>
-          <AppText variant="control" selectable style={styles.dateLine}>
-            {formatAppointmentDate(appointment.startAt)}
-          </AppText>
-          <View style={styles.metaBottomRow}>
-            <AppText variant="control" selectable style={styles.timeLine}>
-              {formatAppointmentTime(appointment.startAt)} – {formatAppointmentTime(endAt)}
-            </AppText>
-            <View style={styles.statusRow}>
-              <View style={styles.statusDot} />
-              <AppText variant="chip" style={styles.statusText}>
-                {getAppointmentStatusLabel(appointment.status)}
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
+      >
+        <View style={styles.appointmentHeader}>
+          <View style={styles.identityHeader}>
+            <View style={styles.identityAccent} />
+            <View style={styles.identityCopy}>
+              <AppText variant="eyebrow" style={styles.identityEyebrow}>
+                RENDEZ-VOUS
+              </AppText>
+              <AppText
+                variant="sheetTitle"
+                accessibilityRole="header"
+                selectable
+                style={styles.clientName}
+              >
+                {clientName}
               </AppText>
             </View>
           </View>
+          <View style={styles.metaSurface}>
+            <AppText variant="control" selectable style={styles.dateLine}>
+              {formatAppointmentDate(appointment.startAt)}
+            </AppText>
+            <View style={styles.metaBottomRow}>
+              <AppText variant="control" selectable style={styles.timeLine}>
+                {formatAppointmentTime(appointment.startAt)} – {formatAppointmentTime(endAt)}
+              </AppText>
+              <View style={styles.statusRow}>
+                <View style={styles.statusDot} />
+                <AppText variant="chip" style={styles.statusText}>
+                  {getAppointmentStatusLabel(appointment.status)}
+                </AppText>
+              </View>
+            </View>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.sectionHeader}>
-        <AppText variant="control" style={styles.sectionTitle}>
-          Prestations
-        </AppText>
-        <AppText variant="chip" style={styles.serviceCount}>
-          {services.length}
-        </AppText>
-      </View>
-      {services.map((service) => (
-        <AppointmentServiceSection
-          key={service.item.id}
-          expanded={expandedItemIds.has(service.item.id)}
-          service={service}
-          onToggle={() => onToggleItem(service.item.id)}
-        />
-      ))}
-
-      <AppointmentSummary summary={summary} />
-
-      {appointment.notes && (
-        <View style={styles.notes}>
-          <AppText variant="control" style={styles.noteLabel}>
-            Note
+        <View style={styles.sectionHeader}>
+          <AppText variant="control" style={styles.sectionTitle}>
+            Prestations
           </AppText>
-          <AppText variant="body" selectable>
-            {appointment.notes}
+          <AppText variant="chip" style={styles.serviceCount}>
+            {services.length}
           </AppText>
         </View>
-      )}
-    </ScrollView>
+        {services.map((service) => (
+          <AppointmentServiceSection
+            key={service.item.id}
+            expanded={expandedItemIds.has(service.item.id)}
+            service={service}
+            onToggle={() => toggleItem(service.item.id)}
+          />
+        ))}
+
+        <AppointmentSummary summary={summary} />
+
+        {appointment.notes && (
+          <View style={styles.notes}>
+            <AppText variant="control" style={styles.noteLabel}>
+              Note
+            </AppText>
+            <AppText variant="body" selectable>
+              {appointment.notes}
+            </AppText>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.background, flex: 1 },
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    height: 52,
-    justifyContent: 'flex-end',
-    paddingHorizontal: spacing.xs,
-  },
-  closeButton: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  closeIcon: { color: colors.foreground, fontSize: 28, lineHeight: 30 },
-  pressed: { opacity: 0.7 },
-  content: { paddingBottom: 128, paddingTop: spacing.md },
+  safeArea: { backgroundColor: colors.background },
+  content: { paddingBottom: spacing['3xl'], paddingTop: spacing.md },
   appointmentHeader: { paddingBottom: spacing.xl },
   identityHeader: { alignItems: 'center', flexDirection: 'row', marginBottom: spacing.md },
   identityAccent: {
