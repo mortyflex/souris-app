@@ -9,6 +9,7 @@
 // Inter is loaded at application startup in src/app/_layout.tsx via
 // @expo-google-fonts/inter. Each weight is a distinct native font family:
 //
+//   300 → Inter_300Light
 //   400 → Inter_400Regular
 //   500 → Inter_500Medium
 //   600 → Inter_600SemiBold
@@ -33,6 +34,8 @@ export type AppTextVariant =
   | 'metadata'
   | 'eyebrow'
   | 'chip'
+  | 'agendaHour'
+  | 'agendaQuarter'
   | 'tab';
 
 /** Souris distinguishes only iOS and Android in its typography contract. */
@@ -41,6 +44,7 @@ export type AppTextPlatform = 'ios' | 'android';
 type FontWeightToken = keyof typeof fontFamilies;
 
 const fontFamilies = {
+  '300': 'Inter_300Light',
   '400': 'Inter_400Regular',
   '500': 'Inter_500Medium',
   '600': 'Inter_600SemiBold',
@@ -76,6 +80,10 @@ function resolveRole(variant: AppTextVariant, platform: AppTextPlatform): Typogr
       return typography.eyebrow;
     case 'chip':
       return typography.chip;
+    case 'agendaHour':
+      return typography.agendaHour;
+    case 'agendaQuarter':
+      return typography.agendaQuarter;
     case 'tab':
       return platform === 'android' ? typography.tabAndroid : typography.tabIos;
   }
@@ -84,7 +92,11 @@ function resolveRole(variant: AppTextVariant, platform: AppTextPlatform): Typogr
 // Variants rendered in the readable secondary foreground per the design
 // (line metadata, eyebrow, subtitle). `muted` stays reserved for tertiary
 // information and is never used for comfortably read text.
-const secondaryVariants: ReadonlySet<AppTextVariant> = new Set(['metadata', 'eyebrow']);
+const secondaryVariants: ReadonlySet<AppTextVariant> = new Set([
+  'metadata',
+  'eyebrow',
+  'agendaQuarter',
+]);
 
 /**
  * Resolves the complete React Native text style for a Souris variant.

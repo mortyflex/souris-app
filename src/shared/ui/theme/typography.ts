@@ -13,7 +13,7 @@
 // All sizes are device-independent pixels.
 // All weights use valid React Native TextStyle fontWeight values.
 
-type FontWeight = '400' | '500' | '600' | '700';
+type FontWeight = "300" | "400" | "500" | "600" | "700";
 
 interface TextRole {
   fontSize: number;
@@ -26,7 +26,7 @@ interface TextRole {
 // letterSpacing = 31 × -0.032 = -0.992
 export const onboardingDisplay = {
   fontSize: 31,
-  fontWeight: '700',
+  fontWeight: "700",
   letterSpacing: -0.992,
 } as const satisfies TextRole;
 
@@ -35,7 +35,7 @@ export const onboardingDisplay = {
 // letterSpacing = 27 × -0.028 = -0.756
 export const screenTitleIos = {
   fontSize: 27,
-  fontWeight: '700',
+  fontWeight: "700",
   lineHeight: 30.24,
   letterSpacing: -0.756,
 } as const satisfies TextRole;
@@ -44,7 +44,7 @@ export const screenTitleIos = {
 // letterSpacing = 24 × -0.01 = -0.24
 export const screenTitleAndroid = {
   fontSize: 24,
-  fontWeight: '600',
+  fontWeight: "600",
   letterSpacing: -0.24,
 } as const satisfies TextRole;
 
@@ -52,7 +52,7 @@ export const screenTitleAndroid = {
 // letterSpacing = 19 × -0.02 = -0.38
 export const sheetTitle = {
   fontSize: 19,
-  fontWeight: '700',
+  fontWeight: "700",
   letterSpacing: -0.38,
 } as const satisfies TextRole;
 
@@ -60,7 +60,7 @@ export const sheetTitle = {
 // letterSpacing = 20 × -0.026 = -0.52
 export const daySummaryValue = {
   fontSize: 20,
-  fontWeight: '700',
+  fontWeight: "700",
   letterSpacing: -0.52,
 } as const satisfies TextRole;
 
@@ -68,7 +68,7 @@ export const daySummaryValue = {
 // letterSpacing = 17 × -0.017 = -0.289
 export const stateTitle = {
   fontSize: 17,
-  fontWeight: '700',
+  fontWeight: "700",
   letterSpacing: -0.289,
 } as const satisfies TextRole;
 
@@ -76,7 +76,7 @@ export const stateTitle = {
 // lineHeight = 16 × 1.45 = 23.2
 export const body = {
   fontSize: 16,
-  fontWeight: '400',
+  fontWeight: "400",
   lineHeight: 23.2,
   letterSpacing: 0,
 } as const satisfies TextRole;
@@ -84,8 +84,8 @@ export const body = {
 // Row title: 15.5px / 600 / -0.011em
 // letterSpacing = 15.5 × -0.011 = -0.1705
 export const rowTitle = {
-  fontSize: 15.5,
-  fontWeight: '600',
+  fontSize: 12,
+  fontWeight: "600",
   letterSpacing: -0.1705,
 } as const satisfies TextRole;
 
@@ -93,7 +93,7 @@ export const rowTitle = {
 // letterSpacing = 15 × -0.006 = -0.09
 export const controlIos = {
   fontSize: 15,
-  fontWeight: '600',
+  fontWeight: "600",
   letterSpacing: -0.09,
 } as const satisfies TextRole;
 
@@ -101,15 +101,15 @@ export const controlIos = {
 // letterSpacing = 15 × -0.006 = -0.09
 export const controlAndroid = {
   fontSize: 15,
-  fontWeight: '500',
+  fontWeight: "500",
   letterSpacing: -0.09,
 } as const satisfies TextRole;
 
 // Metadata: 13px / 400 / +0.01em
 // letterSpacing = 13 × 0.01 = 0.13
 export const metadata = {
-  fontSize: 13,
-  fontWeight: '400',
+  fontSize: 9,
+  fontWeight: "400",
   letterSpacing: 0.13,
 } as const satisfies TextRole;
 
@@ -118,29 +118,43 @@ export const metadata = {
 // textTransform: 'uppercase' must be applied at the component level.
 export const eyebrow = {
   fontSize: 12,
-  fontWeight: '600',
+  fontWeight: "600",
   letterSpacing: 1.08,
 } as const satisfies TextRole;
 
 // Chip / event time / legend: 11.5px / 600 / +0.015em
 // letterSpacing = 11.5 × 0.015 = 0.1725
 export const chip = {
-  fontSize: 11.5,
-  fontWeight: '600',
+  fontSize: 10,
+  fontWeight: "600",
+  letterSpacing: 0.1725,
+} as const satisfies TextRole;
+
+// Agenda full-hour label: metadata sizing with a slightly stronger hierarchy.
+export const agendaHour = {
+  fontSize: 10,
+  fontWeight: "500",
+  letterSpacing: 0.13,
+} as const satisfies TextRole;
+
+// Agenda quarter-hour label: compact and intentionally quiet.
+export const agendaQuarter = {
+  fontSize: 9,
+  fontWeight: "300",
   letterSpacing: 0.1725,
 } as const satisfies TextRole;
 
 // Tab iOS: 10.5px / 600
 export const tabIos = {
   fontSize: 10.5,
-  fontWeight: '600',
+  fontWeight: "600",
   letterSpacing: 0,
 } as const satisfies TextRole;
 
 // Tab Android: 12px / 500
 export const tabAndroid = {
   fontSize: 12,
-  fontWeight: '500',
+  fontWeight: "500",
   letterSpacing: 0,
 } as const satisfies TextRole;
 
@@ -158,6 +172,8 @@ export const typography = {
   metadata,
   eyebrow,
   chip,
+  agendaHour,
+  agendaQuarter,
   tabIos,
   tabAndroid,
 } as const;

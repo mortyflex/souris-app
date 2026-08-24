@@ -27,6 +27,8 @@ export {
   metadata,
   eyebrow,
   chip,
+  agendaHour,
+  agendaQuarter,
   tabIos,
   tabAndroid,
 } from './typography';

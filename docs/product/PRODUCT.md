@@ -114,6 +114,11 @@ The visual representation must remain readable when appointments overlap.
 
 Appointments should be shown side by side rather than visually covering one another.
 
+The operational Agenda primarily represents the professional's occupied time. An Appointment may continue
+through unattended processing time, but that interval is not rendered as an occupied Agenda card: the normal
+grid remains visible so the professional can see the available time. Later staff-required phases appear again
+as separate visible segments of the same Appointment.
+
 ---
 
 ## 6. Real Service Timing
@@ -188,6 +193,8 @@ An appointment may contain multiple services.
 The resulting appointment timeline is derived from the ordered services and their ordered phases.
 
 Processing time contributes to elapsed appointment duration.
+
+This elapsed Appointment duration must be distinguished from professional visible occupancy in the Agenda.
 
 ---
 

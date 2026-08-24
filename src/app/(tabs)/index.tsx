@@ -1,12 +1,5 @@
-import { AppText } from '@/shared/ui/AppText';
-import { Screen } from '@/shared/ui/Screen';
+import { AgendaScreen } from '@/features/agenda/AgendaScreen';
 
-export default function AgendaScreen() {
-  return (
-    <Screen>
-      <AppText variant="screenTitle" accessibilityRole="header">
-        Agenda
-      </AppText>
-    </Screen>
-  );
+export default function AgendaRoute() {
+  return <AgendaScreen />;
 }

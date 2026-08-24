@@ -107,3 +107,26 @@ Only add entries here when a deliberate Souris product/design decision differs f
 Do not use this file as a miscellaneous design notes document.
 
 The goal is to keep exceptions explicit and rare.
+
+---
+
+## 5. Operational Agenda — Professional Occupancy
+
+The exported Agenda design shows unattended processing as a peach striped section inside an event.
+The operational Souris Agenda intentionally overrides that treatment:
+
+- a phase with `requiresStaff = false` remains part of the Appointment domain timeline;
+- it contributes to elapsed duration and appointment end time;
+- it does not render as an appointment-colored or peach striped block in the day Agenda;
+- the normal grid gap represents time during which the professional is available;
+- a later staff-required phase reappears as a separate visual reprise;
+- overlap columns are calculated from visible staff-required segments, not whole Appointment elapsed intervals;
+- visible segments use a restrained set of approved pastel families, with every segment from one Appointment
+  preserving the same family;
+- the reprise remains explicitly identifiable whenever the segment has enough space for readable text.
+- client identity is primary, service is secondary, and phase is tertiary;
+- duplicate service and phase labels are shown only once;
+- short active segments use a compact single-line identity instead of becoming blank;
+- reprise content preserves service continuity.
+
+Processing details remain available for future appointment details, service configuration, and editing workflows.

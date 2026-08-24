@@ -217,6 +217,10 @@ The appointment continues during processing.
 
 The professional may potentially serve another client during that period.
 
+The operational Agenda may therefore leave the processing interval visually empty for the professional while
+the Appointment continues in the domain timeline. Any later `requiresStaff = true` phase may appear as a
+separate presentation segment; this does not change appointment end time, history, or domain calculations.
+
 ---
 
 # 6. Ordered Appointment Items
