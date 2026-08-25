@@ -24,8 +24,11 @@ function getDistinctPhaseLabel(serviceName: string, phaseNames: readonly string[
     .map((phaseName) => phaseName.trim())
     .filter((phaseName) => phaseName.length > 0)
     .filter((phaseName) => normalizeLabel(phaseName) !== serviceKey);
+  const phaseLabel = distinctPhases.join(' · ');
 
-  return distinctPhases.length > 0 ? distinctPhases.join(' · ') : undefined;
+  return phaseLabel.length > 0 && normalizeLabel(phaseLabel) !== serviceKey
+    ? phaseLabel
+    : undefined;
 }
 
 function getCompactClientName(clientName: string): string {

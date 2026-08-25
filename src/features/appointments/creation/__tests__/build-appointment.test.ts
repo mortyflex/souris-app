@@ -1,4 +1,4 @@
-import { getAppointmentEndAt } from '@/domain/appointments';
+import { calculateAppointmentTimeline, getAppointmentEndAt } from '@/domain/appointments';
 
 import { buildAppointment, type BuildAppointmentItemInput } from '../build-appointment';
 
@@ -167,5 +167,39 @@ describe('buildAppointment', () => {
         ],
       }),
     ).toThrow('Invalid phase duration override');
+  });
+
+  it('normalizes reordered items into a contiguous 0-based sequence', () => {
+    const appointment = build({
+      appointmentId: 'appointment-reordered',
+      items: [
+        { service: services.color, price: 50 },
+        { service: services.cut },
+      ],
+    });
+
+    expect(appointment.items.map((item) => item.order)).toEqual([0, 1]);
+    expect(appointment.items.map((item) => item.serviceName)).toEqual([
+      'Couleur Racines',
+      'Coupe',
+    ]);
+    expect(appointment.items[0].price).toBe(50);
+  });
+
+  it('derives the timeline from the reordered item sequence', () => {
+    const appointment = build({
+      appointmentId: 'appointment-reordered-timeline',
+      items: [{ service: services.cut }, { service: services.color }],
+    });
+    const timeline = calculateAppointmentTimeline(appointment);
+
+    expect(timeline.items.map((item) => item.serviceName)).toEqual([
+      'Coupe',
+      'Couleur Racines',
+    ]);
+    expect(timeline.items[0].startAt).toEqual(new Date(2026, 7, 24, 9));
+    expect(timeline.items[0].endAt).toEqual(new Date(2026, 7, 24, 9, 30));
+    expect(timeline.items[1].startAt).toEqual(new Date(2026, 7, 24, 9, 30));
+    expect(getAppointmentEndAt(appointment)).toEqual(new Date(2026, 7, 24, 10, 35));
   });
 });

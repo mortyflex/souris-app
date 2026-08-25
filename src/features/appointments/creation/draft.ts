@@ -108,3 +108,32 @@ export function formatPriceInput(value: number): string {
 export function stepPhaseDuration(current: number, delta: number): number {
   return Math.max(0, current + delta);
 }
+
+/**
+ * Moves the draft at logical position `fromIndex` to `toIndex`.
+ *
+ * Draft entries are moved by reference: custom prices and processing
+ * overrides travel with their draft, and nothing is rebuilt from catalog
+ * defaults. The source array is never mutated.
+ */
+export function reorderDrafts(
+  drafts: readonly SelectedServiceDraft[],
+  fromIndex: number,
+  toIndex: number,
+): readonly SelectedServiceDraft[] {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= drafts.length ||
+    toIndex < 0 ||
+    toIndex >= drafts.length
+  ) {
+    throw new RangeError(
+      `reorderDrafts: indices ${fromIndex} → ${toIndex} are out of range for ${drafts.length} drafts`,
+    );
+  }
+
+  const reordered = [...drafts];
+  const [moved] = reordered.splice(fromIndex, 1);
+  reordered.splice(toIndex, 0, moved);
+  return reordered;
+}

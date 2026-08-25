@@ -86,14 +86,25 @@ export function formatCreationPrice(value: number): string {
   }).format(value);
 }
 
-export function getServiceDurationMinutes(service: Service): number {
-  return service.phases.reduce((total, phase) => total + phase.durationMinutes, 0);
+export function getServiceDurationMinutes(
+  service: Service,
+  phaseDurationOverrides: Readonly<Record<string, number>> = {},
+): number {
+  return service.phases.reduce(
+    (total, phase) => total + (phaseDurationOverrides[phase.id] ?? phase.durationMinutes),
+    0,
+  );
 }
 
-/** Processing (unattended) duration from catalog phases; 0 for SERVICE. */
-export function getServiceProcessingMinutes(service: Service): number {
+/** Processing (unattended) duration from service phases; 0 for SERVICE. */
+export function getServiceProcessingMinutes(
+  service: Service,
+  phaseDurationOverrides: Readonly<Record<string, number>> = {},
+): number {
   return service.phases.reduce(
-    (total, phase) => total + (phase.requiresStaff ? 0 : phase.durationMinutes),
+    (total, phase) =>
+      total +
+      (phase.requiresStaff ? 0 : phaseDurationOverrides[phase.id] ?? phase.durationMinutes),
     0,
   );
 }

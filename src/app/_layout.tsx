@@ -10,6 +10,8 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { colors } from '@/shared/ui/theme';
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
@@ -40,32 +42,38 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="dark" />
-      <AppointmentSessionProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.background },
-          }}>
-          <Stack.Screen
-            name="appointments/[appointmentId]"
-            options={{
-              presentation: 'formSheet',
+      <GestureHandlerRootView style={styles.root}>
+        <AppointmentSessionProvider>
+          <Stack
+            screenOptions={{
               headerShown: false,
-              sheetAllowedDetents: 'fitToContents',
-              sheetGrabberVisible: true,
-            }}
-          />
-          <Stack.Screen
-            name="appointments/new"
-            options={{
-              presentation: 'formSheet',
-              headerShown: false,
-              sheetAllowedDetents: [0.92],
-              sheetGrabberVisible: true,
-            }}
-          />
-        </Stack>
-      </AppointmentSessionProvider>
+              contentStyle: { backgroundColor: colors.background },
+            }}>
+            <Stack.Screen
+              name="appointments/[appointmentId]"
+              options={{
+                presentation: 'formSheet',
+                headerShown: false,
+                sheetAllowedDetents: 'fitToContents',
+                sheetGrabberVisible: true,
+              }}
+            />
+            <Stack.Screen
+              name="appointments/new"
+              options={{
+                presentation: 'formSheet',
+                headerShown: false,
+                sheetAllowedDetents: [0.92],
+                sheetGrabberVisible: true,
+              }}
+            />
+          </Stack>
+        </AppointmentSessionProvider>
+      </GestureHandlerRootView>
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

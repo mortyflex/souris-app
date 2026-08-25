@@ -1,4 +1,7 @@
+import type { Appointment } from '@/domain/appointments';
+
 import type { AgendaStaffSegment } from '../layout/agenda-staff-segments';
+import { buildAgendaStaffSegments } from '../layout/agenda-staff-segments';
 import { getAgendaSegmentContent } from '../segment-content';
 
 function segment(
@@ -19,6 +22,51 @@ function segment(
   };
 }
 
+function consecutiveSimpleServices(): Appointment {
+  return {
+    id: 'appointment-simple-services',
+    businessId: 'business-a',
+    clientId: 'client-a',
+    staffMemberId: 'staff-a',
+    startAt: new Date(2026, 7, 24, 9),
+    status: 'SCHEDULED',
+    items: [
+      {
+        id: 'item-cut',
+        serviceId: 'service-cut',
+        order: 0,
+        serviceName: 'Coupe Femme / Homme',
+        serviceType: 'SERVICE',
+        price: 25,
+        phases: [
+          {
+            id: 'phase-cut',
+            name: 'Coupe Femme / Homme',
+            durationMinutes: 30,
+            requiresStaff: true,
+          },
+        ],
+      },
+      {
+        id: 'item-brushing',
+        serviceId: 'service-brushing',
+        order: 1,
+        serviceName: 'Brushing 1',
+        serviceType: 'SERVICE',
+        price: 30,
+        phases: [
+          {
+            id: 'phase-brushing',
+            name: 'Brushing 1',
+            durationMinutes: 30,
+            requiresStaff: true,
+          },
+        ],
+      },
+    ],
+  };
+}
+
 describe('Agenda segment content', () => {
   it('deduplicates a SERVICE name and identical phase', () => {
     const content = getAgendaSegmentContent(segment('Coupe', ['Coupe']), 'Camille Durand', 'tall');
@@ -34,6 +82,28 @@ describe('Agenda segment content', () => {
       'tall',
     );
 
+    expect(content.phaseLabel).toBeUndefined();
+  });
+
+  it('does not repeat a composite simple-service summary as its phase line', () => {
+    const content = getAgendaSegmentContent(
+      segment('Coupe Femme / Homme · Brushing 1', ['Coupe Femme / Homme', 'Brushing 1']),
+      'Clarisse Baudry',
+      'tall',
+    );
+
+    expect(content.serviceLabel).toBe('Coupe Femme / Homme · Brushing 1');
+    expect(content.phaseLabel).toBeUndefined();
+  });
+
+  it('deduplicates the content generated from consecutive simple appointment items', () => {
+    const agendaSegment = buildAgendaStaffSegments(consecutiveSimpleServices())[0];
+    expect(agendaSegment).toBeDefined();
+
+    if (!agendaSegment) return;
+    const content = getAgendaSegmentContent(agendaSegment, 'Clarisse Baudry', 'tall');
+
+    expect(content.serviceLabel).toBe('Coupe Femme / Homme · Brushing 1');
     expect(content.phaseLabel).toBeUndefined();
   });
 

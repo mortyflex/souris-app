@@ -248,6 +248,14 @@ The Summary step always reflects the adjusted snapshot values: price, processing
 elapsed duration, and total price are recalculated from the adjusted snapshot. A SERVICE never exposes a
 processing editor.
 
+### Service order during creation
+
+Multiple selected services can be reordered by dragging their explicit drag handle in the `Sélectionnées`
+area. The selection order defines the AppointmentItem order and therefore the complete appointment timeline:
+reordering immediately reorders the draft, and Summary, item start times, and the created Appointment follow
+the new order. Reordering never rebuilds a draft from catalog defaults — custom prices and processing
+durations travel with their service.
+
 ---
 
 ## 9. Appointment Editing
