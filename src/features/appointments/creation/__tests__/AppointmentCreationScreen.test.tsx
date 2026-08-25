@@ -22,6 +22,50 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn() }),
 }));
 
+jest.mock('react-native-reanimated', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
+
+  const AnimatedView = (props: { readonly children?: React.ReactNode }) =>
+    React.createElement(View, props);
+  const createAnimationBuilder = () => {
+    const builder = {
+      duration: () => builder,
+      easing: () => builder,
+    };
+    return builder;
+  };
+
+  return {
+    __esModule: true,
+    default: Object.assign(AnimatedView, {
+      View: AnimatedView,
+      createAnimatedComponent: (component: unknown) => component,
+    }),
+    useSharedValue: (init: unknown) => {
+      let value = init;
+      return {
+        get: () => value,
+        set: (next: unknown) => {
+          value = next;
+        },
+      };
+    },
+    useAnimatedStyle: (style: () => object) => style(),
+    useReducedMotion: () => false,
+    useEvent: () => () => undefined,
+    withTiming: (value: unknown) => value,
+    FadeIn: createAnimationBuilder(),
+    FadeOut: createAnimationBuilder(),
+    LinearTransition: createAnimationBuilder(),
+    Easing: { bezier: () => () => 0 },
+  };
+});
+
+jest.mock('react-native-worklets', () => ({
+  scheduleOnRN: (fn: (...args: never[]) => void, ...args: never[]) => fn(...args),
+}));
+
 jest.mock('expo-symbols', () => {
   const React = jest.requireActual('react') as typeof import('react');
   return {
@@ -96,6 +140,12 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.press(view.getByText('Balayage 1'));
     });
 
+    // New selections are compact; open the disclosure before editing.
+    expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
+    });
+
     // Appointment-specific price: 45 → 50.
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '50');
@@ -129,6 +179,9 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByTestId('edit-services'));
     });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
+    });
     expect(view.getByDisplayValue('50,00')).toBeTruthy();
     expect(
       view.getByTestId('phase-value-technique-balayage-balayage-1-processing').props.children,
@@ -152,25 +205,35 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.press(view.getByText('Balayage 1'));
     });
     await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
+    });
+    await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '50');
     });
 
-    // Select a second service.
+    // With exactly one selected service no drag handle is shown.
+    expect(view.queryByLabelText('Déplacer Balayage 1')).toBeNull();
+
+    // Select a second service → drag handles appear.
     await searchService(view, 'coupe brushing 1');
     await act(async () => {
       fireEvent.press(view.getByText('Coupe Brushing 1'));
     });
+    expect(view.getByLabelText('Déplacer Balayage 1')).toBeTruthy();
+    expect(view.getByLabelText('Déplacer Coupe Brushing 1')).toBeTruthy();
 
     // Remove the first service directly from its draft card.
     await act(async () => {
       fireEvent.press(view.getByLabelText('Retirer Balayage 1'));
     });
 
-    // Only the second service remains in Sélectionnées (card + catalog row).
+    // Only the second service remains in Sélectionnées (card + catalog row),
+    // and its drag handle is hidden again.
     expect(view.queryByText('Balayage 1')).toBeNull();
     expect(view.getAllByText('Coupe Brushing 1').length).toBe(2);
     expect(view.queryByText('50,00 €')).toBeNull();
     expect(view.getAllByText('40,00 €').length).toBe(2);
+    expect(view.queryByLabelText('Déplacer Coupe Brushing 1')).toBeNull();
 
     // Re-selecting the removed service starts from catalog defaults again —
     // the override was removed together with the draft entry.
@@ -178,7 +241,86 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByText('Balayage 1'));
     });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
+    });
     expect(view.getByDisplayValue('45,00')).toBeTruthy();
+  });
+
+  it('starts selected cards collapsed and keeps only one editor expanded', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+
+    await searchService(view, 'balayage 1');
+    await act(async () => {
+      fireEvent.press(view.getByText('Balayage 1'));
+    });
+
+    expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
+    expect(view.queryByLabelText('Retirer Balayage 1')).toBeNull();
+    expect(view.getByLabelText('Développer Balayage 1')).toBeTruthy();
+    expect(view.getByText('1 h 30 min + 1 h de pose')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
+    });
+    expect(view.getByLabelText('Réduire Balayage 1')).toBeTruthy();
+    expect(view.getByLabelText('Prix de Balayage 1')).toBeTruthy();
+    expect(view.getByLabelText('Réduire Temps de pose')).toBeTruthy();
+    expect(view.getByLabelText('Retirer Balayage 1')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduire Temps de pose'));
+    });
+    expect(
+      view.getByTestId('phase-value-technique-balayage-balayage-1-processing').props.children,
+    ).toBe('55 min');
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '50');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduire Balayage 1'));
+    });
+    expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
+    expect(view.queryByLabelText('Retirer Balayage 1')).toBeNull();
+    expect(view.getByText('1 h 30 min + 55 min de pose')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
+    });
+    expect(view.getByDisplayValue('50')).toBeTruthy();
+    expect(
+      view.getByTestId('phase-value-technique-balayage-balayage-1-processing').props.children,
+    ).toBe('55 min');
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduire Balayage 1'));
+    });
+
+    await searchService(view, 'coupe brushing 1');
+    await act(async () => {
+      fireEvent.press(view.getByText('Coupe Brushing 1'));
+    });
+
+    expect(view.getByLabelText('Développer Balayage 1')).toBeTruthy();
+    expect(view.getByLabelText('Développer Coupe Brushing 1')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
+    });
+    expect(view.getByLabelText('Réduire Balayage 1')).toBeTruthy();
+    expect(view.queryByLabelText('Prix de Coupe Brushing 1')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Coupe Brushing 1'));
+    });
+    expect(view.queryByLabelText('Réduire Balayage 1')).toBeNull();
+    expect(view.getByLabelText('Réduire Coupe Brushing 1')).toBeTruthy();
+    expect(view.getByLabelText('Prix de Coupe Brushing 1')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduire Coupe Brushing 1'));
+    });
+    expect(view.queryByLabelText('Prix de Coupe Brushing 1')).toBeNull();
   });
 
   it('steps the draft start time and recalculates the summary without changing durations', async () => {

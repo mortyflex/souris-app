@@ -6,7 +6,7 @@
 // step transition. The Agenda startAt is shown as appointment context on
 // every step and is never recalculated or replaced.
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -39,7 +39,7 @@ import { ClientPickerStep, getClientDisplayName } from './components/ClientPicke
 import { CreationStepper } from './components/CreationStepper';
 import { ServiceCatalogStep } from './components/ServiceCatalogStep';
 import { SummaryStep } from './components/SummaryStep';
-import { createSelectedServiceDraft, updateDraftPhaseDuration, updateDraftPrice, type SelectedServiceDraft } from './draft';
+import { createSelectedServiceDraft, reorderDrafts, updateDraftPhaseDuration, updateDraftPrice, type SelectedServiceDraft } from './draft';
 import { stepStartAt, type StartTimeBounds } from './draft-start';
 import { createAppointmentId, createAppointmentItemId } from './runtime-ids';
 import { getAppointmentCreationSummary } from './presentation';
@@ -112,6 +112,13 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       return [...current, createSelectedServiceDraft(service)];
     });
   };
+
+  const reorderSelectedDrafts = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      setSelectedDrafts((current) => reorderDrafts(current, fromIndex, toIndex));
+    },
+    [],
+  );
 
   const updateDraft = (
     serviceId: string,
@@ -207,6 +214,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         {step === 1 && (
           <ServiceCatalogStep
             selectedDrafts={selectedDrafts}
+            onReorderDrafts={reorderSelectedDrafts}
             onToggleService={toggleService}
             onUpdatePhaseDuration={(serviceId, phaseId, durationMinutes) =>
               updateDraft(serviceId, (draft) =>

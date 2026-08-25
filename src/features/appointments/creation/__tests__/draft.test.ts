@@ -7,6 +7,7 @@ import {
   isValidPhaseDuration,
   isValidPrice,
   parsePriceInput,
+  reorderDrafts,
   stepPhaseDuration,
   updateDraftPhaseDuration,
   updateDraftPrice,
@@ -135,5 +136,64 @@ describe('validators', () => {
   it('accepts zero values', () => {
     expect(isValidPrice(0)).toBe(true);
     expect(isValidPhaseDuration(0)).toBe(true);
+  });
+});
+
+describe('reorderDrafts', () => {
+  const balayage = createSelectedServiceDraft(colorService);
+  const coupe = createSelectedServiceDraft(cutService);
+  const brushing = createSelectedServiceDraft({
+    ...cutService,
+    id: 'service-brushing',
+    name: 'Brushing',
+  });
+
+  it('moves a draft from one position to another', () => {
+    const drafts = [balayage, coupe, brushing];
+    const reordered = reorderDrafts(drafts, 1, 0);
+
+    expect(reordered.map((draft) => draft.serviceId)).toEqual([
+      'service-coupe',
+      'technique-balayage-1',
+      'service-brushing',
+    ]);
+    expect(drafts.map((draft) => draft.serviceId)).toEqual([
+      'technique-balayage-1',
+      'service-coupe',
+      'service-brushing',
+    ]);
+  });
+
+  it('preserves custom prices and phase overrides with the moved draft', () => {
+    const customized = updateDraftPhaseDuration(updateDraftPrice(balayage, 50), 'balayage-pose', 45);
+    const reordered = reorderDrafts([customized, coupe], 0, 1);
+
+    expect(reordered[1]).toBe(customized);
+    expect(reordered[1].price).toBe(50);
+    expect(reordered[1].phaseDurationOverrides['balayage-pose']).toBe(45);
+  });
+
+  it('moves a draft to the end', () => {
+    const reordered = reorderDrafts([balayage, coupe, brushing], 0, 2);
+
+    expect(reordered.map((draft) => draft.serviceId)).toEqual([
+      'service-coupe',
+      'service-brushing',
+      'technique-balayage-1',
+    ]);
+  });
+
+  it('does not touch the catalog service the draft refers to', () => {
+    const customized = updateDraftPrice(balayage, 50);
+    reorderDrafts([customized, coupe], 0, 1);
+
+    expect(colorService.price).toBe(45);
+    expect(colorService.phases[1].durationMinutes).toBe(60);
+  });
+
+  it('rejects out-of-range indices', () => {
+    const drafts = [balayage, coupe];
+    expect(() => reorderDrafts(drafts, -1, 0)).toThrow(RangeError);
+    expect(() => reorderDrafts(drafts, 0, 2)).toThrow(RangeError);
   });
 });

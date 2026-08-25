@@ -81,4 +81,8 @@ describe('getServiceProcessingMinutes', () => {
     expect(getServiceProcessingMinutes(services.cut)).toBe(0);
     expect(getServiceProcessingMinutes(services.color)).toBe(20);
   });
+
+  it('includes appointment-specific processing overrides in compact timing values', () => {
+    expect(getServiceProcessingMinutes(services.color, { processing: 45 })).toBe(45);
+  });
 });

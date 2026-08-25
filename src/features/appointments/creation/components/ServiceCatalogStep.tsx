@@ -23,7 +23,7 @@ import { filterCatalogServices } from '../filter-services';
 import type { SelectedServiceDraft } from '../draft';
 import { CatalogServiceRow } from './CatalogServiceRow';
 import { SearchField } from './SearchField';
-import { SelectedServiceCard } from './SelectedServiceCard';
+import { SortableDraftList, type SortableDraftEntry } from './SortableDraftList';
 
 const horizontalGutter = Platform.OS === 'android' ? 16 : 20;
 
@@ -36,6 +36,7 @@ interface CatalogSection {
 interface ServiceCatalogStepProps {
   readonly selectedDrafts: readonly SelectedServiceDraft[];
   readonly onToggleService: (service: Service) => void;
+  readonly onReorderDrafts: (fromIndex: number, toIndex: number) => void;
   readonly onUpdatePrice: (serviceId: string, price: number) => void;
   readonly onUpdatePhaseDuration: (
     serviceId: string,
@@ -47,20 +48,32 @@ interface ServiceCatalogStepProps {
 export function ServiceCatalogStep({
   selectedDrafts,
   onToggleService,
+  onReorderDrafts,
   onUpdatePrice,
   onUpdatePhaseDuration,
 }: ServiceCatalogStepProps) {
   const [query, setQuery] = useState('');
+  const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
   const trimmedQuery = query.trim();
+
+  const toggleService = (service: Service) => {
+    const isSelected = selectedDrafts.some((draft) => draft.serviceId === service.id);
+    if (isSelected) {
+      setExpandedDraftId((current) => (current === service.id ? null : current));
+    }
+    onToggleService(service);
+  };
+
+  const toggleExpandedDraft = (serviceId: string) => {
+    setExpandedDraftId((current) => (current === serviceId ? null : serviceId));
+  };
 
   const selectedEntries = selectedDrafts
     .map((draft) => ({
       draft,
       service: catalog.services.find((service) => service.id === draft.serviceId),
     }))
-    .filter((entry): entry is { draft: SelectedServiceDraft; service: Service } =>
-      entry.service !== undefined,
-    );
+    .filter((entry): entry is SortableDraftEntry => entry.service !== undefined);
 
   const sections = useMemo<readonly SectionListData<Service, CatalogSection>[]>(() => {
     if (trimmedQuery.length > 0) {
@@ -96,18 +109,15 @@ export function ServiceCatalogStep({
           {selectedEntries.length > 0 && (
             <View style={styles.selectedArea}>
               <SectionEyebrow label="Sélectionnées" count={selectedEntries.length} padded={false} />
-              {selectedEntries.map(({ draft, service }) => (
-                <SelectedServiceCard
-                  key={draft.serviceId}
-                  draft={draft}
-                  onRemove={() => onToggleService(service)}
-                  onUpdatePhaseDuration={(phaseId, durationMinutes) =>
-                    onUpdatePhaseDuration(draft.serviceId, phaseId, durationMinutes)
-                  }
-                  onUpdatePrice={(price) => onUpdatePrice(draft.serviceId, price)}
-                  service={service}
-                />
-              ))}
+              <SortableDraftList
+                entries={selectedEntries}
+                expandedDraftId={expandedDraftId}
+                onRemove={toggleService}
+                onReorder={onReorderDrafts}
+                onToggleExpanded={toggleExpandedDraft}
+                onUpdatePhaseDuration={onUpdatePhaseDuration}
+                onUpdatePrice={onUpdatePrice}
+              />
             </View>
           )}
 
@@ -125,7 +135,7 @@ export function ServiceCatalogStep({
         <CatalogServiceRow
           selected={selectedDrafts.some((draft) => draft.serviceId === item.id)}
           service={item}
-          onPress={() => onToggleService(item)}
+          onPress={() => toggleService(item)}
         />
       )}
       ListEmptyComponent={

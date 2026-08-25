@@ -156,8 +156,13 @@ deliberately differs:
   its search field uses a symbol icon and a clear `Rechercher une cliente` placeholder instead of field
   instructions;
 - Prestations groups the catalog by category (eyebrow headers with counts, sticky on iOS) with a
-  `Sélectionnées` area above the catalog hosting appointment-specific customization; each selected-service
-  card offers a direct restrained `Retirer` action;
+  `Sélectionnées` area above the catalog hosting appointment-specific customization; selected-service cards
+  start collapsed, at most one card is expanded at a time, and editing/removal controls live inside the
+  expanded state so the collapsed list prioritizes scanning and reordering;
+- selected services are reordered by a small explicit drag handle (SF/Material grip symbol, 44dp target)
+  on each card — long-press activates the drag, the card lifts slightly, and the order commits on release.
+  The handle is hidden when only one service is selected and remains visually separate from the disclosure
+  affordance; scrolling, price/processing editing, and Retirer are unaffected;
 - the selected-services area allows appointment-specific price and processing-duration editing that only
   affects the AppointmentItem snapshot being created — the catalog is never modified;
 - Résumé is a read-only review screen with the structured `Temps` summary (Temps actif / Temps de pose /
