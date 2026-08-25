@@ -1,15 +1,15 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
+import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { colors, foregroundSoft, lavender, spacing } from '@/shared/ui/theme';
 
-import type { AgendaFixtureAppointment } from '../fixtures/agenda-fixtures';
 import { isSameLocalDay } from '../calendar/week';
 import { WeekAppointmentRow } from './WeekAppointmentRow';
 
 interface WeekDaySectionProps {
   readonly day: Date;
-  readonly appointments: readonly AgendaFixtureAppointment[];
+  readonly appointments: readonly AppointmentSessionEntry[];
   readonly selectedDay: Date;
   readonly today: Date;
   readonly onSelectDay: (day: Date) => void;

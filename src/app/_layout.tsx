@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { colors } from '@/shared/ui/theme';
+import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 
 // Keep the native splash screen visible until Inter is ready so the first
 // frame never renders in a fallback font.
@@ -39,21 +40,32 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-        }}>
-        <Stack.Screen
-          name="appointments/[appointmentId]"
-          options={{
-            presentation: 'formSheet',
+      <AppointmentSessionProvider>
+        <Stack
+          screenOptions={{
             headerShown: false,
-            sheetAllowedDetents: 'fitToContents',
-            sheetGrabberVisible: true,
-          }}
-        />
-      </Stack>
+            contentStyle: { backgroundColor: colors.background },
+          }}>
+          <Stack.Screen
+            name="appointments/[appointmentId]"
+            options={{
+              presentation: 'formSheet',
+              headerShown: false,
+              sheetAllowedDetents: 'fitToContents',
+              sheetGrabberVisible: true,
+            }}
+          />
+          <Stack.Screen
+            name="appointments/new"
+            options={{
+              presentation: 'formSheet',
+              headerShown: false,
+              sheetAllowedDetents: [0.92],
+              sheetGrabberVisible: true,
+            }}
+          />
+        </Stack>
+      </AppointmentSessionProvider>
     </>
   );
 }

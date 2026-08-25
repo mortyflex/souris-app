@@ -208,6 +208,46 @@ Processing time contributes to elapsed appointment duration.
 
 This elapsed Appointment duration must be distinguished from professional visible occupancy in the Agenda.
 
+The first native creation slice follows this interaction:
+
+```text
+tap an empty Day grid position
+→ Cliente
+→ Prestations
+→ Résumé
+→ Créer le rendez-vous
+```
+
+The selected grid position is local time, clamped to the displayed day, and rounded to a fifteen-minute
+interval. The professional may tap a visible processing gap because that interval remains part of the
+Appointment timeline while the professional is available. Existing appointment overlap never blocks creation.
+
+The Agenda tap is the initial proposal, not a lock: during creation the professional may adjust the start
+time in ±5-minute steps on the same local date, within the operational Agenda day — earliest 08:00, latest
+19:55, strictly before the 20:00 end boundary. All creation calculations (context, Summary, appointment end)
+follow the edited draft start time.
+
+The initial address book and catalog use normalized legacy sources. Client search uses only identity and
+contact fields. Services and techniques preserve their type, ordered phases, duration, price, and processing
+semantics; invalid non-numeric prices are excluded with a diagnostic rather than invented as zero.
+
+The first slice is intentionally in-memory for the current app session. Agenda Day, Agenda Week, and
+Appointment Details read the same collection, so a newly created appointment appears immediately in all three
+surfaces. Persistence, editing, deletion, cancellation, and no-show actions are outside this slice.
+
+### Appointment-specific adjustments during creation
+
+During Appointment Creation the professional may adjust, for the appointment being created only:
+
+- the snapshot price of a selected service;
+- the duration of unattended processing phases (`requiresStaff = false`) of a selected TECHNIQUE.
+
+These adjustments apply exclusively to the AppointmentItem snapshot being created. The normalized catalog
+Service and the raw legacy sources remain unchanged, and future appointments keep the catalog defaults.
+The Summary step always reflects the adjusted snapshot values: price, processing duration, appointment end,
+elapsed duration, and total price are recalculated from the adjusted snapshot. A SERVICE never exposes a
+processing editor.
+
 ---
 
 ## 9. Appointment Editing

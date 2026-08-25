@@ -17,6 +17,18 @@ export interface CreateAppointmentItemSnapshotInput {
   readonly service: Service;
   readonly order: number;
   readonly serviceOptionId?: string;
+  /**
+   * Appointment-specific price. Defaults to the catalog service price.
+   * An explicit override intentionally allows the snapshot to differ
+   * from the catalog without ever modifying the catalog service.
+   */
+  readonly price?: number;
+  /**
+   * Appointment-specific phase durations keyed by catalog phase id.
+   * Defaults to the catalog phase duration. Overrides apply to the
+   * snapshot only; the catalog service is never modified.
+   */
+  readonly phaseDurationOverrides?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -24,11 +36,16 @@ export interface CreateAppointmentItemSnapshotInput {
  *
  * Phase data is copied into new objects, so the snapshot holds no reference
  * to catalog structures and remains unchanged if the Service later evolves.
+ *
+ * Optional `price` and `phaseDurationOverrides` let Appointment Creation
+ * record values that intentionally differ from the catalog defaults
+ * (see docs/domain/APPOINTMENTS.md §15). The catalog Service itself is
+ * never touched.
  */
 export function createAppointmentItemSnapshot(
   input: CreateAppointmentItemSnapshotInput,
 ): AppointmentItem {
-  const { id, service, order, serviceOptionId } = input;
+  const { id, service, order, serviceOptionId, price, phaseDurationOverrides } = input;
 
   return {
     id,
@@ -37,11 +54,11 @@ export function createAppointmentItemSnapshot(
     order,
     serviceName: service.name,
     serviceType: service.type,
-    price: service.price,
+    price: price ?? service.price,
     phases: service.phases.map((phase) => ({
       id: phase.id,
       name: phase.name,
-      durationMinutes: phase.durationMinutes,
+      durationMinutes: phaseDurationOverrides?.[phase.id] ?? phase.durationMinutes,
       requiresStaff: phase.requiresStaff,
     })),
   };

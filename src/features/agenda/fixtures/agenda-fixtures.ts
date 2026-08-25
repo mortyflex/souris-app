@@ -1,11 +1,7 @@
-import type { Appointment, AppointmentItem, AppointmentPhase } from '@/domain/appointments';
+import type { AppointmentItem, AppointmentPhase } from '@/domain/appointments';
+import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 
 import { getWeekDays, isSameLocalDay } from '../calendar/week';
-
-export interface AgendaFixtureAppointment {
-  readonly appointment: Appointment;
-  readonly clientName: string;
-}
 
 function localTime(day: Date, hour: number, minute: number): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute);
@@ -47,9 +43,9 @@ function fixture(
   minute: number,
   itemValue: AppointmentItem,
   additionalItems: readonly AppointmentItem[] = [],
-): AgendaFixtureAppointment {
+): AppointmentSessionEntry {
   return {
-    clientName,
+    clientDisplayName: clientName,
     appointment: {
       id,
       businessId: 'fixture-business',
@@ -63,7 +59,7 @@ function fixture(
 }
 
 /** Initial in-memory Agenda data; history and persistence are intentionally absent. */
-export function createAgendaFixtures(day: Date): readonly AgendaFixtureAppointment[] {
+export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntry[] {
   const weekDays = getWeekDays(day);
   const additionalDays = weekDays.filter((weekDay) => !isSameLocalDay(weekDay, day));
   const busyDay = additionalDays[0];

@@ -3,6 +3,7 @@ import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/shared/ui/AppText';
+import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import {
   colors,
   foregroundSoft,
@@ -15,7 +16,6 @@ import {
 
 import { AppointmentServiceSection } from './components/AppointmentServiceSection';
 import { AppointmentSummary } from './components/AppointmentSummary';
-import { getAgendaFixtureAppointmentById } from './fixture-lookup';
 import {
   formatAppointmentDate,
   formatAppointmentTime,
@@ -32,7 +32,8 @@ interface AppointmentDetailsScreenProps {
 export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsScreenProps) {
   const [expandedItemIds, setExpandedItemIds] = useState<ReadonlySet<string>>(() => new Set());
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
-  const fixture = getAgendaFixtureAppointmentById(appointmentId, new Date());
+  const { getAppointmentById } = useAppointmentSession();
+  const entry = getAppointmentById(appointmentId);
 
   const toggleItem = (itemId: string) => {
     setExpandedItemIds((current) => {
@@ -46,7 +47,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
     });
   };
 
-  if (!fixture) {
+  if (!entry) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.notFound}>
@@ -59,7 +60,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
     );
   }
 
-  const { appointment, clientName } = fixture;
+  const { appointment, clientDisplayName } = entry;
   const services = getAppointmentDetailServices(appointment);
   const summary = getAppointmentDetailSummary(appointment);
   const endAt = getAppointmentEnd(appointment);
@@ -83,7 +84,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
                 selectable
                 style={styles.clientName}
               >
-                {clientName}
+                {clientDisplayName}
               </AppText>
             </View>
           </View>
