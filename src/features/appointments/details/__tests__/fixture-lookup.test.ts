@@ -1,15 +1,17 @@
-import { getAgendaFixtureAppointmentById } from '../fixture-lookup';
+import { createAgendaFixtures } from '@/features/agenda/fixtures/agenda-fixtures';
+
+import { getAppointmentSessionEntryById } from '../fixture-lookup';
 
 describe('Agenda fixture appointment lookup', () => {
-  it('resolves a known appointment by identity', () => {
-    const result = getAgendaFixtureAppointmentById('agenda-sofia', new Date(2026, 7, 24));
+  const appointments = createAgendaFixtures(new Date(2026, 7, 24));
 
-    expect(result?.clientName).toBe('Sofia Petit');
+  it('resolves a known appointment by identity', () => {
+    const result = getAppointmentSessionEntryById(appointments, 'agenda-sofia');
+
+    expect(result?.clientDisplayName).toBe('Sofia Petit');
   });
 
   it('returns undefined for an unknown appointment id', () => {
-    expect(
-      getAgendaFixtureAppointmentById('missing-appointment', new Date(2026, 7, 24)),
-    ).toBeUndefined();
+    expect(getAppointmentSessionEntryById(appointments, 'missing-appointment')).toBeUndefined();
   });
 });

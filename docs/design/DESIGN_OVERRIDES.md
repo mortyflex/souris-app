@@ -139,3 +139,27 @@ default and expand locally; processing phases are explicitly visible there even 
 leaves them visually free.
 
 Processing details remain available in Appointment Details and in future service configuration and editing workflows.
+
+---
+
+## 6. Appointment Creation Flow
+
+The exported Agenda reference shows creation as a single form sheet (`Nouveau rendez-vous` with a Cliente field,
+a Prestation select, date/heure fields, and a Déroulé preview). The implemented Souris creation experience
+deliberately differs:
+
+- three steps with a connected stepper — `Cliente → Prestations → Résumé`;
+- the Agenda-selected date/time is pinned as a compact appointment-context row on every step (never a large
+  date card). The time is a creation draft: a restrained `Modifier` reveals an inline ±5-minute control on
+  the same local date, bounded by the operational Agenda day;
+- the client picker searches the complete normalized address book with a virtualized list and no display cap;
+  its search field uses a symbol icon and a clear `Rechercher une cliente` placeholder instead of field
+  instructions;
+- Prestations groups the catalog by category (eyebrow headers with counts, sticky on iOS) with a
+  `Sélectionnées` area above the catalog hosting appointment-specific customization; each selected-service
+  card offers a direct restrained `Retirer` action;
+- the selected-services area allows appointment-specific price and processing-duration editing that only
+  affects the AppointmentItem snapshot being created — the catalog is never modified;
+- Résumé is a read-only review screen with the structured `Temps` summary (Temps actif / Temps de pose /
+  Durée totale / Total) and subtle `Modifier` actions returning to the relevant step;
+- the explicit dismiss action is `Annuler`, kept restrained next to the native sheet grabber.

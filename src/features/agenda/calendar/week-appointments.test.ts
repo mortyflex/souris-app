@@ -32,7 +32,7 @@ function appointment(id: string, startAt: Date, itemNames: readonly string[]): A
 }
 
 function fixture(id: string, startAt: Date, clientName = id) {
-  return { appointment: appointment(id, startAt, ['Coupe']), clientName };
+  return { appointment: appointment(id, startAt, ['Coupe']), clientDisplayName: clientName };
 }
 
 describe('Agenda week appointment helpers', () => {

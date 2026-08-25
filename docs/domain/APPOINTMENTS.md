@@ -497,7 +497,24 @@ If supported later, a price adjustment applies to the appointment snapshot.
 
 It must not silently alter the catalog service price.
 
-Do not implement this until requested.
+---
+
+# 15.1 Intentional Snapshot Differences During Creation
+
+Appointment Creation supports appointment-specific adjustments that apply only to the snapshot being created:
+
+```text
+price
+phase durations (processing phases)
+```
+
+The created snapshot may therefore intentionally differ from the catalog defaults for these values.
+The catalog Service itself is never modified, and future appointments keep the catalog defaults.
+Adjusting a phase duration recalculates the complete timeline (phase times, item times, elapsed duration,
+processing duration, and appointment end) through the normal domain timeline functions.
+
+This is the same snapshot principle as §12: the appointment preserves booking-time reality, which may be a
+deliberate business decision rather than a copy of catalog defaults.
 
 ---
 

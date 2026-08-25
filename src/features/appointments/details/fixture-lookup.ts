@@ -1,14 +1,13 @@
-import { startOfLocalDay } from '@/features/agenda/calendar/week';
-import { createAgendaFixtures, type AgendaFixtureAppointment } from '@/features/agenda/fixtures/agenda-fixtures';
+import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 
-/** Temporary development boundary until Agenda data is persisted. */
-export function getAgendaFixtureAppointmentById(
+/** Pure lookup used by tests and non-React presentation boundaries. */
+export function getAppointmentSessionEntryById(
+  appointments: readonly AppointmentSessionEntry[],
   appointmentId: string | undefined,
-  referenceDay: Date,
-): AgendaFixtureAppointment | undefined {
+): AppointmentSessionEntry | undefined {
   if (!appointmentId) return undefined;
 
-  return createAgendaFixtures(startOfLocalDay(referenceDay)).find(
+  return appointments.find(
     ({ appointment }) => appointment.id === appointmentId,
   );
 }

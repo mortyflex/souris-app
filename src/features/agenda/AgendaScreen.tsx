@@ -9,7 +9,7 @@ import { AgendaViewSwitcher, type AgendaViewMode } from './components/AgendaView
 import { DayTimeline } from './components/DayTimeline';
 import { WeekView } from './components/WeekView';
 import { addLocalDays, getStartOfWeek, getWeekDays, isSameLocalDay, shiftWeek, startOfLocalDay } from './calendar/week';
-import { createAgendaFixtures } from './fixtures/agenda-fixtures';
+import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 
 const dayNames = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
 const monthFormatter = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
@@ -42,7 +42,7 @@ export function AgendaScreen() {
   const [today] = useState(() => startOfLocalDay(new Date()));
   const [selectedDay, setSelectedDay] = useState(today);
   const [mode, setMode] = useState<AgendaViewMode>('day');
-  const [allAppointments] = useState(() => createAgendaFixtures(today));
+  const { appointments: allAppointments } = useAppointmentSession();
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
   const selectedDayAppointments = allAppointments.filter(({ appointment }) =>
     isSameLocalDay(appointment.startAt, selectedDay),

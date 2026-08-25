@@ -1,18 +1,18 @@
 import { getOrderedItems, type Appointment } from '@/domain/appointments';
 
-import type { AgendaFixtureAppointment } from '../fixtures/agenda-fixtures';
+import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { getLocalDateKey } from './week';
 
 export interface WeekDayAppointments {
   readonly day: Date;
-  readonly appointments: readonly AgendaFixtureAppointment[];
+  readonly appointments: readonly AppointmentSessionEntry[];
 }
 
 export function groupAppointmentsByLocalDay(
-  appointments: readonly AgendaFixtureAppointment[],
+  appointments: readonly AppointmentSessionEntry[],
   days: readonly Date[],
 ): readonly WeekDayAppointments[] {
-  const grouped = new Map<string, AgendaFixtureAppointment[]>();
+  const grouped = new Map<string, AppointmentSessionEntry[]>();
   for (const day of days) {
     grouped.set(getLocalDateKey(day), []);
   }

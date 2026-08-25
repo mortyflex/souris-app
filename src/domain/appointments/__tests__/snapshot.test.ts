@@ -88,4 +88,44 @@ describe("appointment item snapshot", () => {
     expect(snapshot.serviceOptionId).toBe("option-1");
     expect(snapshot.serviceId).toBe("service-couleur-racines");
   });
+
+  it("records an appointment-specific price without modifying the catalog service", () => {
+    const service = couleurRacinesService({ price: 45, processingMinutes: 60 });
+    const snapshot = createAppointmentItemSnapshot({
+      id: "item-price-override",
+      service,
+      order: 0,
+      price: 50,
+    });
+
+    expect(snapshot.price).toBe(50);
+    expect(service.price).toBe(45);
+  });
+
+  it("records phase duration overrides without modifying the catalog service", () => {
+    const service = couleurRacinesService({ price: 45, processingMinutes: 60 });
+    const snapshot = createAppointmentItemSnapshot({
+      id: "item-processing-override",
+      service,
+      order: 0,
+      phaseDurationOverrides: { "service-ph-pose": 45 },
+    });
+
+    expect(snapshot.phases.map((phase) => phase.durationMinutes)).toEqual([
+      15, 45, 10,
+    ]);
+    expect(service.phases[1].durationMinutes).toBe(60);
+  });
+
+  it("falls back to catalog defaults when no overrides are provided", () => {
+    const service = couleurRacinesService({ price: 45, processingMinutes: 60 });
+    const snapshot = createAppointmentItemSnapshot({
+      id: "item-defaults",
+      service,
+      order: 0,
+    });
+
+    expect(snapshot.price).toBe(45);
+    expect(snapshot.phases[1].durationMinutes).toBe(60);
+  });
 });

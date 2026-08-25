@@ -1,19 +1,28 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Platform, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type GestureResponderEvent,
+} from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
+import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { agenda, bottomClearance, colors, gutter, rose } from '@/shared/ui/theme';
 
 import { getAgendaAppointmentPalette } from '../appointment-palette';
-import type { AgendaFixtureAppointment } from '../fixtures/agenda-fixtures';
 import { buildAgendaStaffSegments } from '../layout/agenda-staff-segments';
 import { calculateDayIntervalLayout, minutesFromDayStart } from '../layout/day-layout';
+import { startAtFromTimelinePosition } from '../interaction/timeline-position';
 import { AppointmentBlock } from './AppointmentBlock';
 
 interface DayTimelineProps {
   readonly day: Date;
-  readonly appointments: readonly AgendaFixtureAppointment[];
+  readonly appointments: readonly AppointmentSessionEntry[];
 }
 
 const quarterHeight = agenda.hourHeight / 4;
@@ -24,10 +33,10 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [now, setNow] = useState(() => new Date());
-  const visibleSegments = appointments.flatMap(({ appointment, clientName }) =>
+  const visibleSegments = appointments.flatMap(({ appointment, clientDisplayName }) =>
     buildAgendaStaffSegments(appointment).map((segment) => ({
       ...segment,
-      clientName,
+      clientName: clientDisplayName,
       palette: getAgendaAppointmentPalette(segment.appointmentId),
     })),
   );
@@ -41,6 +50,18 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
   const nowTop = minutesFromDayStart(now, agenda.dayStartHour) * (agenda.hourHeight / 60);
   const eventLeft = agenda.timelineGutter;
   const eventWidth = Math.max(160, width - eventLeft - horizontalGutter);
+
+  const openCreationAtPosition = (event: GestureResponderEvent) => {
+    const startAt = startAtFromTimelinePosition(day, event.nativeEvent.locationY, {
+      dayEndHour: agenda.dayEndHour,
+      dayStartHour: agenda.dayStartHour,
+      hourHeight: agenda.hourHeight,
+    });
+    router.push({
+      pathname: '/appointments/new',
+      params: { startAt: startAt.toISOString() },
+    });
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60_000);
@@ -80,6 +101,14 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
             </View>
           );
         })}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Créer un rendez-vous"
+          accessibilityHint="Choisit l'heure du rendez-vous dans la grille"
+          onPress={openCreationAtPosition}
+          style={[styles.emptySlotSurface, { height: timelineHeight, left: eventLeft, width: eventWidth }]}
+        />
 
         {visibleSegments.map((segment) => {
           const layout = layoutById.get(segment.id);
@@ -146,6 +175,7 @@ const styles = StyleSheet.create({
     paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'],
   },
   canvas: { position: 'relative' },
+  emptySlotSurface: { position: 'absolute', top: 0 },
   timeRow: { height: quarterHeight, left: 0, position: 'absolute', right: 0 },
   timeLabel: { left: 14, position: 'absolute', width: 48 },
   fullHourLabel: { top: -8 },

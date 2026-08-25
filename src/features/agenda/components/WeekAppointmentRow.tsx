@@ -2,19 +2,19 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { AppText } from '@/shared/ui/AppText';
+import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { colors, foregroundSoft, spacing } from '@/shared/ui/theme';
 
 import { getAgendaAppointmentPalette } from '../appointment-palette';
-import type { AgendaFixtureAppointment } from '../fixtures/agenda-fixtures';
 import { getWeekAppointmentServiceSummary } from '../calendar/week-appointments';
 
 interface WeekAppointmentRowProps {
-  readonly value: AgendaFixtureAppointment;
+  readonly value: AppointmentSessionEntry;
 }
 
 export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
   const router = useRouter();
-  const { appointment, clientName } = value;
+  const { appointment, clientDisplayName } = value;
   const palette = getAgendaAppointmentPalette(appointment.id);
   const startAt = appointment.startAt;
   const time = `${startAt.getHours().toString().padStart(2, '0')}:${startAt
@@ -27,7 +27,7 @@ export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
     <Pressable
       accessible
       accessibilityRole="button"
-      accessibilityLabel={`${time}, ${clientName}, ${serviceSummary}`}
+      accessibilityLabel={`${time}, ${clientDisplayName}, ${serviceSummary}`}
       onPress={() =>
         router.push({
           pathname: '/appointments/[appointmentId]',
@@ -42,7 +42,7 @@ export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
       </AppText>
       <View style={styles.body}>
         <AppText variant="rowTitle" numberOfLines={1} style={styles.clientName}>
-          {clientName}
+          {clientDisplayName}
         </AppText>
         <AppText variant="metadata" numberOfLines={1} style={{ color: palette.secondaryText }}>
           {serviceSummary}

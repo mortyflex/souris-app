@@ -1,9 +1,9 @@
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
+import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { bottomClearance, colors, gutter, spacing, touchTarget } from '@/shared/ui/theme';
 
-import type { AgendaFixtureAppointment } from '../fixtures/agenda-fixtures';
 import { groupAppointmentsByLocalDay } from '../calendar/week-appointments';
 import { addLocalDays, getWeekDays, getStartOfWeek } from '../calendar/week';
 import { WeekDaySection } from './WeekDaySection';
@@ -11,7 +11,7 @@ import { WeekDaySection } from './WeekDaySection';
 interface WeekViewProps {
   readonly selectedDay: Date;
   readonly today: Date;
-  readonly appointments: readonly AgendaFixtureAppointment[];
+  readonly appointments: readonly AppointmentSessionEntry[];
   readonly onSelectDay: (day: Date) => void;
   readonly onShiftWeek: (amount: number) => void;
 }
