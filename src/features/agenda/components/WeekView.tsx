@@ -1,8 +1,16 @@
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 
 import { AppText } from '@/shared/ui/AppText';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
-import { bottomClearance, colors, gutter, spacing, touchTarget } from '@/shared/ui/theme';
+import {
+  bottomClearance,
+  gutter,
+  interaction,
+  semanticColors,
+  spacing,
+  touchTarget,
+} from '@/shared/ui/theme';
 
 import { groupAppointmentsByLocalDay } from '../calendar/week-appointments';
 import { addLocalDays, getWeekDays, getStartOfWeek } from '../calendar/week';
@@ -70,9 +78,11 @@ export function WeekView({
             pressed && styles.pressedControl,
           ]}
         >
-          <AppText variant="control" style={styles.controlText}>
-            ‹
-          </AppText>
+          <SymbolView
+            name={{ ios: 'chevron.left', android: 'chevron_left' }}
+            size={16}
+            tintColor={semanticColors.foreground}
+          />
         </Pressable>
         <AppText variant="control" style={styles.range}>
           {formatWeekRange(selectedDay)}
@@ -88,9 +98,11 @@ export function WeekView({
             pressed && styles.pressedControl,
           ]}
         >
-          <AppText variant="control" style={styles.controlText}>
-            ›
-          </AppText>
+          <SymbolView
+            name={{ ios: 'chevron.right', android: 'chevron_right' }}
+            size={16}
+            tintColor={semanticColors.foreground}
+          />
         </Pressable>
       </View>
       <ScrollView
@@ -119,14 +131,16 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   weekHeader: {
     alignItems: 'center',
-    borderBottomColor: colors.border,
+    borderBottomColor: semanticColors.borderSubtle,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   weekControl: { alignItems: 'center', justifyContent: 'center', minHeight: touchTarget.ios, width: 44 },
-  pressedControl: { opacity: 0.7 },
-  controlText: { color: colors.foreground, fontSize: 22, lineHeight: 24 },
-  range: { color: colors.foreground },
+  pressedControl: {
+    opacity: interaction.pressedOpacity,
+    transform: [{ scale: interaction.pressedScale }],
+  },
+  range: { color: semanticColors.foreground },
   scrollContent: { paddingTop: spacing.sm },
 });

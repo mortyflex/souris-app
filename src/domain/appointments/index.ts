@@ -29,3 +29,10 @@ export type { CreateAppointmentItemSnapshotInput } from "./snapshot";
 export { createAppointmentItemSnapshot } from "./snapshot";
 
 export { reorderAppointmentItems, updateAppointmentPhaseDuration } from "./mutations";
+
+export type { AppointmentItemEditDraft } from "./editing";
+export {
+  canRemoveAppointmentItem,
+  hydrateAppointmentDrafts,
+  updateAppointmentFromDrafts,
+} from "./editing";

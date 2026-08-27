@@ -12,7 +12,7 @@ import {
 
 import { AppText } from '@/shared/ui/AppText';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
-import { agenda, bottomClearance, colors, gutter, rose } from '@/shared/ui/theme';
+import { agenda, bottomClearance, gutter, rose, semanticColors } from '@/shared/ui/theme';
 
 import { getAgendaAppointmentPalette } from '../appointment-palette';
 import { buildAgendaStaffSegments } from '../layout/agenda-staff-segments';
@@ -181,8 +181,12 @@ const styles = StyleSheet.create({
   fullHourLabel: { top: -8 },
   quarterLabel: { top: -7 },
   gridLine: { left: agenda.timelineGutter, position: 'absolute', top: 0 },
-  fullHourLine: { backgroundColor: colors.border, height: 1 },
-  quarterLine: { backgroundColor: colors.border, height: StyleSheet.hairlineWidth, opacity: 0.45 },
+  fullHourLine: { backgroundColor: semanticColors.borderSubtle, height: 1 },
+  quarterLine: {
+    backgroundColor: semanticColors.borderSubtle,
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.38,
+  },
   nowLine: { height: 1.5, left: agenda.timelineGutter - 4, position: 'absolute' },
   nowDot: {
     backgroundColor: rose.rose600,

@@ -232,8 +232,8 @@ contact fields. Services and techniques preserve their type, ordered phases, dur
 semantics; invalid non-numeric prices are excluded with a diagnostic rather than invented as zero.
 
 The first slice is intentionally in-memory for the current app session. Agenda Day, Agenda Week, and
-Appointment Details read the same collection, so a newly created appointment appears immediately in all three
-surfaces. Persistence, editing, deletion, cancellation, and no-show actions are outside this slice.
+Appointment Details read the same collection, so newly created and edited appointments appear immediately in all
+three surfaces. Persistence, deletion, cancellation, and no-show actions are outside this slice.
 
 ### Appointment-specific adjustments during creation
 
@@ -260,16 +260,17 @@ durations travel with their service.
 
 ## 9. Appointment Editing
 
-Existing appointments may eventually support:
+Existing appointments support service-composition editing:
 
-- changing date/time;
-- adding services;
-- removing services;
+- adding services from the current catalog;
+- removing services, except the final remaining service;
 - reordering services;
-- editing processing duration where appropriate;
-- changing price where explicitly supported;
-- lifecycle actions;
-- notes.
+- editing appointment-specific processing duration where appropriate;
+- changing appointment-specific price.
+
+Editing starts from the AppointmentItem snapshots already stored on the appointment. Existing prices, names, phase
+structure, and phase durations therefore remain visible even when the catalog has changed. A newly added service
+starts from the current catalog configuration and becomes a new AppointmentItem snapshot only when saved.
 
 Reordering services recalculates the complete timeline.
 

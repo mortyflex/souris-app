@@ -1,7 +1,14 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
-import { colors, lavender, radii, spacing, touchTarget } from '@/shared/ui/theme';
+import { haptics } from '@/shared/lib/haptics';
+import {
+  interaction,
+  radii,
+  semanticColors,
+  spacing,
+  touchTarget,
+} from '@/shared/ui/theme';
 
 export type AgendaViewMode = 'day' | 'week';
 
@@ -13,7 +20,7 @@ interface AgendaViewSwitcherProps {
 export function AgendaViewSwitcher({ mode, onChange }: AgendaViewSwitcherProps) {
   const platform = Platform.OS === 'android' ? 'android' : 'ios';
   const minimumTouchTarget = touchTarget[platform];
-  const defaultRadius = radii[platform].default;
+  const defaultRadius = radii.medium;
 
   return (
     <View
@@ -23,13 +30,19 @@ export function AgendaViewSwitcher({ mode, onChange }: AgendaViewSwitcherProps) 
       {(['day', 'week'] as const).map((value) => {
         const selected = mode === value;
         const label = value === 'day' ? 'Jour' : 'Semaine';
+        const selectMode = () => {
+          if (value !== mode) {
+            haptics.selection();
+          }
+          onChange(value);
+        };
         return (
           <Pressable
             key={value}
             accessibilityRole="tab"
             accessibilityLabel={label}
             accessibilityState={{ selected }}
-            onPress={() => onChange(value)}
+            onPress={selectMode}
             style={({ pressed }) => [
               styles.option,
               { minHeight: minimumTouchTarget },
@@ -51,10 +64,9 @@ export function AgendaViewSwitcher({ mode, onChange }: AgendaViewSwitcherProps) 
 const styles = StyleSheet.create({
   container: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radii.ios.default,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: semanticColors.surface,
+    borderCurve: 'continuous',
+    borderRadius: radii.medium,
     flexDirection: 'row',
     padding: 2,
   },
@@ -66,10 +78,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   selectedOption: {
-    backgroundColor: lavender.lav100,
-    borderRadius: radii.ios.default,
+    backgroundColor: semanticColors.surfaceLavenderStrong,
+    borderRadius: radii.medium,
   },
-  pressedOption: { opacity: 0.78 },
-  selectedText: { color: lavender.lav700 },
-  unselectedText: { color: colors.muted },
+  pressedOption: {
+    opacity: interaction.pressedOpacity,
+    transform: [{ scale: interaction.pressedScale }],
+  },
+  selectedText: { color: semanticColors.accent },
+  unselectedText: { color: semanticColors.foregroundSoft },
 });

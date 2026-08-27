@@ -1,4 +1,4 @@
-// Souris — Sortable selected-services list (Appointment Creation)
+// Souris — Sortable selected-services list (Appointment service editor)
 //
 // Drag-and-drop reordering of the SÉLECTIONNÉES drafts during creation.
 //
@@ -39,35 +39,39 @@ import Animated, {
 import { SymbolView } from 'expo-symbols';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { colors, easing, shadowSource, spacing } from '@/shared/ui/theme';
-import type { Service } from '@/domain/appointments';
-
-import type { SelectedServiceDraft } from '../draft';
+import { haptics } from '@/shared/lib/haptics';
+import {
+  duration,
+  easing,
+  interaction,
+  semanticColors,
+  shadowSource,
+  spacing,
+} from '@/shared/ui/theme';
+import { getSelectedServiceDraftKey, type SelectedServiceDraft } from '../draft';
 import { SelectedServiceCard } from './SelectedServiceCard';
 
 export interface SortableDraftEntry {
   readonly draft: SelectedServiceDraft;
-  readonly service: Service;
 }
 
 interface SortableDraftListProps {
   readonly entries: readonly SortableDraftEntry[];
   readonly expandedDraftId: string | null;
-  readonly onToggleExpanded: (serviceId: string) => void;
+  readonly onToggleExpanded: (draftKey: string) => void;
   readonly onReorder: (fromIndex: number, toIndex: number) => void;
-  readonly onUpdatePrice: (serviceId: string, price: number) => void;
+  readonly onUpdatePrice: (draftKey: string, price: number) => void;
   readonly onUpdatePhaseDuration: (
-    serviceId: string,
+    draftKey: string,
     phaseId: string,
     durationMinutes: number,
   ) => void;
-  readonly onRemove: (service: Service) => void;
+  readonly onRemove: (draftKey: string) => void;
+  readonly canRemove: boolean;
 }
 
 const GAP = spacing.sm;
 const LONG_PRESS_MS = 200;
-const MOVE_DURATION_MS = 180;
-const LIFT_DURATION_MS = 150;
 const MOVE_EASING = Easing.bezier(...easing.out);
 
 type HeightMap = Record<string, number>;
@@ -80,6 +84,7 @@ export function SortableDraftList({
   onUpdatePrice,
   onUpdatePhaseDuration,
   onRemove,
+  canRemove,
 }: SortableDraftListProps) {
   const [heights, setHeights] = useState<HeightMap>({});
   const reducedMotion = useReducedMotion();
@@ -91,12 +96,13 @@ export function SortableDraftList({
   const dragTop = useSharedValue(0);
 
   const sortable = entries.length > 1;
-  const ready = entries.every((entry) => heights[entry.draft.serviceId] !== undefined);
+  const ready = entries.every((entry) => heights[getDraftKey(entry.draft)] !== undefined);
   const totalHeight = entries.reduce(
-    (total, entry) => total + (heights[entry.draft.serviceId] ?? 0) + GAP,
+    (total, entry) => total + (heights[getDraftKey(entry.draft)] ?? 0) + GAP,
     entries.length > 0 ? -GAP : 0,
   );
   const moveDuration = reducedMotion ? 0 : MOVE_DURATION_MS;
+  const liftDuration = reducedMotion ? 0 : duration.state;
 
   useLayoutEffect(() => {
     // Whole-object replacement: never add properties to a shared object.
@@ -107,49 +113,70 @@ export function SortableDraftList({
     if (activeId.get() !== null) {
       return;
     }
-    sharedOrder.set(entries.map((entry) => entry.draft.serviceId));
+    sharedOrder.set(entries.map((entry) => getDraftKey(entry.draft)));
   }, [entries, sharedOrder, activeId]);
 
-  const measure = (serviceId: string) => (event: LayoutChangeEvent) => {
+  const measure = (draftKey: string) => (event: LayoutChangeEvent) => {
     const { height } = event.nativeEvent.layout;
     setHeights((current) => {
-      if (current[serviceId] === height) {
+      if (current[draftKey] === height) {
         return current;
       }
-      return { ...current, [serviceId]: height };
+      return { ...current, [draftKey]: height };
     });
   };
 
   return (
-    <View style={[styles.container, ready && { height: totalHeight }]}>
-      {entries.map(({ draft, service }, index) => (
-        <SortableRow
-          key={draft.serviceId}
-          activeId={activeId}
-          dragBase={dragBase}
-          draft={draft}
-          dragTop={dragTop}
-          fromIndex={index}
-          measure={measure(draft.serviceId)}
-          moveDuration={moveDuration}
-          onRemove={() => onRemove(service)}
-          onReorder={onReorder}
-          onUpdatePhaseDuration={(phaseId, durationMinutes) =>
-            onUpdatePhaseDuration(draft.serviceId, phaseId, durationMinutes)
-          }
-          onUpdatePrice={(price) => onUpdatePrice(draft.serviceId, price)}
-          ready={ready}
-          service={service}
-          serviceId={draft.serviceId}
-          sharedHeights={sharedHeights}
-          sharedOrder={sharedOrder}
-          sortable={sortable}
-          expanded={expandedDraftId === draft.serviceId}
-          onToggleExpanded={() => onToggleExpanded(draft.serviceId)}
-        />
-      ))}
+    <View
+      style={[styles.container, ready && { height: totalHeight }]}
+    >
+      {entries.map(({ draft }, index) => {
+        const draftKey = getDraftKey(draft);
+        return (
+          <SortableRow
+            key={draftKey}
+            activeId={activeId}
+            dragBase={dragBase}
+            draft={draft}
+            dragTop={dragTop}
+            fromIndex={index}
+            measure={measure(draftKey)}
+            moveDuration={moveDuration}
+            liftDuration={liftDuration}
+            onRemove={() => onRemove(draftKey)}
+            onReorder={onReorder}
+            onUpdatePhaseDuration={(phaseId, durationMinutes) =>
+              onUpdatePhaseDuration(draftKey, phaseId, durationMinutes)
+            }
+            onUpdatePrice={(price) => onUpdatePrice(draftKey, price)}
+            ready={ready}
+            serviceId={draftKey}
+            serviceName={draft.serviceName}
+            sharedHeights={sharedHeights}
+            sharedOrder={sharedOrder}
+            sortable={sortable}
+            canRemove={canRemove}
+            expanded={expandedDraftId === draftKey}
+            onToggleExpanded={() => onToggleExpanded(draftKey)}
+          />
+        );
+      })}
     </View>
   );
+}
+
+const MOVE_DURATION_MS = duration.disclosure;
+
+function triggerDragStartHaptic() {
+  haptics.dragStart();
+}
+
+function triggerDragEndHaptic() {
+  haptics.dragEnd();
+}
+
+function getDraftKey(draft: SelectedServiceDraft): string {
+  return getSelectedServiceDraftKey(draft);
 }
 
 interface DragGestureParams {
@@ -225,6 +252,7 @@ function buildPanGesture(params: DragGestureParams) {
       activeId.set(serviceId);
       dragBase.set(slotTopOf(serviceId));
       dragTop.set(dragBase.get());
+      scheduleOnRN(triggerDragStartHaptic);
     })
     .onUpdate((event) => {
       'worklet';
@@ -248,7 +276,7 @@ function buildPanGesture(params: DragGestureParams) {
         sharedOrder.set(nextOrder);
       }
     })
-    .onFinalize(() => {
+    .onFinalize((_event, success) => {
       'worklet';
       if (activeId.get() !== serviceId) {
         return;
@@ -257,6 +285,18 @@ function buildPanGesture(params: DragGestureParams) {
       // Releasing the active flag makes the row's derived style animate
       // itself into its final slot; no explicit position write is needed.
       activeId.set(null);
+      if (!success) {
+        const restoredOrder: string[] = [];
+        for (const otherId of sharedOrder.get()) {
+          if (otherId !== serviceId) {
+            restoredOrder.push(otherId);
+          }
+        }
+        restoredOrder.splice(fromIndex, 0, serviceId);
+        sharedOrder.set(restoredOrder);
+        return;
+      }
+      scheduleOnRN(triggerDragEndHaptic);
       if (finalIndex >= 0) {
         scheduleOnRN(onReorder, fromIndex, finalIndex);
       }
@@ -280,7 +320,7 @@ function DragHandle({
         <SymbolView
           name={{ ios: 'line.3.horizontal', android: 'drag_indicator' }}
           size={16}
-          tintColor={colors.muted}
+          tintColor={semanticColors.foregroundMuted}
         />
       </View>
     </GestureDetector>
@@ -289,8 +329,8 @@ function DragHandle({
 
 interface SortableRowProps {
   readonly draft: SelectedServiceDraft;
-  readonly service: Service;
   readonly serviceId: string;
+  readonly serviceName: string;
   readonly fromIndex: number;
   readonly activeId: SharedValue<string | null>;
   readonly dragBase: SharedValue<number>;
@@ -298,6 +338,7 @@ interface SortableRowProps {
   readonly sharedHeights: SharedValue<HeightMap>;
   readonly sharedOrder: SharedValue<string[]>;
   readonly moveDuration: number;
+  readonly liftDuration: number;
   readonly ready: boolean;
   readonly sortable: boolean;
   readonly expanded: boolean;
@@ -307,12 +348,13 @@ interface SortableRowProps {
   readonly onUpdatePrice: (price: number) => void;
   readonly onUpdatePhaseDuration: (phaseId: string, durationMinutes: number) => void;
   readonly onRemove: () => void;
+  readonly canRemove: boolean;
 }
 
 function SortableRow({
   draft,
-  service,
   serviceId,
+  serviceName,
   fromIndex,
   activeId,
   dragBase,
@@ -320,6 +362,7 @@ function SortableRow({
   sharedHeights,
   sharedOrder,
   moveDuration,
+  liftDuration,
   ready,
   sortable,
   expanded,
@@ -329,6 +372,7 @@ function SortableRow({
   onUpdatePrice,
   onUpdatePhaseDuration,
   onRemove,
+  canRemove,
 }: SortableRowProps) {
   // Row-local primitive shared value: true once the row has rendered its
   // first absolute frame. The first frame is applied directly so the row
@@ -386,11 +430,17 @@ function SortableRow({
     return {
       top,
       zIndex: isActive ? 10 : 0,
-      transform: [{ scale: withTiming(isActive ? 1.02 : 1, { duration: LIFT_DURATION_MS }) }],
+      transform: [
+        {
+          scale: withTiming(isActive ? interaction.dragLiftScale : 1, {
+            duration: liftDuration,
+          }),
+        },
+      ],
       shadowColor: shadowSource.navy,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: withTiming(isActive ? 0.14 : 0, { duration: LIFT_DURATION_MS }),
-      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: withTiming(isActive ? 0.16 : 0, { duration: liftDuration }),
+      shadowRadius: 12,
     };
   });
 
@@ -403,13 +453,13 @@ function SortableRow({
         draft={draft}
         expanded={expanded}
         dragHandle={
-          sortable ? <DragHandle dragGesture={dragGesture} serviceName={service.name} /> : undefined
+          sortable ? <DragHandle dragGesture={dragGesture} serviceName={serviceName} /> : undefined
         }
+        canRemove={canRemove}
         onRemove={onRemove}
         onToggleExpanded={onToggleExpanded}
         onUpdatePhaseDuration={onUpdatePhaseDuration}
         onUpdatePrice={onUpdatePrice}
-        service={service}
       />
     </Animated.View>
   );

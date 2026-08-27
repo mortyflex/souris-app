@@ -19,17 +19,28 @@ const addedAppointment: Appointment = {
 };
 
 function Probe() {
-  const { appointments, addAppointment, getAppointmentById } = useAppointmentSession();
+  const { appointments, addAppointment, getAppointmentById, updateAppointment } =
+    useAppointmentSession();
   const added = getAppointmentById('appointment-added');
 
   return (
     <>
       <Text>{`count:${appointments.length}`}</Text>
       <Text>{added?.clientDisplayName ?? 'not-found'}</Text>
+      <Text>{added?.appointment.notes ?? 'no-notes'}</Text>
       <Pressable
         testID="add-appointment"
         onPress={() =>
           addAppointment({ appointment: addedAppointment, clientDisplayName: 'Nouvelle Cliente' })
+        }
+      />
+      <Pressable
+        testID="update-appointment"
+        onPress={() =>
+          updateAppointment({
+            appointment: { ...addedAppointment, notes: 'mis à jour' },
+            clientDisplayName: 'Nouvelle Cliente',
+          })
         }
       />
     </>
@@ -53,6 +64,11 @@ describe('AppointmentSessionProvider', () => {
 
     expect(view.getByText('count:10')).toBeTruthy();
     expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('update-appointment'));
+    });
+    expect(view.getByText('mis à jour')).toBeTruthy();
 
     view.rerender(
       <AppointmentSessionProvider>

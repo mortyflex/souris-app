@@ -1,14 +1,31 @@
-import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { SymbolView } from 'expo-symbols';
+import { useFocusEffect } from 'expo-router';
+import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/shared/ui/AppText';
-import { colors, foregroundSoft, gutter, lavender, spacing } from '@/shared/ui/theme';
+import {
+  foregroundSoft,
+  gutter,
+  interaction,
+  radii,
+  semanticColors,
+  spacing,
+} from '@/shared/ui/theme';
 
 import { AgendaViewSwitcher, type AgendaViewMode } from './components/AgendaViewSwitcher';
 import { DayTimeline } from './components/DayTimeline';
 import { WeekView } from './components/WeekView';
-import { addLocalDays, getStartOfWeek, getWeekDays, isSameLocalDay, shiftWeek, startOfLocalDay } from './calendar/week';
+import {
+  addLocalDays,
+  followTodayChange,
+  getStartOfWeek,
+  getWeekDays,
+  isSameLocalDay,
+  shiftWeek,
+  startOfLocalDay,
+} from './calendar/week';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 
 const dayNames = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
@@ -39,14 +56,48 @@ function formatWeekRange(date: Date): string {
 }
 
 export function AgendaScreen() {
-  const [today] = useState(() => startOfLocalDay(new Date()));
-  const [selectedDay, setSelectedDay] = useState(today);
+  // Today is always derived from the device clock; it is refreshed on focus,
+  // on return from background, and on a rollover check, never frozen at mount.
+  const [today, setToday] = useState<Date>(() => startOfLocalDay(new Date()));
+  const [selectedDay, setSelectedDay] = useState<Date>(today);
   const [mode, setMode] = useState<AgendaViewMode>('day');
   const { appointments: allAppointments } = useAppointmentSession();
+  const previousTodayRef = useRef(today);
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
   const selectedDayAppointments = allAppointments.filter(({ appointment }) =>
     isSameLocalDay(appointment.startAt, selectedDay),
   );
+
+  const refreshToday = useCallback(() => {
+    const current = startOfLocalDay(new Date());
+    setToday((previous) => (isSameLocalDay(previous, current) ? previous : current));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshToday();
+    }, [refreshToday]),
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refreshToday();
+      }
+    });
+    const rolloverTimer = setInterval(refreshToday, 60_000);
+    return () => {
+      subscription.remove();
+      clearInterval(rolloverTimer);
+    };
+  }, [refreshToday]);
+
+  useEffect(() => {
+    const previousToday = previousTodayRef.current;
+    if (isSameLocalDay(previousToday, today)) return;
+    previousTodayRef.current = today;
+    setSelectedDay((selected) => followTodayChange(selected, previousToday, today));
+  }, [today]);
 
   const selectDay = (day: Date) => {
     setSelectedDay(startOfLocalDay(day));
@@ -58,7 +109,9 @@ export function AgendaScreen() {
   };
 
   const goToToday = () => {
-    setSelectedDay(today);
+    const current = startOfLocalDay(new Date());
+    setToday(current);
+    setSelectedDay(current);
   };
 
   return (
@@ -80,9 +133,11 @@ export function AgendaScreen() {
               onPress={() => shiftSelectedWeek(-1)}
               style={({ pressed }) => [styles.navControl, pressed && styles.pressedControl]}
             >
-              <AppText variant="control" style={styles.navText}>
-                ‹
-              </AppText>
+              <SymbolView
+                name={{ ios: 'chevron.left', android: 'chevron_left' }}
+                size={16}
+                tintColor={semanticColors.foreground}
+              />
             </Pressable>
             <AppText variant="control" style={styles.weekRange}>
               {formatWeekRange(selectedDay)}
@@ -94,9 +149,11 @@ export function AgendaScreen() {
               onPress={() => shiftSelectedWeek(1)}
               style={({ pressed }) => [styles.navControl, pressed && styles.pressedControl]}
             >
-              <AppText variant="control" style={styles.navText}>
-                ›
-              </AppText>
+              <SymbolView
+                name={{ ios: 'chevron.right', android: 'chevron_right' }}
+                size={16}
+                tintColor={semanticColors.foreground}
+              />
             </Pressable>
           </View>
           {!isSameLocalDay(selectedDay, today) && (
@@ -162,7 +219,11 @@ function AgendaDayButton({ day, dayName, hasAppointments, selected, onPress }: A
       accessibilityState={{ selected }}
       accessibilityLabel={`${dayName} ${day.getDate()}`}
       onPress={() => onPress(day)}
-      style={[styles.dayCell, selected && styles.selectedDayCell]}
+      style={({ pressed }) => [
+        styles.dayCell,
+        selected && styles.selectedDayCell,
+        pressed && styles.pressedDayCell,
+      ]}
     >
       <AppText variant="metadata" style={[styles.dayName, selected && styles.selectedText]}>
         {dayName}
@@ -176,7 +237,7 @@ function AgendaDayButton({ day, dayName, hasAppointments, selected, onPress }: A
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.background, flex: 1 },
+  safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
   header: { gap: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.md },
   dayNavigation: {
     alignItems: 'center',
@@ -191,20 +252,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 44,
   },
-  navText: { color: colors.foreground, fontSize: 22, lineHeight: 24 },
-  pressedControl: { opacity: 0.7 },
-  weekRange: { color: colors.foreground, flex: 1, textAlign: 'center' },
+  pressedControl: {
+    opacity: interaction.pressedOpacity,
+    transform: [{ scale: interaction.pressedScale }],
+  },
+  weekRange: { color: semanticColors.foreground, flex: 1, textAlign: 'center' },
   todayRow: {
     alignItems: 'flex-end',
     paddingBottom: spacing.xs,
   },
   todayButton: {
+    borderRadius: radii.small,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  todayText: { color: lavender.lav700 },
+  todayText: { color: semanticColors.accent },
   dayStrip: {
-    borderBottomColor: colors.border,
+    borderBottomColor: semanticColors.borderSubtle,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -212,16 +276,20 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: radii.large,
     minHeight: 58,
     paddingHorizontal: 8,
     paddingVertical: 5,
     width: 44,
   },
-  selectedDayCell: { backgroundColor: lavender.lav100 },
+  selectedDayCell: { backgroundColor: semanticColors.surfaceLavenderStrong },
+  pressedDayCell: {
+    opacity: interaction.pressedOpacity,
+    transform: [{ scale: interaction.pressedScale }],
+  },
   dayName: { color: foregroundSoft, fontSize: 10, lineHeight: 14, textTransform: 'capitalize' },
   dayNumber: { fontSize: 15, lineHeight: 20 },
-  selectedText: { color: lavender.lav700 },
-  loadDot: { backgroundColor: colors.border, borderRadius: 2.5, height: 5, marginTop: 3, width: 5 },
-  activeLoadDot: { backgroundColor: lavender.lav700 },
+  selectedText: { color: semanticColors.accent },
+  loadDot: { backgroundColor: semanticColors.borderSubtle, borderRadius: 2.5, height: 5, marginTop: 3, width: 5 },
+  activeLoadDot: { backgroundColor: semanticColors.accent },
 });

@@ -27,7 +27,9 @@ export type AppTextVariant =
   | 'display'
   | 'screenTitle'
   | 'sheetTitle'
+  | 'summaryValue'
   | 'stateTitle'
+  | 'sectionTitle'
   | 'body'
   | 'rowTitle'
   | 'control'
@@ -66,8 +68,12 @@ function resolveRole(variant: AppTextVariant, platform: AppTextPlatform): Typogr
       return platform === 'android' ? typography.screenTitleAndroid : typography.screenTitleIos;
     case 'sheetTitle':
       return typography.sheetTitle;
+    case 'summaryValue':
+      return typography.daySummaryValue;
     case 'stateTitle':
       return typography.stateTitle;
+    case 'sectionTitle':
+      return typography.sectionTitle;
     case 'body':
       return typography.body;
     case 'rowTitle':

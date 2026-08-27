@@ -28,3 +28,16 @@ export function getWeekDays(date: Date): readonly Date[] {
 export function shiftWeek(date: Date, amount: number): Date {
   return addLocalDays(date, amount * 7);
 }
+
+/**
+ * Keeps the calendar selection coherent across a local-day rollover.
+ * A selection still pointing at the previous today follows the new today;
+ * a deliberate selection of any other day is preserved untouched.
+ */
+export function followTodayChange(
+  selectedDay: Date,
+  previousToday: Date,
+  nextToday: Date,
+): Date {
+  return isSameLocalDay(selectedDay, previousToday) ? nextToday : selectedDay;
+}

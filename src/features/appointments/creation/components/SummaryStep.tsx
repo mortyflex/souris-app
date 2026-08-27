@@ -1,13 +1,38 @@
 // Souris — Summary step (Appointment Creation)
 //
-// Clean review screen. All values come from the draft snapshot
-// (adjusted prices and processing durations included), never from stale
-// catalog defaults. Editing happens on the Prestations step via Modifier.
+// Editorial review screen organized in four distinct blocks, each owning a
+// single concern and a single explicit edit action:
+//   1. Cliente          → Changer la cliente
+//   2. Rendez-vous      → Changer l'horaire (inline ±5 minute control)
+//   3. Prestations      → Modifier les prestations
+//   4. Total            → read-only final summary, CTA lives in the footer
+//
+// Every value comes from the draft snapshot (adjusted prices and processing
+// durations included), never from stale catalog defaults. No data point is
+// repeated across blocks.
 
+import { useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  useReducedMotion,
+} from 'react-native-reanimated';
 
 import { AppText } from '@/shared/ui/AppText';
-import { colors, foregroundSoft, lavender, peach, radii, spacing } from '@/shared/ui/theme';
+import { SectionHeader } from '@/shared/ui/SectionHeader';
+import {
+  easing,
+  foregroundSoft,
+  gutter,
+  interaction,
+  lavender,
+  peach,
+  radii,
+  semanticColors,
+  spacing,
+} from '@/shared/ui/theme';
 
 import type { AppointmentCreationSummary } from '../presentation';
 import {
@@ -16,8 +41,9 @@ import {
   formatCreationPrice,
   formatCreationTime,
 } from '../presentation';
+import { TimeStepper } from './TimeStepper';
 
-const horizontalGutter = Platform.OS === 'android' ? 16 : 20;
+const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 interface SummaryServiceRow {
   readonly serviceId: string;
@@ -32,6 +58,7 @@ interface SummaryStepProps {
   readonly services: readonly SummaryServiceRow[];
   readonly onEditClient: () => void;
   readonly onEditServices: () => void;
+  readonly onStartAtChange: (deltaMinutes: number) => void;
 }
 
 export function SummaryStep({
@@ -41,111 +68,151 @@ export function SummaryStep({
   services,
   onEditClient,
   onEditServices,
+  onStartAtChange,
 }: SummaryStepProps) {
+  const [editingTime, setEditingTime] = useState(false);
+  const reducedMotion = useReducedMotion();
+  const timeEntering = useMemo(
+    () =>
+      reducedMotion
+        ? undefined
+        : FadeIn.duration(160).easing(Easing.bezier(...easing.out)),
+    [reducedMotion],
+  );
+  const timeExiting = useMemo(
+    () => (reducedMotion ? undefined : FadeOut.duration(120)),
+    [reducedMotion],
+  );
+
   return (
     <ScrollView
       contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
       showsVerticalScrollIndicator={false}
     >
-      <SummaryRow label="Cliente" value={clientName} onEdit={onEditClient} />
-      <SummaryRow label="Date" value={formatCreationDate(startAt)} />
-      <SummaryRow
-        label="Horaire"
-        value={`${formatCreationTime(startAt)} – ${formatCreationTime(summary.endAt)}`}
-      />
-
-      <View style={styles.sectionHeader}>
-        <AppText variant="eyebrow" style={styles.sectionLabel}>
-          Prestations
+      <View style={styles.block}>
+        <View style={styles.blockHeader}>
+          <AppText variant="eyebrow" style={styles.blockEyebrow}>
+            Cliente
+          </AppText>
+          <BlockAction
+            accessibilityLabel="Changer la cliente"
+            label="Changer la cliente"
+            onPress={onEditClient}
+            testID="edit-client"
+          />
+        </View>
+        <AppText variant="sheetTitle" accessibilityRole="header" selectable style={styles.clientName}>
+          {clientName}
         </AppText>
-        <EditAction label="Modifier" onPress={onEditServices} testID="edit-services" />
       </View>
-      <View style={styles.serviceList}>
-        {services.map((service) => (
-          <View key={service.serviceId} style={styles.serviceRow}>
-            <AppText variant="rowTitle" numberOfLines={1} style={styles.serviceName}>
-              {service.serviceName}
+
+      <View style={styles.block}>
+        <View style={styles.blockHeader}>
+          <AppText variant="eyebrow" style={styles.blockEyebrow}>
+            Rendez-vous
+          </AppText>
+          {!editingTime && (
+            <BlockAction
+              accessibilityLabel="Changer l'horaire"
+              label="Changer l'horaire"
+              onPress={() => setEditingTime(true)}
+              testID="time-modifier"
+            />
+          )}
+        </View>
+        <AppText variant="control" selectable style={styles.dateLine}>
+          {formatCreationDate(startAt)}
+        </AppText>
+        {editingTime ? (
+          <Animated.View entering={timeEntering} exiting={timeExiting}>
+            <TimeStepper
+              startAt={startAt}
+              onStep={onStartAtChange}
+              onDone={() => setEditingTime(false)}
+            />
+          </Animated.View>
+        ) : (
+          <Animated.View entering={timeEntering} exiting={timeExiting}>
+            <AppText variant="summaryValue" selectable style={styles.timeRange}>
+              {`${formatCreationTime(startAt)} – ${formatCreationTime(summary.endAt)}`}
             </AppText>
-            <AppText variant="metadata" style={styles.servicePrice}>
-              {formatCreationPrice(service.price)}
+          </Animated.View>
+        )}
+      </View>
+
+      <View style={styles.block}>
+        <SectionHeader count={services.length} title="Prestations">
+          <BlockAction
+            accessibilityLabel="Modifier les prestations"
+            label="Modifier les prestations"
+            onPress={onEditServices}
+            testID="edit-services"
+          />
+        </SectionHeader>
+        <View style={styles.serviceList}>
+          {services.map((service) => (
+            <View key={service.serviceId} style={styles.serviceRow}>
+              <AppText variant="control" numberOfLines={1} style={styles.serviceName}>
+                {service.serviceName}
+              </AppText>
+              <AppText variant="metadata" style={styles.servicePrice}>
+                {formatCreationPrice(service.price)}
+              </AppText>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.block}>
+        <AppText variant="eyebrow" style={styles.blockEyebrow}>
+          Total
+        </AppText>
+        <View style={styles.timeSurface}>
+          {summary.activeMinutes > 0 && (
+            <TimeRow
+              accent={lavender.lav700}
+              label="Temps actif"
+              value={formatCreationDuration(summary.activeMinutes)}
+            />
+          )}
+          {summary.processingMinutes > 0 && (
+            <TimeRow
+              accent={peach.peach700}
+              label="Temps de pose"
+              value={formatCreationDuration(summary.processingMinutes)}
+            />
+          )}
+        </View>
+        <View style={styles.finalSummary}>
+          <View>
+            <AppText variant="metadata" style={styles.finalLabel}>
+              Durée totale
+            </AppText>
+            <AppText variant="summaryValue" style={styles.finalValue}>
+              {formatCreationDuration(summary.elapsedMinutes)}
             </AppText>
           </View>
-        ))}
-      </View>
-
-      <AppText variant="eyebrow" style={styles.tempsLabel}>
-        Temps
-      </AppText>
-      <View style={styles.timeSurface}>
-        {summary.activeMinutes > 0 && (
-          <TimeRow
-            accent={lavender.lav700}
-            label="Temps actif"
-            value={formatCreationDuration(summary.activeMinutes)}
-          />
-        )}
-        {summary.processingMinutes > 0 && (
-          <TimeRow
-            accent={peach.peach700}
-            label="Temps de pose"
-            value={formatCreationDuration(summary.processingMinutes)}
-          />
-        )}
-      </View>
-      <View style={styles.finalSummary}>
-        <View>
-          <AppText variant="metadata" style={styles.finalLabel}>
-            Durée totale
-          </AppText>
-          <AppText variant="control" style={styles.finalValue}>
-            {formatCreationDuration(summary.elapsedMinutes)}
-          </AppText>
-        </View>
-        <View style={styles.priceColumn}>
-          <AppText variant="metadata" style={styles.finalLabel}>
-            Total
-          </AppText>
-          <AppText variant="control" style={styles.totalValue}>
-            {formatCreationPrice(summary.totalPrice)}
-          </AppText>
+          <View style={styles.priceColumn}>
+            <AppText variant="metadata" style={styles.finalLabel}>
+              Total
+            </AppText>
+            <AppText variant="summaryValue" style={styles.totalValue}>
+              {formatCreationPrice(summary.totalPrice)}
+            </AppText>
+          </View>
         </View>
       </View>
     </ScrollView>
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-  onEdit,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly onEdit?: () => void;
-}) {
-  return (
-    <View style={styles.summaryRow}>
-      <AppText variant="metadata" style={styles.summaryLabel}>
-        {label}
-      </AppText>
-      <AppText
-        variant="control"
-        numberOfLines={1}
-        style={styles.summaryValue}
-        selectable
-      >
-        {value}
-      </AppText>
-      {onEdit && <EditAction label="Modifier" onPress={onEdit} testID="edit-client" />}
-    </View>
-  );
-}
-
-function EditAction({
+function BlockAction({
+  accessibilityLabel,
   label,
   onPress,
   testID,
 }: {
+  readonly accessibilityLabel: string;
   readonly label: string;
   readonly onPress: () => void;
   readonly testID?: string;
@@ -153,13 +220,13 @@ function EditAction({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel}
       hitSlop={spacing.sm}
       onPress={onPress}
-      style={({ pressed }) => [styles.editAction, pressed && styles.editActionPressed]}
+      style={({ pressed }) => [styles.blockAction, pressed && styles.blockActionPressed]}
       testID={testID}
     >
-      <AppText variant="metadata" style={styles.editActionText}>
+      <AppText variant="metadata" style={styles.blockActionText}>
         {label}
       </AppText>
     </Pressable>
@@ -189,67 +256,68 @@ function TimeRow({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: spacing.xl, paddingTop: spacing.sm },
-  summaryRow: {
-    alignItems: 'center',
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 48,
-  },
-  summaryLabel: { width: 76 },
-  summaryValue: { color: colors.foreground, flex: 1, fontVariant: ['tabular-nums'] },
-  sectionHeader: {
+  content: { paddingBottom: spacing.xl, paddingTop: spacing.base },
+  block: { gap: spacing.sm, marginBottom: spacing.xl },
+  blockHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.lg,
   },
-  sectionLabel: { color: foregroundSoft },
-  editAction: { alignItems: 'center', justifyContent: 'center', minHeight: 32 },
-  editActionPressed: { opacity: 0.72 },
-  editActionText: { color: lavender.lav700 },
+  blockEyebrow: { color: foregroundSoft },
+  blockAction: {
+    alignItems: 'center',
+    borderRadius: radii.small,
+    justifyContent: 'center',
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
+  },
+  blockActionPressed: {
+    backgroundColor: semanticColors.surfaceLavender,
+    transform: [{ scale: interaction.pressedScale }],
+  },
+  blockActionText: { color: semanticColors.accent },
+  clientName: { color: semanticColors.foreground },
+  dateLine: { color: semanticColors.foregroundSoft, fontVariant: ['tabular-nums'] },
+  timeRange: {
+    color: semanticColors.foreground,
+    fontVariant: ['tabular-nums'],
+  },
   serviceList: {
-    borderBottomColor: colors.border,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: spacing.sm,
+    backgroundColor: semanticColors.surfaceLavender,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
+    gap: spacing.xs,
+    padding: spacing.sm,
   },
   serviceRow: {
     alignItems: 'center',
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.sm,
-    minHeight: 52,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
   },
-  serviceName: { color: colors.foreground, flex: 1 },
+  serviceName: { color: semanticColors.foreground, flex: 1 },
   servicePrice: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  tempsLabel: { color: foregroundSoft, marginTop: spacing.lg },
   timeSurface: {
-    backgroundColor: colors.surface,
-    borderColor: lavender.lav100,
-    borderRadius: radii.ios.default,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginTop: spacing.sm,
+    backgroundColor: semanticColors.surface,
+    borderRadius: radii.medium,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
   timeRow: { alignItems: 'center', flexDirection: 'row', minHeight: 36 },
-  timeAccent: { borderRadius: radii.ios.pill, height: 8, marginRight: spacing.sm, width: 8 },
+  timeAccent: { borderRadius: radii.pill, height: 8, marginRight: spacing.sm, width: 8 },
   timeLabel: { flex: 1 },
   timeValue: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   finalSummary: {
-    borderTopColor: lavender.lav200,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: semanticColors.surfaceLavender,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
+    padding: spacing.base,
   },
   finalLabel: { color: foregroundSoft },
-  finalValue: { color: colors.foreground, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
+  finalValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
   priceColumn: { alignItems: 'flex-end' },
   totalValue: {
     color: lavender.lav700,

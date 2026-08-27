@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
-import { foregroundSoft, lavender, peach, radii, spacing } from '@/shared/ui/theme';
+import { foregroundSoft, peach, radii, semanticColors, spacing } from '@/shared/ui/theme';
 import type { TimelinePhase } from '@/domain/appointments';
 
 import { formatAppointmentTime, formatDurationMinutes } from '../presentation';
@@ -15,7 +15,7 @@ export function AppointmentPhaseRow({ phase, isFirst }: AppointmentPhaseRowProps
   const processing = !phase.requiresStaff;
 
   return (
-    <View style={[styles.row, !isFirst && styles.separated, processing && styles.processingRow]}>
+    <View style={[styles.row, !isFirst && styles.spaced, processing && styles.processingRow]}>
       <View style={[styles.phaseBar, processing ? styles.processingBar : styles.activeBar]} />
       <AppText variant="metadata" style={styles.startTime}>
         {formatAppointmentTime(phase.startAt)}
@@ -44,18 +44,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  separated: {
-    borderTopColor: lavender.lav100,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  spaced: { marginTop: 2 },
+  processingRow: {
+    backgroundColor: semanticColors.surfacePeach,
+    borderRadius: radii.medium,
   },
-  processingRow: { backgroundColor: peach.peach050 },
   phaseBar: {
     alignSelf: 'stretch',
-    borderRadius: radii.ios.pill,
+    borderRadius: radii.pill,
     marginRight: spacing.sm,
     width: 3,
   },
-  activeBar: { backgroundColor: lavender.lav200 },
+  activeBar: { backgroundColor: semanticColors.borderLavender },
   processingBar: { backgroundColor: peach.peach700 },
   startTime: { color: foregroundSoft, fontVariant: ['tabular-nums'], width: 40 },
   body: { flex: 1, gap: 1, minWidth: 0 },

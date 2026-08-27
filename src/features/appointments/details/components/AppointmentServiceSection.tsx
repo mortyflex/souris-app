@@ -1,19 +1,23 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
   FadeOut,
   LinearTransition,
-  interpolate,
-  useAnimatedStyle,
   useReducedMotion,
-  useSharedValue,
-  withTiming,
 } from 'react-native-reanimated';
 
 import { AppText } from '@/shared/ui/AppText';
-import { colors, easing, foregroundSoft, lavender, radii, spacing } from '@/shared/ui/theme';
+import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
+import {
+  duration,
+  easing,
+  foregroundSoft,
+  radii,
+  semanticColors,
+  spacing,
+} from '@/shared/ui/theme';
 
 import type { AppointmentDetailService } from '../presentation';
 import {
@@ -24,7 +28,6 @@ import {
 } from '../presentation';
 import { AppointmentPhaseRow } from './AppointmentPhaseRow';
 
-const TRANSITION_DURATION_MS = 240;
 const TRANSITION_EASING = Easing.bezier(...easing.out);
 
 interface AppointmentServiceSectionProps {
@@ -41,23 +44,9 @@ export function AppointmentServiceSection({
   const { item, timelineItem } = service;
   const simple = isServicePhaseRedundant(service);
   const reducedMotion = useReducedMotion();
-  const chevronProgress = useSharedValue(expanded ? 1 : 0);
-
-  useEffect(() => {
-    chevronProgress.set(
-      withTiming(expanded ? 1 : 0, {
-        duration: reducedMotion ? 0 : TRANSITION_DURATION_MS,
-        easing: TRANSITION_EASING,
-      }),
-    );
-  }, [expanded, chevronProgress, reducedMotion]);
-
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${interpolate(chevronProgress.get(), [0, 1], [0, 90])}deg` }],
-  }));
 
   const layoutTransition = useMemo(
-    () => LinearTransition.duration(reducedMotion ? 0 : TRANSITION_DURATION_MS).easing(TRANSITION_EASING),
+    () => LinearTransition.duration(reducedMotion ? 0 : duration.settle).easing(TRANSITION_EASING),
     [reducedMotion],
   );
 
@@ -79,11 +68,9 @@ export function AppointmentServiceSection({
 
   const headerContent = (
     <>
-      <View style={styles.timeCapsule}>
-        <AppText variant="chip" selectable style={styles.time}>
-          {formatAppointmentTime(timelineItem.startAt)}
-        </AppText>
-      </View>
+      <AppText variant="chip" selectable style={styles.time}>
+        {formatAppointmentTime(timelineItem.startAt)}
+      </AppText>
       <View style={styles.titleBody}>
         <AppText variant="control" numberOfLines={1} selectable style={styles.serviceName}>
           {item.serviceName}
@@ -96,11 +83,7 @@ export function AppointmentServiceSection({
         {formatPrice(item.price)}
       </AppText>
       {!simple && (
-        <Animated.View style={[styles.chevronBox, chevronStyle]}>
-          <AppText variant="control" style={styles.chevron}>
-            ›
-          </AppText>
-        </Animated.View>
+        <DisclosureChevron expanded={expanded} style={styles.chevron} />
       )}
     </>
   );
@@ -137,9 +120,10 @@ export function AppointmentServiceSection({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: lavender.lav050,
-    borderColor: lavender.lav200,
-    borderRadius: radii.ios.default,
+    backgroundColor: semanticColors.surfaceLavender,
+    borderColor: semanticColors.borderLavender,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: spacing.sm,
     overflow: 'hidden',
@@ -150,34 +134,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  pressed: { backgroundColor: lavender.lav100 },
-  timeCapsule: {
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderColor: lavender.lav200,
-    borderRadius: radii.ios.default,
-    borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: 'center',
+  pressed: { backgroundColor: semanticColors.surfaceLavenderStrong },
+  time: {
+    color: semanticColors.accent,
+    fontVariant: ['tabular-nums'],
     marginRight: spacing.sm,
-    minWidth: 48,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    minWidth: 40,
   },
-  time: { color: lavender.lav700, fontVariant: ['tabular-nums'] },
   titleBody: { flex: 1, gap: 2, minWidth: 0 },
-  serviceName: { color: colors.foreground },
+  serviceName: { color: semanticColors.foreground },
   serviceMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   price: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
-  chevronBox: {
-    alignItems: 'center',
-    height: 20,
-    justifyContent: 'center',
-    marginLeft: spacing.sm,
-    width: 20,
-  },
-  chevron: { color: lavender.lav700, fontSize: 20, lineHeight: 22 },
+  chevron: { marginLeft: spacing.sm },
   expandedBody: {
-    borderTopColor: lavender.lav200,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: semanticColors.surfaceElevated,
+    paddingVertical: spacing.xs,
   },
 });

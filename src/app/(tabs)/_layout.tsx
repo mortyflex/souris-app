@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Platform, StyleSheet, type ColorValue } from 'react-native';
 
-import { colors, typography } from '@/shared/ui/theme';
+import { semanticColors, typography } from '@/shared/ui/theme';
 
 // Tab labels use the approved tab typography: 10.5 / 600 on iOS, 12 / 500
 // on Android. The concrete Inter family carries the weight.
@@ -27,8 +27,8 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.muted,
+        tabBarActiveTintColor: semanticColors.accent,
+        tabBarInactiveTintColor: semanticColors.foregroundSoft,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: tabLabelStyle,
       }}>
@@ -66,7 +66,7 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: colors.background,
-    borderTopColor: colors.border,
+    backgroundColor: semanticColors.surfaceElevated,
+    borderTopColor: semanticColors.surfaceLavenderStrong,
   },
 });

@@ -1,5 +1,6 @@
 import {
   addLocalDays,
+  followTodayChange,
   getStartOfWeek,
   getWeekDays,
   isSameLocalDay,
@@ -88,5 +89,26 @@ describe('Agenda week calendar helpers', () => {
 
     expect(containsWednesday).toBe(true);
     expect(weekDays.length).toBe(7);
+  });
+});
+
+describe('followTodayChange', () => {
+  it('moves a selection that tracked the previous today onto the new today', () => {
+    const previousToday = localDate(2026, 8, 25);
+    const nextToday = localDate(2026, 8, 26);
+
+    const result = followTodayChange(previousToday, previousToday, nextToday);
+
+    expect(isSameLocalDay(result, nextToday)).toBe(true);
+  });
+
+  it('keeps a deliberate selection of another day when today changes', () => {
+    const previousToday = localDate(2026, 8, 25);
+    const nextToday = localDate(2026, 8, 26);
+    const otherDay = localDate(2026, 8, 28);
+
+    const result = followTodayChange(otherDay, previousToday, nextToday);
+
+    expect(isSameLocalDay(result, otherDay)).toBe(true);
   });
 });

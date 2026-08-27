@@ -15,11 +15,15 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { normalizedClients } from '@/features/clients/adapters/normalized-clients';
 import type { NormalizedClient } from '@/features/clients/adapters/legacy-clients-adapter';
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
+import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
 
+const mockBack = jest.fn();
+const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
+
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: jest.fn() }),
+  useRouter: () => ({ back: mockBack }),
 }));
 
 jest.mock('react-native-reanimated', () => {
@@ -122,6 +126,11 @@ async function searchService(view: Rendered, query: string) {
 }
 
 describe('AppointmentCreationScreen', () => {
+  beforeEach(() => {
+    mockBack.mockClear();
+    mockSuccessHaptic.mockClear();
+  });
+
   it('creates an appointment with overrides and preserves the draft across step transitions', async () => {
     const view = await renderCreation();
 
@@ -341,7 +350,7 @@ describe('AppointmentCreationScreen', () => {
 
     // Open the inline time control and step +5 minutes three times: 10:15 → 10:30.
     await act(async () => {
-      fireEvent.press(view.getByLabelText("Modifier l'heure"));
+      fireEvent.press(view.getByLabelText("Changer l'horaire"));
     });
     expect(view.getByTestId('time-value').props.children).toBe('10:15');
     for (let index = 0; index < 3; index += 1) {
@@ -354,13 +363,38 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.press(view.getByLabelText("Terminer la modification de l'heure"));
     });
 
-    // The context line shows the edited time.
-    expect(view.getByText('Mar. 25 août · 10:30')).toBeTruthy();
+    // The Rendez-vous block shows the edited schedule.
+    expect(view.getByText('Mardi 25 août')).toBeTruthy();
 
     // Summary start and end shift together; durations stay unchanged.
     expect(view.getByText('10:30 – 13:00')).toBeTruthy();
     expect(view.getByText('2 h 30 min')).toBeTruthy();
     expect(view.getByText('1 h 30 min')).toBeTruthy();
     expect(view.getByText('1 h')).toBeTruthy();
+  });
+
+  it('emits success feedback only after the appointment is created', async () => {
+    const view = await renderCreation();
+
+    expect(mockSuccessHaptic).not.toHaveBeenCalled();
+    await selectClientBeyond60(view);
+    await searchService(view, 'coupe brushing 1');
+    await act(async () => {
+      fireEvent.press(view.getByText('Coupe Brushing 1'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Continuer'));
+    });
+
+    expect(mockSuccessHaptic).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      view.unmount();
+    });
   });
 });

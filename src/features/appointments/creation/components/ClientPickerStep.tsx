@@ -5,19 +5,21 @@
 // limiting the business dataset.
 
 import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 
 import { AppText } from '@/shared/ui/AppText';
 import {
-  colors,
   foregroundSoft,
-  lavender,
+  gutter,
+  radii,
+  semanticColors,
   spacing,
 } from '@/shared/ui/theme';
 import type { NormalizedClient } from '@/features/clients/adapters/legacy-clients-adapter';
 
-import { SearchField } from './SearchField';
+import { SearchField } from '@/features/appointments/editor/components/SearchField';
 
-const horizontalGutter = Platform.OS === 'android' ? 16 : 20;
+const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 interface ClientPickerStepProps {
   readonly clients: readonly NormalizedClient[];
@@ -86,9 +88,11 @@ export function ClientPickerStep({
               ) : null}
             </View>
             {selected && (
-              <AppText variant="control" style={styles.checkmark}>
-                ✓
-              </AppText>
+              <SymbolView
+                name={{ ios: 'checkmark', android: 'check' }}
+                size={16}
+                tintColor={semanticColors.accent}
+              />
             )}
           </Pressable>
         );
@@ -117,28 +121,32 @@ const styles = StyleSheet.create({
   },
   clientRow: {
     alignItems: 'center',
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     marginHorizontal: horizontalGutter,
     minHeight: 64,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  selectedRow: { backgroundColor: lavender.lav025 },
-  pressedRow: { opacity: 0.76 },
+  selectedRow: {
+    backgroundColor: semanticColors.surfaceLavender,
+    borderRadius: radii.medium,
+  },
+  pressedRow: {
+    backgroundColor: semanticColors.surface,
+    borderRadius: radii.medium,
+  },
   avatar: {
     alignItems: 'center',
-    backgroundColor: lavender.lav100,
-    borderRadius: 20,
+    backgroundColor: semanticColors.surfaceLavenderStrong,
+    borderRadius: radii.pill,
     height: 40,
     justifyContent: 'center',
     marginRight: spacing.md,
     width: 40,
   },
-  selectedAvatar: { backgroundColor: lavender.lav200 },
-  avatarText: { color: lavender.lav700 },
+  selectedAvatar: { backgroundColor: semanticColors.borderLavender },
+  avatarText: { color: semanticColors.accent },
   rowCopy: { flex: 1, minWidth: 0 },
-  checkmark: { color: lavender.lav700, paddingLeft: spacing.sm },
   emptyState: { alignItems: 'center', padding: spacing.xl },
   emptyStateText: { color: foregroundSoft, marginTop: spacing.sm },
 });

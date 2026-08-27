@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 
 import { AppText } from '@/shared/ui/AppText';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
-import { colors, foregroundSoft, spacing } from '@/shared/ui/theme';
+import { foregroundSoft, radii, spacing } from '@/shared/ui/theme';
 
 import { getAgendaAppointmentPalette } from '../appointment-palette';
 import { getWeekAppointmentServiceSummary } from '../calendar/week-appointments';
@@ -34,7 +34,10 @@ export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
           params: { appointmentId: appointment.id },
         })
       }
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.row,
+        pressed && { backgroundColor: palette.background },
+      ]}
     >
       <View style={[styles.marker, { backgroundColor: palette.accent }]} />
       <AppText variant="metadata" style={styles.time}>
@@ -44,7 +47,7 @@ export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
         <AppText variant="rowTitle" numberOfLines={1} style={styles.clientName}>
           {clientDisplayName}
         </AppText>
-        <AppText variant="metadata" numberOfLines={1} style={{ color: palette.secondaryText }}>
+        <AppText variant="metadata" numberOfLines={1} style={styles.serviceSummary}>
           {serviceSummary}
         </AppText>
       </View>
@@ -55,15 +58,15 @@ export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
 const styles = StyleSheet.create({
   row: {
     alignItems: 'center',
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.medium,
     flexDirection: 'row',
-    minHeight: 60,
-    paddingVertical: spacing.sm,
+    minHeight: 56,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  marker: { borderRadius: 2, height: 30, marginRight: spacing.sm, width: 3 },
+  marker: { borderRadius: 2, height: 26, marginRight: spacing.sm, width: 3 },
   time: { color: foregroundSoft, width: 54 },
   body: { flex: 1, minWidth: 0, paddingRight: spacing.sm },
   clientName: { lineHeight: 18 },
-  pressed: { opacity: 0.78 },
+  serviceSummary: { color: foregroundSoft },
 });
