@@ -12,7 +12,14 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
-import { colors, foregroundSoft, lavender, spacing } from '@/shared/ui/theme';
+import {
+  foregroundSoft,
+  gutter,
+  interaction,
+  radii,
+  semanticColors,
+  spacing,
+} from '@/shared/ui/theme';
 
 import {
   canNavigateTo,
@@ -29,7 +36,7 @@ interface CreationStepperProps {
 
 const NODE_SIZE = 22;
 const CONNECTOR_HEIGHT = 2;
-const horizontalGutter = Platform.OS === 'android' ? 16 : 20;
+const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 export function CreationStepper({ step, onStepPress }: CreationStepperProps) {
   return (
@@ -54,7 +61,10 @@ export function CreationStepper({ step, onStepPress }: CreationStepperProps) {
             }
             disabled={!reachable}
             onPress={() => onStepPress(index as CreationStep)}
-            style={styles.stepColumn}
+            style={({ pressed }) => [
+              styles.stepColumn,
+              pressed && reachable && styles.stepPressed,
+            ]}
           >
             <View style={styles.nodeRow}>
               <View
@@ -114,41 +124,42 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   stepColumn: { alignItems: 'center', flex: 1, minWidth: 0, paddingVertical: spacing.xs },
+  stepPressed: { transform: [{ scale: interaction.pressedScale }] },
   nodeRow: { alignItems: 'center', flexDirection: 'row', width: '100%' },
   node: {
     alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: NODE_SIZE / 2,
+    borderColor: semanticColors.borderSubtle,
+    borderRadius: radii.pill,
     borderWidth: 2,
     height: NODE_SIZE,
     justifyContent: 'center',
     width: NODE_SIZE,
   },
   completedNode: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+    backgroundColor: semanticColors.accent,
+    borderColor: semanticColors.accent,
   },
   currentNode: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+    backgroundColor: semanticColors.accent,
+    borderColor: semanticColors.accent,
   },
-  futureNode: { backgroundColor: colors.background },
+  futureNode: { backgroundColor: semanticColors.surfaceElevated },
   currentDot: {
-    backgroundColor: colors.background,
+    backgroundColor: semanticColors.surfaceElevated,
     borderRadius: 2,
     height: 4,
     width: 4,
   },
-  checkmark: { color: colors.background, fontSize: 11, lineHeight: 13 },
+  checkmark: { color: semanticColors.surfaceElevated, fontSize: 11, lineHeight: 13 },
   connector: {
-    backgroundColor: colors.border,
+    backgroundColor: semanticColors.borderSubtle,
     flex: 1,
     height: CONNECTOR_HEIGHT,
   },
   connectorInvisible: { backgroundColor: 'transparent' },
-  connectorAccent: { backgroundColor: colors.accent },
+  connectorAccent: { backgroundColor: semanticColors.accent },
   label: { marginTop: spacing.xs },
   completedLabel: { color: foregroundSoft },
-  currentLabel: { color: lavender.lav700 },
-  futureLabel: { color: colors.muted },
+  currentLabel: { color: semanticColors.accent },
+  futureLabel: { color: semanticColors.foregroundMuted },
 });

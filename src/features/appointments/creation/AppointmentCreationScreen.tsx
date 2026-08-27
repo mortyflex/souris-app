@@ -10,7 +10,6 @@ import { useCallback, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   View,
 } from 'react-native';
@@ -22,24 +21,30 @@ import { useAppointmentSession } from '@/features/appointments/session/Appointme
 import { normalizedClients } from '@/features/clients/adapters/normalized-clients';
 import { filterClients } from '@/features/clients/search/filter-clients';
 import { catalog } from '@/features/services/adapters/catalog';
+import { haptics } from '@/shared/lib/haptics';
+import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import {
   agenda,
-  colors,
   gutter,
-  lavender,
-  radii,
+  semanticColors,
   spacing,
-  touchTarget,
 } from '@/shared/ui/theme';
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
 import { AppointmentContextRow } from './components/AppointmentContextRow';
 import { ClientPickerStep, getClientDisplayName } from './components/ClientPickerStep';
 import { CreationStepper } from './components/CreationStepper';
-import { ServiceCatalogStep } from './components/ServiceCatalogStep';
+import { ServiceCatalogEditor } from '../editor/components/ServiceCatalogEditor';
 import { SummaryStep } from './components/SummaryStep';
-import { createSelectedServiceDraft, reorderDrafts, updateDraftPhaseDuration, updateDraftPrice, type SelectedServiceDraft } from './draft';
+import {
+  createSelectedServiceDraft,
+  getSelectedServiceDraftKey,
+  reorderDrafts,
+  updateDraftPhaseDuration,
+  updateDraftPrice,
+  type SelectedServiceDraft,
+} from './draft';
 import { stepStartAt, type StartTimeBounds } from './draft-start';
 import { createAppointmentId, createAppointmentItemId } from './runtime-ids';
 import { getAppointmentCreationSummary } from './presentation';
@@ -104,13 +109,18 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
 
   const visibleClients = filterClients(normalizedClients, clientQuery);
 
-  const toggleService = (service: Service) => {
-    setSelectedDrafts((current) => {
-      if (current.some((draft) => draft.serviceId === service.id)) {
-        return current.filter((draft) => draft.serviceId !== service.id);
-      }
-      return [...current, createSelectedServiceDraft(service)];
-    });
+  const addService = (service: Service) => {
+    if (selectedDrafts.some((draft) => draft.serviceId === service.id)) return;
+    haptics.selection();
+    setSelectedDrafts((current) => [...current, createSelectedServiceDraft(service)]);
+  };
+
+  const removeDraft = (draftKey: string) => {
+    if (!selectedDrafts.some((draft) => getSelectedServiceDraftKey(draft) === draftKey)) return;
+    haptics.selection();
+    setSelectedDrafts((current) =>
+      current.filter((draft) => getSelectedServiceDraftKey(draft) !== draftKey),
+    );
   };
 
   const reorderSelectedDrafts = useCallback(
@@ -121,11 +131,13 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   );
 
   const updateDraft = (
-    serviceId: string,
+    draftKey: string,
     updater: (draft: SelectedServiceDraft) => SelectedServiceDraft,
   ) => {
     setSelectedDrafts((current) =>
-      current.map((draft) => (draft.serviceId === serviceId ? updater(draft) : draft)),
+      current.map((draft) =>
+        getSelectedServiceDraftKey(draft) === draftKey ? updater(draft) : draft,
+      ),
     );
   };
 
@@ -164,6 +176,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         selectedClient.lastName,
       ),
     });
+    haptics.success();
     router.back();
   };
 
@@ -182,25 +195,24 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
               {stepLabels[step]}
             </AppText>
           </View>
-          <Pressable
-            accessibilityRole="button"
+          <AppButton
             accessibilityLabel="Annuler la création"
             onPress={() => router.back()}
-            style={({ pressed }) => [styles.cancelButton, pressed && styles.pressed]}
-          >
-            <AppText variant="control" style={styles.cancelText}>
-              Annuler
-            </AppText>
-          </Pressable>
+            style={styles.cancelButton}
+            title="Annuler"
+            variant="tertiary"
+          />
         </View>
 
         <CreationStepper step={step} onStepPress={(target) => navigateToStep(target)} />
 
-        <AppointmentContextRow
-          startAt={draftStartAt}
-          clientName={selectedClientName}
-          onStartAtChange={stepDraftStartAt}
-        />
+        {step !== 2 && (
+          <AppointmentContextRow
+            startAt={draftStartAt}
+            clientName={selectedClientName}
+            onStartAtChange={stepDraftStartAt}
+          />
+        )}
 
         {step === 0 && (
           <ClientPickerStep
@@ -212,17 +224,18 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
           />
         )}
         {step === 1 && (
-          <ServiceCatalogStep
+          <ServiceCatalogEditor
             selectedDrafts={selectedDrafts}
             onReorderDrafts={reorderSelectedDrafts}
-            onToggleService={toggleService}
-            onUpdatePhaseDuration={(serviceId, phaseId, durationMinutes) =>
-              updateDraft(serviceId, (draft) =>
+            onRemoveDraft={removeDraft}
+            onToggleService={addService}
+            onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
+              updateDraft(draftKey, (draft) =>
                 updateDraftPhaseDuration(draft, phaseId, durationMinutes),
               )
             }
-            onUpdatePrice={(serviceId, price) =>
-              updateDraft(serviceId, (draft) => updateDraftPrice(draft, price))
+            onUpdatePrice={(draftKey, price) =>
+              updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
             }
           />
         )}
@@ -241,37 +254,26 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
             summary={summary}
             onEditClient={() => navigateToStep(0)}
             onEditServices={() => navigateToStep(1)}
+            onStartAtChange={stepDraftStartAt}
           />
         )}
 
         <View style={styles.footer}>
           {step > 0 && (
-            <Pressable
-              accessibilityRole="button"
+            <AppButton
               accessibilityLabel="Étape précédente"
               onPress={() => navigateToStep(step - 1)}
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-            >
-              <AppText variant="control" style={styles.secondaryButtonText}>
-                Précédent
-              </AppText>
-            </Pressable>
+              style={styles.secondaryButton}
+              title="Précédent"
+              variant="secondary"
+            />
           )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canContinue }}
+          <AppButton
             disabled={!canContinue}
             onPress={step === 2 ? create : continueToNextStep}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              !canContinue && styles.disabledButton,
-              pressed && canContinue && styles.pressedPrimary,
-            ]}
-          >
-            <AppText variant="control" style={styles.primaryButtonText}>
-              {step === 2 ? 'Créer le rendez-vous' : 'Continuer'}
-            </AppText>
-          </Pressable>
+            style={styles.primaryButton}
+            title={step === 2 ? 'Créer le rendez-vous' : 'Continuer'}
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -279,7 +281,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.background, flex: 1 },
+  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
   keyboardContainer: { flex: 1 },
   header: {
     alignItems: 'center',
@@ -290,17 +292,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   headerCopy: { flex: 1, gap: spacing.xs },
-  eyebrow: { color: lavender.lav700 },
-  cancelButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: touchTarget.ios,
-    paddingLeft: spacing.md,
-  },
-  cancelText: { color: lavender.lav700 },
-  pressed: { opacity: 0.72 },
+  eyebrow: { color: semanticColors.accent },
+  cancelButton: { paddingHorizontal: spacing.md },
   footer: {
-    borderTopColor: colors.border,
+    backgroundColor: semanticColors.surfaceElevated,
+    borderTopColor: semanticColors.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.sm,
@@ -308,26 +304,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
-  secondaryButton: {
-    alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: radii.ios.default,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: touchTarget.ios,
-    paddingHorizontal: spacing.md,
-  },
-  secondaryButtonText: { color: colors.foreground },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: colors.accent,
-    borderRadius: radii.ios.default,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: touchTarget.ios,
-    paddingHorizontal: spacing.md,
-  },
-  primaryButtonText: { color: colors.background },
-  pressedPrimary: { backgroundColor: lavender.lav700 },
-  disabledButton: { backgroundColor: colors.border },
+  secondaryButton: { paddingHorizontal: spacing.base },
+  primaryButton: { flex: 1 },
 });

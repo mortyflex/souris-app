@@ -1,15 +1,24 @@
 // Souris — Native Design Tokens
 //
 // Source of truth:
+//   docs/design/DESIGN_OVERRIDES.md
 //   docs/design/DESIGN.md
 //   docs/design/reference-export/tokens.css
 //   docs/design/reference-export/colors_and_type.css
 //
-// These tokens are immutable design constants for the Souris native application.
-// They faithfully represent the approved exported design in a React-Native-compatible form.
-// Do not invent new values — derive from the approved design sources.
+// These tokens are the approved native runtime decisions for Souris. Canonical
+// colors remain derived from the export; semantic aliases and native depth/motion
+// follow the newer runtime direction recorded in DESIGN_OVERRIDES.md.
 
-export { colors, lavender, rose, peach, foregroundSoft, shadowSource } from './colors';
+export {
+  colors,
+  lavender,
+  rose,
+  peach,
+  foregroundSoft,
+  semanticColors,
+  shadowSource,
+} from './colors';
 export { spacing, gutter, bottomClearance } from './spacing';
 export { radii } from './radii';
 export {
@@ -20,6 +29,7 @@ export {
   sheetTitle,
   daySummaryValue,
   stateTitle,
+  sectionTitle,
   body,
   rowTitle,
   controlIos,
@@ -32,6 +42,6 @@ export {
   tabIos,
   tabAndroid,
 } from './typography';
-export { duration, easing } from './motion';
+export { duration, easing, interaction } from './motion';
 export { agenda, touchTarget } from './layout';
-export { shadows } from './shadows';
+export { nativeShadows, shadows } from './shadows';

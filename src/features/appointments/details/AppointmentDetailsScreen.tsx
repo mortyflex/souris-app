@@ -1,16 +1,18 @@
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import {
-  colors,
   foregroundSoft,
   gutter,
-  lavender,
   radii,
   rose,
+  semanticColors,
   spacing,
 } from '@/shared/ui/theme';
 
@@ -30,6 +32,7 @@ interface AppointmentDetailsScreenProps {
 }
 
 export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsScreenProps) {
+  const router = useRouter();
   const [expandedItemIds, setExpandedItemIds] = useState<ReadonlySet<string>>(() => new Set());
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
   const { getAppointmentById } = useAppointmentSession();
@@ -87,6 +90,19 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
                 {clientDisplayName}
               </AppText>
             </View>
+            <AppButton
+              accessibilityLabel="Modifier le rendez-vous"
+              onPress={() =>
+                router.push({
+                  pathname: '/appointments/edit/[appointmentId]',
+                  params: { appointmentId: appointment.id },
+                })
+              }
+              style={styles.modifyAction}
+              testID="modify-appointment"
+              title="Modifier"
+              variant="tertiary"
+            />
           </View>
           <View style={styles.metaSurface}>
             <AppText variant="control" selectable style={styles.dateLine}>
@@ -106,14 +122,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
           </View>
         </View>
 
-        <View style={styles.sectionHeader}>
-          <AppText variant="control" style={styles.sectionTitle}>
-            Prestations
-          </AppText>
-          <AppText variant="chip" style={styles.serviceCount}>
-            {services.length}
-          </AppText>
-        </View>
+        <SectionHeader count={services.length} style={styles.sectionHeader} title="Prestations" />
         {services.map((service) => (
           <AppointmentServiceSection
             key={service.item.id}
@@ -141,66 +150,52 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.background },
-  content: { paddingBottom: spacing['3xl'], paddingTop: spacing.md },
+  safeArea: { backgroundColor: semanticColors.screenWarm },
+  content: { paddingBottom: spacing['3xl'], paddingTop: spacing.base },
   appointmentHeader: { paddingBottom: spacing.xl },
-  identityHeader: { alignItems: 'center', flexDirection: 'row', marginBottom: spacing.md },
+  identityHeader: { alignItems: 'stretch', flexDirection: 'row', marginBottom: spacing.base },
   identityAccent: {
     alignSelf: 'stretch',
     backgroundColor: rose.rose600,
-    borderRadius: radii.ios.pill,
+    borderRadius: radii.pill,
     width: 4,
   },
-  identityCopy: { flex: 1, gap: spacing.xs, marginLeft: spacing.sm, minWidth: 0 },
+  identityCopy: { flex: 1, gap: spacing.xs, justifyContent: 'center', marginLeft: spacing.md, minWidth: 0 },
+  modifyAction: { alignSelf: 'center', paddingHorizontal: spacing.md },
   identityEyebrow: { color: rose.rose600 },
-  clientName: { color: colors.foreground },
+  clientName: { color: semanticColors.foreground },
   metaSurface: {
-    backgroundColor: colors.surface,
-    borderColor: lavender.lav100,
-    borderRadius: radii.ios.default,
+    backgroundColor: semanticColors.surfaceRose,
+    borderColor: rose.rose200,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
     borderWidth: StyleSheet.hairlineWidth,
     padding: spacing.base,
   },
-  dateLine: { color: colors.foreground },
+  dateLine: { color: semanticColors.foreground },
   metaBottomRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: spacing.sm,
   },
-  timeLine: { color: colors.foreground, flexShrink: 1 },
+  timeLine: { color: semanticColors.foreground, flexShrink: 1, fontVariant: ['tabular-nums'] },
   statusRow: { alignItems: 'center', flexDirection: 'row', marginLeft: spacing.sm },
   statusDot: {
-    backgroundColor: lavender.lav700,
-    borderRadius: radii.ios.pill,
+    backgroundColor: semanticColors.accent,
+    borderRadius: radii.pill,
     height: 6,
     marginRight: spacing.xs,
     width: 6,
   },
-  statusText: { color: lavender.lav700 },
+  statusText: { color: semanticColors.accent },
   sectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
-  sectionTitle: { color: colors.foreground },
-  serviceCount: {
-    backgroundColor: lavender.lav100,
-    borderRadius: radii.ios.default,
-    color: lavender.lav700,
-    minWidth: 24,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    textAlign: 'center',
-  },
   notes: {
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: spacing.lg,
-    paddingTop: spacing.md,
+    marginTop: spacing.xl,
   },
-  noteLabel: { color: colors.foreground, marginBottom: spacing.sm },
+  noteLabel: { color: semanticColors.foreground, marginBottom: spacing.sm },
   notFound: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
   notFoundText: { color: foregroundSoft, marginTop: spacing.sm, textAlign: 'center' },
 });

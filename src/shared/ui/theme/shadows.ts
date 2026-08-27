@@ -17,6 +17,8 @@
 // Design constraint: shadows are extremely restrained, navy/lavender tinted,
 // never generic heavy black elevation.
 
+import { Platform, type ViewStyle } from 'react-native';
+
 // Source: tokens.css --shadow-sheet
 // CSS: 0 -1px 0 var(--border), 0 -12px 32px -18px oklch(0.25 0.06 285 / 0.35)
 // Intent: bottom-anchored sheet, 1px border line + soft upward diffuse shadow
@@ -51,3 +53,19 @@ export const shadows = {
   raise: shadowRaise,
   fab: shadowFab,
 } as const;
+
+// Reusable New Architecture shadow styles for native runtime surfaces.
+// RGBA values are alpha variants of the approved navy/lavender shadow sources.
+const needsAndroidElevationFallback =
+  Platform.OS === 'android' && Number(Platform.Version) < 28;
+
+function nativeShadow(boxShadow: string, elevation: number): ViewStyle {
+  return needsAndroidElevationFallback ? { elevation } : { boxShadow };
+}
+
+export const nativeShadows = {
+  raised: nativeShadow('0 4px 14px rgba(31, 28, 61, 0.10)', 2),
+  lifted: nativeShadow('0 8px 20px rgba(31, 28, 61, 0.16)', 4),
+  floating: nativeShadow('0 5px 16px rgba(101, 65, 153, 0.18)', 4),
+  footer: nativeShadow('0 -4px 14px rgba(31, 28, 61, 0.08)', 2),
+} as const satisfies Record<string, ViewStyle>;

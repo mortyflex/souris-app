@@ -6,12 +6,21 @@
 // Easing represented as a [x1, y1, x2, y2] cubic bezier control-point array,
 // compatible with React Native Animated.timing and Reanimated Easing.bezier.
 //
-// This is source data only. No animation library is installed or used.
+// Reanimated consumes these values for shared native interaction language.
 
 export const duration = {
-  tap: 80,
-  state: 150,
+  tap: 120,
+  state: 160,
+  disclosure: 220,
+  settle: 240,
   panel: 280,
+} as const;
+
+export const interaction = {
+  pressedOpacity: 0.76,
+  pressedScale: 0.985,
+  cardPressedScale: 0.99,
+  dragLiftScale: 1.02,
 } as const;
 
 // cubic-bezier(.32, .72, 0, 1) — sheets, onboarding panels

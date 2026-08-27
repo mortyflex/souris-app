@@ -1,20 +1,28 @@
 // Souris — Appointment context row
 //
-// Compact appointment-context surface used on every creation step.
-// Keeps "who + when" visible without a large date/profile card.
+// Compact appointment-context surface used on creation steps and the
+// appointment editing screen. Keeps "who + when" visible without a large
+// date/profile card.
 //
-// The time is the creation draft start time: tapping Modifier reveals a
-// compact ±5 minute control. The calendar date never changes here.
+// The time is the creation draft start time: tapping Changer l'horaire
+// reveals a compact ±5 minute control. The calendar date never changes here.
 
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
-import { colors, lavender, radii, spacing } from '@/shared/ui/theme';
+import {
+  gutter,
+  interaction,
+  radii,
+  semanticColors,
+  spacing,
+} from '@/shared/ui/theme';
 
 import { formatCreationDateShort, formatCreationTime } from '../presentation';
+import { TimeStepper } from './TimeStepper';
 
-const horizontalGutter = Platform.OS === 'android' ? 16 : 20;
+const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 interface AppointmentContextRowProps {
   readonly startAt: Date;
@@ -33,79 +41,38 @@ export function AppointmentContextRow({
 
   return (
     <View style={styles.contextRow}>
+      {clientName && (
+        <AppText variant="rowTitle" numberOfLines={1} style={styles.clientName}>
+          {clientName}
+        </AppText>
+      )}
       {editing ? (
-        <View style={styles.copy}>
-          {clientName && (
-            <AppText variant="rowTitle" numberOfLines={1} style={styles.clientName}>
-              {clientName}
-            </AppText>
-          )}
-          <View style={styles.editRow}>
-            <AppText variant="metadata" numberOfLines={1} style={styles.editDate}>
-              {formatCreationDateShort(startAt)}
-            </AppText>
-            <View style={styles.timeStepper}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Reculer de 5 minutes"
-                onPress={() => onStartAtChange?.(-5)}
-                style={({ pressed }) => [styles.stepButton, pressed && styles.stepButtonPressed]}
-              >
-                <AppText variant="control" style={styles.stepGlyph}>
-                  −
-                </AppText>
-              </Pressable>
-              <AppText variant="control" style={styles.timeValue} testID="time-value">
-                {formatCreationTime(startAt)}
-              </AppText>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Avancer de 5 minutes"
-                onPress={() => onStartAtChange?.(5)}
-                style={({ pressed }) => [styles.stepButton, pressed && styles.stepButtonPressed]}
-              >
-                <AppText variant="control" style={styles.stepGlyph}>
-                  +
-                </AppText>
-              </Pressable>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Terminer la modification de l'heure"
-              hitSlop={spacing.sm}
-              onPress={() => setEditing(false)}
-              style={({ pressed }) => [styles.editAction, pressed && styles.editActionPressed]}
-              testID="time-done"
-            >
-              <AppText variant="metadata" style={styles.editActionText}>
-                Terminer
-              </AppText>
-            </Pressable>
-          </View>
-        </View>
+        <>
+          <AppText variant="metadata" numberOfLines={1} style={styles.editDate}>
+            {formatCreationDateShort(startAt)}
+          </AppText>
+          <TimeStepper
+            startAt={startAt}
+            onStep={(deltaMinutes) => onStartAtChange?.(deltaMinutes)}
+            onDone={() => setEditing(false)}
+          />
+        </>
       ) : (
         <View style={styles.normalRow}>
-          <View style={styles.copy}>
-            {clientName && (
-              <AppText variant="rowTitle" numberOfLines={1} style={styles.clientName}>
-                {clientName}
-              </AppText>
-            )}
-            <AppText variant={clientName ? 'metadata' : 'control'} style={styles.timeLine}>
-              {`${formatCreationDateShort(startAt)} · ${formatCreationTime(startAt)}`}
-            </AppText>
-          </View>
+          <AppText variant={clientName ? 'metadata' : 'control'} style={styles.timeLine}>
+            {`${formatCreationDateShort(startAt)} · ${formatCreationTime(startAt)}`}
+          </AppText>
           {editable && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Modifier l'heure"
+              accessibilityLabel="Changer l'horaire"
               hitSlop={spacing.sm}
               onPress={() => setEditing(true)}
               style={({ pressed }) => [styles.editAction, pressed && styles.editActionPressed]}
               testID="time-modifier"
             >
               <AppText variant="metadata" style={styles.editActionText}>
-                Modifier
+                Changer l&apos;horaire
               </AppText>
             </Pressable>
           )}
@@ -117,51 +84,31 @@ export function AppointmentContextRow({
 
 const styles = StyleSheet.create({
   contextRow: {
-    backgroundColor: colors.surface,
-    borderColor: lavender.lav100,
-    borderRadius: radii.ios.default,
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.borderSubtle,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
     borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
     marginHorizontal: horizontalGutter,
     marginTop: spacing.sm,
     paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
   },
+  clientName: { color: semanticColors.foreground },
   normalRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
-  copy: { flex: 1, gap: 2, minWidth: 0 },
-  clientName: { color: colors.foreground },
-  timeLine: { color: colors.foreground, fontVariant: ['tabular-nums'] },
-  editRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
-  editDate: { color: colors.foreground, flexShrink: 1 },
-  timeStepper: {
+  timeLine: { color: semanticColors.foregroundSoft, flex: 1, fontVariant: ['tabular-nums'] },
+  editDate: { color: semanticColors.foregroundSoft, fontVariant: ['tabular-nums'] },
+  editAction: {
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderColor: lavender.lav100,
-    borderRadius: radii.ios.default,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs,
-  },
-  stepButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radii.ios.default,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 32,
+    borderRadius: radii.small,
     justifyContent: 'center',
-    width: 32,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
   },
-  stepButtonPressed: { backgroundColor: lavender.lav100 },
-  stepGlyph: { color: lavender.lav700, fontSize: 15, lineHeight: 18 },
-  timeValue: {
-    color: colors.foreground,
-    fontVariant: ['tabular-nums'],
-    minWidth: 52,
-    textAlign: 'center',
+  editActionPressed: {
+    backgroundColor: semanticColors.surfaceLavender,
+    transform: [{ scale: interaction.pressedScale }],
   },
-  editAction: { alignItems: 'center', justifyContent: 'center', minHeight: 32 },
-  editActionPressed: { opacity: 0.72 },
-  editActionText: { color: lavender.lav700 },
+  editActionText: { color: semanticColors.accent },
 });

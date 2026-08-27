@@ -1,7 +1,7 @@
 import { Platform, Pressable, StyleSheet } from "react-native";
 
 import { AppText } from "@/shared/ui/AppText";
-import { radii } from "@/shared/ui/theme";
+import { interaction, radii, semanticColors } from "@/shared/ui/theme";
 
 import type { AgendaAppointmentPalette } from "../appointment-palette";
 import type { AgendaStaffSegment } from "../layout/agenda-staff-segments";
@@ -38,13 +38,14 @@ export function AppointmentBlock({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
-      style={[
+      style={({ pressed }) => [
         styles.container,
         {
           backgroundColor: palette.background,
           borderColor: palette.border,
           borderLeftColor: palette.accent,
         },
+        pressed && styles.pressed,
       ]}
     >
       {content.mode === "lines" && (
@@ -64,8 +65,8 @@ export function AppointmentBlock({
             {content.serviceLabel}
             {content.showReprise && (
               <AppText
-                variant="chip"
-                style={[styles.inlineState, { color: palette.primaryText }]}
+                variant="metadata"
+                style={[styles.inlineState, { color: semanticColors.foregroundSoft }]}
               >
                 {" · Reprise"}
               </AppText>
@@ -73,7 +74,7 @@ export function AppointmentBlock({
             {content.phaseLabel && !content.phaseOnSeparateLine && (
               <AppText
                 variant="metadata"
-                style={{ color: palette.secondaryText }}
+                style={{ color: semanticColors.foregroundSoft }}
               >
                 {" · "}
                 {content.phaseLabel}
@@ -84,7 +85,7 @@ export function AppointmentBlock({
             <AppText
               variant="metadata"
               numberOfLines={1}
-              style={[styles.phaseName, { color: palette.secondaryText }]}
+              style={[styles.phaseName, { color: semanticColors.foregroundSoft }]}
             >
               {content.phaseLabel}
             </AppText>
@@ -99,8 +100,8 @@ export function AppointmentBlock({
         >
           {content.compactClientLabel}
           <AppText
-            variant={content.compactSecondaryIsReprise ? "chip" : "metadata"}
-            style={{ color: palette.secondaryText }}
+            variant="metadata"
+            style={{ color: semanticColors.foregroundSoft }}
           >
             {" · "}
             {content.compactSecondaryLabel}
@@ -113,7 +114,8 @@ export function AppointmentBlock({
 
 const styles = StyleSheet.create({
   container: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: 3,
     borderRadius: radii[Platform.OS === "android" ? "android" : "ios"].default,
     flex: 1,
     justifyContent: "center",
@@ -126,4 +128,8 @@ const styles = StyleSheet.create({
   inlineState: { lineHeight: 15 },
   phaseName: { lineHeight: 14 },
   compactLine: { lineHeight: 14 },
+  pressed: {
+    opacity: 0.9,
+    transform: [{ scale: interaction.cardPressedScale }],
+  },
 });

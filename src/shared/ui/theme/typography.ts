@@ -2,8 +2,7 @@
 //
 // Source: docs/design/DESIGN.md §3, docs/design/reference-export/colors_and_type.css
 //
-// One family: Inter. Font files are NOT loaded in this phase.
-// The later typography/UI-foundation phase will decide the Expo-compatible loading mechanism.
+// One family: Inter. The concrete font files are loaded in src/app/_layout.tsx.
 //
 // React Native letterSpacing is absolute (not CSS em).
 // Each value is computed as: fontSize × sourceEm
@@ -72,6 +71,14 @@ export const stateTitle = {
   letterSpacing: -0.289,
 } as const satisfies TextRole;
 
+// Section title: clear editorial grouping without administrative uppercase.
+export const sectionTitle = {
+  fontSize: 17,
+  fontWeight: "600",
+  lineHeight: 22,
+  letterSpacing: -0.187,
+} as const satisfies TextRole;
+
 // Body: 16px / 400 / line-height × 1.45
 // lineHeight = 16 × 1.45 = 23.2
 export const body = {
@@ -84,7 +91,7 @@ export const body = {
 // Row title: 15.5px / 600 / -0.011em
 // letterSpacing = 15.5 × -0.011 = -0.1705
 export const rowTitle = {
-  fontSize: 12,
+  fontSize: 15.5,
   fontWeight: "600",
   letterSpacing: -0.1705,
 } as const satisfies TextRole;
@@ -108,7 +115,7 @@ export const controlAndroid = {
 // Metadata: 13px / 400 / +0.01em
 // letterSpacing = 13 × 0.01 = 0.13
 export const metadata = {
-  fontSize: 9,
+  fontSize: 13,
   fontWeight: "400",
   letterSpacing: 0.13,
 } as const satisfies TextRole;
@@ -125,7 +132,7 @@ export const eyebrow = {
 // Chip / event time / legend: 11.5px / 600 / +0.015em
 // letterSpacing = 11.5 × 0.015 = 0.1725
 export const chip = {
-  fontSize: 10,
+  fontSize: 11.5,
   fontWeight: "600",
   letterSpacing: 0.1725,
 } as const satisfies TextRole;
@@ -165,6 +172,7 @@ export const typography = {
   sheetTitle,
   daySummaryValue,
   stateTitle,
+  sectionTitle,
   body,
   rowTitle,
   controlIos,

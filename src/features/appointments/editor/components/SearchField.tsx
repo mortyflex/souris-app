@@ -1,13 +1,13 @@
-// Souris — Search field (Appointment Creation)
+// Souris — Search field (Appointment service editor)
 //
 // Subtle native search field: Souris surface, search symbol on the left,
 // white background + accent outline on focus, comfortable native height.
 
 import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { colors, foregroundSoft, radii, spacing, touchTarget } from '@/shared/ui/theme';
+import { foregroundSoft, radii, semanticColors, spacing, touchTarget } from '@/shared/ui/theme';
 
 interface SearchFieldProps {
   readonly accessibilityLabel: string;
@@ -23,9 +23,10 @@ export function SearchField({
   onChangeText,
 }: SearchFieldProps) {
   const [focused, setFocused] = useState(false);
+  const minimumHeight = touchTarget[Platform.OS === 'android' ? 'android' : 'ios'];
 
   return (
-    <View style={[styles.field, focused && styles.fieldFocused]}>
+    <View style={[styles.field, { minHeight: minimumHeight }, focused && styles.fieldFocused]}>
       <SymbolView
         name={{ ios: 'magnifyingglass', android: 'search' }}
         size={14}
@@ -51,21 +52,21 @@ export function SearchField({
 const styles = StyleSheet.create({
   field: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: 'transparent',
-    borderRadius: radii.ios.default,
+    backgroundColor: semanticColors.surface,
+    borderColor: semanticColors.surface,
+    borderCurve: 'continuous',
+    borderRadius: radii.medium,
     borderWidth: 2,
     flexDirection: 'row',
     gap: spacing.sm,
-    minHeight: touchTarget.ios,
     paddingHorizontal: spacing.md,
   },
   fieldFocused: {
-    backgroundColor: colors.background,
-    borderColor: colors.accent,
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.accent,
   },
   input: {
-    color: colors.foreground,
+    color: semanticColors.foreground,
     flex: 1,
     fontFamily: 'Inter_400Regular',
     fontSize: 15,

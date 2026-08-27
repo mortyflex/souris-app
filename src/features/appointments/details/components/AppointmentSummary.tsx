@@ -1,7 +1,8 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
-import { colors, foregroundSoft, lavender, peach, radii, spacing } from '@/shared/ui/theme';
+import { SectionHeader } from '@/shared/ui/SectionHeader';
+import { foregroundSoft, lavender, peach, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 import type { AppointmentDetailSummary } from '../presentation';
 import { formatDurationMinutes, formatPrice } from '../presentation';
@@ -13,9 +14,7 @@ interface AppointmentSummaryProps {
 export function AppointmentSummary({ summary }: AppointmentSummaryProps) {
   return (
     <View style={styles.container}>
-      <AppText variant="control" style={styles.label}>
-        Temps
-      </AppText>
+      <SectionHeader style={styles.label} title="Temps" />
       <View style={styles.timeSurface}>
         {summary.activeMinutes > 0 && (
           <SummaryRow
@@ -37,7 +36,7 @@ export function AppointmentSummary({ summary }: AppointmentSummaryProps) {
           <AppText variant="metadata" style={styles.finalLabel}>
             Durée totale
           </AppText>
-          <AppText variant="control" selectable style={styles.finalValue}>
+          <AppText variant="summaryValue" selectable style={styles.finalValue}>
             {formatDurationMinutes(summary.elapsedMinutes)}
           </AppText>
         </View>
@@ -45,7 +44,7 @@ export function AppointmentSummary({ summary }: AppointmentSummaryProps) {
           <AppText variant="metadata" style={styles.finalLabel}>
             Total
           </AppText>
-          <AppText variant="control" selectable style={styles.totalValue}>
+          <AppText variant="summaryValue" selectable style={styles.totalValue}>
             {formatPrice(summary.totalPrice)}
           </AppText>
         </View>
@@ -78,34 +77,29 @@ function SummaryRow({
 
 const styles = StyleSheet.create({
   container: {
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
+    marginTop: spacing.lg,
   },
-  label: { color: colors.foreground, marginBottom: spacing.sm },
+  label: { marginBottom: spacing.sm },
   timeSurface: {
-    backgroundColor: colors.surface,
-    borderColor: lavender.lav100,
-    borderRadius: radii.ios.default,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: semanticColors.surface,
+    borderRadius: radii.medium,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
   row: { alignItems: 'center', flexDirection: 'row', minHeight: 36 },
-  rowAccent: { borderRadius: radii.ios.pill, height: 8, marginRight: spacing.sm, width: 8 },
+  rowAccent: { borderRadius: radii.pill, height: 8, marginRight: spacing.sm, width: 8 },
   rowLabel: { flex: 1 },
   value: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   finalSummary: {
-    borderTopColor: lavender.lav200,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: semanticColors.surfaceLavender,
+    borderRadius: radii.large,
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: spacing.md,
-    paddingTop: spacing.md,
+    padding: spacing.base,
   },
   finalLabel: { color: foregroundSoft },
-  finalValue: { color: colors.foreground, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
+  finalValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
   priceColumn: { alignItems: 'flex-end' },
   totalValue: {
     color: lavender.lav700,

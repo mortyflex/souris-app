@@ -21,9 +21,17 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     setAppointments((current) => [...current, entry]);
   };
 
+  const updateAppointment = (entry: AppointmentSessionEntry) => {
+    setAppointments((current) =>
+      current.map((currentEntry) =>
+        currentEntry.appointment.id === entry.appointment.id ? entry : currentEntry,
+      ),
+    );
+  };
+
   return (
     <AppointmentSessionContext.Provider
-      value={{ appointments, getAppointmentById, addAppointment }}
+      value={{ appointments, getAppointmentById, addAppointment, updateAppointment }}
     >
       {children}
     </AppointmentSessionContext.Provider>

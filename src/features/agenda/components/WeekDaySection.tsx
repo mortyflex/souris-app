@@ -2,7 +2,13 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
-import { colors, foregroundSoft, lavender, spacing } from '@/shared/ui/theme';
+import {
+  foregroundSoft,
+  interaction,
+  radii,
+  semanticColors,
+  spacing,
+} from '@/shared/ui/theme';
 
 import { isSameLocalDay } from '../calendar/week';
 import { WeekAppointmentRow } from './WeekAppointmentRow';
@@ -26,7 +32,8 @@ export function WeekDaySection({
 }: WeekDaySectionProps) {
   const selected = isSameLocalDay(day, selectedDay);
   const isToday = isSameLocalDay(day, today);
-  const weekday = weekdayFormatter.format(day).replace(/\.$/, '').toUpperCase();
+  const formattedWeekday = weekdayFormatter.format(day).replace(/\.$/, '');
+  const weekday = `${formattedWeekday.charAt(0).toUpperCase()}${formattedWeekday.slice(1)}`;
   const countLabel = appointments.length === 1 ? '1 rendez-vous' : `${appointments.length} rendez-vous`;
 
   return (
@@ -44,7 +51,7 @@ export function WeekDaySection({
         ]}
       >
         <View style={styles.dayHeading}>
-          <AppText variant="eyebrow" style={styles.weekday}>
+          <AppText variant="control" style={styles.weekday}>
             {weekday}
           </AppText>
           <AppText variant="rowTitle" style={[styles.dayNumber, selected && styles.selectedText]}>
@@ -74,27 +81,34 @@ export function WeekDaySection({
 }
 
 const styles = StyleSheet.create({
-  section: { paddingBottom: spacing.md },
+  section: {
+    borderBottomColor: semanticColors.borderSubtle,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: spacing.md,
+    paddingBottom: spacing.md,
+  },
   dayHeader: {
     alignItems: 'center',
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.medium,
     flexDirection: 'row',
     justifyContent: 'space-between',
     minHeight: 48,
     paddingHorizontal: spacing.xs,
   },
   selectedDayHeader: {
-    backgroundColor: lavender.lav025,
-    borderLeftColor: lavender.lav700,
+    backgroundColor: semanticColors.surfaceLavender,
+    borderLeftColor: semanticColors.accent,
     borderLeftWidth: 3,
   },
-  pressedDayHeader: { opacity: 0.78 },
+  pressedDayHeader: {
+    opacity: interaction.pressedOpacity,
+    transform: [{ scale: interaction.pressedScale }],
+  },
   dayHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
-  weekday: { color: foregroundSoft, fontSize: 11, letterSpacing: 0.8 },
+  weekday: { color: foregroundSoft },
   dayNumber: { fontSize: 15 },
-  selectedText: { color: lavender.lav700 },
-  todayDot: { backgroundColor: lavender.lav700, borderRadius: 3, height: 6, width: 6 },
+  selectedText: { color: semanticColors.accent },
+  todayDot: { backgroundColor: semanticColors.accent, borderRadius: 3, height: 6, width: 6 },
   count: { color: foregroundSoft },
   rows: { paddingLeft: spacing.xs },
   empty: { color: foregroundSoft, paddingHorizontal: spacing.xs, paddingVertical: spacing.lg },

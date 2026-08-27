@@ -1,13 +1,20 @@
-// Souris — Catalog service row (Appointment Creation)
+// Souris — Catalog service row (Appointment service editor)
 //
 // Compact catalog row: service name primary, duration/processing metadata
 // secondary, price aligned for scanning. SERVICE/TECHNIQUE internals are
 // never exposed to the professional.
 
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 
 import { AppText } from '@/shared/ui/AppText';
-import { colors, foregroundSoft, lavender, spacing } from '@/shared/ui/theme';
+import {
+  foregroundSoft,
+  gutter,
+  radii,
+  semanticColors,
+  spacing,
+} from '@/shared/ui/theme';
 import type { Service } from '@/domain/appointments';
 
 import {
@@ -17,7 +24,7 @@ import {
   getServiceProcessingMinutes,
 } from '../presentation';
 
-const horizontalGutter = Platform.OS === 'android' ? 16 : 20;
+const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 interface CatalogServiceRowProps {
   readonly service: Service;
@@ -45,7 +52,7 @@ export function CatalogServiceRow({ service, selected, onPress }: CatalogService
       ]}
     >
       <View style={styles.serviceCopy}>
-        <AppText variant="rowTitle" numberOfLines={1} style={styles.serviceName}>
+        <AppText variant="control" numberOfLines={1} style={styles.serviceName}>
           {service.name}
         </AppText>
         <AppText variant="metadata" numberOfLines={1} style={styles.serviceMeta}>
@@ -57,9 +64,11 @@ export function CatalogServiceRow({ service, selected, onPress }: CatalogService
       </AppText>
       <View style={[styles.selectionMark, selected && styles.selectedSelectionMark]}>
         {selected && (
-          <AppText variant="chip" style={styles.selectionCheck}>
-            ✓
-          </AppText>
+          <SymbolView
+            name={{ ios: 'checkmark', android: 'check' }}
+            size={12}
+            tintColor={semanticColors.surfaceElevated}
+          />
         )}
       </View>
     </Pressable>
@@ -71,13 +80,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     marginHorizontal: horizontalGutter,
-    minHeight: 60,
-    paddingVertical: spacing.sm,
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  selectedServiceRow: { backgroundColor: lavender.lav025 },
-  pressedRow: { opacity: 0.76 },
+  selectedServiceRow: {
+    backgroundColor: semanticColors.surfaceLavender,
+    borderRadius: radii.medium,
+  },
+  pressedRow: { backgroundColor: semanticColors.surface },
   serviceCopy: { flex: 1, gap: 2, minWidth: 0 },
-  serviceName: { color: colors.foreground },
+  serviceName: { color: semanticColors.foreground },
   serviceMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   price: {
     color: foregroundSoft,
@@ -86,8 +99,8 @@ const styles = StyleSheet.create({
   },
   selectionMark: {
     alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: 12,
+    borderColor: semanticColors.borderSubtle,
+    borderRadius: radii.pill,
     borderWidth: 1,
     height: 24,
     justifyContent: 'center',
@@ -95,8 +108,7 @@ const styles = StyleSheet.create({
     width: 24,
   },
   selectedSelectionMark: {
-    backgroundColor: lavender.lav700,
-    borderColor: lavender.lav700,
+    backgroundColor: semanticColors.accent,
+    borderColor: semanticColors.accent,
   },
-  selectionCheck: { color: colors.background, fontSize: 11, lineHeight: 13 },
 });

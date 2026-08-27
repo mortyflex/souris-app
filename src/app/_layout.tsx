@@ -13,7 +13,7 @@ import { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { colors } from '@/shared/ui/theme';
+import { colors, semanticColors } from '@/shared/ui/theme';
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 
 // Keep the native splash screen visible until Inter is ready so the first
@@ -54,6 +54,7 @@ export default function RootLayout() {
               options={{
                 presentation: 'formSheet',
                 headerShown: false,
+                contentStyle: { backgroundColor: semanticColors.screenWarm },
                 sheetAllowedDetents: 'fitToContents',
                 sheetGrabberVisible: true,
               }}
@@ -63,6 +64,17 @@ export default function RootLayout() {
               options={{
                 presentation: 'formSheet',
                 headerShown: false,
+                contentStyle: { backgroundColor: semanticColors.screenWarm },
+                sheetAllowedDetents: [0.92],
+                sheetGrabberVisible: true,
+              }}
+            />
+            <Stack.Screen
+              name="appointments/edit/[appointmentId]"
+              options={{
+                presentation: 'formSheet',
+                headerShown: false,
+                contentStyle: { backgroundColor: semanticColors.screenWarm },
                 sheetAllowedDetents: [0.92],
                 sheetGrabberVisible: true,
               }}

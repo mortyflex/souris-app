@@ -140,9 +140,19 @@ leaves them visually free.
 
 Processing details remain available in Appointment Details and in future service configuration and editing workflows.
 
+## 6. Existing Appointment Service Editing
+
+Appointment Details remains read-first. Its restrained `Modifier` action opens a dedicated native editing screen;
+price fields, processing steppers, reorder handles, and removal actions are not shown in read mode.
+
+The editing screen reuses the compact selected-service accordion and sortable interaction from Appointment Creation:
+cards start collapsed, only one card expands at a time, and the explicit drag handle appears only with multiple
+services. The final remaining service cannot be removed through this editor; removing a service is not appointment
+deletion.
+
 ---
 
-## 6. Appointment Creation Flow
+## 7. Appointment Creation Flow
 
 The exported Agenda reference shows creation as a single form sheet (`Nouveau rendez-vous` with a Cliente field,
 a Prestation select, date/heure fields, and a Déroulé preview). The implemented Souris creation experience
@@ -168,3 +178,31 @@ deliberately differs:
 - Résumé is a read-only review screen with the structured `Temps` summary (Temps actif / Temps de pose /
   Durée totale / Total) and subtle `Modifier` actions returning to the relevant step;
 - the explicit dismiss action is `Annuler`, kept restrained next to the native sheet grabber.
+
+---
+
+## 8. Native Runtime Visual Language Refresh
+
+The current React Native runtime adopts **soft editorial beauty productivity** as the newer approved visual
+direction. For native runtime presentation, this section takes precedence over the original exported design;
+the export remains preserved as the historical brand and interaction reference.
+
+- The canonical deep navy, Souris purple, lavender, rose, peach, warm white, and cool neutral palette remains
+  unchanged. Runtime semantic tokens assign those approved values to layered screen, elevated, neutral,
+  lavender, rose, and peach surfaces rather than introducing new colors.
+- Appointment detail, creation, and editing surfaces may use a near-white lavender page tint. Elevated white,
+  soft neutral, and pastel surfaces create grouping; borders are reserved for focus, selection, or a boundary
+  that would otherwise be unclear.
+- Lavender identifies service structure and selection, rose carries the Appointment Details brand accent and
+  destructive meaning, and peach remains dedicated to processing / unattended time.
+- Section hierarchy uses title-case editorial titles with optional count chips. Uppercase eyebrows remain a
+  selective Souris brand detail, not the default heading treatment.
+- All service disclosures use the same small purple line chevron and the same soft rotation behavior. Drag
+  handles remain separate, neutral, and visually quieter than disclosure controls.
+- Native feedback is fast and restrained: press states, 150–240 ms disclosure transitions, drag lift/settle,
+  and semantic haptics only for drag activation/drop and successful Appointment creation or save.
+- Appointment Details is the runtime reference surface: rose identity accent, strong client hierarchy,
+  softly layered date/time and lavender service structures, explicit peach processing, and a strong total.
+- Agenda remains the calmer operational exception. Day keeps a neutral grid and restrained appointment
+  families; Week remains a compact editorial list with subtle separators and markers rather than pastel day
+  cards.

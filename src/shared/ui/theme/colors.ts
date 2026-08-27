@@ -52,6 +52,28 @@ export const peach = {
 // oklch(0.42 0.055 285)
 export const foregroundSoft = '#4A496A';
 
+// Native runtime roles introduced by the soft editorial refresh.
+// Every role aliases an approved canonical or derived Souris color above.
+// Screens should use these names when the visual decision is semantic rather
+// than tied to a particular palette step.
+export const semanticColors = {
+  screen: colors.background,
+  screenWarm: lavender.lav025,
+  surface: colors.surface,
+  surfaceElevated: colors.background,
+  surfaceLavender: lavender.lav050,
+  surfaceLavenderStrong: lavender.lav100,
+  surfaceRose: rose.rose050,
+  surfacePeach: peach.peach050,
+  surfacePeachStrong: peach.peach100,
+  borderSubtle: colors.border,
+  borderLavender: lavender.lav200,
+  accent: colors.accent,
+  foreground: colors.foreground,
+  foregroundSoft,
+  foregroundMuted: colors.muted,
+} as const;
+
 // Shadow tint source colors — used only to describe shadow design intent.
 // Native shadows on iOS/Android use platform APIs, not these hex values directly.
 // These are documented for future native component mapping.

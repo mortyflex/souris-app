@@ -1,39 +1,38 @@
-// Souris — Selected service draft card (Appointment Creation)
+// Souris — Selected service draft card (Appointment service editor)
 //
 // Selected cards start as compact recognition/reorder rows. The expanded
 // section hosts appointment-specific editors and the draft-only Retirer
 // action; catalog services are never modified.
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
   FadeOut,
   LinearTransition,
-  useAnimatedStyle,
   useReducedMotion,
-  useSharedValue,
-  withTiming,
 } from 'react-native-reanimated';
-import { SymbolView } from 'expo-symbols';
 
 import { AppText } from '@/shared/ui/AppText';
+import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
 import {
-  colors,
+  duration,
   easing,
   foregroundSoft,
-  lavender,
+  interaction,
   peach,
   radii,
   rose,
+  semanticColors,
   spacing,
 } from '@/shared/ui/theme';
-import type { Service } from '@/domain/appointments';
-
 import {
   formatPriceInput,
+  getDraftDurationMinutes,
+  getDraftProcessingMinutes,
   getProcessingPhases,
+  getSelectedServiceDraftKey,
   parsePriceInput,
   stepPhaseDuration,
   type SelectedServiceDraft,
@@ -41,57 +40,42 @@ import {
 import {
   formatCreationDuration,
   formatCreationPrice,
-  getServiceDurationMinutes,
-  getServiceProcessingMinutes,
 } from '../presentation';
 
 interface SelectedServiceCardProps {
   readonly draft: SelectedServiceDraft;
-  readonly service: Service;
   readonly expanded: boolean;
   readonly onToggleExpanded: () => void;
   readonly onUpdatePrice: (price: number) => void;
   readonly onUpdatePhaseDuration: (phaseId: string, durationMinutes: number) => void;
   readonly onRemove: () => void;
+  readonly canRemove: boolean;
   /** Explicit drag handle (hidden when reordering is unavailable). */
   readonly dragHandle?: ReactNode;
 }
 
-const TRANSITION_DURATION_MS = 220;
 const TRANSITION_EASING = Easing.bezier(...easing.out);
 
 export function SelectedServiceCard({
   draft,
-  service,
   expanded,
   onToggleExpanded,
   onUpdatePrice,
   onUpdatePhaseDuration,
   onRemove,
+  canRemove,
   dragHandle,
 }: SelectedServiceCardProps) {
+  const draftKey = getSelectedServiceDraftKey(draft);
   const [priceText, setPriceText] = useState(() => formatPriceInput(draft.price));
   const [priceInvalid, setPriceInvalid] = useState(false);
-  const processingPhases = getProcessingPhases(service);
+  const [priceFocused, setPriceFocused] = useState(false);
+  const processingPhases = getProcessingPhases(draft);
   const reducedMotion = useReducedMotion();
-  const chevronRotation = useSharedValue(expanded ? 180 : 0);
-
-  useEffect(() => {
-    chevronRotation.set(
-      withTiming(expanded ? 180 : 0, {
-        duration: reducedMotion ? 0 : TRANSITION_DURATION_MS,
-        easing: TRANSITION_EASING,
-      }),
-    );
-  }, [chevronRotation, expanded, reducedMotion]);
-
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${chevronRotation.get()}deg` }],
-  }));
 
   const layoutTransition = useMemo(
     () =>
-      LinearTransition.duration(reducedMotion ? 0 : TRANSITION_DURATION_MS).easing(
+      LinearTransition.duration(reducedMotion ? 0 : duration.disclosure).easing(
         TRANSITION_EASING,
       ),
     [reducedMotion],
@@ -107,8 +91,8 @@ export function SelectedServiceCard({
     [reducedMotion],
   );
 
-  const totalDuration = getServiceDurationMinutes(service, draft.phaseDurationOverrides);
-  const processingDuration = getServiceProcessingMinutes(service, draft.phaseDurationOverrides);
+  const totalDuration = getDraftDurationMinutes(draft);
+  const processingDuration = getDraftProcessingMinutes(draft);
   const activeDuration = totalDuration - processingDuration;
   const durationSummary =
     processingDuration > 0
@@ -127,6 +111,7 @@ export function SelectedServiceCard({
   };
 
   const handlePriceBlur = () => {
+    setPriceFocused(false);
     if (priceInvalid) {
       setPriceText(formatPriceInput(draft.price));
       setPriceInvalid(false);
@@ -138,15 +123,19 @@ export function SelectedServiceCard({
       <View style={styles.cardHeader}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={expanded ? `Réduire ${service.name}` : `Développer ${service.name}`}
+          accessibilityLabel={
+            expanded
+              ? `Réduire ${draft.serviceName}`
+              : `Développer ${draft.serviceName}`
+          }
           accessibilityState={{ expanded }}
           onPress={onToggleExpanded}
           style={({ pressed }) => [styles.headerPressable, pressed && styles.headerPressed]}
-          testID={`toggle-${draft.serviceId}`}
+          testID={`toggle-${draftKey}`}
         >
           <View style={styles.cardCopy}>
             <AppText variant="control" numberOfLines={1} style={styles.serviceName}>
-              {service.name}
+              {draft.serviceName}
             </AppText>
             <AppText variant="metadata" numberOfLines={1} style={styles.serviceMeta}>
               {durationSummary}
@@ -155,30 +144,35 @@ export function SelectedServiceCard({
           <AppText variant="metadata" style={styles.cardPrice}>
             {formatCreationPrice(draft.price)}
           </AppText>
-          <Animated.View style={[styles.disclosure, chevronStyle]}>
-            <SymbolView
-              name={{ ios: 'chevron.down', android: 'keyboard_arrow_down' }}
-              size={18}
-              tintColor={colors.muted}
-            />
-          </Animated.View>
+          <DisclosureChevron expanded={expanded} style={styles.disclosure} />
         </Pressable>
         {dragHandle}
       </View>
 
       {expanded && (
-        <Animated.View entering={enteringAnimation} exiting={exitingAnimation}>
+        <Animated.View
+          entering={enteringAnimation}
+          exiting={exitingAnimation}
+          style={styles.expandedPanel}
+        >
           <View style={styles.customization}>
             <View style={styles.priceRow}>
               <AppText variant="metadata" style={styles.fieldLabel}>
                 Prix
               </AppText>
-              <View style={styles.priceField}>
+              <View
+                style={[
+                  styles.priceField,
+                  priceFocused && styles.priceFieldFocused,
+                  priceInvalid && styles.priceFieldInvalid,
+                ]}
+              >
                 <TextInput
-                  accessibilityLabel={`Prix de ${service.name}`}
+                  accessibilityLabel={`Prix de ${draft.serviceName}`}
                   keyboardType="decimal-pad"
                   onBlur={handlePriceBlur}
                   onChangeText={handlePriceChange}
+                  onFocus={() => setPriceFocused(true)}
                   selectTextOnFocus
                   style={[styles.priceInput, priceInvalid && styles.priceInputInvalid]}
                   value={priceText}
@@ -195,7 +189,7 @@ export function SelectedServiceCard({
             )}
 
             {processingPhases.map((phase) => {
-              const value = draft.phaseDurationOverrides[phase.id] ?? phase.durationMinutes;
+              const value = phase.durationMinutes;
               const atMinimum = value <= 0;
               return (
                 <View key={phase.id} style={styles.processingRow}>
@@ -208,6 +202,7 @@ export function SelectedServiceCard({
                       accessibilityLabel={`Réduire ${phase.name}`}
                       accessibilityState={{ disabled: atMinimum }}
                       disabled={atMinimum}
+                      hitSlop={spacing.xs}
                       onPress={() =>
                         onUpdatePhaseDuration(phase.id, stepPhaseDuration(value, -5))
                       }
@@ -234,6 +229,7 @@ export function SelectedServiceCard({
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Augmenter ${phase.name}`}
+                      hitSlop={spacing.xs}
                       onPress={() => onUpdatePhaseDuration(phase.id, stepPhaseDuration(value, 5))}
                       style={({ pressed }) => [
                         styles.stepperButton,
@@ -250,20 +246,22 @@ export function SelectedServiceCard({
             })}
           </View>
 
-          <View style={styles.removeRow}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Retirer ${service.name}`}
-              hitSlop={spacing.sm}
-              onPress={onRemove}
-              style={({ pressed }) => [styles.removeAction, pressed && styles.removeActionPressed]}
-              testID={`remove-${draft.serviceId}`}
-            >
-              <AppText variant="metadata" style={styles.removeText}>
-                Retirer
-              </AppText>
-            </Pressable>
-          </View>
+          {canRemove && (
+            <View style={styles.removeRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Retirer ${draft.serviceName}`}
+                hitSlop={spacing.sm}
+                onPress={onRemove}
+                style={({ pressed }) => [styles.removeAction, pressed && styles.removeActionPressed]}
+                testID={`remove-${draftKey}`}
+              >
+                <AppText variant="metadata" style={styles.removeText}>
+                  Retirer
+                </AppText>
+              </Pressable>
+            </View>
+          )}
         </Animated.View>
       )}
     </Animated.View>
@@ -272,17 +270,19 @@ export function SelectedServiceCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: lavender.lav050,
-    borderColor: lavender.lav200,
-    borderRadius: radii.ios.default,
+    backgroundColor: semanticColors.surfaceLavender,
+    borderCurve: 'continuous',
+    borderColor: semanticColors.borderLavender,
+    borderRadius: radii.large,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   cardHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    minHeight: 56,
+    paddingLeft: spacing.base,
+    paddingVertical: spacing.xs,
   },
   headerPressable: {
     alignItems: 'center',
@@ -290,25 +290,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     minWidth: 0,
   },
-  headerPressed: { backgroundColor: lavender.lav100 },
+  headerPressed: {
+    backgroundColor: semanticColors.surfaceLavenderStrong,
+    transform: [{ scale: interaction.cardPressedScale }],
+  },
   cardCopy: { flex: 1, gap: 2, minWidth: 0 },
-  serviceName: { color: colors.foreground },
+  serviceName: { color: semanticColors.foreground },
   serviceMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   cardPrice: {
-    color: colors.foreground,
+    color: semanticColors.foreground,
     fontVariant: ['tabular-nums'],
     marginLeft: spacing.sm,
   },
   disclosure: {
     alignItems: 'center',
-    height: 24,
-    justifyContent: 'center',
     marginLeft: spacing.sm,
-    width: 24,
+  },
+  expandedPanel: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderRadius: radii.medium,
+    marginBottom: spacing.xs,
+    marginHorizontal: spacing.xs,
+    overflow: 'hidden',
   },
   customization: {
-    borderTopColor: lavender.lav200,
-    borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
@@ -317,15 +322,23 @@ const styles = StyleSheet.create({
   priceRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   priceField: {
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderColor: lavender.lav200,
-    borderRadius: radii.ios.default,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: semanticColors.surface,
+    borderColor: semanticColors.surface,
+    borderRadius: radii.medium,
+    borderWidth: 1.5,
     flexDirection: 'row',
     paddingHorizontal: spacing.sm,
   },
+  priceFieldFocused: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.accent,
+  },
+  priceFieldInvalid: {
+    backgroundColor: semanticColors.surfaceRose,
+    borderColor: rose.rose600,
+  },
   priceInput: {
-    color: colors.foreground,
+    color: semanticColors.foreground,
     fontFamily: 'Inter_400Regular',
     fontVariant: ['tabular-nums'],
     fontSize: 15,
@@ -334,22 +347,25 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     textAlign: 'right',
   },
-  priceInputInvalid: { color: rose.rose600 },
+  priceInputInvalid: { color: semanticColors.foreground },
   currencySuffix: {
     color: foregroundSoft,
     fontVariant: ['tabular-nums'],
     marginLeft: spacing.xs,
   },
-  priceError: { color: rose.rose600 },
+  priceError: { color: semanticColors.foreground },
   processingRow: {
     alignItems: 'center',
+    backgroundColor: semanticColors.surfacePeach,
+    borderRadius: radii.medium,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    padding: spacing.sm,
   },
   stepper: {
     alignItems: 'center',
-    backgroundColor: peach.peach050,
-    borderRadius: radii.ios.default,
+    backgroundColor: semanticColors.surfacePeachStrong,
+    borderRadius: radii.medium,
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.xs,
@@ -357,32 +373,36 @@ const styles = StyleSheet.create({
   },
   stepperButton: {
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderColor: peach.peach200,
-    borderRadius: radii.ios.default,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: semanticColors.surfaceElevated,
+    borderRadius: radii.small,
     height: 36,
     justifyContent: 'center',
     width: 36,
   },
-  stepperButtonPressed: { backgroundColor: peach.peach100 },
-  stepperButtonDisabled: { backgroundColor: colors.surface, borderColor: colors.border },
+  stepperButtonPressed: { backgroundColor: semanticColors.surfacePeach },
+  stepperButtonDisabled: { backgroundColor: semanticColors.surface },
   stepperGlyph: { color: peach.peach700, fontSize: 17, lineHeight: 20 },
-  stepperGlyphDisabled: { color: colors.muted },
+  stepperGlyphDisabled: { color: semanticColors.foregroundMuted },
   stepperValue: {
-    color: colors.foreground,
+    color: semanticColors.foreground,
     fontVariant: ['tabular-nums'],
     minWidth: 56,
     textAlign: 'center',
   },
   removeRow: {
     alignItems: 'flex-end',
-    borderTopColor: lavender.lav200,
-    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingBottom: spacing.sm,
   },
-  removeAction: { alignItems: 'center', justifyContent: 'center', minHeight: 32 },
-  removeActionPressed: { opacity: 0.72 },
+  removeAction: {
+    alignItems: 'center',
+    borderRadius: radii.small,
+    justifyContent: 'center',
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
+  },
+  removeActionPressed: {
+    backgroundColor: semanticColors.surfaceRose,
+  },
   removeText: { color: rose.rose600 },
 });
