@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 
 import { AppText } from '@/shared/ui/AppText';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
+import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { foregroundSoft, radii, spacing } from '@/shared/ui/theme';
 
 import { getAgendaAppointmentPalette } from '../appointment-palette';
@@ -14,7 +16,9 @@ interface WeekAppointmentRowProps {
 
 export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
   const router = useRouter();
-  const { appointment, clientDisplayName } = value;
+  const { getClientById } = useClientSession();
+  const { appointment } = value;
+  const clientDisplayName = getResolvedClientDisplayName(getClientById(appointment.clientId));
   const palette = getAgendaAppointmentPalette(appointment.id);
   const startAt = appointment.startAt;
   const time = `${startAt.getHours().toString().padStart(2, '0')}:${startAt

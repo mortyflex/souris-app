@@ -21,6 +21,8 @@ import {
   type Service,
 } from '@/domain/appointments';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -52,8 +54,12 @@ interface AppointmentEditingScreenProps {
 export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingScreenProps) {
   const router = useRouter();
   const { getAppointmentById, updateAppointment } = useAppointmentSession();
+  const { getClientById } = useClientSession();
   const entry = getAppointmentById(appointmentId);
   const appointment = entry?.appointment;
+  const clientName = appointment
+    ? getResolvedClientDisplayName(getClientById(appointment.clientId))
+    : undefined;
   const [initialDrafts] = useState<readonly SelectedServiceDraft[]>(() =>
     appointment ? hydrateAppointmentDrafts(appointment) : [],
   );
@@ -173,7 +179,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
         </View>
 
         <AppointmentContextRow
-          clientName={entry.clientDisplayName}
+          clientName={clientName}
           startAt={appointment.startAt}
         />
 

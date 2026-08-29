@@ -7,6 +7,8 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import {
   foregroundSoft,
   gutter,
@@ -36,6 +38,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
   const [expandedItemIds, setExpandedItemIds] = useState<ReadonlySet<string>>(() => new Set());
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
   const { getAppointmentById } = useAppointmentSession();
+  const { getClientById } = useClientSession();
   const entry = getAppointmentById(appointmentId);
 
   const toggleItem = (itemId: string) => {
@@ -63,7 +66,8 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
     );
   }
 
-  const { appointment, clientDisplayName } = entry;
+  const { appointment } = entry;
+  const clientDisplayName = getResolvedClientDisplayName(getClientById(appointment.clientId));
   const services = getAppointmentDetailServices(appointment);
   const summary = getAppointmentDetailSummary(appointment);
   const endAt = getAppointmentEnd(appointment);

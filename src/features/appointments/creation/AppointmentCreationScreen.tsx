@@ -6,7 +6,7 @@
 // step transition. The Agenda startAt is shown as appointment context on
 // every step and is never recalculated or replaced.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -17,9 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import type { Service } from '@/domain/appointments';
+import { getClientDisplayName, type Client } from '@/domain/clients';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
-import { normalizedClients } from '@/features/clients/adapters/normalized-clients';
-import { filterClients } from '@/features/clients/search/filter-clients';
+import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
+import { prepareClientDirectory } from '@/features/clients/directory/sort-clients';
 import { catalog } from '@/features/services/adapters/catalog';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -33,7 +35,7 @@ import {
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
 import { AppointmentContextRow } from './components/AppointmentContextRow';
-import { ClientPickerStep, getClientDisplayName } from './components/ClientPickerStep';
+import { ClientPickerStep } from './components/ClientPickerStep';
 import { CreationStepper } from './components/CreationStepper';
 import { ServiceCatalogEditor } from '../editor/components/ServiceCatalogEditor';
 import { SummaryStep } from './components/SummaryStep';
@@ -69,17 +71,19 @@ const startTimeBounds: StartTimeBounds = {
 export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreenProps) {
   const router = useRouter();
   const { addAppointment } = useAppointmentSession();
+  const { clients } = useClientSession();
   const [step, setStep] = useState<CreationStep>(0);
   const [clientQuery, setClientQuery] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<string>();
+  const [addClientVisible, setAddClientVisible] = useState(false);
   const [selectedDrafts, setSelectedDrafts] = useState<readonly SelectedServiceDraft[]>([]);
   const [draftStartAt, setDraftStartAt] = useState<Date>(() =>
     stepStartAt(new Date(startAt), 0, startTimeBounds),
   );
 
-  const selectedClient = normalizedClients.find((client) => client.id === selectedClientId);
+  const selectedClient = clients.find((client) => client.id === selectedClientId);
   const selectedClientName = selectedClient
-    ? getClientDisplayName(selectedClient.firstName, selectedClient.lastName)
+    ? getClientDisplayName(selectedClient)
     : undefined;
 
   const selectedEntries = selectedDrafts
@@ -107,7 +111,10 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const canContinue =
     step === 0 ? selectedClient !== undefined : selectedEntries.length > 0;
 
-  const visibleClients = filterClients(normalizedClients, clientQuery);
+  const visibleClients = useMemo(
+    () => prepareClientDirectory(clients, clientQuery),
+    [clients, clientQuery],
+  );
 
   const addService = (service: Service) => {
     if (selectedDrafts.some((draft) => draft.serviceId === service.id)) return;
@@ -169,15 +176,14 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       staffMemberId,
       startAt: draftStartAt,
     });
-    addAppointment({
-      appointment,
-      clientDisplayName: getClientDisplayName(
-        selectedClient.firstName,
-        selectedClient.lastName,
-      ),
-    });
+    addAppointment({ appointment });
     haptics.success();
     router.back();
+  };
+
+  const handleClientCreated = (client: Client) => {
+    setSelectedClientId(client.id);
+    setAddClientVisible(false);
   };
 
   return (
@@ -220,6 +226,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
             query={clientQuery}
             selectedClientId={selectedClientId}
             onChangeQuery={setClientQuery}
+            onAddClientPress={() => setAddClientVisible(true)}
             onSelectClient={setSelectedClientId}
           />
         )}
@@ -241,10 +248,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         )}
         {step === 2 && selectedClient && summary && (
           <SummaryStep
-            clientName={getClientDisplayName(
-              selectedClient.firstName,
-              selectedClient.lastName,
-            )}
+            clientName={getClientDisplayName(selectedClient)}
             services={selectedEntries.map(({ draft, service }) => ({
               serviceId: service.id,
               serviceName: service.name,
@@ -275,6 +279,13 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
             title={step === 2 ? 'Créer le rendez-vous' : 'Continuer'}
           />
         </View>
+
+        <ClientFormSheet
+          mode="create"
+          onClose={() => setAddClientVisible(false)}
+          onSubmitted={handleClientCreated}
+          visible={addClientVisible}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

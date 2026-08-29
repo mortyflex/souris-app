@@ -1,126 +1,111 @@
-import { normalizeLegacyClient, normalizeLegacyClients } from '../legacy-clients-adapter';
+import { mapLegacyClient, mapLegacyClients } from '../legacy-clients-adapter';
 
-describe('normalizeLegacyClient', () => {
-  it('maps _id to id', () => {
-    const legacy = {
-      _id: '5fbb9f1a7eaf84537de6c0c7',
-      firstName: 'Clarisse',
-      lastName: 'Baudry',
-      telephone: '0612345678',
-      email: 'clarisse@example.com',
-    };
-
-    const result = normalizeLegacyClient(legacy);
-
-    expect(result.id).toBe('5fbb9f1a7eaf84537de6c0c7');
-  });
-
-  it('maps telephone to phone', () => {
+describe('Legacy client import boundary', () => {
+  it('keeps ONLY identity/contact fields from a polluted legacy record', () => {
     const legacy = {
       _id: 'abc',
-      firstName: 'Alice',
-      telephone: '0612345678',
-    };
-
-    const result = normalizeLegacyClient(legacy);
-
-    expect(result.phone).toBe('0612345678');
-  });
-
-  it('converts empty telephone to undefined', () => {
-    const legacy = {
-      _id: 'abc',
-      firstName: 'Alice',
-      telephone: '',
-    };
-
-    const result = normalizeLegacyClient(legacy);
-
-    expect(result.phone).toBeUndefined();
-  });
-
-  it('converts empty email to undefined', () => {
-    const legacy = {
-      _id: 'abc',
-      firstName: 'Alice',
-      email: '  ',
-    };
-
-    const result = normalizeLegacyClient(legacy);
-
-    expect(result.email).toBeUndefined();
-  });
-
-  it('preserves lastName when present', () => {
-    const legacy = {
-      _id: 'abc',
-      firstName: 'Alice',
-      lastName: 'Dupont',
-    };
-
-    const result = normalizeLegacyClient(legacy);
-
-    expect(result.lastName).toBe('Dupont');
-  });
-
-  it('excludes commercial history (stats fields)', () => {
-    const legacy = {
-      _id: 'abc',
-      firstName: 'Alice',
-      // Legacy fields that should NOT be mapped:
+      firstName: 'Léa',
+      lastName: 'Martin',
+      telephone: '06 12 34 56 78',
+      email: 'lea@example.com',
+      stats: { totalSpent: 250, ticketAverage: 83, lastVisitDate: '2020-12-22T10:59:59.854Z', visitNb: 3, lastVisitIsNoShow: false },
+      notes: 'ancienne note client',
+      importedVisitNotes: [{ text: 'habitude de coloration' }],
+      lastVisitDate: '2020-12-22T10:59:59.854Z',
+      visitNb: 3,
+      ticketAverage: 83,
+      totalSpent: 250,
       onlineBooking: true,
       gender: 'female',
-      shopID: 'shop-123',
+      shopID: 'shop-1',
       shortLinkCode: 'abc123',
-      pictures: [],
-      importedVisitNotes: [],
+      pictures: ['photo.png'],
       createdAt: '2020-11-23T11:38:24.448Z',
       updatedAt: '2023-05-04T10:04:37.043Z',
       __v: 0,
-      stats: {
-        totalSpent: 108,
-        ticketAverage: 108,
-        lastVisitDate: '2020-12-22T10:59:59.854Z',
-        visitNb: 1,
-        lastVisitIsNoShow: false,
-      },
       tmp: false,
     };
 
-    const result = normalizeLegacyClient(legacy);
+    const result = mapLegacyClient(legacy);
 
-    // Only approved fields should be present
-    expect(Object.keys(result).sort()).toEqual(
-      ['email', 'firstName', 'id', 'lastName', 'phone'].sort(),
-    );
-    expect('totalSpent' in result).toBe(false);
-    expect('visitNb' in result).toBe(false);
-    expect('createdAt' in result).toBe(false);
+    expect(result).toEqual({
+      id: 'abc',
+      firstName: 'Léa',
+      lastName: 'Martin',
+      phone: '06 12 34 56 78',
+      email: 'lea@example.com',
+    });
+    expect(Object.keys(result).sort()).toEqual(['email', 'firstName', 'id', 'lastName', 'phone']);
   });
 
-  it('does not invent birthDate', () => {
-    const legacy = {
+  it('produces undefined for empty optional identity fields', () => {
+    const result = mapLegacyClient({
       _id: 'abc',
-      firstName: 'Alice',
-    };
+      firstName: 'Léa',
+      lastName: '',
+      telephone: '   ',
+      email: '',
+    });
 
-    const result = normalizeLegacyClient(legacy);
-
-    expect('birthDate' in result).toBe(false);
+    expect(result).toEqual({ id: 'abc', firstName: 'Léa' });
   });
-});
 
-describe('normalizeLegacyClients', () => {
-  it('batch-normalizes an array of legacy clients', () => {
-    const legacyClients = [
+  it('handles fully absent optional fields', () => {
+    const result = mapLegacyClient({ _id: 'abc', firstName: 'Léa' });
+
+    expect(result).toEqual({ id: 'abc', firstName: 'Léa' });
+  });
+
+  it('trims leading/trailing whitespace on optional fields', () => {
+    const result = mapLegacyClient({
+      _id: 'abc',
+      firstName: 'Léa',
+      lastName: ' Martin ',
+      telephone: ' 06 12 34 56 78 ',
+      email: ' lea@example.com ',
+    });
+
+    expect(result).toEqual({
+      id: 'abc',
+      firstName: 'Léa',
+      lastName: 'Martin',
+      phone: '06 12 34 56 78',
+      email: 'lea@example.com',
+    });
+  });
+
+  it('maps batches without leaking legacy shape', () => {
+    const results = mapLegacyClients([
       { _id: 'a', firstName: 'Alice' },
-      { _id: 'b', firstName: 'Bob' },
-    ];
+      { _id: 'b', firstName: 'Bob', lastName: 'Bricolage' },
+    ]);
 
-    const result = normalizeLegacyClients(legacyClients);
+    expect(results).toHaveLength(2);
+    expect(results[0]).toEqual({ id: 'a', firstName: 'Alice' });
+    expect(results[1]).toEqual({ id: 'b', firstName: 'Bob', lastName: 'Bricolage' });
+  });
 
-    expect(result).toHaveLength(2);
-    expect(result[0].id).toBe('a');
-    expect(result[1].id).toBe('b');
+  it('maps the actual legacy birthdate field only as a valid civil date', () => {
+    const result = mapLegacyClient({
+      _id: 'abc',
+      firstName: 'Léa',
+      birthdate: '1994-10-12',
+    });
+
+    expect(result.birthDate).toBe('1994-10-12');
+  });
+
+  it('discards null, missing, and non-conforming legacy birthdate values', () => {
+    expect(mapLegacyClient({ _id: 'a', firstName: 'Alice', birthdate: null }).birthDate).toBeUndefined();
+    expect(mapLegacyClient({ _id: 'b', firstName: 'Bob' }).birthDate).toBeUndefined();
+    expect(
+      mapLegacyClient({ _id: 'c', firstName: 'Camille', birthdate: '12/10/1994' }).birthDate,
+    ).toBeUndefined();
+    expect(
+      mapLegacyClient({ _id: 'd', firstName: 'Dora', birthdate: '1994-13-45' }).birthDate,
+    ).toBeUndefined();
+    expect(
+      mapLegacyClient({ _id: 'e', firstName: 'Emma', birthdate: '' }).birthDate,
+    ).toBeUndefined();
   });
 });

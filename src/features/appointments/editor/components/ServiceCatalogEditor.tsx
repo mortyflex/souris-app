@@ -25,7 +25,7 @@ import { catalog } from '@/features/services/adapters/catalog';
 import { filterCatalogServices } from '../filter-services';
 import { getSelectedServiceDraftKey, type SelectedServiceDraft } from '../draft';
 import { CatalogServiceRow } from './CatalogServiceRow';
-import { SearchField } from './SearchField';
+import { SearchField } from '@/shared/ui/SearchField';
 import { SelectedServicesComposer } from './SelectedServicesComposer';
 import type { SortableDraftEntry } from './SortableDraftList';
 

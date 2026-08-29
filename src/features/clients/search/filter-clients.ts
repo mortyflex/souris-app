@@ -1,18 +1,16 @@
 // Souris — Client search helper
 //
-// Filters normalized clients based on a query string.
-// Searches across firstName, lastName, full name, and phone.
-// Case-insensitive and accent-insensitive.
+// Filters canonical Clients by first name, last name, full name, and phone.
+// Matching is case-insensitive, accent-insensitive, and tolerant of ordinary
+// phone formatting differences. Substring matching only — no fuzzy matching.
 
-import type { NormalizedClient } from '../adapters/legacy-clients-adapter';
+import { getClientDisplayName, type Client } from '@/domain/clients';
 
 /**
- * Normalizes a string for comparison:
- * - trim whitespace
- * - convert to lowercase
- * - remove accents (NFD normalization + strip combining marks)
+ * Normalizes a string for text comparison:
+ * trim → lowercase → strip accents (NFD + combining marks).
  */
-function normalizeForSearch(value: string): string {
+export function normalizeClientSearch(value: string): string {
   return value
     .trim()
     .toLowerCase()
@@ -20,45 +18,41 @@ function normalizeForSearch(value: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+/** Keeps only digits so "06 12 34 56 78" and "0612345678" compare equal. */
+function normalizePhoneSearch(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
 /**
- * Filters clients based on a query string.
+ * Filters clients for `query`.
  *
- * Matches against:
- * - firstName
- * - lastName
- * - full name (firstName + lastName)
- * - phone
- *
- * Matching is:
- * - case-insensitive
- * - accent-insensitive (é matches e, etc.)
- * - substring match (query can appear anywhere in the field)
- *
- * Empty query returns all clients.
+ * - names match against the normalized firstName, lastName, and full name;
+ * - phone matches when every digit of the query appears, in order, inside
+ *   the digit-normalized phone;
+ * - an empty or whitespace query returns the input list unchanged.
  */
 export function filterClients(
-  clients: readonly NormalizedClient[],
+  clients: readonly Client[],
   query: string,
-): readonly NormalizedClient[] {
-  const normalizedQuery = normalizeForSearch(query);
+): readonly Client[] {
+  const textQuery = normalizeClientSearch(query);
+  const phoneQuery = normalizePhoneSearch(query);
 
-  if (normalizedQuery.length === 0) {
+  if (textQuery.length === 0 && phoneQuery.length === 0) {
     return clients;
   }
 
   return clients.filter((client) => {
-    const firstName = normalizeForSearch(client.firstName);
-    const lastName = normalizeForSearch(client.lastName ?? '');
-    const fullName = normalizeForSearch(
-      `${client.firstName} ${client.lastName ?? ''}`.trim(),
-    );
-    const phone = normalizeForSearch(client.phone ?? '');
+    const nameMatches =
+      textQuery.length > 0 &&
+      (normalizeClientSearch(client.firstName).includes(textQuery) ||
+        normalizeClientSearch(client.lastName ?? '').includes(textQuery) ||
+        normalizeClientSearch(getClientDisplayName(client)).includes(textQuery));
 
-    return (
-      firstName.includes(normalizedQuery) ||
-      lastName.includes(normalizedQuery) ||
-      fullName.includes(normalizedQuery) ||
-      phone.includes(normalizedQuery)
-    );
+    const phoneMatches =
+      phoneQuery.length > 0 &&
+      normalizePhoneSearch(client.phone ?? '').includes(phoneQuery);
+
+    return nameMatches || phoneMatches;
   });
 }

@@ -333,6 +333,17 @@ without a concrete need.
 
 React Context is not a substitute for thoughtful state ownership.
 
+The current in-memory application session uses two focused providers:
+
+```text
+AppointmentSessionProvider — the appointment collection
+ClientSessionProvider       — the single Client source
+```
+
+They expose only what current surfaces need (lookup + add). Appointments
+reference Clients through `clientId`; display names are resolved from the
+Client source, never duplicated into appointment state.
+
 ---
 
 # 16. Persistence

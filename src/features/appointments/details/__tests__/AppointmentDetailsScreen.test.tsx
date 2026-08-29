@@ -1,6 +1,7 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
+import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 
 import { AppointmentDetailsScreen } from '../AppointmentDetailsScreen';
 
@@ -69,12 +70,16 @@ describe('AppointmentDetailsScreen', () => {
     mockPush.mockClear();
   });
 
-  it('exposes Modifier and opens the appointment editor route', async () => {
+  it('resolves the client identity from the shared Client source and exposes Modifier', async () => {
     const view = await render(
-      <AppointmentSessionProvider>
-        <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-      </AppointmentSessionProvider>,
+      <ClientSessionProvider>
+        <AppointmentSessionProvider>
+          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
+        </AppointmentSessionProvider>
+      </ClientSessionProvider>,
     );
+
+    expect(view.getByText('Sofia Petit')).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(view.getByTestId('modify-appointment'));

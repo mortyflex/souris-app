@@ -1,7 +1,7 @@
-import { getOrderedItems, type Appointment } from '@/domain/appointments';
-
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { getLocalDateKey } from './week';
+
+export { formatAppointmentServiceSummary as getWeekAppointmentServiceSummary } from '@/features/appointments/presentation';
 
 export interface WeekDayAppointments {
   readonly day: Date;
@@ -32,19 +32,4 @@ export function groupAppointmentsByLocalDay(
         a.appointment.id.localeCompare(b.appointment.id),
     ),
   }));
-}
-
-export function getWeekAppointmentServiceSummary(appointment: Appointment): string {
-  const names = [...new Set(
-    getOrderedItems(appointment)
-      .map((item) => item.serviceName.trim())
-      .filter((name) => name.length > 0),
-  )];
-
-  if (names.length <= 2) {
-    return names.join(' + ');
-  }
-
-  const remaining = names.length - 2;
-  return `${names.slice(0, 2).join(' + ')} + ${remaining} autre${remaining > 1 ? 's' : ''}`;
 }

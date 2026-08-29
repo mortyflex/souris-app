@@ -1,4 +1,4 @@
-// Souris — Search field (Appointment service editor)
+// Souris — Search field
 //
 // Subtle native search field: Souris surface, search symbol on the left,
 // white background + accent outline on focus, comfortable native height.
@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { foregroundSoft, radii, semanticColors, spacing, touchTarget } from '@/shared/ui/theme';
+import { foregroundSoft, radii, semanticColors, spacing, touchTarget } from './theme';
 
 interface SearchFieldProps {
   readonly accessibilityLabel: string;

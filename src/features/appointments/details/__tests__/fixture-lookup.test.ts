@@ -8,7 +8,7 @@ describe('Agenda fixture appointment lookup', () => {
   it('resolves a known appointment by identity', () => {
     const result = getAppointmentSessionEntryById(appointments, 'agenda-sofia');
 
-    expect(result?.clientDisplayName).toBe('Sofia Petit');
+    expect(result?.appointment.clientId).toBe('client-agenda-sofia');
   });
 
   it('returns undefined for an unknown appointment id', () => {
