@@ -2,11 +2,11 @@ import type { Appointment } from '@/domain/appointments';
 
 /**
  * The temporary in-memory representation used by the appointment surfaces.
- * Client display data stays outside the Appointment domain object.
+ * Client identity lives in the Client source and is resolved through
+ * appointment.clientId — no duplicated display names here.
  */
 export interface AppointmentSessionEntry {
   readonly appointment: Appointment;
-  readonly clientDisplayName: string;
 }
 
 export interface AppointmentSessionValue {

@@ -11,10 +11,12 @@
 //   the summary without changing durations.
 
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { Text } from 'react-native';
 
-import { normalizedClients } from '@/features/clients/adapters/normalized-clients';
-import type { NormalizedClient } from '@/features/clients/adapters/legacy-clients-adapter';
-import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
+import type { Client } from '@/domain/clients';
+import { createInitialClients } from '@/features/clients/data/initial-clients';
+import { ClientSessionProvider, useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
@@ -77,6 +79,14 @@ jest.mock('expo-symbols', () => {
   };
 });
 
+jest.mock('@expo/ui/community/datetime-picker', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
+  return {
+    DateTimePicker: () => React.createElement(View, null),
+  };
+});
+
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -90,20 +100,38 @@ const startAt = new Date(2026, 7, 25, 10, 15);
 
 type Rendered = Awaited<ReturnType<typeof renderCreation>>;
 
+function SessionProbe() {
+  const { clients } = useClientSession();
+  const { appointments } = useAppointmentSession();
+  const newest = appointments[appointments.length - 1]?.appointment;
+  const createdClient = clients.find((client) => client.firstName === 'Nouvelle');
+
+  return (
+    <>
+      <Text testID="new-client-id">{createdClient?.id ?? ''}</Text>
+      <Text testID="last-appointment-client-id">{newest?.clientId ?? ''}</Text>
+    </>
+  );
+}
+
 function renderCreation() {
   return render(
-    <AppointmentSessionProvider>
-      <AppointmentCreationScreen startAt={startAt} />
-    </AppointmentSessionProvider>,
+    <ClientSessionProvider>
+      <AppointmentSessionProvider>
+        <AppointmentCreationScreen startAt={startAt} />
+        <SessionProbe />
+      </AppointmentSessionProvider>
+    </ClientSessionProvider>,
   );
 }
 
 async function selectClientBeyond60(view: Rendered) {
-  const target = normalizedClients.find(
+  const initialClients = createInitialClients();
+  const target = initialClients.find(
     (client) => client.firstName === 'Claudine' && client.lastName === 'Couillard',
-  ) as NormalizedClient | undefined;
+  ) as Client | undefined;
   expect(target).toBeDefined();
-  expect(normalizedClients.indexOf(target as NormalizedClient)).toBeGreaterThan(60);
+  expect(initialClients.indexOf(target as Client)).toBeGreaterThan(60);
 
   await act(async () => {
     fireEvent.changeText(
@@ -393,6 +421,57 @@ describe('AppointmentCreationScreen', () => {
 
     expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
     expect(mockBack).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      view.unmount();
+    });
+  });
+
+  it('adds a client directly from the picker, selects it, and stores its exact id', async () => {
+    const view = await renderCreation();
+
+    // No client selected yet: the appointment cannot be confirmed.
+    expect(view.getByTestId('new-client-id').props.children).toBe('');
+
+    // Open the shared creation sheet from the picker.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-client-picker'));
+    });
+    expect(view.getByLabelText('Prénom')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prénom'), 'Nouvelle');
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Nom'), 'Cliente');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Ajouter la cliente'));
+    });
+
+    // The new client is immediately available in the shared source…
+    const createdClientId = view.getByTestId('new-client-id').props.children as string;
+    expect(createdClientId.length).toBeGreaterThan(0);
+
+    // …and is selected for the appointment in progress.
+    expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByText('Continuer'));
+    });
+    expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
+
+    await searchService(view, 'coupe brushing 1');
+    await act(async () => {
+      fireEvent.press(view.getByText('Coupe Brushing 1'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Continuer'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    // The appointment carries the exact new client id.
+    expect(view.getByTestId('last-appointment-client-id').props.children).toBe(createdClientId);
     await act(async () => {
       view.unmount();
     });

@@ -2,6 +2,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { Alert, Text } from 'react-native';
 
 import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentEditingScreen } from '../AppointmentEditingScreen';
@@ -96,10 +97,12 @@ function SessionProbe() {
 
 function renderEditor() {
   return render(
-    <AppointmentSessionProvider>
-      <AppointmentEditingScreen appointmentId="agenda-sofia" />
-      <SessionProbe />
-    </AppointmentSessionProvider>,
+    <ClientSessionProvider>
+      <AppointmentSessionProvider>
+        <AppointmentEditingScreen appointmentId="agenda-sofia" />
+        <SessionProbe />
+      </AppointmentSessionProvider>
+    </ClientSessionProvider>,
   );
 }
 

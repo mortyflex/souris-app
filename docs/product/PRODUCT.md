@@ -227,9 +227,11 @@ time in ±5-minute steps on the same local date, within the operational Agenda d
 19:55, strictly before the 20:00 end boundary. All creation calculations (context, Summary, appointment end)
 follow the edited draft start time.
 
-The initial address book and catalog use normalized legacy sources. Client search uses only identity and
-contact fields. Services and techniques preserve their type, ordered phases, duration, price, and processing
-semantics; invalid non-numeric prices are excluded with a diagnostic rather than invented as zero.
+The initial address book and catalog use normalized legacy sources. The Cliente step reads the shared
+Client source — the same directory as the Clientes tab — and a new Client can be added directly from
+the picker when the person is not found. Client search uses only identity and contact fields. Services
+and techniques preserve their type, ordered phases, duration, price, and processing semantics; invalid
+non-numeric prices are excluded with a diagnostic rather than invented as zero.
 
 The first slice is intentionally in-memory for the current app session. Agenda Day, Agenda Week, and
 Appointment Details read the same collection, so newly created and edited appointments appear immediately in all
@@ -333,11 +335,7 @@ Cancellation and no-show must never silently delete historical information.
 
 Clients are a core Souris entity.
 
-Initial client data may be migrated from an existing address book.
-
-Only identity/contact information should be imported.
-
-Expected initial fields:
+The Client model is one stable identity used everywhere:
 
 ```text
 id
@@ -345,6 +343,82 @@ firstName
 lastName?
 phone?
 email?
+birthDate?   YYYY-MM-DD civil calendar date
+```
+
+A Client selected during Appointment creation is the SAME Client later used
+by the Agenda, Appointment Details, Client Profile, and Client history.
+Relationships use `clientId` only. Editing a Client's identity never rewrites
+Appointments — every surface resolves identity through the stable id.
+
+### Directory and search
+
+The Clientes tab is the complete Client directory: a prominent, fast search
+over first name, last name, full name, and phone. Search is case-insensitive,
+accent-insensitive, and tolerant of ordinary phone formatting differences
+("06 12 34 56 78" finds "0612345678"). The default list order is a
+deterministic French alphabetical order (firstName, then lastName) — never
+the import order.
+
+### Creating and editing a Client
+
+A restrained `Ajouter une cliente` action opens the shared Client form
+(Prénom required; Nom, Téléphone, Email, Date de naissance optional). A new
+Client appears immediately in the directory and in the Appointment Creation
+picker, and can be created directly from the picker when the person is not
+found.
+
+The same form, in edit mode, is opened from the Client Profile via
+`Modifier`. Existing values hydrate the form; saving updates the Client
+immutably (stable id) and propagates immediately to every surface.
+
+### Client Profile
+
+The Client Profile is a full business screen containing:
+
+- identity (name, subtle initial);
+- contact information (phone, email, birthday) — only existing fields;
+- the next upcoming Appointment when one exists;
+- derived activity: Rendez-vous réalisés, Total dépensé, Absences,
+  Annulations — always derived from Souris Appointment state, never stored;
+- upcoming Appointments and Souris history (terminal outcomes included).
+
+The Client Profile structure stays stable from client to client: the
+`Activité` section is always visible (zero values are valid information) and
+the `Rendez-vous` section always shows its restrained empty state when there
+is no Souris history.
+
+Activity rules are explicit: counts come from status only (COMPLETED,
+CANCELLED, NO_SHOW); `Total dépensé` is the sum of AppointmentItem snapshot
+prices for COMPLETED appointments only. History rows open the existing
+Appointment Details.
+
+### Birthday
+
+`birthDate` is an optional civil calendar date (`YYYY-MM-DD`), never a
+timestamp. It is displayed as a friendly French date (e.g. `12 octobre
+1994`). Birthday promotions, reminders, and age display are future features.
+
+### Purchased products
+
+A future `Produits achetés` section of the Client Profile will derive from
+the future Sales/Transaction domain through `clientId`. It is never stored on
+the Client itself, and no purchased-product data or sales architecture
+exists yet.
+
+### Legacy import
+
+Initial client data may be migrated from an existing address book.
+
+Only identity/contact information is imported:
+
+```text
+_id       → id
+firstName → firstName
+lastName  → lastName
+telephone → phone
+email     → email
+birthdate → birthDate (only valid YYYY-MM-DD civil dates)
 ```
 
 Existing commercial history is intentionally not migrated.
@@ -359,17 +433,6 @@ Do not import legacy:
 - last visit;
 - no-show history;
 - old notes.
-
-Future Souris-created client information may include:
-
-- birth date;
-- appointments;
-- notes;
-- formulas;
-- photos;
-- purchased products;
-- spending statistics;
-- visit frequency.
 
 Do not invent missing client information.
 

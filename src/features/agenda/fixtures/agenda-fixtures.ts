@@ -1,7 +1,15 @@
+// Souris — Development Agenda fixtures
+//
+// Initial in-memory Agenda data; history and persistence are intentionally
+// absent. Fixture status is seed data, never auto-computed at runtime:
+// appointments on weekdays BEFORE the anchor day represent normally
+// completed services and are seeded as COMPLETED; same-day and later
+// appointments stay SCHEDULED.
+
 import type { AppointmentItem, AppointmentPhase } from '@/domain/appointments';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 
-import { getWeekDays, isSameLocalDay } from '../calendar/week';
+import { getWeekDays, isSameLocalDay, startOfLocalDay } from '../calendar/week';
 
 function localTime(day: Date, hour: number, minute: number): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute);
@@ -36,23 +44,24 @@ function item(
 }
 
 function fixture(
+  anchorDay: Date,
   day: Date,
   id: string,
-  clientName: string,
   hour: number,
   minute: number,
   itemValue: AppointmentItem,
   additionalItems: readonly AppointmentItem[] = [],
 ): AppointmentSessionEntry {
+  const isPast = day.getTime() < startOfLocalDay(anchorDay).getTime();
+
   return {
-    clientDisplayName: clientName,
     appointment: {
       id,
       businessId: 'fixture-business',
       clientId: `client-${id}`,
       staffMemberId: 'staff-amelie',
       startAt: localTime(day, hour, minute),
-      status: 'SCHEDULED',
+      status: isPast ? 'COMPLETED' : 'SCHEDULED',
       items: [itemValue, ...additionalItems],
     },
   };
@@ -69,8 +78,8 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
   return [
     fixture(
       day,
+      day,
       'agenda-lea',
-      'Léa Martin',
       9,
       0,
       item('item-lea', 'service-color', 'Coloration', 'TECHNIQUE', [
@@ -81,8 +90,8 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
     ),
     fixture(
       day,
+      day,
       'agenda-camille',
-      'Camille Durand',
       9,
       20,
       item('item-camille', 'service-cut', 'Coupe', 'SERVICE', [
@@ -91,8 +100,8 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
     ),
     fixture(
       day,
+      day,
       'agenda-ines',
-      'Inès Bernard',
       14,
       40,
       item('item-ines', 'service-blowdry', 'Brushing', 'SERVICE', [
@@ -101,8 +110,8 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
     ),
     fixture(
       day,
+      day,
       'agenda-sofia',
-      'Sofia Petit',
       14,
       0,
       item('item-sofia', 'service-highlights', 'Balayage', 'TECHNIQUE', [
@@ -113,8 +122,8 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
     ),
     fixture(
       day,
+      day,
       'agenda-nadia',
-      'Nadia Roy',
       17,
       30,
       item('item-nadia', 'service-treatment', 'Soin profond', 'SERVICE', [
@@ -122,9 +131,9 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ]),
     ),
     fixture(
+      day,
       busyDay,
       'agenda-elodie',
-      'Élodie Moreau',
       9,
       30,
       item('item-elodie', 'service-cut', 'Coupe', 'SERVICE', [
@@ -132,9 +141,9 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ]),
     ),
     fixture(
+      day,
       busyDay,
       'agenda-hugo',
-      'Hugo Lefèvre',
       13,
       0,
       item('item-hugo', 'service-beard', 'Taille', 'SERVICE', [
@@ -142,9 +151,9 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ]),
     ),
     fixture(
+      day,
       mediumDay,
       'agenda-julie',
-      'Julie Garcia',
       10,
       0,
       item('item-julie-color', 'service-color', 'Coloration', 'TECHNIQUE', [
@@ -157,9 +166,9 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ],
     ),
     fixture(
+      day,
       lightDay,
       'agenda-anais',
-      'Anaïs Petit',
       11,
       15,
       item('item-anais', 'service-treatment', 'Soin profond', 'SERVICE', [

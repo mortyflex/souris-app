@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { colors, semanticColors } from '@/shared/ui/theme';
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
+import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 
 // Keep the native splash screen visible until Inter is ready so the first
 // frame never renders in a fallback font.
@@ -43,44 +44,53 @@ export default function RootLayout() {
     <>
       <StatusBar style="dark" />
       <GestureHandlerRootView style={styles.root}>
-        <AppointmentSessionProvider>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.background },
-            }}>
-            <Stack.Screen
-              name="appointments/[appointmentId]"
-              options={{
-                presentation: 'formSheet',
+        <ClientSessionProvider>
+          <AppointmentSessionProvider>
+            <Stack
+              screenOptions={{
                 headerShown: false,
-                contentStyle: { backgroundColor: semanticColors.screenWarm },
-                sheetAllowedDetents: 'fitToContents',
-                sheetGrabberVisible: true,
-              }}
-            />
-            <Stack.Screen
-              name="appointments/new"
-              options={{
-                presentation: 'formSheet',
-                headerShown: false,
-                contentStyle: { backgroundColor: semanticColors.screenWarm },
-                sheetAllowedDetents: [0.92],
-                sheetGrabberVisible: true,
-              }}
-            />
-            <Stack.Screen
-              name="appointments/edit/[appointmentId]"
-              options={{
-                presentation: 'formSheet',
-                headerShown: false,
-                contentStyle: { backgroundColor: semanticColors.screenWarm },
-                sheetAllowedDetents: [0.92],
-                sheetGrabberVisible: true,
-              }}
-            />
-          </Stack>
-        </AppointmentSessionProvider>
+                contentStyle: { backgroundColor: colors.background },
+              }}>
+              <Stack.Screen
+                name="appointments/[appointmentId]"
+                options={{
+                  presentation: 'formSheet',
+                  headerShown: false,
+                  contentStyle: { backgroundColor: semanticColors.screenWarm },
+                  sheetAllowedDetents: 'fitToContents',
+                  sheetGrabberVisible: true,
+                }}
+              />
+              <Stack.Screen
+                name="appointments/new"
+                options={{
+                  presentation: 'formSheet',
+                  headerShown: false,
+                  contentStyle: { backgroundColor: semanticColors.screenWarm },
+                  sheetAllowedDetents: [0.92],
+                  sheetGrabberVisible: true,
+                }}
+              />
+              <Stack.Screen
+                name="appointments/edit/[appointmentId]"
+                options={{
+                  presentation: 'formSheet',
+                  headerShown: false,
+                  contentStyle: { backgroundColor: semanticColors.screenWarm },
+                  sheetAllowedDetents: [0.92],
+                  sheetGrabberVisible: true,
+                }}
+              />
+              <Stack.Screen
+                name="clients/[clientId]"
+                options={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: semanticColors.screenWarm },
+                }}
+              />
+            </Stack>
+          </AppointmentSessionProvider>
+        </ClientSessionProvider>
       </GestureHandlerRootView>
     </>
   );

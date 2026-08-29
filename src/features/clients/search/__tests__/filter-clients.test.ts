@@ -1,16 +1,24 @@
-import { filterClients } from '../filter-clients';
-import { normalizedClients } from '../../adapters/normalized-clients';
-import type { NormalizedClient } from '../../adapters/legacy-clients-adapter';
+import type { Client } from '@/domain/clients';
 
-function client(overrides: Partial<NormalizedClient> & { id: string }): NormalizedClient {
+import { createInitialClients } from '../../data/initial-clients';
+import { filterClients, normalizeClientSearch } from '../filter-clients';
+
+function client(overrides: Partial<Client> & { id: string }): Client {
   return {
     firstName: 'Default',
     ...overrides,
   };
 }
 
+describe('normalizeClientSearch', () => {
+  it('lowercases, trims, and strips accents', () => {
+    expect(normalizeClientSearch('  Léa  ')).toBe('lea');
+    expect(normalizeClientSearch('ÉLODIE')).toBe('elodie');
+  });
+});
+
 describe('filterClients', () => {
-  const clients: readonly NormalizedClient[] = [
+  const clients: readonly Client[] = [
     client({ id: '1', firstName: 'Alice', lastName: 'Dupont', phone: '0612345678' }),
     client({ id: '2', firstName: 'Béatrice', lastName: 'Martin', phone: '0698765432' }),
     client({ id: '3', firstName: 'Camille', lastName: 'Durand' }),
@@ -44,8 +52,46 @@ describe('filterClients', () => {
     expect(result[0].id).toBe('3');
   });
 
+  it('matches a first name without accents ("lea" finds "Léa")', () => {
+    const result = filterClients(
+      [client({ id: 'x', firstName: 'Léa', lastName: 'Martin' })],
+      'lea',
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('x');
+  });
+
+  it('matches a partial lastName ("mart" finds "Martin")', () => {
+    const result = filterClients(clients, 'mart');
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('2');
+  });
+
+  it('matches a full name query ("lea martin" finds "Léa Martin")', () => {
+    const result = filterClients(
+      [client({ id: 'x', firstName: 'Léa', lastName: 'Martin' })],
+      'lea martin',
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('x');
+  });
+
   it('matches by phone', () => {
     const result = filterClients(clients, '0612');
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('1');
+  });
+
+  it('normalizes phone formatting differences in the query', () => {
+    const result = filterClients(clients, '06 12 34 56 78');
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('1');
+  });
+
+  it('normalizes phone formatting differences in punctuation', () => {
+    const result = filterClients(clients, '06.12.34.56.78');
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('1');
   });
@@ -94,7 +140,7 @@ describe('filterClients', () => {
   });
 
   it('returns empty array when no match', () => {
-    const result = filterClients(clients, 'xyz123');
+    const result = filterClients(clients, 'zzz');
     expect(result).toHaveLength(0);
   });
 
@@ -130,29 +176,39 @@ describe('filterClients', () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('2');
   });
+
+  it('does not mutate the source array', () => {
+    const before = clients.map((entry) => entry.id);
+
+    filterClients(clients, 'alice');
+
+    expect(clients.map((entry) => entry.id)).toEqual(before);
+  });
 });
 
-describe('filterClients over the normalized legacy source', () => {
-  it('searches the complete dataset: a client beyond index 60 remains findable', () => {
-    expect(normalizedClients.length).toBeGreaterThan(60);
+describe('filterClients over the initial client source', () => {
+  const initialClients = createInitialClients();
 
-    const target = normalizedClients[120];
+  it('searches the complete dataset: a client beyond index 60 remains findable', () => {
+    expect(initialClients.length).toBeGreaterThan(60);
+
+    const target = initialClients[120];
     expect(target).toBeDefined();
 
     const query = `${target.firstName} ${target.lastName ?? ''}`.trim();
-    const results = filterClients(normalizedClients, query);
+    const results = filterClients(initialClients, query);
 
     expect(results.map((entry) => entry.id)).toContain(target.id);
   });
 
   it('keeps every client reachable by phone search beyond index 60', () => {
-    const beyond = normalizedClients
+    const beyond = initialClients
       .slice(61)
       .find((entry) => entry.phone !== undefined && entry.phone.length > 0);
     expect(beyond).toBeDefined();
     if (!beyond) return;
 
-    const results = filterClients(normalizedClients, beyond.phone ?? '');
+    const results = filterClients(initialClients, beyond.phone ?? '');
     expect(results.map((entry) => entry.id)).toContain(beyond.id);
   });
 });

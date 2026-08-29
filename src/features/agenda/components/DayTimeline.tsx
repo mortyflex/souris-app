@@ -12,6 +12,8 @@ import {
 
 import { AppText } from '@/shared/ui/AppText';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
+import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { agenda, bottomClearance, gutter, rose, semanticColors } from '@/shared/ui/theme';
 
 import { getAgendaAppointmentPalette } from '../appointment-palette';
@@ -31,12 +33,13 @@ const timelineHeight = (agenda.dayEndHour - agenda.dayStartHour) * agenda.hourHe
 
 export function DayTimeline({ day, appointments }: DayTimelineProps) {
   const router = useRouter();
+  const { getClientById } = useClientSession();
   const { width } = useWindowDimensions();
   const [now, setNow] = useState(() => new Date());
-  const visibleSegments = appointments.flatMap(({ appointment, clientDisplayName }) =>
+  const visibleSegments = appointments.flatMap(({ appointment }) =>
     buildAgendaStaffSegments(appointment).map((segment) => ({
       ...segment,
-      clientName: clientDisplayName,
+      clientName: getResolvedClientDisplayName(getClientById(appointment.clientId)),
       palette: getAgendaAppointmentPalette(segment.appointmentId),
     })),
   );

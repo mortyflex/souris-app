@@ -1,6 +1,5 @@
 import {
   calculateAppointmentTimeline,
-  getAppointmentEndAt,
   getElapsedDurationMinutes,
   getOrderedItems,
   getProcessingDurationMinutes,
@@ -9,6 +8,15 @@ import {
   type AppointmentItem,
   type TimelineItem,
 } from '@/domain/appointments';
+
+export {
+  formatAppointmentDate,
+  formatAppointmentTime,
+  formatDurationMinutes,
+  formatPrice,
+  getAppointmentEnd,
+  getAppointmentStatusLabel,
+} from '@/features/appointments/presentation';
 
 export interface AppointmentDetailService {
   readonly item: AppointmentItem;
@@ -20,19 +28,6 @@ export interface AppointmentDetailSummary {
   readonly activeMinutes: number;
   readonly processingMinutes: number;
   readonly totalPrice: number;
-}
-
-const statusLabels = {
-  SCHEDULED: 'Planifié',
-  CONFIRMED: 'Confirmé',
-  IN_PROGRESS: 'En cours',
-  COMPLETED: 'Terminé',
-  CANCELLED: 'Annulé',
-  NO_SHOW: 'Absence',
-} as const;
-
-export function getAppointmentStatusLabel(status: Appointment['status']): string {
-  return statusLabels[status];
 }
 
 export function getAppointmentDetailServices(
@@ -63,40 +58,4 @@ export function getAppointmentDetailSummary(
     processingMinutes: getProcessingDurationMinutes(appointment),
     totalPrice: getOrderedItems(appointment).reduce((total, item) => total + item.price, 0),
   };
-}
-
-export function formatAppointmentTime(date: Date): string {
-  return `${date.getHours().toString().padStart(2, '0')}:${date
-    .getMinutes()
-    .toString()
-    .padStart(2, '0')}`;
-}
-
-export function formatAppointmentDate(date: Date): string {
-  const value = new Intl.DateTimeFormat('fr-FR', {
-    day: 'numeric',
-    month: 'long',
-    weekday: 'short',
-  }).format(date);
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-export function formatDurationMinutes(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const remaining = minutes % 60;
-  return remaining === 0 ? `${hours} h` : `${hours} h ${remaining} min`;
-}
-
-export function formatPrice(value: number): string {
-  return new Intl.NumberFormat('fr-FR', {
-    currency: 'EUR',
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-    style: 'currency',
-  }).format(value);
-}
-
-export function getAppointmentEnd(appointment: Appointment): Date {
-  return getAppointmentEndAt(appointment);
 }
