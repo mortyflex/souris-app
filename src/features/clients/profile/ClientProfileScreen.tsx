@@ -404,10 +404,8 @@ const styles = StyleSheet.create({
   nextRow: {
     alignItems: 'center',
     backgroundColor: semanticColors.surfaceRose,
-    borderColor: rose.rose200,
     borderCurve: 'continuous',
     borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.sm,
     minHeight: 68,
@@ -424,10 +422,8 @@ const styles = StyleSheet.create({
   activitySection: { marginBottom: spacing.xl },
   metricsSurface: {
     backgroundColor: semanticColors.surfaceLavender,
-    borderColor: semanticColors.borderLavender,
     borderCurve: 'continuous',
     borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
   },
@@ -443,10 +439,8 @@ const styles = StyleSheet.create({
   infoSection: { marginBottom: spacing.xl },
   infoSurface: {
     backgroundColor: semanticColors.surfaceElevated,
-    borderColor: semanticColors.borderSubtle,
     borderCurve: 'continuous',
     borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.xs,
   },
@@ -465,10 +459,8 @@ const styles = StyleSheet.create({
   appointmentRow: {
     alignItems: 'center',
     backgroundColor: semanticColors.surfaceLavender,
-    borderColor: semanticColors.borderLavender,
     borderCurve: 'continuous',
     borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     minHeight: 60,
     paddingHorizontal: spacing.base,

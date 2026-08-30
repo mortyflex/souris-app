@@ -1,4 +1,4 @@
-import { Platform, Pressable, StyleSheet } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 
 import { AppText } from "@/shared/ui/AppText";
 import {
@@ -44,7 +44,6 @@ export function AppointmentBlock({
     : undefined;
   const isCompleted = segment.status === "COMPLETED";
   const backgroundColor = isCompleted ? semanticColors.surface : palette.background;
-  const borderColor = isCompleted ? semanticColors.borderSubtle : palette.border;
   const accentColor = isCompleted ? semanticColors.foregroundMuted : palette.accent;
   const primaryTextColor = isCompleted ? foregroundSoft : palette.primaryText;
   const secondaryTextColor = isCompleted ? foregroundSoft : palette.secondaryText;
@@ -67,7 +66,6 @@ export function AppointmentBlock({
         styles.container,
         {
           backgroundColor,
-          borderColor,
           borderLeftColor: accentColor,
         },
         pressed && styles.pressed,
@@ -139,9 +137,8 @@ export function AppointmentBlock({
 
 const styles = StyleSheet.create({
   container: {
-    borderWidth: StyleSheet.hairlineWidth,
     borderLeftWidth: 3,
-    borderRadius: radii[Platform.OS === "android" ? "android" : "ios"].default,
+    borderRadius: radii.small,
     flex: 1,
     justifyContent: "center",
     overflow: "hidden",

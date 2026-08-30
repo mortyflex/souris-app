@@ -272,9 +272,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: semanticColors.surfaceLavender,
     borderCurve: 'continuous',
-    borderColor: semanticColors.borderLavender,
     borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   cardHeader: {
