@@ -18,7 +18,7 @@ import {
   touchTarget,
 } from './theme';
 
-type AppButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'danger';
+type AppButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'danger' | 'dangerSoft';
 
 interface AppButtonProps extends Omit<PressableProps, 'children' | 'style'> {
   readonly title: string;
@@ -55,7 +55,7 @@ export function AppButton({
         style={[
           variant === 'primary'
             ? styles.primaryText
-            : variant === 'danger'
+            : variant === 'danger' || variant === 'dangerSoft'
               ? styles.dangerText
               : variant === 'tertiary'
                 ? styles.tertiaryText
@@ -98,6 +98,7 @@ const variants = StyleSheet.create({
     borderColor: rose.rose200,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  dangerSoft: { backgroundColor: semanticColors.surfaceRose },
 });
 
 const pressedVariants = StyleSheet.create({
@@ -116,6 +117,10 @@ const pressedVariants = StyleSheet.create({
   danger: {
     backgroundColor: rose.rose050,
     borderColor: rose.rose600,
+    transform: [{ scale: interaction.pressedScale }],
+  },
+  dangerSoft: {
+    backgroundColor: rose.rose100,
     transform: [{ scale: interaction.pressedScale }],
   },
 });

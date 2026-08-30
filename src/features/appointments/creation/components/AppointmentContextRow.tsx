@@ -85,10 +85,8 @@ export function AppointmentContextRow({
 const styles = StyleSheet.create({
   contextRow: {
     backgroundColor: semanticColors.surfaceElevated,
-    borderColor: semanticColors.borderSubtle,
     borderCurve: 'continuous',
     borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
     marginHorizontal: horizontalGutter,
     marginTop: spacing.sm,

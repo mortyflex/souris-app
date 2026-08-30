@@ -5,7 +5,6 @@ export type AgendaAppointmentPaletteVariant = 'lavender' | 'peach' | 'neutral';
 export interface AgendaAppointmentPalette {
   readonly variant: AgendaAppointmentPaletteVariant;
   readonly background: string;
-  readonly border: string;
   readonly accent: string;
   readonly primaryText: string;
   readonly secondaryText: string;
@@ -15,7 +14,6 @@ const appointmentPalettes: readonly AgendaAppointmentPalette[] = [
   {
     variant: 'lavender',
     background: lavender.lav050,
-    border: lavender.lav200,
     accent: lavender.lav700,
     primaryText: colors.foreground,
     secondaryText: lavender.lav700,
@@ -23,7 +21,6 @@ const appointmentPalettes: readonly AgendaAppointmentPalette[] = [
   {
     variant: 'peach',
     background: peach.peach050,
-    border: peach.peach200,
     accent: peach.peach700,
     primaryText: colors.foreground,
     secondaryText: peach.peach700,
@@ -31,7 +28,6 @@ const appointmentPalettes: readonly AgendaAppointmentPalette[] = [
   {
     variant: 'neutral',
     background: colors.surface,
-    border: colors.border,
     accent: foregroundSoft,
     primaryText: colors.foreground,
     secondaryText: foregroundSoft,

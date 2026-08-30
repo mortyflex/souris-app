@@ -193,6 +193,11 @@ the export remains preserved as the historical brand and interaction reference.
 - Appointment detail, creation, and editing surfaces may use a near-white lavender page tint. Elevated white,
   soft neutral, and pastel surfaces create grouping; borders are reserved for focus, selection, or a boundary
   that would otherwise be unclear.
+- Appointment surfaces whose tint already provides grouping remain borderless. Compact Agenda blocks use the
+  small radius, Details cards use the medium radius, and Creation/Editing cards keep the larger form rhythm;
+  identity accents, timeline lines, separators, fields, selection/focus states, and modal boundaries remain.
+- Client Profile activity, next-appointment, information, and appointment-history surfaces follow the same
+  borderless grouping rule; internal content dividers and screen separators remain where they add structure.
 - Lavender identifies service structure and selection, rose carries the Appointment Details brand accent and
   destructive meaning, and peach remains dedicated to processing / unattended time.
 - Section hierarchy uses title-case editorial titles with optional count chips. Uppercase eyebrows remain a

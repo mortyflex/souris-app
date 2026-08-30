@@ -272,7 +272,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
                   style={styles.normalAction}
                   testID="open-no-show"
                   title="Absence"
-                  variant="danger"
+                  variant="dangerSoft"
                 />
               )}
               {canCancel && (
@@ -281,7 +281,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
                   style={styles.normalAction}
                   testID="open-cancellation"
                   title="Annuler"
-                  variant="danger"
+                  variant="dangerSoft"
                 />
               )}
               {canModify && (
@@ -358,10 +358,8 @@ const styles = StyleSheet.create({
   clientName: { color: semanticColors.foreground },
   metaSurface: {
     backgroundColor: semanticColors.surfaceRose,
-    borderColor: rose.rose200,
     borderCurve: 'continuous',
-    borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.medium,
     padding: spacing.base,
   },
   dateLine: { color: semanticColors.foreground },

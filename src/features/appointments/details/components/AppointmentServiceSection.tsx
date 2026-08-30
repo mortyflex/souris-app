@@ -121,10 +121,8 @@ export function AppointmentServiceSection({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: semanticColors.surfaceLavender,
-    borderColor: semanticColors.borderLavender,
     borderCurve: 'continuous',
-    borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.medium,
     marginBottom: spacing.sm,
     overflow: 'hidden',
   },
