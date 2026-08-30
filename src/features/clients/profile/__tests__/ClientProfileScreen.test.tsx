@@ -61,6 +61,20 @@ const cancelledAppointment: Appointment = {
   startAt: new Date(2026, 6, 5, 10),
   status: 'CANCELLED',
   items: [cancelledItem],
+  cancellation: {
+    cancelledAt: new Date(2026, 6, 5, 11),
+    cancelledBy: 'CLIENT',
+  },
+};
+
+const businessCancelledAppointment: Appointment = {
+  ...cancelledAppointment,
+  id: 'business-cancelled-test',
+  startAt: new Date(2026, 6, 6, 10),
+  cancellation: {
+    cancelledAt: new Date(2026, 6, 6, 11),
+    cancelledBy: 'BUSINESS',
+  },
 };
 
 const futureAppointment: Appointment = {
@@ -97,6 +111,10 @@ function SessionProbe() {
       <Pressable
         testID="add-cancelled-appointment"
         onPress={() => addAppointment({ appointment: cancelledAppointment })}
+      />
+      <Pressable
+        testID="add-business-cancelled-appointment"
+        onPress={() => addAppointment({ appointment: businessCancelledAppointment })}
       />
       <Pressable
         testID="add-future-appointment"
@@ -192,14 +210,19 @@ describe('ClientProfileScreen', () => {
     expect(view.queryByText(/0 visite|panier moyen/)).toBeNull();
   });
 
-  it('keeps cancelled appointments visible and clearly distinguished', async () => {
+  it('keeps both cancellation actors visible while counting only the client cancellation', async () => {
     const view = await renderProfile('client-agenda-sofia');
 
     await act(async () => {
       fireEvent.press(view.getByTestId('add-cancelled-appointment'));
     });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-business-cancelled-appointment'));
+    });
 
-    expect(view.getByText(/Annulé/)).toBeTruthy();
+    expect(view.getByText(/Annulé par la cliente/)).toBeTruthy();
+    expect(view.getByText(/Annulé par le salon/)).toBeTruthy();
+    expect(view.getByTestId('metric-cancelled').props.children).toBe('1');
   });
 
   it('shows the next appointment when a future appointment exists', async () => {
@@ -210,7 +233,7 @@ describe('ClientProfileScreen', () => {
     });
 
     expect(view.getByText('Prochain rendez-vous')).toBeTruthy();
-    expect(view.getByText('Coupe')).toBeTruthy();
+    expect(view.getAllByText('Coupe')).toHaveLength(2);
   });
 
   it('opens the shared edit form prefilled and saves the updated identity', async () => {

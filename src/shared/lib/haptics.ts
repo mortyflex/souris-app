@@ -23,4 +23,7 @@ export const haptics = {
   success() {
     trigger(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
   },
+  warning() {
+    trigger(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning));
+  },
 } as const;

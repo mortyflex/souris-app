@@ -8,11 +8,13 @@ function segment(
   serviceName: string,
   phaseNames: readonly string[],
   isResume = false,
+  status: Appointment['status'] = 'SCHEDULED',
 ): AgendaStaffSegment {
   return {
     id: 'segment-a',
     appointmentId: 'appointment-a',
     clientId: 'client-a',
+    status,
     serviceName,
     phaseNames,
     startAt: new Date(2026, 7, 24, 9, 0),
@@ -162,4 +164,5 @@ describe('Agenda segment content', () => {
     expect(content.compactSecondaryLabel).toBe('Reprise');
     expect(content.compactSecondaryIsReprise).toBe(true);
   });
+
 });

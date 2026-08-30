@@ -743,9 +743,43 @@ CANCELLED
 NO_SHOW
 ```
 
-The exact permitted transitions should be implemented deliberately when lifecycle behavior is introduced.
+Lifecycle V1 deliberately avoids a complex state machine and does not expose a `Démarrer` action.
+`IN_PROGRESS` remains a supported compatibility state, but Souris V1 creates no transition into it.
 
-Do not invent a complex state machine before needed.
+The permitted V1 transitions are:
+
+```text
+SCHEDULED / CONFIRMED / IN_PROGRESS
+→ COMPLETED
+once appointment.startAt <= now
+
+SCHEDULED / CONFIRMED
+→ CANCELLED
+
+SCHEDULED / CONFIRMED
+→ NO_SHOW
+once appointment.startAt <= now
+```
+
+Completion through `Terminer` is optional. The normal workflow requires no end-of-appointment administration:
+an untouched `SCHEDULED`, `CONFIRMED`, or compatibility `IN_PROGRESS` appointment becomes `COMPLETED` when its
+device-local calendar day is strictly before the current device-local calendar day.
+
+Automatic completion must:
+
+- leave every same-day appointment untouched for the whole day, even after its start time;
+- leave future appointments untouched;
+- leave `COMPLETED`, `CANCELLED`, and `NO_SHOW` untouched;
+- compare local civil calendar fields rather than UTC date strings;
+- be pure, immutable, deterministic with an injected `now`, and idempotent.
+
+The in-memory Appointment session applies this reconciliation at initial state creation, after a local-day rollover,
+and when the app becomes active on a new local day. Rendering components never perform lifecycle mutation.
+
+The operational Agenda is a projection of professional occupancy, not a complete historical view. It includes
+`SCHEDULED`, `CONFIRMED`, compatibility `IN_PROGRESS`, and `COMPLETED` appointments. It excludes `CANCELLED` and
+`NO_SHOW` before Day segments, overlap columns, or Week rows are calculated. Those outcomes therefore leave the
+time slot visually free and never reduce the width of another appointment at the same time.
 
 ---
 
@@ -753,7 +787,7 @@ Do not invent a complex state machine before needed.
 
 Cancellation does not delete the appointment.
 
-A cancellation may contain:
+A cancellation contains:
 
 ```text
 cancelledAt
@@ -770,6 +804,13 @@ BUSINESS
 
 Historical information remains available.
 
+A cancelled Appointment remains a session and Client-history record, including its actor and optional reason, but
+it no longer occupies the operational Agenda.
+
+V1 cancellation is allowed only from `SCHEDULED` or `CONFIRMED`. It requires an explicit `CLIENT` or `BUSINESS`
+actor, records the injected cancellation time, and may preserve a trimmed optional reason. `IN_PROGRESS` cannot be
+cancelled in V1.
+
 ---
 
 # 27. No-show
@@ -783,6 +824,13 @@ recordedAt
 ```
 
 This historical outcome must remain attached to the appointment.
+
+A no-show Appointment remains a session and Client-history record, including `recordedAt`, but it no longer
+occupies the operational Agenda.
+
+V1 no-show is allowed only from `SCHEDULED` or `CONFIRMED`, and only once `appointment.startAt <= now`. It records
+the injected observation time and never creates cancellation metadata. `IN_PROGRESS` cannot be marked as no-show
+in V1.
 
 ---
 
@@ -804,15 +852,26 @@ Absence
 Supprimer définitivement
 ```
 
+Permanent deletion is not a lifecycle transition. The in-memory Appointment session removes the exact record by
+id without mutating the source collection; an unknown id is a no-op. Once removed, the Appointment naturally
+disappears from Agenda Day, Agenda Week, Appointment Details, Client history, and every Client activity value
+derived from Appointment state. No Client counter is updated manually.
+
+Appointment Details exposes deletion only as a secondary destructive action, including for `COMPLETED`,
+`CANCELLED`, and `NO_SHOW` records. It requires a focused irreversible-action confirmation, then removes the
+record and returns to the previous screen. Cancellation and no-show never trigger deletion automatically.
+
 ---
 
 # 29. Terminal Appointments
 
-Cancelled and no-show appointments may eventually be hidden from active Agenda views according to UI rules.
+`COMPLETED`, `CANCELLED`, and `NO_SHOW` are terminal historical outcomes.
 
-They must remain available to historical views.
+`COMPLETED` remains visible in the operational Agenda because it represents work that occupied professional time.
 
-The domain must not erase them merely because they are not displayed on the active calendar.
+`CANCELLED` and `NO_SHOW` do not occupy Agenda Day and do not appear as active Agenda Week rows, but they remain
+available to Appointment Details and Client history. The domain must not erase them merely because the operational
+calendar excludes them. Only an explicit permanent deletion removes a terminal Appointment record.
 
 ---
 
@@ -871,6 +930,15 @@ snapshot independence
 overlap allowed
 cancellation preservation
 no-show preservation
+operational Agenda exclusion for cancellation/no-show
+overlap calculation without cancellation/no-show
+manual completion eligibility
+previous-local-day automatic completion
+same-day non-completion
+terminal-state preservation
+idempotent session reconciliation
+immutable permanent deletion
+derived Client activity after deletion
 ```
 
 Tests should validate behavior, not implementation structure.
@@ -927,6 +995,12 @@ The following must remain true unless an explicit product decision changes them:
 11. businessId, staffMemberId and clientId remain explicit identities.
 
 12. Appointment business rules remain independent from React Native and persistence.
+
+13. Normal appointments require no manual end-of-appointment action; previous local days reconcile to COMPLETED.
+
+14. CANCELLED and NO_SHOW remain historical records but do not occupy the operational Agenda.
+
+15. Permanent deletion explicitly removes an incorrect or duplicate Appointment and all values derived from it.
 ```
 
 These invariants are the foundation of Souris scheduling.

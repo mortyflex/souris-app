@@ -16,4 +16,5 @@ export interface AppointmentSessionValue {
   ) => AppointmentSessionEntry | undefined;
   readonly addAppointment: (entry: AppointmentSessionEntry) => void;
   readonly updateAppointment: (entry: AppointmentSessionEntry) => void;
+  readonly deleteAppointment: (appointmentId: string) => void;
 }

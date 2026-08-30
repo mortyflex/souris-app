@@ -4,6 +4,7 @@ export interface AgendaStaffSegment {
   readonly id: string;
   readonly appointmentId: string;
   readonly clientId: string;
+  readonly status: Appointment['status'];
   readonly serviceName: string;
   readonly phaseNames: readonly string[];
   readonly startAt: Date;
@@ -37,6 +38,7 @@ export function buildAgendaStaffSegments(
         id: `${appointment.id}:${activePhases[0].phaseId}`,
         appointmentId: appointment.id,
         clientId: appointment.clientId,
+        status: appointment.status,
         serviceName: serviceNames.join(' · '),
         phaseNames: activePhases.map((phase) => phase.phaseName),
         startAt,

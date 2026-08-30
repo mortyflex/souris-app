@@ -168,6 +168,15 @@ appointment.clientId === client.id
 
 Historical terminal outcomes (`CANCELLED`, `NO_SHOW`) remain part of history.
 
+Cancellation history distinguishes the recorded actor:
+
+```text
+CLIENT   → Annulé par la cliente
+BUSINESS → Annulé par le salon
+```
+
+Both remain historical records. Only explicit permanent Appointment deletion removes a row from Client history.
+
 History is sorted by appointment date, newest first, and never mutated.
 
 ---
@@ -180,6 +189,7 @@ persisted on the Client:
 ```text
 Rendez-vous réalisés  → appointments with status COMPLETED
 Annulations           → appointments with status CANCELLED
+                        and cancellation.cancelledBy === CLIENT
 Absences              → appointments with status NO_SHOW
 Total dépensé         → sum of AppointmentItem snapshot prices for
                         COMPLETED appointments only
@@ -188,6 +198,15 @@ Total dépensé         → sum of AppointmentItem snapshot prices for
 `Total dépensé` uses AppointmentItem snapshot prices — never current catalog
 prices — and excludes SCHEDULED, CONFIRMED, IN_PROGRESS, CANCELLED, and
 NO_SHOW appointments.
+
+A `BUSINESS` cancellation remains visible in history with its actor and optional reason, but it does not increment
+the Client `Annulations` metric. That metric describes Client behavior only. `NO_SHOW` continues to increment
+`Absences` according to its status.
+
+Deleting an erroneous or duplicate Appointment automatically removes all of its contributions from Client history
+and activity. For example, deleting a `COMPLETED` Appointment removes its completed count and snapshot amount from
+`Total dépensé`; deleting a `CANCELLED` or `NO_SHOW` Appointment removes the corresponding historical outcome.
+These changes are derived from the remaining Appointment collection and never stored as Client counters.
 
 Upcoming appointments are derived from status + date: CANCELLED, NO_SHOW, and
 COMPLETED are excluded; the nearest future appointment by `startAt` is the

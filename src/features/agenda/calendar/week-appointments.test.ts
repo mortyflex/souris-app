@@ -1,11 +1,18 @@
-import type { Appointment, AppointmentItem } from '@/domain/appointments';
+import type { Appointment, AppointmentItem, AppointmentStatus } from '@/domain/appointments';
+
+import { getOperationalAgendaEntries } from '../operational-visibility';
 
 import {
   getWeekAppointmentServiceSummary,
   groupAppointmentsByLocalDay,
 } from './week-appointments';
 
-function appointment(id: string, startAt: Date, itemNames: readonly string[]): Appointment {
+function appointment(
+  id: string,
+  startAt: Date,
+  itemNames: readonly string[],
+  status: AppointmentStatus = 'SCHEDULED',
+): Appointment {
   const items: AppointmentItem[] = itemNames.map((serviceName, index) => ({
     id: `${id}-item-${index}`,
     serviceId: `${id}-service-${index}`,
@@ -26,13 +33,13 @@ function appointment(id: string, startAt: Date, itemNames: readonly string[]): A
     clientId: `client-${id}`,
     staffMemberId: 'staff-a',
     startAt,
-    status: 'SCHEDULED',
+    status,
     items,
   };
 }
 
-function fixture(id: string, startAt: Date) {
-  return { appointment: appointment(id, startAt, ['Coupe']) };
+function fixture(id: string, startAt: Date, status?: AppointmentStatus) {
+  return { appointment: appointment(id, startAt, ['Coupe'], status) };
 }
 
 describe('Agenda week appointment helpers', () => {
@@ -64,6 +71,26 @@ describe('Agenda week appointment helpers', () => {
     const reverse = groupAppointmentsByLocalDay([...values].reverse(), days);
 
     expect(forward).toEqual(reverse);
+  });
+
+  it('groups only operational rows after the Agenda visibility projection', () => {
+    const monday = new Date(2026, 7, 24);
+    const grouped = groupAppointmentsByLocalDay(
+      getOperationalAgendaEntries([
+        fixture('scheduled', new Date(2026, 7, 24, 9), 'SCHEDULED'),
+        fixture('confirmed', new Date(2026, 7, 24, 10), 'CONFIRMED'),
+        fixture('completed', new Date(2026, 7, 24, 11), 'COMPLETED'),
+        fixture('cancelled', new Date(2026, 7, 24, 12), 'CANCELLED'),
+        fixture('no-show', new Date(2026, 7, 24, 13), 'NO_SHOW'),
+      ]),
+      [monday],
+    );
+
+    expect(grouped[0].appointments.map(({ appointment: value }) => value.id)).toEqual([
+      'scheduled',
+      'confirmed',
+      'completed',
+    ]);
   });
 
   it('summarizes one and multiple ordered services without duplicate names', () => {

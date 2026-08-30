@@ -1,6 +1,7 @@
 import type { Appointment, AppointmentItem } from '@/domain/appointments';
 
 import {
+  formatCancellationActorLabel,
   formatDurationMinutes,
   getAppointmentDetailServices,
   getAppointmentDetailSummary,
@@ -48,6 +49,11 @@ describe('Appointment details presentation', () => {
     expect(getAppointmentStatusLabel('SCHEDULED')).toBe('Planifié');
     expect(getAppointmentStatusLabel('IN_PROGRESS')).toBe('En cours');
     expect(getAppointmentStatusLabel('NO_SHOW')).toBe('Absence');
+  });
+
+  it('formats the recorded cancellation actor for history', () => {
+    expect(formatCancellationActorLabel('CLIENT')).toBe('Annulé par la cliente');
+    expect(formatCancellationActorLabel('BUSINESS')).toBe('Annulé par le salon');
   });
 
   it('derives ordered service starts from the calculated timeline', () => {

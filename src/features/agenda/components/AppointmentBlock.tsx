@@ -1,7 +1,16 @@
 import { Platform, Pressable, StyleSheet } from "react-native";
 
 import { AppText } from "@/shared/ui/AppText";
-import { interaction, radii, semanticColors } from "@/shared/ui/theme";
+import {
+  getAppointmentStatusLabel,
+  isTerminalAppointmentStatus,
+} from "@/features/appointments/presentation";
+import {
+  foregroundSoft,
+  interaction,
+  radii,
+  semanticColors,
+} from "@/shared/ui/theme";
 
 import type { AgendaAppointmentPalette } from "../appointment-palette";
 import type { AgendaStaffSegment } from "../layout/agenda-staff-segments";
@@ -30,7 +39,23 @@ export function AppointmentBlock({
     clientName,
     getAgendaSegmentDensity(height),
   );
-  const accessibilityLabel = `${clientName}, ${segment.serviceName}, ${segment.phaseNames.join(", ")}`;
+  const statusLabel = isTerminalAppointmentStatus(segment.status)
+    ? getAppointmentStatusLabel(segment.status)
+    : undefined;
+  const isCompleted = segment.status === "COMPLETED";
+  const backgroundColor = isCompleted ? semanticColors.surface : palette.background;
+  const borderColor = isCompleted ? semanticColors.borderSubtle : palette.border;
+  const accentColor = isCompleted ? semanticColors.foregroundMuted : palette.accent;
+  const primaryTextColor = isCompleted ? foregroundSoft : palette.primaryText;
+  const secondaryTextColor = isCompleted ? foregroundSoft : palette.secondaryText;
+  const accessibilityLabel = [
+    clientName,
+    segment.serviceName,
+    segment.phaseNames.join(", "),
+    statusLabel,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <Pressable
@@ -41,9 +66,9 @@ export function AppointmentBlock({
       style={({ pressed }) => [
         styles.container,
         {
-          backgroundColor: palette.background,
-          borderColor: palette.border,
-          borderLeftColor: palette.accent,
+          backgroundColor,
+          borderColor,
+          borderLeftColor: accentColor,
         },
         pressed && styles.pressed,
       ]}
@@ -53,14 +78,14 @@ export function AppointmentBlock({
           <AppText
             variant="rowTitle"
             numberOfLines={1}
-            style={[styles.clientName, { color: palette.primaryText }]}
+            style={[styles.clientName, { color: primaryTextColor }]}
           >
             {content.clientLabel}
           </AppText>
           <AppText
             variant="metadata"
             numberOfLines={1}
-            style={[styles.serviceName, { color: palette.secondaryText }]}
+            style={[styles.serviceName, { color: secondaryTextColor }]}
           >
             {content.serviceLabel}
             {content.showReprise && (
@@ -96,7 +121,7 @@ export function AppointmentBlock({
         <AppText
           variant="chip"
           numberOfLines={1}
-          style={[styles.compactLine, { color: palette.primaryText }]}
+          style={[styles.compactLine, { color: primaryTextColor }]}
         >
           {content.compactClientLabel}
           <AppText
@@ -129,7 +154,6 @@ const styles = StyleSheet.create({
   phaseName: { lineHeight: 14 },
   compactLine: { lineHeight: 14 },
   pressed: {
-    opacity: 0.9,
     transform: [{ scale: interaction.cardPressedScale }],
   },
 });

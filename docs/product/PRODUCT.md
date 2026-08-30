@@ -119,6 +119,11 @@ through unattended processing time, but that interval is not rendered as an occu
 grid remains visible so the professional can see the available time. Later staff-required phases appear again
 as separate visible segments of the same Appointment.
 
+`CANCELLED` and `NO_SHOW` appointments do not occupy this operational view. They render no Day segment, create no
+overlap column, and appear as no active Week row; another appointment at the same time therefore uses its normal
+available width. The records remain available through Appointment Details and Client history. `COMPLETED`
+appointments remain visible because they represent professional time that was actually occupied.
+
 Agenda provides two complementary views:
 
 - **Jour** is the detailed operational view of professional occupancy, processing gaps, reprises, and overlaps;
@@ -234,8 +239,10 @@ and techniques preserve their type, ordered phases, duration, price, and process
 non-numeric prices are excluded with a diagnostic rather than invented as zero.
 
 The first slice is intentionally in-memory for the current app session. Agenda Day, Agenda Week, and
-Appointment Details read the same collection, so newly created and edited appointments appear immediately in all
-three surfaces. Persistence, deletion, cancellation, and no-show actions are outside this slice.
+Appointment Details read the same collection, so newly created, edited, or lifecycle-updated appointments appear
+immediately in all three surfaces. Persistence remains outside this slice. Explicit permanent deletion removes an
+incorrect or duplicate Appointment from the same in-memory collection; cancellation and no-show remain historical
+outcomes handled separately by the lifecycle behavior below.
 
 ### Appointment-specific adjustments during creation
 
@@ -297,11 +304,35 @@ NO_SHOW
 
 Cancellation, no-show, and deletion are different concepts.
 
+The V1 lifecycle is exception-first. A normal appointment requires no administrative start or finish action:
+
+```text
+same local calendar day
+→ remains SCHEDULED / CONFIRMED / compatibility IN_PROGRESS
+
+next local calendar day
+→ automatically COMPLETED
+```
+
+There is no `Démarrer` action. `Terminer` is an optional immediate shortcut once the appointment start time has
+been reached. It is available from `SCHEDULED`, `CONFIRMED`, and compatibility `IN_PROGRESS`.
+
+Appointment Details exposes only relevant actions:
+
+- a future `SCHEDULED` / `CONFIRMED` appointment can be modified or cancelled;
+- once its start time is reached, it can also be completed or marked as no-show;
+- compatibility `IN_PROGRESS` exposes only completion as a lifecycle outcome action;
+- `COMPLETED`, `CANCELLED`, and `NO_SHOW` are read-only terminal lifecycle outcomes, while permanent deletion
+  remains available as a separate secondary data-correction action.
+
+Untouched previous-local-day appointments are reconciled at the Appointment session boundary when the app starts,
+returns active on a new local day, or crosses a local-day boundary while open. The operation is idempotent. Same-day
+appointments are never auto-completed merely because their start time has passed.
+
 ### Cancellation
 
-The appointment remains part of history.
-
-Future cancellation metadata may include:
+The appointment remains part of history. The professional confirms who cancelled (`CLIENT` or `BUSINESS`) and
+may add an optional reason. Cancellation metadata contains:
 
 ```text
 cancelledAt
@@ -311,9 +342,8 @@ reason?
 
 ### No-show
 
-The appointment remains part of history.
-
-Future no-show metadata may include:
+The appointment remains part of history. Once the appointment start time has been reached,
+`Marquer comme absence` requires an explicit confirmation and records:
 
 ```text
 recordedAt
@@ -327,7 +357,17 @@ Permanent deletion is reserved for exceptional cases such as:
 - incorrect entries;
 - accidental creation.
 
-Cancellation and no-show must never silently delete historical information.
+Appointment Details exposes `Supprimer définitivement` only in its secondary/destructive actions. Tapping it opens
+a focused confirmation explaining that the Appointment will disappear from both Agenda and Client history and
+that the operation is irreversible. Confirming removes the exact record from the in-memory Appointment session,
+uses restrained destructive feedback, and returns to the previous screen without showing a not-found state.
+
+Cancellation and no-show must never silently delete historical information. Their metadata remains attached until
+the professional explicitly chooses permanent deletion.
+
+Agenda Day and Week keep completed appointments visible with calmer treatment. Cancellation and no-show remain in
+history but are excluded before Agenda occupancy and overlap placement, so their former time becomes visibly free.
+Active/completed geometry, ordered phases, processing gaps, reprises, and overlaps remain unchanged.
 
 ---
 
@@ -388,10 +428,11 @@ The Client Profile structure stays stable from client to client: the
 the `Rendez-vous` section always shows its restrained empty state when there
 is no Souris history.
 
-Activity rules are explicit: counts come from status only (COMPLETED,
-CANCELLED, NO_SHOW); `Total dépensé` is the sum of AppointmentItem snapshot
-prices for COMPLETED appointments only. History rows open the existing
-Appointment Details.
+Activity rules are explicit: completed and no-show counts come from their status; `Annulations` counts only
+`CANCELLED` appointments whose recorded actor is `CLIENT`. A `BUSINESS` cancellation remains visible in history as
+`Annulé par le salon` but does not count against the Client. `Total dépensé` is the sum of AppointmentItem snapshot
+prices for COMPLETED appointments only. History rows open the existing Appointment Details. Permanently deleting an
+Appointment removes its history row and all derived count or spending contributions without mutating the Client.
 
 ### Birthday
 

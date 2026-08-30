@@ -36,3 +36,14 @@ export {
   hydrateAppointmentDrafts,
   updateAppointmentFromDrafts,
 } from "./editing";
+
+export {
+  canCompleteAppointment,
+  canCancelAppointment,
+  canMarkAppointmentNoShow,
+  shouldAutoCompleteAppointment,
+  completeAppointment,
+  cancelAppointment,
+  markAppointmentNoShow,
+  finalizePastBusinessDays,
+} from "./lifecycle";
