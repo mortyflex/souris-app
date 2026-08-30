@@ -12,10 +12,12 @@ import {
 export {
   formatAppointmentDate,
   formatAppointmentTime,
+  formatCancellationActorLabel,
   formatDurationMinutes,
   formatPrice,
   getAppointmentEnd,
   getAppointmentStatusLabel,
+  isTerminalAppointmentStatus,
 } from '@/features/appointments/presentation';
 
 export interface AppointmentDetailService {

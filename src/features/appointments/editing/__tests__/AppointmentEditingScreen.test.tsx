@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Alert, Text } from 'react-native';
+import { Alert, Pressable, Text } from 'react-native';
 
 import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
@@ -76,7 +76,7 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 function SessionProbe() {
-  const { getAppointmentById } = useAppointmentSession();
+  const { getAppointmentById, updateAppointment } = useAppointmentSession();
   const entry = getAppointmentById('agenda-sofia');
   const items = entry?.appointment.items ?? [];
   return (
@@ -91,6 +91,15 @@ function SessionProbe() {
           )
           .join('|')}
       </Text>
+      <Pressable
+        testID="complete-edited-appointment"
+        onPress={() => {
+          if (!entry) return;
+          updateAppointment({
+            appointment: { ...entry.appointment, status: 'COMPLETED' },
+          });
+        }}
+      />
     </>
   );
 }
@@ -202,5 +211,16 @@ describe('AppointmentEditingScreen', () => {
       expect.any(Array),
     );
     alertSpy.mockRestore();
+  });
+
+  it('stops editing when the appointment reaches a terminal outcome', async () => {
+    const view = await renderEditor();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('complete-edited-appointment'));
+    });
+
+    expect(view.getByText('Modification indisponible')).toBeTruthy();
+    expect(view.queryByTestId('save-appointment-edit')).toBeNull();
   });
 });

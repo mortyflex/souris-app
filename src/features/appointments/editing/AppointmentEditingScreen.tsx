@@ -23,6 +23,7 @@ import {
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
+import { isTerminalAppointmentStatus } from '@/features/appointments/presentation';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -66,6 +67,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   const [drafts, setDrafts] = useState<readonly SelectedServiceDraft[]>(initialDrafts);
   const [isLeaving, setIsLeaving] = useState(false);
   const isDirty = !areDraftsEqual(drafts, initialDrafts);
+  const isTerminal = appointment ? isTerminalAppointmentStatus(appointment.status) : false;
 
   const requestDiscard = () => {
     Alert.alert(
@@ -78,7 +80,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     );
   };
 
-  usePreventRemove(isDirty && !isLeaving, requestDiscard);
+  usePreventRemove(isDirty && !isLeaving && !isTerminal, requestDiscard);
 
   useEffect(() => {
     if (isLeaving) {
@@ -93,6 +95,19 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           <AppText variant="stateTitle">Rendez-vous introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
             Ce rendez-vous n&apos;est plus disponible.
+          </AppText>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isTerminal) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.notFound}>
+          <AppText variant="stateTitle">Modification indisponible</AppText>
+          <AppText variant="metadata" style={styles.notFoundText}>
+            Ce rendez-vous a un statut final et ne peut plus être modifié.
           </AppText>
         </View>
       </SafeAreaView>
@@ -137,7 +152,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   };
 
   const save = () => {
-    if (!isDirty) return;
+    if (!isDirty || isTerminal) return;
 
     const updatedAppointment = updateAppointmentFromDrafts(
       appointment,

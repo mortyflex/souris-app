@@ -2,6 +2,7 @@ import type { Appointment, AppointmentPhase } from '@/domain/appointments';
 
 import { buildAgendaStaffSegments } from '../layout/agenda-staff-segments';
 import { calculateDayIntervalLayout } from '../layout/day-layout';
+import { getOperationalAgendaEntries } from '../operational-visibility';
 
 function at(minutes: number): Date {
   return new Date(2026, 7, 24, 9, minutes);
@@ -78,6 +79,21 @@ describe('buildAgendaStaffSegments', () => {
     expect(segments[1].isResume).toBe(true);
   });
 
+  it('carries completed status without changing visible geometry', () => {
+    const value = createAppointment([
+      phase('application', 'Application', 15, true),
+      phase('processing', 'Temps de pose', 35, false),
+      phase('finish', 'Rinçage', 10, true),
+    ]);
+    const segments = buildAgendaStaffSegments({ ...value, status: 'COMPLETED' });
+
+    expect(segments.map(({ status }) => status)).toEqual(['COMPLETED', 'COMPLETED']);
+    expect(segments.map(({ startAt, endAt }) => [startAt, endAt])).toEqual([
+      [at(0), at(15)],
+      [at(50), at(60)],
+    ]);
+  });
+
   it('keeps consecutive active phases in one continuous segment', () => {
     const segments = buildAgendaStaffSegments(
       createAppointment([
@@ -113,5 +129,36 @@ describe('buildAgendaStaffSegments', () => {
 
     expect(visibleOverlap).toBe(false);
     expect(layout.every((segment) => segment.columnCount === 1)).toBe(true);
+  });
+
+  it('excludes cancelled and no-show records before overlap columns are calculated', () => {
+    const active = createAppointment(
+      [phase('active', 'Coupe', 60, true)],
+      'active',
+    );
+    const cancelled = {
+      ...createAppointment([phase('cancelled', 'Coupe', 60, true)], 'cancelled'),
+      status: 'CANCELLED' as const,
+    };
+    const noShow = {
+      ...createAppointment([phase('no-show', 'Coupe', 60, true)], 'no-show'),
+      status: 'NO_SHOW' as const,
+    };
+    const operationalEntries = getOperationalAgendaEntries([
+      { appointment: cancelled },
+      { appointment: active },
+      { appointment: noShow },
+    ]);
+    const segments = operationalEntries.flatMap(({ appointment }) =>
+      buildAgendaStaffSegments(appointment),
+    );
+    const layout = calculateDayIntervalLayout(segments);
+
+    expect(segments.map(({ appointmentId }) => appointmentId)).toEqual(['active']);
+    expect(layout.map(({ id, column, columnCount }) => ({
+      id,
+      column,
+      columnCount,
+    }))).toEqual([{ id: 'active:active', column: 0, columnCount: 1 }]);
   });
 });

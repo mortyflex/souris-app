@@ -27,6 +27,7 @@ import {
   startOfLocalDay,
 } from './calendar/week';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { getOperationalAgendaEntries } from './operational-visibility';
 
 const dayNames = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
 const monthFormatter = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
@@ -62,9 +63,10 @@ export function AgendaScreen() {
   const [selectedDay, setSelectedDay] = useState<Date>(today);
   const [mode, setMode] = useState<AgendaViewMode>('day');
   const { appointments: allAppointments } = useAppointmentSession();
+  const operationalAppointments = getOperationalAgendaEntries(allAppointments);
   const previousTodayRef = useRef(today);
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
-  const selectedDayAppointments = allAppointments.filter(({ appointment }) =>
+  const selectedDayAppointments = operationalAppointments.filter(({ appointment }) =>
     isSameLocalDay(appointment.startAt, selectedDay),
   );
 
@@ -173,7 +175,7 @@ export function AgendaScreen() {
           <View style={[styles.dayStrip, { paddingHorizontal: horizontalGutter }]}>
             {getWeekDays(selectedDay).map((day, index) => {
               const selected = isSameLocalDay(day, selectedDay);
-              const hasAppointments = allAppointments.some(({ appointment }) =>
+              const hasAppointments = operationalAppointments.some(({ appointment }) =>
                 isSameLocalDay(appointment.startAt, day),
               );
               return (
@@ -193,7 +195,7 @@ export function AgendaScreen() {
         </>
       ) : (
         <WeekView
-          appointments={allAppointments}
+          appointments={operationalAppointments}
           selectedDay={selectedDay}
           today={today}
           onSelectDay={selectDay}

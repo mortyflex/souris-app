@@ -86,9 +86,9 @@ export function getHistoricalClientAppointments(
 /**
  * The complete derived activity of one client.
  *
- * Count rules are explicit and status-based — never date-based:
+ * Count rules are explicit and never date-based:
  *   Rendez-vous réalisés  → COMPLETED only
- *   Annulations           → CANCELLED only
+ *   Annulations           → CANCELLED by CLIENT only
  *   Absences              → NO_SHOW only
  *   Total dépensé         → snapshot prices of COMPLETED only
  */
@@ -110,7 +110,10 @@ export function getClientActivitySummary(
     if (appointment.status === 'COMPLETED') {
       completedAppointmentCount += 1;
       totalSpent += getAppointmentSnapshotTotal(appointment);
-    } else if (appointment.status === 'CANCELLED') {
+    } else if (
+      appointment.status === 'CANCELLED' &&
+      appointment.cancellation?.cancelledBy === 'CLIENT'
+    ) {
       cancelledAppointmentCount += 1;
     } else if (appointment.status === 'NO_SHOW') {
       noShowAppointmentCount += 1;

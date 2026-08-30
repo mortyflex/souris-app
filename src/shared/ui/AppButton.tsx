@@ -12,12 +12,13 @@ import {
   interaction,
   lavender,
   radii,
+  rose,
   semanticColors,
   spacing,
   touchTarget,
 } from './theme';
 
-type AppButtonVariant = 'primary' | 'secondary' | 'tertiary';
+type AppButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'danger';
 
 interface AppButtonProps extends Omit<PressableProps, 'children' | 'style'> {
   readonly title: string;
@@ -54,9 +55,11 @@ export function AppButton({
         style={[
           variant === 'primary'
             ? styles.primaryText
-            : variant === 'tertiary'
-              ? styles.tertiaryText
-              : styles.secondaryText,
+            : variant === 'danger'
+              ? styles.dangerText
+              : variant === 'tertiary'
+                ? styles.tertiaryText
+                : styles.secondaryText,
           disabled && styles.disabledText,
         ]}
       >
@@ -75,8 +78,12 @@ const styles = StyleSheet.create({
     minHeight: minimumHeight,
     paddingHorizontal: spacing.base,
   },
-  disabled: { backgroundColor: semanticColors.surface },
+  disabled: {
+    backgroundColor: semanticColors.surface,
+    borderColor: semanticColors.borderSubtle,
+  },
   disabledText: { color: semanticColors.foregroundMuted },
+  dangerText: { color: rose.rose600 },
   primaryText: { color: semanticColors.surfaceElevated },
   secondaryText: { color: semanticColors.foreground },
   tertiaryText: { color: semanticColors.accent },
@@ -86,6 +93,11 @@ const variants = StyleSheet.create({
   primary: { backgroundColor: semanticColors.accent },
   secondary: { backgroundColor: semanticColors.surfaceLavender },
   tertiary: { backgroundColor: 'transparent' },
+  danger: {
+    backgroundColor: 'transparent',
+    borderColor: rose.rose200,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
 });
 
 const pressedVariants = StyleSheet.create({
@@ -99,6 +111,11 @@ const pressedVariants = StyleSheet.create({
   },
   tertiary: {
     backgroundColor: semanticColors.surfaceLavender,
+    transform: [{ scale: interaction.pressedScale }],
+  },
+  danger: {
+    backgroundColor: rose.rose050,
+    borderColor: rose.rose600,
     transform: [{ scale: interaction.pressedScale }],
   },
 });

@@ -1,15 +1,14 @@
 // Souris — Development Agenda fixtures
 //
 // Initial in-memory Agenda data; history and persistence are intentionally
-// absent. Fixture status is seed data, never auto-computed at runtime:
-// appointments on weekdays BEFORE the anchor day represent normally
-// completed services and are seeded as COMPLETED; same-day and later
-// appointments stay SCHEDULED.
+// absent. Every fixture is seeded SCHEDULED: status is raw seed data only.
+// Automatic previous-local-day completion is product behavior and runs at
+// the appointment session boundary (reconciliation), never inside fixtures.
 
 import type { AppointmentItem, AppointmentPhase } from '@/domain/appointments';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 
-import { getWeekDays, isSameLocalDay, startOfLocalDay } from '../calendar/week';
+import { getWeekDays, isSameLocalDay } from '../calendar/week';
 
 function localTime(day: Date, hour: number, minute: number): Date {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute);
@@ -44,7 +43,6 @@ function item(
 }
 
 function fixture(
-  anchorDay: Date,
   day: Date,
   id: string,
   hour: number,
@@ -52,8 +50,6 @@ function fixture(
   itemValue: AppointmentItem,
   additionalItems: readonly AppointmentItem[] = [],
 ): AppointmentSessionEntry {
-  const isPast = day.getTime() < startOfLocalDay(anchorDay).getTime();
-
   return {
     appointment: {
       id,
@@ -61,7 +57,7 @@ function fixture(
       clientId: `client-${id}`,
       staffMemberId: 'staff-amelie',
       startAt: localTime(day, hour, minute),
-      status: isPast ? 'COMPLETED' : 'SCHEDULED',
+      status: 'SCHEDULED',
       items: [itemValue, ...additionalItems],
     },
   };
@@ -78,7 +74,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
   return [
     fixture(
       day,
-      day,
       'agenda-lea',
       9,
       0,
@@ -90,7 +85,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
     ),
     fixture(
       day,
-      day,
       'agenda-camille',
       9,
       20,
@@ -100,7 +94,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
     ),
     fixture(
       day,
-      day,
       'agenda-ines',
       14,
       40,
@@ -109,7 +102,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ]),
     ),
     fixture(
-      day,
       day,
       'agenda-sofia',
       14,
@@ -122,7 +114,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
     ),
     fixture(
       day,
-      day,
       'agenda-nadia',
       17,
       30,
@@ -131,7 +122,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ]),
     ),
     fixture(
-      day,
       busyDay,
       'agenda-elodie',
       9,
@@ -141,7 +131,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ]),
     ),
     fixture(
-      day,
       busyDay,
       'agenda-hugo',
       13,
@@ -151,7 +140,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ]),
     ),
     fixture(
-      day,
       mediumDay,
       'agenda-julie',
       10,
@@ -166,7 +154,6 @@ export function createAgendaFixtures(day: Date): readonly AppointmentSessionEntr
       ],
     ),
     fixture(
-      day,
       lightDay,
       'agenda-anais',
       11,

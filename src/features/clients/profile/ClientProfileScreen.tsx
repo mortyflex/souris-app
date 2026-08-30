@@ -25,6 +25,7 @@ import {
   formatAppointmentDate,
   formatAppointmentServiceSummary,
   formatAppointmentTime,
+  formatCancellationActorLabel,
   formatPrice,
   getAppointmentEnd,
   getAppointmentSnapshotTotal,
@@ -316,14 +317,24 @@ interface AppointmentRowProps {
 }
 
 function AppointmentRow({ appointment, onPress }: AppointmentRowProps) {
-  const statusLabel = isTerminalAppointmentStatus(appointment.status)
-    ? getAppointmentStatusLabel(appointment.status)
-    : undefined;
+  const statusLabel =
+    appointment.status === 'CANCELLED' && appointment.cancellation
+      ? formatCancellationActorLabel(appointment.cancellation.cancelledBy)
+      : isTerminalAppointmentStatus(appointment.status)
+        ? getAppointmentStatusLabel(appointment.status)
+        : undefined;
+  const isException = appointment.status === 'CANCELLED' || appointment.status === 'NO_SHOW';
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Rendez-vous du ${formatAppointmentDate(appointment.startAt)} à ${formatAppointmentTime(appointment.startAt)}, ${formatAppointmentServiceSummary(appointment)}`}
+      accessibilityLabel={[
+        `Rendez-vous du ${formatAppointmentDate(appointment.startAt)} à ${formatAppointmentTime(appointment.startAt)}`,
+        formatAppointmentServiceSummary(appointment),
+        statusLabel,
+      ]
+        .filter(Boolean)
+        .join(', ')}
       onPress={onPress}
       style={({ pressed }) => [styles.appointmentRow, pressed && styles.appointmentRowPressed]}
     >
@@ -336,7 +347,10 @@ function AppointmentRow({ appointment, onPress }: AppointmentRowProps) {
             {`${formatAppointmentDate(appointment.startAt)} · ${formatAppointmentTime(appointment.startAt)}`}
           </AppText>
           {statusLabel && (
-            <AppText variant="metadata" style={styles.terminalStatus}>
+            <AppText
+              variant="metadata"
+              style={isException ? styles.exceptionStatus : styles.completedStatus}
+            >
               {` · ${statusLabel}`}
             </AppText>
           )}
@@ -468,7 +482,8 @@ const styles = StyleSheet.create({
   appointmentTitle: { color: semanticColors.foreground },
   appointmentMetaRow: { flexDirection: 'row' },
   appointmentMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  terminalStatus: { color: rose.rose600 },
+  completedStatus: { color: foregroundSoft },
+  exceptionStatus: { color: rose.rose600 },
   appointmentPrice: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
   emptyHistory: {
     backgroundColor: semanticColors.surface,

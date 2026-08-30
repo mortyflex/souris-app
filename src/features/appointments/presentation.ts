@@ -8,6 +8,7 @@ import {
   getAppointmentEndAt,
   getOrderedItems,
   type Appointment,
+  type AppointmentCancellationActor,
 } from '@/domain/appointments';
 
 const statusLabels = {
@@ -23,9 +24,13 @@ export function getAppointmentStatusLabel(status: Appointment['status']): string
   return statusLabels[status];
 }
 
-/** Terminal historical outcomes remain visible in Client history. */
+/** Final historical outcomes remain visible in Appointment history. */
 export function isTerminalAppointmentStatus(status: Appointment['status']): boolean {
-  return status === 'CANCELLED' || status === 'NO_SHOW';
+  return status === 'COMPLETED' || status === 'CANCELLED' || status === 'NO_SHOW';
+}
+
+export function formatCancellationActorLabel(actor: AppointmentCancellationActor): string {
+  return actor === 'CLIENT' ? 'Annulé par la cliente' : 'Annulé par le salon';
 }
 
 export function formatAppointmentTime(date: Date): string {
