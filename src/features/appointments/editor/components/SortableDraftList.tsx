@@ -25,7 +25,7 @@
 // serviceId is unique within the draft list by product rule: the selection
 // toggle prevents duplicate selections of the same catalog service.
 
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -49,10 +49,21 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 import { getSelectedServiceDraftKey, type SelectedServiceDraft } from '../draft';
-import { SelectedServiceCard } from './SelectedServiceCard';
+import { AppointmentServiceEditorCard } from './AppointmentServiceEditorCard';
 
 export interface SortableDraftEntry {
   readonly draft: SelectedServiceDraft;
+}
+
+export interface SortableDraftCardProps {
+  readonly draft: SelectedServiceDraft;
+  readonly expanded: boolean;
+  readonly onToggleExpanded: () => void;
+  readonly onUpdatePrice: (price: number) => void;
+  readonly onUpdatePhaseDuration: (phaseId: string, durationMinutes: number) => void;
+  readonly onRemove: () => void;
+  readonly canRemove: boolean;
+  readonly dragHandle?: ReactNode;
 }
 
 interface SortableDraftListProps {
@@ -68,6 +79,8 @@ interface SortableDraftListProps {
   ) => void;
   readonly onRemove: (draftKey: string) => void;
   readonly canRemove: boolean;
+  /** Card renderer; defaults to the shared appointment editor card. */
+  readonly renderCard?: (props: SortableDraftCardProps) => ReactNode;
 }
 
 const GAP = spacing.sm;
@@ -85,6 +98,7 @@ export function SortableDraftList({
   onUpdatePhaseDuration,
   onRemove,
   canRemove,
+  renderCard,
 }: SortableDraftListProps) {
   const [heights, setHeights] = useState<HeightMap>({});
   const reducedMotion = useReducedMotion();
@@ -158,6 +172,7 @@ export function SortableDraftList({
             canRemove={canRemove}
             expanded={expandedDraftId === draftKey}
             onToggleExpanded={() => onToggleExpanded(draftKey)}
+            renderCard={renderCard}
           />
         );
       })}
@@ -349,6 +364,7 @@ interface SortableRowProps {
   readonly onUpdatePhaseDuration: (phaseId: string, durationMinutes: number) => void;
   readonly onRemove: () => void;
   readonly canRemove: boolean;
+  readonly renderCard?: (props: SortableDraftCardProps) => ReactNode;
 }
 
 function SortableRow({
@@ -373,6 +389,7 @@ function SortableRow({
   onUpdatePhaseDuration,
   onRemove,
   canRemove,
+  renderCard,
 }: SortableRowProps) {
   // Row-local primitive shared value: true once the row has rendered its
   // first absolute frame. The first frame is applied directly so the row
@@ -449,18 +466,33 @@ function SortableRow({
       onLayout={measure}
       style={[ready ? styles.rowAbsolute : styles.rowFlow, ready && animatedStyle]}
     >
-      <SelectedServiceCard
-        draft={draft}
-        expanded={expanded}
-        dragHandle={
-          sortable ? <DragHandle dragGesture={dragGesture} serviceName={serviceName} /> : undefined
-        }
-        canRemove={canRemove}
-        onRemove={onRemove}
-        onToggleExpanded={onToggleExpanded}
-        onUpdatePhaseDuration={onUpdatePhaseDuration}
-        onUpdatePrice={onUpdatePrice}
-      />
+      {renderCard
+        ? renderCard({
+            draft,
+            expanded,
+            onToggleExpanded,
+            onUpdatePrice,
+            onUpdatePhaseDuration,
+            onRemove,
+            canRemove,
+            dragHandle: sortable ? (
+              <DragHandle dragGesture={dragGesture} serviceName={serviceName} />
+            ) : undefined,
+          })
+        : (
+            <AppointmentServiceEditorCard
+              draft={draft}
+              expanded={expanded}
+              dragHandle={
+                sortable ? <DragHandle dragGesture={dragGesture} serviceName={serviceName} /> : undefined
+              }
+              canRemove={canRemove}
+              onRemove={onRemove}
+              onToggleExpanded={onToggleExpanded}
+              onUpdatePhaseDuration={onUpdatePhaseDuration}
+              onUpdatePrice={onUpdatePrice}
+            />
+          )}
     </Animated.View>
   );
 }

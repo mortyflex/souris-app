@@ -1,7 +1,12 @@
 // Souris - Existing Appointment service editing screen
 //
-// The screen owns a draft until the explicit save action. Appointment
-// metadata is shown as context only and is never editable in this phase.
+// ONE continuous editor: editable Date/Heure context, the retained
+// AppointmentItem stack (snapshot hydration only), and the shared grouped
+// catalog inline for ADDING new current Services. No secondary catalog mode.
+//
+// Existing AppointmentItems hydrate ONLY from their snapshots; the catalog
+// grid uses a separate pending-add selection. Editing an existing
+// Appointment never writes the catalog.
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -10,6 +15,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -22,20 +28,22 @@ import {
 } from '@/domain/appointments';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { isTerminalAppointmentStatus } from '@/features/appointments/presentation';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
   gutter,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
 
-import { AppointmentContextRow } from '../creation/components/AppointmentContextRow';
 import { createNewAppointmentItemId } from '../creation/runtime-ids';
-import { ServiceCatalogEditor } from '../editor/components/ServiceCatalogEditor';
+import { ServiceSelectionGrid } from '../editor/components/ServiceSelectionGrid';
+import { SortableDraftList } from '../editor/components/SortableDraftList';
 import {
   areDraftsEqual,
   createSelectedServiceDraft,
@@ -47,27 +55,44 @@ import {
   updateDraftPrice,
   type SelectedServiceDraft,
 } from '../editor/draft';
+import { ClientPickerSheet } from './components/ClientPickerSheet';
+import { EditableAppointmentContext } from './components/EditableAppointmentContext';
+import { isSameStartAt } from './start-at';
 
 interface AppointmentEditingScreenProps {
   readonly appointmentId?: string;
 }
 
+const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
+
 export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingScreenProps) {
   const router = useRouter();
   const { getAppointmentById, updateAppointment } = useAppointmentSession();
   const { getClientById } = useClientSession();
+  const { getServiceById, activeServices } = useServiceCatalog();
   const entry = getAppointmentById(appointmentId);
   const appointment = entry?.appointment;
-  const clientName = appointment
-    ? getResolvedClientDisplayName(getClientById(appointment.clientId))
-    : undefined;
   const [initialDrafts] = useState<readonly SelectedServiceDraft[]>(() =>
     appointment ? hydrateAppointmentDrafts(appointment) : [],
   );
+  const [initialStartAt] = useState<Date | undefined>(() =>
+    appointment ? new Date(appointment.startAt) : undefined,
+  );
+  const [initialClientId] = useState<string | undefined>(() => appointment?.clientId);
   const [drafts, setDrafts] = useState<readonly SelectedServiceDraft[]>(initialDrafts);
+  const [draftStartAt, setDraftStartAt] = useState<Date | undefined>(initialStartAt);
+  const [draftClientId, setDraftClientId] = useState<string | undefined>(initialClientId);
+  const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
+  const [clientPickerVisible, setClientPickerVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
-  const isDirty = !areDraftsEqual(drafts, initialDrafts);
+  const isDirty =
+    !areDraftsEqual(drafts, initialDrafts) ||
+    (draftStartAt !== undefined &&
+      initialStartAt !== undefined &&
+      !isSameStartAt(draftStartAt, initialStartAt)) ||
+    draftClientId !== initialClientId;
   const isTerminal = appointment ? isTerminalAppointmentStatus(appointment.status) : false;
+  const clientName = getResolvedClientDisplayName(getClientById(draftClientId));
 
   const requestDiscard = () => {
     Alert.alert(
@@ -88,7 +113,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     }
   }, [isLeaving, router]);
 
-  if (!entry || !appointment) {
+  if (!entry || !appointment || !initialStartAt || !draftStartAt || !initialClientId) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.notFound}>
@@ -114,19 +139,6 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     );
   }
 
-  const addService = (service: Service) => {
-    if (drafts.some((draft) => draft.serviceId === service.id)) return;
-    haptics.selection();
-    setDrafts((current) => [
-      ...current,
-      {
-        ...createSelectedServiceDraft(service),
-        appointmentItemId: createNewAppointmentItemId(appointment.id),
-        order: current.length,
-      },
-    ]);
-  };
-
   const removeDraft = (draftKey: string) => {
     if (!canRemoveAppointmentItem(drafts.length)) return;
     if (!drafts.some((draft) => getSelectedServiceDraftKey(draft) === draftKey)) return;
@@ -134,6 +146,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     setDrafts((current) =>
       current.filter((draft) => getSelectedServiceDraftKey(draft) !== draftKey),
     );
+    setExpandedDraftId((current) => (current === draftKey ? null : current));
   };
 
   const reorderSelectedDrafts = (fromIndex: number, toIndex: number) => {
@@ -151,6 +164,20 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     );
   };
 
+  const addServiceImmediately = (service: Service) => {
+    // No duplicate copies of a Service already present in the draft.
+    if (drafts.some((draft) => draft.serviceId === service.id)) return;
+    haptics.selection();
+    setDrafts((current) => [
+      ...current,
+      {
+        ...createSelectedServiceDraft(service),
+        appointmentItemId: createNewAppointmentItemId(appointment.id),
+        order: current.length,
+      },
+    ]);
+  };
+
   const save = () => {
     if (!isDirty || isTerminal) return;
 
@@ -158,7 +185,14 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
       appointment,
       drafts.map((draft, index) => toAppointmentItemEditDraft(draft, index)),
     );
-    updateAppointment({ ...entry, appointment: updatedAppointment });
+    updateAppointment({
+      ...entry,
+      appointment: {
+        ...updatedAppointment,
+        clientId: draftClientId ?? appointment.clientId,
+        startAt: new Date(draftStartAt),
+      },
+    });
     haptics.success();
     setIsLeaving(true);
   };
@@ -193,27 +227,49 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           />
         </View>
 
-        <AppointmentContextRow
-          clientName={clientName}
-          startAt={appointment.startAt}
-        />
+        <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.editorContent, { paddingHorizontal: horizontalGutter }]}
+        >
+          <EditableAppointmentContext
+            clientName={clientName}
+            startAt={draftStartAt}
+            onEditClient={() => setClientPickerVisible(true)}
+            onStartAtChange={setDraftStartAt}
+          />
 
-        <ServiceCatalogEditor
-          catalogLabel="+ Ajouter une prestation"
-          onRemoveDraft={removeDraft}
-          onReorderDrafts={reorderSelectedDrafts}
-          onToggleService={addService}
-          onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
-            updateDraft(draftKey, (draft) =>
-              updateDraftPhaseDuration(draft, phaseId, durationMinutes),
-            )
-          }
-          onUpdatePrice={(draftKey, price) =>
-            updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
-          }
-          preventRemovingFinalService
-          selectedDrafts={drafts}
-        />
+          <View style={styles.selectedSection}>
+            <SectionHeader count={drafts.length} title="Prestations" />
+            <SortableDraftList
+              canRemove={drafts.length > 1}
+              entries={drafts.map((draft) => ({ draft }))}
+              expandedDraftId={expandedDraftId}
+              onRemove={removeDraft}
+              onReorder={reorderSelectedDrafts}
+              onToggleExpanded={(draftKey) =>
+                setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
+              }
+              onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
+                updateDraft(draftKey, (draft) =>
+                  updateDraftPhaseDuration(draft, phaseId, durationMinutes),
+                )
+              }
+              onUpdatePrice={(draftKey, price) =>
+                updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
+              }
+            />
+          </View>
+
+          <View style={styles.catalogSection}>
+            <ServiceSelectionGrid
+              services={activeServices}
+              selectedServiceIds={drafts.map((draft) => draft.serviceId)}
+              onToggleService={addServiceImmediately}
+            />
+          </View>
+        </ScrollView>
 
         <View style={styles.footer}>
           <AppButton
@@ -230,6 +286,16 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
             title="Enregistrer les modifications"
           />
         </View>
+
+        <ClientPickerSheet
+          selectedClientId={draftClientId}
+          visible={clientPickerVisible}
+          onClose={() => setClientPickerVisible(false)}
+          onSelectClient={(clientId) => {
+            setDraftClientId(clientId);
+            setClientPickerVisible(false);
+          }}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -242,13 +308,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: Platform.OS === 'android' ? gutter.android : gutter.ios,
     paddingBottom: spacing.xs,
+    paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
   },
   headerCopy: { flex: 1 },
   eyebrow: { color: semanticColors.accent },
   cancelButton: { paddingHorizontal: spacing.md },
+  editorContent: {
+    gap: spacing.base,
+    paddingBottom: spacing.xl,
+    paddingTop: spacing.base,
+  },
+  selectedSection: { gap: spacing.sm },
+  catalogSection: { gap: spacing.sm },
   footer: {
     backgroundColor: semanticColors.surfaceElevated,
     borderTopColor: semanticColors.borderSubtle,
@@ -256,7 +329,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     paddingBottom: spacing.sm,
-    paddingHorizontal: Platform.OS === 'android' ? gutter.android : gutter.ios,
+    paddingHorizontal: horizontalGutter,
     paddingTop: spacing.md,
   },
   secondaryButton: { paddingHorizontal: spacing.base },

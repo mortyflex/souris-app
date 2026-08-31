@@ -49,7 +49,7 @@ describe('legacy TECHNIQUE adapter', () => {
     });
   });
 
-  it('keeps a TECHNIQUE without processing valid and does not invent a phase', () => {
+  it('classifies a zero-break record as SERVICE without inventing a pose phase', () => {
     const result = normalizeLegacyTechnique(
       {
         name: 'Coupe Brushing 1',
@@ -62,9 +62,11 @@ describe('legacy TECHNIQUE adapter', () => {
       businessId,
     );
 
-    expect(result?.type).toBe('TECHNIQUE');
+    expect(result?.type).toBe('SERVICE');
     expect(result?.phases).toHaveLength(1);
     expect(result?.phases[0].requiresStaff).toBe(true);
+    expect(result?.phases[0].durationMinutes).toBe(50);
+    expect(result?.phases.some((phase) => !phase.requiresStaff)).toBe(false);
   });
 
   it('is deterministic, preserves input, and discards aggregate/color fields', () => {

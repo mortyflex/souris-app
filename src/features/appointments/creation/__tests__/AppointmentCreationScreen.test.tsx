@@ -4,11 +4,13 @@
 // catalog. Proves the key creation behaviors end to end:
 // - the Agenda start time is visible from the first step;
 // - a client far beyond index 60 in the legacy source is reachable;
-// - appointment-specific price/processing overrides reach the summary;
-// - the draft survives Summary → Prestations → Summary transitions;
-// - a selected service can be removed directly from its draft card;
-// - the draft start time is adjustable in ±5 minute steps and drives
-//   the summary without changing durations.
+// - the Prestations step is a compact grouped multi-selection grid without
+//   a selected-services stack;
+// - the Résumé step hosts the ordered stacked accordion editor;
+// - price and phase-duration adjustments commit to the catalog only when
+//   creation succeeds, and the Appointment snapshot uses the same values;
+// - abandoned creations and deselected services never touch the catalog;
+// - a client can be created directly from the picker.
 
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { Pressable, Text } from 'react-native';
@@ -104,14 +106,45 @@ type Rendered = Awaited<ReturnType<typeof renderCreation>>;
 function SessionProbe() {
   const { clients } = useClientSession();
   const { appointments } = useAppointmentSession();
-  const { setServiceActive } = useServiceCatalog();
+  const { getServiceById, setServiceActive } = useServiceCatalog();
   const newest = appointments[appointments.length - 1]?.appointment;
   const createdClient = clients.find((client) => client.firstName === 'Nouvelle');
+  const balayage = getServiceById('technique-balayage-balayage-1');
+  const brushing = getServiceById('service-brushing-brushing-1');
 
   return (
     <>
       <Text testID="new-client-id">{createdClient?.id ?? ''}</Text>
       <Text testID="last-appointment-client-id">{newest?.clientId ?? ''}</Text>
+      <Text testID="appointments-probe">
+        {appointments
+          .map(
+            ({ appointment }) =>
+              `${appointment.id}|${appointment.items
+                .map(
+                  (item) =>
+                    `${item.serviceName}:${item.price}:${item.phases
+                      .map((phase) => phase.durationMinutes)
+                      .join('/')}`,
+                )
+                .join(';')}`,
+          )
+          .join('~')}
+      </Text>
+      <Text testID="catalog-balayage">
+        {balayage
+          ? `${balayage.price}:${balayage.phases
+              .map((phase) => `${phase.id}=${phase.durationMinutes}`)
+              .join(',')}`
+          : 'missing'}
+      </Text>
+      <Text testID="catalog-brushing-1">
+        {brushing
+          ? `${brushing.price}:${brushing.phases
+              .map((phase) => `${phase.id}=${phase.durationMinutes}`)
+              .join(',')}`
+          : 'missing'}
+      </Text>
       <Pressable
         testID="deactivate-balayage"
         onPress={() => setServiceActive('technique-balayage-balayage-1', false)}
@@ -124,17 +157,27 @@ function SessionProbe() {
   );
 }
 
-function renderCreation() {
-  return render(
+function creationTree(screenKey: number) {
+  return (
     <ClientSessionProvider>
       <ServiceCatalogProvider>
         <AppointmentSessionProvider>
-          <AppointmentCreationScreen startAt={startAt} />
+          <AppointmentCreationScreen key={screenKey} startAt={startAt} />
           <SessionProbe />
         </AppointmentSessionProvider>
       </ServiceCatalogProvider>
-    </ClientSessionProvider>,
+    </ClientSessionProvider>
   );
+}
+
+function renderCreation() {
+  return render(creationTree(0));
+}
+
+async function restartCreation(view: Rendered, screenKey: number) {
+  await act(async () => {
+    view.rerender(creationTree(screenKey));
+  });
 }
 
 async function selectClientBeyond60(view: Rendered) {
@@ -165,206 +208,182 @@ async function searchService(view: Rendered, query: string) {
   });
 }
 
+async function clearServiceSearch(view: Rendered) {
+  await act(async () => {
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher une prestation'), '');
+  });
+}
+
+async function selectService(view: Rendered, name: string) {
+  await act(async () => {
+    fireEvent.press(view.getByText(name));
+  });
+}
+
+async function continueToSummary(view: Rendered) {
+  await act(async () => {
+    fireEvent.press(view.getByText('Continuer'));
+  });
+}
+
+async function expandService(view: Rendered, name: string) {
+  await act(async () => {
+    fireEvent.press(view.getByLabelText(`Développer ${name}`));
+  });
+}
+
 describe('AppointmentCreationScreen', () => {
   beforeEach(() => {
     mockBack.mockClear();
     mockSuccessHaptic.mockClear();
   });
 
-  it('creates an appointment with overrides and preserves the draft across step transitions', async () => {
+  it('presents a compact grouped selection grid without a selected stack', async () => {
     const view = await renderCreation();
-
-    // The Agenda-selected time is visible on the first screen.
-    expect(view.getByText('Mar. 25 août · 10:15')).toBeTruthy();
-
     await selectClientBeyond60(view);
 
-    // Prestations keeps the selected client and time visible.
+    expect(view.getByText('Services')).toBeTruthy();
+    expect(view.getByText('Techniques')).toBeTruthy();
+    expect(view.getByText('0 prestation sélectionnée')).toBeTruthy();
+
+    await selectService(view, 'Balayage 1');
+    expect(view.getByText('1 prestation sélectionnée')).toBeTruthy();
+    // No sticky selected-stack editor on the selection step.
+    expect(view.queryByLabelText('Développer Balayage 1')).toBeNull();
+    expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
+  });
+
+  it('search filters both sections, hides empty ones, and preserves selections', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+
+    await selectService(view, 'Brushing 1');
+    await searchService(view, 'balayage');
+
+    expect(view.getByText('Balayage 1')).toBeTruthy();
+    expect(view.queryByText('Services')).toBeNull();
+    expect(view.getByText('Techniques')).toBeTruthy();
+
+    await selectService(view, 'Balayage 1');
+    await clearServiceSearch(view);
+
+    // Both selections survive; both sections return.
+    expect(view.getByText('2 prestations sélectionnées')).toBeTruthy();
+    expect(view.getByText('Services')).toBeTruthy();
+    expect(view.getByText('Techniques')).toBeTruthy();
+  });
+
+  it('offers only active Services for new additions and reacts immediately', async () => {
+    const view = await renderCreation();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('deactivate-balayage'));
+    });
+    await selectClientBeyond60(view);
+    await searchService(view, 'balayage 1');
+
+    expect(view.queryByText('Balayage 1')).toBeNull();
+    expect(view.getByText('Aucune prestation trouvée')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('reactivate-balayage'));
+    });
+
+    expect(view.getByText('Balayage 1')).toBeTruthy();
+  });
+
+  it('creates an appointment with adjustments and preserves the draft across step transitions', async () => {
+    const view = await renderCreation();
+
+    expect(view.getByText('Mar. 25 août · 10:15')).toBeTruthy();
+    await selectClientBeyond60(view);
+
     expect(view.getByText('Claudine Couillard')).toBeTruthy();
     expect(view.getByText('Mar. 25 août · 10:15')).toBeTruthy();
 
-    // Select the Balayage 1 TECHNIQUE through the catalog search.
     await searchService(view, 'balayage 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Balayage 1'));
-    });
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
 
-    // New selections are compact; open the disclosure before editing.
+    // Summary hosts the stacked editor, collapsed by default.
+    expect(view.getByText('1 h 30 min + 1 h de pose')).toBeTruthy();
     expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
-    });
+    await expandService(view, 'Balayage 1');
 
     // Appointment-specific price: 45 → 50.
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '50');
     });
-    expect(view.getByText('50,00 €')).toBeTruthy();
+    expect(view.getAllByText('50,00 €').length).toBeGreaterThanOrEqual(1);
 
-    // Appointment-specific processing: 60 → 45 (three −5 steps).
-    const decreaseProcessing = view.getByLabelText('Réduire Temps de pose');
-    for (let index = 0; index < 3; index += 1) {
-      await act(async () => {
-        fireEvent.press(decreaseProcessing);
-      });
-    }
-    expect(
-      view.getByTestId('phase-value-technique-balayage-balayage-1-processing').props.children,
-    ).toBe('45 min');
-
+    // Per-phase durations: active 90 stays, pose 60 → 45.
+    expect(view.getByLabelText('Durée de Balayage 1').props.value).toBe('90');
     await act(async () => {
-      fireEvent.press(view.getByText('Continuer'));
+      fireEvent.changeText(view.getByLabelText('Durée de Temps de pose'), '45');
     });
+    expect(
+      view.getByText('Les modifications seront enregistrées pour les prochains rendez-vous.'),
+    ).toBeTruthy();
 
-    // Summary reflects the adjusted snapshot values.
+    // Summary reflects the adjusted draft values.
     expect(view.getByText('10:15 – 12:30')).toBeTruthy();
-    expect(view.getByText('Temps de pose')).toBeTruthy();
     expect(view.getByText('45 min')).toBeTruthy();
     expect(view.getByText('1 h 30 min')).toBeTruthy();
     expect(view.getByText('2 h 15 min')).toBeTruthy();
     expect(view.getAllByText('50,00 €').length).toBe(2);
 
-    // Modifier returns to Prestations with the draft preserved.
+    // Modifier les prestations returns to the grid with the draft preserved.
     await act(async () => {
       fireEvent.press(view.getByTestId('edit-services'));
     });
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
-    });
+    expect(view.getByText('1 prestation sélectionnée')).toBeTruthy();
+    await continueToSummary(view);
+    await expandService(view, 'Balayage 1');
     expect(view.getByDisplayValue('50,00')).toBeTruthy();
-    expect(
-      view.getByTestId('phase-value-technique-balayage-balayage-1-processing').props.children,
-    ).toBe('45 min');
+    expect(view.getByLabelText('Durée de Temps de pose').props.value).toBe('45');
 
-    // Returning forward keeps everything.
+    // Creation commits both the Appointment snapshot and the future default.
     await act(async () => {
-      fireEvent.press(view.getByText('Continuer'));
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
     });
-    expect(view.getByText('10:15 – 12:30')).toBeTruthy();
-    expect(view.getAllByText('50,00 €').length).toBe(2);
+
+    const catalog = view.getByTestId('catalog-balayage').props.children as string;
+    expect(catalog).toBe(
+      '50:technique-balayage-balayage-1-active=90,technique-balayage-balayage-1-processing=45',
+    );
+    const appointments = view.getByTestId('appointments-probe').props.children as string;
+    expect(appointments).toContain('Balayage 1:50:90/45');
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('removes a selected service directly from its draft card, dropping its overrides', async () => {
+  it('keeps only one Summary editor expanded and values survive collapse', async () => {
     const view = await renderCreation();
     await selectClientBeyond60(view);
 
-    // Select Balayage 1 and give it a custom price.
     await searchService(view, 'balayage 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Balayage 1'));
-    });
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
-    });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '50');
-    });
-
-    // With exactly one selected service no drag handle is shown.
-    expect(view.queryByLabelText('Déplacer Balayage 1')).toBeNull();
-
-    // Select a second service → drag handles appear.
+    await selectService(view, 'Balayage 1');
     await searchService(view, 'coupe brushing 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Coupe Brushing 1'));
-    });
+    await selectService(view, 'Coupe Brushing 1');
+    await continueToSummary(view);
+
+    // Both collapsed; drag handles visible for the ordered stack.
+    expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
+    expect(view.getByLabelText('Développer Balayage 1')).toBeTruthy();
+    expect(view.getByLabelText('Développer Coupe Brushing 1')).toBeTruthy();
     expect(view.getByLabelText('Déplacer Balayage 1')).toBeTruthy();
     expect(view.getByLabelText('Déplacer Coupe Brushing 1')).toBeTruthy();
 
-    // Remove the first service directly from its draft card.
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Retirer Balayage 1'));
-    });
-
-    // Only the second service remains in Sélectionnées (card + catalog row),
-    // and its drag handle is hidden again.
-    expect(view.queryByText('Balayage 1')).toBeNull();
-    expect(view.getAllByText('Coupe Brushing 1').length).toBe(2);
-    expect(view.queryByText('50,00 €')).toBeNull();
-    expect(view.getAllByText('40,00 €').length).toBe(2);
-    expect(view.queryByLabelText('Déplacer Coupe Brushing 1')).toBeNull();
-
-    // Re-selecting the removed service starts from catalog defaults again —
-    // the override was removed together with the draft entry.
-    await searchService(view, 'balayage 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Balayage 1'));
-    });
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
-    });
-    expect(view.getByDisplayValue('45,00')).toBeTruthy();
-  });
-
-  it('starts selected cards collapsed and keeps only one editor expanded', async () => {
-    const view = await renderCreation();
-    await selectClientBeyond60(view);
-
-    await searchService(view, 'balayage 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Balayage 1'));
-    });
-
-    expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
-    expect(view.queryByLabelText('Retirer Balayage 1')).toBeNull();
-    expect(view.getByLabelText('Développer Balayage 1')).toBeTruthy();
-    expect(view.getByText('1 h 30 min + 1 h de pose')).toBeTruthy();
-
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
-    });
-    expect(view.getByLabelText('Réduire Balayage 1')).toBeTruthy();
+    await expandService(view, 'Balayage 1');
     expect(view.getByLabelText('Prix de Balayage 1')).toBeTruthy();
-    expect(view.getByLabelText('Réduire Temps de pose')).toBeTruthy();
-    expect(view.getByLabelText('Retirer Balayage 1')).toBeTruthy();
+    expect(view.getByLabelText('Durée de Balayage 1')).toBeTruthy();
+    expect(view.getByLabelText('Durée de Temps de pose')).toBeTruthy();
 
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Réduire Temps de pose'));
-    });
-    expect(
-      view.getByTestId('phase-value-technique-balayage-balayage-1-processing').props.children,
-    ).toBe('55 min');
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '50');
-    });
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Réduire Balayage 1'));
-    });
+    // Expanding another card collapses the previous one.
+    await expandService(view, 'Coupe Brushing 1');
     expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
-    expect(view.queryByLabelText('Retirer Balayage 1')).toBeNull();
-    expect(view.getByText('1 h 30 min + 55 min de pose')).toBeTruthy();
-
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
-    });
-    expect(view.getByDisplayValue('50')).toBeTruthy();
-    expect(
-      view.getByTestId('phase-value-technique-balayage-balayage-1-processing').props.children,
-    ).toBe('55 min');
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Réduire Balayage 1'));
-    });
-
-    await searchService(view, 'coupe brushing 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Coupe Brushing 1'));
-    });
-
-    expect(view.getByLabelText('Développer Balayage 1')).toBeTruthy();
-    expect(view.getByLabelText('Développer Coupe Brushing 1')).toBeTruthy();
-
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Balayage 1'));
-    });
-    expect(view.getByLabelText('Réduire Balayage 1')).toBeTruthy();
-    expect(view.queryByLabelText('Prix de Coupe Brushing 1')).toBeNull();
-
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Coupe Brushing 1'));
-    });
-    expect(view.queryByLabelText('Réduire Balayage 1')).toBeNull();
-    expect(view.getByLabelText('Réduire Coupe Brushing 1')).toBeTruthy();
     expect(view.getByLabelText('Prix de Coupe Brushing 1')).toBeTruthy();
+    // A SERVICE exposes one simple Durée field.
+    expect(view.getByLabelText('Durée de Coupe Brushing 1')).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(view.getByLabelText('Réduire Coupe Brushing 1'));
@@ -372,23 +391,195 @@ describe('AppointmentCreationScreen', () => {
     expect(view.queryByLabelText('Prix de Coupe Brushing 1')).toBeNull();
   });
 
+  it('deselecting a modified service drops its draft and never commits it', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+    await expandService(view, 'Balayage 1');
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '110');
+    });
+
+    // Back to selection and deselect the modified service.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('edit-services'));
+    });
+    await selectService(view, 'Balayage 1');
+    expect(view.getByText('0 prestation sélectionnée')).toBeTruthy();
+
+    await searchService(view, 'coupe brushing 1');
+    await selectService(view, 'Coupe Brushing 1');
+    await continueToSummary(view);
+    expect(view.queryByText('Balayage 1')).toBeNull();
+    expect(view.getByText('Coupe Brushing 1')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    // Balayage catalog untouched; appointment contains only Coupe Brushing 1.
+    const catalog = view.getByTestId('catalog-balayage').props.children as string;
+    expect(catalog).toContain('45:');
+    const appointments = view.getByTestId('appointments-probe').props.children as string;
+    expect(appointments).toContain('Coupe Brushing 1:40:50');
+    expect(appointments).not.toContain('Balayage 1:110');
+  });
+
+  it('appends new selections to the end of the appointment order', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+
+    await searchService(view, 'brushing 1');
+    await selectService(view, 'Brushing 1');
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+
+    expect(
+      view
+        .getAllByLabelText(/^Déplacer /)
+        .map((element) => element.props.accessibilityLabel),
+    ).toEqual(['Déplacer Brushing 1', 'Déplacer Balayage 1']);
+
+    // Return, add a third service, and the order appends it.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('edit-services'));
+    });
+    await searchService(view, 'chignon');
+    await selectService(view, 'Chignon');
+    await continueToSummary(view);
+
+    expect(
+      view
+        .getAllByLabelText(/^Déplacer /)
+        .map((element) => element.props.accessibilityLabel),
+    ).toEqual(['Déplacer Brushing 1', 'Déplacer Balayage 1', 'Déplacer Chignon']);
+  });
+
+  it('simple service price and duration become catalog defaults only on success', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+
+    await searchService(view, 'brushing 1');
+    await selectService(view, 'Brushing 1');
+    await continueToSummary(view);
+    await expandService(view, 'Brushing 1');
+
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Brushing 1'), '25');
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Durée de Brushing 1'), '35');
+    });
+
+    // Before creation the catalog keeps its current defaults.
+    expect(view.getByTestId('catalog-brushing-1').props.children).toContain('20:');
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    expect(view.getByTestId('catalog-brushing-1').props.children).toContain(
+      '25:service-brushing-brushing-1-phase=35',
+    );
+    const appointments = view.getByTestId('appointments-probe').props.children as string;
+    expect(appointments).toContain('Brushing 1:25:35');
+  });
+
+  it('abandoning creation leaves the catalog unchanged', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+    await expandService(view, 'Balayage 1');
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '110');
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Durée de Temps de pose'), '55');
+    });
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Annuler la création'));
+    });
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    const catalog = view.getByTestId('catalog-balayage').props.children as string;
+    expect(catalog).toBe(
+      '45:technique-balayage-balayage-1-active=90,technique-balayage-balayage-1-processing=60',
+    );
+  });
+
+  it('keeps earlier Appointment snapshots unchanged when defaults are updated', async () => {
+    const view = await renderCreation();
+
+    // First appointment uses catalog defaults (45 / 90 + 60).
+    await selectClientBeyond60(view);
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    // Second appointment adjusts the defaults: 110 / 35 + 55.
+    await restartCreation(view, 1);
+    await selectClientBeyond60(view);
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+    await expandService(view, 'Balayage 1');
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '110');
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Durée de Balayage 1'), '35');
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Durée de Temps de pose'), '55');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    // Catalog default and newest appointment use the new values…
+    const catalog = view.getByTestId('catalog-balayage').props.children as string;
+    expect(catalog).toBe(
+      '110:technique-balayage-balayage-1-active=35,technique-balayage-balayage-1-processing=55',
+    );
+    // …while the earlier Appointment keeps its booked snapshot.
+    const appointments = view.getByTestId('appointments-probe').props.children as string;
+    expect(appointments).toContain('Balayage 1:45:90/60');
+    expect(appointments).toContain('Balayage 1:110:35/55');
+
+    // A third creation starts from the new defaults.
+    await restartCreation(view, 2);
+    await selectClientBeyond60(view);
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+    await expandService(view, 'Balayage 1');
+    expect(view.getByDisplayValue('110,00')).toBeTruthy();
+    expect(view.getByLabelText('Durée de Balayage 1').props.value).toBe('35');
+    expect(view.getByLabelText('Durée de Temps de pose').props.value).toBe('55');
+  });
+
   it('steps the draft start time and recalculates the summary without changing durations', async () => {
     const view = await renderCreation();
     await selectClientBeyond60(view);
 
-    // Select Balayage 1 (TECHNIQUE: 1 h 30 actif + 1 h de pose).
     await searchService(view, 'balayage 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Balayage 1'));
-    });
-    await act(async () => {
-      fireEvent.press(view.getByText('Continuer'));
-    });
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
 
     expect(view.getByText('10:15 – 12:45')).toBeTruthy();
     expect(view.getByText('2 h 30 min')).toBeTruthy();
 
-    // Open the inline time control and step +5 minutes three times: 10:15 → 10:30.
     await act(async () => {
       fireEvent.press(view.getByLabelText("Changer l'horaire"));
     });
@@ -403,10 +594,8 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.press(view.getByLabelText("Terminer la modification de l'heure"));
     });
 
-    // The Rendez-vous block shows the edited schedule.
     expect(view.getByText('Mardi 25 août')).toBeTruthy();
 
-    // Summary start and end shift together; durations stay unchanged.
     expect(view.getByText('10:30 – 13:00')).toBeTruthy();
     expect(view.getByText('2 h 30 min')).toBeTruthy();
     expect(view.getByText('1 h 30 min')).toBeTruthy();
@@ -419,12 +608,8 @@ describe('AppointmentCreationScreen', () => {
     expect(mockSuccessHaptic).not.toHaveBeenCalled();
     await selectClientBeyond60(view);
     await searchService(view, 'coupe brushing 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Coupe Brushing 1'));
-    });
-    await act(async () => {
-      fireEvent.press(view.getByText('Continuer'));
-    });
+    await selectService(view, 'Coupe Brushing 1');
+    await continueToSummary(view);
 
     expect(mockSuccessHaptic).not.toHaveBeenCalled();
     await act(async () => {
@@ -438,28 +623,11 @@ describe('AppointmentCreationScreen', () => {
     });
   });
 
-  it('offers only active Services for new additions and reacts immediately', async () => {
-    const view = await renderCreation();
-
-    await act(async () => fireEvent.press(view.getByTestId('deactivate-balayage')));
-    await selectClientBeyond60(view);
-    await searchService(view, 'balayage 1');
-
-    expect(view.queryByText('Balayage 1')).toBeNull();
-    expect(view.getByText('Aucune prestation trouvée')).toBeTruthy();
-
-    await act(async () => fireEvent.press(view.getByTestId('reactivate-balayage')));
-
-    expect(view.getByText('Balayage 1')).toBeTruthy();
-  });
-
   it('adds a client directly from the picker, selects it, and stores its exact id', async () => {
     const view = await renderCreation();
 
-    // No client selected yet: the appointment cannot be confirmed.
     expect(view.getByTestId('new-client-id').props.children).toBe('');
 
-    // Open the shared creation sheet from the picker.
     await act(async () => {
       fireEvent.press(view.getByTestId('add-client-picker'));
     });
@@ -475,11 +643,9 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.press(view.getByText('Ajouter la cliente'));
     });
 
-    // The new client is immediately available in the shared source…
     const createdClientId = view.getByTestId('new-client-id').props.children as string;
     expect(createdClientId.length).toBeGreaterThan(0);
 
-    // …and is selected for the appointment in progress.
     expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
     await act(async () => {
       fireEvent.press(view.getByText('Continuer'));
@@ -487,17 +653,12 @@ describe('AppointmentCreationScreen', () => {
     expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
 
     await searchService(view, 'coupe brushing 1');
-    await act(async () => {
-      fireEvent.press(view.getByText('Coupe Brushing 1'));
-    });
-    await act(async () => {
-      fireEvent.press(view.getByText('Continuer'));
-    });
+    await selectService(view, 'Coupe Brushing 1');
+    await continueToSummary(view);
     await act(async () => {
       fireEvent.press(view.getByText('Créer le rendez-vous'));
     });
 
-    // The appointment carries the exact new client id.
     expect(view.getByTestId('last-appointment-client-id').props.children).toBe(createdClientId);
     await act(async () => {
       view.unmount();

@@ -32,6 +32,8 @@ export interface ServiceFormValidation {
     readonly nameValid: boolean;
     readonly durationValid: boolean;
   }[];
+  /** TECHNIQUE only: at least one processing phase exists. */
+  readonly hasProcessingPhase: boolean;
   readonly phasesValid: boolean;
   readonly valid: boolean;
 }
@@ -106,9 +108,11 @@ export function validateServiceForm(values: ServiceFormValues): ServiceFormValid
     nameValid: phase.requiresStaff ? phase.name.trim().length > 0 : true,
     durationValid: parsePositiveDurationInput(phase.durationMinutes) !== undefined,
   }));
+  const hasProcessingPhase = values.phases.some((phase) => !phase.requiresStaff);
   const phasesValid =
     values.type !== 'TECHNIQUE' ||
     (values.phases.length > 0 &&
+      hasProcessingPhase &&
       phaseValidities.every((phase) => phase.nameValid && phase.durationValid));
 
   return {
@@ -116,6 +120,7 @@ export function validateServiceForm(values: ServiceFormValues): ServiceFormValid
     priceValid,
     simpleDurationValid,
     phaseValidities,
+    hasProcessingPhase,
     phasesValid,
     valid: nameValid && priceValid && simpleDurationValid && phasesValid,
   };

@@ -52,16 +52,17 @@ export function generateTechniqueId(category: string, name: string): string {
 }
 
 /**
- * Normalizes a single legacy technique into a canonical Service.
+ * Normalizes a single legacy technique record into a canonical Service.
  *
- * Mapping rules:
- * - category + name → id (deterministic, slugified)
+ * Mapping rules (approved current product distinction):
+ * - category + name → id (deterministic, slugified — stable regardless of type)
  * - name → name
- * - type: always "TECHNIQUE"
  * - price: must be numeric, otherwise returns null
- * - duration → active phase with requiresStaff: true
- * - break > 0 → processing phase with requiresStaff: false
- * - break === 0 → no processing phase (treated like a service)
+ * - break > 0 → TECHNIQUE: an active phase (requiresStaff true) followed by
+ *   the processing phase (requiresStaff false)
+ * - break === 0 → SERVICE: the record represents one continuous
+ *   professional-occupied service, normalized to a single staff-required
+ *   phase. No fake zero-minute processing phase is created.
  * - color: IGNORED (design system owns colors)
  *
  * Returns null if price is non-numeric (e.g., "Multiprix").
@@ -77,6 +78,28 @@ export function normalizeLegacyTechnique(
   }
 
   const techniqueId = generateTechniqueId(category, legacy.name);
+
+  // No real processing time: this is a simple professional-occupied service.
+  if (legacy.break <= 0) {
+    const activePhaseId = `${techniqueId}-active`;
+    return {
+      id: techniqueId,
+      businessId,
+      name: legacy.name,
+      type: 'SERVICE',
+      price: legacy.price,
+      phases: [
+        {
+          id: activePhaseId,
+          name: legacy.name,
+          durationMinutes: legacy.duration,
+          requiresStaff: true,
+        },
+      ],
+      active: true,
+    };
+  }
+
   const phases: ServicePhase[] = [];
 
   // Active phase (always present)
@@ -88,16 +111,14 @@ export function normalizeLegacyTechnique(
     requiresStaff: true,
   });
 
-  // Processing phase (only if break > 0)
-  if (legacy.break > 0) {
-    const processingPhaseId = `${techniqueId}-processing`;
-    phases.push({
-      id: processingPhaseId,
-      name: 'Temps de pose',
-      durationMinutes: legacy.break,
-      requiresStaff: false,
-    });
-  }
+  // Processing phase (break > 0)
+  const processingPhaseId = `${techniqueId}-processing`;
+  phases.push({
+    id: processingPhaseId,
+    name: 'Temps de pose',
+    durationMinutes: legacy.break,
+    requiresStaff: false,
+  });
 
   return {
     id: techniqueId,

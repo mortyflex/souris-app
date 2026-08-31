@@ -1,7 +1,7 @@
 import type { Service } from '@/domain/appointments';
 
 export type CatalogGroupLabel = 'ACTIVES' | 'INACTIVES';
-export type CatalogSectionTitle = 'Prestations simples' | 'Techniques';
+export type CatalogSectionTitle = 'Services' | 'Techniques';
 
 export interface CatalogListSection {
   readonly key: string;
@@ -47,7 +47,7 @@ export function buildCatalogSections(
 
   push(
     'ACTIVES',
-    'Prestations simples',
+    'Services',
     actives.filter((service) => service.type === 'SERVICE'),
   );
   push(
@@ -57,7 +57,7 @@ export function buildCatalogSections(
   );
   push(
     'INACTIVES',
-    'Prestations simples',
+    'Services',
     inactives.filter((service) => service.type === 'SERVICE'),
   );
   push(

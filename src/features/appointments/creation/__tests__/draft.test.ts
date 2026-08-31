@@ -8,7 +8,6 @@ import {
   isValidPrice,
   parsePriceInput,
   reorderDrafts,
-  stepPhaseDuration,
   updateDraftPhaseDuration,
   updateDraftPrice,
 } from '../draft';
@@ -120,15 +119,6 @@ describe('formatPriceInput', () => {
   it('formats values for the editable field without a currency symbol', () => {
     expect(formatPriceInput(45)).toBe('45,00');
     expect(formatPriceInput(50.5)).toBe('50,50');
-  });
-});
-
-describe('stepPhaseDuration', () => {
-  it('steps by ±5 minutes and never goes below zero', () => {
-    expect(stepPhaseDuration(60, 5)).toBe(65);
-    expect(stepPhaseDuration(60, -5)).toBe(55);
-    expect(stepPhaseDuration(0, -5)).toBe(0);
-    expect(stepPhaseDuration(2, -5)).toBe(0);
   });
 });
 

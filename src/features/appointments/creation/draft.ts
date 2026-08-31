@@ -13,7 +13,6 @@ export {
   isValidPrice,
   parsePriceInput,
   reorderDrafts,
-  stepPhaseDuration,
   toAppointmentItemEditDraft,
   toServiceSnapshotSource,
   updateDraftPhaseDuration,

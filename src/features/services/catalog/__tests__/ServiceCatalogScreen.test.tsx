@@ -55,7 +55,7 @@ describe('ServiceCatalogScreen', () => {
 
     expect(view.getByText('Prestations & tarifs')).toBeTruthy();
     expect(view.getByText('Actives')).toBeTruthy();
-    expect(view.getByText('Prestations simples')).toBeTruthy();
+    expect(view.getByText('Services')).toBeTruthy();
     expect(view.getByText('Techniques')).toBeTruthy();
     // No legacy category headers reappear.
     expect(view.queryByText('Brushing')).toBeNull();
@@ -96,8 +96,8 @@ describe('ServiceCatalogScreen', () => {
   it('moves a deactivated Service out of the active group without removing it', async () => {
     const view = await renderCatalog();
 
-    expect(view.getByText('5')).toBeTruthy();
-    expect(view.getByText('11')).toBeTruthy();
+    // Active catalog: 8 Services + 8 Techniques.
+    expect(view.getAllByText('8').length).toBe(2);
 
     await act(async () => {
       fireEvent.press(view.getByTestId('deactivate-brushing-1'));
@@ -105,8 +105,7 @@ describe('ServiceCatalogScreen', () => {
 
     // The Service is kept; only the active/inactive split changes.
     expect(view.getByTestId('catalog-count').props.children).toBe(16);
-    expect(view.queryByText('5')).toBeNull();
-    expect(view.getByText('4')).toBeTruthy();
-    expect(view.getByText('11')).toBeTruthy();
+    expect(view.getByText('7')).toBeTruthy();
+    expect(view.getAllByText('8').length).toBe(1);
   });
 });

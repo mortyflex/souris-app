@@ -466,17 +466,43 @@ Appointment additions. An `AppointmentItem` is a booking-time copy.
 
 The boundary is strict:
 
-- Appointment Creation and Editing additions read CURRENT active catalog services only.
+- Appointment Creation and Editing additions read CURRENT active catalog services only, through the
+  same shared grouped `Services` / `Techniques` selection grid.
 - Once selected, the draft owns its name, type, price, and ordered phases; saving never re-reads
   the catalog.
-- Existing retained items always hydrate from their `AppointmentItem` snapshots, never from the
-  catalog.
+- The selection grid is for ADDITIONS only: existing retained items hydrate from their
+  `AppointmentItem` snapshots, never from the catalog, and never need their catalog Service to
+  exist, be active, or match current values.
 - Editing the catalog (name, price, phases, activation) NEVER mutates an existing `AppointmentItem`.
   A new addition made later snapshots the new catalog values.
 - `serviceId` may reference a Service that is inactive or no longer present in the catalog. The
   snapshot remains valid and is displayed everywhere.
 
 No Appointment presentation or timeline may look up current catalog values for retained items.
+
+# 13.2 Appointment startAt Editing
+
+Existing Appointment Editing keeps `startAt` in the editing draft:
+
+- the initial value hydrates from the Appointment's current local `startAt`;
+- `Date` and `Heure` changes update the draft only — `AppointmentSessionProvider` is untouched before save;
+- date changes preserve the local time of day using local civil calendar semantics (never UTC-string round-trips);
+- saving writes the draft `startAt` together with the items through the normal Appointment update boundary, so
+  Appointment Details, Day Agenda, Week Agenda, and Client Profile projections all observe the updated Appointment;
+- cancel/discard leaves the original `startAt` unchanged;
+- `startAt` changes participate in dirty-state detection like any other draft change.
+
+# 13.3 Appointment clientId Editing
+
+Existing Appointment Editing may reassign the Appointment's Client through the shared client picker.
+The relation remains `clientId` only — never display names:
+
+- choosing another Client updates the local editing draft only;
+- saving writes the draft `clientId` through the normal Appointment update boundary, preserving every other
+  field; the Appointment immediately appears under the new Client's history and leaves the former Client's
+  history through existing `clientId`-derived projections — no history is edited manually;
+- cancel/discard leaves the original `clientId` unchanged;
+- `clientId` changes participate in dirty-state detection like any other draft change.
 
 ---
 
@@ -536,6 +562,21 @@ processing duration, and appointment end) through the normal domain timeline fun
 
 This is the same snapshot principle as §12: the appointment preserves booking-time reality, which may be a
 deliberate business decision rather than a copy of catalog defaults.
+
+# 15.2 Final Creation Draft as Snapshot Source
+
+The FINAL Appointment Creation UX pass formalizes the draft boundary:
+
+- the final AppointmentItem snapshot is built directly from the creation draft (name, type, price, and
+  ordered phases with their final durations) — never re-read from the current catalog at save time;
+- on successful creation the SAME draft values are committed back to the canonical Service catalog
+  (stable Service and phase ids), so future Appointments use them as defaults;
+- if creation is abandoned, cancelled, or a modified Service is deselected, the catalog remains unchanged;
+- existing AppointmentItem snapshots are never retroactively modified by either operation;
+- existing Appointment EDITING keeps its snapshot-specific semantics and never writes the catalog.
+
+The ordering of the selected stack is the Appointment item order; reordering the draft therefore
+recalculates the complete timeline through the normal domain functions.
 
 ---
 

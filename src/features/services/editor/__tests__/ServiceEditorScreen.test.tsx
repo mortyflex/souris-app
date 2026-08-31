@@ -307,12 +307,28 @@ describe('ServiceEditorScreen', () => {
       true,
     );
 
-    // A real name replaces the placeholder and unlocks saving.
+    // A real name replaces the placeholder, but a technique still needs a
+    // processing phase before it can be saved.
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Nom de la phase 1'), 'Application');
     });
     expect(view.queryByText('Nouvelle phase')).toBeNull();
     expect(view.getByText('Application')).toBeTruthy();
+    expect(view.getByTestId('save-service').props.accessibilityState?.disabled).toBe(
+      true,
+    );
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('save-service'));
+    });
+    expect(
+      view.getByText('Une technique doit contenir au moins un temps de pose.'),
+    ).toBeTruthy();
+
+    // Switching the phase to processing satisfies the rule.
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Phase 1, temps de pose'));
+    });
     expect(view.getByTestId('save-service').props.accessibilityState?.disabled).toBe(
       false,
     );

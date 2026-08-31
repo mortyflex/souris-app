@@ -108,7 +108,7 @@ describe('Service form rules', () => {
     expect(getElapsedDurationMinutes(appointment)).toBe(105);
   });
 
-  it('accepts a technique with no processing phase', () => {
+  it('rejects a technique with no processing phase', () => {
     const values: ServiceFormValues = {
       name: 'Technique active',
       price: '60',
@@ -120,15 +120,28 @@ describe('Service form rules', () => {
       ],
     };
 
+    expect(validateServiceForm(values).hasProcessingPhase).toBe(false);
+    expect(validateServiceForm(values).valid).toBe(false);
+  });
+
+  it('rejects a technique whose last processing phase was removed', () => {
+    const values: ServiceFormValues = {
+      name: 'Technique',
+      price: '60',
+      type: 'TECHNIQUE',
+      simpleDurationMinutes: '',
+      phases: [
+        { id: 'phase-a', name: 'Application', durationMinutes: '20', requiresStaff: true },
+        { id: 'phase-pose', name: 'Temps de pose', durationMinutes: '30', requiresStaff: false },
+      ],
+    };
+
     expect(validateServiceForm(values).valid).toBe(true);
-    expect(
-      buildServiceFromForm({
-        id: 'service-active-technique',
-        businessId: 'business-1',
-        active: true,
-        values,
-      }).phases.every((phase) => phase.requiresStaff),
-    ).toBe(true);
+
+    const withoutPose = setPhaseRequiresStaff(values, 'phase-pose', true);
+
+    expect(validateServiceForm(withoutPose).hasProcessingPhase).toBe(false);
+    expect(validateServiceForm(withoutPose).valid).toBe(false);
   });
 
   it('reorders phases while preserving every identity and value', () => {

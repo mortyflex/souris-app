@@ -35,16 +35,18 @@ The `Service` model has no category, color, options, variants, or aggregate dura
 
 ## 3. SERVICE vs TECHNIQUE
 
-`SERVICE` — the professional is occupied for the whole duration. Canonically represented by one staff-required phase:
+`SERVICE` — the professional is occupied for the whole duration; it has NO pose. Canonically
+represented by one staff-required phase:
 
 ```text
 Coupe
     Coupe · 45 min · requiresStaff = true
 ```
 
-The management UI presents this as a single `Durée` field. The professional never edits "phases" for a simple service.
+The management UI presents this as a single `Durée` field. The professional never edits "phases" for a simple service, and a Service can never acquire a processing phase (the type is immutable).
 
-`TECHNIQUE` — an ordered phase list. Each phase is active or processing. Any pattern is valid, including zero processing phases:
+`TECHNIQUE` — an ordered phase list containing at least one processing phase under the current
+product rule:
 
 ```text
 Application · 30 min · active
@@ -52,7 +54,12 @@ Temps de pose · 45 min · processing
 Finition · 30 min · active
 ```
 
-User-facing wording: `Temps actif` (`requiresStaff = true`, professionnelle occupée) and `Temps de pose` (`requiresStaff = false`, professionnelle disponible).
+A technique cannot be saved without a `Temps de pose`, and an existing technique cannot save after
+losing its final processing phase. The low-level Appointment timeline engine still understands
+arbitrary ordered phases and `requiresStaff` — the pose requirement is a catalog creation/validation
+rule, not a timeline constraint.
+
+User-facing wording: `Temps actif` (`requiresStaff = true`, professionnelle occupée) and `Temps de pose` (`requiresStaff = false`, professionnelle disponible). The picker sections are `Services` / `Techniques` — the raw enum values are never exposed.
 
 A processing phase has ONE canonical user-facing identity: `Temps de pose`. Its name is never
 user-entered — the editor shows only `Durée` and `Type` for it, and saving always records the
@@ -98,7 +105,11 @@ The two legacy files (`legacy-services.ts`, `legacy-techniques.ts`) are ONE-WAY 
 Mapping rules:
 
 - legacy `duration` on a simple service → one staff-required phase;
-- legacy technique `duration` → active phase; positive legacy `break` → one `Temps de pose` processing phase; `break === 0` → no processing phase invented;
+- legacy technique `duration` → active phase; positive legacy `break` → one `Temps de pose`
+  processing phase (`TECHNIQUE`);
+- legacy technique `break === 0` → the record is continuous professional-occupied work and is
+  normalized as `SERVICE` with a single staff-required phase. No fake zero-minute processing phase
+  is created to preserve a legacy source bucket;
 - non-numeric prices (e.g. `Multiprix`) are excluded with a diagnostic, never invented as zero;
 - `businessId` is supplied at the seed-composition boundary (the development business identity), never invented per service;
 - every imported Service is `active: true`.
@@ -114,6 +125,18 @@ phase: {serviceId}-phase | {serviceId}-active | {serviceId}-processing
 ```
 
 The same legacy input always normalizes to the same canonical identities. No random generation occurs at import time.
+
+Classification is timing-based, never name-based: legacy source buckets do not dictate the type.
+IDs remain stable even where the corrected classification differs from the legacy filename — a
+zero-break record keeps its deterministic `technique-…` id while its canonical `type` is `SERVICE`.
+Changing ids would unnecessarily break identity stability.
+
+The current fresh-session import yields **8 Services / 8 Techniques**: Services = Brushing 1/2/3,
+Coupe Femme / Homme, Chignon, Coupe Brushing 1/2/3; Techniques = Balayage 1/2/3, Couleur Racines,
+Dose Supplémentaire, Soin Classique, Soin Profond, Traitement SOS. The catalog is seeded once per
+`ServiceCatalogProvider` mount — a development session started before a classification change keeps
+its old in-memory seed until a full reload/restart; the application never reclassifies rendered
+Services dynamically.
 
 ---
 
@@ -149,6 +172,19 @@ Editing a catalog Service updates it immutably:
 
 Catalog edits never cascade into `AppointmentItem` snapshots (see `docs/domain/APPOINTMENTS.md §12`).
 
+### 7.1 Defaults Adjusted During NEW Appointment Creation
+
+Service defaults may also be adjusted during NEW Appointment Creation (price and phase durations, from the
+Résumé step's expanded cards). These adjustments:
+
+- live in the creation draft — nothing is written to the catalog on keystrokes;
+- are committed to `ServiceCatalogProvider` only when Appointment creation succeeds, using the same stable
+  Service id and phase ids/order (`updateService`, never a new record);
+- are dropped entirely when creation is abandoned, cancelled, or the modified Service is deselected;
+- never retroactively affect existing AppointmentItem snapshots.
+
+Existing Appointment EDITING remains snapshot-specific and never writes the catalog.
+
 ---
 
 ## 8. Validation
@@ -158,8 +194,9 @@ Service form rules:
 - name non-empty;
 - price: finite, >= 0 (`42`, `42,5`, `42,50`);
 - simple duration: positive integer minutes;
-- TECHNIQUE: at least one phase; each phase has a non-empty name and a positive integer duration;
-- a TECHNIQUE with no processing phase is valid.
+- SERVICE: exactly one staff-required phase, never a processing phase (the UI never exposes phases for it);
+- TECHNIQUE: at least one phase; each phase has a non-empty name (active) and a positive integer duration;
+- TECHNIQUE: at least one processing phase — a technique with no `Temps de pose` is invalid, and removing/changing away the final processing phase blocks saving. The type never converts automatically.
 
 ---
 

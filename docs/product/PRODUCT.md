@@ -232,6 +232,46 @@ time in ±5-minute steps on the same local date, within the operational Agenda d
 19:55, strictly before the 20:00 end boundary. All creation calculations (context, Summary, appointment end)
 follow the edited draft start time.
 
+### Prestations step — fast multi-selection
+
+The Prestations step is optimized for fast multi-selection: a compact wrapping two-column grid grouped by
+type (`Services`, `Techniques` — never legacy categories), fed by the active shared Service
+catalog. Cards show name, concise duration (with quiet `dont X de pose` context for techniques), and price.
+Selection is communicated by surface state and a small check indicator; a lightweight count
+(`N sélectionnées`) replaces the old sticky selected-services stack. Search filters both sections
+independently and selections survive search changes. Selecting a card adds the Service to the end of the
+current Appointment order; tapping it again deselects it.
+
+### Résumé step — ordered editable Summary
+
+The Résumé step hosts the selected services as a vertical ordered stack (drag handle + disclosure chevron,
+cards collapsed by default, one expanded at a time). The stack order IS the Appointment item order and
+therefore the timeline. Expanded cards expose quick adjustments:
+
+- SERVICE: `Prix` and `Durée` (the canonical single staff-required phase);
+- TECHNIQUE: `Prix` and a compact per-phase duration editor (`Durées`) — no phase rename, add, remove,
+  reorder, or active/processing switching (those structural changes belong to Prestations & tarifs);
+- durations must stay positive integer minutes; prices use the supported euro input.
+
+### Creation adjustments become future catalog defaults
+
+During NEW Appointment Creation, adjusted prices and phase durations also update the Service catalog so
+future Appointments use them. This is deliberately communicated by a quiet line inside the expanded editor:
+« Les modifications seront enregistrées pour les prochains rendez-vous. »
+
+The commit is atomic with creation:
+
+- nothing is written to the catalog on keystrokes — the draft owns the values;
+- only Services still selected at successful creation update the catalog (same stable Service id, same
+  phase ids and order);
+- abandoning or cancelling creation leaves the catalog unchanged;
+- deselecting a modified Service drops its draft and never commits it;
+- the Appointment snapshot and the catalog update use exactly the same final draft values;
+- existing historical Appointments keep their snapshots untouched.
+
+Existing Appointment EDITING keeps its snapshot-specific semantics: retained item adjustments never
+rewrite the catalog.
+
 The initial address book and catalog use normalized legacy sources. The Cliente step reads the shared
 Client source — the same directory as the Clientes tab — and a new Client can be added directly from
 the picker when the person is not found. Client search uses only identity and contact fields. The
@@ -248,24 +288,30 @@ outcomes handled separately by the lifecycle behavior below.
 
 ### Appointment-specific adjustments during creation
 
-During Appointment Creation the professional may adjust, for the appointment being created only:
+During NEW Appointment Creation the professional may adjust, inside the Résumé step's expanded cards:
 
 - the snapshot price of a selected service;
-- the duration of unattended processing phases (`requiresStaff = false`) of a selected TECHNIQUE.
+- the duration of a simple Service's single staff-required phase;
+- the duration of each TECHNIQUE phase (active and processing).
 
-These adjustments apply exclusively to the AppointmentItem snapshot being created. The normalized catalog
-Service and the raw legacy sources remain unchanged, and future appointments keep the catalog defaults.
-The Summary step always reflects the adjusted snapshot values: price, processing duration, appointment end,
-elapsed duration, and total price are recalculated from the adjusted snapshot. A SERVICE never exposes a
-processing editor.
+The Summary step always reflects the adjusted draft values: price, durations, appointment end, elapsed
+duration, and total price are recalculated from the adjusted draft.
+
+The FINAL Appointment Creation UX pass changed the previous override rule: on successful creation these
+adjusted values are ALSO committed to the Service catalog (`ServiceCatalogProvider`) so future Appointments
+use them as defaults — see « Creation adjustments become future catalog defaults » above. The Appointment
+snapshot and the catalog update are both built from the same final draft. Abandoning creation, cancelling,
+or deselecting a modified Service never touches the catalog. Existing Appointment EDITING remains
+snapshot-specific and never rewrites the catalog.
 
 ### Service order during creation
 
-Multiple selected services can be reordered by dragging their explicit drag handle in the `Sélectionnées`
-area. The selection order defines the AppointmentItem order and therefore the complete appointment timeline:
-reordering immediately reorders the draft, and Summary, item start times, and the created Appointment follow
-the new order. Reordering never rebuilds a draft from catalog defaults — custom prices and processing
-durations travel with their service.
+The Résumé step hosts selected services as a vertical ordered stack with explicit drag handles. The stack
+order defines the AppointmentItem order and therefore the complete appointment timeline: reordering
+immediately reorders the draft, and Summary, item start times, and the created Appointment follow the new
+order. Catalog grouping is for discovery only — Summary ordering is Appointment ordering. Returning to the
+Prestations step preserves selections and draft values, and newly selected services append to the end of
+the current order.
 
 ---
 
@@ -282,6 +328,26 @@ Existing appointments support service-composition editing:
 Editing starts from the AppointmentItem snapshots already stored on the appointment. Existing prices, names, phase
 structure, and phase durations therefore remain visible even when the catalog has changed. A newly added service
 starts from the current catalog configuration and becomes a new AppointmentItem snapshot only when saved.
+
+Appointment Editing is ONE continuous editor with tight vertical rhythm: an editable context surface
+(`Modifier la cliente` reassigns the Appointment's Client through the shared picker — identity stays
+`clientId`-only; `Changer la date` / `Changer l'heure` edit the draft start), the retained AppointmentItem
+stack, and the SAME shared grouped `Services` / `Techniques` compact card grid inline directly below it —
+there is no separate add-service screen or mode. Tapping a catalog Service card IMMEDIATELY appends a new
+draft built from the current catalog values to the end of the ordered stack (no intermediate add
+confirmation); the scroll position stays stable so several Services can be tapped in a row. A catalog card
+whose Service is already present in the draft communicates the "already added" state and cannot create a
+duplicate; removing the corresponding Appointment item makes the catalog card available again. Retained
+items never appear as grid selections and never need their catalog Service to exist, be active, or match
+current values; duplicate retained items with the same `serviceId` stay independent drafts with unique
+AppointmentItem ids.
+
+Client, `Date`/`Heure`, and service changes all live in the editing draft: they participate in dirty-state
+detection; saving writes `clientId`, `startAt`, and items together through the normal Appointment update
+boundary (preserving id, business/staff metadata, lifecycle, and notes), so the Appointment immediately
+moves between Client histories through existing `clientId`-derived projections. Cancelling/discarding leaves
+the original Appointment unchanged. Editing an existing Appointment never writes the Service catalog:
+adjustments stay snapshot-specific.
 
 Reordering services recalculates the complete timeline.
 
@@ -517,7 +583,7 @@ Plus
 It is business configuration, not a hidden technical setting.
 
 The screen lists the canonical catalog grouped by activation and then by type — `Actives`
-(`Prestations simples`, `Techniques`) and `Inactives` (same split). Rows use the
+(`Services`, `Techniques`) and `Inactives` (same split). Rows use the
 professional-facing summary: name, price, duration, and processing context (`dont X de pose`).
 Only non-empty subsections render; legacy categories never reappear.
 `Ajouter une prestation` opens a dedicated sheet where the professional first chooses:
@@ -535,6 +601,12 @@ collapsed phases show a compact identity (index, name, semantic type, duration, 
 A processing phase has one canonical user-facing identity — `Temps de pose` — and therefore has no
 custom name field; only its duration and type are configured. Switching a phase back to active
 restores its previous draft name when available, and an active phase always requires a real name.
+
+The current product classification is explicit: a `Service` has NO pose (the professional is
+occupied for the whole duration), while a `Technique` contains at least one `Temps de pose`. A
+technique cannot be saved without a processing phase, an existing technique cannot save after
+losing its final processing phase, and a Service can never acquire one — the type is immutable.
+No fake zero-minute processing phase is ever created.
 
 Existing services open in read mode with `Modifier`, `Désactiver` (or `Réactiver` when inactive),
 and a tertiary `Supprimer définitivement` text action. Deactivation simply removes the service
