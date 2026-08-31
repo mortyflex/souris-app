@@ -168,20 +168,36 @@ deliberately differs:
 - the client picker searches the complete normalized address book with a virtualized list and no display cap;
   its search field uses a symbol icon and a clear `Rechercher une cliente` placeholder instead of field
   instructions;
-- Prestations reads the single shared active Service catalog as a flat deterministic list (no
-  category grouping: categories were legacy import metadata and do not exist on the canonical
-  Service model) with a `Sélectionnées` area above the catalog hosting appointment-specific
-  customization; selected-service cards
-  start collapsed, at most one card is expanded at a time, and editing/removal controls live inside the
-  expanded state so the collapsed list prioritizes scanning and reordering;
-- selected services are reordered by a small explicit drag handle (SF/Material grip symbol, 44dp target)
-  on each card — long-press activates the drag, the card lifts slightly, and the order commits on release.
-  The handle is hidden when only one service is selected and remains visually separate from the disclosure
-  affordance; scrolling, price/processing editing, and Retirer are unaffected;
-- the selected-services area allows appointment-specific price and processing-duration editing that only
-  affects the AppointmentItem snapshot being created — the catalog is never modified;
-- Résumé is a read-only review screen with the structured `Temps` summary (Temps actif / Temps de pose /
-  Durée totale / Total) and subtle `Modifier` actions returning to the relevant step;
+- Prestations reads the single shared active Service catalog as a compact wrapping two-column grid grouped
+  by type — `Services` / `Techniques` — with borderless tinted selectable cards (name, concise
+  duration with quiet `dont X de pose` context, price; selected = stronger lavender surface + small check
+  indicator, no outline). No selected-services stack lives on this step. The SAME shared grid is used by
+  existing Appointment Editing INLINE — embedded directly below the retained AppointmentItem stack on the
+  same scrollable screen with a tight vertical rhythm (one standard spacing transition between the stack and
+  the search field, no giant gap). Tapping a catalog card IMMEDIATELY appends a new Appointment draft: no
+  `Ajouter la prestation` / `Ajouter N prestations` confirmation. A catalog card whose Service is already in
+  the draft shows the added state and cannot create a duplicate; removing the Appointment item releases the
+  card again. Retained snapshot items never appear as grid selections;
+- the Appointment Editing context surface carries explicit restrained violet actions:
+  `Modifier la cliente` (client reassignment through the shared picker), `Changer la date`,
+  `Changer l'heure` — no generic `Modifier` wording;
+- selection feedback lives in the BOTTOM ACTION AREA: a restrained deep-violet, medium-weight count line
+  (`2 prestations sélectionnées`, correctly pluralized) sits directly above the navigation buttons inside
+  the same sticky footer — never floating inside the grid content;
+- the Résumé step hosts the selected services as a vertical ordered stack of borderless soft-lavender
+  accordion cards (strong name, concise duration, price, small purple disclosure chevron, muted explicit
+  drag handle). Cards start collapsed, at most one card is expanded at a time, and dragging operates on the
+  compact collapsed representation. The SAME stacked accordion card system is used by existing Appointment
+  Editing (with the removal action and last-service protection);
+- expanded Résumé cards expose quick adjustments only: `Prix` and `Durée` for a simple Service, `Prix` and a
+  compact per-phase `Durées` editor for a TECHNIQUE — no structural phase changes (those belong to
+  Prestations & tarifs). A quiet line states « Les modifications seront enregistrées pour les prochains
+  rendez-vous. »;
+- adjusted price and phase-duration values are committed to the Service catalog ONLY when creation
+  succeeds, as one coherent action with the Appointment snapshot; abandoning or deselecting never touches
+  the catalog;
+- Résumé keeps the structured `Temps` summary (Temps actif / Temps de pose / Durée totale / Total) and
+  subtle `Modifier` actions returning to the relevant step;
 - the explicit dismiss action is `Annuler`, kept restrained next to the native sheet grabber.
 
 ---
@@ -205,7 +221,7 @@ d’un rendez-vous. » — followed by a confirmation. Deactivation only removes
 Appointment selection; existing Appointment snapshots are never changed.
 
 Prestations & tarifs management groups the canonical catalog into `Actives` / `Inactives` groups,
-each visually separated into `Prestations simples` and `Techniques` subsections (only non-empty
+each visually separated into `Services` and `Techniques` subsections (only non-empty
 subsections render). Legacy categories never reappear. Rows use light surfaces with a restrained
 deep brand-violet service name (`lav700`, not full-strength action purple), strong foreground
 price, soft secondary duration metadata, and subtle chevrons. The editor uses

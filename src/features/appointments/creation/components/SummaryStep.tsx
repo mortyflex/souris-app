@@ -4,12 +4,13 @@
 // single concern and a single explicit edit action:
 //   1. Cliente          → Changer la cliente
 //   2. Rendez-vous      → Changer l'horaire (inline ±5 minute control)
-//   3. Prestations      → Modifier les prestations
+//   3. Prestations      → stacked sortable accordion editor (quick price and
+//                          phase-duration adjustments)
 //   4. Total            → read-only final summary, CTA lives in the footer
 //
-// Every value comes from the draft snapshot (adjusted prices and processing
-// durations included), never from stale catalog defaults. No data point is
-// repeated across blocks.
+// Every value comes from the draft snapshot (adjusted prices and durations
+// included), never from stale catalog defaults. No data point is repeated
+// across blocks.
 
 import { useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -34,6 +35,8 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
+import { SortableDraftList, type SortableDraftEntry } from '../../editor/components/SortableDraftList';
+import { AppointmentServiceEditorCard } from '../../editor/components/AppointmentServiceEditorCard';
 import type { AppointmentCreationSummary } from '../presentation';
 import {
   formatCreationDate,
@@ -45,17 +48,20 @@ import { TimeStepper } from './TimeStepper';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
-interface SummaryServiceRow {
-  readonly serviceId: string;
-  readonly serviceName: string;
-  readonly price: number;
-}
-
 interface SummaryStepProps {
   readonly clientName: string;
   readonly startAt: Date;
   readonly summary: AppointmentCreationSummary;
-  readonly services: readonly SummaryServiceRow[];
+  readonly entries: readonly SortableDraftEntry[];
+  readonly expandedDraftId: string | null;
+  readonly onToggleExpanded: (draftKey: string) => void;
+  readonly onReorder: (fromIndex: number, toIndex: number) => void;
+  readonly onUpdatePrice: (draftKey: string, price: number) => void;
+  readonly onUpdatePhaseDuration: (
+    draftKey: string,
+    phaseId: string,
+    durationMinutes: number,
+  ) => void;
   readonly onEditClient: () => void;
   readonly onEditServices: () => void;
   readonly onStartAtChange: (deltaMinutes: number) => void;
@@ -65,7 +71,12 @@ export function SummaryStep({
   clientName,
   startAt,
   summary,
-  services,
+  entries,
+  expandedDraftId,
+  onToggleExpanded,
+  onReorder,
+  onUpdatePrice,
+  onUpdatePhaseDuration,
   onEditClient,
   onEditServices,
   onStartAtChange,
@@ -141,7 +152,7 @@ export function SummaryStep({
       </View>
 
       <View style={styles.block}>
-        <SectionHeader count={services.length} title="Prestations">
+        <SectionHeader count={entries.length} title="Sélectionnées">
           <BlockAction
             accessibilityLabel="Modifier les prestations"
             label="Modifier les prestations"
@@ -149,18 +160,17 @@ export function SummaryStep({
             testID="edit-services"
           />
         </SectionHeader>
-        <View style={styles.serviceList}>
-          {services.map((service) => (
-            <View key={service.serviceId} style={styles.serviceRow}>
-              <AppText variant="control" numberOfLines={1} style={styles.serviceName}>
-                {service.serviceName}
-              </AppText>
-              <AppText variant="metadata" style={styles.servicePrice}>
-                {formatCreationPrice(service.price)}
-              </AppText>
-            </View>
-          ))}
-        </View>
+        <SortableDraftList
+          canRemove={false}
+          entries={entries}
+          expandedDraftId={expandedDraftId}
+          onRemove={() => {}}
+          onReorder={onReorder}
+          onToggleExpanded={onToggleExpanded}
+          onUpdatePhaseDuration={onUpdatePhaseDuration}
+          onUpdatePrice={onUpdatePrice}
+          renderCard={(props) => <AppointmentServiceEditorCard {...props} showCatalogHint />}
+        />
       </View>
 
       <View style={styles.block}>
@@ -282,22 +292,6 @@ const styles = StyleSheet.create({
     color: semanticColors.foreground,
     fontVariant: ['tabular-nums'],
   },
-  serviceList: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    gap: spacing.xs,
-    padding: spacing.sm,
-  },
-  serviceRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
-  },
-  serviceName: { color: semanticColors.foreground, flex: 1 },
-  servicePrice: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   timeSurface: {
     backgroundColor: semanticColors.surface,
     borderRadius: radii.medium,

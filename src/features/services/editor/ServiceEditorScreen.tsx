@@ -519,6 +519,15 @@ function ServiceForm({
               Ajoutez au moins une phase.
             </AppText>
           )}
+          {values.phases.length > 0 &&
+            !validation.hasProcessingPhase &&
+            validation.phaseValidities.every(
+              (phase) => phase.nameValid && phase.durationValid,
+            ) && (
+              <AppText variant="metadata" style={styles.formError}>
+                Une technique doit contenir au moins un temps de pose.
+              </AppText>
+            )}
         </View>
       )}
     </ScrollView>

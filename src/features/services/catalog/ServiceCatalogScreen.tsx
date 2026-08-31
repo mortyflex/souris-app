@@ -69,6 +69,7 @@ export function ServiceCatalogScreen() {
 
       <SectionList
         sections={sections}
+        initialNumToRender={40}
         keyExtractor={(service) => service.id}
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}

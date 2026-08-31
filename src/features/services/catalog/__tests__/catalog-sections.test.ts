@@ -34,9 +34,9 @@ describe('buildCatalogSections', () => {
     const sections = buildCatalogSections(services);
 
     expect(sections.map((section) => `${section.groupLabel}:${section.title}`)).toEqual([
-      'ACTIVES:Prestations simples',
+      'ACTIVES:Services',
       'ACTIVES:Techniques',
-      'INACTIVES:Prestations simples',
+      'INACTIVES:Services',
       'INACTIVES:Techniques',
     ]);
     expect(sections[0].data.map((s) => s.id)).toEqual(['simple-active']);
