@@ -1,11 +1,11 @@
 import {
   createAppointmentItemSnapshot,
   type Appointment,
-  type Service,
+  type ServiceSnapshotSource,
 } from '@/domain/appointments';
 
 export interface BuildAppointmentItemInput {
-  readonly service: Service;
+  readonly service: ServiceSnapshotSource;
   /**
    * Appointment-specific price override. Falls back to the catalog price.
    * The catalog service itself is never modified.

@@ -9,8 +9,13 @@ import type {
   AppointmentPhase,
   Service,
   ServicePhase,
+  ServiceSnapshotSource,
 } from '@/domain/appointments';
 import { hydrateAppointmentDrafts as hydrateAppointmentItemDrafts } from '@/domain/appointments';
+import {
+  formatServicePriceInput,
+  parseServicePriceInput,
+} from '@/features/services/editor/service-form';
 
 export type EditablePhase = ServicePhase | AppointmentPhase;
 
@@ -38,6 +43,19 @@ export function createSelectedServiceDraft(service: Service): SelectedServiceDra
     price: service.price,
     phases: service.phases.map((phase) => ({ ...phase })),
     phaseDurationOverrides: {},
+  };
+}
+
+/** Returns the owned booking-time values, never a live catalog reference. */
+export function toServiceSnapshotSource(
+  draft: SelectedServiceDraft,
+): ServiceSnapshotSource {
+  return {
+    id: draft.serviceId,
+    name: draft.serviceName,
+    type: draft.serviceType,
+    price: draft.price,
+    phases: draft.phases.map((phase) => ({ ...phase })),
   };
 }
 
@@ -120,18 +138,11 @@ export function isValidPhaseDuration(minutes: number): boolean {
 }
 
 export function parsePriceInput(text: string): number | undefined {
-  const normalized = text.trim().replace(/\s/g, '').replace(',', '.');
-  if (normalized.length === 0) return undefined;
-  const value = Number(normalized);
-  return isValidPrice(value) ? value : undefined;
+  return parseServicePriceInput(text);
 }
 
 export function formatPriceInput(value: number): string {
-  return new Intl.NumberFormat('fr-FR', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-    useGrouping: false,
-  }).format(value);
+  return formatServicePriceInput(value);
 }
 
 export function stepPhaseDuration(current: number, delta: number): number {

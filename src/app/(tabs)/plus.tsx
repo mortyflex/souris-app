@@ -1,12 +1,5 @@
-import { AppText } from '@/shared/ui/AppText';
-import { Screen } from '@/shared/ui/Screen';
+import { PlusScreen } from '@/features/plus/PlusScreen';
 
-export default function PlusScreen() {
-  return (
-    <Screen>
-      <AppText variant="screenTitle" accessibilityRole="header">
-        Plus
-      </AppText>
-    </Screen>
-  );
+export default function PlusRoute() {
+  return <PlusScreen />;
 }

@@ -1,11 +1,9 @@
 // Souris — Service catalog editor (Appointment Creation and Appointment editing)
 //
-// Sticky composer + grouped catalog. The search field and the selected
+// Sticky composer + active catalog. The search field and the selected
 // services stay pinned at the top so the composition in progress is always
-// visible; the scrollable catalog lives below. Category headers are strongly
-// distinct (eyebrow + count + hairline) and sticky on iOS. Selected draft
-// cards live in the composer and host the appointment-specific price /
-// processing editors.
+// visible; the scrollable catalog lives below. Selected draft cards live in
+// the composer and host the appointment-specific price / processing editors.
 
 import { useMemo, useState } from 'react';
 import {
@@ -21,7 +19,7 @@ import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { foregroundSoft, gutter, semanticColors, spacing } from '@/shared/ui/theme';
 import type { Service } from '@/domain/appointments';
 
-import { catalog } from '@/features/services/adapters/catalog';
+import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { filterCatalogServices } from '../filter-services';
 import { getSelectedServiceDraftKey, type SelectedServiceDraft } from '../draft';
 import { CatalogServiceRow } from './CatalogServiceRow';
@@ -65,6 +63,7 @@ export function ServiceCatalogEditor({
 }: ServiceCatalogEditorProps) {
   const [query, setQuery] = useState('');
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
+  const { activeServices } = useServiceCatalog();
   const trimmedQuery = query.trim();
 
   const removeDraft = (draftKey: string) => {
@@ -88,16 +87,14 @@ export function ServiceCatalogEditor({
   const selectedEntries: readonly SortableDraftEntry[] = selectedDrafts.map((draft) => ({ draft }));
 
   const sections = useMemo<readonly SectionListData<Service, CatalogSection>[]>(() => {
-    if (trimmedQuery.length > 0) {
-      const matches = filterCatalogServices(catalog.services, trimmedQuery);
-      return [{ key: 'results', title: 'Résultats', data: matches }];
-    }
-    return catalog.groups.map((group) => ({
-      key: group.category,
-      title: group.category,
-      data: group.services,
-    }));
-  }, [trimmedQuery]);
+    const services =
+      trimmedQuery.length > 0
+        ? filterCatalogServices(activeServices, trimmedQuery)
+        : activeServices;
+    return services.length > 0
+      ? [{ key: 'catalog', title: catalogLabel, data: services }]
+      : [];
+  }, [activeServices, catalogLabel, trimmedQuery]);
 
   const searching = trimmedQuery.length > 0;
 
@@ -129,22 +126,14 @@ export function ServiceCatalogEditor({
         keyExtractor={(service) => service.id}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        stickySectionHeadersEnabled={Platform.OS === 'ios'}
+        stickySectionHeadersEnabled={false}
         ListHeaderComponent={
           <SectionHeader
             style={styles.catalogLabel}
             title={searching ? 'Résultats' : catalogLabel}
           />
         }
-        renderSectionHeader={({ section }) =>
-          section.key === 'results' ? null : (
-            <SectionHeader
-              count={section.data.length}
-              style={styles.sectionHeader}
-              title={section.title}
-            />
-          )
-        }
+        renderSectionHeader={() => null}
         renderItem={({ item }) => (
           <CatalogServiceRow
             selected={selectedDrafts.some((draft) => draft.serviceId === item.id)}
@@ -153,14 +142,16 @@ export function ServiceCatalogEditor({
           />
         )}
         ListEmptyComponent={
-          searching ? (
-            <View style={styles.emptyState}>
-              <AppText variant="stateTitle">Aucune prestation trouvée</AppText>
-              <AppText variant="metadata" style={styles.emptyStateText}>
-                Essayez un autre nom.
-              </AppText>
-            </View>
-          ) : null
+          <View style={styles.emptyState}>
+            <AppText variant="stateTitle">
+              {searching ? 'Aucune prestation trouvée' : 'Aucune prestation disponible'}
+            </AppText>
+            <AppText variant="metadata" style={styles.emptyStateText}>
+              {searching
+                ? 'Essayez un autre nom.'
+                : 'Activez une prestation depuis Prestations & tarifs.'}
+            </AppText>
+          </View>
         }
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -182,12 +173,6 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: spacing.xl },
   catalogLabel: {
     marginHorizontal: horizontalGutter,
-  },
-  sectionHeader: {
-    backgroundColor: semanticColors.screenWarm,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.xl,
   },
   emptyState: { alignItems: 'center', padding: spacing.xl },
   emptyStateText: { color: foregroundSoft, marginTop: spacing.sm },

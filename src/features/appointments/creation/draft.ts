@@ -15,6 +15,7 @@ export {
   reorderDrafts,
   stepPhaseDuration,
   toAppointmentItemEditDraft,
+  toServiceSnapshotSource,
   updateDraftPhaseDuration,
   updateDraftPrice,
 } from '../editor/draft';

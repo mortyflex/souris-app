@@ -138,6 +138,19 @@ function renderProfile(clientId: string) {
 const initialClients = createInitialClients();
 
 describe('ClientProfileScreen', () => {
+  beforeAll(() => {
+    // The Agenda fixtures are anchored on "today", so assertions about
+    // upcoming vs historical rows depend on the time of day. Freeze the
+    // clock at a fixed late-afternoon instant so the fixture day is always
+    // in the past while the real-now-derived future appointment stays ahead.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 7, 26, 18, 0));
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     mockPush.mockClear();
     mockBack.mockClear();

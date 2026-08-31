@@ -25,7 +25,10 @@ export {
   getAppointmentEndAt,
 } from "./timeline";
 
-export type { CreateAppointmentItemSnapshotInput } from "./snapshot";
+export type {
+  CreateAppointmentItemSnapshotInput,
+  ServiceSnapshotSource,
+} from "./snapshot";
 export { createAppointmentItemSnapshot } from "./snapshot";
 
 export { reorderAppointmentItems, updateAppointmentPhaseDuration } from "./mutations";
