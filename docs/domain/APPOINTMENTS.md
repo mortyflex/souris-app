@@ -459,6 +459,27 @@ Do not use the current service catalog as the only source for displaying histori
 
 ---
 
+# 13.1 Service Catalog vs AppointmentItem Snapshot
+
+The single in-memory Service catalog (see `docs/domain/SERVICES.md`) is a SELECTION source for new
+Appointment additions. An `AppointmentItem` is a booking-time copy.
+
+The boundary is strict:
+
+- Appointment Creation and Editing additions read CURRENT active catalog services only.
+- Once selected, the draft owns its name, type, price, and ordered phases; saving never re-reads
+  the catalog.
+- Existing retained items always hydrate from their `AppointmentItem` snapshots, never from the
+  catalog.
+- Editing the catalog (name, price, phases, activation) NEVER mutates an existing `AppointmentItem`.
+  A new addition made later snapshots the new catalog values.
+- `serviceId` may reference a Service that is inactive or no longer present in the catalog. The
+  snapshot remains valid and is displayed everywhere.
+
+No Appointment presentation or timeline may look up current catalog values for retained items.
+
+---
+
 # 14. Processing Duration Editing
 
 Processing duration may be editable after appointment creation when the relevant feature is implemented.

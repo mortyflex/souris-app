@@ -8,14 +8,9 @@
 // where the professional is not actively required.
 
 import type { Service, ServicePhase } from '@/domain/appointments';
+import type { PackageItem } from '../data/legacy-techniques';
 
-export interface LegacyTechnique {
-  readonly name: string;
-  readonly duration: number;
-  readonly break: number;
-  readonly price: number | string;
-  readonly color?: string;
-}
+export type LegacyTechnique = Readonly<PackageItem>;
 
 export interface LegacyTechniqueCategory {
   readonly category: string;
@@ -33,8 +28,6 @@ export interface TechniquesAdapterResult {
   readonly techniques: readonly Service[];
   readonly diagnostics: readonly AdapterDiagnostic[];
 }
-
-const legacyBusinessId = 'fixture-business';
 
 /**
  * Generates a deterministic technique ID from category and name.
@@ -76,6 +69,7 @@ export function generateTechniqueId(category: string, name: string): string {
 export function normalizeLegacyTechnique(
   legacy: LegacyTechnique,
   category: string,
+  businessId: string,
 ): Service | null {
   // Validate price
   if (typeof legacy.price !== 'number' || !Number.isFinite(legacy.price)) {
@@ -107,7 +101,7 @@ export function normalizeLegacyTechnique(
 
   return {
     id: techniqueId,
-    businessId: legacyBusinessId,
+    businessId,
     name: legacy.name,
     type: 'TECHNIQUE',
     price: legacy.price,
@@ -125,12 +119,13 @@ export function normalizeLegacyTechnique(
  */
 export function normalizeLegacyTechniqueCategory(
   categoryData: LegacyTechniqueCategory,
+  businessId: string,
 ): TechniquesAdapterResult {
   const techniques: Service[] = [];
   const diagnostics: AdapterDiagnostic[] = [];
 
   for (const legacy of categoryData.techniques) {
-    const normalized = normalizeLegacyTechnique(legacy, categoryData.category);
+    const normalized = normalizeLegacyTechnique(legacy, categoryData.category, businessId);
 
     if (normalized) {
       techniques.push(normalized);
@@ -153,12 +148,13 @@ export function normalizeLegacyTechniqueCategory(
  */
 export function normalizeLegacyTechniques(
   categories: readonly LegacyTechniqueCategory[],
+  businessId: string,
 ): TechniquesAdapterResult {
   const allTechniques: Service[] = [];
   const allDiagnostics: AdapterDiagnostic[] = [];
 
   for (const category of categories) {
-    const result = normalizeLegacyTechniqueCategory(category);
+    const result = normalizeLegacyTechniqueCategory(category, businessId);
     allTechniques.push(...result.techniques);
     allDiagnostics.push(...result.diagnostics);
   }

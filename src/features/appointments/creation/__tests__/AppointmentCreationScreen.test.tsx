@@ -11,12 +11,13 @@
 //   the summary without changing durations.
 
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 
 import type { Client } from '@/domain/clients';
 import { createInitialClients } from '@/features/clients/data/initial-clients';
 import { ClientSessionProvider, useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
@@ -103,6 +104,7 @@ type Rendered = Awaited<ReturnType<typeof renderCreation>>;
 function SessionProbe() {
   const { clients } = useClientSession();
   const { appointments } = useAppointmentSession();
+  const { setServiceActive } = useServiceCatalog();
   const newest = appointments[appointments.length - 1]?.appointment;
   const createdClient = clients.find((client) => client.firstName === 'Nouvelle');
 
@@ -110,6 +112,14 @@ function SessionProbe() {
     <>
       <Text testID="new-client-id">{createdClient?.id ?? ''}</Text>
       <Text testID="last-appointment-client-id">{newest?.clientId ?? ''}</Text>
+      <Pressable
+        testID="deactivate-balayage"
+        onPress={() => setServiceActive('technique-balayage-balayage-1', false)}
+      />
+      <Pressable
+        testID="reactivate-balayage"
+        onPress={() => setServiceActive('technique-balayage-balayage-1', true)}
+      />
     </>
   );
 }
@@ -117,10 +127,12 @@ function SessionProbe() {
 function renderCreation() {
   return render(
     <ClientSessionProvider>
-      <AppointmentSessionProvider>
-        <AppointmentCreationScreen startAt={startAt} />
-        <SessionProbe />
-      </AppointmentSessionProvider>
+      <ServiceCatalogProvider>
+        <AppointmentSessionProvider>
+          <AppointmentCreationScreen startAt={startAt} />
+          <SessionProbe />
+        </AppointmentSessionProvider>
+      </ServiceCatalogProvider>
     </ClientSessionProvider>,
   );
 }
@@ -424,6 +436,21 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       view.unmount();
     });
+  });
+
+  it('offers only active Services for new additions and reacts immediately', async () => {
+    const view = await renderCreation();
+
+    await act(async () => fireEvent.press(view.getByTestId('deactivate-balayage')));
+    await selectClientBeyond60(view);
+    await searchService(view, 'balayage 1');
+
+    expect(view.queryByText('Balayage 1')).toBeNull();
+    expect(view.getByText('Aucune prestation trouvée')).toBeTruthy();
+
+    await act(async () => fireEvent.press(view.getByTestId('reactivate-balayage')));
+
+    expect(view.getByText('Balayage 1')).toBeTruthy();
   });
 
   it('adds a client directly from the picker, selects it, and stores its exact id', async () => {

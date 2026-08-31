@@ -1,8 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
-import { foregroundSoft, peach, radii, semanticColors, spacing } from '@/shared/ui/theme';
-import type { TimelinePhase } from '@/domain/appointments';
+import { foregroundSoft, peach, radii, semanticColors, spacing } from '@/shared/ui/theme';import type { TimelinePhase } from '@/domain/appointments';
 
 import { formatAppointmentTime, formatDurationMinutes } from '../presentation';
 
@@ -24,11 +23,6 @@ export function AppointmentPhaseRow({ phase, isFirst }: AppointmentPhaseRowProps
         <AppText variant="body" numberOfLines={1} style={styles.phaseName}>
           {phase.phaseName}
         </AppText>
-        {processing && (
-          <AppText variant="metadata" style={styles.processingLabel}>
-            Professionnelle disponible
-          </AppText>
-        )}
       </View>
       <AppText variant="metadata" style={styles.duration}>
         {formatDurationMinutes(phase.durationMinutes)}
@@ -60,6 +54,5 @@ const styles = StyleSheet.create({
   startTime: { color: foregroundSoft, fontVariant: ['tabular-nums'], width: 40 },
   body: { flex: 1, gap: 1, minWidth: 0 },
   phaseName: { fontSize: 13, lineHeight: 18 },
-  processingLabel: { color: peach.peach700, fontSize: 11 },
   duration: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
 });

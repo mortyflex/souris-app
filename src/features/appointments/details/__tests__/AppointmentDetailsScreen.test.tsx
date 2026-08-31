@@ -356,4 +356,22 @@ describe('AppointmentDetailsScreen', () => {
     expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
+
+  it('shows concise processing phases without redundant wording', async () => {
+    const view = await render(
+      <ClientSessionProvider>
+        <AppointmentSessionProvider>
+          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
+        </AppointmentSessionProvider>
+      </ClientSessionProvider>,
+    );
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText(/Balayage, commence à/));
+    });
+
+    expect(view.getAllByText('Temps de pose').length).toBeGreaterThanOrEqual(1);
+    expect(view.queryByText('Professionnelle disponible')).toBeNull();
+    expect(view.queryByText('Professionnelle occupée')).toBeNull();
+  });
 });

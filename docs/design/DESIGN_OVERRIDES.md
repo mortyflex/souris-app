@@ -49,6 +49,9 @@ Actions:
 - `Annuler`
 - `Supprimer`
 
+Services & Pricing V1 keeps `Modifier`, adds `Désactiver` / `Réactiver`, and replaces the
+exported destructive primary with a tertiary `Supprimer définitivement` — see §9.
+
 ---
 
 ## 2. Existing Service — Edit Mode Actions
@@ -165,8 +168,10 @@ deliberately differs:
 - the client picker searches the complete normalized address book with a virtualized list and no display cap;
   its search field uses a symbol icon and a clear `Rechercher une cliente` placeholder instead of field
   instructions;
-- Prestations groups the catalog by category (eyebrow headers with counts, sticky on iOS) with a
-  `Sélectionnées` area above the catalog hosting appointment-specific customization; selected-service cards
+- Prestations reads the single shared active Service catalog as a flat deterministic list (no
+  category grouping: categories were legacy import metadata and do not exist on the canonical
+  Service model) with a `Sélectionnées` area above the catalog hosting appointment-specific
+  customization; selected-service cards
   start collapsed, at most one card is expanded at a time, and editing/removal controls live inside the
   expanded state so the collapsed list prioritizes scanning and reordering;
 - selected services are reordered by a small explicit drag handle (SF/Material grip symbol, 44dp target)
@@ -181,7 +186,47 @@ deliberately differs:
 
 ---
 
-## 8. Native Runtime Visual Language Refresh
+## 9. Service Management V1 — Activation Instead of Deletion
+
+The exported Prestations reference offers `Supprimer` with a destructive confirmation. Services &
+Pricing V1 originally had no permanent Service deletion: appointment snapshots preserve
+historical reality regardless. V1 now exposes BOTH catalog actions with distinct semantics:
+
+- `Désactiver` / `Réactiver` — temporary, non-destructive catalog management. The details sheet
+  closes after confirmation and the service moves to the matching list group.
+- `Supprimer définitivement` — permanent catalog-record removal for mistakes, duplicates, or
+  genuinely unwanted services. It is a tertiary rose text action (no filled destructive
+  background, no decorative outer border, 44pt touch area) placed below the primary actions.
+  Confirmation explicitly states that existing Appointments remain unchanged. Deletion never
+  cascades into Appointment snapshots.
+
+`Désactiver` uses non-destructive copy — « La prestation ne sera plus proposée lors de la création
+d’un rendez-vous. » — followed by a confirmation. Deactivation only removes the service from NEW
+Appointment selection; existing Appointment snapshots are never changed.
+
+Prestations & tarifs management groups the canonical catalog into `Actives` / `Inactives` groups,
+each visually separated into `Prestations simples` and `Techniques` subsections (only non-empty
+subsections render). Legacy categories never reappear. Rows use light surfaces with a restrained
+deep brand-violet service name (`lav700`, not full-strength action purple), strong foreground
+price, soft secondary duration metadata, and subtle chevrons. The editor uses
+`Prestation simple` / `Prestation technique` wording rather than raw enum vocabulary, and phases
+use `Temps actif` (professionnelle occupée, light neutral/lavender) and `Temps de pose`
+(professionnelle disponible, soft peach).
+
+The TECHNIQUE phase editor is an accordion: exactly one phase is expanded at a time, adding a
+phase collapses the current one and expands the new one, and collapsed phases show a compact
+identity row (index, name, semantic type, duration, drag handle). Dragging collapses the expanded
+phase so reordering always works on the compact representation. A processing phase has the
+canonical name `Temps de pose` and no custom name field.
+
+Read-only phase presentation is concise: an active phase shows its name with `Temps actif`
+semantics, a processing phase shows `Temps de pose` and its duration on the peach surface —
+the wording `professionnelle occupée` / `professionnelle disponible` belongs to the editor type
+selector only and never appears on read-only detail surfaces.
+
+---
+
+## 10. Native Runtime Visual Language Refresh
 
 The current React Native runtime adopts **soft editorial beauty productivity** as the newer approved visual
 direction. For native runtime presentation, this section takes precedence over the original exported design;

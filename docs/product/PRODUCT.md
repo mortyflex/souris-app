@@ -234,9 +234,11 @@ follow the edited draft start time.
 
 The initial address book and catalog use normalized legacy sources. The Cliente step reads the shared
 Client source — the same directory as the Clientes tab — and a new Client can be added directly from
-the picker when the person is not found. Client search uses only identity and contact fields. Services
-and techniques preserve their type, ordered phases, duration, price, and processing semantics; invalid
-non-numeric prices are excluded with a diagnostic rather than invented as zero.
+the picker when the person is not found. Client search uses only identity and contact fields. The
+Prestations step reads the single shared in-memory Service catalog (`ServiceCatalogProvider`): active
+services only, in deterministic import order. Services and techniques preserve their type, ordered
+phases, duration, price, and processing semantics; invalid non-numeric prices are excluded with a
+diagnostic rather than invented as zero.
 
 The first slice is intentionally in-memory for the current app session. Agenda Day, Agenda Week, and
 Appointment Details read the same collection, so newly created, edited, or lifecycle-updated appointments appear
@@ -514,20 +516,42 @@ Plus
 
 It is business configuration, not a hidden technical setting.
 
-A service may eventually expose:
+The screen lists the canonical catalog grouped by activation and then by type — `Actives`
+(`Prestations simples`, `Techniques`) and `Inactives` (same split). Rows use the
+professional-facing summary: name, price, duration, and processing context (`dont X de pose`).
+Only non-empty subsections render; legacy categories never reappear.
+`Ajouter une prestation` opens a dedicated sheet where the professional first chooses:
 
 ```text
-name
-category
-type
-price
-phases
-durations
-processing time
-active/inactive
+Prestation simple
+Prestation technique
 ```
 
-Future online-booking visibility may also be configurable.
+A simple service has one duration; a technique exposes an ordered phase editor where each phase
+is `Temps actif` (professionnelle occupée) or `Temps de pose` (professionnelle disponible).
+Phases can be added, edited, removed, and reordered. The phase editor is an accordion: only one
+phase is expanded at a time; adding a phase collapses the current one and expands the new one, and
+collapsed phases show a compact identity (index, name, semantic type, duration, drag handle).
+A processing phase has one canonical user-facing identity — `Temps de pose` — and therefore has no
+custom name field; only its duration and type are configured. Switching a phase back to active
+restores its previous draft name when available, and an active phase always requires a real name.
+
+Existing services open in read mode with `Modifier`, `Désactiver` (or `Réactiver` when inactive),
+and a tertiary `Supprimer définitivement` text action. Deactivation simply removes the service
+from new Appointment selection while existing Appointment snapshots remain untouched.
+
+Permanent deletion removes the catalog record only: it requires explicit destructive confirmation
+explaining that existing Appointments remain unchanged, then closes the Service Details sheet.
+Deletion never cascades into AppointmentItems, Agenda timelines, or Client history — a deleted
+Service simply cannot be newly added anymore. Deletion is available for both active and inactive
+services.
+
+The catalog is the SINGLE runtime service source shared by Prestations & tarifs, Appointment
+Creation, and Appointment Editing additions. It is seeded once from normalized legacy data
+(`legacy-services` / `legacy-techniques`), which are one-way import sources and never parallel
+runtime catalogs. The catalog is in-memory for the current session.
+
+Future directions (not implemented): category, online-booking visibility.
 
 ---
 
@@ -538,7 +562,8 @@ For an existing service:
 ```text
 read mode
 → Modifier
-→ Supprimer
+→ Désactiver / Réactiver
+→ Supprimer définitivement
 ```
 
 After entering edit mode:
@@ -548,18 +573,9 @@ Annuler
 Enregistrer les modifications
 ```
 
-The exported design showing:
-
-```text
-Fermer
-Enregistrer
-```
-
-for an existing service is explicitly overridden by:
-
-```text
-docs/design/DESIGN_OVERRIDES.md
-```
+`Désactiver` closes the details sheet after confirmation and moves the service to `Inactives`;
+`Réactiver` does the same toward `Actives`. The exported design showing `Fermer / Enregistrer`
+for an existing service is explicitly overridden by `docs/design/DESIGN_OVERRIDES.md`.
 
 ---
 

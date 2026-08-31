@@ -22,7 +22,6 @@ import { useAppointmentSession } from '@/features/appointments/session/Appointme
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { prepareClientDirectory } from '@/features/clients/directory/sort-clients';
-import { catalog } from '@/features/services/adapters/catalog';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -43,6 +42,7 @@ import {
   createSelectedServiceDraft,
   getSelectedServiceDraftKey,
   reorderDrafts,
+  toServiceSnapshotSource,
   updateDraftPhaseDuration,
   updateDraftPrice,
   type SelectedServiceDraft,
@@ -86,30 +86,17 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
     ? getClientDisplayName(selectedClient)
     : undefined;
 
-  const selectedEntries = selectedDrafts
-    .map((draft) => ({
-      draft,
-      service: catalog.services.find((service) => service.id === draft.serviceId),
-    }))
-    .filter((entry): entry is { draft: SelectedServiceDraft; service: Service } =>
-      entry.service !== undefined,
-    );
-
-  const summaryItems: readonly BuildAppointmentItemInput[] = selectedEntries.map(
-    ({ draft, service }) => ({
-      service,
-      price: draft.price,
-      phaseDurationOverrides: draft.phaseDurationOverrides,
-    }),
+  const summaryItems: readonly BuildAppointmentItemInput[] = selectedDrafts.map(
+    (draft) => ({ service: toServiceSnapshotSource(draft) }),
   );
 
   const summary =
-    selectedEntries.length > 0
+    selectedDrafts.length > 0
       ? getAppointmentCreationSummary(draftStartAt, summaryItems)
       : undefined;
 
   const canContinue =
-    step === 0 ? selectedClient !== undefined : selectedEntries.length > 0;
+    step === 0 ? selectedClient !== undefined : selectedDrafts.length > 0;
 
   const visibleClients = useMemo(
     () => prepareClientDirectory(clients, clientQuery),
@@ -164,14 +151,14 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   };
 
   const create = () => {
-    if (!selectedClient || selectedEntries.length === 0 || !summary) return;
+    if (!selectedClient || selectedDrafts.length === 0 || !summary) return;
 
     const appointmentId = createAppointmentId();
     const appointment = buildAppointment({
       appointmentId,
       businessId,
       clientId: selectedClient.id,
-      itemIds: selectedEntries.map((_, index) => createAppointmentItemId(appointmentId, index)),
+      itemIds: selectedDrafts.map((_, index) => createAppointmentItemId(appointmentId, index)),
       items: summaryItems,
       staffMemberId,
       startAt: draftStartAt,
@@ -249,9 +236,9 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         {step === 2 && selectedClient && summary && (
           <SummaryStep
             clientName={getClientDisplayName(selectedClient)}
-            services={selectedEntries.map(({ draft, service }) => ({
-              serviceId: service.id,
-              serviceName: service.name,
+            services={selectedDrafts.map((draft) => ({
+              serviceId: draft.serviceId,
+              serviceName: draft.serviceName,
               price: draft.price,
             }))}
             startAt={draftStartAt}

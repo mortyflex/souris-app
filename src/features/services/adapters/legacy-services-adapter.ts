@@ -8,14 +8,9 @@
 // with no processing time (unlike TECHNIQUEs).
 
 import type { Service, ServicePhase } from '@/domain/appointments';
+import type { ServiceItem } from '../data/legacy-services';
 
-export interface LegacyService {
-  readonly name: string;
-  readonly duration: number;
-  readonly break: number;
-  readonly price: number | string;
-  readonly color?: string;
-}
+export type LegacyService = Readonly<ServiceItem>;
 
 export interface LegacyServiceCategory {
   readonly category: string;
@@ -33,8 +28,6 @@ export interface ServicesAdapterResult {
   readonly services: readonly Service[];
   readonly diagnostics: readonly AdapterDiagnostic[];
 }
-
-const legacyBusinessId = 'fixture-business';
 
 /**
  * Generates a deterministic service ID from category and name.
@@ -83,6 +76,7 @@ export function generateServicePhaseId(serviceId: string): string {
 export function normalizeLegacyService(
   legacy: LegacyService,
   category: string,
+  businessId: string,
 ): Service | null {
   // Validate price
   if (typeof legacy.price !== 'number' || !Number.isFinite(legacy.price)) {
@@ -101,7 +95,7 @@ export function normalizeLegacyService(
 
   return {
     id: serviceId,
-    businessId: legacyBusinessId,
+    businessId,
     name: legacy.name,
     type: 'SERVICE',
     price: legacy.price,
@@ -119,12 +113,13 @@ export function normalizeLegacyService(
  */
 export function normalizeLegacyServiceCategory(
   categoryData: LegacyServiceCategory,
+  businessId: string,
 ): ServicesAdapterResult {
   const services: Service[] = [];
   const diagnostics: AdapterDiagnostic[] = [];
 
   for (const legacy of categoryData.services) {
-    const normalized = normalizeLegacyService(legacy, categoryData.category);
+    const normalized = normalizeLegacyService(legacy, categoryData.category, businessId);
 
     if (normalized) {
       services.push(normalized);
@@ -147,12 +142,13 @@ export function normalizeLegacyServiceCategory(
  */
 export function normalizeLegacyServices(
   categories: readonly LegacyServiceCategory[],
+  businessId: string,
 ): ServicesAdapterResult {
   const allServices: Service[] = [];
   const allDiagnostics: AdapterDiagnostic[] = [];
 
   for (const category of categories) {
-    const result = normalizeLegacyServiceCategory(category);
+    const result = normalizeLegacyServiceCategory(category, businessId);
     allServices.push(...result.services);
     allDiagnostics.push(...result.diagnostics);
   }

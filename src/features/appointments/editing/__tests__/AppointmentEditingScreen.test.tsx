@@ -3,6 +3,7 @@ import { Alert, Pressable, Text } from 'react-native';
 
 import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
+import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentEditingScreen } from '../AppointmentEditingScreen';
@@ -107,10 +108,12 @@ function SessionProbe() {
 function renderEditor() {
   return render(
     <ClientSessionProvider>
-      <AppointmentSessionProvider>
-        <AppointmentEditingScreen appointmentId="agenda-sofia" />
-        <SessionProbe />
-      </AppointmentSessionProvider>
+      <ServiceCatalogProvider>
+        <AppointmentSessionProvider>
+          <AppointmentEditingScreen appointmentId="agenda-sofia" />
+          <SessionProbe />
+        </AppointmentSessionProvider>
+      </ServiceCatalogProvider>
     </ClientSessionProvider>,
   );
 }

@@ -333,16 +333,20 @@ without a concrete need.
 
 React Context is not a substitute for thoughtful state ownership.
 
-The current in-memory application session uses two focused providers:
+The current in-memory application session uses three focused providers:
 
 ```text
 AppointmentSessionProvider — the appointment collection
 ClientSessionProvider       — the single Client source
+ServiceCatalogProvider      — the single canonical Service catalog source
 ```
 
-They expose only what current surfaces need (lookup + add). Appointments
-reference Clients through `clientId`; display names are resolved from the
-Client source, never duplicated into appointment state.
+They expose only what current surfaces need (lookup + add + the mutations each feature requires).
+Appointments reference Clients through `clientId`; display names are resolved from the Client
+source, never duplicated into appointment state. Appointments reference catalog services through
+`serviceId` at selection time only; once selected, an `AppointmentItem` owns its snapshot and is
+never re-read from the Service catalog. Legacy service data feeds the catalog through pure
+one-way adapters and is not a parallel runtime source.
 
 ---
 
