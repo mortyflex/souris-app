@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   canCancelAppointment,
@@ -11,14 +17,14 @@ import {
   completeAppointment,
   markAppointmentNoShow,
   shouldAutoCompleteAppointment,
-} from '@/domain/appointments';
-import { AppButton } from '@/shared/ui/AppButton';
-import { AppText } from '@/shared/ui/AppText';
-import { SectionHeader } from '@/shared/ui/SectionHeader';
-import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
-import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
-import { getResolvedClientDisplayName } from '@/features/clients/presentation';
-import { haptics } from '@/shared/lib/haptics';
+} from "@/domain/appointments";
+import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
+import { getResolvedClientDisplayName } from "@/features/clients/presentation";
+import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
+import { haptics } from "@/shared/lib/haptics";
+import { AppButton } from "@/shared/ui/AppButton";
+import { AppText } from "@/shared/ui/AppText";
+import { SectionHeader } from "@/shared/ui/SectionHeader";
 import {
   foregroundSoft,
   gutter,
@@ -28,15 +34,15 @@ import {
   semanticColors,
   spacing,
   touchTarget,
-} from '@/shared/ui/theme';
+} from "@/shared/ui/theme";
 
-import { AppointmentServiceSection } from './components/AppointmentServiceSection';
-import { AppointmentSummary } from './components/AppointmentSummary';
-import { AppointmentDeletionDialog } from './components/AppointmentDeletionDialog';
+import { AppointmentDeletionDialog } from "./components/AppointmentDeletionDialog";
 import {
   AppointmentCancellationSheet,
   AppointmentNoShowSheet,
-} from './components/AppointmentLifecycleSheets';
+} from "./components/AppointmentLifecycleSheets";
+import { AppointmentServiceSection } from "./components/AppointmentServiceSection";
+import { AppointmentSummary } from "./components/AppointmentSummary";
 import {
   formatAppointmentDate,
   formatAppointmentTime,
@@ -46,21 +52,27 @@ import {
   getAppointmentEnd,
   getAppointmentStatusLabel,
   isTerminalAppointmentStatus,
-} from './presentation';
+} from "./presentation";
 
 interface AppointmentDetailsScreenProps {
   readonly appointmentId?: string;
 }
 
-export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsScreenProps) {
+export function AppointmentDetailsScreen({
+  appointmentId,
+}: AppointmentDetailsScreenProps) {
   const router = useRouter();
-  const [expandedItemIds, setExpandedItemIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedItemIds, setExpandedItemIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [now, setNow] = useState(() => new Date());
-  const [activeSheet, setActiveSheet] = useState<'cancellation' | 'no-show'>();
+  const [activeSheet, setActiveSheet] = useState<"cancellation" | "no-show">();
   const [deletionVisible, setDeletionVisible] = useState(false);
   const [deletedByCurrentScreen, setDeletedByCurrentScreen] = useState(false);
-  const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
-  const { deleteAppointment, getAppointmentById, updateAppointment } = useAppointmentSession();
+  const horizontalGutter =
+    Platform.OS === "android" ? gutter.android : gutter.ios;
+  const { deleteAppointment, getAppointmentById, updateAppointment } =
+    useAppointmentSession();
   const { getClientById } = useClientSession();
   const entry = getAppointmentById(appointmentId);
 
@@ -93,7 +105,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
     if (deletedByCurrentScreen) return null;
 
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Rendez-vous introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
@@ -105,12 +117,15 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
   }
 
   const { appointment } = entry;
-  const clientDisplayName = getResolvedClientDisplayName(getClientById(appointment.clientId));
+  const clientDisplayName = getResolvedClientDisplayName(
+    getClientById(appointment.clientId),
+  );
   const services = getAppointmentDetailServices(appointment);
   const summary = getAppointmentDetailSummary(appointment);
   const endAt = getAppointmentEnd(appointment);
   const isTerminal = isTerminalAppointmentStatus(appointment.status);
-  const isException = appointment.status === 'CANCELLED' || appointment.status === 'NO_SHOW';
+  const isException =
+    appointment.status === "CANCELLED" || appointment.status === "NO_SHOW";
   const canComplete = canCompleteAppointment(appointment, now);
   const canCancel = canCancelAppointment(appointment);
   const canMarkNoShow = canMarkAppointmentNoShow(appointment, now);
@@ -125,7 +140,8 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
   };
 
   const finalizePreviousDayBeforeException = (transitionNow: Date): boolean => {
-    if (!shouldAutoCompleteAppointment(appointment, transitionNow)) return false;
+    if (!shouldAutoCompleteAppointment(appointment, transitionNow))
+      return false;
     updateAppointment({
       appointment: completeAppointment(appointment, transitionNow),
     });
@@ -133,10 +149,15 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
     return true;
   };
 
-  const cancel = (actor: 'CLIENT' | 'BUSINESS', reason?: string) => {
+  const cancel = (actor: "CLIENT" | "BUSINESS", reason?: string) => {
     const transitionNow = new Date();
     if (finalizePreviousDayBeforeException(transitionNow)) return;
-    const nextAppointment = cancelAppointment(appointment, actor, transitionNow, reason);
+    const nextAppointment = cancelAppointment(
+      appointment,
+      actor,
+      transitionNow,
+      reason,
+    );
     if (nextAppointment === appointment) return;
     updateAppointment({ appointment: nextAppointment });
     setActiveSheet(undefined);
@@ -162,13 +183,19 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
+        contentContainerStyle={[
+          styles.content,
+          { paddingHorizontal: horizontalGutter },
+        ]}
       >
         <View style={styles.appointmentHeader}>
-          <View style={styles.identityHeader} testID="appointment-identity-header">
+          <View
+            style={styles.identityHeader}
+            testID="appointment-identity-header"
+          >
             <View style={styles.identityAccent} />
             <View style={styles.identityCopy}>
               <AppText variant="eyebrow" style={styles.identityEyebrow}>
@@ -190,7 +217,8 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
             </AppText>
             <View style={styles.metaBottomRow}>
               <AppText variant="control" selectable style={styles.timeLine}>
-                {formatAppointmentTime(appointment.startAt)} – {formatAppointmentTime(endAt)}
+                {formatAppointmentTime(appointment.startAt)} –{" "}
+                {formatAppointmentTime(endAt)}
               </AppText>
               <View style={styles.statusRow}>
                 <View
@@ -220,10 +248,16 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
             {appointment.cancellation && (
               <View style={styles.outcomeMetadata}>
                 <AppText variant="metadata" style={styles.outcomeActor}>
-                  {formatCancellationActorLabel(appointment.cancellation.cancelledBy)}
+                  {formatCancellationActorLabel(
+                    appointment.cancellation.cancelledBy,
+                  )}
                 </AppText>
                 {appointment.cancellation.reason && (
-                  <AppText variant="metadata" selectable style={styles.outcomeReason}>
+                  <AppText
+                    variant="metadata"
+                    selectable
+                    style={styles.outcomeReason}
+                  >
                     {appointment.cancellation.reason}
                   </AppText>
                 )}
@@ -232,7 +266,11 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
           </View>
         </View>
 
-        <SectionHeader count={services.length} style={styles.sectionHeader} title="Prestations" />
+        <SectionHeader
+          count={services.length}
+          style={styles.sectionHeader}
+          title="Prestations"
+        />
         {services.map((service) => (
           <AppointmentServiceSection
             key={service.item.id}
@@ -265,10 +303,13 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
             />
           )}
           {hasNormalActions && (
-            <View style={styles.normalActions} testID="appointment-normal-actions">
+            <View
+              style={styles.normalActions}
+              testID="appointment-normal-actions"
+            >
               {canMarkNoShow && (
                 <AppButton
-                  onPress={() => setActiveSheet('no-show')}
+                  onPress={() => setActiveSheet("no-show")}
                   style={styles.normalAction}
                   testID="open-no-show"
                   title="Absence"
@@ -277,7 +318,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
               )}
               {canCancel && (
                 <AppButton
-                  onPress={() => setActiveSheet('cancellation')}
+                  onPress={() => setActiveSheet("cancellation")}
                   style={styles.normalAction}
                   testID="open-cancellation"
                   title="Annuler"
@@ -289,7 +330,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
                   accessibilityLabel="Modifier le rendez-vous"
                   onPress={() =>
                     router.push({
-                      pathname: '/appointments/edit/[appointmentId]',
+                      pathname: "/appointments/edit/[appointmentId]",
                       params: { appointmentId: appointment.id },
                     })
                   }
@@ -315,7 +356,7 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
             testID="open-permanent-deletion"
           >
             <AppText variant="control" style={styles.deleteText}>
-              Supprimer définitivement
+              Supprimer
             </AppText>
           </Pressable>
         </View>
@@ -325,13 +366,13 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
         clientName={clientDisplayName}
         onClose={() => setActiveSheet(undefined)}
         onConfirm={cancel}
-        visible={!isTerminal && activeSheet === 'cancellation'}
+        visible={!isTerminal && activeSheet === "cancellation"}
       />
       <AppointmentNoShowSheet
         clientName={clientDisplayName}
         onClose={() => setActiveSheet(undefined)}
         onConfirm={markNoShow}
-        visible={!isTerminal && activeSheet === 'no-show'}
+        visible={!isTerminal && activeSheet === "no-show"}
       />
       <AppointmentDeletionDialog
         onClose={() => setDeletionVisible(false)}
@@ -344,33 +385,51 @@ export function AppointmentDetailsScreen({ appointmentId }: AppointmentDetailsSc
 
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  content: { paddingBottom: spacing['3xl'], paddingTop: spacing.base },
+  content: { paddingBottom: spacing["3xl"], paddingTop: spacing.base },
   appointmentHeader: { paddingBottom: spacing.xl },
-  identityHeader: { alignItems: 'stretch', flexDirection: 'row', marginBottom: spacing.base },
+  identityHeader: {
+    alignItems: "stretch",
+    flexDirection: "row",
+    marginBottom: spacing.base,
+  },
   identityAccent: {
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
     backgroundColor: rose.rose600,
     borderRadius: radii.pill,
     width: 4,
   },
-  identityCopy: { flex: 1, gap: spacing.xs, justifyContent: 'center', marginLeft: spacing.md, minWidth: 0 },
+  identityCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    justifyContent: "center",
+    marginLeft: spacing.md,
+    minWidth: 0,
+  },
   identityEyebrow: { color: rose.rose600 },
   clientName: { color: semanticColors.foreground },
   metaSurface: {
     backgroundColor: semanticColors.surfaceRose,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.medium,
     padding: spacing.base,
   },
   dateLine: { color: semanticColors.foreground },
   metaBottomRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: spacing.sm,
   },
-  timeLine: { color: semanticColors.foreground, flexShrink: 1, fontVariant: ['tabular-nums'] },
-  statusRow: { alignItems: 'center', flexDirection: 'row', marginLeft: spacing.sm },
+  timeLine: {
+    color: semanticColors.foreground,
+    flexShrink: 1,
+    fontVariant: ["tabular-nums"],
+  },
+  statusRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    marginLeft: spacing.sm,
+  },
   statusDot: {
     borderRadius: radii.pill,
     height: 6,
@@ -400,16 +459,16 @@ const styles = StyleSheet.create({
   },
   noteLabel: { color: semanticColors.foreground, marginBottom: spacing.sm },
   appointmentActions: { gap: spacing.sm, marginTop: spacing.xl },
-  fullWidthAction: { alignSelf: 'stretch' },
-  normalActions: { flexDirection: 'row', gap: spacing.sm },
+  fullWidthAction: { alignSelf: "stretch" },
+  normalActions: { flexDirection: "row", gap: spacing.sm },
   normalAction: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm },
-  onlyNormalAction: { flex: 0, marginLeft: 'auto' },
+  onlyNormalAction: { flex: 0, marginLeft: "auto" },
   deleteTextAction: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    alignSelf: "center",
+    justifyContent: "center",
     marginTop: spacing.sm,
-    minHeight: touchTarget[Platform.OS === 'android' ? 'android' : 'ios'],
+    minHeight: touchTarget[Platform.OS === "android" ? "android" : "ios"],
     paddingHorizontal: spacing.md,
   },
   deleteTextActionPressed: {
@@ -417,6 +476,15 @@ const styles = StyleSheet.create({
     transform: [{ scale: interaction.pressedScale }],
   },
   deleteText: { color: rose.rose600 },
-  notFound: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
-  notFoundText: { color: foregroundSoft, marginTop: spacing.sm, textAlign: 'center' },
+  notFound: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  notFoundText: {
+    color: foregroundSoft,
+    marginTop: spacing.sm,
+    textAlign: "center",
+  },
 });

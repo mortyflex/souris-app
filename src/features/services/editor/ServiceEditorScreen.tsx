@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from "expo-router";
+import { SymbolView, type SymbolViewProps } from "expo-symbols";
+import { useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -8,23 +9,22 @@ import {
   ScrollView,
   StyleSheet,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { Service, ServiceType } from '@/domain/appointments';
-import { DEVELOPMENT_BUSINESS_ID } from '@/features/services/data/initial-services';
+import type { Service, ServiceType } from "@/domain/appointments";
+import { DEVELOPMENT_BUSINESS_ID } from "@/features/services/data/initial-services";
 import {
   formatServiceDuration,
   formatServicePrice,
   getServiceDurationMinutes,
   getServiceProcessingMinutes,
-} from '@/features/services/presentation';
-import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
-import { haptics } from '@/shared/lib/haptics';
-import { AppButton } from '@/shared/ui/AppButton';
-import { AppText } from '@/shared/ui/AppText';
-import { SectionHeader } from '@/shared/ui/SectionHeader';
+} from "@/features/services/presentation";
+import { useServiceCatalog } from "@/features/services/session/ServiceCatalogProvider";
+import { haptics } from "@/shared/lib/haptics";
+import { AppButton } from "@/shared/ui/AppButton";
+import { AppText } from "@/shared/ui/AppText";
+import { SectionHeader } from "@/shared/ui/SectionHeader";
 import {
   foregroundSoft,
   gutter,
@@ -34,8 +34,11 @@ import {
   rose,
   semanticColors,
   spacing,
-} from '@/shared/ui/theme';
+} from "@/shared/ui/theme";
 
+import { TextField } from "@/shared/ui/TextField";
+import { SortablePhaseEditor } from "./components/SortablePhaseEditor";
+import { createServiceId, createServicePhaseId } from "./runtime-ids";
 import {
   addServicePhase,
   buildServiceFromForm,
@@ -47,21 +50,22 @@ import {
   updateServicePhase,
   validateServiceForm,
   type ServiceFormValues,
-} from './service-form';
-import { createServiceId, createServicePhaseId } from './runtime-ids';
-import { TextField } from '@/shared/ui/TextField';
-import { SortablePhaseEditor } from './components/SortablePhaseEditor';
+} from "./service-form";
 
-export type ServiceEditorMode = 'create' | 'existing';
+export type ServiceEditorMode = "create" | "existing";
 
 interface ServiceEditorScreenProps {
   readonly mode: ServiceEditorMode;
   readonly serviceId?: string;
 }
 
-const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
+const horizontalGutter =
+  Platform.OS === "android" ? gutter.android : gutter.ios;
 
-export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProps) {
+export function ServiceEditorScreen({
+  mode,
+  serviceId,
+}: ServiceEditorScreenProps) {
   const router = useRouter();
   const {
     addService,
@@ -72,35 +76,40 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
   } = useServiceCatalog();
   const service = getServiceById(serviceId);
   const [runtimeServiceId] = useState(() =>
-    mode === 'create' ? createServiceId() : serviceId ?? 'missing-service',
+    mode === "create" ? createServiceId() : (serviceId ?? "missing-service"),
   );
   const [values, setValues] = useState<ServiceFormValues | null>(() =>
-    mode === 'existing' && service ? toServiceFormValues(service) : null,
+    mode === "existing" && service ? toServiceFormValues(service) : null,
   );
-  const [editing, setEditing] = useState(mode === 'create');
+  const [editing, setEditing] = useState(mode === "create");
   const [attempted, setAttempted] = useState(false);
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
 
-  if (mode === 'existing' && !service) {
+  if (mode === "existing" && !service) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Prestation introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
             Cette prestation n&apos;est plus disponible.
           </AppText>
-          <AppButton onPress={() => router.back()} title="Fermer" variant="secondary" />
+          <AppButton
+            onPress={() => router.back()}
+            title="Fermer"
+            variant="secondary"
+          />
         </View>
       </SafeAreaView>
     );
   }
 
   const validation = values ? validateServiceForm(values) : undefined;
-  const title = mode === 'create' ? 'Ajouter une prestation' : service?.name ?? '';
-  const closeLabel = mode === 'create' || editing ? 'Annuler' : 'Fermer';
+  const title =
+    mode === "create" ? "Ajouter une prestation" : (service?.name ?? "");
+  const closeLabel = mode === "create" || editing ? "Annuler" : "Fermer";
 
   const close = () => {
-    if (mode === 'existing' && editing && service) {
+    if (mode === "existing" && editing && service) {
       setValues(toServiceFormValues(service));
       setAttempted(false);
       setEditing(false);
@@ -113,7 +122,7 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
     const firstPhaseId = createServicePhaseId(runtimeServiceId);
     setValues(createEmptyServiceForm(type, firstPhaseId));
     setAttempted(false);
-    setExpandedPhaseId(type === 'TECHNIQUE' ? firstPhaseId : null);
+    setExpandedPhaseId(type === "TECHNIQUE" ? firstPhaseId : null);
   };
 
   const addPhase = () => {
@@ -151,7 +160,7 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
       values,
     });
 
-    if (mode === 'create') {
+    if (mode === "create") {
       addService(nextService);
       haptics.success();
       router.back();
@@ -179,11 +188,11 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
     }
 
     Alert.alert(
-      'Désactiver cette prestation ?',
-      'La prestation ne sera plus proposée lors de la création d’un rendez-vous.',
+      "Désactiver cette prestation ?",
+      "La prestation ne sera plus proposée lors de la création d’un rendez-vous.",
       [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Désactiver', onPress: () => commit(false) },
+        { text: "Annuler", style: "cancel" },
+        { text: "Désactiver", onPress: () => commit(false) },
       ],
     );
   };
@@ -192,13 +201,13 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
     if (!service) return;
 
     Alert.alert(
-      'Supprimer définitivement cette prestation ?',
-      'Elle sera supprimée du catalogue et ne pourra plus être ajoutée à de nouveaux rendez-vous.\n\nLes rendez-vous existants qui utilisent cette prestation resteront inchangés.',
+      "Supprimer cette prestation ?",
+      "Elle sera supprimée du catalogue et ne pourra plus être ajoutée à de nouveaux rendez-vous.\n\nLes rendez-vous existants qui utilisent cette prestation resteront inchangés.",
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: "Annuler", style: "cancel" },
         {
-          text: 'Supprimer définitivement',
-          style: 'destructive',
+          text: "Supprimer",
+          style: "destructive",
           onPress: () => {
             deleteService(service.id);
             haptics.warning();
@@ -210,17 +219,21 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.keyboardContainer}
       >
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <AppText variant="eyebrow" style={styles.eyebrow}>
-              {mode === 'create' ? 'NOUVELLE PRESTATION' : 'PRESTATION'}
+              {mode === "create" ? "NOUVELLE PRESTATION" : "PRESTATION"}
             </AppText>
-            <AppText variant="sheetTitle" accessibilityRole="header" numberOfLines={1}>
+            <AppText
+              variant="sheetTitle"
+              accessibilityRole="header"
+              numberOfLines={1}
+            >
               {title}
             </AppText>
           </View>
@@ -233,7 +246,7 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
           />
         </View>
 
-        {mode === 'create' && !values ? (
+        {mode === "create" && !values ? (
           <ServiceKindPicker onSelect={chooseType} />
         ) : editing && values && validation ? (
           <ServiceForm
@@ -242,14 +255,16 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
             validation={validation}
             values={values}
             onAddPhase={addPhase}
-            onChangeName={(name) => updateField('name', name)}
-            onChangePrice={(price) => updateField('price', price)}
+            onChangeName={(name) => updateField("name", name)}
+            onChangePrice={(price) => updateField("price", price)}
             onChangeSimpleDuration={(duration) =>
-              updateField('simpleDurationMinutes', duration)
+              updateField("simpleDurationMinutes", duration)
             }
             onChangePhase={(phaseId, update) =>
               setValues((current) =>
-                current ? updateServicePhase(current, phaseId, update) : current,
+                current
+                  ? updateServicePhase(current, phaseId, update)
+                  : current,
               )
             }
             onChangeRequiresStaff={(phaseId, requiresStaff) =>
@@ -275,7 +290,7 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
 
         {values && editing && (
           <View style={styles.footer}>
-            {mode === 'existing' && (
+            {mode === "existing" && (
               <AppButton
                 onPress={close}
                 style={styles.secondaryButton}
@@ -289,21 +304,21 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
               style={styles.primaryButton}
               testID="save-service"
               title={
-                mode === 'create'
-                  ? 'Ajouter la prestation'
-                  : 'Enregistrer les modifications'
+                mode === "create"
+                  ? "Ajouter la prestation"
+                  : "Enregistrer les modifications"
               }
             />
           </View>
         )}
 
-        {mode === 'existing' && !editing && service && (
+        {mode === "existing" && !editing && service && (
           <View style={styles.readFooterContainer}>
             <View style={[styles.footer, styles.readFooterRow]}>
               <AppButton
                 onPress={changeActiveState}
                 style={styles.secondaryButton}
-                title={service.active ? 'Désactiver' : 'Réactiver'}
+                title={service.active ? "Désactiver" : "Réactiver"}
                 variant="secondary"
               />
               <AppButton
@@ -320,7 +335,7 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Supprimer définitivement cette prestation"
+              accessibilityLabel="Supprimer cette prestation"
               onPress={requestDelete}
               style={({ pressed }) => [
                 styles.deleteAction,
@@ -328,7 +343,7 @@ export function ServiceEditorScreen({ mode, serviceId }: ServiceEditorScreenProp
               ]}
             >
               <AppText variant="control" style={styles.deleteText}>
-                Supprimer définitivement
+                Supprimer
               </AppText>
             </Pressable>
           </View>
@@ -355,15 +370,15 @@ function ServiceKindPicker({
       </AppText>
       <KindChoice
         description="Une seule durée, la professionnelle reste occupée."
-        icon={{ ios: 'clock', android: 'schedule' }}
+        icon={{ ios: "clock", android: "schedule" }}
         label="Prestation simple"
-        onPress={() => onSelect('SERVICE')}
+        onPress={() => onSelect("SERVICE")}
       />
       <KindChoice
         description="Plusieurs phases, avec ou sans temps de pose."
-        icon={{ ios: 'list.number', android: 'format_list_numbered' }}
+        icon={{ ios: "list.number", android: "format_list_numbered" }}
         label="Prestation technique"
-        onPress={() => onSelect('TECHNIQUE')}
+        onPress={() => onSelect("TECHNIQUE")}
       />
     </ScrollView>
   );
@@ -377,14 +392,17 @@ function KindChoice({
 }: {
   readonly label: string;
   readonly description: string;
-  readonly icon: SymbolViewProps['name'];
+  readonly icon: SymbolViewProps["name"];
   readonly onPress: () => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.kindChoice, pressed && styles.kindChoicePressed]}
+      style={({ pressed }) => [
+        styles.kindChoice,
+        pressed && styles.kindChoicePressed,
+      ]}
     >
       <View style={styles.kindIcon}>
         <SymbolView name={icon} size={20} tintColor={semanticColors.accent} />
@@ -396,7 +414,7 @@ function KindChoice({
         </AppText>
       </View>
       <SymbolView
-        name={{ ios: 'chevron.right', android: 'chevron_right' }}
+        name={{ ios: "chevron.right", android: "chevron_right" }}
         size={15}
         tintColor={semanticColors.foregroundMuted}
       />
@@ -415,7 +433,7 @@ interface ServiceFormProps {
   readonly onChangeSimpleDuration: (duration: string) => void;
   readonly onChangePhase: (
     phaseId: string,
-    update: Partial<Omit<ServiceFormValues['phases'][number], 'id'>>,
+    update: Partial<Omit<ServiceFormValues["phases"][number], "id">>,
   ) => void;
   readonly onChangeRequiresStaff: (
     phaseId: string,
@@ -450,13 +468,17 @@ function ServiceForm({
     >
       <View style={styles.kindLabel}>
         <AppText variant="metadata" style={styles.kindLabelText}>
-          {values.type === 'SERVICE' ? 'Prestation simple' : 'Prestation technique'}
+          {values.type === "SERVICE"
+            ? "Prestation simple"
+            : "Prestation technique"}
         </AppText>
       </View>
       <TextField
         accessibilityLabel="Nom de la prestation"
         autoFocus
-        error={attempted && !validation.nameValid ? 'Le nom est requis.' : undefined}
+        error={
+          attempted && !validation.nameValid ? "Le nom est requis." : undefined
+        }
         label="Nom"
         onChangeText={onChangeName}
         placeholder="Ex. Coupe"
@@ -466,7 +488,7 @@ function ServiceForm({
         accessibilityLabel="Prix de la prestation"
         error={
           attempted && !validation.priceValid
-            ? 'Indiquez un prix valide, positif ou nul.'
+            ? "Indiquez un prix valide, positif ou nul."
             : undefined
         }
         keyboardType="decimal-pad"
@@ -477,12 +499,12 @@ function ServiceForm({
         value={values.price}
       />
 
-      {values.type === 'SERVICE' ? (
+      {values.type === "SERVICE" ? (
         <TextField
           accessibilityLabel="Durée de la prestation"
           error={
             attempted && !validation.simpleDurationValid
-              ? 'Indiquez une durée positive en minutes.'
+              ? "Indiquez une durée positive en minutes."
               : undefined
           }
           keyboardType="number-pad"
@@ -514,11 +536,13 @@ function ServiceForm({
             title="Ajouter une phase"
             variant="secondary"
           />
-          {attempted && !validation.phasesValid && values.phases.length === 0 && (
-            <AppText variant="metadata" style={styles.formError}>
-              Ajoutez au moins une phase.
-            </AppText>
-          )}
+          {attempted &&
+            !validation.phasesValid &&
+            values.phases.length === 0 && (
+              <AppText variant="metadata" style={styles.formError}>
+                Ajoutez au moins une phase.
+              </AppText>
+            )}
           {values.phases.length > 0 &&
             !validation.hasProcessingPhase &&
             validation.phaseValidities.every(
@@ -544,9 +568,11 @@ function ServiceReadView({ service }: { readonly service: Service }) {
       contentContainerStyle={styles.readContent}
     >
       <View style={styles.statusLine}>
-        <View style={[styles.statusDot, !service.active && styles.inactiveDot]} />
+        <View
+          style={[styles.statusDot, !service.active && styles.inactiveDot]}
+        />
         <AppText variant="metadata" style={styles.statusText}>
-          {service.active ? 'Active' : 'Inactive'}
+          {service.active ? "Active" : "Inactive"}
         </AppText>
       </View>
       <View style={styles.summarySurface}>
@@ -561,7 +587,7 @@ function ServiceReadView({ service }: { readonly service: Service }) {
         )}
       </View>
 
-      {service.type === 'TECHNIQUE' && (
+      {service.type === "TECHNIQUE" && (
         <View style={styles.readPhases}>
           <SectionHeader count={service.phases.length} title="Phases" />
           {service.phases.map((phase, index) => (
@@ -569,7 +595,9 @@ function ServiceReadView({ service }: { readonly service: Service }) {
               key={phase.id}
               style={[
                 styles.readPhase,
-                phase.requiresStaff ? styles.readActivePhase : styles.readProcessingPhase,
+                phase.requiresStaff
+                  ? styles.readActivePhase
+                  : styles.readProcessingPhase,
               ]}
             >
               <View style={styles.readPhaseIndex}>
@@ -605,7 +633,10 @@ function ReadMetric({
 }) {
   return (
     <View style={[styles.readMetric, processing && styles.processingMetric]}>
-      <AppText variant="summaryValue" style={processing && styles.processingLabel}>
+      <AppText
+        variant="summaryValue"
+        style={processing && styles.processingLabel}
+      >
         {value}
       </AppText>
       <AppText variant="metadata" style={processing && styles.processingLabel}>
@@ -619,11 +650,11 @@ const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
   keyboardContainer: { flex: 1 },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     borderBottomColor: semanticColors.borderSubtle,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingBottom: spacing.sm,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
@@ -633,17 +664,17 @@ const styles = StyleSheet.create({
   closeButton: { paddingHorizontal: spacing.md },
   kindContent: {
     gap: spacing.md,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing["3xl"],
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.xl,
   },
   kindIntro: { color: foregroundSoft, marginBottom: spacing.sm },
   kindChoice: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.large,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.md,
     minHeight: 82,
     padding: spacing.base,
@@ -653,24 +684,24 @@ const styles = StyleSheet.create({
     transform: [{ scale: interaction.cardPressedScale }],
   },
   kindIcon: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.medium,
     height: 44,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: 44,
   },
   kindCopy: { flex: 1, gap: spacing.xs },
   kindDescription: { color: foregroundSoft, lineHeight: 18 },
   formContent: {
     gap: spacing.base,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing["3xl"],
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
   kindLabel: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     backgroundColor: semanticColors.surfaceLavenderStrong,
     borderRadius: radii.small,
     paddingHorizontal: spacing.sm,
@@ -681,11 +712,11 @@ const styles = StyleSheet.create({
   formError: { color: semanticColors.foregroundSoft },
   readContent: {
     gap: spacing.xl,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing["3xl"],
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
-  statusLine: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
+  statusLine: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
   statusDot: {
     backgroundColor: semanticColors.accent,
     borderRadius: radii.pill,
@@ -696,25 +727,25 @@ const styles = StyleSheet.create({
   statusText: { color: semanticColors.foregroundSoft },
   summarySurface: {
     backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.large,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
     padding: spacing.md,
   },
   readMetric: { flex: 1, gap: 2 },
   processingMetric: {
     backgroundColor: semanticColors.surfacePeachStrong,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.medium,
     padding: spacing.sm,
   },
   readPhases: { gap: spacing.sm },
   readPhase: {
-    alignItems: 'center',
-    borderCurve: 'continuous',
+    alignItems: "center",
+    borderCurve: "continuous",
     borderRadius: radii.medium,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
     minHeight: 64,
     padding: spacing.md,
@@ -722,22 +753,22 @@ const styles = StyleSheet.create({
   readActivePhase: { backgroundColor: semanticColors.surfaceLavender },
   readProcessingPhase: { backgroundColor: semanticColors.surfacePeach },
   readPhaseIndex: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: semanticColors.surfaceElevated,
     borderRadius: radii.pill,
     height: 28,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: 28,
   },
   readPhaseCopy: { flex: 1, gap: 2, minWidth: 0 },
   activeLabel: { color: semanticColors.accent },
   processingLabel: { color: peach.peach700 },
-  phaseDuration: { fontVariant: ['tabular-nums'] },
+  phaseDuration: { fontVariant: ["tabular-nums"] },
   footer: {
     backgroundColor: semanticColors.surfaceElevated,
     borderTopColor: semanticColors.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
     paddingBottom: spacing.sm,
     paddingHorizontal: horizontalGutter,
@@ -752,13 +783,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   readFooterRow: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderTopWidth: 0,
     paddingBottom: 0,
   },
   deleteAction: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     minHeight: 44,
     paddingHorizontal: spacing.base,
   },
@@ -768,11 +799,11 @@ const styles = StyleSheet.create({
   },
   deleteText: { color: rose.rose600 },
   notFound: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
     gap: spacing.md,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingHorizontal: spacing.xl,
   },
-  notFoundText: { color: foregroundSoft, textAlign: 'center' },
+  notFoundText: { color: foregroundSoft, textAlign: "center" },
 });
