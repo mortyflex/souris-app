@@ -193,6 +193,46 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.queryByTestId("open-cancellation")).toBeNull();
   });
 
+  it("offers Revente above the lifecycle actions with the Appointment Client, before and after completion", async () => {
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    const view = await render(
+      <ClientSessionProvider>
+        <AppointmentSessionProvider>
+          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
+        </AppointmentSessionProvider>
+      </ClientSessionProvider>,
+    );
+
+    expect(view.getByText("Revente")).toBeTruthy();
+    expect(view.queryByText("Vendre un produit")).toBeNull();
+    expect(
+      within(view.getByTestId("appointment-normal-actions")).queryByTestId("sell-product"),
+    ).toBeNull();
+    const actionOrder = within(view.getByTestId("appointment-actions"))
+      .getAllByRole("button")
+      .map(({ props }) => props.testID);
+    expect(actionOrder.indexOf("sell-product")).toBe(0);
+    expect(actionOrder.indexOf("sell-product")).toBeLessThan(
+      actionOrder.indexOf("complete-appointment"),
+    );
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText("Revente"));
+    });
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/sales/new",
+      params: { clientId: "client-agenda-sofia" },
+    });
+    expect(Object.keys(mockPush.mock.calls[0][0].params)).toEqual(["clientId"]);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId("complete-appointment"));
+    });
+    expect(view.getByText("Terminé")).toBeTruthy();
+    expect(view.getByTestId("sell-product")).toBeTruthy();
+    expect(view.queryByTestId("modify-appointment")).toBeNull();
+  });
+
   it("completes a started same-day appointment without requiring a start action", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     const view = await render(

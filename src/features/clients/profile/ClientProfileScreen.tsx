@@ -1,9 +1,10 @@
 // Souris — Client Profile
 //
 // A full business record, intentionally light: identity + contact +
-// next appointment + derived activity + Souris Appointment history.
-// Nothing here is stored on the Client — activity is always derived from
-// Appointment state. Modifier opens the SAME Client form used for creation
+// next appointment + derived activity + Souris Appointment history +
+// Souris Product purchases. Nothing here is stored on the Client — activity
+// is derived from Appointment state and purchases from Sale snapshots
+// through clientId. Modifier opens the SAME Client form used for creation
 // (edit mode). No dashboard KPIs, no fake metrics, no edit/delete traps.
 
 import { useState } from 'react';
@@ -32,6 +33,9 @@ import {
   getAppointmentStatusLabel,
   isTerminalAppointmentStatus,
 } from '@/features/appointments/presentation';
+import { ClientPurchaseCard } from '@/features/sales/history/ClientPurchaseCard';
+import { getClientSales } from '@/features/sales/presentation';
+import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
@@ -57,6 +61,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   const router = useRouter();
   const { getClientById } = useClientSession();
   const { appointments } = useAppointmentSession();
+  const { sales } = useSaleSession();
   const [editVisible, setEditVisible] = useState(false);
   const client = getClientById(clientId);
 
@@ -74,7 +79,12 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   }
 
   const activity = getClientActivitySummary(appointments, client.id);
+  const purchases = getClientSales(sales, client.id);
   const hasContactInfo = Boolean(client.phone || client.email || client.birthDate);
+
+  const openSale = () => {
+    router.push({ pathname: '/sales/new', params: { clientId: client.id } });
+  };
 
   const openAppointment = (appointmentId: string) => {
     router.push({
@@ -130,6 +140,16 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
           >
             {getClientDisplayName(client)}
           </AppText>
+          <View style={styles.clientActions}>
+            <AppButton
+              accessibilityLabel="Vendre un produit"
+              onPress={openSale}
+              style={styles.clientAction}
+              testID="sell-product"
+              title="Vendre un produit"
+              variant="secondary"
+            />
+          </View>
         </View>
 
         {activity.nextAppointment && (
@@ -227,6 +247,25 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
                   ))}
                 </View>
               )}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.purchasesSection}>
+          <SectionHeader
+            count={purchases.length}
+            style={styles.sectionHeader}
+            title="Produits achetés"
+          />
+          {purchases.length === 0 ? (
+            <AppText variant="metadata" style={styles.emptyHistory}>
+              Aucun achat enregistré.
+            </AppText>
+          ) : (
+            <View style={styles.purchases} testID="client-purchases">
+              {purchases.map((sale) => (
+                <ClientPurchaseCard key={sale.id} sale={sale} />
+              ))}
             </View>
           )}
         </View>
@@ -389,6 +428,8 @@ const styles = StyleSheet.create({
   modifyAction: { paddingHorizontal: spacing.md },
   content: { paddingBottom: spacing['3xl'], paddingTop: spacing.base },
   identity: { gap: spacing.sm, marginBottom: spacing.xl },
+  clientActions: { flexDirection: 'row', marginTop: spacing.xs },
+  clientAction: { flex: 1 },
   avatar: {
     alignItems: 'center',
     backgroundColor: semanticColors.surfaceLavenderStrong,
@@ -452,7 +493,9 @@ const styles = StyleSheet.create({
   },
   infoLabel: { color: foregroundSoft, width: 128 },
   infoValue: { color: semanticColors.foreground, flex: 1, fontVariant: ['tabular-nums'] },
-  appointmentsSection: {},
+  appointmentsSection: { marginBottom: spacing.xl },
+  purchasesSection: {},
+  purchases: { gap: spacing.sm },
   appointmentGroups: { gap: spacing.md },
   appointmentGroup: { gap: spacing.xs },
   groupLabel: { color: foregroundSoft, marginBottom: spacing.xs },

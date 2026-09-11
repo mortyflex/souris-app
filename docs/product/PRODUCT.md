@@ -510,10 +510,13 @@ timestamp. It is displayed as a friendly French date (e.g. `12 octobre
 
 ### Purchased products
 
-A future `Produits achetés` section of the Client Profile will derive from
-the future Sales/Transaction domain through `clientId`. It is never stored on
-the Client itself, and no purchased-product data or sales architecture
-exists yet.
+The `Produits achetés` section of the Client Profile derives from the Sale
+session through `sale.clientId` (Sales V1, §12). The profile identity block
+carries the `Vendre un produit` action, which opens the Sale flow with this
+Client preselected. The section lists completed Product purchases newest first, rendered from Sale snapshots (`productName`,
+`quantity`, `unitPrice`) with a per-sale total, and shows a restrained empty
+state otherwise. It is never stored on the Client, and it does not change the
+Appointment-derived `Total dépensé` metric.
 
 ### Legacy import
 
@@ -614,11 +617,64 @@ stock semantics:
 Camera permission is requested only when the scanner opens. Permanent denial explains that manual
 entry remains possible and offers a direct route to device settings.
 
-Sales are deliberately NOT part of V1: no checkout, payments, client purchase history, automatic
-stock decrement, suppliers, cost/margin, VAT, or variants. The Client Profile keeps no fake
-`Produits achetés` section — that only becomes real with the future
-Sales/Transactions domain, which will reference Products through the stable `productId` and
-snapshot commercial data at purchase time.
+### Sales V1 — completed Product sales
+
+Product sales primarily happen from the Client context. Three entry points open the SAME
+`Nouvelle vente` flow:
+
+```text
+Client Profile        → Vendre un produit   (primary — Client preselected)
+Appointment Details   → Revente             (primary — the Appointment's Client preselected)
+Produits              → Nouvelle vente      (secondary — walk-in, no Client)
+```
+
+From the Client Profile and Appointment Details the Client is resolved on the first render — the
+professional never selects them again and never sees a transient « Aucune cliente ». The
+Appointment is only a navigation context: the Sale is associated with the Client, never with the
+Appointment, and `Revente` stays available on completed appointments because that is a natural
+moment to sell a Product. The wording is context-specific: `Revente` in Appointment Details,
+`Vendre un produit` on the Client Profile, `Nouvelle vente` in Produits. On success the flow simply returns to where it was opened
+(Client Profile, Appointment Details, or Produits), and a Client-attached Sale appears in that
+Client's `Produits achetés`.
+
+In Appointment Details, `Revente` is a contextual commercial action (shopping-bag icon +
+label) placed ABOVE the lifecycle actions (`Terminer`, `Absence` / `Annuler` / `Modifier`),
+visually lighter than the primary `Terminer`; it is never presented as another lifecycle
+outcome. The Produits tab keeps `Nouvelle vente` beside
+`Ajouter un produit` as the walk-in entry.
+
+The flow is one focused native form sheet (`Nouvelle vente`), presented like the other Souris
+creation flows; a draft holding lines asks « Abandonner la vente ? » before `Annuler`, swipe, or
+back can discard it. The flow itself:
+
+- `Cliente` is optional — `Aucune cliente` when opened from Produits (a walk-in sale).
+  `Choisir une cliente` reuses the shared Client picker; once chosen or preselected, `Modifier`
+  and `Retirer` stay available until completion. Selecting a Client never mutates the Client
+  session;
+- `Produits`: the same search field as the catalog (name, brand, category, barcode — ACTIVE
+  Products only) with the camera action. Tapping a result adds the Product immediately with a
+  restrained selection haptic; tapping it again increments its line — the same Product is one
+  line with a quantity, never a duplicated row. Scanning reuses the shared scanner: a unique
+  active match is added/incremented, an inactive-only match shows « Ce produit est inactif. »,
+  an unknown barcode shows « Produit introuvable » with `Fermer` (no Product creation from a
+  Sale), several active matches ask which one to add;
+- each line shows the Product thumbnail/fallback, name, unit price, a quiet `Stock N` hint, a
+  `−  n  +` control and the line subtotal, plus an explicit remove action. `+` is disabled at
+  current stock, `−` at quantity 1; zero-quantity lines never exist; adding a Product without
+  remaining stock is refused with a concise notice;
+- `Total` is derived (`Σ unitPrice × quantity`) with the usual money formatting — no tax or
+  payment breakdown;
+- `Valider la vente` is enabled only when at least one line exists and every line is valid
+  against the CURRENT catalog (Product exists, is active, stock sufficient). Success creates the
+  immutable completed Sale, decrements every involved Product stock, gives a success haptic, and
+  returns to `Produits` where the updated stock is visible immediately. A final stock failure
+  keeps the screen open, explains which Product lacks stock, and mutates nothing.
+
+Sales V1 deliberately excludes: pending orders, checkout, payment methods, card terminal,
+refunds, returns, discounts, per-sale price editing, VAT, receipts, cash register, accounting,
+revenue dashboard, a Sales history screen or tab, loyalty, and persistence. Stock remains direct
+V1 state: there is still no stock-movement history — a completed Sale simply decrements the
+quantity.
 
 Product management should remain simple.
 

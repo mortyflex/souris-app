@@ -17,6 +17,7 @@ import { AppointmentSessionProvider } from '@/features/appointments/session/Appo
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
+import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
 
 // Keep the native splash screen visible until Plus Jakarta Sans is ready so
 // the first frame never renders in a fallback font.
@@ -47,6 +48,7 @@ export default function RootLayout() {
         <ClientSessionProvider>
           <ServiceCatalogProvider>
             <ProductCatalogProvider>
+              <SaleSessionProvider>
               <AppointmentSessionProvider>
               <Stack
                 screenOptions={{
@@ -144,8 +146,19 @@ export default function RootLayout() {
                     sheetGrabberVisible: true,
                   }}
                 />
+                <Stack.Screen
+                  name="sales/new"
+                  options={{
+                    presentation: 'formSheet',
+                    headerShown: false,
+                    contentStyle: { backgroundColor: semanticColors.screenWarm },
+                    sheetAllowedDetents: [0.92],
+                    sheetGrabberVisible: true,
+                  }}
+                />
               </Stack>
             </AppointmentSessionProvider>
+              </SaleSessionProvider>
             </ProductCatalogProvider>
           </ServiceCatalogProvider>
         </ClientSessionProvider>

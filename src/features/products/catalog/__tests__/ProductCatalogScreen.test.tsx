@@ -166,6 +166,15 @@ describe('ProductCatalogScreen', () => {
     expect(view.getByText('Aucun produit trouvé')).toBeTruthy();
   });
 
+  it('opens the Sale creation flow from the Produits tab', async () => {
+    const view = await renderCatalog();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Nouvelle vente'));
+    });
+    expect(mockPush).toHaveBeenCalledWith('/sales/new');
+  });
+
   it('opens the create flow and an existing Product detail', async () => {
     const view = await renderCatalog();
 

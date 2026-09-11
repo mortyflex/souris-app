@@ -1,7 +1,8 @@
-// Souris — Client picker step (Appointment Creation)
+// Souris — Client picker step (shared Client selection)
 //
 // Search + virtualized list over the SHARED Client session source (same
-// clients as the Clientes directory). No display cap: FlatList
+// clients as the Clientes directory), embedded by Appointment Creation and by
+// the shared ClientPickerSheet. No display cap: FlatList
 // virtualization keeps the list fast without limiting the business dataset.
 // A restrained "Ajouter une cliente" action opens the shared creation sheet
 // when the person is not in the directory.

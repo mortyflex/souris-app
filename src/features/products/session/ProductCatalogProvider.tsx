@@ -1,10 +1,12 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 
 import {
+  applyStockDecrements,
   isAcceptableProductName,
   isValidProductPrice,
   isValidStockQuantity,
   type Product,
+  type StockDecrement,
 } from '@/domain/products';
 
 import { createInitialProductCatalog } from '../data/initial-products';
@@ -29,8 +31,8 @@ function assertValidProduct(product: Product) {
 }
 
 /**
- * The single in-memory Product source shared by the Produits tab and, later,
- * Sales/Transactions. Session only — no persistence yet.
+ * The single in-memory Product source shared by the Produits tab and Sale
+ * creation/completion. Session only — no persistence yet.
  */
 export function ProductCatalogProvider({ children }: PropsWithChildren) {
   const [products, setProducts] = useState<readonly Product[]>(() =>
@@ -84,6 +86,13 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
     );
   };
 
+  const decrementProductStock = (decrements: readonly StockDecrement[]) => {
+    // Validate against the current canonical state BEFORE scheduling any
+    // update, so an impossible batch changes nothing (never negative stock).
+    if (applyStockDecrements(products, decrements) === products) return;
+    setProducts((current) => applyStockDecrements(current, decrements));
+  };
+
   const deleteProduct = (productId: string) => {
     setProducts((current) => current.filter((product) => product.id !== productId));
   };
@@ -98,6 +107,7 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
         updateProduct,
         setProductActive,
         setProductStock,
+        decrementProductStock,
         deleteProduct,
       }}
     >

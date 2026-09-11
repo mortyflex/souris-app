@@ -1,9 +1,10 @@
-// Souris — Client picker sheet (Appointment Editing)
+// Souris — Client picker sheet (shared Client selection)
 //
-// Focused client-selection sheet for reassigning the Appointment's Client.
-// Reuses the shared ClientPickerStep (search + virtualized directory over the
-// SAME Client source) and the shared ClientFormSheet for creating a client on
-// the fly. Identity stays clientId-only.
+// The ONE bottom-sheet Client picker used wherever a screen needs to choose or
+// reassign a Client after it is open: Appointment Editing and Sale creation.
+// Composes ClientPickerStep (search + virtualized directory over the SAME
+// Client source) and the shared ClientFormSheet for creating a client on the
+// fly. Identity stays clientId-only; selecting never mutates the Client.
 
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -15,9 +16,9 @@ import { prepareClientDirectory } from '@/features/clients/directory/sort-client
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import type { Client } from '@/domain/clients';
-import { interaction, spacing } from '@/shared/ui/theme';
+import { spacing } from '@/shared/ui/theme';
 
-import { ClientPickerStep } from '../../creation/components/ClientPickerStep';
+import { ClientPickerStep } from './ClientPickerStep';
 
 interface ClientPickerSheetProps {
   readonly visible: boolean;
@@ -110,5 +111,4 @@ const styles = StyleSheet.create({
   title: { flexShrink: 1 },
   closeButton: { paddingHorizontal: spacing.md },
   pickerBody: { flex: 1 },
-  pressed: { opacity: interaction.pressedOpacity },
 });

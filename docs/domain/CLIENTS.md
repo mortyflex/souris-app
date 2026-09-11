@@ -76,8 +76,9 @@ Activity statistics (appointment counts, total spent, upcoming appointments)
 are never stored on the Client. They are always DERIVED from Souris
 Appointment state through `clientId`.
 
-Future fields (notes, formulas, photos, purchased products, visit frequency)
-are separate future features and must not be added speculatively.
+Purchased products are derived from Sales through `clientId` and never
+stored on the Client. Future fields (notes, formulas, photos, visit
+frequency) are separate future features and must not be added speculatively.
 
 ---
 
@@ -226,5 +227,6 @@ Client deletion is a future increment with its own deliberate rules
 Notes, photos, technical formulas, and statistics are separate future
 features and remain outside the Client domain.
 
-Purchased-product history will derive from the future Sales/Transaction
-domain through `clientId` — it is never stored on the Client.
+Purchased-product history derives from the Sale domain through
+`sale.clientId` (`docs/domain/SALES.md`) — it is never stored on the Client,
+and it does not change the Appointment-derived activity metrics above.

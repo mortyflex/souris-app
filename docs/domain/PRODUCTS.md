@@ -4,9 +4,10 @@
 
 This document defines the Product catalog rules of Souris V1.
 
-V1 scope: a professional-managed Product catalog + current stock. No Sales, checkout, payments,
-purchase history, suppliers, or stock-movement history yet — those belong to the future
-Sales/Transactions domain.
+V1 scope: a professional-managed Product catalog + current stock. Completed Product sales
+(Sales V1) reference Products through the stable `productId` and decrement current stock
+atomically — see `docs/domain/SALES.md`. No checkout, payments, suppliers, or stock-movement
+history yet.
 
 ---
 
@@ -72,11 +73,14 @@ One in-memory session source — `ProductCatalogProvider` — owns the canonical
 legacy-products ── pure adapter ──> Product[] ──> ProductCatalogProvider
                                                        │
                                               Produits tab
-                                          (future Sales reads activeProducts)
+                                          Sale creation (activeProducts)
+                                          SaleSessionProvider (completion)
 ```
 
 API: `products`, `activeProducts`, `getProductById`, `addProduct`, `updateProduct`,
-`setProductActive`, `setProductStock`, `deleteProduct`. The seed is deep-copied per session;
+`setProductActive`, `setProductStock`, `decrementProductStock`, `deleteProduct`.
+`decrementProductStock` applies a whole batch of Sale decrements or nothing at all: it throws
+before any change when a Product is missing or stock would become negative. The seed is deep-copied per session;
 the raw legacy module is never mutated. New runtime identities follow the session-ID pattern
 (`product-{timestamp}-{sequence}`).
 
@@ -85,8 +89,8 @@ the raw legacy module is never mutated. New runtime identities follow the sessio
 ## 5. Stock Semantics
 
 `stockQuantity` is DIRECT current-stock state in V1. There is no stock-movement history:
-adjustments edit the quantity in place. The future Sales/Inventory transaction domain will
-introduce movements and history.
+manual adjustments edit the quantity in place, and a completed Sale decrements it by the sold
+quantity (never below zero). A future inventory domain may introduce movements and history.
 
 A zero-stock Product remains in the catalog and is displayed with a restrained
 `Stock épuisé` treatment. No low-stock thresholds, alerts, or reorder suggestions exist in V1.
@@ -96,21 +100,22 @@ A zero-stock Product remains in the catalog and is displayed with a restrained
 ## 6. Active / Inactive
 
 `active` controls catalog management grouping. Inactive Products stay in the catalog (visible
-under Inactifs) and will be hidden from future Sale product selection once Sales exists. State
-changes never touch any other domain.
+under Inactifs) and are hidden from Sale product selection: they cannot be newly added to a
+Sale, while existing Sale snapshots remain untouched. State changes never touch any other
+domain.
 
 ## 7. Permanent Deletion
 
-`Supprimer définitivement` removes the catalog record only (mistakes/duplicates). Since Sales
-does not exist yet, there are no historical relationships to preserve. Future transaction
-snapshots will define historical retention later.
+`Supprimer définitivement` removes the catalog record only (mistakes/duplicates). Deletion
+never cascades into Sales: historical SaleItems keep their own `productName` / `unitPrice`
+snapshot and remain readable after the Product disappears.
 
-## 8. Future Sales Direction
+## 8. Sales Relationship
 
-Future Sales/Transactions will reference Products through the stable `productId` and will
-likely snapshot relevant commercial data (name/price at purchase time) so catalog edits never
-rewrite historical purchases. This snapshot model is deliberately NOT implemented in V1 —
-the canonical model simply stays referenceable by stable id.
+Sales reference Products through the stable `productId` and snapshot `productName` and
+`unitPrice` at completion time, so catalog edits never rewrite historical purchases. Sale
+drafts read live Product values (name, price, image, stock) for presentation only. The Product
+model itself stores no sales count, revenue, or purchase history — see `docs/domain/SALES.md`.
 
 ## 9. Search and Order
 
@@ -131,7 +136,8 @@ Catalog lookup is pure and exact (`findProductsByBarcode`) and returns every mat
 
 In create/edit forms, a scan updates only the local draft. Cancelling leaves the canonical Product
 unchanged; saving follows the existing Product form boundary. Scanning never modifies
-`stockQuantity`, creates stock movement, or introduces Sales behavior.
+`stockQuantity` or creates stock movement. Inside a Sale draft, the same lookup adds an active
+Product to the draft; stock still changes only at Sale completion.
 
 ## 11. Product Image Semantics
 
@@ -153,6 +159,7 @@ enhancement and does not change the canonical Product model; failure keeps the o
 
 ## 12. Non-Goals
 
-Not in this phase: sales, checkout, payments, client purchase history, automatic stock
-decrement from sales, suppliers, purchase orders, cost/margin, VAT, variants, ecommerce,
-persistence, image galleries, remote image storage, image synchronization.
+Not in this phase: checkout, payments, suppliers, purchase orders, stock-movement history,
+cost/margin, VAT, variants, ecommerce, persistence, image galleries, remote image storage,
+image synchronization. Completed Sales, their stock decrement, and Client purchase history live
+in the Sale domain (`docs/domain/SALES.md`).
