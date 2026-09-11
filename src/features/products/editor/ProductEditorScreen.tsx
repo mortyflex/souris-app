@@ -11,9 +11,9 @@
 // id/businessId are stable across edits. Current stock is direct V1 state —
 // stock-movement history belongs to the future Sales/Inventory domain.
 
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -22,19 +22,19 @@ import {
   ScrollView,
   StyleSheet,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { Product } from '@/domain/products';
-import { ProductImage } from '@/features/products/components/ProductImage';
-import { DEVELOPMENT_BUSINESS_ID } from '@/features/services/data/initial-services';
-import { formatServicePrice } from '@/features/services/presentation';
-import { haptics } from '@/shared/lib/haptics';
-import { AppButton } from '@/shared/ui/AppButton';
-import { AppText } from '@/shared/ui/AppText';
-import { BarcodeScannerModal } from '@/shared/ui/BarcodeScannerModal';
-import { SectionHeader } from '@/shared/ui/SectionHeader';
-import { TextField } from '@/shared/ui/TextField';
+import type { Product } from "@/domain/products";
+import { ProductImage } from "@/features/products/components/ProductImage";
+import { DEVELOPMENT_BUSINESS_ID } from "@/features/services/data/initial-services";
+import { formatServicePrice } from "@/features/services/presentation";
+import { haptics } from "@/shared/lib/haptics";
+import { AppButton } from "@/shared/ui/AppButton";
+import { AppText } from "@/shared/ui/AppText";
+import { BarcodeScannerModal } from "@/shared/ui/BarcodeScannerModal";
+import { SectionHeader } from "@/shared/ui/SectionHeader";
+import { TextField } from "@/shared/ui/TextField";
 import {
   foregroundSoft,
   gutter,
@@ -43,20 +43,20 @@ import {
   rose,
   semanticColors,
   spacing,
-} from '@/shared/ui/theme';
+} from "@/shared/ui/theme";
 
-import { useProductCatalog } from '../session/ProductCatalogProvider';
+import { useProductCatalog } from "../session/ProductCatalogProvider";
+import { ProductPhotoField } from "./components/ProductPhotoField";
 import {
   buildProductFromForm,
   EMPTY_PRODUCT_FORM,
   toProductFormValues,
   validateProductForm,
   type ProductFormValues,
-} from './product-form';
-import { createProductId } from './runtime-ids';
-import { ProductPhotoField } from './components/ProductPhotoField';
+} from "./product-form";
+import { createProductId } from "./runtime-ids";
 
-export type ProductEditorMode = 'create' | 'existing';
+export type ProductEditorMode = "create" | "existing";
 
 interface ProductEditorScreenProps {
   readonly mode: ProductEditorMode;
@@ -64,7 +64,8 @@ interface ProductEditorScreenProps {
   readonly initialBarcode?: string;
 }
 
-const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
+const horizontalGutter =
+  Platform.OS === "android" ? gutter.android : gutter.ios;
 
 export function ProductEditorScreen({
   mode,
@@ -82,27 +83,31 @@ export function ProductEditorScreen({
   } = useProductCatalog();
   const product = getProductById(productId);
   const [runtimeProductId] = useState(() =>
-    mode === 'create' ? createProductId() : productId ?? 'missing-product',
+    mode === "create" ? createProductId() : (productId ?? "missing-product"),
   );
   const [values, setValues] = useState<ProductFormValues | null>(() =>
-    mode === 'create'
-      ? { ...EMPTY_PRODUCT_FORM, barcode: initialBarcode?.trim() ?? '' }
-      : mode === 'existing' && product
+    mode === "create"
+      ? { ...EMPTY_PRODUCT_FORM, barcode: initialBarcode?.trim() ?? "" }
+      : mode === "existing" && product
         ? toProductFormValues(product)
         : null,
   );
-  const [editing, setEditing] = useState(mode === 'create');
+  const [editing, setEditing] = useState(mode === "create");
   const [attempted, setAttempted] = useState(false);
 
-  if (mode === 'existing' && !product) {
+  if (mode === "existing" && !product) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Produit introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
             Ce produit n&apos;est plus disponible.
           </AppText>
-          <AppButton onPress={() => router.back()} title="Fermer" variant="secondary" />
+          <AppButton
+            onPress={() => router.back()}
+            title="Fermer"
+            variant="secondary"
+          />
         </View>
       </SafeAreaView>
     );
@@ -112,14 +117,16 @@ export function ProductEditorScreen({
   const duplicateBarcodeProduct = values?.barcode.trim()
     ? products.find(
         (candidate) =>
-          candidate.id !== product?.id && candidate.barcode === values.barcode.trim(),
+          candidate.id !== product?.id &&
+          candidate.barcode === values.barcode.trim(),
       )
     : undefined;
-  const title = mode === 'create' ? 'Ajouter un produit' : product?.name ?? '';
-  const closeLabel = mode === 'create' || editing ? 'Annuler' : 'Fermer';
+  const title =
+    mode === "create" ? "Ajouter un produit" : (product?.name ?? "");
+  const closeLabel = mode === "create" || editing ? "Annuler" : "Fermer";
 
   const close = () => {
-    if (mode === 'existing' && editing && product) {
+    if (mode === "existing" && editing && product) {
       setValues(toProductFormValues(product));
       setAttempted(false);
       setEditing(false);
@@ -148,7 +155,7 @@ export function ProductEditorScreen({
       values,
     });
 
-    if (mode === 'create') {
+    if (mode === "create") {
       addProduct(nextProduct);
       haptics.success();
       router.back();
@@ -176,11 +183,11 @@ export function ProductEditorScreen({
     }
 
     Alert.alert(
-      'Désactiver ce produit ?',
-      'Le produit restera dans le catalogue mais ne sera plus actif.',
+      "Désactiver ce produit ?",
+      "Le produit restera dans le catalogue mais ne sera plus actif.",
       [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Désactiver', onPress: () => commit(false) },
+        { text: "Annuler", style: "cancel" },
+        { text: "Désactiver", onPress: () => commit(false) },
       ],
     );
   };
@@ -189,13 +196,13 @@ export function ProductEditorScreen({
     if (!product) return;
 
     Alert.alert(
-      'Supprimer définitivement ce produit ?',
-      'Il sera supprimé du catalogue.\nCette action est irréversible.',
+      "Supprimer ce produit ?",
+      "Il sera supprimé du catalogue.\nCette action est irréversible.",
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: "Annuler", style: "cancel" },
         {
-          text: 'Supprimer définitivement',
-          style: 'destructive',
+          text: "Supprimer",
+          style: "destructive",
           onPress: () => {
             deleteProduct(product.id);
             haptics.warning();
@@ -207,17 +214,21 @@ export function ProductEditorScreen({
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.keyboardContainer}
       >
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <AppText variant="eyebrow" style={styles.eyebrow}>
-              {mode === 'create' ? 'NOUVEAU PRODUIT' : 'PRODUIT'}
+              {mode === "create" ? "NOUVEAU PRODUIT" : "PRODUIT"}
             </AppText>
-            <AppText variant="sheetTitle" accessibilityRole="header" numberOfLines={1}>
+            <AppText
+              variant="sheetTitle"
+              accessibilityRole="header"
+              numberOfLines={1}
+            >
               {title}
             </AppText>
           </View>
@@ -244,7 +255,7 @@ export function ProductEditorScreen({
 
         {values && editing && (
           <View style={styles.footer}>
-            {mode === 'existing' && (
+            {mode === "existing" && (
               <AppButton
                 onPress={close}
                 style={styles.secondaryButton}
@@ -259,21 +270,21 @@ export function ProductEditorScreen({
               style={styles.primaryButton}
               testID="save-product"
               title={
-                mode === 'create'
-                  ? 'Ajouter le produit'
-                  : 'Enregistrer les modifications'
+                mode === "create"
+                  ? "Ajouter le produit"
+                  : "Enregistrer les modifications"
               }
             />
           </View>
         )}
 
-        {mode === 'existing' && !editing && product && (
+        {mode === "existing" && !editing && product && (
           <View style={styles.readFooterContainer}>
             <View style={[styles.footer, styles.readFooterRow]}>
               <AppButton
                 onPress={changeActiveState}
                 style={styles.secondaryButton}
-                title={product.active ? 'Désactiver' : 'Réactiver'}
+                title={product.active ? "Désactiver" : "Réactiver"}
                 variant="secondary"
               />
               <AppButton
@@ -289,7 +300,7 @@ export function ProductEditorScreen({
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Supprimer définitivement ce produit"
+              accessibilityLabel="Supprimer ce produit"
               onPress={requestDelete}
               style={({ pressed }) => [
                 styles.deleteAction,
@@ -297,7 +308,7 @@ export function ProductEditorScreen({
               ]}
             >
               <AppText variant="control" style={styles.deleteText}>
-                Supprimer définitivement
+                 Supprimer
               </AppText>
             </Pressable>
           </View>
@@ -333,11 +344,14 @@ function ProductForm({
       accessibilityLabel="Scanner le code-barres"
       hitSlop={spacing.sm}
       onPress={() => setScannerVisible(true)}
-      style={({ pressed }) => [styles.scanAction, pressed && styles.scanActionPressed]}
+      style={({ pressed }) => [
+        styles.scanAction,
+        pressed && styles.scanActionPressed,
+      ]}
       testID="open-product-barcode-scanner"
     >
       <SymbolView
-        name={{ ios: 'barcode.viewfinder', android: 'barcode_scanner' }}
+        name={{ ios: "barcode.viewfinder", android: "barcode_scanner" }}
         size={19}
         tintColor={semanticColors.accent}
       />
@@ -354,29 +368,33 @@ function ProductForm({
       >
         <ProductPhotoField
           imageUri={values.imageUri}
-          onChangeImageUri={(imageUri) => onChangeField('imageUri', imageUri)}
+          onChangeImageUri={(imageUri) => onChangeField("imageUri", imageUri)}
           productName={values.name}
         />
         <TextField
           accessibilityLabel="Nom du produit"
           autoFocus
-          error={attempted && !validation.nameValid ? 'Le nom est requis.' : undefined}
+          error={
+            attempted && !validation.nameValid
+              ? "Le nom est requis."
+              : undefined
+          }
           label="Nom"
-          onChangeText={(text) => onChangeField('name', text)}
+          onChangeText={(text) => onChangeField("name", text)}
           placeholder="Ex. Shampooing"
           value={values.name}
         />
         <TextField
           accessibilityLabel="Marque du produit"
           label="Marque"
-          onChangeText={(text) => onChangeField('brand', text)}
+          onChangeText={(text) => onChangeField("brand", text)}
           placeholder="Optionnel"
           value={values.brand}
         />
         <TextField
           accessibilityLabel="Catégorie du produit"
           label="Catégorie"
-          onChangeText={(text) => onChangeField('category', text)}
+          onChangeText={(text) => onChangeField("category", text)}
           placeholder="Optionnel"
           value={values.category}
         />
@@ -384,14 +402,15 @@ function ProductForm({
           <TextField
             accessibilityLabel="Code-barres du produit"
             label="Code-barres"
-            onChangeText={(text) => onChangeField('barcode', text)}
+            onChangeText={(text) => onChangeField("barcode", text)}
             placeholder="Optionnel"
             trailingAccessory={scanAction}
             value={values.barcode}
           />
           {duplicateBarcodeProduct && (
             <AppText variant="metadata" style={styles.duplicateBarcodeHint}>
-              Ce code-barres est aussi utilisé par « {duplicateBarcodeProduct.name} ».
+              Ce code-barres est aussi utilisé par «{" "}
+              {duplicateBarcodeProduct.name} ».
             </AppText>
           )}
         </View>
@@ -399,12 +418,12 @@ function ProductForm({
           accessibilityLabel="Prix du produit"
           error={
             attempted && !validation.priceValid
-              ? 'Indiquez un prix valide, positif ou nul.'
+              ? "Indiquez un prix valide, positif ou nul."
               : undefined
           }
           keyboardType="decimal-pad"
           label="Prix"
-          onChangeText={(text) => onChangeField('price', text)}
+          onChangeText={(text) => onChangeField("price", text)}
           placeholder="25,00"
           suffix="€"
           value={values.price}
@@ -413,12 +432,12 @@ function ProductForm({
           accessibilityLabel="Stock du produit"
           error={
             attempted && !validation.stockValid
-              ? 'Indiquez une quantité entière, positive ou nulle.'
+              ? "Indiquez une quantité entière, positive ou nulle."
               : undefined
           }
           keyboardType="number-pad"
           label="Stock"
-          onChangeText={(text) => onChangeField('stockQuantity', text)}
+          onChangeText={(text) => onChangeField("stockQuantity", text)}
           placeholder="0"
           value={values.stockQuantity}
         />
@@ -427,7 +446,7 @@ function ProductForm({
         onClose={() => setScannerVisible(false)}
         onScanned={(barcode) => {
           setScannerVisible(false);
-          onChangeField('barcode', barcode);
+          onChangeField("barcode", barcode);
         }}
         visible={scannerVisible}
       />
@@ -436,7 +455,9 @@ function ProductForm({
 }
 
 function ProductReadView({ product }: { readonly product: Product }) {
-  const hasInformation = Boolean(product.brand || product.category || product.barcode);
+  const hasInformation = Boolean(
+    product.brand || product.category || product.barcode,
+  );
 
   return (
     <ScrollView
@@ -454,9 +475,11 @@ function ProductReadView({ product }: { readonly product: Product }) {
 
       <View style={styles.productSummary}>
         <View style={styles.statusLine}>
-          <View style={[styles.statusDot, !product.active && styles.inactiveDot]} />
+          <View
+            style={[styles.statusDot, !product.active && styles.inactiveDot]}
+          />
           <AppText variant="metadata" style={styles.statusText}>
-            {product.active ? 'Actif' : 'Inactif'}
+            {product.active ? "Actif" : "Inactif"}
           </AppText>
         </View>
 
@@ -484,9 +507,13 @@ function ProductReadView({ product }: { readonly product: Product }) {
           </AppText>
           <AppText
             variant="metadata"
-            style={product.stockQuantity === 0 ? styles.stockEmpty : styles.stockLabel}
+            style={
+              product.stockQuantity === 0
+                ? styles.stockEmpty
+                : styles.stockLabel
+            }
           >
-            {product.stockQuantity === 0 ? 'Stock épuisé' : 'en stock'}
+            {product.stockQuantity === 0 ? "Stock épuisé" : "en stock"}
           </AppText>
         </View>
       </View>
@@ -494,7 +521,13 @@ function ProductReadView({ product }: { readonly product: Product }) {
   );
 }
 
-function ReadRow({ label, value }: { readonly label: string; readonly value?: string }) {
+function ReadRow({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value?: string;
+}) {
   if (!value) return null;
 
   return (
@@ -502,7 +535,12 @@ function ReadRow({ label, value }: { readonly label: string; readonly value?: st
       <AppText variant="metadata" style={styles.readLabel}>
         {label}
       </AppText>
-      <AppText variant="control" numberOfLines={1} selectable style={styles.readValue}>
+      <AppText
+        variant="control"
+        numberOfLines={1}
+        selectable
+        style={styles.readValue}
+      >
         {value}
       </AppText>
     </View>
@@ -513,11 +551,11 @@ const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
   keyboardContainer: { flex: 1 },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     borderBottomColor: semanticColors.borderSubtle,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingBottom: spacing.sm,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.lg,
@@ -527,17 +565,17 @@ const styles = StyleSheet.create({
   closeButton: { paddingHorizontal: spacing.md },
   formContent: {
     gap: spacing.base,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing["3xl"],
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
   barcodeField: { gap: spacing.xs },
   duplicateBarcodeHint: { color: semanticColors.foregroundSoft },
   scanAction: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: radii.small,
     height: 44,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: 44,
   },
   scanActionPressed: {
@@ -546,12 +584,12 @@ const styles = StyleSheet.create({
   },
   readContent: {
     gap: spacing.xl,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing["3xl"],
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
   productSummary: { gap: spacing.sm },
-  statusLine: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
+  statusLine: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
   statusDot: {
     backgroundColor: semanticColors.accent,
     borderRadius: radii.pill,
@@ -564,32 +602,35 @@ const styles = StyleSheet.create({
   infoSection: { gap: spacing.sm },
   infoSurface: {
     backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.large,
     gap: spacing.sm,
     padding: spacing.md,
   },
-  readRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
+  readRow: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
   readLabel: { color: semanticColors.foregroundSoft, width: 104 },
   readValue: { color: semanticColors.foreground, flex: 1 },
   stockSection: { gap: spacing.sm },
   stockSurface: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.large,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
     padding: spacing.md,
   },
-  stockValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  stockValue: {
+    color: semanticColors.foreground,
+    fontVariant: ["tabular-nums"],
+  },
   stockLabel: { color: semanticColors.foregroundSoft },
   stockEmpty: { color: rose.rose600 },
   footer: {
     backgroundColor: semanticColors.surfaceElevated,
     borderTopColor: semanticColors.borderSubtle,
     borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: spacing.sm,
     paddingBottom: spacing.sm,
     paddingHorizontal: horizontalGutter,
@@ -604,13 +645,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   readFooterRow: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderTopWidth: 0,
     paddingBottom: 0,
   },
   deleteAction: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     minHeight: 44,
     paddingHorizontal: spacing.base,
   },
@@ -620,11 +661,11 @@ const styles = StyleSheet.create({
   },
   deleteText: { color: rose.rose600 },
   notFound: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
     gap: spacing.md,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingHorizontal: spacing.xl,
   },
-  notFoundText: { color: foregroundSoft, textAlign: 'center' },
+  notFoundText: { color: foregroundSoft, textAlign: "center" },
 });
