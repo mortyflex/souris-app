@@ -2,18 +2,10 @@
 //
 // Shared typography primitive.
 //
-// - centralizes the Inter family mapping for the loaded font files;
 // - resolves the approved typography tokens from src/shared/ui/theme;
+// - maps each weight to the concrete Plus Jakarta Sans family loaded at
+//   startup in src/app/_layout.tsx (see theme/typography.ts `fontFamilies`);
 // - provides strongly typed Souris variants only (no arbitrary type scale).
-//
-// Inter is loaded at application startup in src/app/_layout.tsx via
-// @expo-google-fonts/inter. Each weight is a distinct native font family:
-//
-//   300 → Inter_300Light
-//   400 → Inter_400Regular
-//   500 → Inter_500Medium
-//   600 → Inter_600SemiBold
-//   700 → Inter_700Bold
 //
 // The resolved style deliberately carries no `fontWeight`: the concrete
 // family already encodes the weight, and adding fontWeight can make iOS
@@ -21,7 +13,7 @@
 
 import { Platform, Text, type TextProps, type TextStyle } from 'react-native';
 
-import { colors, foregroundSoft, typography } from './theme';
+import { colors, fontFamilies, foregroundSoft, typography } from './theme';
 
 export type AppTextVariant =
   | 'display'
@@ -44,14 +36,6 @@ export type AppTextVariant =
 export type AppTextPlatform = 'ios' | 'android';
 
 type FontWeightToken = keyof typeof fontFamilies;
-
-const fontFamilies = {
-  '300': 'Inter_300Light',
-  '400': 'Inter_400Regular',
-  '500': 'Inter_500Medium',
-  '600': 'Inter_600SemiBold',
-  '700': 'Inter_700Bold',
-} as const;
 
 interface TypographyRole {
   readonly fontSize: number;

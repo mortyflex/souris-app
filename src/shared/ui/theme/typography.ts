@@ -1,18 +1,18 @@
 // Souris design tokens — Typography
 //
-// Source: docs/design/DESIGN.md §3, docs/design/reference-export/colors_and_type.css
+// Source: docs/design/DESIGN_OVERRIDES.md §12 (native runtime typography),
+//         docs/design/DESIGN.md §3 (original Inter hierarchy, preserved as history)
 //
-// One family: Inter. The concrete font files are loaded in src/app/_layout.tsx.
+// One family: Plus Jakarta Sans. The concrete font files are loaded in
+// src/app/_layout.tsx. Four weights only: 400 / 500 / 600 / 700.
 //
 // React Native letterSpacing is absolute (not CSS em).
-// Each value is computed as: fontSize × sourceEm
 // React Native lineHeight is absolute.
-// Each value is computed as: fontSize × sourceMultiplier
 //
 // All sizes are device-independent pixels.
 // All weights use valid React Native TextStyle fontWeight values.
 
-type FontWeight = "300" | "400" | "500" | "600" | "700";
+type FontWeight = "400" | "500" | "600" | "700";
 
 interface TextRole {
   fontSize: number;
@@ -21,107 +21,113 @@ interface TextRole {
   letterSpacing: number;
 }
 
-// Onboarding display: 31px / 700 / -0.032em
-// letterSpacing = 31 × -0.032 = -0.992
+/**
+ * Concrete native font family per weight. Each weight is a distinct family:
+ * the resolved style never sets `fontWeight`, otherwise iOS may synthesize a
+ * weight instead of using the loaded file.
+ */
+export const fontFamilies = {
+  "400": "PlusJakartaSans_400Regular",
+  "500": "PlusJakartaSans_500Medium",
+  "600": "PlusJakartaSans_600SemiBold",
+  "700": "PlusJakartaSans_700Bold",
+} as const satisfies Record<FontWeight, string>;
+
+// Onboarding display: 34px / 700 / -0.03em
 export const onboardingDisplay = {
-  fontSize: 31,
+  fontSize: 34,
   fontWeight: "700",
-  letterSpacing: -0.992,
+  lineHeight: 40,
+  letterSpacing: -1.02,
 } as const satisfies TextRole;
 
-// Screen title iOS: 27px / 700 / line-height × 1.12 / -0.028em
-// lineHeight = 27 × 1.12 = 30.24
-// letterSpacing = 27 × -0.028 = -0.756
+// Screen title iOS: 30px / 700 / -0.024em
 export const screenTitleIos = {
+  fontSize: 30,
+  fontWeight: "700",
+  lineHeight: 36,
+  letterSpacing: -0.72,
+} as const satisfies TextRole;
+
+// Screen title Android: 27px / 700 / -0.012em
+export const screenTitleAndroid = {
   fontSize: 27,
   fontWeight: "700",
-  lineHeight: 30.24,
-  letterSpacing: -0.756,
+  lineHeight: 33,
+  letterSpacing: -0.324,
 } as const satisfies TextRole;
 
-// Screen title Android: 24px / 600 / -0.01em
-// letterSpacing = 24 × -0.01 = -0.24
-export const screenTitleAndroid = {
-  fontSize: 24,
-  fontWeight: "600",
-  letterSpacing: -0.24,
-} as const satisfies TextRole;
-
-// Sheet title: 19px / 700 / ≈ -0.02em
-// letterSpacing = 19 × -0.02 = -0.38
+// Sheet title: 21px / 700 / -0.02em
 export const sheetTitle = {
-  fontSize: 19,
+  fontSize: 21,
   fontWeight: "700",
-  letterSpacing: -0.38,
+  lineHeight: 26,
+  letterSpacing: -0.42,
 } as const satisfies TextRole;
 
-// Day summary value: 20px / 700 / -0.026em
-// letterSpacing = 20 × -0.026 = -0.52
+// Day summary value / price and stock key values: 23px / 700 / -0.024em
 export const daySummaryValue = {
-  fontSize: 20,
+  fontSize: 23,
   fontWeight: "700",
-  letterSpacing: -0.52,
+  lineHeight: 28,
+  letterSpacing: -0.552,
 } as const satisfies TextRole;
 
-// State title (empty/error): 17px / 700 / -0.017em
-// letterSpacing = 17 × -0.017 = -0.289
+// State title (empty/error): 18px / 700 / -0.016em
 export const stateTitle = {
-  fontSize: 17,
+  fontSize: 18,
   fontWeight: "700",
-  letterSpacing: -0.289,
+  lineHeight: 24,
+  letterSpacing: -0.288,
 } as const satisfies TextRole;
 
 // Section title: clear editorial grouping without administrative uppercase.
+// 18px / 700 / -0.016em
 export const sectionTitle = {
-  fontSize: 17,
-  fontWeight: "600",
-  lineHeight: 22,
-  letterSpacing: -0.187,
+  fontSize: 18,
+  fontWeight: "700",
+  lineHeight: 24,
+  letterSpacing: -0.288,
 } as const satisfies TextRole;
 
-// Body: 16px / 400 / line-height × 1.45
-// lineHeight = 16 × 1.45 = 23.2
+// Body: 16px / 400 / line-height 24
 export const body = {
   fontSize: 16,
   fontWeight: "400",
-  lineHeight: 23.2,
+  lineHeight: 24,
   letterSpacing: 0,
 } as const satisfies TextRole;
 
-// Row title: 15.5px / 600 / -0.011em
-// letterSpacing = 15.5 × -0.011 = -0.1705
+// Row title / primary names: 16.5px / 600 / -0.01em
 export const rowTitle = {
-  fontSize: 15.5,
+  fontSize: 16.5,
   fontWeight: "600",
-  letterSpacing: -0.1705,
+  lineHeight: 22,
+  letterSpacing: -0.165,
 } as const satisfies TextRole;
 
-// Control iOS: 15px / 600 / -0.006em
-// letterSpacing = 15 × -0.006 = -0.09
+// Control iOS (CTA, actions, key values): 16px / 600 / -0.006em
 export const controlIos = {
-  fontSize: 15,
+  fontSize: 16,
   fontWeight: "600",
-  letterSpacing: -0.09,
+  letterSpacing: -0.096,
 } as const satisfies TextRole;
 
-// Control Android: 15px / 500 / -0.006em
-// letterSpacing = 15 × -0.006 = -0.09
+// Control Android: 16px / 500 / -0.006em
 export const controlAndroid = {
-  fontSize: 15,
+  fontSize: 16,
   fontWeight: "500",
-  letterSpacing: -0.09,
+  letterSpacing: -0.096,
 } as const satisfies TextRole;
 
-// Metadata: 13px / 400 / +0.01em
-// letterSpacing = 13 × 0.01 = 0.13
+// Metadata: 13.5px / 400 / +0.006em
 export const metadata = {
-  fontSize: 13,
+  fontSize: 13.5,
   fontWeight: "400",
-  letterSpacing: 0.13,
+  letterSpacing: 0.081,
 } as const satisfies TextRole;
 
 // Eyebrow / section label: 12px / 600 / +0.09em / uppercase
-// letterSpacing = 12 × 0.09 = 1.08
 // textTransform: 'uppercase' must be applied at the component level.
 export const eyebrow = {
   fontSize: 12,
@@ -129,12 +135,11 @@ export const eyebrow = {
   letterSpacing: 1.08,
 } as const satisfies TextRole;
 
-// Chip / event time / legend: 11.5px / 600 / +0.015em
-// letterSpacing = 11.5 × 0.015 = 0.1725
+// Chip / event time / legend: 12px / 600 / +0.015em
 export const chip = {
-  fontSize: 11.5,
+  fontSize: 12,
   fontWeight: "600",
-  letterSpacing: 0.1725,
+  letterSpacing: 0.18,
 } as const satisfies TextRole;
 
 // Agenda full-hour label: metadata sizing with a slightly stronger hierarchy.
@@ -147,13 +152,13 @@ export const agendaHour = {
 // Agenda quarter-hour label: compact and intentionally quiet.
 export const agendaQuarter = {
   fontSize: 9,
-  fontWeight: "300",
+  fontWeight: "400",
   letterSpacing: 0.1725,
 } as const satisfies TextRole;
 
-// Tab iOS: 10.5px / 600
+// Tab iOS: 11px / 600
 export const tabIos = {
-  fontSize: 10.5,
+  fontSize: 11,
   fontWeight: "600",
   letterSpacing: 0,
 } as const satisfies TextRole;

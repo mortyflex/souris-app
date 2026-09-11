@@ -33,7 +33,7 @@ import type {
   ServiceFormValidation,
   ServicePhaseFormValues,
 } from '../service-form';
-import { ServiceTextField } from './ServiceTextField';
+import { TextField } from '@/shared/ui/TextField';
 
 interface SortablePhaseEditorProps {
   readonly phases: readonly ServicePhaseFormValues[];
@@ -300,7 +300,7 @@ function SortablePhaseRow({
       {expanded && (
         <View style={styles.expandedBody}>
           {phase.requiresStaff && (
-            <ServiceTextField
+            <TextField
               accessibilityLabel={`Nom de la phase ${index + 1}`}
               error={
                 attempted && validity && !validity.nameValid
@@ -313,7 +313,7 @@ function SortablePhaseRow({
               value={phase.name}
             />
           )}
-          <ServiceTextField
+          <TextField
             accessibilityLabel={`Durée de la phase ${index + 1}`}
             error={
               attempted && validity && !validity.durationValid

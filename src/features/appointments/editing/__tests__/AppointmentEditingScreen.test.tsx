@@ -74,12 +74,17 @@ jest.mock('@expo/ui/community/datetime-picker', () => {
   return {
     DateTimePicker: (props: {
       readonly onValueChange?: (event: unknown, date: Date) => void;
+      readonly value: Date;
     }) =>
       React.createElement(
         Pressable,
         {
           testID: 'mock-date-picker',
-          onPress: () => props.onValueChange?.({}, new Date(2026, 8, 1, 12, 0)),
+          onPress: () => {
+            const nextDate = new Date(props.value);
+            nextDate.setDate(nextDate.getDate() + 1);
+            props.onValueChange?.({}, nextDate);
+          },
         },
       ),
   };
@@ -556,6 +561,7 @@ describe('AppointmentEditingScreen', () => {
 
   it('saves a changed date with the local time of day preserved', async () => {
     const view = await renderEditor();
+    const before = new Date(Number(view.getByTestId('session-start-at').props.children));
 
     await act(async () => {
       fireEvent.press(view.getByLabelText('Changer la date'));
@@ -570,10 +576,11 @@ describe('AppointmentEditingScreen', () => {
       fireEvent.press(view.getByTestId('save-appointment-edit'));
     });
 
-    // agenda-sofia starts at 14:00 on the fixture day; the mock picker moves
-    // the date to 1 September 2026 while keeping 14:00 local.
+    // The mock picker moves one local calendar day while preserving 14:00.
+    const expected = new Date(before);
+    expected.setDate(expected.getDate() + 1);
     const after = Number(view.getByTestId('session-start-at').props.children);
-    expect(after).toBe(new Date(2026, 8, 1, 14, 0).getTime());
+    expect(after).toBe(expected.getTime());
     expect(view.getByTestId('session-items').props.children).toContain('item-sofia:Balayage:95:');
   });
 

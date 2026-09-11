@@ -272,3 +272,73 @@ the export remains preserved as the historical brand and interaction reference.
 - Agenda remains the calmer operational exception. Day keeps a neutral grid and restrained appointment
   families; Week remains a compact editorial list with subtle separators and markers rather than pastel day
   cards.
+
+---
+
+## 11. Product Image Presentation
+
+Products use one consistent primary-image treatment across catalog, details, and the shared form:
+
+- catalog images remain compact square thumbnails and never turn management rows into ecommerce cards;
+- normal photographs use `cover` in the small catalog thumbnail, while detail/form previews use
+  `contain` so an isolated transparent Product is not clipped;
+- transparent or letterboxed content rests on the approved soft lavender Product surface;
+- Products without images use a quiet lavender square with the existing package symbol in catalog/form;
+- Product Details renders no large placeholder when an image is absent, preserving the textual hierarchy;
+- image surfaces use restrained Souris radii with no decorative outer border.
+
+---
+
+## 12. Native Runtime Typography — Plus Jakarta Sans
+
+The native runtime replaces Inter (DESIGN.md §3) with **Plus Jakarta Sans**, loaded through
+`@expo-google-fonts/plus-jakarta-sans` in four weights only: 400 / 500 / 600 / 700. The
+exported reference keeps Inter as historical documentation.
+
+- One family, one place: `src/shared/ui/theme/typography.ts` owns the scale and the
+  `fontFamilies` weight → family mapping. `AppText`, tab labels, and every native `TextInput`
+  read that mapping; no screen names a font family directly.
+- The hierarchy is slightly larger and more editorial than the export: screen titles 30 (iOS) /
+  27 (Android), sheet titles 21, section titles 18 / 700, key values 23, row titles 16.5, controls
+  and CTAs 16, body 16 with a 24 line height, metadata 13.5, chips 12, tabs 11 (iOS) / 12
+  (Android). Agenda hour and quarter labels keep their compact operational sizes.
+- Tracking stays gently negative on titles and neutral on body; uppercase eyebrows remain the
+  selective brand detail described in §10.
+
+## 13. Product Sticker Presentation and Scanner Framing
+
+Extends §11.
+
+- An isolated Product image (the transparent PNG written by the optional iOS background-removal
+  module, or any PNG) is presented as a **sticker**: a clean white contour drawn from offset copies
+  of the silhouette and a soft navy silhouette shadow, resting on the lavender Product surface with
+  an inner inset so nothing is clipped. Catalog thumbnails use a lighter contour (four copies, no
+  blur) to stay cheap in long lists; details and the form use the full contour and the soft shadow.
+- Photographs that are not isolated keep the flat §11 presentation. Android, where Vision is
+  unavailable, therefore keeps photographs flat without any special casing.
+- Sizing comes from the processed file, never from a UI zoom: the native module crops the cutout
+  to the subject bounds plus a transparent margin of 4 % (minimum 8 px), and every surface renders it
+  with `contain` inside the same inset box. Detail uses a 320 px surface and the form a full-width
+  264 px tile (near square / 4:3 on a phone) so a typical bottle fills most of the box; the catalog
+  keeps its 52 px thumbnail and row height. Form and details rest on the `surfaceMedia` lavender
+  (lav200), dense enough for the white contour to read; the thumbnail keeps the quiet lav050.
+- In the Product form the image area is the interaction. Without a photo it is one soft lavender
+  media tile with the camera symbol and `Ajouter une photo`; with a photo it shows the sticker with a
+  small `Modifier` pill. Tapping opens a compact bottom sheet (`Photo du produit`: camera, library,
+  and remove when a photo exists, plus `Annuler`). No explanatory paragraph, no second CTA.
+- `Prendre une photo` dismisses the source sheet first, then presents a dedicated Product camera in
+  its own native large sheet (iOS `pageSheet`, full screen on Android): navy surface, close button,
+  a preview that fills the available height with nothing drawn over it, `Placez le produit au
+  centre`, one shutter. One modal is active at a time; sheets are never stacked and the camera is
+  never embedded in a drawer. No barcode framing or scanner language.
+- Every small bottom drawer (confirmations, pickers, action lists, forms) uses the shared
+  `BottomSheet` primitive: one navy scrim (`scrim`, canonical navy at 16 %) that fades with the
+  Modal while the sheet slides up from the bottom edge. No frosted or white veil, no blur, no scrim
+  that travels with the sheet, and no per-screen backdrop definitions.
+- When a photo is added, replaced, or finishes background removal in the Product form, the visual
+  reveals with a short scale/fade settle (spring, ≈ 240 ms) and a small activity badge while the
+  transparent version is being prepared. Reduced motion renders the final state directly.
+- The barcode scanner fills the screen with the camera, adds a navy scrim with a rounded
+  landscape cut-out window, white corner brackets, a subtle lavender pulse around the window, and
+  a glass instruction pill. Close and torch are circular glass buttons inside the top safe area;
+  the status bar stays light while the scanner is presented.

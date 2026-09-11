@@ -54,6 +54,9 @@ src/
 ├── providers/
 └── config/
 
+modules/
+└── product-image-background/  # focused optional local Expo native module
+
 assets/
 docs/
 ```
@@ -173,6 +176,23 @@ Only place a component in `shared/ui` when it is genuinely reusable.
 A component used only by Appointment belongs to the Appointment feature.
 
 Do not prematurely generalize components.
+
+`BarcodeScannerModal` is the reusable native scanner boundary. It owns Expo Camera permission,
+supported retail formats, torch presentation, and the one-result-per-opening lock, then returns only
+the scanned string through a callback. It imports no Product catalog, routing, stock, or Sales state;
+Product-specific exact lookup and navigation remain under `src/features/products`.
+
+Product photo acquisition remains Product-feature orchestration under
+`src/features/products/images`: the focused `expo-image-picker` boundary requests camera or library
+permission only after the matching action and returns a local URI. Product UI owns the local form
+draft; acquisition and processing never call `ProductCatalogProvider` directly.
+
+The optional Apple-only local Expo module under `modules/product-image-background` is the complete
+native boundary for foreground extraction. It uses stable iOS 17+ Vision APIs on-device and writes
+a separate transparent PNG to cache. The TypeScript `removeImageBackground` boundary loads the
+module optionally and always returns the original URI on Android, unsupported iOS, native failure,
+or timeout. Product components contain no platform branches or Vision implementation details. A
+development build is required for this enhancement; it adds no persistence or backend boundary.
 
 ---
 
@@ -333,12 +353,13 @@ without a concrete need.
 
 React Context is not a substitute for thoughtful state ownership.
 
-The current in-memory application session uses three focused providers:
+The current in-memory application session uses four focused providers:
 
 ```text
 AppointmentSessionProvider — the appointment collection
 ClientSessionProvider       — the single Client source
 ServiceCatalogProvider      — the single canonical Service catalog source
+ProductCatalogProvider      — the single canonical Product catalog source
 ```
 
 They expose only what current surfaces need (lookup + add + the mutations each feature requires).
@@ -346,7 +367,9 @@ Appointments reference Clients through `clientId`; display names are resolved fr
 source, never duplicated into appointment state. Appointments reference catalog services through
 `serviceId` at selection time only; once selected, an `AppointmentItem` owns its snapshot and is
 never re-read from the Service catalog. Legacy service data feeds the catalog through pure
-one-way adapters and is not a parallel runtime source.
+one-way adapters and is not a parallel runtime source. The Product catalog follows the same
+pattern: legacy products are one-way import sources for `ProductCatalogProvider`, which future
+Sales/Transactions will reference through the stable `productId`.
 
 ---
 

@@ -1,12 +1,5 @@
-import { AppText } from '@/shared/ui/AppText';
-import { Screen } from '@/shared/ui/Screen';
+import { ProductCatalogScreen } from '@/features/products/catalog/ProductCatalogScreen';
 
-export default function ProduitsScreen() {
-  return (
-    <Screen>
-      <AppText variant="screenTitle" accessibilityRole="header">
-        Produits
-      </AppText>
-    </Screen>
-  );
+export default function ProduitsTab() {
+  return <ProductCatalogScreen />;
 }

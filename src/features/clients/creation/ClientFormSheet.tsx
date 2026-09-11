@@ -11,16 +11,7 @@
 // canceling never mutates anything.
 
 import { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 
@@ -29,13 +20,16 @@ import { useClientSession } from '@/features/clients/session/ClientSessionProvid
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { BottomSheet } from '@/shared/ui/BottomSheet';
 import { SymbolView } from 'expo-symbols';
 import {
+  fontFamilies,
   gutter,
+  radii,
   rose,
+  scrim,
   semanticColors,
   spacing,
-  radii,
 } from '@/shared/ui/theme';
 
 import {
@@ -123,114 +117,98 @@ export function ClientFormSheet({
   const canSubmit = isValidClientForm(values);
 
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
+    <BottomSheet
+      backdropLabel="Fermer la fiche cliente"
+      keyboardAvoiding
+      onClose={onClose}
       onShow={seedForm}
-      transparent
       visible={visible}
     >
-      <View style={styles.modalRoot}>
-        <Pressable
-          accessibilityLabel="Fermer la fiche cliente"
+      <View style={styles.header}>
+        <View style={styles.headerCopy}>
+          <AppText variant="eyebrow" style={styles.eyebrow}>
+            {mode === 'edit' ? 'CLIENTE' : 'NOUVELLE CLIENTE'}
+          </AppText>
+          <AppText variant="sheetTitle" accessibilityRole="header">
+            {mode === 'edit' ? 'Modifier la cliente' : 'Ajouter une cliente'}
+          </AppText>
+        </View>
+        <AppButton
+          accessibilityLabel="Fermer"
           onPress={onClose}
-          style={styles.backdrop}
+          style={styles.closeButton}
+          title="Fermer"
+          variant="tertiary"
         />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          pointerEvents="box-none"
-          style={styles.sheetAnchor}
-        >
-          <SafeAreaView edges={['bottom']} style={styles.sheet}>
-            <View style={styles.grabber} />
-            <View style={styles.header}>
-              <View style={styles.headerCopy}>
-                <AppText variant="eyebrow" style={styles.eyebrow}>
-                  {mode === 'edit' ? 'CLIENTE' : 'NOUVELLE CLIENTE'}
-                </AppText>
-                <AppText variant="sheetTitle" accessibilityRole="header">
-                  {mode === 'edit' ? 'Modifier la cliente' : 'Ajouter une cliente'}
-                </AppText>
-              </View>
-              <AppButton
-                accessibilityLabel="Fermer"
-                onPress={onClose}
-                style={styles.closeButton}
-                title="Fermer"
-                variant="tertiary"
-              />
-            </View>
+      </View>
 
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              style={styles.fieldsScroll}
-            >
-              <View style={styles.fields}>
-                <FormField
-                  accessibilityLabel="Prénom"
-                  autoFocus={visible}
-                  invalid={firstNameMissing}
-                  label="Prénom"
-                  onChangeText={(text) => updateField('firstName', text)}
-                  placeholder="Prénom"
-                  value={values.firstName}
-                />
-                {firstNameMissing && (
-                  <AppText variant="metadata" style={styles.fieldError}>
-                    Le prénom est requis.
-                  </AppText>
-                )}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        style={styles.fieldsScroll}
+      >
+        <View style={styles.fields}>
+          <FormField
+            accessibilityLabel="Prénom"
+            autoFocus={visible}
+            invalid={firstNameMissing}
+            label="Prénom"
+            onChangeText={(text) => updateField('firstName', text)}
+            placeholder="Prénom"
+            value={values.firstName}
+          />
+          {firstNameMissing && (
+            <AppText variant="metadata" style={styles.fieldError}>
+              Le prénom est requis.
+            </AppText>
+          )}
 
-                <FormField
-                  accessibilityLabel="Nom"
-                  label="Nom"
-                  onChangeText={(text) => updateField('lastName', text)}
-                  placeholder="Optionnel"
-                  value={values.lastName}
-                />
-                <FormField
-                  accessibilityLabel="Téléphone"
-                  keyboardType="phone-pad"
-                  label="Téléphone"
-                  onChangeText={(text) => updateField('phone', text)}
-                  placeholder="Optionnel"
-                  value={values.phone}
-                />
-                <FormField
-                  accessibilityLabel="Email"
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  label="Email"
-                  onChangeText={(text) => updateField('email', text)}
-                  placeholder="Optionnel"
-                  value={values.email}
-                />
-                {emailInvalid && (
-                  <AppText variant="metadata" style={styles.fieldError}>
-                    Adresse email invalide.
-                  </AppText>
-                )}
+          <FormField
+            accessibilityLabel="Nom"
+            label="Nom"
+            onChangeText={(text) => updateField('lastName', text)}
+            placeholder="Optionnel"
+            value={values.lastName}
+          />
+          <FormField
+            accessibilityLabel="Téléphone"
+            keyboardType="phone-pad"
+            label="Téléphone"
+            onChangeText={(text) => updateField('phone', text)}
+            placeholder="Optionnel"
+            value={values.phone}
+          />
+          <FormField
+            accessibilityLabel="Email"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            label="Email"
+            onChangeText={(text) => updateField('email', text)}
+            placeholder="Optionnel"
+            value={values.email}
+          />
+          {emailInvalid && (
+            <AppText variant="metadata" style={styles.fieldError}>
+              Adresse email invalide.
+            </AppText>
+          )}
 
-                <BirthDateField
-                  value={values.birthDate}
-                  onClear={() => updateField('birthDate', '')}
-                  onOpen={openBirthdayPicker}
-                />
-              </View>
-            </ScrollView>
+          <BirthDateField
+            value={values.birthDate}
+            onClear={() => updateField('birthDate', '')}
+            onOpen={openBirthdayPicker}
+          />
+        </View>
+      </ScrollView>
 
-            <View style={styles.footer}>
-              <AppButton
-                disabled={!canSubmit}
-                onPress={submit}
-                style={styles.primaryButton}
-                testID="submit-client"
-                title={mode === 'edit' ? 'Enregistrer les modifications' : 'Ajouter la cliente'}
-              />
-            </View>
-          </SafeAreaView>
-        </KeyboardAvoidingView>
+      <View style={styles.footer}>
+        <AppButton
+          disabled={!canSubmit}
+          onPress={submit}
+          style={styles.primaryButton}
+          testID="submit-client"
+          title={mode === 'edit' ? 'Enregistrer les modifications' : 'Ajouter la cliente'}
+        />
       </View>
 
       {Platform.OS === 'android' && birthdayPickerOpen && (
@@ -291,7 +269,7 @@ export function ClientFormSheet({
           </SafeAreaView>
         </View>
       )}
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -397,19 +375,9 @@ function FormField({
 }
 
 const styles = StyleSheet.create({
-  modalRoot: { flex: 1, justifyContent: 'flex-end' },
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(25, 22, 63, 0.24)',
-  },
-  sheetAnchor: { flex: 1, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderCurve: 'continuous',
-    borderTopLeftRadius: radii.ios.sheet,
-    borderTopRightRadius: radii.ios.sheet,
-    maxHeight: '100%',
-    paddingHorizontal: horizontalGutter,
+    backgroundColor: scrim,
   },
   grabber: {
     alignSelf: 'center',
@@ -440,7 +408,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.medium,
     borderWidth: 1.5,
     color: semanticColors.foreground,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: fontFamilies['400'],
     fontSize: 16,
     minHeight: 44,
     paddingHorizontal: spacing.md,
