@@ -1,26 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import type { AppointmentCancellationActor } from '@/domain/appointments';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
-import {
-  gutter,
-  radii,
-  rose,
-  semanticColors,
-  spacing,
-} from '@/shared/ui/theme';
+import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { fontFamilies, radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 interface AppointmentCancellationSheetProps {
   readonly clientName: string;
@@ -162,72 +147,52 @@ function LifecycleSheet({
   onConfirm,
 }: LifecycleSheetProps) {
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
-      transparent
+    <BottomSheet
+      backdropLabel="Fermer la confirmation"
+      keyboardAvoiding
+      onClose={onClose}
+      testID={testID}
       visible={visible}
     >
-      <View style={styles.modalRoot}>
-        <Pressable
-          accessibilityLabel="Fermer la confirmation"
+      <View style={styles.header}>
+        <View style={styles.headerCopy}>
+          <AppText variant="eyebrow" style={styles.eyebrow}>
+            {eyebrow}
+          </AppText>
+          <AppText accessibilityRole="header" variant="sheetTitle">
+            {title}
+          </AppText>
+        </View>
+        <AppButton
+          accessibilityLabel="Fermer"
           onPress={onClose}
-          style={styles.backdrop}
+          style={styles.closeButton}
+          title="Fermer"
+          variant="tertiary"
         />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          pointerEvents="box-none"
-          style={styles.sheetAnchor}
-        >
-          <SafeAreaView
-            accessibilityViewIsModal
-            edges={['bottom']}
-            style={styles.sheet}
-            testID={testID}
-          >
-            <View style={styles.grabber} />
-            <View style={styles.header}>
-              <View style={styles.headerCopy}>
-                <AppText variant="eyebrow" style={styles.eyebrow}>
-                  {eyebrow}
-                </AppText>
-                <AppText accessibilityRole="header" variant="sheetTitle">
-                  {title}
-                </AppText>
-              </View>
-              <AppButton
-                accessibilityLabel="Fermer"
-                onPress={onClose}
-                style={styles.closeButton}
-                title="Fermer"
-                variant="tertiary"
-              />
-            </View>
-            <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              style={styles.scroll}
-            >
-              <AppText variant="body" style={styles.description}>
-                {description}
-              </AppText>
-              {children && <View style={styles.body}>{children}</View>}
-            </ScrollView>
-            <View style={styles.footer}>
-              <AppButton
-                disabled={confirmDisabled}
-                onPress={onConfirm}
-                style={styles.confirmButton}
-                testID={confirmTestID}
-                title={confirmTitle}
-                variant="danger"
-              />
-            </View>
-          </SafeAreaView>
-        </KeyboardAvoidingView>
       </View>
-    </Modal>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        style={styles.scroll}
+      >
+        <AppText variant="body" style={styles.description}>
+          {description}
+        </AppText>
+        {children && <View style={styles.body}>{children}</View>}
+      </ScrollView>
+      <View style={styles.footer}>
+        <AppButton
+          disabled={confirmDisabled}
+          onPress={onConfirm}
+          style={styles.confirmButton}
+          testID={confirmTestID}
+          title={confirmTitle}
+          variant="danger"
+        />
+      </View>
+    </BottomSheet>
   );
 }
 
@@ -259,31 +224,7 @@ function ActorOption({ actor, label, selected, onPress }: ActorOptionProps) {
   );
 }
 
-const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
-
 const styles = StyleSheet.create({
-  modalRoot: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(25, 22, 63, 0.24)',
-  },
-  sheetAnchor: { flex: 1, justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderCurve: 'continuous',
-    borderTopLeftRadius: radii.ios.sheet,
-    borderTopRightRadius: radii.ios.sheet,
-    maxHeight: '100%',
-    paddingHorizontal: horizontalGutter,
-  },
-  grabber: {
-    alignSelf: 'center',
-    backgroundColor: semanticColors.borderSubtle,
-    borderRadius: radii.pill,
-    height: 5,
-    marginTop: spacing.sm,
-    width: 40,
-  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -342,7 +283,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.medium,
     borderWidth: StyleSheet.hairlineWidth,
     color: semanticColors.foreground,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: fontFamilies['400'],
     fontSize: 16,
     minHeight: 80,
     padding: spacing.md,

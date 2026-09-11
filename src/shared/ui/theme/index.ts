@@ -16,12 +16,14 @@ export {
   rose,
   peach,
   foregroundSoft,
+  scrim,
   semanticColors,
   shadowSource,
 } from './colors';
 export { spacing, gutter, bottomClearance } from './spacing';
 export { radii } from './radii';
 export {
+  fontFamilies,
   typography,
   onboardingDisplay,
   screenTitleIos,

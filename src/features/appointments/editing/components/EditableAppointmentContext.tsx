@@ -7,12 +7,12 @@
 // no decorative borders.
 
 import { useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { BottomSheet } from '@/shared/ui/BottomSheet';
 import {
   interaction,
   radii,
@@ -151,48 +151,37 @@ export function EditableAppointmentContext({
         />
       )}
 
-      <Modal
-        animationType="slide"
-        onRequestClose={cancelDatePicker}
-        transparent
+      <BottomSheet
+        backdropLabel="Annuler la sélection de date"
+        onClose={cancelDatePicker}
         visible={Platform.OS === 'ios' && datePickerOpen}
       >
-        <View style={styles.modalRoot}>
-          <Pressable
-            accessibilityLabel="Annuler la sélection de date"
+        <AppText variant="sheetTitle" accessibilityRole="header" style={styles.pickerTitle}>
+          Date du rendez-vous
+        </AppText>
+        <DateTimePicker
+          accentColor={semanticColors.accent}
+          display="spinner"
+          locale="fr_FR"
+          mode="date"
+          onValueChange={(_event, date) => setDraftDate(date ?? DEFAULT_PICKER_DATE)}
+          value={draftDate}
+        />
+        <View style={styles.pickerFooter}>
+          <AppButton
             onPress={cancelDatePicker}
-            style={styles.backdrop}
+            style={styles.pickerSecondary}
+            title="Annuler"
+            variant="secondary"
           />
-          <SafeAreaView edges={['bottom']} style={styles.pickerSheet}>
-            <View style={styles.grabber} />
-            <AppText variant="sheetTitle" accessibilityRole="header" style={styles.pickerTitle}>
-              Date du rendez-vous
-            </AppText>
-            <DateTimePicker
-              accentColor={semanticColors.accent}
-              display="spinner"
-              locale="fr_FR"
-              mode="date"
-              onValueChange={(_event, date) => setDraftDate(date ?? DEFAULT_PICKER_DATE)}
-              value={draftDate}
-            />
-            <View style={styles.pickerFooter}>
-              <AppButton
-                onPress={cancelDatePicker}
-                style={styles.pickerSecondary}
-                title="Annuler"
-                variant="secondary"
-              />
-              <AppButton
-                onPress={confirmDate}
-                style={styles.pickerPrimary}
-                testID="confirm-date"
-                title="Confirmer"
-              />
-            </View>
-          </SafeAreaView>
+          <AppButton
+            onPress={confirmDate}
+            style={styles.pickerPrimary}
+            testID="confirm-date"
+            title="Confirmer"
+          />
         </View>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }
@@ -230,26 +219,6 @@ const styles = StyleSheet.create({
   },
   modifyPressed: { backgroundColor: semanticColors.surfaceLavenderStrong },
   modifyText: { color: semanticColors.accent },
-  modalRoot: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(25, 22, 63, 0.24)',
-  },
-  pickerSheet: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderCurve: 'continuous',
-    borderTopLeftRadius: radii.ios.sheet,
-    borderTopRightRadius: radii.ios.sheet,
-    paddingHorizontal: spacing.base,
-  },
-  grabber: {
-    alignSelf: 'center',
-    backgroundColor: semanticColors.borderSubtle,
-    borderRadius: radii.pill,
-    height: 5,
-    marginTop: spacing.sm,
-    width: 40,
-  },
   pickerTitle: { paddingVertical: spacing.base },
   pickerFooter: {
     flexDirection: 'row',

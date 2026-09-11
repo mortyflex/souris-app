@@ -3,17 +3,19 @@
 // Subtle native search field: Souris surface, search symbol on the left,
 // white background + accent outline on focus, comfortable native height.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import { foregroundSoft, radii, semanticColors, spacing, touchTarget } from './theme';
+import { fontFamilies, foregroundSoft, radii, semanticColors, spacing, touchTarget } from './theme';
 
 interface SearchFieldProps {
   readonly accessibilityLabel: string;
   readonly placeholder: string;
   readonly value: string;
   readonly onChangeText: (text: string) => void;
+  /** Optional generic trailing accessory (e.g. a scan action). */
+  readonly trailingAccessory?: ReactNode;
 }
 
 export function SearchField({
@@ -21,6 +23,7 @@ export function SearchField({
   placeholder,
   value,
   onChangeText,
+  trailingAccessory,
 }: SearchFieldProps) {
   const [focused, setFocused] = useState(false);
   const minimumHeight = touchTarget[Platform.OS === 'android' ? 'android' : 'ios'];
@@ -45,6 +48,7 @@ export function SearchField({
         style={styles.input}
         value={value}
       />
+      {trailingAccessory}
     </View>
   );
 }
@@ -68,7 +72,7 @@ const styles = StyleSheet.create({
   input: {
     color: semanticColors.foreground,
     flex: 1,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: fontFamilies['400'],
     fontSize: 15,
   },
 });

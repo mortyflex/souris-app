@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   StyleSheet,
   TextInput,
@@ -7,9 +7,9 @@ import {
 } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
-import { radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
+import { fontFamilies, radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
-interface ServiceTextFieldProps {
+interface TextFieldProps {
   readonly accessibilityLabel: string;
   readonly label: string;
   readonly value: string;
@@ -19,9 +19,11 @@ interface ServiceTextFieldProps {
   readonly keyboardType?: KeyboardTypeOptions;
   readonly suffix?: string;
   readonly autoFocus?: boolean;
+  /** Optional generic trailing accessory (e.g. a scan action). */
+  readonly trailingAccessory?: ReactNode;
 }
 
-export function ServiceTextField({
+export function TextField({
   accessibilityLabel,
   label,
   value,
@@ -31,7 +33,8 @@ export function ServiceTextField({
   keyboardType = 'default',
   suffix,
   autoFocus = false,
-}: ServiceTextFieldProps) {
+  trailingAccessory,
+}: TextFieldProps) {
   const [focused, setFocused] = useState(false);
 
   return (
@@ -65,6 +68,7 @@ export function ServiceTextField({
             {suffix}
           </AppText>
         )}
+        {trailingAccessory}
       </View>
       {error && (
         <AppText variant="metadata" style={styles.error}>
@@ -100,7 +104,7 @@ const styles = StyleSheet.create({
   input: {
     color: semanticColors.foreground,
     flex: 1,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: fontFamilies['400'],
     fontSize: 16,
     minHeight: 42,
     paddingVertical: 0,

@@ -63,6 +63,9 @@ export const semanticColors = {
   surfaceElevated: colors.background,
   surfaceLavender: lavender.lav050,
   surfaceLavenderStrong: lavender.lav100,
+  // Media surface behind Product photos / stickers: dense enough for a white
+  // contour to read, still a light Souris lavender.
+  surfaceMedia: lavender.lav200,
   surfaceRose: rose.rose050,
   surfacePeach: peach.peach050,
   surfacePeachStrong: peach.peach100,
@@ -73,6 +76,11 @@ export const semanticColors = {
   foregroundSoft,
   foregroundMuted: colors.muted,
 } as const;
+
+// Modal scrim — one restrained navy dim behind bottom sheets and dialogs.
+// Alpha variant of the canonical foreground navy; the underlying screen stays
+// recognizable while the presented surface remains dominant.
+export const scrim = 'rgba(25, 22, 63, 0.16)';
 
 // Shadow tint source colors — used only to describe shadow design intent.
 // Native shadows on iOS/Android use platform APIs, not these hex values directly.

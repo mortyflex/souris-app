@@ -49,7 +49,7 @@ import {
   type ServiceFormValues,
 } from './service-form';
 import { createServiceId, createServicePhaseId } from './runtime-ids';
-import { ServiceTextField } from './components/ServiceTextField';
+import { TextField } from '@/shared/ui/TextField';
 import { SortablePhaseEditor } from './components/SortablePhaseEditor';
 
 export type ServiceEditorMode = 'create' | 'existing';
@@ -453,7 +453,7 @@ function ServiceForm({
           {values.type === 'SERVICE' ? 'Prestation simple' : 'Prestation technique'}
         </AppText>
       </View>
-      <ServiceTextField
+      <TextField
         accessibilityLabel="Nom de la prestation"
         autoFocus
         error={attempted && !validation.nameValid ? 'Le nom est requis.' : undefined}
@@ -462,7 +462,7 @@ function ServiceForm({
         placeholder="Ex. Coupe"
         value={values.name}
       />
-      <ServiceTextField
+      <TextField
         accessibilityLabel="Prix de la prestation"
         error={
           attempted && !validation.priceValid
@@ -478,7 +478,7 @@ function ServiceForm({
       />
 
       {values.type === 'SERVICE' ? (
-        <ServiceTextField
+        <TextField
           accessibilityLabel="Durée de la prestation"
           error={
             attempted && !validation.simpleDurationValid

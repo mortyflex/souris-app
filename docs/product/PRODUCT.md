@@ -551,18 +551,74 @@ Do not invent missing client information.
 
 Products are a primary product area.
 
-Future capabilities may include:
+### Produits V1 — catalog & current stock
 
-```text
-product catalog
-search
-categories
-brand
-barcode
-price
-stock
-retail sale
-```
+The `Produits` tab hosts the professional-managed Product catalog:
+
+- the canonical catalog lists `Actifs` / `Inactifs` groups in deterministic French alphabetical
+  order, seeded once from the normalized legacy product dataset (one-way import);
+- search covers name, brand, category, and barcode (case- and accent-insensitive; barcodes match
+  exactly as entered, leading zeroes preserved);
+- catalog rows keep a compact management layout and add one small primary-image thumbnail; Products
+  without a photo use the same restrained lavender package fallback rather than fabricated imagery;
+- `Ajouter un produit` opens the shared Product form (Photo, Marque, Catégorie and Code-barres
+  optionnels; Nom, Prix and Stock requis — stock defaults to 0 for a new product);
+- product details show identity, an optional primary image, price, optional informations
+  (brand/category/barcode, omitted when absent), and current stock (`Stock épuisé` when zero);
+- `Modifier` reuses the same form with exact hydration; `id`/`businessId` are stable;
+- `Désactiver` / `Réactiver` move the product between management groups (details close after the
+  state change); `Supprimer définitivement` removes an erroneous/duplicate record after explicit
+  confirmation;
+- current stock is direct V1 state — no stock-movement history, thresholds, or alerts yet.
+
+### Product Photos V1
+
+Each Product may have one optional primary photo. In the shared create/edit form the image area
+itself is the interaction: tapping it opens a compact Product photo sheet offering `Prendre une
+photo`, `Choisir dans la photothèque` and, when a photo exists, `Supprimer la photo`. Taking a photo
+closes that sheet and then presents a dedicated in-app Product camera (large native sheet with a
+live preview, one instruction, one shutter); the library uses the system picker. Acquisition and removal update only the local form
+draft: cancelling keeps the canonical Product unchanged, while Save commits the final `imageUri`
+together with the other Product fields. Photo actions never create a Product, change stock, or
+change activation state.
+
+Camera and photo-library permissions are requested only from the corresponding user action. Both
+paths return a local URI suitable for the current in-memory session; Souris does not persist,
+upload, synchronize, or fabricate Product images in V1. Legacy Products therefore start without
+images.
+
+On iOS 17 and later, a small local Apple Vision enhancement automatically attempts foreground
+subject extraction (`VNGenerateForegroundInstanceMaskRequest`) after acquisition, crops the result
+to the subject bounds with a small transparent margin, and writes a new transparent PNG to the app
+cache, so the Product naturally fills its presentation surface. The original camera/library asset is
+never changed. Unsupported iOS versions, Android, processing errors, no detected subject, and
+processing timeout all keep the original photo, so image processing never blocks Product creation or
+editing. The native enhancement requires a development build; no server or third-party segmentation
+service is involved.
+
+### Barcode Scanner V1
+
+Barcode scanning accelerates catalog lookup and Product data entry without changing Product or
+stock semantics:
+
+- the catalog search field exposes a camera action; one exact match opens Product Details, no match
+  offers `Ajouter un produit` with the exact scanned barcode prefilled, and multiple matches require
+  the professional to choose rather than opening an arbitrary Product;
+- create and edit forms expose the same scan action beside the optional barcode field; a detection
+  updates only the local form draft and reaches the canonical catalog only through the normal save
+  action;
+- manual barcode entry remains available, leading zeroes are preserved, and duplicate barcodes are
+  allowed (with a quiet informational hint in the form);
+- opening or completing a scan never changes `stockQuantity` and never creates a Sale.
+
+Camera permission is requested only when the scanner opens. Permanent denial explains that manual
+entry remains possible and offers a direct route to device settings.
+
+Sales are deliberately NOT part of V1: no checkout, payments, client purchase history, automatic
+stock decrement, suppliers, cost/margin, VAT, or variants. The Client Profile keeps no fake
+`Produits achetés` section — that only becomes real with the future
+Sales/Transactions domain, which will reference Products through the stable `productId` and
+snapshot commercial data at purchase time.
 
 Product management should remain simple.
 

@@ -25,6 +25,7 @@ import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
 import {
   duration,
   easing,
+  fontFamilies,
   foregroundSoft,
   interaction,
   peach,
@@ -395,7 +396,7 @@ const styles = StyleSheet.create({
   },
   input: {
     color: semanticColors.foreground,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: fontFamilies['400'],
     fontVariant: ['tabular-nums'],
     fontSize: 15,
     minHeight: 36,

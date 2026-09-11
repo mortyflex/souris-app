@@ -2,12 +2,12 @@ import { Tabs } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Platform, StyleSheet, type ColorValue } from 'react-native';
 
-import { semanticColors, typography } from '@/shared/ui/theme';
+import { fontFamilies, semanticColors, typography } from '@/shared/ui/theme';
 
-// Tab labels use the approved tab typography: 10.5 / 600 on iOS, 12 / 500
-// on Android. The concrete Inter family carries the weight.
+// Tab labels use the approved tab typography: 11 / 600 on iOS, 12 / 500 on
+// Android. The concrete font family carries the weight.
 const tabLabelStyle = {
-  fontFamily: Platform.OS === 'android' ? 'Inter_500Medium' : 'Inter_600SemiBold',
+  fontFamily: Platform.OS === 'android' ? fontFamilies['500'] : fontFamilies['600'],
   fontSize: Platform.OS === 'android' ? typography.tabAndroid.fontSize : typography.tabIos.fontSize,
 } as const;
 
