@@ -1,8 +1,9 @@
 // Souris — Products catalog screen (Produits tab)
 //
 // Light operational product catalog: search, Actifs/Inactifs groups,
-// deterministic French alphabetical order. No dashboard KPIs, no fake sales
-// metrics. Stock is visible but restrained.
+// deterministic French alphabetical order. "Nouvelle vente" is the single
+// Sale entry point; no dashboard KPIs, no sales metrics. Stock is visible but
+// restrained.
 
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -121,18 +122,29 @@ export function ProductCatalogScreen() {
           trailingAccessory={scanAccessory}
           value={query}
         />
-        <AppButton
-          accessibilityLabel="Ajouter un produit"
-          onPress={() => router.push('/products/new')}
-          title="Ajouter un produit"
-        />
+        <View style={styles.actions}>
+          <AppButton
+            accessibilityLabel="Nouvelle vente"
+            onPress={() => router.push('/sales/new')}
+            style={styles.action}
+            testID="new-sale"
+            title="Nouvelle vente"
+          />
+          <AppButton
+            accessibilityLabel="Ajouter un produit"
+            onPress={() => router.push('/products/new')}
+            style={styles.action}
+            title="Ajouter un produit"
+            variant="secondary"
+          />
+        </View>
       </View>
 
       {products.length === 0 ? (
         <View style={styles.emptyState}>
           <AppText variant="stateTitle">Aucun produit enregistré.</AppText>
           <AppText variant="metadata" style={styles.emptyStateText}>
-            Ajoutez votre premier produit pour préparer la future vente.
+            Ajoutez votre premier produit pour préparer vos ventes.
           </AppText>
         </View>
       ) : searching && directory.length === 0 ? (
@@ -319,6 +331,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingTop: spacing.base,
   },
+  actions: { flexDirection: 'row', gap: spacing.sm },
+  action: { flex: 1 },
   scanAction: {
     alignItems: 'center',
     borderRadius: radii.small,

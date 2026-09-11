@@ -342,3 +342,30 @@ Extends §11.
   landscape cut-out window, white corner brackets, a subtle lavender pulse around the window, and
   a glass instruction pill. Close and torch are circular glass buttons inside the top safe area;
   the status bar stays light while the scanner is presented.
+
+## 14. Sale Creation — Operational Selection
+
+The exported reference contains no Sale flow. Sales V1 reuses existing Souris patterns rather than
+introducing a POS visual language:
+
+- `Nouvelle vente` is a primary action beside a secondary `Ajouter un produit` on the Produits
+  tab — no new tab, no KPI, no cash-register surface;
+- Sale creation is one native form sheet (0.92 detent, grabber) with the standard eyebrow / sheet
+  title / tertiary `Annuler` header and a sticky primary footer (`Valider la vente`), like the
+  Product editor — never a full-screen modal that would collide with the status bar;
+- Product selection is operational: tapping a search or scan result adds the Product IMMEDIATELY
+  (or increments its single line) with a selection haptic and no intermediate confirmation. The
+  scroll position stays stable so several additions can follow each other;
+- a Sale line is a borderless lavender card: thumbnail, name in deep brand violet, `prix / unité`,
+  a quiet `Stock N` hint, a `−  n  +` stepper (disabled sides communicate the bound: 1 and current
+  stock) and the line subtotal; removal is an explicit small close control, never a hidden swipe;
+- the total is a stronger lavender surface with the summary value typography; completion issues
+  use the rose surface and text, never a blocking dialog;
+- scan results inside a Sale use the shared `BottomSheet` (unknown / inactive / several matches)
+  and never offer Product creation;
+- `Vendre un produit` is a secondary `AppButton` in the Client Profile identity block. In
+  Appointment Details the same action is `Revente`: a borderless full-width lavender pill with the
+  shopping-bag symbol and violet label, placed ABOVE `Terminer` and the lifecycle row, without a
+  heading or divider — a contextual business action that never competes with the primary
+  lifecycle action and is never grouped beside `Absence` / `Annuler`. Produits keeps
+  `Nouvelle vente`.

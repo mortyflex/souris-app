@@ -55,7 +55,7 @@ import {
   updateDraftPrice,
   type SelectedServiceDraft,
 } from '../editor/draft';
-import { ClientPickerSheet } from './components/ClientPickerSheet';
+import { ClientPickerSheet } from '@/features/clients/selection/ClientPickerSheet';
 import { EditableAppointmentContext } from './components/EditableAppointmentContext';
 import { isSameStartAt } from './start-at';
 

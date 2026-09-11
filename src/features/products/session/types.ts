@@ -1,4 +1,4 @@
-import type { Product } from '@/domain/products';
+import type { Product, StockDecrement } from '@/domain/products';
 
 /**
  * The smallest in-memory Product session surface needed by Produits:
@@ -8,7 +8,7 @@ import type { Product } from '@/domain/products';
 export interface ProductCatalogSessionValue {
   /** Complete management catalog, including inactive Products. */
   readonly products: readonly Product[];
-  /** Active Products only — the future Sales selection source. */
+  /** Active Products only — the Sale selection source. */
   readonly activeProducts: readonly Product[];
   readonly getProductById: (productId: string | undefined) => Product | undefined;
   readonly addProduct: (product: Product) => void;
@@ -17,6 +17,12 @@ export interface ProductCatalogSessionValue {
   readonly setProductActive: (productId: string, active: boolean) => void;
   /** Direct current-stock state in V1 (no stock-movement history yet). */
   readonly setProductStock: (productId: string, stockQuantity: number) => void;
+  /**
+   * Applies a whole batch of decrements (Sale completion) or nothing at all:
+   * throws before any change when a Product is missing or stock would become
+   * negative. Canonical stock never goes below zero.
+   */
+  readonly decrementProductStock: (decrements: readonly StockDecrement[]) => void;
   /** Removes the catalog record immutably; unknown ids are a no-op. */
   readonly deleteProduct: (productId: string) => void;
 }

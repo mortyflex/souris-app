@@ -101,6 +101,7 @@ Examples:
 src/domain/appointments/
 src/domain/clients/
 src/domain/products/
+src/domain/sales/
 ```
 
 Create each area only when its implementation begins.
@@ -136,6 +137,7 @@ Examples may eventually include:
 src/features/appointments/
 src/features/clients/
 src/features/products/
+src/features/sales/
 src/features/auth/
 ```
 
@@ -181,6 +183,12 @@ Do not prematurely generalize components.
 supported retail formats, torch presentation, and the one-result-per-opening lock, then returns only
 the scanned string through a callback. It imports no Product catalog, routing, stock, or Sales state;
 Product-specific exact lookup and navigation remain under `src/features/products`.
+
+Client selection is owned by the Client feature under `src/features/clients/selection`:
+`ClientPickerStep` (search + virtualized directory over the single Client source) and
+`ClientPickerSheet` (the same step inside the shared `BottomSheet`, with on-the-fly Client
+creation). Appointment Creation, Appointment Editing, and Sale creation all consume these two
+components; no other Client picker implementation exists.
 
 Product photo acquisition remains Product-feature orchestration under
 `src/features/products/images`: the focused `expo-image-picker` boundary requests camera or library
@@ -353,13 +361,14 @@ without a concrete need.
 
 React Context is not a substitute for thoughtful state ownership.
 
-The current in-memory application session uses four focused providers:
+The current in-memory application session uses five focused providers:
 
 ```text
 AppointmentSessionProvider — the appointment collection
 ClientSessionProvider       — the single Client source
 ServiceCatalogProvider      — the single canonical Service catalog source
 ProductCatalogProvider      — the single canonical Product catalog source
+SaleSessionProvider         — the completed Sale collection (starts empty)
 ```
 
 They expose only what current surfaces need (lookup + add + the mutations each feature requires).
@@ -368,8 +377,34 @@ source, never duplicated into appointment state. Appointments reference catalog 
 `serviceId` at selection time only; once selected, an `AppointmentItem` owns its snapshot and is
 never re-read from the Service catalog. Legacy service data feeds the catalog through pure
 one-way adapters and is not a parallel runtime source. The Product catalog follows the same
-pattern: legacy products are one-way import sources for `ProductCatalogProvider`, which future
-Sales/Transactions will reference through the stable `productId`.
+pattern: legacy products are one-way import sources for `ProductCatalogProvider`, which Sales
+reference through the stable `productId`.
+
+### Sale completion boundary
+
+`SaleSessionProvider` is nested inside `ProductCatalogProvider` and exposes only `sales`,
+`getSaleById`, and `completeSale`. Completion is ONE operation:
+
+```text
+completeSale(draft)
+  → prepareSaleCompletion(draft, products)      pure domain: whole-draft validation,
+                                                 Sale snapshot, exact stock decrements
+  → decrementProductStock(stockDecrements)       catalog: whole batch, never negative
+  → add the immutable Sale
+```
+
+Validation runs against the current canonical catalog before any state update; the two updates
+are issued synchronously in the same call so React commits them together. A validation failure
+returns the issues and changes neither the Sale session nor the Product catalog. The Sale draft
+(lines, optional Client) is local screen state; the session and catalog are never touched while
+drafting. Sale UI reads live Product values for presentation, while the completed Sale keeps its
+own snapshot and survives Product edits or deletion. The Client Profile derives purchases from
+`sales` through `clientId` — nothing is stored on the Client.
+
+Entry context is navigation-only: `/sales/new` accepts an optional `clientId` route parameter
+(Client Profile and Appointment Details pass it, Produits does not). The screen resolves it on
+its first render; the origin never reaches the Sale model or the session, and returning after
+success is plain back-stack navigation.
 
 ---
 

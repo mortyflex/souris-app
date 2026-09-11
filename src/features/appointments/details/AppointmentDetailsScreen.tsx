@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import { useEffect, useState } from "react";
 import {
   Platform,
@@ -117,9 +118,8 @@ export function AppointmentDetailsScreen({
   }
 
   const { appointment } = entry;
-  const clientDisplayName = getResolvedClientDisplayName(
-    getClientById(appointment.clientId),
-  );
+  const client = getClientById(appointment.clientId);
+  const clientDisplayName = getResolvedClientDisplayName(client);
   const services = getAppointmentDetailServices(appointment);
   const summary = getAppointmentDetailSummary(appointment);
   const endAt = getAppointmentEnd(appointment);
@@ -294,6 +294,33 @@ export function AppointmentDetailsScreen({
         )}
 
         <View style={styles.appointmentActions} testID="appointment-actions">
+          {client && (
+            <Pressable
+              accessibilityLabel="Revente"
+              accessibilityHint="Vendre un produit à cette cliente"
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: "/sales/new",
+                  params: { clientId: client.id },
+                })
+              }
+              style={({ pressed }) => [
+                styles.saleAction,
+                pressed && styles.saleActionPressed,
+              ]}
+              testID="sell-product"
+            >
+              <SymbolView
+                name={{ ios: "bag.fill", android: "shopping_bag" }}
+                size={18}
+                tintColor={semanticColors.accent}
+              />
+              <AppText variant="control" style={styles.saleActionText}>
+                Revente
+              </AppText>
+            </Pressable>
+          )}
           {canComplete && (
             <AppButton
               onPress={complete}
@@ -463,6 +490,26 @@ const styles = StyleSheet.create({
   normalActions: { flexDirection: "row", gap: spacing.sm },
   normalAction: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm },
   onlyNormalAction: { flex: 0, marginLeft: "auto" },
+  // Contextual commercial action: lavender, borderless, above the lifecycle
+  // actions and visually lighter than the primary Terminer.
+  saleAction: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: semanticColors.surfaceLavenderStrong,
+    borderCurve: "continuous",
+    borderRadius: radii.medium,
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "center",
+    marginBottom: spacing.xs,
+    minHeight: touchTarget[Platform.OS === "android" ? "android" : "ios"],
+    paddingHorizontal: spacing.base,
+  },
+  saleActionPressed: {
+    backgroundColor: semanticColors.borderLavender,
+    transform: [{ scale: interaction.pressedScale }],
+  },
+  saleActionText: { color: semanticColors.accent },
   deleteTextAction: {
     alignItems: "center",
     alignSelf: "center",

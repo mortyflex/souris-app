@@ -37,7 +37,7 @@ import {
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
 import { AppointmentContextRow } from './components/AppointmentContextRow';
-import { ClientPickerStep } from './components/ClientPickerStep';
+import { ClientPickerStep } from '@/features/clients/selection/ClientPickerStep';
 import { CreationStepper } from './components/CreationStepper';
 import { ServiceSelectionGrid } from '../editor/components/ServiceSelectionGrid';
 import { SummaryStep } from './components/SummaryStep';

@@ -28,6 +28,7 @@ function Probe() {
     updateProduct,
     setProductActive,
     setProductStock,
+    decrementProductStock,
     deleteProduct,
   } = useProductCatalog();
   const created = getProductById(addedProduct.id);
@@ -96,6 +97,19 @@ function Probe() {
       <Pressable
         testID="reactivate"
         onPress={() => setProductActive(addedProduct.id, true)}
+      />
+      <Pressable
+        testID="decrement-stock"
+        onPress={() => decrementProductStock([{ productId: addedProduct.id, quantity: 3 }])}
+      />
+      <Pressable
+        testID="decrement-too-much"
+        onPress={() =>
+          decrementProductStock([
+            { productId: addedProduct.id, quantity: 1 },
+            { productId: addedProduct.id, quantity: 4 },
+          ])
+        }
       />
       <Pressable testID="delete-added" onPress={() => deleteProduct(addedProduct.id)} />
       <Pressable testID="delete-unknown" onPress={() => deleteProduct('unknown-id')} />
@@ -185,6 +199,23 @@ describe('ProductCatalogProvider', () => {
       'Invalid Product stock quantity',
     );
     expect(view.getByText(`count:${initialCount + 1}`)).toBeTruthy();
+  });
+
+  it('decrements stock as a whole batch and never below zero', async () => {
+    const view = await render(
+      <ProductCatalogProvider>
+        <Probe />
+      </ProductCatalogProvider>,
+    );
+
+    await act(async () => fireEvent.press(view.getByTestId('add')));
+    await act(async () => fireEvent.press(view.getByTestId('decrement-stock')));
+    expect(view.getByText('Shampooing Test:25:1:true')).toBeTruthy();
+
+    await expect(fireEvent.press(view.getByTestId('decrement-too-much'))).rejects.toThrow(
+      'would become negative',
+    );
+    expect(view.getByText('Shampooing Test:25:1:true')).toBeTruthy();
   });
 
   it('deletes the exact Product immutably with consistent unknown-id behavior', async () => {
