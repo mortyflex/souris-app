@@ -47,6 +47,7 @@ import { findProductsByBarcode, prepareProductDirectory } from '@/features/produ
 import { useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
 import { DEVELOPMENT_BUSINESS_ID } from '@/features/services/data/initial-services';
 import { formatServicePrice } from '@/features/services/presentation';
+import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -199,7 +200,13 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
   }, [isLeaving, router]);
 
   const validate = () => {
-    const result = completeSale(buildDraft(new Date()));
+    let result: ReturnType<typeof completeSale>;
+    try {
+      result = completeSale(buildDraft(new Date()));
+    } catch {
+      alertPersistenceFailure();
+      return;
+    }
     if (!result.ok) {
       haptics.warning();
       return;

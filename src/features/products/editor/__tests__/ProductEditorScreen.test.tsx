@@ -7,6 +7,8 @@ import {
   useProductCatalog,
 } from "../../session/ProductCatalogProvider";
 import { ProductEditorScreen } from "../ProductEditorScreen";
+import { createMemoryLocalFiles } from "@/persistence/testing/memory-local-files";
+import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 
 const mockBack = jest.fn();
 let mockScannedBarcode = "";
@@ -232,12 +234,20 @@ function SeededImageEditor() {
   );
 }
 
+// Every image URI in this file lives under file:///products/, which is the
+// Souris-owned image directory when the document directory is file:///. The
+// catalog therefore keeps the URIs verbatim; promotion itself is covered by
+// the product-image-storage and ProductCatalogProvider tests.
 function renderEditor(screen: React.ReactNode) {
   return render(
-    <ProductCatalogProvider>
+    <TestPersistenceProvider
+      files={createMemoryLocalFiles({ documentDirectoryUri: "file:///" })}
+    >
+      <ProductCatalogProvider>
       {screen}
       <CatalogProbe />
-    </ProductCatalogProvider>,
+      </ProductCatalogProvider>
+    </TestPersistenceProvider>,
   );
 }
 

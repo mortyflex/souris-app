@@ -3,6 +3,7 @@ import { Pressable, Text } from 'react-native';
 
 import { ServiceCatalogProvider, useServiceCatalog } from '../../session/ServiceCatalogProvider';
 import { ServiceCatalogScreen } from '../ServiceCatalogScreen';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -37,10 +38,12 @@ function CatalogProbe() {
 
 function renderCatalog() {
   return render(
-    <ServiceCatalogProvider>
+    <TestPersistenceProvider>
+      <ServiceCatalogProvider>
       <ServiceCatalogScreen />
       <CatalogProbe />
-    </ServiceCatalogProvider>,
+      </ServiceCatalogProvider>
+    </TestPersistenceProvider>,
   );
 }
 

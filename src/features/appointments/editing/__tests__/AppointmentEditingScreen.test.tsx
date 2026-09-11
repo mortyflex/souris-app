@@ -8,6 +8,7 @@ import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/s
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentEditingScreen } from '../AppointmentEditingScreen';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockBack = jest.fn();
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
@@ -221,14 +222,16 @@ function SessionProbe() {
 
 function editorTree(appointmentId: string) {
   return (
-    <ClientSessionProvider>
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
       <ServiceCatalogProvider>
         <AppointmentSessionProvider>
           <AppointmentEditingScreen key={appointmentId} appointmentId={appointmentId} />
           <SessionProbe />
         </AppointmentSessionProvider>
       </ServiceCatalogProvider>
-    </ClientSessionProvider>
+      </ClientSessionProvider>
+    </TestPersistenceProvider>
   );
 }
 

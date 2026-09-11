@@ -21,6 +21,7 @@ import {
   getServiceProcessingMinutes,
 } from "@/features/services/presentation";
 import { useServiceCatalog } from "@/features/services/session/ServiceCatalogProvider";
+import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
@@ -160,14 +161,23 @@ export function ServiceEditorScreen({
       values,
     });
 
+    try {
+      if (mode === "create") {
+        addService(nextService);
+      } else {
+        updateService(nextService);
+      }
+    } catch {
+      alertPersistenceFailure();
+      return;
+    }
+
     if (mode === "create") {
-      addService(nextService);
       haptics.success();
       router.back();
       return;
     }
 
-    updateService(nextService);
     setValues(toServiceFormValues(nextService));
     setAttempted(false);
     setEditing(false);
@@ -177,7 +187,12 @@ export function ServiceEditorScreen({
   const changeActiveState = () => {
     if (!service) return;
     const commit = (active: boolean) => {
-      setServiceActive(service.id, active);
+      try {
+        setServiceActive(service.id, active);
+      } catch {
+        alertPersistenceFailure();
+        return;
+      }
       haptics.selection();
       router.back();
     };
@@ -209,7 +224,12 @@ export function ServiceEditorScreen({
           text: "Supprimer",
           style: "destructive",
           onPress: () => {
-            deleteService(service.id);
+            try {
+              deleteService(service.id);
+            } catch {
+              alertPersistenceFailure();
+              return;
+            }
             haptics.warning();
             router.back();
           },

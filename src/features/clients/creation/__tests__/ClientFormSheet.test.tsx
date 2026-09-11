@@ -11,6 +11,7 @@ import { Text } from 'react-native';
 import { ClientSessionProvider, useClientSession } from '../../session/ClientSessionProvider';
 import { ClientFormSheet } from '../ClientFormSheet';
 import type { Client } from '@/domain/clients';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 interface PickerProps {
   readonly onValueChange?: (event: unknown, date: Date) => void;
@@ -67,16 +68,19 @@ function SessionProbe() {
 
 function renderCreateSheet() {
   return render(
-    <ClientSessionProvider>
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
       <ClientFormSheet mode="create" onClose={() => {}} onSubmitted={() => {}} visible />
       <SessionProbe />
-    </ClientSessionProvider>,
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
   );
 }
 
 function renderEditSheet() {
   return render(
-    <ClientSessionProvider>
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
       <ClientFormSheet
         client={editableClient}
         mode="edit"
@@ -85,7 +89,8 @@ function renderEditSheet() {
         visible
       />
       <SessionProbe />
-    </ClientSessionProvider>,
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
   );
 }
 

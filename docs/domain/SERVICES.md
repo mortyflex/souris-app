@@ -133,10 +133,10 @@ Changing ids would unnecessarily break identity stability.
 
 The current fresh-session import yields **8 Services / 8 Techniques**: Services = Brushing 1/2/3,
 Coupe Femme / Homme, Chignon, Coupe Brushing 1/2/3; Techniques = Balayage 1/2/3, Couleur Racines,
-Dose Supplémentaire, Soin Classique, Soin Profond, Traitement SOS. The catalog is seeded once per
-`ServiceCatalogProvider` mount — a development session started before a classification change keeps
-its old in-memory seed until a full reload/restart; the application never reclassifies rendered
-Services dynamically.
+Dose Supplémentaire, Soin Classique, Soin Profond, Traitement SOS. The catalog is seeded into
+SQLite once, on the very first launch; afterwards the persisted catalog is the only source, so a
+classification change in the legacy adapters affects fresh installs (or a development reset)
+only. The application never reclassifies rendered Services dynamically.
 
 ---
 

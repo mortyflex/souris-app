@@ -4,6 +4,7 @@ import { Pressable, Text } from 'react-native';
 
 import { ClientSessionProvider, useClientSession } from '../../session/ClientSessionProvider';
 import { ClientPickerSheet } from '../ClientPickerSheet';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
@@ -39,9 +40,11 @@ function Host() {
 
 function renderPicker() {
   return render(
-    <ClientSessionProvider>
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
       <Host />
-    </ClientSessionProvider>,
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
   );
 }
 

@@ -5,8 +5,10 @@ import type { Appointment, AppointmentItem } from '@/domain/appointments';
 import type { Client } from '@/domain/clients';
 
 import { getResolvedClientDisplayName } from '../../presentation';
+import { developmentClients } from '../../data/development-clients';
 import { createInitialClients } from '../../data/initial-clients';
 import { ClientSessionProvider, useClientSession } from '../ClientSessionProvider';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const addedClient: Client = {
   id: 'client-created',
@@ -66,24 +68,31 @@ function Probe() {
   );
 }
 
+// TestPersistenceProvider seeds the DEVELOPMENT seed: legacy clients + fixture clients.
+const seededClientCount = createInitialClients().length + developmentClients.length;
+
 describe('ClientSessionProvider', () => {
   it('seeds the coherent initial source and exposes lookup', async () => {
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <Probe />
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
-    expect(view.getByText(`count:${createInitialClients().length}`)).toBeTruthy();
+    expect(view.getByText(`count:${seededClientCount}`)).toBeTruthy();
     expect(view.getByText('Sofia Petit')).toBeTruthy();
     expect(view.getByText('added-missing')).toBeTruthy();
   });
 
   it('makes a newly added client retrievable immediately, with its id retained', async () => {
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <Probe />
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => {
@@ -91,14 +100,16 @@ describe('ClientSessionProvider', () => {
     });
 
     expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
-    expect(view.getByText(`count:${createInitialClients().length + 1}`)).toBeTruthy();
+    expect(view.getByText(`count:${seededClientCount + 1}`)).toBeTruthy();
   });
 
   it('updates a client immutably with its stable id and propagates identity', async () => {
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <Probe />
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     expect(view.getByText('lea:Léa')).toBeTruthy();
@@ -114,9 +125,11 @@ describe('ClientSessionProvider', () => {
 
   it('never requires the Appointment object to be rewritten on client edit', async () => {
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <Probe />
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     const beforeId = view.getByText('appointment-client-id:client-agenda-lea').props.children;

@@ -17,6 +17,7 @@ import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 
 import { formatCivilDate, formatClientBirthDate, parseCivilDate, type Client } from '@/domain/clients';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -103,10 +104,15 @@ export function ClientFormSheet({
         ? buildClientFromForm(client.id, values)
         : buildClientFromForm(createClientId(), values);
 
-    if (mode === 'edit' && client) {
-      updateClient(nextClient);
-    } else {
-      addClient(nextClient);
+    try {
+      if (mode === 'edit' && client) {
+        updateClient(nextClient);
+      } else {
+        addClient(nextClient);
+      }
+    } catch {
+      alertPersistenceFailure();
+      return;
     }
     haptics.success();
     onSubmitted(nextClient);

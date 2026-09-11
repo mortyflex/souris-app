@@ -57,7 +57,8 @@
           "cameraPermission": "Souris utilise la caméra pour scanner des codes-barres et prendre des photos de produits.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

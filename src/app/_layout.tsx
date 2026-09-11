@@ -8,7 +8,7 @@ import {
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -18,9 +18,15 @@ import { ClientSessionProvider } from '@/features/clients/session/ClientSessionP
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
+import { openSourisDatabase } from '@/persistence/expo-database';
+import { createExpoLocalFiles } from '@/persistence/files/expo-local-files';
+import { createDevelopmentSeed } from '@/providers/development-seed';
+import { createFirstRunSeed } from '@/providers/first-run-seed';
+import { PersistenceProvider } from '@/providers/PersistenceProvider';
 
-// Keep the native splash screen visible until Plus Jakarta Sans is ready so
-// the first frame never renders in a fallback font.
+// Keep the native splash screen visible until Plus Jakarta Sans is ready AND
+// the local database is bootstrapped, so the first frame never renders in a
+// fallback font nor with empty/legacy data.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -30,21 +36,28 @@ export default function RootLayout() {
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
   });
+  const [files] = useState(createExpoLocalFiles);
+  const [persistenceSettled, setPersistenceSettled] = useState(false);
+  const fontsReady = fontsLoaded || fontError !== null;
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    if (fontsReady && persistenceSettled) {
       void SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
-
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
+  }, [fontsReady, persistenceSettled]);
 
   return (
     <>
       <StatusBar style="dark" />
       <GestureHandlerRootView style={styles.root}>
+        <PersistenceProvider
+          createDevelopmentSeed={createDevelopmentSeed}
+          createSeed={createFirstRunSeed}
+          files={files}
+          onSettled={() => setPersistenceSettled(true)}
+          openDatabase={openSourisDatabase}
+        >
+        {fontsReady && (
         <ClientSessionProvider>
           <ServiceCatalogProvider>
             <ProductCatalogProvider>
@@ -162,6 +175,8 @@ export default function RootLayout() {
             </ProductCatalogProvider>
           </ServiceCatalogProvider>
         </ClientSessionProvider>
+        )}
+        </PersistenceProvider>
       </GestureHandlerRootView>
     </>
   );

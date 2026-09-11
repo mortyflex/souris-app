@@ -31,6 +31,7 @@ import { useClientSession } from '@/features/clients/session/ClientSessionProvid
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { isTerminalAppointmentStatus } from '@/features/appointments/presentation';
+import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -185,14 +186,19 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
       appointment,
       drafts.map((draft, index) => toAppointmentItemEditDraft(draft, index)),
     );
-    updateAppointment({
-      ...entry,
-      appointment: {
-        ...updatedAppointment,
-        clientId: draftClientId ?? appointment.clientId,
-        startAt: new Date(draftStartAt),
-      },
-    });
+    try {
+      updateAppointment({
+        ...entry,
+        appointment: {
+          ...updatedAppointment,
+          clientId: draftClientId ?? appointment.clientId,
+          startAt: new Date(draftStartAt),
+        },
+      });
+    } catch {
+      alertPersistenceFailure();
+      return;
+    }
     haptics.success();
     setIsLeaving(true);
   };

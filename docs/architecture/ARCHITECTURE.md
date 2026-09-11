@@ -47,6 +47,7 @@ src/
 ├── app/
 ├── domain/
 ├── features/
+├── persistence/
 ├── shared/
 │   ├── ui/
 │   ├── icons/
@@ -252,10 +253,18 @@ src/providers/
 
 Only introduce providers when an actual cross-application concern exists.
 
+Current providers:
+
+```text
+src/providers/PersistenceProvider.tsx   application persistence bootstrap (see PERSISTENCE.md)
+src/providers/first-run-seed.ts         one-time production seed (approved legacy data only)
+src/providers/development-seed.ts       production seed + Agenda fixtures (__DEV__ reset / tests)
+src/providers/persistence-failure.ts    the one concise "Enregistrement impossible" alert
+```
+
 Examples may later include:
 
 - authentication;
-- persistence client;
 - query client;
 - theme infrastructure.
 
@@ -361,7 +370,8 @@ without a concrete need.
 
 React Context is not a substitute for thoughtful state ownership.
 
-The current in-memory application session uses five focused providers:
+The current persistent local session uses five focused providers, all hydrated once from the
+SQLite snapshot exposed by `PersistenceProvider` (see `docs/architecture/PERSISTENCE.md`):
 
 ```text
 AppointmentSessionProvider — the appointment collection
@@ -372,6 +382,8 @@ SaleSessionProvider         — the completed Sale collection (starts empty)
 ```
 
 They expose only what current surfaces need (lookup + add + the mutations each feature requires).
+Every mutation is written to SQLite first (in a transaction when several rows are involved) and
+reflected in React state only after the write succeeds; a failed write changes no state.
 Appointments reference Clients through `clientId`; display names are resolved from the Client
 source, never duplicated into appointment state. Appointments reference catalog services through
 `serviceId` at selection time only; once selected, an `AppointmentItem` owns its snapshot and is
@@ -389,13 +401,16 @@ reference through the stable `productId`.
 completeSale(draft)
   → prepareSaleCompletion(draft, products)      pure domain: whole-draft validation,
                                                  Sale snapshot, exact stock decrements
-  → decrementProductStock(stockDecrements)       catalog: whole batch, never negative
+  → sales store completeSale()                  ONE SQLite transaction: stock revalidation,
+                                                 decrements, Sale row, SaleItem rows
+  → applyCommittedStockDecrements(decrements)    catalog state mirrors the committed stock
   → add the immutable Sale
 ```
 
-Validation runs against the current canonical catalog before any state update; the two updates
-are issued synchronously in the same call so React commits them together. A validation failure
-returns the issues and changes neither the Sale session nor the Product catalog. The Sale draft
+Validation runs against the current canonical catalog before any write; the state updates are
+issued synchronously after the transaction commits so React commits them together. A validation
+failure returns the issues and changes neither the Sale session nor the Product catalog; a
+database failure rolls the transaction back and throws before any state change. The Sale draft
 (lines, optional Client) is local screen state; the session and catalog are never touched while
 drafting. Sale UI reads live Product values for presentation, while the completed Sale keeps its
 own snapshot and survives Product edits or deletion. The Client Profile derives purchases from
@@ -410,13 +425,19 @@ success is plain back-stack navigation.
 
 # 16. Persistence
 
-Persistence is deliberately deferred.
+Local persistence exists and is documented in `docs/architecture/PERSISTENCE.md`.
 
-The domain must not be coupled to a future persistence provider.
+```text
+src/persistence/     expo-sqlite boundary, schema v1, migrations, first-run seed, stores,
+                     LocalFiles boundary for durable Product images (plain TypeScript)
+src/providers/       PersistenceProvider: migrate → seed once → hydrate → render
+```
 
-Do not introduce persistence abstractions before storage requirements are known.
+The domain stays independent from it: `src/persistence` depends on domain types only, and row ↔
+domain mapping happens exclusively inside the stores. Screens never see SQL or rows.
 
-Potential future technologies may include local and remote persistence, but the architecture should not guess prematurely.
+Remote persistence, sync, backup, and authentication remain deferred; the local schema must not
+guess their shape.
 
 ---
 

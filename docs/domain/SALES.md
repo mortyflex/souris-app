@@ -135,7 +135,11 @@ INSUFFICIENT_STOCK    productId, productName, requested, available
 
 The pure domain function (`prepareSaleCompletion`) never applies anything; it returns either
 the Sale plus the exact stock decrements, or the issues. The application boundary
-(`SaleSessionProvider.completeSale`) applies the decrements and the Sale together, or nothing.
+(`SaleSessionProvider.completeSale`) then applies the decrements and the Sale in ONE SQLite
+transaction — each decrement re-checks the stored quantity of an active Product, and any failure
+rolls everything back — before reflecting the committed result in state. There is never a
+committed Sale without its decrements nor a decrement without its Sale
+(`docs/architecture/PERSISTENCE.md` §8).
 
 ---
 
