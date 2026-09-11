@@ -1,10 +1,13 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { useState } from 'react';
 import { Pressable, Text } from 'react-native';
 
 import type { Product } from '@/domain/products';
 
 import { createInitialProductCatalog } from '../../data/initial-products';
 import { ProductCatalogProvider, useProductCatalog } from '../ProductCatalogProvider';
+import { createMemoryLocalFiles } from '@/persistence/testing/memory-local-files';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const addedProduct: Product = {
   id: 'product-created',
@@ -19,6 +22,16 @@ const addedProduct: Product = {
   active: true,
 };
 
+const DURABLE_IMAGE = /^image:file:\/\/\/app\/Documents\/products\/product-created-\d+-\d+\.(jpg|png)$/;
+
+/** Draft images exist as temporary files before the Product is saved. */
+function createDraftFiles() {
+  const files = createMemoryLocalFiles();
+  files.addFile('file:///products/product-a.jpg');
+  files.addFile('file:///products/product-b.png');
+  return files;
+}
+
 function Probe() {
   const {
     products,
@@ -28,10 +41,11 @@ function Probe() {
     updateProduct,
     setProductActive,
     setProductStock,
-    decrementProductStock,
+    applyCommittedStockDecrements,
     deleteProduct,
   } = useProductCatalog();
   const created = getProductById(addedProduct.id);
+  const [lastError, setLastError] = useState('none');
 
   return (
     <>
@@ -48,9 +62,14 @@ function Probe() {
           addProduct(addedProduct);
         }}
       />
+      <Text>{`error:${lastError}`}</Text>
       <Pressable
         testID="add-invalid"
-        onPress={() => addProduct({ ...addedProduct, id: 'invalid-product', price: NaN })}
+        onPress={() =>
+          addProduct({ ...addedProduct, id: 'invalid-product', price: NaN }).catch(
+            (error: Error) => setLastError(error.message),
+          )
+        }
       />
       <Pressable
         testID="update"
@@ -100,12 +119,12 @@ function Probe() {
       />
       <Pressable
         testID="decrement-stock"
-        onPress={() => decrementProductStock([{ productId: addedProduct.id, quantity: 3 }])}
+        onPress={() => applyCommittedStockDecrements([{ productId: addedProduct.id, quantity: 3 }])}
       />
       <Pressable
         testID="decrement-too-much"
         onPress={() =>
-          decrementProductStock([
+          applyCommittedStockDecrements([
             { productId: addedProduct.id, quantity: 1 },
             { productId: addedProduct.id, quantity: 4 },
           ])
@@ -120,9 +139,11 @@ function Probe() {
 describe('ProductCatalogProvider', () => {
   it('seeds the real canonical import and exposes lookup', async () => {
     const view = await render(
-      <ProductCatalogProvider>
-        <Probe />
-      </ProductCatalogProvider>,
+      <TestPersistenceProvider files={createDraftFiles()}>
+        <ProductCatalogProvider>
+          <Probe />
+        </ProductCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     expect(view.getByText(`count:${createInitialProductCatalog().length}`)).toBeTruthy();
@@ -134,14 +155,16 @@ describe('ProductCatalogProvider', () => {
     const initial = createInitialProductCatalog();
     const initialSnapshot = JSON.stringify(initial);
     const view = await render(
-      <ProductCatalogProvider>
-        <Probe />
-      </ProductCatalogProvider>,
+      <TestPersistenceProvider files={createDraftFiles()}>
+        <ProductCatalogProvider>
+          <Probe />
+        </ProductCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('add')));
     expect(view.getByText('Shampooing Test:25:4:true')).toBeTruthy();
-    expect(view.getByText('image:file:///products/product-a.jpg')).toBeTruthy();
+    expect(view.getByText(DURABLE_IMAGE)).toBeTruthy();
 
     await act(async () => fireEvent.press(view.getByTestId('set-stock')));
     expect(view.getByText('Shampooing Test:25:12:true')).toBeTruthy();
@@ -162,16 +185,21 @@ describe('ProductCatalogProvider', () => {
 
   it('creates, replaces, and removes one image while preserving Product identity and fields', async () => {
     const view = await render(
-      <ProductCatalogProvider>
-        <Probe />
-      </ProductCatalogProvider>,
+      <TestPersistenceProvider files={createDraftFiles()}>
+        <ProductCatalogProvider>
+          <Probe />
+        </ProductCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('add')));
-    expect(view.getByText('image:file:///products/product-a.jpg')).toBeTruthy();
+    const firstImage = view.getByText(DURABLE_IMAGE).props.children as string;
+    expect(firstImage.endsWith('.jpg')).toBe(true);
 
     await act(async () => fireEvent.press(view.getByTestId('replace-image')));
-    expect(view.getByText('image:file:///products/product-b.png')).toBeTruthy();
+    const secondImage = view.getByText(DURABLE_IMAGE).props.children as string;
+    expect(secondImage.endsWith('.png')).toBe(true);
+    expect(secondImage).not.toBe(firstImage);
     expect(view.getByText('identity:product-created:fixture-business')).toBeTruthy();
     expect(view.getByText('Shampooing Test:25:4:true')).toBeTruthy();
 
@@ -184,17 +212,18 @@ describe('ProductCatalogProvider', () => {
   it('keeps duplicate ids and invalid canonical values out of the catalog', async () => {
     const initialCount = createInitialProductCatalog().length;
     const view = await render(
-      <ProductCatalogProvider>
-        <Probe />
-      </ProductCatalogProvider>,
+      <TestPersistenceProvider files={createDraftFiles()}>
+        <ProductCatalogProvider>
+          <Probe />
+        </ProductCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('add-twice')));
     expect(view.getByText(`count:${initialCount + 1}`)).toBeTruthy();
 
-    await expect(fireEvent.press(view.getByTestId('add-invalid'))).rejects.toThrow(
-      'Invalid Product "invalid-product"',
-    );
+    await act(async () => fireEvent.press(view.getByTestId('add-invalid')));
+    expect(view.getByText('error:Invalid Product "invalid-product"')).toBeTruthy();
     await expect(fireEvent.press(view.getByTestId('set-invalid-stock'))).rejects.toThrow(
       'Invalid Product stock quantity',
     );
@@ -203,9 +232,11 @@ describe('ProductCatalogProvider', () => {
 
   it('decrements stock as a whole batch and never below zero', async () => {
     const view = await render(
-      <ProductCatalogProvider>
-        <Probe />
-      </ProductCatalogProvider>,
+      <TestPersistenceProvider files={createDraftFiles()}>
+        <ProductCatalogProvider>
+          <Probe />
+        </ProductCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('add')));
@@ -222,9 +253,11 @@ describe('ProductCatalogProvider', () => {
     const initial = createInitialProductCatalog();
     const initialSnapshot = JSON.stringify(initial);
     const view = await render(
-      <ProductCatalogProvider>
-        <Probe />
-      </ProductCatalogProvider>,
+      <TestPersistenceProvider files={createDraftFiles()}>
+        <ProductCatalogProvider>
+          <Probe />
+        </ProductCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('add')));

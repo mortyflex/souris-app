@@ -23,6 +23,7 @@ import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/s
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockBack = jest.fn();
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
@@ -159,14 +160,16 @@ function SessionProbe() {
 
 function creationTree(screenKey: number) {
   return (
-    <ClientSessionProvider>
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
       <ServiceCatalogProvider>
         <AppointmentSessionProvider>
           <AppointmentCreationScreen key={screenKey} startAt={startAt} />
           <SessionProbe />
         </AppointmentSessionProvider>
       </ServiceCatalogProvider>
-    </ClientSessionProvider>
+      </ClientSessionProvider>
+    </TestPersistenceProvider>
   );
 }
 

@@ -19,6 +19,7 @@ import {
 import { SaleCreationScreen } from '@/features/sales/creation/SaleCreationScreen';
 import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { ClientProfileScreen } from '../ClientProfileScreen';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -236,7 +237,8 @@ function SessionProbe() {
 
 function renderProfile(clientId: string, saleClientId?: string) {
   return render(
-    <ClientSessionProvider>
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
       <ProductCatalogProvider>
         <SaleSessionProvider>
           <AppointmentSessionProvider>
@@ -246,7 +248,8 @@ function renderProfile(clientId: string, saleClientId?: string) {
           </AppointmentSessionProvider>
         </SaleSessionProvider>
       </ProductCatalogProvider>
-    </ClientSessionProvider>,
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
   );
 }
 

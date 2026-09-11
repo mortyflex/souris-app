@@ -22,6 +22,7 @@ import {
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
+import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
@@ -132,19 +133,33 @@ export function AppointmentDetailsScreen({
   const canModify = !isTerminal;
   const hasNormalActions = canMarkNoShow || canCancel || canModify;
 
+  // Every lifecycle write goes through the persisted session; a failed write
+  // leaves the record unchanged and is reported once.
+  const persist = (task: () => void): boolean => {
+    try {
+      task();
+      return true;
+    } catch {
+      alertPersistenceFailure();
+      return false;
+    }
+  };
+
   const complete = () => {
     const nextAppointment = completeAppointment(appointment, new Date());
     if (nextAppointment === appointment) return;
-    updateAppointment({ appointment: nextAppointment });
+    if (!persist(() => updateAppointment({ appointment: nextAppointment }))) return;
     haptics.success();
   };
 
   const finalizePreviousDayBeforeException = (transitionNow: Date): boolean => {
     if (!shouldAutoCompleteAppointment(appointment, transitionNow))
       return false;
-    updateAppointment({
-      appointment: completeAppointment(appointment, transitionNow),
-    });
+    persist(() =>
+      updateAppointment({
+        appointment: completeAppointment(appointment, transitionNow),
+      }),
+    );
     setActiveSheet(undefined);
     return true;
   };
@@ -159,7 +174,7 @@ export function AppointmentDetailsScreen({
       reason,
     );
     if (nextAppointment === appointment) return;
-    updateAppointment({ appointment: nextAppointment });
+    if (!persist(() => updateAppointment({ appointment: nextAppointment }))) return;
     setActiveSheet(undefined);
     haptics.warning();
   };
@@ -169,15 +184,15 @@ export function AppointmentDetailsScreen({
     if (finalizePreviousDayBeforeException(transitionNow)) return;
     const nextAppointment = markAppointmentNoShow(appointment, transitionNow);
     if (nextAppointment === appointment) return;
-    updateAppointment({ appointment: nextAppointment });
+    if (!persist(() => updateAppointment({ appointment: nextAppointment }))) return;
     setActiveSheet(undefined);
     haptics.warning();
   };
 
   const deletePermanently = () => {
-    setDeletedByCurrentScreen(true);
     setDeletionVisible(false);
-    deleteAppointment(appointment.id);
+    if (!persist(() => deleteAppointment(appointment.id))) return;
+    setDeletedByCurrentScreen(true);
     haptics.warning();
     router.back();
   };

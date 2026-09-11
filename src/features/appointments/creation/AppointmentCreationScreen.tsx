@@ -24,6 +24,7 @@ import { useClientSession } from '@/features/clients/session/ClientSessionProvid
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { prepareClientDirectory } from '@/features/clients/directory/sort-clients';
+import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -77,7 +78,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const router = useRouter();
   const { addAppointment } = useAppointmentSession();
   const { clients } = useClientSession();
-  const { getServiceById, updateService, activeServices } = useServiceCatalog();
+  const { getServiceById, activeServices } = useServiceCatalog();
   const [step, setStep] = useState<CreationStep>(0);
   const [clientQuery, setClientQuery] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<string>();
@@ -184,13 +185,17 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       startAt: draftStartAt,
     });
 
-    // Adjusted defaults become future catalog values ONLY on success, as one
-    // coherent user action with the Appointment creation above.
-    for (const updated of collectCatalogServiceUpdates(selectedDrafts, getServiceById)) {
-      updateService(updated);
+    // Adjusted defaults become future catalog values ONLY on success: the
+    // Appointment and the catalog updates commit in ONE transaction.
+    try {
+      addAppointment(
+        { appointment },
+        collectCatalogServiceUpdates(selectedDrafts, getServiceById),
+      );
+    } catch {
+      alertPersistenceFailure();
+      return;
     }
-
-    addAppointment({ appointment });
     haptics.success();
     router.back();
   };

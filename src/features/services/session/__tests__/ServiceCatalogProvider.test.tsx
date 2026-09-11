@@ -10,6 +10,7 @@ import {
 
 import { createInitialServiceCatalog } from '../../data/initial-services';
 import { ServiceCatalogProvider, useServiceCatalog } from '../ServiceCatalogProvider';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const addedService: Service = {
   id: 'service-created',
@@ -80,9 +81,11 @@ function Probe() {
 describe('ServiceCatalogProvider', () => {
   it('seeds the real canonical import and exposes lookup', async () => {
     const view = await render(
-      <ServiceCatalogProvider>
+      <TestPersistenceProvider>
+        <ServiceCatalogProvider>
         <Probe />
-      </ServiceCatalogProvider>,
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     expect(view.getByText(`count:${createInitialServiceCatalog().length}`)).toBeTruthy();
@@ -94,9 +97,11 @@ describe('ServiceCatalogProvider', () => {
     const initial = createInitialServiceCatalog();
     const initialSnapshot = JSON.stringify(initial);
     const view = await render(
-      <ServiceCatalogProvider>
+      <TestPersistenceProvider>
+        <ServiceCatalogProvider>
         <Probe />
-      </ServiceCatalogProvider>,
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('add')));
@@ -119,9 +124,11 @@ describe('ServiceCatalogProvider', () => {
     const initial = createInitialServiceCatalog();
     const initialSnapshot = JSON.stringify(initial);
     const view = await render(
-      <ServiceCatalogProvider>
+      <TestPersistenceProvider>
+        <ServiceCatalogProvider>
         <Probe />
-      </ServiceCatalogProvider>,
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('add')));
@@ -142,9 +149,11 @@ describe('ServiceCatalogProvider', () => {
   it('deletes an inactive Service without a prior reactivation', async () => {
     const initial = createInitialServiceCatalog();
     const view = await render(
-      <ServiceCatalogProvider>
+      <TestPersistenceProvider>
+        <ServiceCatalogProvider>
         <Probe />
-      </ServiceCatalogProvider>,
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('add')));
@@ -206,9 +215,11 @@ function SnapshotProbe() {
 describe('catalog and Appointment snapshot boundary', () => {
   it('keeps retained items unchanged while new additions use current catalog values', async () => {
     const view = await render(
-      <ServiceCatalogProvider>
+      <TestPersistenceProvider>
+        <ServiceCatalogProvider>
         <SnapshotProbe />
-      </ServiceCatalogProvider>,
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('book-old')));
@@ -230,9 +241,11 @@ describe('catalog and Appointment snapshot boundary', () => {
 
   it('deleting the catalog Service never touches retained Appointment snapshots', async () => {
     const view = await render(
-      <ServiceCatalogProvider>
+      <TestPersistenceProvider>
+        <ServiceCatalogProvider>
         <SnapshotProbe />
-      </ServiceCatalogProvider>,
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => fireEvent.press(view.getByTestId('book-old')));

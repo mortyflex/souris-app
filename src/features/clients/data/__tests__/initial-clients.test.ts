@@ -1,13 +1,14 @@
 import { createInitialClients } from '../initial-clients';
 import { developmentClients } from '../development-clients';
 
-describe('createInitialClients (real legacy data + development seed)', () => {
+describe('createInitialClients (real legacy data only)', () => {
   const clients = createInitialClients();
 
-  it('contains the mapped legacy dataset and the development seed', () => {
+  it('contains the mapped legacy dataset and none of the development fixtures', () => {
     expect(clients.length).toBeGreaterThan(600);
+    const ids = new Set(clients.map((client) => client.id));
     for (const dev of developmentClients) {
-      expect(clients).toContainEqual(dev);
+      expect(ids.has(dev.id)).toBe(false);
     }
   });
 
@@ -43,10 +44,11 @@ describe('createInitialClients (real legacy data + development seed)', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('every development fixture client id is resolvable', () => {
-    const byId = new Map(clients.map((client) => [client.id, client]));
+  it('development fixture ids never collide with legacy ids', () => {
+    const ids = new Set(clients.map((client) => client.id));
     for (const dev of developmentClients) {
-      expect(byId.get(dev.id)).toEqual(dev);
+      expect(dev.id.startsWith('client-agenda-')).toBe(true);
+      expect(ids.has(dev.id)).toBe(false);
     }
   });
 });

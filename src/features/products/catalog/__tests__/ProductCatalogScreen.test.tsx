@@ -3,6 +3,8 @@ import { Pressable, Text } from 'react-native';
 
 import { ProductCatalogProvider, useProductCatalog } from '../../session/ProductCatalogProvider';
 import { ProductCatalogScreen } from '../ProductCatalogScreen';
+import { createMemoryLocalFiles } from '@/persistence/testing/memory-local-files';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockPush = jest.fn();
 let mockScannedBarcode = '';
@@ -85,12 +87,22 @@ function CatalogProbe() {
   );
 }
 
+// file:///products/ is the Souris-owned image directory here (document
+// directory file:///), so owned URIs stay verbatim; the cache PNG is a real
+// temporary artifact that gets promoted on save.
 function renderCatalog() {
+  const files = createMemoryLocalFiles({
+    documentDirectoryUri: 'file:///',
+    cacheDirectoryUri: 'file:///caches/',
+  });
+  files.addFile('file:///caches/ProductImages/product-1.png');
   return render(
-    <ProductCatalogProvider>
+    <TestPersistenceProvider files={files}>
+      <ProductCatalogProvider>
       <ProductCatalogScreen />
       <CatalogProbe />
-    </ProductCatalogProvider>,
+      </ProductCatalogProvider>
+    </TestPersistenceProvider>,
   );
 }
 

@@ -67,7 +67,8 @@ possible until real usage justifies a rule.
 
 ## 4. Runtime Catalog
 
-One in-memory session source — `ProductCatalogProvider` — owns the canonical `Product[]`:
+One persistent session source — `ProductCatalogProvider` — owns the canonical `Product[]`,
+hydrated from SQLite at launch (see `docs/architecture/PERSISTENCE.md`):
 
 ```text
 legacy-products ── pure adapter ──> Product[] ──> ProductCatalogProvider
@@ -78,11 +79,13 @@ legacy-products ── pure adapter ──> Product[] ──> ProductCatalogProv
 ```
 
 API: `products`, `activeProducts`, `getProductById`, `addProduct`, `updateProduct`,
-`setProductActive`, `setProductStock`, `decrementProductStock`, `deleteProduct`.
-`decrementProductStock` applies a whole batch of Sale decrements or nothing at all: it throws
-before any change when a Product is missing or stock would become negative. The seed is deep-copied per session;
-the raw legacy module is never mutated. New runtime identities follow the session-ID pattern
-(`product-{timestamp}-{sequence}`).
+`setProductActive`, `setProductStock`, `applyCommittedStockDecrements`, `deleteProduct`.
+`addProduct` and `updateProduct` are asynchronous: the draft image is promoted into durable app
+storage, then the row is written, then state changes. `applyCommittedStockDecrements` only mirrors
+in memory a batch already committed by the Sale completion transaction; it throws before any
+change when a Product is missing or stock would become negative. The legacy module feeds the
+database once, on first launch, and is never mutated. New runtime identities follow the
+session-ID pattern (`product-{timestamp}-{sequence}`) and are persisted as-is.
 
 ---
 
@@ -152,14 +155,17 @@ commits it only with `updateProduct`. Cancel restores the original canonical ima
 Product fields, including stable `id`/`businessId`, stock, and active state, follow their existing
 rules.
 
-The current picker/processed URI is local to the app and coherent with the in-memory Product
-session. There is deliberately no promise of survival across session reseed, reinstall, or future
-persistence migration. Apple Vision background removal is an optional presentation/infrastructure
+The picker/camera/processed URI is a temporary draft artifact. On a successful Save it is copied
+into the app-owned documents directory (`products/<productId>-<timestamp>-<n>.<ext>`) and the
+durable URI is what the Product persists; a replaced or removed Souris-owned image is deleted
+after the write succeeds, and external photo-library assets are never deleted (see
+`docs/architecture/PERSISTENCE.md` §9). The image therefore survives normal app restarts; it does
+not survive reinstall. Apple Vision background removal is an optional presentation/infrastructure
 enhancement and does not change the canonical Product model; failure keeps the original URI.
 
 ## 12. Non-Goals
 
 Not in this phase: checkout, payments, suppliers, purchase orders, stock-movement history,
-cost/margin, VAT, variants, ecommerce, persistence, image galleries, remote image storage,
+cost/margin, VAT, variants, ecommerce, image galleries, remote image storage,
 image synchronization. Completed Sales, their stock decrement, and Client purchase history live
 in the Sale domain (`docs/domain/SALES.md`).

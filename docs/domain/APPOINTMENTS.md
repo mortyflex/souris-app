@@ -835,8 +835,9 @@ Automatic completion must:
 - compare local civil calendar fields rather than UTC date strings;
 - be pure, immutable, deterministic with an injected `now`, and idempotent.
 
-The in-memory Appointment session applies this reconciliation at initial state creation, after a local-day rollover,
-and when the app becomes active on a new local day. Rendering components never perform lifecycle mutation.
+The persistent Appointment session applies this reconciliation at initial hydration, after a local-day rollover,
+and when the app becomes active on a new local day; every finalized record is written to SQLite in one transaction
+before state changes. Rendering components never perform lifecycle mutation.
 
 The operational Agenda is a projection of professional occupancy, not a complete historical view. It includes
 `SCHEDULED`, `CONFIRMED`, compatibility `IN_PROGRESS`, and `COMPLETED` appointments. It excludes `CANCELLED` and
@@ -914,8 +915,9 @@ Absence
 Supprimer définitivement
 ```
 
-Permanent deletion is not a lifecycle transition. The in-memory Appointment session removes the exact record by
-id without mutating the source collection; an unknown id is a no-op. Once removed, the Appointment naturally
+Permanent deletion is not a lifecycle transition. The Appointment session deletes the exact record by id — the
+row and every nested item/phase row — then removes it from state without mutating the source collection; an
+unknown id is a no-op. Once removed, the Appointment naturally
 disappears from Agenda Day, Agenda Week, Appointment Details, Client history, and every Client activity value
 derived from Appointment state. No Client counter is updated manually.
 

@@ -11,6 +11,7 @@ import { haptics } from '@/shared/lib/haptics';
 
 import { SaleSessionProvider, useSaleSession } from '../../session/SaleSessionProvider';
 import { SaleCreationScreen } from '../SaleCreationScreen';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockBack = jest.fn();
 let mockScannedBarcode = '';
@@ -122,14 +123,16 @@ function Probe() {
 
 function renderSale(initialClientId?: string) {
   return render(
-    <ClientSessionProvider>
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
       <ProductCatalogProvider>
         <SaleSessionProvider>
           <SaleCreationScreen initialClientId={initialClientId} />
           <Probe />
         </SaleSessionProvider>
       </ProductCatalogProvider>
-    </ClientSessionProvider>,
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
   );
 }
 

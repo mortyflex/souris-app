@@ -10,6 +10,7 @@ import {
 } from '@/features/products/session/ProductCatalogProvider';
 
 import { SaleSessionProvider, useSaleSession } from '../SaleSessionProvider';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const shampoo: Product = {
   id: 'product-a',
@@ -121,11 +122,13 @@ function Probe() {
 
 function renderSession() {
   return render(
-    <ProductCatalogProvider>
+    <TestPersistenceProvider>
+      <ProductCatalogProvider>
       <SaleSessionProvider>
         <Probe />
       </SaleSessionProvider>
-    </ProductCatalogProvider>,
+      </ProductCatalogProvider>
+    </TestPersistenceProvider>,
   );
 }
 

@@ -29,6 +29,7 @@ import type { Product } from "@/domain/products";
 import { ProductImage } from "@/features/products/components/ProductImage";
 import { DEVELOPMENT_BUSINESS_ID } from "@/features/services/data/initial-services";
 import { formatServicePrice } from "@/features/services/presentation";
+import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
@@ -94,6 +95,7 @@ export function ProductEditorScreen({
   );
   const [editing, setEditing] = useState(mode === "create");
   const [attempted, setAttempted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   if (mode === "existing" && !product) {
     return (
@@ -142,8 +144,8 @@ export function ProductEditorScreen({
     setValues((current) => (current ? { ...current, [key]: value } : current));
   };
 
-  const save = () => {
-    if (!values) return;
+  const save = async () => {
+    if (!values || saving) return;
     setAttempted(true);
     const nextValidation = validateProductForm(values);
     if (!nextValidation.valid) return;
@@ -155,24 +157,36 @@ export function ProductEditorScreen({
       values,
     });
 
-    if (mode === "create") {
-      addProduct(nextProduct);
-      haptics.success();
-      router.back();
-      return;
-    }
+    setSaving(true);
+    try {
+      if (mode === "create") {
+        await addProduct(nextProduct);
+        haptics.success();
+        router.back();
+        return;
+      }
 
-    updateProduct(nextProduct);
-    setValues(toProductFormValues(nextProduct));
-    setAttempted(false);
-    setEditing(false);
-    haptics.success();
+      await updateProduct(nextProduct);
+      setValues(toProductFormValues(nextProduct));
+      setAttempted(false);
+      setEditing(false);
+      haptics.success();
+    } catch {
+      alertPersistenceFailure();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const changeActiveState = () => {
     if (!product) return;
     const commit = (active: boolean) => {
-      setProductActive(product.id, active);
+      try {
+        setProductActive(product.id, active);
+      } catch {
+        alertPersistenceFailure();
+        return;
+      }
       haptics.selection();
       router.back();
     };
@@ -204,7 +218,12 @@ export function ProductEditorScreen({
           text: "Supprimer",
           style: "destructive",
           onPress: () => {
-            deleteProduct(product.id);
+            try {
+              deleteProduct(product.id);
+            } catch {
+              alertPersistenceFailure();
+              return;
+            }
             haptics.warning();
             router.back();
           },
@@ -265,8 +284,8 @@ export function ProductEditorScreen({
               />
             )}
             <AppButton
-              disabled={!validation?.valid}
-              onPress={save}
+              disabled={!validation?.valid || saving}
+              onPress={() => void save()}
               style={styles.primaryButton}
               testID="save-product"
               title={

@@ -6,6 +6,7 @@ import {
   useServiceCatalog,
 } from "../../session/ServiceCatalogProvider";
 import { ServiceEditorScreen } from "../ServiceEditorScreen";
+import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 
 const mockBack = jest.fn();
 
@@ -96,10 +97,12 @@ function CatalogProbe() {
 
 function renderEditor(screen: React.ReactNode) {
   return render(
-    <ServiceCatalogProvider>
+    <TestPersistenceProvider>
+      <ServiceCatalogProvider>
       {screen}
       <CatalogProbe />
-    </ServiceCatalogProvider>,
+      </ServiceCatalogProvider>
+    </TestPersistenceProvider>,
   );
 }
 

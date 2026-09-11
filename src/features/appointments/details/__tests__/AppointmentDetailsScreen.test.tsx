@@ -15,6 +15,7 @@ import { ClientSessionProvider } from "@/features/clients/session/ClientSessionP
 import { haptics } from "@/shared/lib/haptics";
 
 import { AppointmentDetailsScreen } from "../AppointmentDetailsScreen";
+import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -117,11 +118,13 @@ describe("AppointmentDetailsScreen", () => {
 
   it("moves Modifier from the identity header to the rightmost normal action", async () => {
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     expect(view.getByText("Sofia Petit")).toBeTruthy();
@@ -153,11 +156,13 @@ describe("AppointmentDetailsScreen", () => {
       advanceTimers: (delay) => jest.advanceTimersByTime(delay),
     });
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     expect(view.getByTestId("modify-appointment")).toBeTruthy();
@@ -196,11 +201,13 @@ describe("AppointmentDetailsScreen", () => {
   it("offers Revente above the lifecycle actions with the Appointment Client, before and after completion", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     expect(view.getByText("Revente")).toBeTruthy();
@@ -236,11 +243,13 @@ describe("AppointmentDetailsScreen", () => {
   it("completes a started same-day appointment without requiring a start action", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     expect(view.getByTestId("complete-appointment")).toBeTruthy();
@@ -267,11 +276,13 @@ describe("AppointmentDetailsScreen", () => {
   it("makes start-time actions available on the next wall-clock minute", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 13, 59, 30));
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     expect(view.queryByTestId("complete-appointment")).toBeNull();
@@ -288,11 +299,13 @@ describe("AppointmentDetailsScreen", () => {
   it("confirms and preserves a started same-day no-show", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => {
@@ -316,11 +329,13 @@ describe("AppointmentDetailsScreen", () => {
       advanceTimers: (delay) => jest.advanceTimersByTime(delay),
     });
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     await user.press(view.getByTestId("open-cancellation"));
@@ -336,12 +351,14 @@ describe("AppointmentDetailsScreen", () => {
 
   it("requires a focused confirmation and lets Retour preserve the appointment", async () => {
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
           <AppointmentPresence appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     const deleteAction = view.getByTestId("open-permanent-deletion");
@@ -379,12 +396,14 @@ describe("AppointmentDetailsScreen", () => {
 
   it("permanently deletes the appointment, triggers warning haptics, and closes Details", async () => {
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
           <AppointmentPresence appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => {
@@ -411,12 +430,14 @@ describe("AppointmentDetailsScreen", () => {
       advanceTimers: (delay) => jest.advanceTimersByTime(delay),
     });
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
           <AppointmentPresence appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     await user.press(view.getByTestId("open-cancellation"));
@@ -440,11 +461,13 @@ describe("AppointmentDetailsScreen", () => {
 
   it("shows concise processing phases without redundant wording", async () => {
     const view = await render(
-      <ClientSessionProvider>
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
         <AppointmentSessionProvider>
           <AppointmentDetailsScreen appointmentId="agenda-sofia" />
         </AppointmentSessionProvider>
-      </ClientSessionProvider>,
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
     );
 
     await act(async () => {

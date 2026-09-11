@@ -4,6 +4,7 @@ import { createInitialClients } from '../../data/initial-clients';
 import { prepareClientDirectory } from '../sort-clients';
 import { ClientDirectoryScreen } from '../ClientDirectoryScreen';
 import { ClientSessionProvider } from '../../session/ClientSessionProvider';
+import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockPush = jest.fn();
 
@@ -37,9 +38,11 @@ jest.mock('react-native-safe-area-context', () => {
 
 function renderDirectory() {
   return render(
-    <ClientSessionProvider>
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
       <ClientDirectoryScreen />
-    </ClientSessionProvider>,
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
   );
 }
 

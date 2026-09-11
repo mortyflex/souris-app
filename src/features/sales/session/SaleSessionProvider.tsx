@@ -2,27 +2,30 @@ import { createContext, useContext, useState, type PropsWithChildren } from 'rea
 
 import { prepareSaleCompletion, type Sale, type SaleDraft } from '@/domain/sales';
 import { useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
+import { completeSale as persistSaleCompletion } from '@/persistence/stores/sales';
+import { usePersistence } from '@/providers/PersistenceProvider';
 
 import type { SaleSessionValue } from './types';
 
 const SaleSessionContext = createContext<SaleSessionValue | null>(null);
 
 /**
- * The in-memory Sale session boundary.
+ * The Sale session boundary.
  *
- * There is NO legacy Sale source: every session starts with an empty
- * collection. This provider composes the Product catalog so that Sale
- * completion and the stock decrement happen at one boundary:
+ * Hydrated once from the persisted snapshot. Completion is ONE operation:
  *
- *   validate whole draft → build snapshot → decrement stock → add Sale
+ *   validate whole draft → build snapshot
+ *   → ONE SQLite transaction: stock revalidation + decrements + Sale + items
+ *   → reflect the committed decrements in the Product catalog
+ *   → add the Sale to state
  *
- * The two state updates are issued synchronously in the same call, after
- * validation, so React commits them together. A validation failure returns
- * the issues and touches nothing.
+ * A validation failure returns the issues and touches nothing. A database
+ * failure rolls the transaction back and throws before any state changes.
  */
 export function SaleSessionProvider({ children }: PropsWithChildren) {
-  const { products, decrementProductStock } = useProductCatalog();
-  const [sales, setSales] = useState<readonly Sale[]>([]);
+  const { database, snapshot } = usePersistence();
+  const { products, applyCommittedStockDecrements } = useProductCatalog();
+  const [sales, setSales] = useState<readonly Sale[]>(snapshot.sales);
 
   const getSaleById = (saleId: string | undefined) => {
     if (!saleId) return undefined;
@@ -36,7 +39,8 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
       throw new Error(`A Sale with id "${result.sale.id}" already exists`);
     }
 
-    decrementProductStock(result.stockDecrements);
+    persistSaleCompletion(database, result.sale, result.stockDecrements);
+    applyCommittedStockDecrements(result.stockDecrements);
     setSales((current) => [...current, result.sale]);
     return result;
   };
