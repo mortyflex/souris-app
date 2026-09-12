@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
@@ -5,6 +6,7 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { usePersistence } from '@/providers/PersistenceProvider';
 import { AppText } from '@/shared/ui/AppText';
+import { BrandComposition } from '@/shared/ui/BrandMark';
 import { Screen } from '@/shared/ui/Screen';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
@@ -54,7 +56,34 @@ export function PlusScreen() {
         </Pressable>
       </View>
       {__DEV__ && <DevelopmentSection />}
+      <BrandSection version={Constants.expoConfig?.version} />
     </Screen>
+  );
+}
+
+/** "Version 1.0.0" from the application manifest; nothing when unknown. */
+export function formatAppVersion(version: string | undefined): string | undefined {
+  const trimmed = version?.trim();
+  return trimmed ? `Version ${trimmed}` : undefined;
+}
+
+/**
+ * Restrained Souris identity at the bottom of Plus: the canonical mark +
+ * wordmark composition, then the installed version. The composition exposes
+ * exactly one accessible "Souris".
+ */
+function BrandSection({ version }: { readonly version: string | undefined }) {
+  const versionLabel = formatAppVersion(version);
+
+  return (
+    <View style={styles.brandSection} testID="plus-brand">
+      <BrandComposition size={128} />
+      {versionLabel && (
+        <AppText variant="metadata" style={styles.brandVersion}>
+          {versionLabel}
+        </AppText>
+      )}
+    </View>
   );
 }
 
@@ -127,4 +156,12 @@ const styles = StyleSheet.create({
   },
   copy: { flex: 1, gap: 2, minWidth: 0 },
   meta: { color: semanticColors.foregroundSoft },
+  brandSection: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: 'auto',
+    paddingBottom: spacing.lg,
+    paddingTop: spacing['3xl'],
+  },
+  brandVersion: { color: semanticColors.foregroundMuted },
 });

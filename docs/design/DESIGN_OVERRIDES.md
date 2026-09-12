@@ -299,7 +299,7 @@ Products use one consistent primary-image treatment across catalog, details, and
 
 ## 12. Native Runtime Typography — Plus Jakarta Sans
 
-The native runtime replaces Inter (DESIGN.md §3) with **Plus Jakarta Sans**, loaded through
+The native runtime replaces the export’s Inter (see DESIGN.md §3) with **Plus Jakarta Sans**, loaded through
 `@expo-google-fonts/plus-jakarta-sans` in four weights only: 400 / 500 / 600 / 700. The
 exported reference keeps Inter as historical documentation.
 
@@ -377,3 +377,42 @@ introducing a POS visual language:
   heading or divider — a contextual business action that never competes with the primary
   lifecycle action and is never grouped beside `Absence` / `Annuler`. Produits keeps
   `Nouvelle vente`.
+
+---
+
+## 15. Brand Foundation V1 — Identity Integration
+
+The exported reference shows the logos only inside a web launcher and an onboarding mock. The native
+runtime integrates the SAME canonical assets (`assets/brand/logo-mark.png`, `logo-wordmark.png`,
+`logo-lockup.png` — transparent PNGs, never modified) at deliberate brand moments only:
+
+- **App icon** — derived from `logo-mark.png`: the mark's artwork spans 68 % of a 1024 px canvas,
+  centered, flattened on `lavender.lav200` (`#E1D6F9`) for iOS (`assets/images/icon.png`). Android
+  adaptive icon: transparent foreground with the artwork at 56 % of the canvas (inside the safe
+  circle), `backgroundColor` `#E1D6F9`, alpha-only monochrome layer from the same render. Light
+  lavender is used because the navy strokes would vanish on navy/violet; no wordmark in the icon.
+- **Native splash** — `expo-splash-screen`: white `#FFFFFF` background (identical to the Agenda
+  first frame). iOS shows `assets/images/splash-ios.png` at `imageWidth` 260: a DERIVED transparent
+  PNG stacking `logo-mark.png` above `logo-wordmark.png` (mark half the wordmark width, wordmark
+  pulled 18 % of the mark width into the mark's padding), required because the native splash accepts
+  a single image; it is regenerated from the canonical PNGs, never edited. Android shows
+  `logo-mark.png` alone at `imageWidth` 200, because the Android 12+ system splash masks the image
+  to a circle that would clip a wordmark. Icon and splash therefore show the same canonical mouse.
+  No spinner, text, or animation beyond the short native fade (`duration.settle`).
+- **Bootstrap** — the splash stays visible until Plus Jakarta Sans and the SQLite bootstrap are both
+  settled and the router is committed; the root view shares the splash white so no intermediate
+  unbranded surface or flash exists.
+- **Plus** — a compact identity block at the bottom of the screen: `BrandComposition` (mark 64 dp
+  above wordmark 128 dp, the single accessible "Souris"), then `Version x.y.z` from the Expo
+  manifest in muted metadata. It never competes with the management rows.
+- **Future onboarding / auth** — reuse `<BrandComposition size={...} />`. No screen exists yet.
+- **Lockup** — `logo-lockup.png` is retained in `assets/brand/` but is not used by the app: its
+  baseline "GESTION DE RENDEZ-VOUS SALON" is hairdressing-specific while Souris serves every
+  appointment-based beauty profession, and its detailed mouse differs from the canonical mark used
+  by the icon. It may return only with an updated, profession-neutral asset.
+- **Where logos do NOT appear** — Agenda, Clientes, Produits, Prestations, details, sheets, forms,
+  headers. Titles stay `Agenda` / `Clientes` / `Produits` / `Plus`; never `Souris — Agenda`.
+- **Display name** — the installed app is named `Souris` (`expo.name`); `souris-app` remains only
+  the technical slug / package name.
+- Dark logo variants, alternative palettes, and new artwork are out of scope: the three canonical
+  assets are the identity.

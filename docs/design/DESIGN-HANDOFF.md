@@ -100,6 +100,32 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - `logo-mark.png`
 - `logo-wordmark.png`
 
+## Souris native brand integration (repository truth)
+The three logo PNGs above are the approved Souris identity. In the application repository they live
+**only** in `assets/brand/` (identical bytes to the export copies) and are never redrawn, regenerated,
+or replaced by generic icons:
+
+| Asset | Role | Runtime use |
+| --- | --- | --- |
+| `assets/brand/logo-mark.png` | MARK — canonical app symbol | app icon source, splash symbol, compact identity |
+| `assets/brand/logo-wordmark.png` | WORDMARK — canonical Souris name | name-forward contexts |
+| mark + wordmark (`BrandComposition`) | PRIMARY product-facing composition | iOS splash (derived PNG), Plus, future onboarding / auth |
+| `assets/brand/logo-lockup.png` | LOCKUP — alternate mouse + name + historical salon-specific baseline | retained asset only; NOT the default cross-profession app identity |
+
+- Derived runtime icons (`assets/images/icon.png`, `android-icon-foreground.png`,
+  `android-icon-monochrome.png`, `favicon.png`) are flattened/padded renders of `logo-mark.png` on
+  the approved `lav200` background; they are outputs, not sources. Regenerate them from the mark,
+  never edit them by hand.
+- Splash: `app.json` → `expo-splash-screen` renders `assets/images/splash-ios.png` (iOS,
+  `imageWidth` 260 — a derived transparent PNG stacking `logo-mark.png` above `logo-wordmark.png`,
+  required because the native splash accepts a single image) and `logo-mark.png` (Android,
+  `imageWidth` 200, mark only because the Android 12+ splash mask would clip a wordmark) on white
+  `#FFFFFF`.
+- In-app rendering goes through `src/shared/ui/BrandMark.tsx`; no other component loads the PNGs.
+- UI typeface: **Plus Jakarta Sans** (see `DESIGN_OVERRIDES.md` §12). Inter appears only inside the
+  historical export files and must not be reintroduced. The wordmark is an image, never typeset.
+- The logo never appears on Agenda, Clientes, Produits, or any functional detail/sheet surface.
+
 ## Coding checklist for AI tools
 1. Inspect `index.html` and `DESIGN-MANIFEST.json` first and identify reusable components before coding.
 2. Implement each user-facing screen file as its own route/surface; keep launcher, landing, app, platform, and OS widget files separate.

@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { colors, semanticColors } from '@/shared/ui/theme';
+import { colors, duration, semanticColors } from '@/shared/ui/theme';
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
@@ -24,10 +24,21 @@ import { createDevelopmentSeed } from '@/providers/development-seed';
 import { createFirstRunSeed } from '@/providers/first-run-seed';
 import { PersistenceProvider } from '@/providers/PersistenceProvider';
 
-// Keep the native splash screen visible until Plus Jakarta Sans is ready AND
-// the local database is bootstrapped, so the first frame never renders in a
-// fallback font nor with empty/legacy data.
+// Bootstrap flow:
+//
+//   native Souris splash (app.json → expo-splash-screen: mark + wordmark on white)
+//     ↓ fonts (Plus Jakarta Sans) + SQLite open / migrate / hydrate
+//   hideAsync() once both are settled and the first screen is committed
+//     ↓
+//   Agenda
+//
+// Nothing renders underneath the splash until both gates are open: the tree
+// below PersistenceProvider stays empty while it bootstraps and the router
+// mounts only once fonts are ready, so the first frame never shows a fallback
+// font, empty data, or an unbranded loading surface. The root view shares the
+// splash background so the short native fade lands on the same white.
 SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ duration: duration.settle, fade: true });
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -40,6 +51,8 @@ export default function RootLayout() {
   const [persistenceSettled, setPersistenceSettled] = useState(false);
   const fontsReady = fontsLoaded || fontError !== null;
 
+  // Runs after the commit that mounted the router (or the recoverable
+  // persistence failure surface), so the splash never hides over an empty root.
   useEffect(() => {
     if (fontsReady && persistenceSettled) {
       void SplashScreen.hideAsync();
@@ -183,5 +196,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: colors.background },
 });

@@ -304,5 +304,86 @@
     "Preserve or rebuild JS interactions for meaningful UX actions.",
     "Validate screenshots at desktop/tablet/mobile viewports with no horizontal overflow.",
     "Keep landing pages, in-app modules, and OS widgets as separate implementation surfaces."
-  ]
+  ],
+  "brand": {
+    "canonicalAssets": {
+      "mark": "assets/brand/logo-mark.png",
+      "wordmark": "assets/brand/logo-wordmark.png",
+      "lockup": "assets/brand/logo-lockup.png"
+    },
+    "roles": {
+      "mark": "canonical app symbol — app icon source, splash symbol, compact brand contexts",
+      "wordmark": "canonical Souris wordmark — name-forward contexts",
+      "composition": "mark + wordmark stacked (BrandComposition) — primary product-facing composition: iOS splash (derived PNG), Plus, future onboarding/auth",
+      "lockup": "retained brand asset with the historical salon-specific baseline; not the default cross-profession app identity"
+    },
+    "appIcon": {
+      "source": "assets/brand/logo-mark.png",
+      "derived": {
+        "ios": "assets/images/icon.png",
+        "androidForeground": "assets/images/android-icon-foreground.png",
+        "androidMonochrome": "assets/images/android-icon-monochrome.png",
+        "favicon": "assets/images/favicon.png"
+      },
+      "backgroundColor": "#E1D6F9",
+      "backgroundToken": "lavender.lav200"
+    },
+    "splash": {
+      "backgroundColor": "#FFFFFF",
+      "ios": {
+        "image": "assets/images/splash-ios.png",
+        "derivedFrom": [
+          "assets/brand/logo-mark.png",
+          "assets/brand/logo-wordmark.png"
+        ],
+        "imageWidth": 260
+      },
+      "android": {
+        "image": "assets/brand/logo-mark.png",
+        "imageWidth": 200,
+        "note": "mark only: the Android 12+ splash mask would clip a wordmark"
+      }
+    },
+    "runtimeComponent": "src/shared/ui/BrandMark.tsx",
+    "approvedContexts": [
+      "app-icon",
+      "native-splash",
+      "plus-identity",
+      "future-onboarding-auth"
+    ],
+    "forbiddenContexts": [
+      "agenda",
+      "clientes",
+      "produits",
+      "details",
+      "sheets",
+      "forms",
+      "headers"
+    ],
+    "rules": [
+      "Never redraw, regenerate, or replace the canonical assets.",
+      "Never typeset the wordmark with the UI font.",
+      "Exactly one accessible 'Souris' element per brand composition.",
+      "logo-lockup.png is not used as app-facing identity while it carries the salon-specific baseline."
+    ],
+    "primaryComposition": {
+      "component": "BrandComposition",
+      "assets": [
+        "assets/brand/logo-mark.png",
+        "assets/brand/logo-wordmark.png"
+      ]
+    }
+  },
+  "typography": {
+    "uiFamily": "Plus Jakarta Sans",
+    "weights": [
+      400,
+      500,
+      600,
+      700
+    ],
+    "package": "@expo-google-fonts/plus-jakarta-sans",
+    "runtimeScale": "src/shared/ui/theme/typography.ts",
+    "historicalExportFamily": "Inter (reference-export only, not to be reintroduced)"
+  }
 }
