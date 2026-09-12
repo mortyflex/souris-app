@@ -1,9 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type ReactNode, type Ref } from 'react';
 import {
   StyleSheet,
   TextInput,
   View,
   type KeyboardTypeOptions,
+  type ReturnKeyTypeOptions,
+  type TextInputProps,
 } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
@@ -19,8 +21,20 @@ interface TextFieldProps {
   readonly keyboardType?: KeyboardTypeOptions;
   readonly suffix?: string;
   readonly autoFocus?: boolean;
-  /** Optional generic trailing accessory (e.g. a scan action). */
+  /** Optional generic trailing accessory (e.g. a scan action or a visibility toggle). */
   readonly trailingAccessory?: ReactNode;
+  readonly autoCapitalize?: TextInputProps['autoCapitalize'];
+  /** Native autofill hints (password managers, keyboard suggestions). */
+  readonly autoComplete?: TextInputProps['autoComplete'];
+  readonly textContentType?: TextInputProps['textContentType'];
+  readonly secureTextEntry?: boolean;
+  readonly returnKeyType?: ReturnKeyTypeOptions;
+  readonly onSubmitEditing?: () => void;
+  /** `submit` keeps the keyboard up so the next field can take focus. */
+  readonly submitBehavior?: TextInputProps['submitBehavior'];
+  readonly editable?: boolean;
+  readonly inputRef?: Ref<TextInput>;
+  readonly testID?: string;
 }
 
 export function TextField({
@@ -34,6 +48,16 @@ export function TextField({
   suffix,
   autoFocus = false,
   trailingAccessory,
+  autoCapitalize = 'sentences',
+  autoComplete,
+  textContentType,
+  secureTextEntry = false,
+  returnKeyType,
+  onSubmitEditing,
+  submitBehavior,
+  editable = true,
+  inputRef,
+  testID,
 }: TextFieldProps) {
   const [focused, setFocused] = useState(false);
 
@@ -51,16 +75,25 @@ export function TextField({
       >
         <TextInput
           accessibilityLabel={accessibilityLabel}
-          autoCapitalize="sentences"
+          autoCapitalize={autoCapitalize}
+          autoComplete={autoComplete}
           autoCorrect={false}
           autoFocus={autoFocus}
+          editable={editable}
           keyboardType={keyboardType}
           onBlur={() => setFocused(false)}
           onChangeText={onChangeText}
           onFocus={() => setFocused(true)}
+          onSubmitEditing={onSubmitEditing}
           placeholder={placeholder}
           placeholderTextColor={semanticColors.foregroundMuted}
+          ref={inputRef}
+          returnKeyType={returnKeyType}
+          secureTextEntry={secureTextEntry}
           style={styles.input}
+          submitBehavior={submitBehavior}
+          testID={testID}
+          textContentType={textContentType}
           value={value}
         />
         {suffix && (

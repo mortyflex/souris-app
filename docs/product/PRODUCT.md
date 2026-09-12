@@ -878,6 +878,13 @@ Compte
 - Aide
 ```
 
+Current implementation (Account & Onboarding V1): a `Compte` section shows the Business identity
+(name + activity, e.g. `Maison Léa` / `Coiffure`) and opens a restrained account sheet (activity,
+responsable, email, phone, `Se déconnecter`). Sign-out asks for an explicit, non-alarming
+confirmation: "Les données restent enregistrées sur cet appareil." Souris never claims local data is
+backed up or synchronized — operational cloud sync does not exist yet. The Souris brand block stays
+at the bottom of Plus.
+
 Do not implement future entries merely because they are documented here.
 
 They describe product direction, not current implementation scope.
@@ -887,6 +894,28 @@ They describe product direction, not current implementation scope.
 ## 17. Onboarding
 
 Onboarding should be short.
+
+Implemented (Account & Onboarding V1) — four steps, no tutorial carousel:
+
+```text
+1. Welcome        brand composition, one promise, `Commencer` / `J'ai déjà un compte`
+2. Account        email + password (create or sign in; email confirmation handled when enabled)
+3. Business setup prénom *, nom, nom de votre activité *, votre activité *, téléphone professionnel
+4. App
+```
+
+Wording: "Nom de votre activité" (never "Nom du salon") — Souris serves every appointment-based
+beauty profession and independent workers; placeholders never imply hairdressing only. Activities:
+Coiffure, Barbier, Onglerie, Esthétique, Cils & sourcils, Autre. Nothing else is asked at first run
+(no address, SIRET, VAT, hours, social links, logo, staff, banking, subscription).
+
+A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
+existing install keeps its local data; completing Business setup binds that data to the new
+account without duplication or reset. Password recovery is intentionally absent from the UI in V1.
+See `docs/architecture/AUTH.md`.
+
+The three content screens below remain the documented direction for a later, optional
+introduction; they are not implemented.
 
 Target:
 

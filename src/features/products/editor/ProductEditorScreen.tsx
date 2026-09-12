@@ -27,7 +27,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { Product } from "@/domain/products";
 import { ProductImage } from "@/features/products/components/ProductImage";
-import { DEVELOPMENT_BUSINESS_ID } from "@/features/services/data/initial-services";
+import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
 import { formatServicePrice } from "@/features/services/presentation";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
@@ -74,6 +74,7 @@ export function ProductEditorScreen({
   initialBarcode,
 }: ProductEditorScreenProps) {
   const router = useRouter();
+  const business = useCurrentBusiness();
   const {
     addProduct,
     deleteProduct,
@@ -152,7 +153,7 @@ export function ProductEditorScreen({
 
     const nextProduct = buildProductFromForm({
       id: product?.id ?? runtimeProductId,
-      businessId: product?.businessId ?? DEVELOPMENT_BUSINESS_ID,
+      businessId: product?.businessId ?? business.id,
       active: product?.active ?? true,
       values,
     });

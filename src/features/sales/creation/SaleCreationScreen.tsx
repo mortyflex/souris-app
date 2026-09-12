@@ -45,7 +45,7 @@ import { ClientPickerSheet } from '@/features/clients/selection/ClientPickerShee
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { findProductsByBarcode, prepareProductDirectory } from '@/features/products/search/filter-products';
 import { useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
-import { DEVELOPMENT_BUSINESS_ID } from '@/features/services/data/initial-services';
+import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { formatServicePrice } from '@/features/services/presentation';
 import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
@@ -90,6 +90,7 @@ interface SaleCreationScreenProps {
 
 export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps) {
   const router = useRouter();
+  const business = useCurrentBusiness();
   const { products, activeProducts, getProductById } = useProductCatalog();
   const { getClientById } = useClientSession();
   const { completeSale } = useSaleSession();
@@ -116,7 +117,7 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
 
   const buildDraft = (completedAt: Date): SaleDraft => ({
     id: saleId,
-    businessId: DEVELOPMENT_BUSINESS_ID,
+    businessId: business.id,
     clientId,
     completedAt,
     lines,

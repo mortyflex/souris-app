@@ -138,14 +138,43 @@ const SCHEMA_V2 = `
 ALTER TABLE clients ADD COLUMN archived_at TEXT;
 `;
 
+/**
+ * Schema v3 — local account binding. ONE row (enforced by the `singleton`
+ * primary key) caches the Business this device's data belongs to, together
+ * with the owning Auth user id, so Souris opens offline once onboarding
+ * completed. Existing rows in every other table are untouched; the row is
+ * created only when the owner completes (or reconnects to) Business setup.
+ * Never stores tokens or the owner's email — Auth identity stays inside the
+ * Supabase client storage.
+ */
+const SCHEMA_V3 = `
+CREATE TABLE IF NOT EXISTS business_profile (
+  singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+  id TEXT NOT NULL,
+  owner_user_id TEXT NOT NULL,
+  owner_first_name TEXT NOT NULL,
+  owner_last_name TEXT,
+  name TEXT NOT NULL,
+  activity_type TEXT NOT NULL,
+  phone TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
+  { version: 3, up: (db) => db.execSync(SCHEMA_V3) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;
 
-/** Every canonical table, in a deletion order that respects foreign keys. */
+/**
+ * Every canonical OPERATIONAL table, in a deletion order that respects
+ * foreign keys. `business_profile` is deliberately absent: the account
+ * binding survives a development data reset.
+ */
 export const SOURIS_TABLES = [
   'sale_items',
   'sales',
@@ -157,3 +186,6 @@ export const SOURIS_TABLES = [
   'products',
   'clients',
 ] as const;
+
+/** The tables whose rows carry a `business_id`; the ONLY columns account binding rewrites. */
+export const BUSINESS_SCOPED_TABLES = ['services', 'appointments', 'products', 'sales'] as const;

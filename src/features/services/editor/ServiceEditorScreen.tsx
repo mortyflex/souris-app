@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { Service, ServiceType } from "@/domain/appointments";
-import { DEVELOPMENT_BUSINESS_ID } from "@/features/services/data/initial-services";
+import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
 import {
   formatServiceDuration,
   formatServicePrice,
@@ -68,6 +68,7 @@ export function ServiceEditorScreen({
   serviceId,
 }: ServiceEditorScreenProps) {
   const router = useRouter();
+  const business = useCurrentBusiness();
   const {
     addService,
     deleteService,
@@ -156,7 +157,7 @@ export function ServiceEditorScreen({
 
     const nextService = buildServiceFromForm({
       id: service?.id ?? runtimeServiceId,
-      businessId: service?.businessId ?? DEVELOPMENT_BUSINESS_ID,
+      businessId: service?.businessId ?? business.id,
       active: service?.active ?? true,
       values,
     });
