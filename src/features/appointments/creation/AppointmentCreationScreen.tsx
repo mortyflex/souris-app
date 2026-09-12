@@ -77,7 +77,7 @@ const startTimeBounds: StartTimeBounds = {
 export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreenProps) {
   const router = useRouter();
   const { addAppointment } = useAppointmentSession();
-  const { clients } = useClientSession();
+  const { activeClients } = useClientSession();
   const { getServiceById, activeServices } = useServiceCatalog();
   const [step, setStep] = useState<CreationStep>(0);
   const [clientQuery, setClientQuery] = useState('');
@@ -89,7 +89,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
     stepStartAt(new Date(startAt), 0, startTimeBounds),
   );
 
-  const selectedClient = clients.find((client) => client.id === selectedClientId);
+  const selectedClient = activeClients.find((client) => client.id === selectedClientId);
   const selectedClientName = selectedClient
     ? getClientDisplayName(selectedClient)
     : undefined;
@@ -107,8 +107,8 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
     step === 0 ? selectedClient !== undefined : selectedDrafts.length > 0;
 
   const visibleClients = useMemo(
-    () => prepareClientDirectory(clients, clientQuery),
-    [clients, clientQuery],
+    () => prepareClientDirectory(activeClients, clientQuery),
+    [activeClients, clientQuery],
   );
 
   const addService = (service: Service) => {

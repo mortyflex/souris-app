@@ -20,9 +20,13 @@ import { SaleCreationScreen } from '@/features/sales/creation/SaleCreationScreen
 import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { ClientProfileScreen } from '../ClientProfileScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { haptics } from '@/shared/lib/haptics';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const selectionHaptic = jest.spyOn(haptics, 'selection').mockImplementation();
+const successHaptic = jest.spyOn(haptics, 'success').mockImplementation();
+const warningHaptic = jest.spyOn(haptics, 'warning').mockImplementation();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
@@ -137,7 +141,7 @@ function saleDraft(id: string, day: number, lines: SaleDraft['lines'], clientId?
 }
 
 function SessionProbe() {
-  const { clients, addClient } = useClientSession();
+  const { clients, activeClients, addClient } = useClientSession();
   const { addAppointment } = useAppointmentSession();
   const { addProduct, deleteProduct, getProductById, setProductStock, updateProduct } =
     useProductCatalog();
@@ -148,6 +152,9 @@ function SessionProbe() {
     <>
       <Text testID="session-lea-first-name">{lea?.firstName ?? ''}</Text>
       <Text testID="session-lea-id">{lea?.id ?? ''}</Text>
+      <Text testID="session-client-count">{clients.length}</Text>
+      <Text testID="session-active-count">{activeClients.length}</Text>
+      <Text testID="session-lea-archived">{String(lea?.archivedAt !== undefined)}</Text>
       <Pressable
         testID="add-birthday-client"
         onPress={() =>
@@ -208,6 +215,14 @@ function SessionProbe() {
         onPress={() =>
           completeSale(
             saleDraft('sale-sofia', 5, [{ id: 'sale-sofia-item-1', productId: 'product-care', quantity: 1 }], 'client-agenda-sofia'),
+          )
+        }
+      />
+      <Pressable
+        testID="sell-first-legacy"
+        onPress={() =>
+          completeSale(
+            saleDraft('sale-legacy', 7, [{ id: 'sale-legacy-item-1', productId: 'product-care', quantity: 1 }], initialClients[0].id),
           )
         }
       />
@@ -280,6 +295,9 @@ describe('ClientProfileScreen', () => {
   beforeEach(() => {
     mockPush.mockClear();
     mockBack.mockClear();
+    selectionHaptic.mockClear();
+    successHaptic.mockClear();
+    warningHaptic.mockClear();
   });
 
   it('shows a restrained not-found state for an unknown client id', async () => {
@@ -501,5 +519,176 @@ describe('ClientProfileScreen', () => {
 
     expect(view.getByText('Léa Martin')).toBeTruthy();
     expect(view.queryByText('Léana')).toBeNull();
+  });
+
+  describe('lifecycle', () => {
+    it('offers a tertiary archive action on an active Client and no permanent deletion', async () => {
+      const view = await renderProfile('client-agenda-lea');
+
+      expect(view.getByTestId('archive-client')).toBeTruthy();
+      expect(view.getByText('Archiver la cliente')).toBeTruthy();
+      expect(view.getByTestId('sell-product')).toBeTruthy();
+      expect(view.queryByTestId('open-client-deletion')).toBeNull();
+      expect(view.queryByTestId('restore-client')).toBeNull();
+      expect(view.queryByTestId('client-archived-indicator')).toBeNull();
+    });
+
+    it('archives with restrained feedback, keeps history, hides new business actions, and restores', async () => {
+      const view = await renderProfile('client-agenda-lea');
+      await seedSales(view);
+      const total = Number(view.getByTestId('session-client-count').props.children);
+      const active = Number(view.getByTestId('session-active-count').props.children);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('archive-client'));
+      });
+
+      expect(selectionHaptic).toHaveBeenCalledTimes(1);
+      expect(view.getByTestId('client-archived-indicator')).toBeTruthy();
+      expect(view.getByText('Archivée')).toBeTruthy();
+      expect(view.getByText('Léa Martin')).toBeTruthy();
+      expect(view.getByTestId('restore-client')).toBeTruthy();
+      expect(view.queryByTestId('sell-product')).toBeNull();
+      expect(view.queryByLabelText('Vendre un produit')).toBeNull();
+      expect(view.queryByTestId('archive-client')).toBeNull();
+      expect(view.getByTestId('open-client-deletion')).toBeTruthy();
+      expect(view.getByText('Supprimer définitivement')).toBeTruthy();
+      // History and metrics are untouched.
+      expect(view.getByText('Coloration')).toBeTruthy();
+      expect(view.getByTestId('client-sale-sale-lea-2')).toBeTruthy();
+      expect(view.getByTestId('client-sale-sale-lea-1')).toBeTruthy();
+      expect(view.getByTestId('metric-completed').props.children).toBe('0');
+      expect(view.getByTestId('session-lea-archived').props.children).toBe('true');
+      expect(Number(view.getByTestId('session-client-count').props.children)).toBe(total);
+      expect(Number(view.getByTestId('session-active-count').props.children)).toBe(active - 1);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('restore-client'));
+      });
+
+      expect(successHaptic).toHaveBeenCalledTimes(1);
+      expect(view.queryByTestId('client-archived-indicator')).toBeNull();
+      expect(view.getByTestId('sell-product')).toBeTruthy();
+      expect(view.getByTestId('archive-client')).toBeTruthy();
+      expect(view.queryByTestId('open-client-deletion')).toBeNull();
+      expect(view.getByTestId('session-lea-archived').props.children).toBe('false');
+      expect(Number(view.getByTestId('session-active-count').props.children)).toBe(active);
+    });
+
+    it('keeps the archived state through an identity edit', async () => {
+      const view = await renderProfile('client-agenda-lea');
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('archive-client'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('edit-client'));
+      });
+      await act(async () => {
+        fireEvent.changeText(view.getByLabelText('Prénom'), 'Léana');
+      });
+      await act(async () => {
+        fireEvent.press(view.getByText('Enregistrer les modifications'));
+      });
+
+      expect(view.getByText('Léana Martin')).toBeTruthy();
+      expect(view.getByTestId('client-archived-indicator')).toBeTruthy();
+      expect(view.getByTestId('session-lea-archived').props.children).toBe('true');
+    });
+
+    it('permanently deletes an archived Client without history after an explicit confirmation', async () => {
+      const disposable = initialClients[0];
+      const view = await renderProfile(disposable.id);
+      const total = Number(view.getByTestId('session-client-count').props.children);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('archive-client'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('open-client-deletion'));
+      });
+
+      expect(view.getByTestId('client-deletion-dialog')).toBeTruthy();
+      expect(view.getByText('Supprimer définitivement cette cliente ?')).toBeTruthy();
+      expect(view.getByText('Cette action est irréversible.')).toBeTruthy();
+      expect(view.queryByTestId('client-deletion-blocked')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('cancel-client-deletion'));
+      });
+      expect(view.queryByTestId('client-deletion-dialog')).toBeNull();
+      expect(Number(view.getByTestId('session-client-count').props.children)).toBe(total);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('open-client-deletion'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-client-deletion'));
+      });
+
+      expect(warningHaptic).toHaveBeenCalledTimes(1);
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(Number(view.getByTestId('session-client-count').props.children)).toBe(total - 1);
+      expect(view.queryByText('Cliente introuvable')).toBeNull();
+    });
+
+    it('explains instead of confirming when an Appointment references the archived Client', async () => {
+      const view = await renderProfile('client-agenda-lea');
+      const total = Number(view.getByTestId('session-client-count').props.children);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('archive-client'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('open-client-deletion'));
+      });
+
+      expect(view.getByTestId('client-deletion-blocked')).toBeTruthy();
+      expect(view.getByText('Suppression impossible')).toBeTruthy();
+      expect(
+        view.getByText(
+          'Cette cliente possède un historique de rendez-vous ou de ventes. Conservez-la archivée pour préserver cet historique.',
+        ),
+      ).toBeTruthy();
+      expect(view.queryByTestId('confirm-client-deletion')).toBeNull();
+      expect(view.queryByTestId('client-deletion-dialog')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('close-client-deletion-blocked'));
+      });
+
+      expect(view.queryByTestId('client-deletion-blocked')).toBeNull();
+      expect(view.getByText('Léa Martin')).toBeTruthy();
+      expect(view.getByText('Coloration')).toBeTruthy();
+      expect(Number(view.getByTestId('session-client-count').props.children)).toBe(total);
+      expect(warningHaptic).not.toHaveBeenCalled();
+      expect(mockBack).not.toHaveBeenCalled();
+    });
+
+    it('explains instead of confirming when a Sale references the archived Client', async () => {
+      const buyer = initialClients[0];
+      const view = await renderProfile(buyer.id);
+      const total = Number(view.getByTestId('session-client-count').props.children);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('seed-products'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('sell-first-legacy'));
+      });
+      expect(view.getByTestId('client-sale-sale-legacy')).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('archive-client'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('open-client-deletion'));
+      });
+
+      expect(view.getByTestId('client-deletion-blocked')).toBeTruthy();
+      expect(view.queryByTestId('confirm-client-deletion')).toBeNull();
+      expect(view.getByTestId('client-sale-sale-legacy')).toBeTruthy();
+      expect(Number(view.getByTestId('session-client-count').props.children)).toBe(total);
+    });
   });
 });

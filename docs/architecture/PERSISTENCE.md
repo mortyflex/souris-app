@@ -37,7 +37,7 @@ Expo Router, features, or screens. Its public surface:
 ```text
 database.ts          SourisDatabase — the synchronous SQL boundary every module writes against
 expo-database.ts     expo-sqlite binding (application root only)
-schema.ts            migrations[] — schema v1 SQL, SOURIS_TABLES
+schema.ts            migrations[] — schema v1 SQL, schema v2 (clients.archived_at), SOURIS_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
 seed.ts              FirstRunSeed contract + seedDatabaseIfNeeded()
@@ -57,14 +57,15 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema v1
+## 3. Schema (v1 + v2)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities.
 
 ```text
 souris_metadata     key PK, value                                   seed marker and future flags
 
-clients             id PK, first_name, last_name?, phone?, email?, birth_date?
+clients             id PK, first_name, last_name?, phone?, email?, birth_date?,
+                    archived_at?                                    (v2)
 services            id PK, business_id, name, type, price, active
 service_phases      (service_id FK→services CASCADE, position) PK, id, name, duration_minutes, requires_staff
 appointments        id PK, business_id, client_id, staff_member_id, start_at, status, notes?,
@@ -86,7 +87,8 @@ Indexes: `appointments(start_at)`, `appointments(client_id)`, `sales(client_id)`
 
 ```text
 booleans        INTEGER 0/1                       (values.ts: toSqlBoolean / fromSqlBoolean)
-instants        ISO-8601 UTC TEXT                 startAt, cancelledAt, recordedAt, completedAt
+instants        ISO-8601 UTC TEXT                 startAt, cancelledAt, recordedAt, completedAt,
+                                                  archivedAt (NULL = active Client)
                                                   restored as Date; local calendar behavior
                                                   is unchanged because the instant is exact
 birthDate       civil YYYY-MM-DD TEXT             stored and restored as the same string, NEVER
@@ -111,8 +113,10 @@ Nested rows DO cascade from their owner: deleting an Appointment removes its ite
 deleting a Service removes its catalog phases; deleting a Sale (not exposed today) would remove its
 items. Orphans are impossible.
 
-`client_id` is a plain reference as well: Client deletion is not an approved feature, and no
-destructive Client cascade exists.
+`client_id` is a plain reference as well, with no foreign key and no cascade. Client removal is
+governed by the lifecycle: archiving only sets `clients.archived_at`, and permanent deletion is
+refused by the store while any `appointments.client_id` or `sales.client_id` row references the
+Client (§7a). A Client row therefore never disappears from under its history.
 
 ---
 
@@ -128,13 +132,26 @@ edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
 
+### Schema v2 — Client lifecycle
+
+```text
+ALTER TABLE clients ADD COLUMN archived_at TEXT;
+```
+
+The first forward migration applied to devices that already run Persistence V1. An existing
+database goes `v1 → v2` in one transaction: every persisted Client keeps its row and gets
+`archived_at = NULL` (active). No wipe, no reseed (`seed_version` is already present), no
+duplicated legacy record; Appointments and Sales are untouched. Re-running is a no-op. The
+migration is covered by a test that builds a genuine schema-v1 fixture database, inserts rows
+with the v1 column set, migrates, and asserts version, rows, and NULL lifecycle.
+
 ---
 
 ## 5. First-Run Seed Lifecycle
 
 ```text
 first launch:  empty database
-               → migrate to schema v1
+               → migrate to the current schema (v2)
                → seed_version absent → run legacy adapters ONCE, in one transaction
                    Clients      = strict legacy address book ONLY
                    Services     = legacy services/techniques through the catalog adapter
@@ -209,7 +226,9 @@ There is no optimistic update and no global error framework.
 Transaction boundaries (`runInTransaction` joins an enclosing transaction instead of nesting):
 
 ```text
-Client create/edit            single row
+Client create/edit            single row (edit never touches archived_at)
+Client archive/restore        single statement on archived_at
+Client permanent deletion     reference counts + DELETE in one transaction   (§7a)
 Service create/edit           service row + full phase-list replacement
 Service activation/deletion   single statement (phases cascade)
 Appointment create            appointment + items + phases + Service catalog default updates
@@ -224,6 +243,27 @@ Sale completion               stock revalidation + decrements + sale + items   (
 First-run seed                everything                                        (§5)
 Development reset             every DELETE + seed marker                        (§10)
 ```
+
+---
+
+### 7a. Client deletion guard
+
+`ClientSessionProvider.deleteClientPermanently` → clients store `deleteClientPermanently()`:
+
+```text
+BEGIN
+  SELECT COUNT(*) FROM appointments WHERE client_id = ?
+  SELECT COUNT(*) FROM sales        WHERE client_id = ?
+  any reference  ⇒ throw ClientDeleteConflictError(clientId, references) ⇒ ROLLBACK
+  DELETE FROM clients WHERE id = ?   (0 rows ⇒ not-found error ⇒ ROLLBACK)
+COMMIT
+→ remove the Client from session state
+```
+
+The stored rows are the authority: the UI pre-check (`getClientDeletionEligibility`, same
+counts, used to choose between the confirmation and the "Suppression impossible" explanation)
+is advisory, and the transaction re-verifies before deleting. There is no cascade and no
+`client_id = NULL` rewrite. A conflict or a database error changes no state.
 
 ---
 
@@ -309,7 +349,9 @@ database per test, no extra dependency, no developer device database. `TestPersi
 wraps the real `PersistenceProvider` around such a database with in-memory files, seeded with the
 real first-run seed unless a test supplies its own.
 
-Covered: fresh migration, idempotence, refusal of newer versions, seed-once, restart without
-duplicates, empty-but-initialized databases, every store's round trip (order, instants, civil
-birthDate, optionals, snapshots surviving catalog deletion), Sale rollback, image promotion /
+Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2 upgrade of an
+existing seeded database, seed-once, restart without duplicates, empty-but-initialized
+databases, every store's round trip (order, instants, civil birthDate, optionals, `archivedAt`
+Date round trip, snapshots surviving catalog deletion), Sale rollback, the transactional Client
+deletion guard (safe / blocked by Appointment / blocked by Sale / both), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.

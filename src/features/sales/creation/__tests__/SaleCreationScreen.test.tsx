@@ -1,7 +1,9 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Alert, Pressable, Text } from 'react-native';
 
+import { archiveClient } from '@/domain/clients';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
+import { createDevelopmentSeed } from '@/providers/development-seed';
 import {
   ProductCatalogProvider,
   useProductCatalog,
@@ -121,9 +123,20 @@ function Probe() {
   );
 }
 
-function renderSale(initialClientId?: string) {
+/** The development seed with Camille Durand already archived when the screen mounts. */
+function createSeedWithArchivedCamille() {
+  const seed = createDevelopmentSeed(new Date());
+  return {
+    ...seed,
+    clients: seed.clients.map((client) =>
+      client.id === 'client-agenda-camille' ? archiveClient(client, new Date(2026, 8, 1)) : client,
+    ),
+  };
+}
+
+function renderSale(initialClientId?: string, createSeed?: () => ReturnType<typeof createDevelopmentSeed>) {
   return render(
-    <TestPersistenceProvider>
+    <TestPersistenceProvider createSeed={createSeed}>
       <ClientSessionProvider>
       <ProductCatalogProvider>
         <SaleSessionProvider>
@@ -460,5 +473,20 @@ describe('SaleCreationScreen', () => {
     expect(view.getByTestId('masque-stock').props.children).toBe(2);
     expect(view.getByTestId('sales-count').props.children).toBe(0);
     alertSpy.mockRestore();
+  });
+
+  it('never attaches an archived Client: no preselection from a stale route, never offered by the picker', async () => {
+    const view = await renderSale('client-agenda-camille', createSeedWithArchivedCamille);
+
+    expect(view.getByText('Aucune cliente')).toBeTruthy();
+    expect(view.queryByText('Camille Durand')).toBeNull();
+
+    await act(async () => fireEvent.press(view.getByLabelText('Choisir une cliente')));
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Camille');
+    });
+
+    expect(view.queryByText('Camille Durand')).toBeNull();
+    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
   });
 });

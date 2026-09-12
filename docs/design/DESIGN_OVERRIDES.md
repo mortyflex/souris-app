@@ -220,6 +220,14 @@ historical reality regardless. V1 now exposes BOTH catalog actions with distinct
 d’un rendez-vous. » — followed by a confirmation. Deactivation only removes the service from NEW
 Appointment selection; existing Appointment snapshots are never changed.
 
+Archived records (Clients today) share one restrained treatment: the row keeps its structure,
+name and avatar drop to `foregroundSoft` on the neutral `surface`, metadata gains a leading
+`Archivée` mention, and the group eyebrow uses `foregroundMuted`. Never rose/error styling,
+never strikethrough, never a hidden row — archived is a quiet state, not a failure. The
+lifecycle actions follow the existing hierarchy: reactivate as the secondary action in the
+identity block, archive as tertiary soft text after the history, permanent deletion as tertiary
+rose text (`rose600`) reachable only from the archived state.
+
 Prestations & tarifs management groups the canonical catalog into `Actives` / `Inactives` groups,
 each visually separated into `Services` and `Techniques` subsections (only non-empty
 subsections render). Legacy categories never reappear. Rows use light surfaces with a restrained

@@ -40,7 +40,7 @@ import {
   type SaleDraft,
   type SaleDraftLine,
 } from '@/domain/sales';
-import { getClientDisplayName } from '@/domain/clients';
+import { getClientDisplayName, isClientArchived } from '@/domain/clients';
 import { ClientPickerSheet } from '@/features/clients/selection/ClientPickerSheet';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { findProductsByBarcode, prepareProductDirectory } from '@/features/products/search/filter-products';
@@ -97,9 +97,12 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
   const [saleId] = useState(() => createSaleId());
   const lineSequence = useRef(0);
   const [lines, setLines] = useState<readonly SaleDraftLine[]>([]);
-  const [clientId, setClientId] = useState<string | undefined>(
-    () => getClientById(initialClientId)?.id,
-  );
+  // An archived Client is historical: she is never attached to a NEW Sale,
+  // even when a stale route parameter names her.
+  const [clientId, setClientId] = useState<string | undefined>(() => {
+    const initialClient = getClientById(initialClientId);
+    return initialClient && !isClientArchived(initialClient) ? initialClient.id : undefined;
+  });
   const [clientPickerVisible, setClientPickerVisible] = useState(false);
   const [query, setQuery] = useState('');
   const [scannerVisible, setScannerVisible] = useState(false);

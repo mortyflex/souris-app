@@ -5,13 +5,16 @@ import {
   userEvent,
   within,
 } from "@testing-library/react-native";
-import { Text } from "react-native";
+import { Pressable, Text } from "react-native";
 
 import {
   AppointmentSessionProvider,
   useAppointmentSession,
 } from "@/features/appointments/session/AppointmentSessionProvider";
-import { ClientSessionProvider } from "@/features/clients/session/ClientSessionProvider";
+import {
+  ClientSessionProvider,
+  useClientSession,
+} from "@/features/clients/session/ClientSessionProvider";
 import { haptics } from "@/shared/lib/haptics";
 
 import { AppointmentDetailsScreen } from "../AppointmentDetailsScreen";
@@ -86,6 +89,16 @@ jest.mock("react-native-safe-area-context", () => {
     }) => React.createElement(NativeView, props, children),
   };
 });
+
+function ClientLifecycleProbe() {
+  const { archiveClient } = useClientSession();
+  return (
+    <Pressable
+      testID="archive-sofia"
+      onPress={() => archiveClient("client-agenda-sofia")}
+    />
+  );
+}
 
 function AppointmentPresence({
   appointmentId,
@@ -477,5 +490,31 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getAllByText("Temps de pose").length).toBeGreaterThanOrEqual(1);
     expect(view.queryByText("Professionnelle disponible")).toBeNull();
     expect(view.queryByText("Professionnelle occupée")).toBeNull();
+  });
+
+  it("keeps an archived Client fully readable but withholds Revente", async () => {
+    const view = await render(
+      <TestPersistenceProvider>
+        <ClientSessionProvider>
+          <AppointmentSessionProvider>
+            <AppointmentDetailsScreen appointmentId="agenda-sofia" />
+            <ClientLifecycleProbe />
+          </AppointmentSessionProvider>
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
+    );
+
+    expect(view.getByTestId("sell-product")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId("archive-sofia"));
+    });
+
+    expect(view.getByText("Sofia Petit")).toBeTruthy();
+    expect(view.queryByText("Cliente inconnue")).toBeNull();
+    expect(view.queryByTestId("sell-product")).toBeNull();
+    expect(view.queryByText("Revente")).toBeNull();
+    expect(view.getByTestId("appointment-normal-actions")).toBeTruthy();
+    expect(view.getByTestId("open-permanent-deletion")).toBeTruthy();
   });
 });

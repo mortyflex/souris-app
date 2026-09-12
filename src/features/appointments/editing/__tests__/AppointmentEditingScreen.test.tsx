@@ -3,7 +3,7 @@ import { Alert, Pressable, Text } from 'react-native';
 
 import { createAppointmentItemSnapshot } from '@/domain/appointments';
 import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
-import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
+import { ClientSessionProvider, useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { haptics } from '@/shared/lib/haptics';
 
@@ -103,6 +103,7 @@ jest.mock('react-native-safe-area-context', () => {
 function SessionProbe() {
   const { getAppointmentById, updateAppointment, addAppointment } = useAppointmentSession();
   const { getServiceById, setServiceActive } = useServiceCatalog();
+  const { archiveClient } = useClientSession();
   const entry = getAppointmentById('agenda-sofia');
   const items = entry?.appointment.items ?? [];
   const catalogEntry = getAppointmentById('catalog-edit-appointment');
@@ -203,6 +204,7 @@ function SessionProbe() {
           });
         }}
       />
+      <Pressable testID="archive-lea" onPress={() => archiveClient('client-agenda-lea')} />
       <Pressable
         testID="deactivate-brushing"
         onPress={() => setServiceActive('service-brushing-brushing-1', false)}
@@ -649,5 +651,23 @@ describe('AppointmentEditingScreen', () => {
     expect(view.getByLabelText('Changer la date')).toBeTruthy();
     expect(view.getByLabelText("Changer l'heure")).toBeTruthy();
     expect(view.queryByText('Modifier')).toBeNull();
+  });
+
+  it('never offers an archived Client for reassignment while the current Client keeps resolving', async () => {
+    const view = await renderEditor();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('archive-lea'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Modifier la cliente'));
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
+    });
+
+    expect(view.queryByText('Léa Martin')).toBeNull();
+    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+    expect(view.getByText('Sofia Petit')).toBeTruthy();
   });
 });

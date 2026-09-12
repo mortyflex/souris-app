@@ -15,7 +15,7 @@ jest.mock('@expo/ui/community/datetime-picker', () => {
 });
 
 function Host() {
-  const { clients } = useClientSession();
+  const { clients, archiveClient } = useClientSession();
   const [visible, setVisible] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
   const selected = clients.find((client) => client.id === selectedClientId);
@@ -25,6 +25,7 @@ function Host() {
       <Text testID="selected">{selected ? `${selected.id}:${selected.firstName}` : 'none'}</Text>
       <Text testID="client-count">{clients.length}</Text>
       <Pressable testID="open" onPress={() => setVisible(true)} />
+      <Pressable testID="archive-camille" onPress={() => archiveClient('client-agenda-camille')} />
       <ClientPickerSheet
         onClose={() => setVisible(false)}
         onSelectClient={(clientId) => {
@@ -87,5 +88,20 @@ describe('ClientPickerSheet (shared Client selection)', () => {
 
     expect(view.getByTestId('selected').props.children).toBe('none');
     expect(view.queryByText('Choisir la cliente')).toBeNull();
+  });
+
+  it('never offers an archived Client, while the shared source still holds her', async () => {
+    const view = await renderPicker();
+    const initialCount = Number(view.getByTestId('client-count').props.children);
+
+    await act(async () => fireEvent.press(view.getByTestId('archive-camille')));
+    await act(async () => fireEvent.press(view.getByTestId('open')));
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'camille');
+    });
+
+    expect(view.queryByText('Camille Durand')).toBeNull();
+    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+    expect(Number(view.getByTestId('client-count').props.children)).toBe(initialCount);
   });
 });

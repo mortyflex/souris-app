@@ -1,25 +1,36 @@
 // Souris — Client directory (Clientes tab)
 //
-// The complete Client directory: search + FlatList over the shared Client
-// session source. Rows stay clean and light (initial avatar, strong name,
-// soft phone) — no per-client cards, no fake metrics. The shared creation
-// sheet is the single way to add a Client.
+// The complete Client directory: search + SectionList over the shared Client
+// session source, grouped into Actives / Archivées (archived Clients stay
+// discoverable, visually secondary, never error-like). Rows stay clean and
+// light (initial avatar, strong name, soft phone) — no per-client cards, no
+// fake metrics. The shared creation sheet is the single way to add a Client.
 
 import { useMemo, useState } from 'react';
 import {
-  FlatList,
   Platform,
   Pressable,
+  SectionList,
   StyleSheet,
   View,
+  type SectionListData,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
-import { getClientDisplayName, getClientInitial, type Client } from '@/domain/clients';
+import {
+  getClientDisplayName,
+  getClientInitial,
+  isClientArchived,
+  type Client,
+} from '@/domain/clients';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
-import { prepareClientDirectory } from '@/features/clients/directory/sort-clients';
+import {
+  buildClientDirectorySections,
+  type ClientDirectorySection,
+} from '@/features/clients/directory/directory-sections';
+import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { SearchField } from '@/shared/ui/SearchField';
@@ -40,8 +51,8 @@ export function ClientDirectoryScreen() {
   const [query, setQuery] = useState('');
   const [addClientVisible, setAddClientVisible] = useState(false);
 
-  const visibleClients = useMemo(
-    () => prepareClientDirectory(clients, query),
+  const sections: readonly SectionListData<Client, ClientDirectorySection>[] = useMemo(
+    () => buildClientDirectorySections(clients, query),
     [clients, query],
   );
 
@@ -82,11 +93,23 @@ export function ClientDirectoryScreen() {
         />
       </View>
 
-      <FlatList
-        data={visibleClients}
+      <SectionList
+        sections={sections}
         keyExtractor={(client) => client.id}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
+        stickySectionHeadersEnabled={false}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            <AppText
+              variant="eyebrow"
+              style={section.key === 'ARCHIVED' ? styles.archivedGroupLabel : styles.groupLabel}
+              testID={`client-group-${section.key.toLowerCase()}`}
+            >
+              {section.title}
+            </AppText>
+          </View>
+        )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <AppText variant="stateTitle">
@@ -122,25 +145,37 @@ interface ClientRowProps {
 }
 
 function ClientRow({ client, onPress }: ClientRowProps) {
+  const archived = isClientArchived(client);
+  const metadata = archived
+    ? [ARCHIVED_CLIENT_LABEL, client.phone].filter(Boolean).join(' · ')
+    : client.phone;
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Ouvrir la fiche de ${getClientDisplayName(client)}`}
+      accessibilityLabel={`Ouvrir la fiche de ${getClientDisplayName(client)}${
+        archived ? `, ${ARCHIVED_CLIENT_LABEL.toLowerCase()}` : ''
+      }`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressedRow]}
+      testID={`client-row-${client.id}`}
     >
-      <View style={styles.avatar}>
-        <AppText variant="rowTitle" style={styles.avatarText}>
+      <View style={[styles.avatar, archived && styles.archivedAvatar]}>
+        <AppText variant="rowTitle" style={archived ? styles.archivedAvatarText : styles.avatarText}>
           {getClientInitial(client)}
         </AppText>
       </View>
       <View style={styles.rowCopy}>
-        <AppText variant="rowTitle" numberOfLines={1} style={styles.clientName}>
+        <AppText
+          variant="rowTitle"
+          numberOfLines={1}
+          style={archived ? styles.archivedClientName : styles.clientName}
+        >
           {getClientDisplayName(client)}
         </AppText>
-        {client.phone ? (
+        {metadata ? (
           <AppText variant="metadata" numberOfLines={1} style={styles.phoneLine}>
-            {client.phone}
+            {metadata}
           </AppText>
         ) : null}
       </View>
@@ -169,6 +204,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   listContent: { paddingBottom: spacing.xl },
+  sectionHeader: {
+    paddingBottom: spacing.xs,
+    paddingHorizontal: horizontalGutter + spacing.md,
+    paddingTop: spacing.md,
+  },
+  groupLabel: { color: foregroundSoft },
+  archivedGroupLabel: { color: semanticColors.foregroundMuted },
   row: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -191,9 +233,12 @@ const styles = StyleSheet.create({
     marginRight: spacing.md,
     width: 36,
   },
+  archivedAvatar: { backgroundColor: semanticColors.surface },
   avatarText: { color: semanticColors.accent },
+  archivedAvatarText: { color: foregroundSoft },
   rowCopy: { flex: 1, minWidth: 0 },
   clientName: { color: semanticColors.foreground },
+  archivedClientName: { color: foregroundSoft },
   phoneLine: { color: foregroundSoft },
   emptyState: { alignItems: 'center', padding: spacing.xl },
   emptyStateText: { color: foregroundSoft, marginTop: spacing.sm, textAlign: 'center' },

@@ -384,6 +384,22 @@ SaleSessionProvider         — the completed Sale collection (starts empty)
 They expose only what current surfaces need (lookup + add + the mutations each feature requires).
 Every mutation is written to SQLite first (in a transaction when several rows are involved) and
 reflected in React state only after the write succeeds; a failed write changes no state.
+
+`ClientSessionProvider` owns the Client lifecycle:
+
+```text
+clients            complete source, archived included — every historical clientId resolves
+activeClients      derived: archivedAt absent — the ONLY collection offered by Client pickers
+archivedClients    derived
+getClientById
+addClient / updateClient          identity only; updateClient never changes the lifecycle
+archiveClient / restoreClient     archived_at write, then state
+getClientDeletionEligibility      stored reference counts (advisory pre-check)
+deleteClientPermanently           transactional guard; throws ClientDeleteConflictError
+```
+
+Screens never filter archived Clients themselves: the shared picker (`src/features/clients/selection`)
+reads `activeClients`, and the directory groups `clients` through `directory-sections.ts`.
 Appointments reference Clients through `clientId`; display names are resolved from the Client
 source, never duplicated into appointment state. Appointments reference catalog services through
 `serviceId` at selection time only; once selected, an `AppointmentItem` owns its snapshot and is
@@ -428,7 +444,7 @@ success is plain back-stack navigation.
 Local persistence exists and is documented in `docs/architecture/PERSISTENCE.md`.
 
 ```text
-src/persistence/     expo-sqlite boundary, schema v1, migrations, first-run seed, stores,
+src/persistence/     expo-sqlite boundary, schema v1 + v2, migrations, first-run seed, stores,
                      LocalFiles boundary for durable Product images (plain TypeScript)
 src/providers/       PersistenceProvider: migrate → seed once → hydrate → render
 ```

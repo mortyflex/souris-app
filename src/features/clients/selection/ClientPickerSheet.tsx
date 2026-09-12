@@ -3,8 +3,9 @@
 // The ONE bottom-sheet Client picker used wherever a screen needs to choose or
 // reassign a Client after it is open: Appointment Editing and Sale creation.
 // Composes ClientPickerStep (search + virtualized directory over the SAME
-// Client source) and the shared ClientFormSheet for creating a client on the
-// fly. Identity stays clientId-only; selecting never mutates the Client.
+// Client source, ACTIVE Clients only — archived Clients are never offered
+// for a new action) and the shared ClientFormSheet for creating a client on
+// the fly. Identity stays clientId-only; selecting never mutates the Client.
 
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -34,13 +35,13 @@ export function ClientPickerSheet({
   onClose,
   onSelectClient,
 }: ClientPickerSheetProps) {
-  const { clients } = useClientSession();
+  const { activeClients } = useClientSession();
   const [query, setQuery] = useState('');
   const [addClientVisible, setAddClientVisible] = useState(false);
 
   const visibleClients = useMemo(
-    () => prepareClientDirectory(clients, query),
-    [clients, query],
+    () => prepareClientDirectory(activeClients, query),
+    [activeClients, query],
   );
 
   const select = (clientId: string) => {

@@ -105,7 +105,7 @@ const startAt = new Date(2026, 7, 25, 10, 15);
 type Rendered = Awaited<ReturnType<typeof renderCreation>>;
 
 function SessionProbe() {
-  const { clients } = useClientSession();
+  const { clients, archiveClient } = useClientSession();
   const { appointments } = useAppointmentSession();
   const { getServiceById, setServiceActive } = useServiceCatalog();
   const newest = appointments[appointments.length - 1]?.appointment;
@@ -146,6 +146,7 @@ function SessionProbe() {
               .join(',')}`
           : 'missing'}
       </Text>
+      <Pressable testID="archive-lea" onPress={() => archiveClient('client-agenda-lea')} />
       <Pressable
         testID="deactivate-balayage"
         onPress={() => setServiceActive('technique-balayage-balayage-1', false)}
@@ -666,5 +667,21 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       view.unmount();
     });
+  });
+
+  it('never offers an archived Client in the Cliente step', async () => {
+    const view = await renderCreation();
+
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
+    });
+    expect(view.getByText('Léa Martin')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('archive-lea'));
+    });
+
+    expect(view.queryByText('Léa Martin')).toBeNull();
+    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
   });
 });

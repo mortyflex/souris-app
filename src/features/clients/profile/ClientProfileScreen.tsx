@@ -6,6 +6,13 @@
 // is derived from Appointment state and purchases from Sale snapshots
 // through clientId. Modifier opens the SAME Client form used for creation
 // (edit mode). No dashboard KPIs, no fake metrics, no edit/delete traps.
+//
+// Lifecycle: an active Client carries a tertiary `Archiver la cliente`
+// management action; an archived Client shows a subtle `Archivée`
+// indicator, `Réactiver la cliente` as her lifecycle action, no new business
+// action (`Vendre un produit` is hidden), and the tertiary destructive
+// `Supprimer définitivement`, which the database refuses while any
+// Appointment or Sale references her. History is never hidden.
 
 import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -17,10 +24,12 @@ import {
   formatClientBirthDate,
   getClientDisplayName,
   getClientInitial,
+  isClientArchived,
 } from '@/domain/clients';
 import type { Appointment } from '@/domain/appointments';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
+import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import {
   formatAppointmentDate,
@@ -36,6 +45,9 @@ import {
 import { ClientPurchaseCard } from '@/features/sales/history/ClientPurchaseCard';
 import { getClientSales } from '@/features/sales/presentation';
 import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
+import { ClientDeleteConflictError } from '@/persistence/stores/clients';
+import { alertPersistenceFailure } from '@/providers/persistence-failure';
+import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
@@ -47,8 +59,10 @@ import {
   rose,
   semanticColors,
   spacing,
+  touchTarget,
 } from '@/shared/ui/theme';
 
+import { ClientDeletionDialog, type ClientDeletionDialogMode } from './components/ClientDeletionDialog';
 import { getClientActivitySummary } from './presentation';
 
 interface ClientProfileScreenProps {
@@ -59,13 +73,23 @@ const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios
 
 export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   const router = useRouter();
-  const { getClientById } = useClientSession();
+  const {
+    getClientById,
+    archiveClient,
+    restoreClient,
+    getClientDeletionEligibility,
+    deleteClientPermanently,
+  } = useClientSession();
   const { appointments } = useAppointmentSession();
   const { sales } = useSaleSession();
   const [editVisible, setEditVisible] = useState(false);
+  const [deletionMode, setDeletionMode] = useState<ClientDeletionDialogMode>();
+  const [deletedByCurrentScreen, setDeletedByCurrentScreen] = useState(false);
   const client = getClientById(clientId);
 
   if (!client) {
+    if (deletedByCurrentScreen) return null;
+
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.notFound}>
@@ -81,9 +105,60 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   const activity = getClientActivitySummary(appointments, client.id);
   const purchases = getClientSales(sales, client.id);
   const hasContactInfo = Boolean(client.phone || client.email || client.birthDate);
+  const archived = isClientArchived(client);
 
   const openSale = () => {
     router.push({ pathname: '/sales/new', params: { clientId: client.id } });
+  };
+
+  // Every lifecycle write goes through the persisted session; a failed write
+  // leaves the record unchanged and is reported once.
+  const persist = (task: () => void): boolean => {
+    try {
+      task();
+      return true;
+    } catch {
+      alertPersistenceFailure();
+      return false;
+    }
+  };
+
+  const archive = () => {
+    if (!persist(() => archiveClient(client.id))) return;
+    haptics.selection();
+  };
+
+  const restore = () => {
+    if (!persist(() => restoreClient(client.id))) return;
+    haptics.success();
+  };
+
+  // The stored references decide — never the in-memory collections — so the
+  // professional is never offered a confirmation that cannot succeed.
+  const openPermanentDeletion = () => {
+    try {
+      const eligibility = getClientDeletionEligibility(client.id);
+      setDeletionMode(eligibility.deletable ? 'confirm' : 'blocked');
+    } catch {
+      alertPersistenceFailure();
+    }
+  };
+
+  const deletePermanently = () => {
+    setDeletionMode(undefined);
+    try {
+      deleteClientPermanently(client.id);
+    } catch (error) {
+      if (error instanceof ClientDeleteConflictError) {
+        setDeletionMode('blocked');
+      } else {
+        alertPersistenceFailure();
+      }
+      return;
+    }
+    setDeletedByCurrentScreen(true);
+    haptics.warning();
+    router.back();
   };
 
   const openAppointment = (appointmentId: string) => {
@@ -140,15 +215,33 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
           >
             {getClientDisplayName(client)}
           </AppText>
+          {archived && (
+            <View style={styles.archivedBadge} testID="client-archived-indicator">
+              <AppText variant="chip" style={styles.archivedBadgeText}>
+                {ARCHIVED_CLIENT_LABEL}
+              </AppText>
+            </View>
+          )}
           <View style={styles.clientActions}>
-            <AppButton
-              accessibilityLabel="Vendre un produit"
-              onPress={openSale}
-              style={styles.clientAction}
-              testID="sell-product"
-              title="Vendre un produit"
-              variant="secondary"
-            />
+            {archived ? (
+              <AppButton
+                accessibilityLabel="Réactiver la cliente"
+                onPress={restore}
+                style={styles.clientAction}
+                testID="restore-client"
+                title="Réactiver la cliente"
+                variant="secondary"
+              />
+            ) : (
+              <AppButton
+                accessibilityLabel="Vendre un produit"
+                onPress={openSale}
+                style={styles.clientAction}
+                testID="sell-product"
+                title="Vendre un produit"
+                variant="secondary"
+              />
+            )}
           </View>
         </View>
 
@@ -269,6 +362,34 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
             </View>
           )}
         </View>
+
+        <View style={styles.managementSection} testID="client-management">
+          {archived ? (
+            <Pressable
+              accessibilityHint="Supprime la cliente si aucun rendez-vous ni aucune vente ne la concerne"
+              accessibilityRole="button"
+              onPress={openPermanentDeletion}
+              style={({ pressed }) => [styles.textAction, pressed && styles.textActionPressed]}
+              testID="open-client-deletion"
+            >
+              <AppText variant="control" style={styles.destructiveText}>
+                Supprimer définitivement
+              </AppText>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityHint="La cliente ne sera plus proposée pour les nouveaux rendez-vous et ventes. Son historique est conservé."
+              accessibilityRole="button"
+              onPress={archive}
+              style={({ pressed }) => [styles.textAction, pressed && styles.textActionPressed]}
+              testID="archive-client"
+            >
+              <AppText variant="control" style={styles.managementText}>
+                Archiver la cliente
+              </AppText>
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
 
       <ClientFormSheet
@@ -277,6 +398,11 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         onClose={() => setEditVisible(false)}
         onSubmitted={() => setEditVisible(false)}
         visible={editVisible}
+      />
+      <ClientDeletionDialog
+        mode={deletionMode}
+        onClose={() => setDeletionMode(undefined)}
+        onConfirm={deletePermanently}
       />
     </SafeAreaView>
   );
@@ -440,6 +566,15 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: semanticColors.accent, fontSize: 24, lineHeight: 28 },
   clientName: { color: semanticColors.foreground },
+  archivedBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: semanticColors.surface,
+    borderRadius: radii.pill,
+    minHeight: 24,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  archivedBadgeText: { color: foregroundSoft },
   sectionHeader: { marginBottom: spacing.sm },
   nextSection: { marginBottom: spacing.xl },
   nextRow: {
@@ -496,6 +631,19 @@ const styles = StyleSheet.create({
   appointmentsSection: { marginBottom: spacing.xl },
   purchasesSection: {},
   purchases: { gap: spacing.sm },
+  managementSection: { alignItems: 'center', marginTop: spacing['2xl'] },
+  textAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: touchTarget[Platform.OS === 'android' ? 'android' : 'ios'],
+    paddingHorizontal: spacing.md,
+  },
+  textActionPressed: {
+    opacity: interaction.pressedOpacity,
+    transform: [{ scale: interaction.pressedScale }],
+  },
+  managementText: { color: foregroundSoft },
+  destructiveText: { color: rose.rose600 },
   appointmentGroups: { gap: spacing.md },
   appointmentGroup: { gap: spacing.xs },
   groupLabel: { color: foregroundSoft, marginBottom: spacing.xs },
