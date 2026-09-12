@@ -1,7 +1,7 @@
-// Souris — Initial in-memory Product catalog
+// Souris — Initial (development) Product catalog
 //
-// The ONE canonical Product source for the current in-memory session:
-// strictly-mapped legacy products only. Legacy files are one-way import
+// The strictly-mapped legacy pilot products, reached only by the development
+// seed — a fresh production install starts empty. Legacy files are one-way import
 // sources; runtime features receive canonical Product values only.
 
 import type { Product } from '@/domain/products';
@@ -11,11 +11,13 @@ import { mapLegacyProducts } from '../adapters/legacy-products-adapter';
 import { products_list } from './legacy-products';
 
 /** Builds a fresh, deterministic normalization result from the legacy file. */
-export function createInitialProductImport() {
-  return mapLegacyProducts(products_list, DEVELOPMENT_BUSINESS_ID);
+export function createInitialProductImport(businessId: string = DEVELOPMENT_BUSINESS_ID) {
+  return mapLegacyProducts(products_list, businessId);
 }
 
-/** Builds the canonical seed used by each in-memory catalog session. */
-export function createInitialProductCatalog(): readonly Product[] {
-  return createInitialProductImport().products;
+/** Builds the canonical development catalog, stamped with `businessId`. */
+export function createInitialProductCatalog(
+  businessId: string = DEVELOPMENT_BUSINESS_ID,
+): readonly Product[] {
+  return createInitialProductImport(businessId).products;
 }

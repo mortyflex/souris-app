@@ -16,8 +16,12 @@ Products (with a durable image file reference)
 Sales (with item snapshots)
 ```
 
-Explicit non-goals: authentication, accounts, server database, cloud backup, conflict resolution,
-multi-device sync, offline sync engine. Local-first only.
+Since Account & Onboarding V1 the database also holds the **local account binding** (schema v3,
+§3/§4b): which Business — and which owning Auth user — this device's data belongs to.
+
+Explicit non-goals: cloud backup of operational data, conflict resolution, multi-device sync,
+offline sync engine. Authentication and the Business profile live in Supabase
+(`docs/architecture/AUTH.md`); operational data stays local-first only.
 
 ---
 
@@ -37,7 +41,8 @@ Expo Router, features, or screens. Its public surface:
 ```text
 database.ts          SourisDatabase — the synchronous SQL boundary every module writes against
 expo-database.ts     expo-sqlite binding (application root only)
-schema.ts            migrations[] — schema v1 SQL, schema v2 (clients.archived_at), SOURIS_TABLES
+schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v3 (business_profile),
+                     SOURIS_TABLES, BUSINESS_SCOPED_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
 seed.ts              FirstRunSeed contract + seedDatabaseIfNeeded()
@@ -57,7 +62,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2)
+## 3. Schema (v1 + v2 + v3)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities.
 
@@ -79,7 +84,12 @@ products            id PK, business_id, name, brand?, category?, barcode?, image
 sales               id PK, business_id, client_id?, completed_at
 sale_items          (sale_id FK→sales CASCADE, id) PK, position, product_id, product_name,
                     unit_price, quantity (CHECK >= 1)
+business_profile    singleton PK (CHECK = 1), id, owner_user_id, owner_first_name,
+                    owner_last_name?, name, activity_type, phone?, created_at, updated_at   (v3)
 ```
+
+`business_profile` holds at most ONE row (the `singleton` primary key): the device's account
+binding. It never stores tokens or the owner's email.
 
 Indexes: `appointments(start_at)`, `appointments(client_id)`, `sales(client_id)`.
 
@@ -132,6 +142,39 @@ edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
 
+### Schema v3 — local account binding
+
+```text
+CREATE TABLE business_profile (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), …)
+```
+
+An existing v2 database goes `v2 → v3` in one transaction: the table is created empty; no row of
+any other table is touched, no reseed, no wipe. The device stays **unbound** until the owner
+completes (or reconnects to) Business setup. Re-running is a no-op. Covered by a test that builds a
+genuine schema-v2 fixture database with Clients, Services, Appointments, Products, and a Sale.
+
+### 4b. Account binding
+
+`src/persistence/stores/business-profile.ts` — `bindLocalDatabaseToBusiness(db, profile)`:
+
+```text
+BEGIN
+  business_profile present with another owner or Business  ⇒ ALREADY_BOUND_TO_OTHER_ACCOUNT, ROLLBACK
+  distinct business_id across services / appointments / products / sales
+    (BUSINESS_SCOPED_TABLES), excluding profile.id
+    more than one                                             ⇒ MULTIPLE_LOCAL_BUSINESS_IDS, ROLLBACK
+    exactly one   ⇒ UPDATE <table> SET business_id = profile.id WHERE business_id = <that id>
+  upsert the single business_profile row
+COMMIT
+```
+
+Only the business ownership column changes: Client / Appointment / Service / Product / Sale ids,
+snapshots, and relationships are exactly preserved (verified by comparing the full snapshot before
+and after). `clients` carries no `business_id` and is never rewritten. A failure anywhere leaves the
+database unchanged (rollback test with a failing `UPDATE sales`). Re-binding the same owner and
+Business only refreshes the cached profile. `readBusinessProfile(db)` restores the binding on every
+launch. The development reset keeps the row (it is not in `SOURIS_TABLES`).
+
 ### Schema v2 — Client lifecycle
 
 ```text
@@ -151,27 +194,30 @@ with the v1 column set, migrates, and asserts version, rows, and NULL lifecycle.
 
 ```text
 first launch:  empty database
-               → migrate to the current schema (v2)
-               → seed_version absent → run legacy adapters ONCE, in one transaction
-                   Clients      = strict legacy address book ONLY
-                   Services     = legacy services/techniques through the catalog adapter
-                   Products     = legacy products through the product adapter
-                   Appointments = []
-                   Sales        = []
+               → migrate to the current schema (v3)
+               → seed_version absent → run the production seed ONCE, in one transaction
+                   Clients / Services / Products / Appointments / Sales = []   (EMPTY)
                → write souris_metadata.seed_version = 1
                → load snapshot
 
 next launches: migrate (no-op) → seed_version present → skip seed → load snapshot
 ```
 
-The seed marker — not row counts — decides. A professional who deletes every record is NOT
-re-seeded. The production seed composition lives in `src/providers/first-run-seed.ts` and
-contains approved legacy data only; after the first launch the legacy modules are never
-consulted again.
+Since Account & Onboarding V1 the production first-run seed is **empty**: a fresh real install
+starts with no pilot Clients, Services, Products, Appointments, or Sales, and shows the intentional
+empty states. The legacy pilot address book and catalogs are business-specific data of the first
+professional; they were never meant to become universal customer data.
 
-Development fixtures (the `client-agenda-*` clients and the relative-day Agenda Appointments)
-live in `src/providers/development-seed.ts`. They reach a database only through the `__DEV__`
-reset (§10) or `TestPersistenceProvider` — never through the production first-run path.
+Existing installs are untouched: their `seed_version` marker is already present, so the seed is
+never consulted again and the pilot data they already hold stays exactly as it is.
+
+The seed marker — not row counts — decides. A professional who deletes every record is NOT
+re-seeded.
+
+The legacy data and the development fixtures (the `client-agenda-*` clients and the relative-day
+Agenda Appointments) live in `src/providers/development-seed.ts`, stamped with a `businessId`. They
+reach a database only through the `__DEV__` reset (§10) or `TestPersistenceProvider` — never
+through the production first-run path.
 
 ---
 
@@ -327,14 +373,15 @@ Development builds show a `Développement › Réinitialiser les données locale
 (`__DEV__` only, compiled out of production). It runs `resetForDevelopment()`:
 
 ```text
-DELETE every canonical table + remove seed_version   (one transaction)
+DELETE every operational table + remove seed_version (one transaction; business_profile is KEPT)
 → delete <documents>/products/                       (owned images only)
-→ bootstrap again with the DEVELOPMENT seed (legacy data + Agenda fixtures)
+→ bootstrap again with the DEVELOPMENT seed (legacy pilot data + Agenda fixtures), stamped with
+  the bound Business id so the reset never introduces a second business id
 → load → remount feature providers
 ```
 
-A fresh development install therefore starts with production data only; the reset is the
-explicit way to load the fixtures.
+A fresh development install therefore starts empty like production; the reset is the explicit
+way to load the pilot data and fixtures.
 
 The schema is kept. Alternatives: uninstall the app, or delete `souris.db` from the app's SQLite
 directory with a device file browser.
@@ -349,8 +396,11 @@ database per test, no extra dependency, no developer device database. `TestPersi
 wraps the real `PersistenceProvider` around such a database with in-memory files, seeded with the
 real first-run seed unless a test supplies its own.
 
-Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2 upgrade of an
-existing seeded database, seed-once, restart without duplicates, empty-but-initialized
+Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2 and v2 → v3
+upgrades of existing seeded databases, account binding (profile persisted, every `business_id`
+rewritten, relationships untouched, restart, same-owner rebind, other-owner refusal, multiple local
+ids refusal, rollback), the empty production seed, the development seed under a bound Business id,
+seed-once, restart without duplicates, empty-but-initialized
 databases, every store's round trip (order, instants, civil birthDate, optionals, `archivedAt`
 Date round trip, snapshots surviving catalog deletion), Sale rollback, the transactional Client
 deletion guard (safe / blocked by Appointment / blocked by Sale / both), image promotion /

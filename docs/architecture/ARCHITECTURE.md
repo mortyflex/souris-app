@@ -48,6 +48,7 @@ src/
 ├── domain/
 ├── features/
 ├── persistence/
+├── infrastructure/   # remote technical boundaries (Supabase client + adapters)
 ├── shared/
 │   ├── ui/
 │   ├── icons/
@@ -75,6 +76,20 @@ Expo Router owns route definitions under:
 ```text
 src/app/
 ```
+
+Route groups (Account & Onboarding V1):
+
+```text
+src/app/(auth)/          Welcome, sign-up, sign-in, verify-email      — no session
+src/app/(onboarding)/    business setup                               — session, no Business
+src/app/(app)/           tabs + every operational sheet route         — session + bound Business
+```
+
+The root layout mounts `RootNavigator` (`src/providers/RootNavigator.tsx`), which resolves ONE
+route from the Auth and Business states (`src/providers/root-route.ts`) and guards each group with
+`Stack.Protected`. `(app)/_layout.tsx` owns the operational session providers and
+`CurrentBusinessProvider`, so no operational state exists in the tree while signed out. See
+`docs/architecture/AUTH.md`.
 
 Route files should remain thin.
 
@@ -257,14 +272,20 @@ Current providers:
 
 ```text
 src/providers/PersistenceProvider.tsx   application persistence bootstrap (see PERSISTENCE.md)
-src/providers/first-run-seed.ts         one-time production seed (approved legacy data only)
-src/providers/development-seed.ts       production seed + Agenda fixtures (__DEV__ reset / tests)
+src/providers/RootNavigator.tsx         root navigation gate over the Auth + Business states
+src/providers/root-route.ts             pure route resolution (booting / auth / onboarding / app / …)
+src/providers/first-run-seed.ts         one-time production seed (EMPTY since Account V1)
+src/providers/development-seed.ts       legacy pilot data + Agenda fixtures (__DEV__ reset / tests)
 src/providers/persistence-failure.ts    the one concise "Enregistrement impossible" alert
+
+src/features/auth/session/AuthProvider.tsx                     who is signed in?
+src/features/business/session/BusinessSessionProvider.tsx      which Business, onboarding, binding
+src/features/business/session/CurrentBusinessProvider.tsx      the bound Business for (app) screens
 ```
 
-Examples may later include:
+Auth and Business are deliberately two providers (see `docs/architecture/AUTH.md`). Examples may
+later include:
 
-- authentication;
 - query client;
 - theme infrastructure.
 
@@ -452,20 +473,30 @@ src/providers/       PersistenceProvider: migrate → seed once → hydrate → 
 The domain stays independent from it: `src/persistence` depends on domain types only, and row ↔
 domain mapping happens exclusively inside the stores. Screens never see SQL or rows.
 
-Remote persistence, sync, backup, and authentication remain deferred; the local schema must not
-guess their shape.
+Schema v3 adds the local account binding (`business_profile`, one row). Operational cloud sync,
+backup, and multi-device restoration remain deferred; the local schema must not guess their shape.
 
 ---
 
 # 17. Networking
 
-Do not build an API layer before a remote API exists.
+The only remote boundary is Supabase, under `src/infrastructure/supabase/`:
 
-When networking eventually appears:
+```text
+config.ts            environment contract (EXPO_PUBLIC_SUPABASE_URL / _PUBLISHABLE_KEY)
+client.ts            the single client (expo-sqlite localStorage session storage, AppState refresh)
+auth-gateway.ts      AuthGateway adapter        → src/features/auth/gateway.ts contract
+business-gateway.ts  BusinessGateway adapter    → src/features/business/gateway.ts contract
+```
 
-- keep transport concerns outside the domain;
-- convert external data at boundaries;
-- do not leak remote API shapes throughout the app.
+Rules that already apply:
+
+- transport concerns stay outside the domain (`src/domain/business` is plain TypeScript);
+- external data is converted at the boundary (rows → `BusinessProfile`, errors → stable codes);
+- remote API shapes never leak into screens or providers, which depend on the gateway contracts;
+- tests inject fakes; Jest never reaches Supabase.
+
+Remote scope in V1 is the account only: no operational data crosses this boundary.
 
 ---
 

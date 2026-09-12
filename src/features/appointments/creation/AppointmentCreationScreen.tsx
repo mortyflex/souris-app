@@ -52,6 +52,8 @@ import {
   type SelectedServiceDraft,
 } from './draft';
 import { stepStartAt, type StartTimeBounds } from './draft-start';
+import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
+
 import { createAppointmentId, createAppointmentItemId } from './runtime-ids';
 import { collectCatalogServiceUpdates } from './commit-drafts';
 import { getAppointmentCreationSummary } from './presentation';
@@ -62,7 +64,8 @@ interface AppointmentCreationScreenProps {
   readonly startAt: Date;
 }
 
-const businessId = 'fixture-business';
+// Single-professional V1: the staff identifier stays a stable placeholder
+// until staff members become a real concept.
 const staffMemberId = 'staff-amelie';
 /**
  * Valid manual start times stay inside the operational Agenda day and
@@ -76,6 +79,7 @@ const startTimeBounds: StartTimeBounds = {
 
 export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreenProps) {
   const router = useRouter();
+  const business = useCurrentBusiness();
   const { addAppointment } = useAppointmentSession();
   const { activeClients } = useClientSession();
   const { getServiceById, activeServices } = useServiceCatalog();
@@ -177,7 +181,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
     // The final draft is the immediate source for the Appointment snapshot.
     const appointment = buildAppointment({
       appointmentId,
-      businessId,
+      businessId: business.id,
       clientId: selectedClient.id,
       itemIds: selectedDrafts.map((_, index) => createAppointmentItemId(appointmentId, index)),
       items: summaryItems,

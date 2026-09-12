@@ -10,6 +10,16 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
+1. Configure Supabase (account & Business identity only — see `docs/architecture/AUTH.md`)
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Fill `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from the Supabase
+   project Connect panel, and apply `supabase/migrations` as described in `supabase/README.md`.
+   Never use the secret key or the database password in the app.
+
 2. Start the app
 
    ```bash

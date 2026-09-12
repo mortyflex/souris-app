@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@expo/ui": "~57.0.14",
+    "@supabase/supabase-js": "^2.116.0",
     "expo": "~57.0.18",
     "expo-camera": "~57.0.4",
     "expo-constants": "~57.0.16",

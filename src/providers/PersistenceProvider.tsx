@@ -33,6 +33,7 @@ import type { SourisDatabase } from '@/persistence/database';
 import { clearPersistedDataForDevelopment } from '@/persistence/development-reset';
 import type { LocalFiles } from '@/persistence/files/local-files';
 import type { FirstRunSeed } from '@/persistence/seed';
+import { readBusinessProfile } from '@/persistence/stores/business-profile';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { semanticColors, spacing } from '@/shared/ui/theme';
@@ -43,8 +44,9 @@ export interface PersistenceValue {
   /** Canonical state loaded at bootstrap; providers hydrate from it once. */
   readonly snapshot: PersistedSnapshot;
   /**
-   * Development-only: wipes every persisted record and owned image, seeds the
-   * DEVELOPMENT seed (legacy data + fixtures), and remounts the feature
+   * Development-only: wipes every persisted record and owned image (the
+   * account binding is kept), seeds the DEVELOPMENT seed (legacy pilot data +
+   * fixtures) under the bound Business id, and remounts the feature
    * providers. No-op in production builds.
    */
   readonly resetForDevelopment: () => void;
@@ -62,14 +64,19 @@ type BootstrapState =
 
 const PersistenceContext = createContext<PersistenceValue | null>(null);
 
+export interface DevelopmentSeedContext {
+  /** The Business this device is bound to, so fixtures never introduce a foreign business id. */
+  readonly businessId: string | undefined;
+}
+
 interface PersistenceProviderProps {
   /** Opens (or creates) the database; called inside the bootstrap boundary, and again on retry. */
   readonly openDatabase: () => SourisDatabase;
   readonly files: LocalFiles;
-  /** Production first-run seed: approved legacy data only. */
+  /** Production first-run seed (empty since Account & Onboarding V1). */
   readonly createSeed: () => FirstRunSeed;
   /** Seed used by the development reset; defaults to `createSeed`. */
-  readonly createDevelopmentSeed?: () => FirstRunSeed;
+  readonly createDevelopmentSeed?: (context: DevelopmentSeedContext) => FirstRunSeed;
   /** Called once the bootstrap settled (ready or failed), e.g. to hide the splash screen. */
   readonly onSettled?: () => void;
 }
@@ -134,12 +141,19 @@ export function PersistenceProvider({
   }, [bootstrap]);
 
   const resetForDevelopment = useCallback(() => {
-    if (!__DEV__ || !databaseRef.current) return;
-    clearPersistedDataForDevelopment(databaseRef.current);
+    const database = databaseRef.current;
+    if (!__DEV__ || !database) return;
+    clearPersistedDataForDevelopment(database);
     files.deleteDirectory(getProductImagesDirectoryUri(files));
-    bootstrap(() => (createDevelopmentSeedRef.current ?? createSeedRef.current)(), {
-      freshConnection: false,
-    });
+    // The account binding survives the reset; fixtures adopt its Business id.
+    const context: DevelopmentSeedContext = { businessId: readBusinessProfile(database)?.id };
+    bootstrap(
+      () =>
+        createDevelopmentSeedRef.current
+          ? createDevelopmentSeedRef.current(context)
+          : createSeedRef.current(),
+      { freshConnection: false },
+    );
   }, [bootstrap, files]);
 
   if (state.status === 'initializing') {

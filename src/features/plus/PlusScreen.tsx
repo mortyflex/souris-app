@@ -1,8 +1,11 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { formatBusinessActivityType } from '@/features/business/presentation';
+import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { usePersistence } from '@/providers/PersistenceProvider';
 import { AppText } from '@/shared/ui/AppText';
@@ -17,10 +20,15 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
+import { AccountSheet } from './components/AccountSheet';
+
 export function PlusScreen() {
   const router = useRouter();
   const { services } = useServiceCatalog();
+  const business = useCurrentBusiness();
+  const [accountVisible, setAccountVisible] = useState(false);
   const serviceCountLabel = `${services.length} prestation${services.length > 1 ? 's' : ''}`;
+  const activityLabel = formatBusinessActivityType(business.activityType);
 
   return (
     <Screen>
@@ -55,8 +63,40 @@ export function PlusScreen() {
           />
         </Pressable>
       </View>
+      <View style={styles.accountSection}>
+        <SectionHeader title="Compte" />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Compte, ${business.name}, ${activityLabel}`}
+          onPress={() => setAccountVisible(true)}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          testID="plus-account"
+        >
+          <View style={styles.iconSurface}>
+            <SymbolView
+              name={{ ios: 'person.crop.circle', android: 'account_circle' }}
+              size={19}
+              tintColor={semanticColors.accent}
+            />
+          </View>
+          <View style={styles.copy}>
+            <AppText variant="rowTitle" numberOfLines={1}>
+              {business.name}
+            </AppText>
+            <AppText variant="metadata" style={styles.meta}>
+              {activityLabel}
+            </AppText>
+          </View>
+          <SymbolView
+            name={{ ios: 'chevron.right', android: 'chevron_right' }}
+            size={15}
+            tintColor={semanticColors.foregroundMuted}
+          />
+        </Pressable>
+      </View>
       {__DEV__ && <DevelopmentSection />}
       <BrandSection version={Constants.expoConfig?.version} />
+      <AccountSheet onClose={() => setAccountVisible(false)} visible={accountVisible} />
     </Screen>
   );
 }
@@ -130,6 +170,7 @@ function DevelopmentSection() {
 
 const styles = StyleSheet.create({
   managementSection: { gap: spacing.sm, paddingTop: spacing['2xl'] },
+  accountSection: { gap: spacing.sm, paddingTop: spacing['2xl'] },
   developmentSection: { gap: spacing.sm, paddingTop: spacing['2xl'] },
   developmentTitle: { color: rose.rose600 },
   row: {
