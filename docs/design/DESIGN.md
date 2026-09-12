@@ -80,13 +80,19 @@ Fichier de référence : `colors_and_type.css`. Source : bloc `:root` de `assets
 
 ## 3. Typographie
 
-Une seule famille : **Inter** — `"Inter", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif`.
-Sur Android, Roboto et Noto Sans s'intercalent dans la pile. Ce choix mono-famille est assumé : le
-brief est utilitaire et dense en données ; le contraste vient de la graisse, de la taille et de
-l'interlettrage, pas d'un second caractère.
+Une seule famille : **Plus Jakarta Sans**, en quatre graisses (400 / 500 / 600 / 700), chargée
+au démarrage via `@expo-google-fonts/plus-jakarta-sans` (`src/app/_layout.tsx`). C'est la typographie
+UI approuvée de Souris ; l'échelle native de référence est celle de `DESIGN_OVERRIDES.md` §12 et de
+`src/shared/ui/theme/typography.ts`. Ce choix mono-famille est assumé : le brief est utilitaire et
+dense en données ; le contraste vient de la graisse, de la taille et de l'interlettrage, pas d'un
+second caractère.
 
-Chargée depuis Google Fonts (400 / 500 / 600 / 700) dans chaque écran. Aucun fichier de police n'est
-livré dans le projet source — voir « Blocages » ci-dessous.
+Le prototype exporté (`reference-export/`) utilisait Inter ; cette famille n'est plus une référence
+et ne doit pas être réintroduite. Les logos (`assets/brand/`) sont des images au lettrage propre,
+indépendantes de la typographie UI : le wordmark n'est jamais recomposé en Plus Jakarta Sans.
+
+Échelle historique du prototype (valeurs web, conservées pour la traçabilité — les valeurs natives
+en vigueur sont celles de `DESIGN_OVERRIDES.md` §12) :
 
 | Rôle | Taille | Graisse | Interlettrage |
 | --- | --- | --- | --- |
@@ -256,12 +262,35 @@ sprite `build/souris-icons.svg`, index `build/icons.json`.
 
 ### Marque
 
-`assets/brand/logo-mark.png` (tête de souris : deux oreilles ouvertes, oreilles internes rose,
-nez rose, sourire) · `logo-wordmark.png` (mot « souris » en bas de casse avec le sourire sous le mot,
-point du i rose) · `logo-lockup.png` (marque + wordmark + baseline « GESTION DE RENDEZ-VOUS SALON »).
-Le nom évoque le sourire, pas la mascotte : la tête apparaît en petite taille (46px en onboarding),
-le wordmark en tête du launcher. Les PNG sont posés en `mix-blend-mode:multiply` sur fond clair.
-**Ne pas multiplier les souris illustrées.**
+Trois assets canoniques, et seulement trois, dans `assets/brand/` (PNG sur fond transparent, tracés
+navy `--fg` et rose) :
+
+| Fichier | Rôle | Contextes approuvés |
+| --- | --- | --- |
+| `assets/brand/logo-mark.png` (1254 × 1254) | **MARK** — symbole canonique de l'app : oreilles, nez rose, sourire | icône d'application (source), symbole du splash, identité compacte |
+| `assets/brand/logo-wordmark.png` (2172 × 724) | **WORDMARK** — le nom « souris » canonique, sourire sous le mot, point du i rose | contextes où le nom est mis en avant |
+| mark + wordmark (composition, `BrandComposition`) | **COMPOSITION PRINCIPALE** produit : mark canonique au-dessus du wordmark | splash iOS (PNG dérivé), Plus, futur onboarding / auth |
+| `assets/brand/logo-lockup.png` (1122 × 1402) | **LOCKUP** — souris alternative détaillée + wordmark + baseline « GESTION DE RENDEZ-VOUS SALON » | asset de marque conservé ; **pas l'identité app par défaut** : sa baseline est spécifique aux salons de coiffure alors que Souris s'adresse à toutes les professions de la beauté, et sa souris diffère du mark de l'icône |
+
+Règles :
+
+- ces fichiers sont l'identité approuvée : ne jamais redessiner la souris, générer un autre symbole,
+  un monogramme ou un wordmark, ni substituer un emoji ou un symbole système au logo ;
+- le runtime rend la marque uniquement via `src/shared/ui/BrandMark.tsx` (`BrandMark` : `variant` =
+  `mark` / `wordmark` / `lockup`, `size` = largeur, ratio intrinsèque conservé, jamais d'étirement ;
+  `BrandComposition` : mark + wordmark, la composition produit) ;
+- le lockup reste disponible comme asset mais n'est utilisé nulle part dans l'app tant qu'il porte
+  la baseline salon ; l'icône et le splash montrent la MÊME souris (le mark canonique) ;
+- les logos apparaissent seulement aux moments de marque : icône, splash natif, bloc identité de Plus,
+  futur onboarding / auth. **Aucun logo ni en-tête « Souris » sur Agenda, Clientes, Produits, les
+  détails, les feuilles ou les formulaires** — les titres restent `Agenda`, `Clientes`, `Produits`,
+  `Plus` ;
+- accessibilité : un seul élément annonce « Souris » ; un mark posé à côté d'un texte ou d'un
+  wordmark lisible est décoratif ;
+- les PNG sont posés sur fond clair (blanc `--bg` ou lavande) ; jamais sur navy ou violet plein, où
+  les tracés navy disparaissent. Le splash utilise mark + wordmark sur blanc ; l'icône pose le mark sur
+  `--lav-200`. Détails d'implémentation : `DESIGN_OVERRIDES.md` §15.
+- **Ne pas multiplier les souris illustrées.**
 
 ---
 
@@ -328,12 +357,13 @@ Si un élément est beau mais ralentit la professionnelle, il est simplifié.
 
 ## Blocages / preuves manquantes
 
-- **Fichiers de police :** aucun `.woff2` n'existe dans le projet source ; Inter est chargée depuis
-  Google Fonts dans chaque écran. Le dossier `fonts/` n'est donc pas livré, et la pile de repli
-  déclarée doit être conservée telle quelle.
+- **Fichiers de police :** le projet source ne livrait aucun fichier de police. Le runtime natif
+  charge Plus Jakarta Sans via `@expo-google-fonts/plus-jakarta-sans` (voir §3) ; aucune pile de
+  repli web n'est à conserver.
 - **Icônes d'application / tray :** le projet source ne contient aucune icône d'app exportée.
-  `build/` contient les 24 icônes d'interface réellement présentes dans le code, pas un jeu d'icônes
-  de plateforme.
+  L'icône et le splash natifs sont dérivés des assets canoniques de `assets/brand/` (voir §6
+  « Marque » et `DESIGN_OVERRIDES.md` §15). `build/` contient les 24 icônes d'interface réellement
+  présentes dans le code, pas un jeu d'icônes de plateforme.
 - **Mode sombre :** absent du prototype. Aucun token sombre n'est inventé ici.
 - **Le launcher `index.html` référence `/frames/iphone-15-pro.html` et `/frames/android-pixel.html`,**
   fournis par le runtime du projet source. Hors de ce runtime, les cadres restent vides ; les écrans

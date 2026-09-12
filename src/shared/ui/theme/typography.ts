@@ -1,7 +1,7 @@
 // Souris design tokens — Typography
 //
 // Source: docs/design/DESIGN_OVERRIDES.md §12 (native runtime typography),
-//         docs/design/DESIGN.md §3 (original Inter hierarchy, preserved as history)
+//         docs/design/DESIGN.md §3 (Plus Jakarta Sans; the export scale is kept there as history)
 //
 // One family: Plus Jakarta Sans. The concrete font files are loaded in
 // src/app/_layout.tsx. Four weights only: 400 / 500 / 600 / 700.
