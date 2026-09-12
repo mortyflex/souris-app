@@ -19,6 +19,7 @@ import {
   markAppointmentNoShow,
   shouldAutoCompleteAppointment,
 } from "@/domain/appointments";
+import { isClientArchived } from "@/domain/clients";
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
@@ -121,6 +122,9 @@ export function AppointmentDetailsScreen({
   const { appointment } = entry;
   const client = getClientById(appointment.clientId);
   const clientDisplayName = getResolvedClientDisplayName(client);
+  // Revente opens a NEW Sale for the Client: an archived Client keeps her
+  // history readable here but is never attached to new business actions.
+  const canSellToClient = client !== undefined && !isClientArchived(client);
   const services = getAppointmentDetailServices(appointment);
   const summary = getAppointmentDetailSummary(appointment);
   const endAt = getAppointmentEnd(appointment);
@@ -309,7 +313,7 @@ export function AppointmentDetailsScreen({
         )}
 
         <View style={styles.appointmentActions} testID="appointment-actions">
-          {client && (
+          {canSellToClient && (
             <Pressable
               accessibilityLabel="Revente"
               accessibilityHint="Vendre un produit à cette cliente"

@@ -22,4 +22,10 @@ export interface Client {
    * NOT a timestamp — never a Date at local midnight. Optional.
    */
   readonly birthDate?: string;
+  /**
+   * Lifecycle marker. Absent for an active Client; the exact instant of the
+   * archive otherwise. Archiving never deletes anything and never touches
+   * Appointments, Sales, or derived metrics (see lifecycle.ts).
+   */
+  readonly archivedAt?: Date;
 }

@@ -1,9 +1,10 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { Pressable } from 'react-native';
 
 import { createInitialClients } from '../../data/initial-clients';
 import { prepareClientDirectory } from '../sort-clients';
 import { ClientDirectoryScreen } from '../ClientDirectoryScreen';
-import { ClientSessionProvider } from '../../session/ClientSessionProvider';
+import { ClientSessionProvider, useClientSession } from '../../session/ClientSessionProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockPush = jest.fn();
@@ -36,11 +37,22 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+function LifecycleProbe() {
+  const { archiveClient, restoreClient } = useClientSession();
+  return (
+    <>
+      <Pressable testID="archive-lea" onPress={() => archiveClient('client-agenda-lea')} />
+      <Pressable testID="restore-lea" onPress={() => restoreClient('client-agenda-lea')} />
+    </>
+  );
+}
+
 function renderDirectory() {
   return render(
     <TestPersistenceProvider>
       <ClientSessionProvider>
-      <ClientDirectoryScreen />
+        <ClientDirectoryScreen />
+        <LifecycleProbe />
       </ClientSessionProvider>
     </TestPersistenceProvider>,
   );
@@ -141,5 +153,62 @@ describe('ClientDirectoryScreen', () => {
     });
 
     expect(view.getByText('Zélie Deville')).toBeTruthy();
+  });
+
+  it('lists every Client under Actives without an Archivées group when nothing is archived', async () => {
+    const view = await renderDirectory();
+
+    expect(view.getByTestId('client-group-active')).toBeTruthy();
+    expect(view.queryByTestId('client-group-archived')).toBeNull();
+    expect(view.queryByText('Archivée')).toBeNull();
+  });
+
+  it('moves an archived Client under a secondary Archivées group with a subtle indicator', async () => {
+    const view = await renderDirectory();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('archive-lea'));
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
+    });
+
+    expect(view.getByTestId('client-group-active')).toBeTruthy();
+    expect(view.getByTestId('client-group-archived')).toBeTruthy();
+    const archivedRow = within(view.getByTestId('client-row-client-agenda-lea'));
+    expect(archivedRow.getByText('Léa Martin')).toBeTruthy();
+    expect(archivedRow.getByText('Archivée')).toBeTruthy();
+    expect(view.getByLabelText('Ouvrir la fiche de Léa Martin, archivée')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Léa Martin'));
+    });
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/clients/[clientId]',
+      params: { clientId: 'client-agenda-lea' },
+    });
+  });
+
+  it('keeps an archived Client discoverable through search and restores her to Actives', async () => {
+    const view = await renderDirectory();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('archive-lea'));
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
+    });
+    expect(view.getByTestId('client-group-archived')).toBeTruthy();
+    expect(view.queryByTestId('client-group-active')).toBeNull();
+    expect(view.getByText('Léa Martin')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('restore-lea'));
+    });
+
+    expect(view.getByTestId('client-group-active')).toBeTruthy();
+    expect(view.queryByTestId('client-group-archived')).toBeNull();
+    expect(view.queryByText('Archivée')).toBeNull();
+    expect(view.getByText('Léa Martin')).toBeTruthy();
   });
 });

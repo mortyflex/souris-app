@@ -34,19 +34,20 @@ fuzzy matching
 
 ## 2. Canonical Client
 
-The canonical Client contains identity/contact fields only:
+The canonical Client contains identity/contact fields plus one lifecycle marker:
 
 ```text
-id         string
-firstName  string
-lastName?  string
-phone?     string
-email?     string
-birthDate? string   YYYY-MM-DD
+id          string
+firstName   string
+lastName?   string
+phone?      string
+email?      string
+birthDate?  string   YYYY-MM-DD
+archivedAt? Date     lifecycle marker, absent while active
 ```
 
 `id` is a stable identity and never changes — including when identity/contact
-information is edited.
+information is edited, archived, or restored.
 
 ### birthDate
 
@@ -219,10 +220,68 @@ information, never replaced by a hidden section or an empty-state card.
 
 ---
 
-## 7. Future Client Capabilities
+## 7. Client Lifecycle
 
-Client deletion is a future increment with its own deliberate rules
-(relationship/history consequences).
+Archive is the normal way to remove a Client from daily use. Permanent
+deletion is a separate, destructive operation allowed only when history is
+safe. There is no status enum, no boolean flag, no `deletedAt`, no reason.
+
+### Active / archived
+
+```text
+active   = archivedAt == null
+archived = archivedAt != null
+```
+
+`archivedAt` is the exact instant of the archive (a `Date` in the domain,
+an ISO instant in persistence, restored as the same `Date`). Archiving:
+
+- never deletes the Client, an Appointment, or a Sale;
+- never rewrites an Appointment or Sale snapshot;
+- never alters derived activity metrics or purchase history;
+- never touches identity fields (editing identity never archives or restores).
+
+`archiveClient` and `restoreClient` are pure, idempotent domain operations:
+restoring removes `archivedAt` entirely (no `null`).
+
+### Selection rules
+
+Every flow that chooses a Client for a NEW action reads ACTIVE Clients only:
+
+```text
+Appointment creation — Cliente step
+Appointment editing  — Modifier la cliente
+Sale creation        — Choisir / Modifier la cliente
+```
+
+An archived Client is never offered there, never preselected from a stale
+route parameter, and never silently restored because an action was
+attempted. Existing references keep resolving everywhere (`clientId` →
+Client), so Agenda blocks, Appointment Details, Appointment history, and
+`Produits achetés` still show the archived Client's identity. Her profile
+stays reachable from the directory (`Archivées` group) and from history.
+
+Reactivating (`restoreClient`) makes the Client selectable again immediately.
+
+### Permanent deletion eligibility
+
+```text
+canDeleteClientPermanently = appointmentCount == 0 AND saleCount == 0
+```
+
+Any Appointment status counts (SCHEDULED, CONFIRMED, IN_PROGRESS,
+COMPLETED, CANCELLED, NO_SHOW) and any Sale counts. Historical integrity
+always wins: deletion never cascades, never nulls `clientId`, never
+anonymizes. Persistence re-verifies the references inside the delete
+transaction and raises a typed conflict; the rule is never trusted to
+in-memory arrays alone (`docs/architecture/PERSISTENCE.md`).
+
+Deletion is offered only from an ARCHIVED Client — the deliberate path is
+`active → archived → deleted (if safe)`.
+
+---
+
+## 8. Future Client Capabilities
 
 Notes, photos, technical formulas, and statistics are separate future
 features and remain outside the Client domain.

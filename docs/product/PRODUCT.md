@@ -468,6 +468,20 @@ accent-insensitive, and tolerant of ordinary phone formatting differences
 deterministic French alphabetical order (firstName, then lastName) — never
 the import order.
 
+The directory groups Clients by lifecycle:
+
+```text
+Clientes
+  search
+  Actives     every Client in daily use
+  Archivées   archived Clients — visually secondary, still searchable
+```
+
+Search covers both groups and keeps the grouping, so an archived Client can
+always be found again. Empty groups do not render. An archived row keeps its
+name and phone with muted colors and a subtle `Archivée` mention — it never
+looks deleted or erroneous.
+
 ### Creating and editing a Client
 
 A restrained `Ajouter une cliente` action opens the shared Client form
@@ -501,6 +515,55 @@ Activity rules are explicit: completed and no-show counts come from their status
 `Annulé par le salon` but does not count against the Client. `Total dépensé` is the sum of AppointmentItem snapshot
 prices for COMPLETED appointments only. History rows open the existing Appointment Details. Permanently deleting an
 Appointment removes its history row and all derived count or spending contributions without mutating the Client.
+
+### Client lifecycle — archive, reactivate, permanent deletion
+
+Archiving is the normal way to remove a Client from daily use; it is
+reversible and keeps every history. Permanent deletion exists only for
+Clients without any history, and only from an archived profile:
+
+```text
+Active  →  Archiver la cliente  →  Archivée  →  Réactiver la cliente  →  Active
+                                       ↓
+                            Supprimer définitivement   (only if safe)
+```
+
+On an ACTIVE profile, `Archiver la cliente` is a restrained tertiary
+management action placed after the history sections, away from the business
+actions. Archiving asks no confirmation (it is reversible), gives restrained
+haptic feedback, and moves the Client under `Archivées`.
+
+On an ARCHIVED profile:
+
+- a subtle `Archivée` mention sits under the name;
+- `Réactiver la cliente` replaces `Vendre un produit` as the lifecycle action;
+- no NEW business action is offered (`Vendre un produit` is hidden, and
+  Appointment Details hides `Revente` for an archived Client);
+- Activité, contact information, Rendez-vous, and Produits achetés remain
+  fully visible — history is never hidden;
+- `Modifier` still edits identity without changing the lifecycle;
+- `Supprimer définitivement` appears as tertiary destructive text.
+
+Archived Clients are never offered by the Client pickers (Appointment
+creation, Appointment editing, Sale creation), and a stale route parameter
+never preselects one for a new Sale. Reactivating restores every normal
+action immediately; an action attempt never reactivates a Client by itself.
+
+Tapping `Supprimer définitivement` first checks the stored references. When
+the Client has no Appointment and no Sale, a focused confirmation asks
+`Supprimer définitivement cette cliente ?` — `Cette action est irréversible.`
+— then deletes her from Souris (directory, session, database). When ANY
+Appointment (whatever its status) or Sale references her, Souris shows a
+concise explanation instead of a confirmation that could never succeed:
+
+```text
+Suppression impossible
+Cette cliente possède un historique de rendez-vous ou de ventes.
+Conservez-la archivée pour préserver cet historique.
+```
+
+There is no cascade option and no anonymization. Deletion gives warning
+haptic feedback only after it actually succeeded.
 
 ### Birthday
 

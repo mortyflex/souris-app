@@ -129,8 +129,18 @@ CREATE TABLE IF NOT EXISTS sale_items (
 );
 `;
 
+/**
+ * Schema v2 — Client lifecycle. A nullable ISO instant; NULL means active.
+ * Existing rows keep NULL, so every persisted Client stays active after the
+ * upgrade. No data is copied, rewritten, or re-seeded.
+ */
+const SCHEMA_V2 = `
+ALTER TABLE clients ADD COLUMN archived_at TEXT;
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
+  { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;
