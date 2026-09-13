@@ -106,6 +106,8 @@ export function WeekView({
         </Pressable>
       </View>
       <ScrollView
+        // Native tab bar overlay: system bottom inset, see DayTimeline.
+        contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,

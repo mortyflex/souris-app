@@ -1,72 +1,58 @@
-import { Tabs } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Platform, StyleSheet, type ColorValue } from 'react-native';
+// Souris — main navigation
+//
+// The four canonical tabs (Agenda · Clientes · Produits · Plus) on the
+// platform's own tab bar through Expo Router's NativeTabs: UIKit's tab bar on
+// iOS (Apple's Liquid Glass on iOS 26 when the binary is built with Xcode 26),
+// Material bottom navigation on Android. The system owns the bar's material,
+// layout, labels and selected state; Souris only lends it its violet for the
+// selected tab. No imitation glass, no custom bar, static tabs, and no
+// minimize-on-scroll yet (deliberately left to a later evaluation).
+//
+// The bar overlays the page on iOS. Each main screen's scroll view opts into
+// the system content inset (`contentInsetAdjustmentBehavior`) so its last row
+// scrolls above the bar, and the floating + stays above it through its own
+// bottom safe-area edge, which Expo Router scopes to the tab screen (see
+// FloatingCreateButton). Creation stays a FloatingCreateButton action —
+// the bar is navigation, never a fifth « + » tab.
 
-import { fontFamilies, semanticColors, typography } from '@/shared/ui/theme';
+import { ThemeProvider } from 'expo-router';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
-// Tab labels use the approved tab typography: 11 / 600 on iOS, 12 / 500 on
-// Android. The concrete font family carries the weight.
-const tabLabelStyle = {
-  fontFamily: Platform.OS === 'android' ? fontFamilies['500'] : fontFamilies['600'],
-  fontSize: Platform.OS === 'android' ? typography.tabAndroid.fontSize : typography.tabIos.fontSize,
-} as const;
-
-interface TabBarIconProps {
-  color: ColorValue;
-  size: number;
-}
-
-function createTabIcon(name: SymbolViewProps['name']) {
-  return function TabBarIcon({ color, size }: TabBarIconProps) {
-    return <SymbolView name={name} tintColor={color} size={size} />;
-  };
-}
+import { sourisNavigationTheme } from '@/providers/navigation-theme';
+import { semanticColors } from '@/shared/ui/theme';
 
 export default function TabsLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: semanticColors.accent,
-        tabBarInactiveTintColor: semanticColors.foregroundSoft,
-        tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: tabLabelStyle,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Agenda',
-          tabBarIcon: createTabIcon({ ios: 'calendar', android: 'calendar_month' }),
-        }}
-      />
-      <Tabs.Screen
-        name="clientes"
-        options={{
-          title: 'Clientes',
-          tabBarIcon: createTabIcon({ ios: 'person.2', android: 'group' }),
-        }}
-      />
-      <Tabs.Screen
-        name="produits"
-        options={{
-          title: 'Produits',
-          tabBarIcon: createTabIcon({ ios: 'cube', android: 'inventory_2' }),
-        }}
-      />
-      <Tabs.Screen
-        name="plus"
-        options={{
-          title: 'Plus',
-          tabBarIcon: createTabIcon({ ios: 'ellipsis', android: 'more_horiz' }),
-        }}
-      />
-    </Tabs>
+    <ThemeProvider value={sourisNavigationTheme}>
+      <NativeTabs
+        // Souris's main screens keep a fixed header above their list, so the
+        // list is never the first view UIKit inspects for scroll-edge
+        // detection: without this, iOS 18 and earlier would treat every tab
+        // as permanently "at the edge" and draw a transparent bar. Liquid
+        // Glass ignores bar backgrounds, so iOS 26 is unaffected.
+        disableTransparentOnScrollEdge
+        tintColor={semanticColors.accent}
+      >
+        <NativeTabs.Trigger name="index">
+          <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
+          <NativeTabs.Trigger.Label>Agenda</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="clientes">
+          <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} md="group" />
+          <NativeTabs.Trigger.Label>Clientes</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="produits">
+          <NativeTabs.Trigger.Icon
+            sf={{ default: 'shippingbox', selected: 'shippingbox.fill' }}
+            md="inventory_2"
+          />
+          <NativeTabs.Trigger.Label>Produits</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="plus">
+          <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
+          <NativeTabs.Trigger.Label>Plus</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+      </NativeTabs>
+    </ThemeProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.surfaceLavenderStrong,
-  },
-});

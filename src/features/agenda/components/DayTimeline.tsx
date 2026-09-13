@@ -75,6 +75,10 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.scrollContent}
+      // The native tab bar overlays the page: the system bottom inset keeps
+      // the last quarter-hour scrollable above it (bottomClearance then clears
+      // the floating +).
+      contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
     >
       <View style={[styles.canvas, { height: timelineHeight, width }]}>

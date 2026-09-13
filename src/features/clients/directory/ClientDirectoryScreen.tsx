@@ -83,6 +83,10 @@ export function ClientDirectoryScreen() {
       <SectionList
         sections={sections}
         keyExtractor={(client) => client.id}
+        // The native tab bar overlays the page: the system bottom inset keeps
+        // the last row scrollable above it (bottomClearance then clears the
+        // floating +).
+        contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         stickySectionHeadersEnabled={false}

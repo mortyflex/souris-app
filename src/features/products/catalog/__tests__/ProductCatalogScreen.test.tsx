@@ -129,6 +129,13 @@ describe('ProductCatalogScreen', () => {
     expect(view.getByLabelText('Aucune photo pour Masque réparateur 5 min')).toBeTruthy();
   });
 
+  it('lets the list scroll above the native tab bar through the system content inset', async () => {
+    const view = await renderCatalog();
+    const lists = view.container.queryAll((node) => node.type === 'RCTScrollView');
+    expect(lists).toHaveLength(1);
+    expect(lists[0].props.contentInsetAdjustmentBehavior).toBe('automatic');
+  });
+
   it('anchors the decorative products watermark, hidden from accessibility and touches', async () => {
     const view = await renderCatalog();
 

@@ -85,6 +85,13 @@ describe('ClientDirectoryScreen', () => {
     expect(create.props.accessibilityLabel).toBe('Ajouter une cliente');
   });
 
+  it('lets the list scroll above the native tab bar through the system content inset', async () => {
+    const view = await renderDirectory();
+    const lists = view.container.queryAll((node) => node.type === 'RCTScrollView');
+    expect(lists).toHaveLength(1);
+    expect(lists[0].props.contentInsetAdjustmentBehavior).toBe('automatic');
+  });
+
   it('anchors the decorative clients watermark, hidden from accessibility and touches', async () => {
     const view = await renderDirectory();
 
