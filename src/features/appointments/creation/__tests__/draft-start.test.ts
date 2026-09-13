@@ -1,8 +1,9 @@
 import { stepStartAt, type StartTimeBounds } from '../draft-start';
 
-// 08:00 → 19:55: valid starts stay strictly before the 20:00 end boundary
-// of the operational Agenda day, with ±5-minute granularity.
-const bounds: StartTimeBounds = { minMinutes: 8 * 60, maxMinutes: 19 * 60 + 55 };
+// 08:00 → 23:55: valid starts begin at the operational Agenda day start and
+// stay on the same local date, with ±5-minute granularity. The 20:00 Agenda
+// boundary is a display default and never limits scheduling.
+const bounds: StartTimeBounds = { minMinutes: 8 * 60, maxMinutes: 24 * 60 - 5 };
 
 describe('stepStartAt', () => {
   it('advances the local time by the requested step', () => {
@@ -40,26 +41,25 @@ describe('stepStartAt', () => {
     );
   });
 
-  it('accepts 19:55 as a valid latest start', () => {
+  it('steps freely through the former 20:00 Agenda boundary', () => {
     const start = new Date(2026, 7, 25, 19, 55);
-    expect(stepStartAt(start, 0, bounds)).toEqual(new Date(2026, 7, 25, 19, 55));
-    expect(stepStartAt(start, -5, bounds)).toEqual(new Date(2026, 7, 25, 19, 50));
-  });
-
-  it('keeps the start strictly before the 20:00 day end', () => {
-    const start = new Date(2026, 7, 25, 19, 55);
-    expect(stepStartAt(start, 5, bounds)).toEqual(new Date(2026, 7, 25, 19, 55));
-    expect(stepStartAt(new Date(2026, 7, 25, 19, 57), 5, bounds)).toEqual(
-      new Date(2026, 7, 25, 19, 55),
+    expect(stepStartAt(start, 5, bounds)).toEqual(new Date(2026, 7, 25, 20, 0));
+    expect(stepStartAt(new Date(2026, 7, 25, 20, 0), 5, bounds)).toEqual(
+      new Date(2026, 7, 25, 20, 5),
     );
   });
 
-  it('clamps a 20:00 input down to 19:55', () => {
-    expect(stepStartAt(new Date(2026, 7, 25, 20, 0), 0, bounds)).toEqual(
-      new Date(2026, 7, 25, 19, 55),
-    );
-    expect(stepStartAt(new Date(2026, 7, 25, 20, 0), -5, bounds)).toEqual(
-      new Date(2026, 7, 25, 19, 55),
+  it('accepts 23:55 as the latest start of the local date', () => {
+    const start = new Date(2026, 7, 25, 23, 55);
+    expect(stepStartAt(start, 0, bounds)).toEqual(new Date(2026, 7, 25, 23, 55));
+    expect(stepStartAt(start, -5, bounds)).toEqual(new Date(2026, 7, 25, 23, 50));
+  });
+
+  it('never rolls into the next local date', () => {
+    const start = new Date(2026, 7, 25, 23, 55);
+    expect(stepStartAt(start, 5, bounds)).toEqual(new Date(2026, 7, 25, 23, 55));
+    expect(stepStartAt(new Date(2026, 7, 25, 23, 57), 5, bounds)).toEqual(
+      new Date(2026, 7, 25, 23, 55),
     );
   });
 });

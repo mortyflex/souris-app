@@ -6,6 +6,7 @@
 // and their phases are never mutated, and catalog Services are never touched.
 
 import type { Appointment } from "./types";
+import { isValidPhaseDurationMinutes } from "./phase-duration";
 import { getOrderedItems } from "./timeline";
 
 /**
@@ -83,4 +84,42 @@ export function updateAppointmentPhaseDuration(
   });
 
   return { ...appointment, items };
+}
+
+/** One phase duration change inside an AppointmentItem snapshot. */
+export interface AppointmentPhaseDurationUpdate {
+  readonly phaseId: string;
+  readonly durationMinutes: number;
+}
+
+/**
+ * Applies several phase duration changes to ONE AppointmentItem snapshot at
+ * once. Every update targets an existing phase of that item and carries a
+ * valid (integer, >= 0) duration, otherwise nothing is applied. Zero is a
+ * valid persisted duration and never removes the phase.
+ *
+ * Other items, other Appointments and the catalog Service are never touched.
+ */
+export function updateAppointmentItemPhaseDurations(
+  appointment: Appointment,
+  appointmentItemId: string,
+  updates: readonly AppointmentPhaseDurationUpdate[],
+): Appointment {
+  for (const update of updates) {
+    if (!isValidPhaseDurationMinutes(update.durationMinutes)) {
+      throw new RangeError(
+        `updateAppointmentItemPhaseDurations: ${update.durationMinutes} is not a valid duration for phase "${update.phaseId}"`,
+      );
+    }
+  }
+  return updates.reduce(
+    (current, update) =>
+      updateAppointmentPhaseDuration(
+        current,
+        appointmentItemId,
+        update.phaseId,
+        update.durationMinutes,
+      ),
+    appointment,
+  );
 }

@@ -507,9 +507,10 @@ The relation remains `clientId` only — never display names:
 
 ---
 
-# 14. Processing Duration Editing
+# 14. Appointment Phase Timing Editing
 
-Processing duration may be editable after appointment creation when the relevant feature is implemented.
+Every phase duration of an existing Appointment is **snapshot data** and may be edited after creation,
+directly from Appointment Details (expanded Service) or from Appointment Editing.
 
 Example:
 
@@ -531,9 +532,52 @@ Changing a phase duration recalculates all following:
 - item times;
 - appointment end.
 
-The modification affects the appointment snapshot.
+The modification affects the appointment snapshot only.
 
-It must not silently modify the original catalog service.
+## 14.1 Service catalog timing vs Appointment timing
+
+Service catalog timing and Appointment timing are NOT the same mutable object:
+
+- a Service defines the DEFAULT timing of FUTURE Appointments;
+- an AppointmentItem carries the SNAPSHOT timing of ONE Appointment.
+
+Editing the timing of an existing Appointment updates only that Appointment's `AppointmentPhase`
+snapshot durations. It never writes the Service, its `ServicePhase` defaults, other Appointments, or
+history. Tomorrow's Balayage still initializes from the catalog (Application 45 / Pose 40) even if
+today's was adjusted to 30 / 5.
+
+**Ownership rule.** `Prestations & tarifs` (the Service catalog editor) is the ONLY place that modifies
+official Service timing. Appointment creation, Appointment editing, and Appointment Details are ALL
+snapshot-only: none of them may write a Service, a ServicePhase, or any catalog default, implicitly or
+through an explicit option.
+
+## 14.2 Step rule and zero
+
+- Timing is adjusted in **5-minute steps** relative to the CURRENT value (`current ± 5`), clamped at
+  **0**. A legacy value that is not a multiple of five is never normalized on its own: 7 → 12 / 2 / 0.
+- **0 minutes is a valid duration.** It is persisted explicitly as zero, the phase is kept, and the
+  timeline places it as a point (start = end). Zero is never read as missing or invalid.
+- Timing changes follow the ONE editing eligibility rule (`canEditAppointment`): `SCHEDULED`,
+  `CONFIRMED`, and compatibility `IN_PROGRESS` are editable; `COMPLETED`, `CANCELLED`, and `NO_SHOW`
+  stay read-only. A paid Appointment is `COMPLETED` and therefore never re-timed; payment, `paidAt`,
+  Sale links, and the Cash Register are never touched by a timing change.
+- The durations of one AppointmentItem are written **atomically**: one transaction re-verifies that the
+  stored Appointment exists and is editable, updates every targeted phase row, then commits; the session
+  state changes only after the commit. No derived duration is stored — `Durée totale`, the end time, and
+  the Agenda geometry are recalculated from the snapshot through the normal timeline functions.
+- Multiple services: items are addressed by their stable `AppointmentItem` id; editing one item never
+  changes the others.
+
+## 14.3 Agenda visual range for late Appointments
+
+The operational Agenda day normally spans 08:00 → 20:00, but 20:00 is a display default, not a clipping
+boundary. The visible end of the selected day is derived as
+`max(default end, latest visible block end + 30 min)` rounded up to the next full hour, so a 19:00 + 3 h
+or a 20:00 → 23:00 Appointment stays fully visible and scrollable. An Appointment that runs past
+midnight keeps extending the same start-day canvas (offsets may exceed 24 h internally; labels stay
+clock time: 23:00, 00:00, 01:00). It remains ONE Appointment on its canonical start date; no next-day
+duplicate is created. Ordinary days keep the compact default range. Occupancy semantics are unchanged:
+only staff-required phases are drawn, using the current snapshot values.
 
 ---
 
@@ -553,7 +597,7 @@ Appointment Creation supports appointment-specific adjustments that apply only t
 
 ```text
 price
-phase durations (processing phases)
+phase durations (active and processing), in 5-minute steps, 0 allowed
 ```
 
 The created snapshot may therefore intentionally differ from the catalog defaults for these values.
@@ -561,20 +605,24 @@ The catalog Service itself is never modified, and future appointments keep the c
 Adjusting a phase duration recalculates the complete timeline (phase times, item times, elapsed duration,
 processing duration, and appointment end) through the normal domain timeline functions.
 
+Example — catalog Balayage: Application 45 / Pose 40. Appointment A is created with Pose → 0: A stores
+Pose 0, the catalog keeps Pose 40, and Appointment B created tomorrow initializes at Pose 40, not 0.
+Editing A later to Pose 10 changes A only; the catalog and every new Appointment still use 40.
+
 This is the same snapshot principle as §12: the appointment preserves booking-time reality, which may be a
 deliberate business decision rather than a copy of catalog defaults.
 
 # 15.2 Final Creation Draft as Snapshot Source
 
-The FINAL Appointment Creation UX pass formalizes the draft boundary:
+The creation draft boundary:
 
+- selecting a Service copies the CURRENT catalog timing and price into the draft;
 - the final AppointmentItem snapshot is built directly from the creation draft (name, type, price, and
   ordered phases with their final durations) — never re-read from the current catalog at save time;
-- on successful creation the SAME draft values are committed back to the canonical Service catalog
-  (stable Service and phase ids), so future Appointments use them as defaults;
-- if creation is abandoned, cancelled, or a modified Service is deselected, the catalog remains unchanged;
-- existing AppointmentItem snapshots are never retroactively modified by either operation;
-- existing Appointment EDITING keeps its snapshot-specific semantics and never writes the catalog.
+- creation persists the Appointment snapshot rows ONLY (appointment + items + phases, one transaction);
+  no Service row is written, on success or otherwise;
+- existing AppointmentItem snapshots are never retroactively modified;
+- existing Appointment EDITING and Appointment Details keep the same snapshot-only semantics.
 
 The ordering of the selected stack is the Appointment item order; reordering the draft therefore
 recalculates the complete timeline through the normal domain functions.
@@ -1038,6 +1086,9 @@ timeline calculation
 multiple items
 item reordering
 phase duration change
+5-minute timing step, zero duration, legacy non-multiple values
+atomic per-item timing persistence and catalog isolation
+dynamic Agenda day range (late and cross-midnight appointments)
 appointment end calculation
 active duration
 processing duration
@@ -1125,6 +1176,8 @@ The following must remain true unless an explicit product decision changes them:
 16. A payment exists only through an explicit checkout; automatic completion never records one.
 
 17. The Cash Register derives only from recorded payments (Appointment checkouts and standalone Sale payments), never counting an Appointment-linked Sale twice; an Appointment with a payment or a linked Sale is never deleted.
+
+18. Appointment phase timing is snapshot data: creating, editing, or re-timing an Appointment never changes the Service catalog (only Prestations & tarifs does), and a zero-minute phase is valid.
 ```
 
 These invariants are the foundation of Souris scheduling.

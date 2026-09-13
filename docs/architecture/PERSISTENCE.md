@@ -351,10 +351,9 @@ Client archive/restore        single statement on archived_at
 Client permanent deletion     reference counts + DELETE in one transaction   (§7a)
 Service create/edit           service row + full phase-list replacement
 Service activation/deletion   single statement (phases cascade)
-Appointment create            appointment + items + phases + Service catalog default updates
-                              (adjusted prices/durations become catalog defaults ONLY when
-                              creation commits; Appointment Editing never touches the catalog)
-Appointment edit              metadata + full item/phase replacement
+Appointment create            appointment + items + phases (snapshot only; no Service row is written)
+Appointment edit              metadata + full item/phase replacement (snapshot only)
+Appointment timing            editability re-check + phase duration rows of one item (snapshot only)
 Appointment delete            single statement (items/phases cascade)
 Appointment reconciliation    every previous-day finalization in one transaction
 Product create/edit           single row, after the durable image copy

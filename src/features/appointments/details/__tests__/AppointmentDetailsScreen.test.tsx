@@ -23,6 +23,12 @@ import {
   SaleSessionProvider,
   useSaleSession,
 } from "@/features/sales/session/SaleSessionProvider";
+import {
+  ServiceCatalogProvider,
+  useServiceCatalog,
+} from "@/features/services/session/ServiceCatalogProvider";
+import { loadAppointments } from "@/persistence/stores/appointments";
+import { openTestDatabase } from "@/persistence/testing/node-sqlite-database";
 import { haptics } from "@/shared/lib/haptics";
 import { formatEuroCents, formatEuros } from "@/shared/lib/money";
 
@@ -191,23 +197,117 @@ function SaleProbe() {
   );
 }
 
-function renderDetails(appointmentId = "agenda-sofia", probes?: React.ReactNode) {
-  return render(
-    <TestPersistenceProvider>
+/** Fingerprint of every catalog phase duration: must never move from Details. */
+function CatalogProbe() {
+  const { services } = useServiceCatalog();
+  return (
+    <Text testID="catalog-durations">
+      {services
+        .map((service) => `${service.id}=${service.phases.map((phase) => phase.durationMinutes).join("/")}`)
+        .join("|")}
+    </Text>
+  );
+}
+
+/** A future Appointment with two services so item isolation can be observed. */
+function MultiServiceProbe() {
+  const { addAppointment, getAppointmentById } = useAppointmentSession();
+  const entry = getAppointmentById("multi-service-appointment");
+  return (
+    <>
+      <Text testID="multi-service-items">
+        {(entry?.appointment.items ?? [])
+          .map(
+            (item) =>
+              `${item.id}:${item.phases.map((phase) => `${phase.id}=${phase.durationMinutes}`).join(",")}`,
+          )
+          .join("|")}
+      </Text>
+      <Pressable
+        testID="add-multi-service-appointment"
+        onPress={() =>
+          addAppointment({
+            appointment: {
+              id: "multi-service-appointment",
+              businessId: "business-test",
+              clientId: "client-agenda-sofia",
+              staffMemberId: "staff-amelie",
+              startAt: new Date(2026, 7, 31, 10, 0),
+              status: "SCHEDULED",
+              items: [
+                {
+                  id: "ms-coupe",
+                  serviceId: "service-cut",
+                  order: 0,
+                  serviceName: "Coupe",
+                  serviceType: "SERVICE",
+                  price: 40,
+                  phases: [{ id: "ms-coupe-phase", name: "Coupe", durationMinutes: 30, requiresStaff: true }],
+                },
+                {
+                  id: "ms-balayage",
+                  serviceId: "service-highlights",
+                  order: 1,
+                  serviceName: "Balayage",
+                  serviceType: "TECHNIQUE",
+                  price: 95,
+                  phases: [
+                    { id: "ms-application", name: "Application", durationMinutes: 45, requiresStaff: true },
+                    { id: "ms-pose", name: "Temps de pose", durationMinutes: 40, requiresStaff: false },
+                  ],
+                },
+              ],
+            },
+          })
+        }
+      />
+    </>
+  );
+}
+
+function detailsTree(
+  appointmentId: string,
+  probes?: React.ReactNode,
+  database?: ReturnType<typeof openTestDatabase>,
+) {
+  return (
+    <TestPersistenceProvider database={database}>
       <ClientSessionProvider>
         <ProductCatalogProvider>
           <SaleSessionProvider>
-            <AppointmentSessionProvider>
-              <AppointmentDetailsScreen appointmentId={appointmentId} />
-              <AppointmentPresence appointmentId={appointmentId} />
-              <SaleProbe />
-              {probes}
-            </AppointmentSessionProvider>
+            <ServiceCatalogProvider>
+              <AppointmentSessionProvider>
+                <AppointmentDetailsScreen appointmentId={appointmentId} />
+                <AppointmentPresence appointmentId={appointmentId} />
+                <SaleProbe />
+                <CatalogProbe />
+                {probes}
+              </AppointmentSessionProvider>
+            </ServiceCatalogProvider>
           </SaleSessionProvider>
         </ProductCatalogProvider>
       </ClientSessionProvider>
-    </TestPersistenceProvider>,
+    </TestPersistenceProvider>
   );
+}
+
+function renderDetails(
+  appointmentId = "agenda-sofia",
+  probes?: React.ReactNode,
+  database?: ReturnType<typeof openTestDatabase>,
+) {
+  return render(detailsTree(appointmentId, probes, database));
+}
+
+async function stepPose(view: Awaited<ReturnType<typeof render>>, phaseId: string, times: number) {
+  const action = times < 0 ? "decrement" : "increment";
+  for (let index = 0; index < Math.abs(times); index += 1) {
+    await press(view, `phase-duration-${phaseId}-${action}`);
+  }
+}
+
+function phaseValue(view: Awaited<ReturnType<typeof render>>, phaseId: string): string {
+  return view.getByTestId(`phase-duration-${phaseId}-value`).props.children as string;
 }
 
 async function press(view: Awaited<ReturnType<typeof render>>, testID: string) {
@@ -675,5 +775,141 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByTestId("checkout-appointment")).toBeTruthy();
     expect(view.getByTestId("appointment-normal-actions")).toBeTruthy();
     expect(view.getByTestId("open-permanent-deletion")).toBeTruthy();
+  });
+
+  describe("appointment-specific timing", () => {
+    it("expands a service into the shared steppers, saves atomically, and updates every total", async () => {
+      const db = openTestDatabase();
+      const view = await renderDetails("agenda-sofia", undefined, db);
+      const catalogBefore = view.getByTestId("catalog-durations").props.children;
+
+      expect(view.getByText("14:00 – 15:55")).toBeTruthy();
+      expect(view.getByTestId("service-meta-item-sofia").props.children).toBe("1 h 55 min · 3 phases");
+      expect(view.queryByTestId("service-timing-item-sofia")).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText(/Balayage, commence à/));
+      });
+
+      // Phase labels, minus / value / plus, and no keyboard input.
+      const timing = within(view.getByTestId("service-timing-item-sofia"));
+      expect(timing.getByText("Application")).toBeTruthy();
+      expect(timing.getByText("Temps de pose")).toBeTruthy();
+      expect(timing.getByText("Patine & finition")).toBeTruthy();
+      expect(timing.getByLabelText("Réduire le temps de pose de 5 minutes")).toBeTruthy();
+      expect(timing.getByLabelText("Augmenter le temps de pose de 5 minutes")).toBeTruthy();
+      expect(phaseValue(view, "sofia-processing")).toBe("55 min");
+      expect(view.container.queryAll((node) => node.type === "TextInput")).toHaveLength(0);
+      expect(view.getByTestId("save-service-timing-item-sofia").props.accessibilityState.disabled).toBe(true);
+
+      await stepPose(view, "sofia-processing", -1);
+
+      // The draft moves; the committed totals do not until Enregistrer.
+      expect(phaseValue(view, "sofia-processing")).toBe("50 min");
+      expect(view.getByTestId("service-draft-total-item-sofia").props.children).toBe("Durée 1 h 50 min");
+      expect(view.getByText("1 h 55 min")).toBeTruthy();
+      expect(view.getByTestId("save-service-timing-item-sofia").props.accessibilityState.disabled).toBe(false);
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+
+      await press(view, "save-service-timing-item-sofia");
+
+      expect(view.getByText("1 h 50 min")).toBeTruthy();
+      expect(view.getByText("14:00 – 15:50")).toBeTruthy();
+      expect(view.getByTestId("service-meta-item-sofia").props.children).toBe("1 h 50 min · 3 phases");
+      expect(view.getByTestId("save-service-timing-item-sofia").props.accessibilityState.disabled).toBe(true);
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+      expect(view.getByTestId("appointment-status").props.children).toBe("SCHEDULED");
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
+      expect(view.getByTestId("catalog-durations").props.children).toBe(catalogBefore);
+
+      // SQLite holds the snapshot value.
+      const stored = loadAppointments(db).find((entry) => entry.id === "agenda-sofia");
+      expect(stored?.items[0]?.phases.map((phase) => phase.durationMinutes)).toEqual([30, 50, 30]);
+    });
+
+    it("reaches zero, never goes negative, and persists zero without dropping the phase", async () => {
+      const db = openTestDatabase();
+      const view = await renderDetails("agenda-sofia", undefined, db);
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText(/Balayage, commence à/));
+      });
+      await stepPose(view, "sofia-processing", -12);
+
+      expect(phaseValue(view, "sofia-processing")).toBe("0 min");
+      expect(
+        view.getByTestId("phase-duration-sofia-processing-decrement").props.accessibilityState.disabled,
+      ).toBe(true);
+      await stepPose(view, "sofia-processing", 1);
+      expect(phaseValue(view, "sofia-processing")).toBe("5 min");
+      await stepPose(view, "sofia-processing", -1);
+      expect(phaseValue(view, "sofia-processing")).toBe("0 min");
+
+      await press(view, "save-service-timing-item-sofia");
+
+      expect(view.getByText("1 h")).toBeTruthy();
+      expect(view.getByText("14:00 – 15:00")).toBeTruthy();
+      const stored = loadAppointments(db).find((entry) => entry.id === "agenda-sofia");
+      expect(stored?.items[0]?.phases).toHaveLength(3);
+      expect(stored?.items[0]?.phases[1]).toEqual({
+        id: "sofia-processing",
+        name: "Temps de pose",
+        durationMinutes: 0,
+        requiresStaff: false,
+      });
+      // The phase stays visible and editable after the save.
+      expect(view.getByText("Temps de pose")).toBeTruthy();
+      expect(view.getByTestId("phase-duration-sofia-processing-increment")).toBeTruthy();
+    });
+
+    it("changes one service without touching the other services of the Appointment", async () => {
+      const view = await renderDetails("agenda-sofia", <MultiServiceProbe />);
+      await press(view, "add-multi-service-appointment");
+      await act(async () => {
+        view.rerender(detailsTree("multi-service-appointment", <MultiServiceProbe />));
+      });
+
+      expect(view.getByText("1 h 55 min")).toBeTruthy();
+      await act(async () => {
+        fireEvent.press(view.getByLabelText(/Balayage, commence à/));
+      });
+      await stepPose(view, "ms-pose", -7);
+      await press(view, "save-service-timing-ms-balayage");
+
+      expect(view.getByTestId("multi-service-items").props.children).toBe(
+        "ms-coupe:ms-coupe-phase=30|ms-balayage:ms-application=45,ms-pose=5",
+      );
+      expect(view.getByText("1 h 20 min")).toBeTruthy();
+      expect(view.getByTestId("service-meta-ms-coupe").props.children).toBe("30 min");
+      expect(view.getByTestId("service-meta-ms-balayage").props.children).toBe("50 min · 2 phases");
+
+      // A simple service is editable too, through one « Durée » row.
+      await act(async () => {
+        fireEvent.press(view.getByLabelText(/Coupe, commence à/));
+      });
+      expect(within(view.getByTestId("service-timing-ms-coupe")).getByText("Durée")).toBeTruthy();
+      expect(view.getByLabelText("Augmenter la durée de Coupe de 5 minutes")).toBeTruthy();
+    });
+
+    it("keeps timing read-only once the Appointment is terminal", async () => {
+      const user = userEvent.setup({
+        advanceTimers: (delay) => jest.advanceTimersByTime(delay),
+      });
+      const view = await renderDetails();
+
+      await user.press(view.getByTestId("open-cancellation"));
+      await user.press(view.getByTestId("cancellation-actor-client"));
+      await user.press(view.getByTestId("confirm-cancellation"));
+      expect(view.getByText("Annulé")).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText(/Balayage, commence à/));
+      });
+
+      expect(view.getByText("Temps de pose")).toBeTruthy();
+      expect(view.queryByTestId("service-timing-item-sofia")).toBeNull();
+      expect(view.queryByTestId("save-service-timing-item-sofia")).toBeNull();
+      expect(view.queryByLabelText(/de 5 minutes$/)).toBeNull();
+    });
   });
 });

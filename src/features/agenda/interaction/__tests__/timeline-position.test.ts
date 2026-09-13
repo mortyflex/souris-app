@@ -31,4 +31,11 @@ describe('startAtFromTimelinePosition', () => {
     expect(result.getDate()).toBe(24);
     expect(result.getHours()).toBe(10);
   });
+
+  it('keeps a tap in the after-midnight extension on the selected day', () => {
+    const extended = { ...options, dayEndHour: 26 };
+
+    expect(startAtFromTimelinePosition(day, 15 * 68, extended)).toEqual(new Date(2026, 7, 24, 23));
+    expect(startAtFromTimelinePosition(day, 17 * 68, extended)).toEqual(new Date(2026, 7, 24, 23, 45));
+  });
 });

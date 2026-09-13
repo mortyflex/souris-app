@@ -3,10 +3,13 @@
 // The parent row, its ordered item snapshots, and each item's ordered phases
 // are written in ONE transaction. Items keep their authoritative `order`;
 // phases are stored by position. `service_id` is historical metadata with
-// no foreign key: deleting a catalog Service never changes an Appointment.
+// no foreign key: deleting a catalog Service never changes an Appointment,
+// and no Appointment write (create, edit, timing) ever touches Service rows.
 
 import {
   canDeleteAppointmentPermanently,
+  isEditableAppointmentStatus,
+  isValidPhaseDurationMinutes,
   type Appointment,
   type AppointmentCancellation,
   type AppointmentCancellationActor,
@@ -14,15 +17,14 @@ import {
   type AppointmentPayment,
   type AppointmentPaymentAmounts,
   type AppointmentPhase,
+  type AppointmentPhaseDurationUpdate,
   type AppointmentReferences,
   type AppointmentStatus,
-  type Service,
   type ServiceType,
 } from '@/domain/appointments';
 
 import { runInTransaction, type SourisDatabase } from '../database';
 import { countAppointmentSales } from './sales';
-import { updateService } from './services';
 import {
   assertAmountCents,
   fromSqlBoolean,
@@ -215,25 +217,6 @@ export function insertAppointment(db: SourisDatabase, appointment: Appointment):
 }
 
 /**
- * NEW Appointment Creation: the Appointment (items + phases) and the Service
- * catalog default updates it justified (adjusted prices/durations) commit in
- * ONE transaction. Any failure leaves neither the Appointment nor any
- * Service row changed. Editing never uses this: edits are snapshot-only.
- */
-export function insertAppointmentWithServiceDefaults(
-  db: SourisDatabase,
-  appointment: Appointment,
-  serviceDefaultUpdates: readonly Service[],
-): void {
-  runInTransaction(db, () => {
-    insertAppointment(db, appointment);
-    for (const service of serviceDefaultUpdates) {
-      updateService(db, service);
-    }
-  });
-}
-
-/**
  * Replaces metadata, lifecycle outcome, and the complete item/phase snapshot
  * list of the Appointment with the same id, atomically.
  */
@@ -248,6 +231,57 @@ export function updateAppointment(db: SourisDatabase, appointment: Appointment):
     }
     db.runSync('DELETE FROM appointment_items WHERE appointment_id = ?', [appointment.id]);
     writeItems(db, appointment);
+  });
+}
+
+export class AppointmentTimingConflictError extends Error {
+  constructor(readonly appointmentId: string) {
+    super(`Appointment "${appointmentId}" no longer allows timing changes`);
+    this.name = 'AppointmentTimingConflictError';
+  }
+}
+
+/**
+ * Appointment-specific timing edit in ONE transaction: the stored Appointment
+ * must still exist and still be editable (no terminal outcome), then every
+ * targeted phase row of the item receives its new duration. A phase that
+ * does not belong to the item, or an invalid duration, rolls the whole
+ * write back. Zero is written as zero; no row is deleted. The catalog
+ * `service_phases` table is never involved. No derived duration is stored
+ * in the schema, so nothing else needs updating.
+ */
+export function updateAppointmentItemPhaseDurations(
+  db: SourisDatabase,
+  appointmentId: string,
+  appointmentItemId: string,
+  updates: readonly AppointmentPhaseDurationUpdate[],
+): void {
+  for (const update of updates) {
+    if (!isValidPhaseDurationMinutes(update.durationMinutes)) {
+      throw new RangeError(
+        `updateAppointmentItemPhaseDurations: invalid duration ${update.durationMinutes} for phase "${update.phaseId}"`,
+      );
+    }
+  }
+  runInTransaction(db, () => {
+    const row = db.getFirstSync<{ status: AppointmentStatus }>(
+      'SELECT status FROM appointments WHERE id = ?',
+      [appointmentId],
+    );
+    if (!row || !isEditableAppointmentStatus(row.status)) {
+      throw new AppointmentTimingConflictError(appointmentId);
+    }
+    for (const update of updates) {
+      const result = db.runSync(
+        'UPDATE appointment_phases SET duration_minutes = ? WHERE appointment_id = ? AND appointment_item_id = ? AND id = ?',
+        [update.durationMinutes, appointmentId, appointmentItemId, update.phaseId],
+      );
+      if (result.changes !== 1) {
+        throw new Error(
+          `updateAppointmentItemPhaseDurations: phase "${update.phaseId}" not found in item "${appointmentItemId}" of Appointment "${appointmentId}"`,
+        );
+      }
+    }
   });
 }
 

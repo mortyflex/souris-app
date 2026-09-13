@@ -1,6 +1,8 @@
 import {
   canCancelAppointment,
   canCompleteAppointment,
+  canEditAppointment,
+  isEditableAppointmentStatus,
   canMarkAppointmentNoShow,
   cancelAppointment,
   completeAppointment,
@@ -252,5 +254,21 @@ describe('automatic previous-local-day finalization', () => {
     ];
 
     expect(finalizePastBusinessDays(values, nowSameDayEvening)).toBe(values);
+  });
+});
+
+describe('editing eligibility', () => {
+  it('allows editing until a terminal outcome, including a future appointment', () => {
+    expect(canEditAppointment(appointment('a', future, 'SCHEDULED'))).toBe(true);
+    expect(canEditAppointment(appointment('a', sameDayPast, 'CONFIRMED'))).toBe(true);
+    expect(canEditAppointment(appointment('a', sameDayPast, 'IN_PROGRESS'))).toBe(true);
+  });
+
+  it('keeps COMPLETED, CANCELLED, and NO_SHOW read-only', () => {
+    expect(canEditAppointment(appointment('a', sameDayPast, 'COMPLETED'))).toBe(false);
+    expect(canEditAppointment(appointment('a', sameDayPast, 'CANCELLED'))).toBe(false);
+    expect(canEditAppointment(appointment('a', sameDayPast, 'NO_SHOW'))).toBe(false);
+    expect(isEditableAppointmentStatus('COMPLETED')).toBe(false);
+    expect(isEditableAppointmentStatus('SCHEDULED')).toBe(true);
   });
 });

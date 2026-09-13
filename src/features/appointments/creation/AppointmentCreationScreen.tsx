@@ -50,7 +50,6 @@ import { stepStartAt, type StartTimeBounds } from './draft-start';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 
 import { createAppointmentId, createAppointmentItemId } from './runtime-ids';
-import { collectCatalogServiceUpdates } from './commit-drafts';
 import { getAppointmentCreationSummary } from './presentation';
 import { formatSelectionCountLabel } from '../editor/presentation';
 import { canNavigateTo, stepLabels, type CreationStep } from './steps';
@@ -63,13 +62,14 @@ interface AppointmentCreationScreenProps {
 // until staff members become a real concept.
 const staffMemberId = 'staff-amelie';
 /**
- * Valid manual start times stay inside the operational Agenda day and
- * strictly before its end boundary. With ±5-minute steps the latest
- * visible start slot is 19:55.
+ * Valid manual start times begin at the operational Agenda day start and
+ * stay on the selected local date: with ±5-minute steps the latest start is
+ * 23:55. The normal 20:00 Agenda boundary is a display default, not a
+ * scheduling limit — a late Appointment simply extends the visible day.
  */
 const startTimeBounds: StartTimeBounds = {
   minMinutes: agenda.dayStartHour * 60,
-  maxMinutes: agenda.dayEndHour * 60 - 5,
+  maxMinutes: 24 * 60 - 5,
 };
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
@@ -79,7 +79,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const business = useCurrentBusiness();
   const { addAppointment } = useAppointmentSession();
   const { activeClients } = useClientSession();
-  const { getServiceById, activeServices } = useServiceCatalog();
+  const { activeServices } = useServiceCatalog();
   const [step, setStep] = useState<CreationStep>(0);
   const [clientQuery, setClientQuery] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<string>();
@@ -186,13 +186,10 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       startAt: draftStartAt,
     });
 
-    // Adjusted defaults become future catalog values ONLY on success: the
-    // Appointment and the catalog updates commit in ONE transaction.
+    // Snapshot only: the Appointment (items + phases) is the whole write.
+    // Official Service timing is edited from Prestations & tarifs alone.
     try {
-      addAppointment(
-        { appointment },
-        collectCatalogServiceUpdates(selectedDrafts, getServiceById),
-      );
+      addAppointment({ appointment });
     } catch {
       alertPersistenceFailure();
       return;

@@ -172,18 +172,13 @@ Editing a catalog Service updates it immutably:
 
 Catalog edits never cascade into `AppointmentItem` snapshots (see `docs/domain/APPOINTMENTS.md §12`).
 
-### 7.1 Defaults Adjusted During NEW Appointment Creation
+### 7.1 Official Timing Is Edited Here Only
 
-Service defaults may also be adjusted during NEW Appointment Creation (price and phase durations, from the
-Résumé step's expanded cards). These adjustments:
-
-- live in the creation draft — nothing is written to the catalog on keystrokes;
-- are committed to `ServiceCatalogProvider` only when Appointment creation succeeds, using the same stable
-  Service id and phase ids/order (`updateService`, never a new record);
-- are dropped entirely when creation is abandoned, cancelled, or the modified Service is deselected;
-- never retroactively affect existing AppointmentItem snapshots.
-
-Existing Appointment EDITING remains snapshot-specific and never writes the catalog.
+`Prestations & tarifs` is the ONLY place that modifies official Service timing and price defaults.
+Appointment creation, Appointment editing, and Appointment Details adjust the Appointment snapshot only
+(5-minute steps, 0 allowed) and never write `Service`, `ServicePhase`, or `ServiceCatalogProvider`.
+Catalog validation (positive phase durations) applies to the catalog alone: an Appointment phase may be
+0 minutes independently of it.
 
 ---
 

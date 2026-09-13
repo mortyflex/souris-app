@@ -4,8 +4,8 @@
 // single concern and a single explicit edit action:
 //   1. Cliente          → Changer la cliente
 //   2. Rendez-vous      → Changer l'horaire (inline ±5 minute control)
-//   3. Prestations      → stacked sortable accordion editor (quick price and
-//                          phase-duration adjustments)
+//   3. Prestations      → stacked sortable accordion editor (snapshot-only
+//                          price and phase-duration adjustments)
 //   4. Total            → read-only final summary, CTA lives in the footer
 //
 // Every value comes from the draft snapshot (adjusted prices and durations
@@ -37,7 +37,6 @@ import {
 } from '@/shared/ui/theme';
 
 import { SortableDraftList, type SortableDraftEntry } from '../../editor/components/SortableDraftList';
-import { AppointmentServiceEditorCard } from '../../editor/components/AppointmentServiceEditorCard';
 import type { AppointmentCreationSummary } from '../presentation';
 import {
   formatCreationDate,
@@ -173,7 +172,6 @@ export function SummaryStep({
           onToggleExpanded={onToggleExpanded}
           onUpdatePhaseDuration={onUpdatePhaseDuration}
           onUpdatePrice={onUpdatePrice}
-          renderCard={(props) => <AppointmentServiceEditorCard {...props} showCatalogHint />}
         />
       </View>
 

@@ -1,8 +1,8 @@
 import type {
   Appointment,
   AppointmentPaymentAmounts,
+  AppointmentPhaseDurationUpdate,
   AppointmentReferences,
-  Service,
 } from '@/domain/appointments';
 
 /**
@@ -26,15 +26,23 @@ export interface AppointmentSessionValue {
     appointmentId: string | undefined,
   ) => AppointmentSessionEntry | undefined;
   /**
-   * Persists a NEW Appointment and, in the same transaction, the Service
-   * catalog default updates its creation justified. On failure nothing is
-   * persisted and neither the appointment nor the catalog state changes.
+   * Persists a NEW Appointment (row + item + phase snapshots) in one
+   * transaction. Snapshot only: the Service catalog is never written. On
+   * failure nothing is persisted and state does not change.
    */
-  readonly addAppointment: (
-    entry: AppointmentSessionEntry,
-    serviceDefaultUpdates?: readonly Service[],
-  ) => void;
+  readonly addAppointment: (entry: AppointmentSessionEntry) => void;
   readonly updateAppointment: (entry: AppointmentSessionEntry) => void;
+  /**
+   * Appointment-specific timing edit from Appointment Details: the phase
+   * durations of ONE AppointmentItem snapshot change in ONE transaction and
+   * state reflects them only after the commit. Never writes the Service
+   * catalog. Throws when the Appointment is not editable or the write fails.
+   */
+  readonly updateAppointmentItemTiming: (
+    appointmentId: string,
+    appointmentItemId: string,
+    updates: readonly AppointmentPhaseDurationUpdate[],
+  ) => void;
   /**
    * Explicit checkout (« Encaisser »): ONE transaction writes COMPLETED and
    * the recorded card/cash cents together; state changes only after the

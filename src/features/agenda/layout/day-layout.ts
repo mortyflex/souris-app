@@ -59,7 +59,3 @@ export function calculateDayIntervalLayout(
 
   return intervals.map((interval) => result.get(interval.id) as DayIntervalLayout);
 }
-
-export function minutesFromDayStart(date: Date, startHour: number): number {
-  return (date.getHours() - startHour) * 60 + date.getMinutes() + date.getSeconds() / 60;
-}

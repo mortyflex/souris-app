@@ -11,21 +11,23 @@ import { AppState } from 'react-native';
 
 import {
   canDeleteAppointmentPermanently,
+  canEditAppointment,
   checkoutAppointment as recordCheckout,
+  updateAppointmentItemPhaseDurations as adjustItemPhaseDurations,
   updateAppointmentPayment as correctPayment,
   type Appointment,
   type AppointmentPaymentAmounts,
-  type Service,
+  type AppointmentPhaseDurationUpdate,
 } from '@/domain/appointments';
 import { getLocalDateKey } from '@/features/agenda/calendar/week';
-import { useOptionalServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { runInTransaction, type SourisDatabase } from '@/persistence/database';
 import {
   checkoutAppointment as persistCheckout,
   countAppointmentReferences,
   deleteAppointment as removeAppointment,
-  insertAppointmentWithServiceDefaults,
+  insertAppointment,
   updateAppointment as persistAppointment,
+  updateAppointmentItemPhaseDurations as persistItemPhaseDurations,
   updateAppointmentPayment as persistPaymentCorrection,
 } from '@/persistence/stores/appointments';
 import { usePersistence } from '@/providers/PersistenceProvider';
@@ -87,7 +89,6 @@ function millisecondsUntilNextLocalDay(now: Date): number {
  */
 export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   const { database, snapshot } = usePersistence();
-  const serviceCatalog = useOptionalServiceCatalog();
   const [initialState] = useState(() =>
     createInitialSessionState(database, snapshot.appointments),
   );
@@ -137,18 +138,12 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     return appointments.find(({ appointment }) => appointment.id === appointmentId);
   };
 
-  const addAppointment = (
-    entry: AppointmentSessionEntry,
-    serviceDefaultUpdates: readonly Service[] = [],
-  ) => {
-    if (serviceDefaultUpdates.length > 0 && !serviceCatalog) {
-      throw new Error('addAppointment: Service default updates require a ServiceCatalogProvider');
-    }
+  const addAppointment = (entry: AppointmentSessionEntry) => {
     const reconciledEntry = reconcileAppointmentEntriesForLocalDay([entry], new Date())[0] ?? entry;
-    // ONE transaction: appointment + items + phases + catalog defaults.
-    insertAppointmentWithServiceDefaults(database, reconciledEntry.appointment, serviceDefaultUpdates);
+    // ONE transaction: appointment + items + phases. Snapshot only — the
+    // Service catalog is never written from Appointment workflows.
+    insertAppointment(database, reconciledEntry.appointment);
     commit([...committed.current, reconciledEntry]);
-    serviceCatalog?.applyCommittedServiceUpdates(serviceDefaultUpdates);
   };
 
   const updateAppointment = (entry: AppointmentSessionEntry) => {
@@ -177,6 +172,25 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     );
     if (!entry) throw new Error(`${operation}: Appointment "${appointmentId}" not found`);
     return entry.appointment;
+  };
+
+  // Timing edit: the domain rebuilds the snapshot (zero stays zero, other
+  // items untouched), ONE transaction writes the phase rows after
+  // re-verifying editability, and state changes only after the commit.
+  const updateAppointmentItemTiming = (
+    appointmentId: string,
+    appointmentItemId: string,
+    updates: readonly AppointmentPhaseDurationUpdate[],
+  ) => {
+    const appointment = requireAppointment(appointmentId, 'updateAppointmentItemTiming');
+    if (!canEditAppointment(appointment)) {
+      throw new Error(
+        `updateAppointmentItemTiming: Appointment "${appointmentId}" is no longer editable`,
+      );
+    }
+    const next = adjustItemPhaseDurations(appointment, appointmentItemId, updates);
+    persistItemPhaseDurations(database, appointmentId, appointmentItemId, updates);
+    replaceEntry(next);
   };
 
   // Checkout: the domain decides eligibility and builds the next record; ONE
@@ -224,6 +238,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
         getAppointmentById,
         addAppointment,
         updateAppointment,
+        updateAppointmentItemTiming,
         checkoutAppointment,
         updateAppointmentPayment,
         getAppointmentDeletionEligibility,
