@@ -112,10 +112,17 @@ or replaced by generic icons:
 | mark + wordmark (`BrandComposition`) | PRIMARY product-facing composition | iOS splash (derived PNG), Plus, future onboarding / auth |
 | `assets/brand/logo-lockup.png` | LOCKUP — alternate mouse + name + historical salon-specific baseline | retained asset only; NOT the default cross-profession app identity |
 
-- Derived runtime icons (`assets/images/icon.png`, `android-icon-foreground.png`,
-  `android-icon-monochrome.png`, `favicon.png`) are flattened/padded renders of `logo-mark.png` on
-  the approved `lav200` background; they are outputs, not sources. Regenerate them from the mark,
-  never edit them by hand.
+- iOS app icon: `assets/brand/Souris.icon` (Apple Icon Composer document, `ios.icon` in
+  `app.json`). Layered, never flattened: lavender `lav200` document fill, the canonical navy mouse,
+  the pink nose — three elements only, no medallion, disc, glow or plate behind the mouse; Liquid Glass
+  (specular, refraction, shadow, depth) is rendered
+  by the system, nothing is baked into the layers. No wordmark. Dark: lavender strokes on the
+  system's dark background treatment; mono/tinted: system rendering. Layer sources and Icon Composer settings:
+  `assets/brand/icon-source/README.md`. The glass treatment never replaces the flat mark in-app.
+- Derived runtime icons (`assets/images/icon.png` — fallback/metadata PNG, no longer the iOS icon —,
+  `android-icon-foreground.png`, `android-icon-monochrome.png`, `favicon.png`) are flattened/padded
+  renders of `logo-mark.png` on the approved `lav200` background; they are outputs, not sources.
+  Regenerate them from the mark, never edit them by hand. Android keeps its flat adaptive icon.
 - Splash: `app.json` → `expo-splash-screen` renders `assets/images/splash-ios.png` (iOS,
   `imageWidth` 260 — a derived transparent PNG stacking `logo-mark.png` above `logo-wordmark.png`,
   required because the native splash accepts a single image) and `logo-mark.png` (Android,

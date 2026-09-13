@@ -295,6 +295,16 @@ Règles :
 - les PNG sont posés sur fond clair (blanc `--bg` ou lavande) ; jamais sur navy ou violet plein, où
   les tracés navy disparaissent. Le splash utilise mark + wordmark sur blanc ; l'icône pose le mark sur
   `--lav-200`. Détails d'implémentation : `DESIGN_OVERRIDES.md` §15.
+- **Icône d'application iOS — Liquid Glass** : `assets/brand/Souris.icon` (document Icon Composer,
+  `ios.icon`). Le mark canonique y est posé en calques, jamais aplati : fond lavande `--lav-200`
+  (fond du document), souris navy, nez rose — trois éléments, rien d'autre. Aucun médaillon, disque,
+  anneau, halo, lueur ni plaque derrière la souris. Le matériau (spéculaire, réfraction, ombre, relief)
+  est rendu dynamiquement par iOS ; aucun effet n'est cuit dans les calques et aucun coin arrondi n'est
+  dessiné. La souris doit paraître légèrement soulevée, jamais plastique ni 3D lourde. Pas de wordmark
+  dans l'icône. Apparence sombre : tracés lavande, nez rose, fond assombri par le système ; mono / teinté : rendu
+  système à partir de la silhouette. Le traitement verre est réservé à l'icône système : dans l'app,
+  `BrandMark` reste plat ; Android garde son icône adaptative plate ; le splash est inchangé. Calques
+  sources : `assets/brand/icon-source/`.
 - **Ne pas multiplier les souris illustrées.**
 
 ---
