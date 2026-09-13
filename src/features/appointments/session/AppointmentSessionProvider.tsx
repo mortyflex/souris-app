@@ -13,6 +13,8 @@ import {
   canDeleteAppointmentPermanently,
   canEditAppointment,
   checkoutAppointment as recordCheckout,
+  removeAppointmentItem as dropItem,
+  reorderAppointmentItemsByIds as arrangeItems,
   updateAppointmentItemPhaseDurations as adjustItemPhaseDurations,
   updateAppointmentPayment as correctPayment,
   type Appointment,
@@ -26,6 +28,8 @@ import {
   countAppointmentReferences,
   deleteAppointment as removeAppointment,
   insertAppointment,
+  removeAppointmentItem as persistItemRemoval,
+  reorderAppointmentItems as persistItemOrder,
   updateAppointment as persistAppointment,
   updateAppointmentItemPhaseDurations as persistItemPhaseDurations,
   updateAppointmentPayment as persistPaymentCorrection,
@@ -193,6 +197,30 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     replaceEntry(next);
   };
 
+  // Direct composition edits from Appointment Details (no draft, no Save):
+  // the domain builds the next snapshot by STABLE item id, ONE transaction
+  // writes it after re-verifying editability, and state changes only after
+  // the commit. Linked Sales, payment and the catalog are never involved.
+  const reorderAppointmentItems = (appointmentId: string, orderedItemIds: readonly string[]) => {
+    const appointment = requireAppointment(appointmentId, 'reorderAppointmentItems');
+    if (!canEditAppointment(appointment)) {
+      throw new Error(`reorderAppointmentItems: Appointment "${appointmentId}" is no longer editable`);
+    }
+    const next = arrangeItems(appointment, orderedItemIds);
+    persistItemOrder(database, appointmentId, orderedItemIds);
+    replaceEntry(next);
+  };
+
+  const removeAppointmentItem = (appointmentId: string, appointmentItemId: string) => {
+    const appointment = requireAppointment(appointmentId, 'removeAppointmentItem');
+    if (!canEditAppointment(appointment)) {
+      throw new Error(`removeAppointmentItem: Appointment "${appointmentId}" is no longer editable`);
+    }
+    const next = dropItem(appointment, appointmentItemId);
+    persistItemRemoval(database, appointmentId, appointmentItemId);
+    replaceEntry(next);
+  };
+
   // Checkout: the domain decides eligibility and builds the next record; ONE
   // transaction then writes status + payment (re-verifying the stored row);
   // state reflects the record only after the commit.
@@ -239,6 +267,8 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
         addAppointment,
         updateAppointment,
         updateAppointmentItemTiming,
+        reorderAppointmentItems,
+        removeAppointmentItem,
         checkoutAppointment,
         updateAppointmentPayment,
         getAppointmentDeletionEligibility,

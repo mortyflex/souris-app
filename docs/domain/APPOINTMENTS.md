@@ -927,6 +927,29 @@ Rules:
 - **correction**: a completed Appointment with a payment may have its card/cash split edited. The status and
   the original `paidAt` are preserved; no second record is created.
 
+**Expected total.** ONE canonical derivation (`getAppointmentExpectedTotal`, `src/domain/appointments`)
+feeds both the Appointment Details ticket (`Total à encaisser`) and the checkout sheet (`Total attendu`), so the
+two can never disagree:
+
+```text
+servicesCents      = Σ AppointmentItem snapshot prices
+productsCents      = Σ SaleItem snapshot lines of every Sale where sale.appointmentId === appointment.id
+expectedTotalCents = servicesCents + productsCents
+```
+
+Integer cents, snapshots only: the current Service catalog and the current Product catalog are never consulted,
+so later catalog price changes leave historical tickets untouched. A Sale of the same Client without the
+Appointment id, a standalone Sale, or a Sale of another Appointment contributes nothing. Without any linked
+Sale the expected total is simply the services total — it is always shown, never hidden. It recomputes
+immediately when a Revente is added or a sold Product row is deleted (`docs/domain/SALES.md` §10).
+
+**Expected vs. received.** `appointment.payment` is the amount actually received; the expected total is a
+helper. They may legitimately differ — a discount, a tip, or a sold Product deleted after checkout. Deleting a
+Product row never rewrites the payment: after `services 80 € + products 20 €` were checked out as `100 €`, removing
+the 20 € Product gives `Total attendu 80 €` while `Encaissement 100 €` stays recorded, and Details shows the restrained
+`Écart : +20,00 €` (received minus expected). `Modifier l’encaissement` remains the only way to change the recorded
+amount, and the Cash Register follows that payment alone.
+
 The **Cash Register** (`src/domain/cash-register`) derives ONLY from money explicitly recorded through
 Souris: every `appointment.payment`, plus `sale.payment` of STANDALONE Sales (no `appointmentId`,
 `docs/domain/SALES.md` §4b). A Sale sold during an Appointment is never counted separately — the Appointment

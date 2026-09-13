@@ -8,5 +8,5 @@ export {
   normalizeBarcode,
   normalizeOptionalText,
 } from "./helpers";
-export type { StockDecrement } from "./stock";
-export { applyStockDecrements } from "./stock";
+export type { StockDecrement, StockRestoration } from "./stock";
+export { applyStockDecrements, applyStockRestorations } from "./stock";

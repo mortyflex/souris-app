@@ -2,11 +2,13 @@ import { createContext, useContext, useRef, useState, type PropsWithChildren } f
 
 import {
   applyStockDecrements,
+  applyStockRestorations,
   isAcceptableProductName,
   isValidProductPrice,
   isValidStockQuantity,
   type Product,
   type StockDecrement,
+  type StockRestoration,
 } from '@/domain/products';
 import {
   deleteProduct as removeProduct,
@@ -147,6 +149,10 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
     commit(applyStockDecrements(committed.current, decrements));
   };
 
+  const applyCommittedStockRestorations = (restorations: readonly StockRestoration[]) => {
+    commit(applyStockRestorations(committed.current, restorations));
+  };
+
   const deleteProduct = (productId: string) => {
     const existing = committed.current.find((product) => product.id === productId);
     if (!existing) return;
@@ -166,6 +172,7 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
         setProductActive,
         setProductStock,
         applyCommittedStockDecrements,
+        applyCommittedStockRestorations,
         deleteProduct,
       }}
     >

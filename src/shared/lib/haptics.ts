@@ -20,6 +20,10 @@ export const haptics = {
   dragEnd() {
     trigger(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
   },
+  /** A committed destructive-but-reversible action (a draft line removed by swipe). */
+  destructive() {
+    trigger(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+  },
   success() {
     trigger(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
   },

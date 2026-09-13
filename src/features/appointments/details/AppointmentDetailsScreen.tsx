@@ -14,26 +14,29 @@ import {
   canEditAppointment,
   canEditAppointmentPayment,
   canMarkAppointmentNoShow,
+  canRemoveAppointmentItem,
   cancelAppointment,
   completeAppointment,
+  getAppointmentExpectedTotal,
+  getAppointmentProductLines,
+  getOrderedItems,
   markAppointmentNoShow,
   shouldAutoCompleteAppointment,
+  type Appointment,
   type AppointmentPaymentAmounts,
   type AppointmentPhaseDurationUpdate,
+  type AppointmentProductLine,
 } from "@/domain/appointments";
+import type { Sale } from "@/domain/sales";
 import { isClientArchived } from "@/domain/clients";
 import {
   AppointmentCheckoutSheet,
   type AppointmentCheckoutMode,
 } from "@/features/appointments/checkout/AppointmentCheckoutSheet";
-import { getCheckoutExpectation } from "@/features/appointments/checkout/checkout-form";
+import { SortableRowList } from "@/features/appointments/editor/components/SortableRowList";
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
-import {
-  getAppointmentSaleLines,
-  getAppointmentSalesTotal,
-} from "@/features/sales/presentation";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
@@ -41,6 +44,7 @@ import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
+import { SwipeToDeleteRow, useSwipeHintTarget } from "@/shared/ui/SwipeToDeleteRow";
 import {
   foregroundSoft,
   gutter,
@@ -65,6 +69,7 @@ import { AppointmentPrimaryActions } from "./components/AppointmentPrimaryAction
 import { AppointmentProductsSection } from "./components/AppointmentProductsSection";
 import { AppointmentServiceSection } from "./components/AppointmentServiceSection";
 import { AppointmentSummary } from "./components/AppointmentSummary";
+import { AppointmentTicketTotal } from "./components/AppointmentTicketTotal";
 import {
   formatAppointmentDate,
   formatAppointmentTime,
@@ -78,6 +83,25 @@ import {
 
 interface AppointmentDetailsScreenProps {
   readonly appointmentId?: string;
+}
+
+/**
+ * The ONE swipe-hint target of a Details instance, decided when the screen
+ * opens: the first removable Service (editable Appointment with several
+ * items) — the gesture is learned there — otherwise the first sold Product.
+ * Never both, never replayed.
+ */
+function getInitialSwipeHintTarget(
+  appointment: Appointment | undefined,
+  sales: readonly Sale[],
+): string | undefined {
+  if (!appointment) return undefined;
+  const items = getOrderedItems(appointment);
+  if (canEditAppointment(appointment) && canRemoveAppointmentItem(items.length) && items[0]) {
+    return `service:${items[0].id}`;
+  }
+  const firstLine = getAppointmentProductLines(sales, appointment.id)[0];
+  return firstLine ? `product:${firstLine.key}` : undefined;
 }
 
 export function AppointmentDetailsScreen({
@@ -99,13 +123,19 @@ export function AppointmentDetailsScreen({
     deleteAppointment,
     getAppointmentById,
     getAppointmentDeletionEligibility,
+    removeAppointmentItem,
+    reorderAppointmentItems,
     updateAppointment,
     updateAppointmentItemTiming,
     updateAppointmentPayment,
   } = useAppointmentSession();
   const { getClientById } = useClientSession();
-  const { sales } = useSaleSession();
+  const { sales, deleteAppointmentProduct } = useSaleSession();
   const entry = getAppointmentById(appointmentId);
+  // ONE coordinated swipe hint per screen instance (Services first, else Products).
+  const swipeHintTarget = useSwipeHintTarget(
+    getInitialSwipeHintTarget(entry?.appointment, sales),
+  );
 
   useEffect(() => {
     let minuteTimer: ReturnType<typeof setTimeout>;
@@ -156,8 +186,12 @@ export function AppointmentDetailsScreen({
   const canSellToClient = client !== undefined && !isClientArchived(client);
   const services = getAppointmentDetailServices(appointment);
   const summary = getAppointmentDetailSummary(appointment);
-  const productLines = getAppointmentSaleLines(sales, appointment.id);
-  const productsTotal = getAppointmentSalesTotal(sales, appointment.id);
+  // Product rows aggregated across every Revente of this Appointment (domain
+  // derivation over the linked Sale snapshots; the Sales stay separate).
+  const productLines = getAppointmentProductLines(sales, appointment.id);
+  // THE expected total: service snapshots + linked Sale snapshots, in cents.
+  // The same value feeds the ticket row here and the checkout sheet.
+  const expectedTotal = getAppointmentExpectedTotal(appointment, sales);
   const endAt = getAppointmentEnd(appointment);
   const isTerminal = isTerminalAppointmentStatus(appointment.status);
   const isException =
@@ -169,6 +203,8 @@ export function AppointmentDetailsScreen({
   // The ONE editing eligibility rule (domain): timing accordions and the
   // Modifier action open together and close together.
   const canModify = canEditAppointment(appointment);
+  // Same editing rule as « Modifier »: an Appointment always keeps one Service.
+  const canRemoveService = canModify && canRemoveAppointmentItem(services.length);
   const hasNormalActions = canMarkNoShow || canCancel || canModify;
 
   // Every lifecycle write goes through the persisted session; a failed write
@@ -194,6 +230,23 @@ export function AppointmentDetailsScreen({
     );
     if (succeeded) haptics.success();
     return succeeded;
+  };
+
+  // Direct composition edits (no draft, no Save): ONE atomic write each,
+  // this Appointment's snapshot only. A refused write leaves the rows where
+  // the session says they are and reports once.
+  const removeService = (appointmentItemId: string): boolean => {
+    const succeeded = persist(() => removeAppointmentItem(appointment.id, appointmentItemId));
+    if (succeeded) haptics.destructive();
+    return succeeded;
+  };
+
+  const reorderServices = (fromIndex: number, toIndex: number): boolean => {
+    const orderedItemIds = services.map((service) => service.item.id);
+    const [moved] = orderedItemIds.splice(fromIndex, 1);
+    if (moved === undefined) return false;
+    orderedItemIds.splice(toIndex, 0, moved);
+    return persist(() => reorderAppointmentItems(appointment.id, orderedItemIds));
   };
 
   const openSale = () => {
@@ -270,6 +323,15 @@ export function AppointmentDetailsScreen({
     haptics.warning();
     router.back();
   };
+
+  // Swipe-to-delete of one displayed Product row: every matching sold line
+  // across the Reventes of this Appointment goes and the summed quantity
+  // returns to stock in ONE transaction. The Appointment and its recorded
+  // payment are never touched; the ticket total and the checkout expectation
+  // recompute from the session. Returns whether the deletion was committed so
+  // the row can close again on failure.
+  const deleteProductLine = (line: AppointmentProductLine): boolean =>
+    persist(() => deleteAppointmentProduct(appointment.id, line));
 
   return (
     <SheetScreen fit="content" testID="appointment-details-sheet">
@@ -361,20 +423,53 @@ export function AppointmentDetailsScreen({
           style={styles.sectionHeader}
           title="Prestations"
         />
-        {services.map((service) => (
-          <AppointmentServiceSection
-            key={service.item.id}
-            editable={canModify}
-            expanded={expandedItemIds.has(service.item.id)}
-            service={service}
-            onSaveTiming={(updates) => saveServiceTiming(service.item.id, updates)}
-            onToggle={() => toggleItem(service.item.id)}
-          />
-        ))}
+        <SortableRowList
+          entries={services}
+          getKey={(service) => service.item.id}
+          getLabel={(service) => service.item.serviceName}
+          onReorder={reorderServices}
+          renderRow={(service, { dragHandle }) => {
+            const section = (
+              <AppointmentServiceSection
+                dragHandle={dragHandle}
+                editable={canModify}
+                expanded={expandedItemIds.has(service.item.id)}
+                service={service}
+                onSaveTiming={(updates) => saveServiceTiming(service.item.id, updates)}
+                onToggle={() => toggleItem(service.item.id)}
+              />
+            );
+            if (!canRemoveService) return section;
+            return (
+              <SwipeToDeleteRow
+                borderRadius={radii.medium}
+                deleteAccessibilityLabel={`Retirer ${service.item.serviceName} du rendez-vous`}
+                deleteTestID={`remove-appointment-service-${service.item.id}`}
+                hint={swipeHintTarget === `service:${service.item.id}`}
+                onDelete={() => removeService(service.item.id)}
+                surfaceColor={semanticColors.surfaceLavender}
+                testID={`appointment-service-${service.item.id}`}
+              >
+                {section}
+              </SwipeToDeleteRow>
+            );
+          }}
+          sortable={canModify}
+        />
 
         <AppointmentSummary summary={summary} />
 
-        <AppointmentProductsSection lines={productLines} total={productsTotal} />
+        <AppointmentProductsSection
+          hintKey={
+            swipeHintTarget?.startsWith("product:")
+              ? swipeHintTarget.slice("product:".length)
+              : undefined
+          }
+          lines={productLines}
+          onDeleteLine={deleteProductLine}
+        />
+
+        <AppointmentTicketTotal expectedTotal={expectedTotal} />
 
         {appointment.notes && (
           <View style={styles.notes}>
@@ -389,6 +484,7 @@ export function AppointmentDetailsScreen({
 
         {canEditPayment && appointment.payment && (
           <AppointmentPaymentSummary
+            expectedTotalCents={expectedTotal.expectedTotalCents}
             onEdit={() => setCheckoutMode("edit")}
             payment={appointment.payment}
           />
@@ -465,7 +561,7 @@ export function AppointmentDetailsScreen({
       </ScrollView>
 
       <AppointmentCheckoutSheet
-        expectation={getCheckoutExpectation(appointment, sales)}
+        expectation={expectedTotal}
         initialAmounts={checkoutMode === "edit" ? appointment.payment : undefined}
         mode={checkoutMode ?? "checkout"}
         onClose={() => setCheckoutMode(undefined)}

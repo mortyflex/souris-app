@@ -6,6 +6,7 @@
 // and their phases are never mutated, and catalog Services are never touched.
 
 import type { Appointment } from "./types";
+import { canRemoveAppointmentItem } from "./editing";
 import { isValidPhaseDurationMinutes } from "./phase-duration";
 import { getOrderedItems } from "./timeline";
 
@@ -42,6 +43,58 @@ export function reorderAppointmentItems(
 
   const items = ordered.map((item, index) => ({ ...item, order: index }));
 
+  return { ...appointment, items };
+}
+
+/**
+ * Sets the logical order of the items from their STABLE identities: every
+ * existing item id exactly once, in the desired order. Used by Appointment
+ * Details, where a drop persists immediately and array positions are never
+ * business identity. Throws when the set of ids does not match the items.
+ */
+export function reorderAppointmentItemsByIds(
+  appointment: Appointment,
+  orderedItemIds: readonly string[],
+): Appointment {
+  const itemsById = new Map(appointment.items.map((item) => [item.id, item]));
+  const distinct = new Set(orderedItemIds);
+  if (
+    distinct.size !== orderedItemIds.length ||
+    distinct.size !== itemsById.size ||
+    orderedItemIds.some((id) => !itemsById.has(id))
+  ) {
+    throw new Error(
+      `reorderAppointmentItemsByIds: [${orderedItemIds.join(", ")}] does not match the items of Appointment "${appointment.id}"`,
+    );
+  }
+  const items = orderedItemIds.map((id, index) => ({ ...itemsById.get(id)!, order: index }));
+  return { ...appointment, items };
+}
+
+/**
+ * Removes ONE AppointmentItem snapshot (and, with it, its phases) and
+ * normalizes the remaining `order` values. Follows the editing rule: an
+ * Appointment always retains at least one item, so removing the last one
+ * throws. Linked Product Sales, the recorded payment and the catalog
+ * Service are never involved.
+ */
+export function removeAppointmentItem(
+  appointment: Appointment,
+  appointmentItemId: string,
+): Appointment {
+  if (!appointment.items.some((item) => item.id === appointmentItemId)) {
+    throw new Error(
+      `removeAppointmentItem: appointment item "${appointmentItemId}" not found`,
+    );
+  }
+  if (!canRemoveAppointmentItem(appointment.items.length)) {
+    throw new Error(
+      `removeAppointmentItem: Appointment "${appointment.id}" must keep at least one item`,
+    );
+  }
+  const items = getOrderedItems(appointment)
+    .filter((item) => item.id !== appointmentItemId)
+    .map((item, index) => ({ ...item, order: index }));
   return { ...appointment, items };
 }
 

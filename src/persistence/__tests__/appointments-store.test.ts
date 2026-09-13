@@ -2,9 +2,12 @@ import type { Appointment } from '@/domain/appointments';
 
 import { bootstrapPersistence, loadSnapshot } from '../bootstrap';
 import {
+  AppointmentItemConflictError,
   deleteAppointment,
   insertAppointment,
   loadAppointments,
+  removeAppointmentItem,
+  reorderAppointmentItems,
   updateAppointment,
   updateAppointmentItemPhaseDurations,
 } from '../stores/appointments';
@@ -237,6 +240,120 @@ describe('Appointment store', () => {
       ).toThrow(RangeError);
 
       expect(reloadLea(db).items[0]?.phases[1]?.durationMinutes).toBe(serviceColor.phases[1]!.durationMinutes);
+    });
+  });
+
+  describe('direct item edits from Appointment Details', () => {
+    /** Lea: Coloration (item-0, 3 phases) then Coupe (item-1, 1 phase). */
+    const COLOR = 'appointment-lea-item-0';
+    const CUT = 'appointment-lea-item-1';
+
+    function reload(db: ReturnType<typeof openTestDatabase>): Appointment {
+      const reloaded = loadAppointments(db).find((entry) => entry.id === appointmentLea.id);
+      if (!reloaded) throw new Error('appointment-lea missing');
+      return reloaded;
+    }
+
+    function refusal(task: () => void): string | undefined {
+      try {
+        task();
+        return undefined;
+      } catch (error) {
+        return error instanceof AppointmentItemConflictError ? error.reason : 'unexpected';
+      }
+    }
+
+    it('reorders by stable item id, keeps phases and prices, and survives a restart', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+
+      reorderAppointmentItems(db, appointmentLea.id, [CUT, COLOR]);
+
+      const reloaded = reload(db);
+      expect(reloaded.items.map((item) => [item.id, item.order])).toEqual([
+        [CUT, 0],
+        [COLOR, 1],
+      ]);
+      expect(reloaded.items.find((item) => item.id === COLOR)?.phases).toEqual(appointmentLea.items[0]?.phases);
+      expect(reloaded.items.find((item) => item.id === CUT)?.price).toBe(40);
+      expect(loadServices(db).map((service) => service.id)).toEqual([serviceColor.id, serviceCut.id]);
+      expect(countRows(db, 'appointment_phases')).toBe(4);
+    });
+
+    it('refuses an order that does not name every stored item exactly once', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+
+      expect(refusal(() => reorderAppointmentItems(db, appointmentLea.id, [CUT]))).toBe('ORDER_MISMATCH');
+      expect(refusal(() => reorderAppointmentItems(db, appointmentLea.id, [CUT, CUT]))).toBe('ORDER_MISMATCH');
+      expect(refusal(() => reorderAppointmentItems(db, appointmentLea.id, [CUT, COLOR, 'ghost']))).toBe(
+        'ORDER_MISMATCH',
+      );
+      expect(refusal(() => reorderAppointmentItems(db, 'unknown', [CUT, COLOR]))).toBe('APPOINTMENT_NOT_FOUND');
+      expect(reload(db).items.map((item) => item.id)).toEqual([COLOR, CUT]);
+    });
+
+    it('removes one item with its phases, normalizes the remaining order, and survives a restart', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+
+      removeAppointmentItem(db, appointmentLea.id, COLOR);
+
+      const reloaded = reload(db);
+      expect(reloaded.items.map((item) => [item.id, item.order])).toEqual([[CUT, 0]]);
+      expect(countRows(db, 'appointment_items')).toBe(1);
+      expect(countRows(db, 'appointment_phases')).toBe(1);
+      expect(reloaded.notes).toBe(appointmentLea.notes);
+      expect(reloaded.startAt.getTime()).toBe(appointmentLea.startAt.getTime());
+      // The catalog keeps every Service and its phases.
+      expect(loadServices(db).find((service) => service.id === serviceColor.id)?.phases).toHaveLength(3);
+    });
+
+    it('never removes the last item and refuses unknown items — nothing changes', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+      removeAppointmentItem(db, appointmentLea.id, COLOR);
+
+      expect(refusal(() => removeAppointmentItem(db, appointmentLea.id, CUT))).toBe('LAST_ITEM');
+      expect(refusal(() => removeAppointmentItem(db, appointmentLea.id, 'ghost'))).toBe('ITEM_NOT_FOUND');
+      expect(reload(db).items.map((item) => item.id)).toEqual([CUT]);
+      expect(countRows(db, 'appointment_phases')).toBe(1);
+    });
+
+    it('refuses both edits once the Appointment reached a terminal outcome', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+      updateAppointment(db, {
+        ...appointmentLea,
+        status: 'CANCELLED',
+        cancellation: { cancelledAt: new Date(2026, 8, 10, 9), cancelledBy: 'BUSINESS' },
+      });
+
+      expect(refusal(() => reorderAppointmentItems(db, appointmentLea.id, [CUT, COLOR]))).toBe(
+        'APPOINTMENT_NOT_EDITABLE',
+      );
+      expect(refusal(() => removeAppointmentItem(db, appointmentLea.id, COLOR))).toBe('APPOINTMENT_NOT_EDITABLE');
+      expect(reload(db).items.map((item) => [item.id, item.order])).toEqual([
+        [COLOR, 0],
+        [CUT, 1],
+      ]);
+    });
+
+    it('rolls a removal back entirely when a later write of the transaction fails', () => {
+      const native = openTestDatabase();
+      const db: typeof native = {
+        ...native,
+        runSync: (sql, params) => {
+          if (sql.startsWith('UPDATE appointment_items SET item_order')) throw new Error('disk full');
+          return native.runSync(sql, params);
+        },
+      };
+      bootstrapPersistence(db, createTestSeed);
+
+      expect(() => removeAppointmentItem(db, appointmentLea.id, COLOR)).toThrow('disk full');
+
+      expect(reload(db).items.map((item) => item.id)).toEqual([COLOR, CUT]);
+      expect(countRows(db, 'appointment_phases')).toBe(4);
     });
   });
 });

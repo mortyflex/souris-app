@@ -8,6 +8,7 @@
 
 import {
   canDeleteAppointmentPermanently,
+  canRemoveAppointmentItem,
   isEditableAppointmentStatus,
   isValidPhaseDurationMinutes,
   type Appointment,
@@ -282,6 +283,125 @@ export function updateAppointmentItemPhaseDurations(
         );
       }
     }
+  });
+}
+
+export type AppointmentItemRefusal =
+  | 'APPOINTMENT_NOT_FOUND'
+  | 'APPOINTMENT_NOT_EDITABLE'
+  | 'ITEM_NOT_FOUND'
+  /** Removing the item would leave the Appointment without any Service. */
+  | 'LAST_ITEM'
+  /** The requested order does not name every stored item exactly once. */
+  | 'ORDER_MISMATCH';
+
+/** The stored rows refuse this item change; nothing was written. */
+export class AppointmentItemConflictError extends Error {
+  constructor(
+    readonly appointmentId: string,
+    readonly reason: AppointmentItemRefusal,
+  ) {
+    super(`Appointment "${appointmentId}" refuses this item change (${reason})`);
+    this.name = 'AppointmentItemConflictError';
+  }
+}
+
+function requireEditableAppointment(db: SourisDatabase, appointmentId: string): void {
+  const row = db.getFirstSync<{ status: AppointmentStatus }>(
+    'SELECT status FROM appointments WHERE id = ?',
+    [appointmentId],
+  );
+  if (!row) throw new AppointmentItemConflictError(appointmentId, 'APPOINTMENT_NOT_FOUND');
+  if (!isEditableAppointmentStatus(row.status)) {
+    throw new AppointmentItemConflictError(appointmentId, 'APPOINTMENT_NOT_EDITABLE');
+  }
+}
+
+function storedItemIds(db: SourisDatabase, appointmentId: string): string[] {
+  return db
+    .getAllSync<{ id: string }>(
+      'SELECT id FROM appointment_items WHERE appointment_id = ? ORDER BY item_order',
+      [appointmentId],
+    )
+    .map((row) => row.id);
+}
+
+/**
+ * Direct reorder from Appointment Details, in ONE transaction: the stored
+ * Appointment must still exist and be editable, the requested order must
+ * name every stored item exactly once, then `item_order` is rewritten by
+ * STABLE item id (never by array position). Phases, prices and the catalog
+ * are untouched. Any failure rolls the whole write back.
+ */
+export function reorderAppointmentItems(
+  db: SourisDatabase,
+  appointmentId: string,
+  orderedItemIds: readonly string[],
+): void {
+  runInTransaction(db, () => {
+    requireEditableAppointment(db, appointmentId);
+    const stored = storedItemIds(db, appointmentId);
+    const requested = new Set(orderedItemIds);
+    if (
+      requested.size !== orderedItemIds.length ||
+      requested.size !== stored.length ||
+      stored.some((id) => !requested.has(id))
+    ) {
+      throw new AppointmentItemConflictError(appointmentId, 'ORDER_MISMATCH');
+    }
+    orderedItemIds.forEach((itemId, index) => {
+      const result = db.runSync(
+        'UPDATE appointment_items SET item_order = ? WHERE appointment_id = ? AND id = ?',
+        [index, appointmentId, itemId],
+      );
+      if (result.changes !== 1) {
+        throw new AppointmentItemConflictError(appointmentId, 'ITEM_NOT_FOUND');
+      }
+    });
+  });
+}
+
+/**
+ * Direct removal of ONE AppointmentItem from Appointment Details, in ONE
+ * transaction: the stored Appointment must still exist and be editable, the
+ * item must exist, and it must not be the last one (the editing rule). The
+ * item's phase rows go with it and the remaining `item_order` values are
+ * normalized. Linked Sales, stock, payment and the catalog are never
+ * involved. Any failure rolls the whole write back.
+ */
+export function removeAppointmentItem(
+  db: SourisDatabase,
+  appointmentId: string,
+  appointmentItemId: string,
+): void {
+  runInTransaction(db, () => {
+    requireEditableAppointment(db, appointmentId);
+    const stored = storedItemIds(db, appointmentId);
+    if (!stored.includes(appointmentItemId)) {
+      throw new AppointmentItemConflictError(appointmentId, 'ITEM_NOT_FOUND');
+    }
+    if (!canRemoveAppointmentItem(stored.length)) {
+      throw new AppointmentItemConflictError(appointmentId, 'LAST_ITEM');
+    }
+    db.runSync(
+      'DELETE FROM appointment_phases WHERE appointment_id = ? AND appointment_item_id = ?',
+      [appointmentId, appointmentItemId],
+    );
+    const removed = db.runSync(
+      'DELETE FROM appointment_items WHERE appointment_id = ? AND id = ?',
+      [appointmentId, appointmentItemId],
+    );
+    if (removed.changes !== 1) {
+      throw new AppointmentItemConflictError(appointmentId, 'ITEM_NOT_FOUND');
+    }
+    stored
+      .filter((id) => id !== appointmentItemId)
+      .forEach((itemId, index) => {
+        db.runSync(
+          'UPDATE appointment_items SET item_order = ? WHERE appointment_id = ? AND id = ?',
+          [index, appointmentId, itemId],
+        );
+      });
   });
 }
 

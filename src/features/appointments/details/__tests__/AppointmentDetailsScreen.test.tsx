@@ -5,7 +5,12 @@ import {
   userEvent,
   within,
 } from "@testing-library/react-native";
-import { Pressable, Text } from "react-native";
+import { Alert, Pressable, Text } from "react-native";
+import { State, type PanGesture } from "react-native-gesture-handler";
+import {
+  fireGestureHandler,
+  getByGestureTestId,
+} from "react-native-gesture-handler/jest-utils";
 
 import {
   AppointmentSessionProvider,
@@ -27,8 +32,14 @@ import {
   ServiceCatalogProvider,
   useServiceCatalog,
 } from "@/features/services/session/ServiceCatalogProvider";
-import { loadAppointments } from "@/persistence/stores/appointments";
+import { getCashRegisterDaySummary } from "@/domain/cash-register";
+import { getClientSales } from "@/features/sales/presentation";
+import { bootstrapPersistence } from "@/persistence/bootstrap";
+import { insertAppointment, loadAppointments } from "@/persistence/stores/appointments";
+import { findProduct, setProductStock } from "@/persistence/stores/products";
+import { completeSale, loadSales } from "@/persistence/stores/sales";
 import { openTestDatabase } from "@/persistence/testing/node-sqlite-database";
+import { createDevelopmentSeed } from "@/providers/development-seed";
 import { haptics } from "@/shared/lib/haptics";
 import { formatEuroCents, formatEuros } from "@/shared/lib/money";
 
@@ -40,6 +51,8 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockWarningHaptic = jest.spyOn(haptics, "warning").mockImplementation();
 const mockSuccessHaptic = jest.spyOn(haptics, "success").mockImplementation();
+const mockSelectionHaptic = jest.spyOn(haptics, "selection").mockImplementation();
+const mockAlert = jest.spyOn(Alert, "alert").mockImplementation();
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
@@ -73,20 +86,44 @@ jest.mock("react-native-reanimated", () => {
     Easing: { bezier: () => () => 0 },
     interpolate: (value: number, input: number[], output: number[]) =>
       value <= input[0] ? output[0] : output[output.length - 1],
+    SlideOutRight: createAnimationBuilder(),
+    Extrapolation: { CLAMP: "clamp" },
     useAnimatedStyle: (style: () => object) => style(),
+    // Runs the reaction on every render with the current shared values.
+    useAnimatedReaction: (
+      prepare: () => unknown,
+      react: (value: unknown, previous: unknown) => void,
+    ) => react(prepare(), null),
+    useEvent: () => () => undefined,
     useReducedMotion: () => false,
+    // Stable across renders, like the real hook; readable as `.value` too.
     useSharedValue: (init: unknown) => {
-      let value = init;
-      return {
-        get: () => value,
-        set: (next: unknown) => {
-          value = next;
-        },
-      };
+      const [shared] = React.useState(() => {
+        const holder = {
+          value: init,
+          get: () => holder.value,
+          set: (next: unknown) => {
+            holder.value = next;
+          },
+        };
+        return holder;
+      });
+      return shared;
     },
     withTiming: (value: unknown) => value,
+    withSequence: (...values: unknown[]) => values[values.length - 1],
+    withDelay: (_delay: number, value: unknown) => value,
+    cancelAnimation: () => undefined,
   };
 });
+
+jest.mock("react-native-worklets", () => ({
+  scheduleOnRN: (fn: (...args: never[]) => void, ...args: never[]) => fn(...args),
+}));
+
+jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () =>
+  jest.requireActual("@/shared/ui/testing/mock-reanimated-swipeable"),
+);
 
 jest.mock("expo-symbols", () => ({
   SymbolView: () => null,
@@ -143,11 +180,23 @@ function AppointmentPresence({
 
 /** Completes Sales through the canonical session: two linked to Sofia's appointment, one not. */
 function SaleProbe() {
-  const { setProductStock } = useProductCatalog();
-  const { completeSale } = useSaleSession();
+  const { getProductById, setProductStock } = useProductCatalog();
+  const { completeSale, sales } = useSaleSession();
+  const { appointments } = useAppointmentSession();
   const completedAt = new Date(2026, 7, 29, 14, 30);
+  const caisse = getCashRegisterDaySummary(
+    { appointments: appointments.map(({ appointment }) => appointment), sales },
+    new Date(2026, 7, 29, 12, 0),
+  );
   return (
     <>
+      <Text testID="stock-masque">{getProductById(MASQUE_ID)?.stockQuantity ?? "gone"}</Text>
+      <Text testID="stock-concentrate">{getProductById(CONCENTRATE_ID)?.stockQuantity ?? "gone"}</Text>
+      <Text testID="sale-ids">{sales.map((sale) => sale.id).join(",")}</Text>
+      <Text testID="sofia-purchases">
+        {getClientSales(sales, "client-agenda-sofia").map((sale) => sale.id).join(",")}
+      </Text>
+      <Text testID="caisse-day-total">{caisse.totalCents}</Text>
       <Pressable
         testID="stock-products"
         onPress={() => {
@@ -190,6 +239,35 @@ function SaleProbe() {
             clientId: "client-agenda-sofia",
             completedAt,
             lines: [{ id: "sale-unlinked-1", productId: CONCENTRATE_ID, quantity: 1 }],
+          });
+        }}
+      />
+      <Pressable
+        testID="sell-linked-mixed"
+        onPress={() => {
+          completeSale({
+            id: "sale-linked-mixed",
+            businessId: "business-test",
+            clientId: "client-agenda-sofia",
+            appointmentId: "agenda-sofia",
+            completedAt,
+            lines: [
+              { id: "sale-linked-mixed-1", productId: MASQUE_ID, quantity: 1 },
+              { id: "sale-linked-mixed-2", productId: CONCENTRATE_ID, quantity: 1 },
+            ],
+          });
+        }}
+      />
+      <Pressable
+        testID="sell-linked-shampoo-once"
+        onPress={() => {
+          completeSale({
+            id: "sale-linked-c",
+            businessId: "business-test",
+            clientId: "client-agenda-sofia",
+            appointmentId: "agenda-sofia",
+            completedAt: new Date(2026, 7, 29, 14, 45),
+            lines: [{ id: "sale-linked-c-1", productId: MASQUE_ID, quantity: 1 }],
           });
         }}
       />
@@ -265,6 +343,94 @@ function MultiServiceProbe() {
   );
 }
 
+/** Coupe 30 € · Balayage 50 € · Brushing 20 €, plus a Concentrate (12 €) Revente probe. */
+function ThreeServiceProbe() {
+  const { addAppointment, getAppointmentById } = useAppointmentSession();
+  const { completeSale } = useSaleSession();
+  const entry = getAppointmentById("three-service-appointment");
+  return (
+    <>
+      <Text testID="three-service-items">
+        {(entry?.appointment.items ?? [])
+          .slice()
+          .sort((a, b) => a.order - b.order)
+          .map((item) => `${item.id}:${item.order}:${item.phases.map((phase) => phase.durationMinutes).join("/")}`)
+          .join("|")}
+      </Text>
+      <Pressable
+        testID="add-three-service-appointment"
+        onPress={() =>
+          addAppointment({
+            appointment: {
+              id: "three-service-appointment",
+              businessId: "business-test",
+              clientId: "client-agenda-sofia",
+              staffMemberId: "staff-amelie",
+              startAt: new Date(2026, 7, 31, 10, 0),
+              status: "SCHEDULED",
+              items: [
+                {
+                  id: "ts-coupe",
+                  serviceId: "service-cut",
+                  order: 0,
+                  serviceName: "Coupe",
+                  serviceType: "SERVICE",
+                  price: 30,
+                  phases: [{ id: "ts-coupe-phase", name: "Coupe", durationMinutes: 30, requiresStaff: true }],
+                },
+                {
+                  id: "ts-balayage",
+                  serviceId: "service-highlights",
+                  order: 1,
+                  serviceName: "Balayage",
+                  serviceType: "TECHNIQUE",
+                  price: 50,
+                  phases: [
+                    { id: "ts-application", name: "Application", durationMinutes: 45, requiresStaff: true },
+                    { id: "ts-pose", name: "Temps de pose", durationMinutes: 40, requiresStaff: false },
+                  ],
+                },
+                {
+                  id: "ts-brushing",
+                  serviceId: "service-brushing",
+                  order: 2,
+                  serviceName: "Brushing",
+                  serviceType: "SERVICE",
+                  price: 20,
+                  phases: [{ id: "ts-brushing-phase", name: "Brushing", durationMinutes: 20, requiresStaff: true }],
+                },
+              ],
+            },
+          })
+        }
+      />
+      <Pressable
+        testID="sell-concentrate-three-service"
+        onPress={() =>
+          completeSale({
+            id: "sale-three-service",
+            businessId: "business-test",
+            clientId: "client-agenda-sofia",
+            appointmentId: "three-service-appointment",
+            completedAt: new Date(2026, 7, 31, 11, 0),
+            lines: [{ id: "sale-three-service-1", productId: CONCENTRATE_ID, quantity: 1 }],
+          })
+        }
+      />
+    </>
+  );
+}
+
+/** Drives the shared reorder handle of one Service row: long-press pan, then release. */
+function dragServiceRow(itemId: string, translationY: number) {
+  fireGestureHandler<PanGesture>(getByGestureTestId(`reorder-${itemId}`), [
+    { state: State.BEGAN },
+    { state: State.ACTIVE, translationY },
+    { translationY },
+    { state: State.END, translationY },
+  ]);
+}
+
 function detailsTree(
   appointmentId: string,
   probes?: React.ReactNode,
@@ -297,6 +463,43 @@ function renderDetails(
   database?: ReturnType<typeof openTestDatabase>,
 ) {
   return render(detailsTree(appointmentId, probes, database));
+}
+
+/**
+ * Seeds the database and persists one linked Sale (×1) per Product BEFORE
+ * the screen renders, so a test can open Details on an Appointment that
+ * already has sold Products — the way a real screen instance opens.
+ */
+function persistLinkedSales(db: ReturnType<typeof openTestDatabase>, productIds: readonly string[]) {
+  bootstrapPersistence(db, () => createDevelopmentSeed(new Date()));
+  setProductStock(db, MASQUE_ID, 5);
+  setProductStock(db, CONCENTRATE_ID, 3);
+  const names: Record<string, string> = {
+    [MASQUE_ID]: "Masque réparateur 5 min",
+    [CONCENTRATE_ID]: "Acidic bonding concentrate",
+  };
+  productIds.forEach((productId, index) => {
+    completeSale(
+      db,
+      {
+        id: `sale-seeded-${index}`,
+        businessId: "business-test",
+        clientId: "client-agenda-sofia",
+        appointmentId: "agenda-sofia",
+        completedAt: new Date(2026, 7, 29, 14, 30 + index),
+        items: [
+          {
+            id: `sale-seeded-${index}-1`,
+            productId,
+            productName: names[productId] ?? productId,
+            unitPrice: productId === MASQUE_ID ? 50 : 12,
+            quantity: 1,
+          },
+        ],
+      },
+      [{ productId, quantity: 1 }],
+    );
+  });
 }
 
 async function stepPose(view: Awaited<ReturnType<typeof render>>, phaseId: string, times: number) {
@@ -337,6 +540,8 @@ describe("AppointmentDetailsScreen", () => {
     mockBack.mockClear();
     mockWarningHaptic.mockClear();
     mockSuccessHaptic.mockClear();
+    mockSelectionHaptic.mockClear();
+    mockAlert.mockClear();
   });
 
   afterAll(() => {
@@ -729,35 +934,564 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.queryByText("Professionnelle occupée")).toBeNull();
   });
 
-  it("lists the Products sold during the appointment from Sale snapshots, not the Client's other Sales", async () => {
+  it("lists the Products sold during the appointment as aggregated Product rows, not Sale cards nor the Client's other Sales", async () => {
     const view = await renderDetails();
     expect(view.queryByTestId("appointment-products")).toBeNull();
+    // Before any Revente the ticket total is simply the Prestations total — never hidden.
+    expect(view.getByTestId("appointment-services-total").props.children).toBe(formatEuros(95));
+    expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
 
     await press(view, "stock-products");
     await press(view, "sell-linked-shampoo");
     await press(view, "sell-linked-serum");
     await press(view, "sell-unlinked");
+    // A later separate Revente of the SAME Product snapshot: one row, quantity summed.
+    await press(view, "sell-linked-shampoo-once");
 
     const products = within(view.getByTestId("appointment-products"));
     expect(products.getByText("Produits vendus")).toBeTruthy();
     const lines = products.getAllByTestId("appointment-product-line");
     expect(lines).toHaveLength(2);
     expect(within(lines[0]!).getByText("Masque réparateur 5 min")).toBeTruthy();
-    expect(within(lines[0]!).getByText(`×2 · ${formatEuros(50)}`)).toBeTruthy();
-    expect(within(lines[0]!).getByText(formatEuros(100))).toBeTruthy();
+    expect(within(lines[0]!).getByText(`×3 · ${formatEuros(50)}`)).toBeTruthy();
+    expect(within(lines[0]!).getByText(formatEuroCents(15000))).toBeTruthy();
     expect(within(lines[1]!).getByText("Acidic bonding concentrate")).toBeTruthy();
     expect(within(lines[1]!).getByText(`×1 · ${formatEuros(12)}`)).toBeTruthy();
-    expect(view.getByTestId("appointment-products-total").props.children).toBe(formatEuros(112));
+    // No Sale-level presentation and no permanently visible delete control.
+    expect(products.queryByText(/Revente/)).toBeNull();
+    expect(products.queryByText("Supprimer")).toBeNull();
+    // The badge counts TOTAL UNITS (3 + 1), not unique Products.
+    expect(products.getByText("4")).toBeTruthy();
+    expect(view.getByTestId("sale-ids").props.children).toBe("sale-linked-a,sale-linked-b,sale-unlinked,sale-linked-c");
 
-    // The checkout expectation includes the linked Products, not the unlinked Sale.
+    // The ticket total recomputed immediately: services + linked Products only.
+    expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(25700));
+
+    // The checkout expectation is the SAME derivation: linked Products, not the unlinked Sale.
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     await act(async () => {
       jest.advanceTimersByTime(60_000);
     });
     await press(view, "checkout-appointment");
     expect(view.getByTestId("checkout-services-total").props.children).toBe(formatEuroCents(9500));
-    expect(view.getByTestId("checkout-products-total").props.children).toBe(formatEuroCents(11200));
-    expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(20700));
+    expect(view.getByTestId("checkout-products-total").props.children).toBe(formatEuroCents(16200));
+    expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(25700));
+  });
+
+  describe("Product swipe-to-delete", () => {
+    const masqueRow = `appointment-product-${MASQUE_ID}`;
+    const concentrateRow = `appointment-product-${CONCENTRATE_ID}`;
+
+    it("plays the swipe hint once, on the first Product row present when the screen opens, never on rows added later", async () => {
+      const db = openTestDatabase();
+      // The screen opens with one sold Product already persisted.
+      const view = await renderDetails("agenda-sofia", undefined, db);
+      await press(view, "stock-products");
+      await press(view, "sell-linked-serum");
+      // No hint yet: the screen settles first.
+      expect(view.queryByTestId(`${concentrateRow}-hint`)).toBeNull();
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      // The Products section mounted with no row, so it has no hint target; a
+      // Product sold during this screen instance never plays the hint.
+      expect(view.queryByTestId(`${concentrateRow}-hint`)).toBeNull();
+    });
+
+    it("hints the first Product row of a screen that opens with sold Products, and only that row", async () => {
+      const db = openTestDatabase();
+      persistLinkedSales(db, [MASQUE_ID, CONCENTRATE_ID]);
+
+      const view = await renderDetails("agenda-sofia", undefined, db);
+      expect(view.getAllByTestId("appointment-product-line")).toHaveLength(2);
+      expect(view.queryByTestId(`${masqueRow}-hint`)).toBeNull();
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(view.getByTestId(`${masqueRow}-hint`)).toBeTruthy();
+      expect(view.queryByTestId(`${concentrateRow}-hint`)).toBeNull();
+      expect(mockSelectionHaptic).not.toHaveBeenCalled();
+
+      // Reveal + hold: the trash stays readable for a while before the return.
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(view.getByTestId(`${masqueRow}-hint`)).toBeTruthy();
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(view.queryByTestId(`${masqueRow}-hint`)).toBeNull();
+
+      // Once played it never replays, and the promoted row never inherits it.
+      await press(view, `${masqueRow}-swipe-full`);
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      expect(view.queryByTestId(`${concentrateRow}-hint`)).toBeNull();
+    });
+
+    it("cancels a pending hint when the user touches the row first", async () => {
+      const db = openTestDatabase();
+      persistLinkedSales(db, [CONCENTRATE_ID]);
+
+      const view = await renderDetails("agenda-sofia", undefined, db);
+      await act(async () => {
+        fireEvent(view.getByTestId(concentrateRow), "touchStart");
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      expect(view.queryByTestId(`${concentrateRow}-hint`)).toBeNull();
+    });
+
+    it("reveals the trash on a partial swipe, keeps the Product until the trash is tapped, then deletes the aggregated row", async () => {
+      jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+      const db = openTestDatabase();
+      const view = await renderDetails("agenda-sofia", undefined, db);
+      await press(view, "stock-products");
+      // Two separate Reventes of the same Product: ONE row, ×3, restored together.
+      await press(view, "sell-linked-shampoo");
+      await press(view, "sell-linked-shampoo-once");
+      expect(view.getByTestId("stock-masque").props.children).toBe(2);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(24500));
+      expect(view.getAllByTestId("appointment-product-line")).toHaveLength(1);
+
+      // Checkout and Details agree before the deletion.
+      await press(view, "checkout-appointment");
+      expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(24500));
+      await act(async () => {
+        fireEvent.press(view.getByLabelText("Annuler l’encaissement"));
+      });
+      await settleSheetTransition();
+
+      // Partial swipe: the destructive action is revealed, nothing is deleted.
+      const trash = view.getByLabelText("Supprimer Masque réparateur 5 min des produits vendus");
+      expect(trash.props.accessibilityRole).toBe("button");
+      await press(view, `${masqueRow}-swipe-partial`);
+      expect(view.getByTestId(`${masqueRow}-translation`).props.children).toBe("90");
+      expect(view.getByTestId("appointment-product-line")).toBeTruthy();
+      expect(view.getByTestId("stock-masque").props.children).toBe(2);
+      expect(mockWarningHaptic).not.toHaveBeenCalled();
+      expect(mockSelectionHaptic).not.toHaveBeenCalled();
+
+      // Tapping the trash deletes the displayed row: both sold lines, stock +3.
+      await press(view, `delete-appointment-product-${MASQUE_ID}`);
+
+      expect(view.queryByTestId("appointment-products")).toBeNull();
+      expect(view.getByTestId("stock-masque").props.children).toBe(5);
+      expect(view.getByTestId("sale-ids").props.children).toBe("");
+      expect(view.getByTestId("sofia-purchases").props.children).toBe("");
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
+      expect(view.getByTestId("appointment-presence").props.children).toBe("present");
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
+      expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
+      expect(mockAlert).not.toHaveBeenCalled();
+
+      await press(view, "checkout-appointment");
+      expect(view.queryByTestId("checkout-products-total")).toBeNull();
+      expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(9500));
+
+      // Restart: SQLite no longer holds any line and holds the restored stock.
+      expect(loadSales(db)).toEqual([]);
+      expect(findProduct(db, MASQUE_ID)?.stockQuantity).toBe(5);
+    });
+
+    it("commits exactly once on a full swipe release, with one selection tick when the threshold is crossed", async () => {
+      const view = await renderDetails();
+      await press(view, "stock-products");
+      await press(view, "sell-linked-serum");
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(2);
+
+      await press(view, `${concentrateRow}-swipe-full`);
+
+      expect(view.queryByTestId("appointment-products")).toBeNull();
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(3);
+      expect(view.getByTestId("sale-ids").props.children).toBe("");
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
+      expect(mockSelectionHaptic).toHaveBeenCalled();
+      expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it("deletes the aggregated Product across a mixed Sale and a single Sale, keeping the other Product and its Sale", async () => {
+      const view = await renderDetails();
+      await press(view, "stock-products");
+      // sale-linked-mixed: Masque ×1 + Concentrate ×1 · sale-linked-c: Masque ×1 · sale-unlinked: not shown
+      await press(view, "sell-linked-mixed");
+      await press(view, "sell-linked-shampoo-once");
+      await press(view, "sell-unlinked");
+      expect(view.getByTestId("stock-masque").props.children).toBe(3);
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(1);
+      const before = within(view.getByTestId("appointment-products"));
+      expect(before.getByText(`×2 · ${formatEuros(50)}`)).toBeTruthy();
+      expect(before.getByText(`×1 · ${formatEuros(12)}`)).toBeTruthy();
+      expect(before.getByText("3")).toBeTruthy();
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(20700));
+
+      await press(view, `${masqueRow}-swipe-full`);
+
+      const products = within(view.getByTestId("appointment-products"));
+      expect(products.getAllByTestId("appointment-product-line")).toHaveLength(1);
+      expect(products.getByText("Acidic bonding concentrate")).toBeTruthy();
+      expect(products.queryByText("Masque réparateur 5 min")).toBeNull();
+      expect(products.getByText("1")).toBeTruthy();
+      expect(view.getByTestId("stock-masque").props.children).toBe(5);
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(1);
+      // The mixed Sale keeps its Concentrate line; the emptied Sale is gone; the unlinked Sale is untouched.
+      expect(view.getByTestId("sale-ids").props.children).toBe("sale-linked-mixed,sale-unlinked");
+      expect(view.getByTestId("sofia-purchases").props.children).toBe("sale-unlinked,sale-linked-mixed");
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(10700));
+    });
+
+    it("keeps the recorded payment and the Cash Register untouched when a Product is deleted after checkout", async () => {
+      jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+      const view = await renderDetails();
+      await press(view, "stock-products");
+      await press(view, "sell-linked-serum");
+      await press(view, "checkout-appointment");
+      expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(10700));
+      await typeAmount(view, "card", "107");
+      await press(view, "confirm-checkout");
+      await settleSheetTransition();
+      expect(view.getByTestId("caisse-day-total").props.children).toBe(10700);
+      expect(view.queryByTestId("appointment-payment-difference")).toBeNull();
+
+      // Same direct gesture, no extra modal.
+      await press(view, `${concentrateRow}-swipe-full`);
+
+      expect(view.queryByTestId("appointment-products")).toBeNull();
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(3);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("10700/0");
+      expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(10700));
+      expect(view.getByTestId("appointment-payment-difference").props.children).toEqual([
+        "Écart : ",
+        `+${formatEuroCents(1200)}`,
+      ]);
+      expect(view.getByTestId("caisse-day-total").props.children).toBe(10700);
+      expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
+      expect(view.getByTestId("edit-payment")).toBeTruthy();
+
+      // The correction sheet consumes the same expectation as Details.
+      await press(view, "edit-payment");
+      expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(9500));
+      expect(view.getByTestId("checkout-amount-card").props.value).toBe("107,00");
+
+      // Permanent deletion stays blocked: the payment still anchors the Appointment.
+      await act(async () => {
+        fireEvent.press(view.getByLabelText("Annuler l’encaissement"));
+      });
+      await settleSheetTransition();
+      await press(view, "open-permanent-deletion");
+      expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
+    });
+
+    it("re-evaluates permanent deletion once the last sold Product is gone", async () => {
+      const view = await renderDetails();
+      await press(view, "stock-products");
+      await press(view, "sell-linked-shampoo");
+      await press(view, "open-permanent-deletion");
+      expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
+      await press(view, "close-appointment-deletion-blocked");
+
+      await press(view, `${masqueRow}-swipe-full`);
+      expect(view.getByTestId("stock-masque").props.children).toBe(5);
+
+      await press(view, "open-permanent-deletion");
+      expect(view.queryByTestId("appointment-deletion-blocked")).toBeNull();
+      expect(view.getByTestId("permanent-deletion-dialog")).toBeTruthy();
+    });
+
+    it("closes the row again and keeps Sale and stock when persistence refuses the deletion", async () => {
+      const native = openTestDatabase();
+      const control = { failDeletes: false };
+      const db: typeof native = {
+        ...native,
+        runSync: (sql, params) => {
+          if (control.failDeletes && sql.startsWith("DELETE FROM sale_items")) {
+            throw new Error("disk full");
+          }
+          return native.runSync(sql, params);
+        },
+      };
+      const view = await renderDetails("agenda-sofia", undefined, db);
+      await press(view, "stock-products");
+      await press(view, "sell-linked-serum");
+      control.failDeletes = true;
+
+      await press(view, `${concentrateRow}-swipe-full`);
+
+      expect(view.getByTestId("appointment-product-line")).toBeTruthy();
+      expect(view.getByTestId(`${concentrateRow}-closed`).props.children).toBe("1");
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(2);
+      expect(findProduct(db, CONCENTRATE_ID)?.stockQuantity).toBe(2);
+      expect(loadSales(db)).toHaveLength(1);
+      expect(view.getByTestId("sale-ids").props.children).toBe("sale-linked-b");
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(10700));
+      expect(mockAlert).toHaveBeenCalledTimes(1);
+      expect(mockWarningHaptic).not.toHaveBeenCalled();
+
+      // Once persistence works again the same row deletes normally.
+      control.failDeletes = false;
+      await press(view, `delete-appointment-product-${CONCENTRATE_ID}`);
+      expect(view.queryByTestId("appointment-products")).toBeNull();
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(3);
+      expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("direct Service reorder and removal", () => {
+    const APPOINTMENT = "three-service-appointment";
+
+    /** Seeds the database and persists the three-Service Appointment BEFORE the screen renders. */
+    function persistThreeServiceAppointment(
+      db: ReturnType<typeof openTestDatabase>,
+      options: { readonly withProduct?: boolean } = {},
+    ) {
+      bootstrapPersistence(db, () => createDevelopmentSeed(new Date()));
+      insertAppointment(db, {
+        id: APPOINTMENT,
+        businessId: "business-test",
+        clientId: "client-agenda-sofia",
+        staffMemberId: "staff-amelie",
+        startAt: new Date(2026, 7, 31, 10, 0),
+        status: "SCHEDULED",
+        items: [
+          {
+            id: "ts-coupe",
+            serviceId: "service-cut",
+            order: 0,
+            serviceName: "Coupe",
+            serviceType: "SERVICE",
+            price: 30,
+            phases: [{ id: "ts-coupe-phase", name: "Coupe", durationMinutes: 30, requiresStaff: true }],
+          },
+          {
+            id: "ts-balayage",
+            serviceId: "service-highlights",
+            order: 1,
+            serviceName: "Balayage",
+            serviceType: "TECHNIQUE",
+            price: 50,
+            phases: [
+              { id: "ts-application", name: "Application", durationMinutes: 45, requiresStaff: true },
+              { id: "ts-pose", name: "Temps de pose", durationMinutes: 40, requiresStaff: false },
+            ],
+          },
+          {
+            id: "ts-brushing",
+            serviceId: "service-brushing",
+            order: 2,
+            serviceName: "Brushing",
+            serviceType: "SERVICE",
+            price: 20,
+            phases: [{ id: "ts-brushing-phase", name: "Brushing", durationMinutes: 20, requiresStaff: true }],
+          },
+        ],
+      });
+      if (options.withProduct) {
+        setProductStock(db, CONCENTRATE_ID, 3);
+        completeSale(
+          db,
+          {
+            id: "sale-three-service",
+            businessId: "business-test",
+            clientId: "client-agenda-sofia",
+            appointmentId: APPOINTMENT,
+            completedAt: new Date(2026, 7, 31, 11, 0),
+            items: [
+              {
+                id: "sale-three-service-1",
+                productId: CONCENTRATE_ID,
+                productName: "Acidic bonding concentrate",
+                unitPrice: 12,
+                quantity: 1,
+              },
+            ],
+          },
+          [{ productId: CONCENTRATE_ID, quantity: 1 }],
+        );
+      }
+    }
+
+    function storedOrder(db: ReturnType<typeof openTestDatabase>): string[] {
+      const stored = loadAppointments(db).find((appointment) => appointment.id === APPOINTMENT);
+      return (stored?.items ?? [])
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((item) => item.id);
+    }
+
+    it("reorders Services by drag, persists the order after the write, and touches neither timing nor the catalog", async () => {
+      const db = openTestDatabase();
+      persistThreeServiceAppointment(db);
+      const view = await renderDetails(APPOINTMENT, <ThreeServiceProbe />, db);
+      const catalogBefore = view.getByTestId("catalog-durations").props.children;
+      expect(view.getByTestId("three-service-items").props.children).toBe(
+        "ts-coupe:0:30|ts-balayage:1:45/40|ts-brushing:2:20",
+      );
+      expect(view.getByLabelText("Déplacer Balayage")).toBeTruthy();
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(10000));
+
+      await act(async () => {
+        dragServiceRow("ts-balayage", -100);
+      });
+
+      expect(view.getByTestId("three-service-items").props.children).toBe(
+        "ts-balayage:0:45/40|ts-coupe:1:30|ts-brushing:2:20",
+      );
+      expect(storedOrder(db)).toEqual(["ts-balayage", "ts-coupe", "ts-brushing"]);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(10000));
+      expect(view.getByText("2 h 15 min")).toBeTruthy();
+      expect(view.getByTestId("catalog-durations").props.children).toBe(catalogBefore);
+      expect(mockAlert).not.toHaveBeenCalled();
+    });
+
+    it("removes a Service by swipe immediately, recalculating totals and duration, and persists it", async () => {
+      const db = openTestDatabase();
+      persistThreeServiceAppointment(db);
+      const view = await renderDetails(APPOINTMENT, <ThreeServiceProbe />, db);
+      const catalogBefore = view.getByTestId("catalog-durations").props.children;
+      expect(view.getByText("2 h 15 min")).toBeTruthy();
+      expect(view.getByLabelText("Retirer Balayage du rendez-vous")).toBeTruthy();
+
+      await press(view, "appointment-service-ts-balayage-swipe-full");
+
+      expect(view.getByTestId("three-service-items").props.children).toBe("ts-coupe:0:30|ts-brushing:1:20");
+      expect(storedOrder(db)).toEqual(["ts-coupe", "ts-brushing"]);
+      expect(view.queryByTestId("service-section-ts-balayage")).toBeNull();
+      expect(view.getByTestId("appointment-services-total").props.children).toBe(formatEuros(50));
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(5000));
+      expect(view.getByText("50 min")).toBeTruthy();
+      expect(view.getByText("10:00 – 10:50")).toBeTruthy();
+      expect(view.getByTestId("catalog-durations").props.children).toBe(catalogBefore);
+      expect(mockSelectionHaptic).toHaveBeenCalled();
+    });
+
+    it("keeps linked Product Sales, stock and purchase history when a Service is removed", async () => {
+      const db = openTestDatabase();
+      persistThreeServiceAppointment(db, { withProduct: true });
+      const view = await renderDetails(APPOINTMENT, <ThreeServiceProbe />, db);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(11200));
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(2);
+
+      await press(view, "appointment-service-ts-balayage-swipe-full");
+
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(6200));
+      expect(view.getByTestId("appointment-product-line")).toBeTruthy();
+      expect(view.getByTestId("sale-ids").props.children).toBe("sale-three-service");
+      expect(view.getByTestId("sofia-purchases").props.children).toBe("sale-three-service");
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(2);
+      expect(loadSales(db)).toHaveLength(1);
+    });
+
+    it("never exposes removal or reorder for a lone Service, in Details as in the editor", async () => {
+      const view = await renderDetails();
+      expect(view.getByTestId("service-section-item-sofia")).toBeTruthy();
+      expect(view.queryByTestId("appointment-service-item-sofia")).toBeNull();
+      expect(view.queryByLabelText("Retirer Balayage du rendez-vous")).toBeNull();
+      expect(view.queryByLabelText("Déplacer Balayage")).toBeNull();
+    });
+
+    it("withdraws the swipe once removals leave a single Service", async () => {
+      const db = openTestDatabase();
+      persistThreeServiceAppointment(db);
+      const view = await renderDetails(APPOINTMENT, <ThreeServiceProbe />, db);
+      await press(view, "appointment-service-ts-coupe-swipe-full");
+      await press(view, "appointment-service-ts-balayage-swipe-full");
+
+      expect(view.getByTestId("three-service-items").props.children).toBe("ts-brushing:0:20");
+      expect(storedOrder(db)).toEqual(["ts-brushing"]);
+      expect(view.queryByTestId("appointment-service-ts-brushing")).toBeNull();
+      expect(view.queryByLabelText("Retirer Brushing du rendez-vous")).toBeNull();
+    });
+
+    it("keeps timing expansion attached to the Service through reorder and the removal of another row", async () => {
+      const db = openTestDatabase();
+      persistThreeServiceAppointment(db);
+      const view = await renderDetails(APPOINTMENT, <ThreeServiceProbe />, db);
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText(/Balayage, commence à/));
+      });
+      expect(view.getByTestId("service-timing-ts-balayage")).toBeTruthy();
+
+      await act(async () => {
+        dragServiceRow("ts-balayage", -100);
+      });
+      expect(view.getByTestId("three-service-items").props.children).toBe(
+        "ts-balayage:0:45/40|ts-coupe:1:30|ts-brushing:2:20",
+      );
+      expect(view.getByTestId("service-timing-ts-balayage")).toBeTruthy();
+      expect(view.queryByTestId("service-timing-ts-coupe")).toBeNull();
+
+      await press(view, "appointment-service-ts-coupe-swipe-full");
+      expect(view.getByTestId("three-service-items").props.children).toBe("ts-balayage:0:45/40|ts-brushing:1:20");
+      expect(view.getByTestId("service-timing-ts-balayage")).toBeTruthy();
+      expect(view.queryByTestId("service-timing-ts-brushing")).toBeNull();
+    });
+
+    it("restores the order and keeps the row when the database refuses the write", async () => {
+      const native = openTestDatabase();
+      const control = { failItemWrites: false };
+      const db: typeof native = {
+        ...native,
+        runSync: (sql, params) => {
+          if (
+            control.failItemWrites &&
+            /^(UPDATE appointment_items SET item_order|DELETE FROM appointment_items)/.test(sql)
+          ) {
+            throw new Error("disk full");
+          }
+          return native.runSync(sql, params);
+        },
+      };
+      persistThreeServiceAppointment(db);
+      const view = await renderDetails(APPOINTMENT, <ThreeServiceProbe />, db);
+      control.failItemWrites = true;
+
+      await act(async () => {
+        dragServiceRow("ts-balayage", -100);
+      });
+      expect(view.getByTestId("three-service-items").props.children).toBe(
+        "ts-coupe:0:30|ts-balayage:1:45/40|ts-brushing:2:20",
+      );
+      expect(storedOrder(db)).toEqual(["ts-coupe", "ts-balayage", "ts-brushing"]);
+      expect(mockAlert).toHaveBeenCalledTimes(1);
+
+      await press(view, "appointment-service-ts-balayage-swipe-full");
+      expect(view.getByTestId("service-section-ts-balayage")).toBeTruthy();
+      expect(view.getByTestId("appointment-service-ts-balayage-closed").props.children).toBe("1");
+      expect(view.getByTestId("three-service-items").props.children).toBe(
+        "ts-coupe:0:30|ts-balayage:1:45/40|ts-brushing:2:20",
+      );
+      expect(mockAlert).toHaveBeenCalledTimes(2);
+
+      control.failItemWrites = false;
+      await press(view, "remove-appointment-service-ts-balayage");
+      expect(storedOrder(db)).toEqual(["ts-coupe", "ts-brushing"]);
+    });
+
+    it("hints the first removable Service once, and never the Products of the same screen", async () => {
+      const db = openTestDatabase();
+      persistThreeServiceAppointment(db, { withProduct: true });
+      const view = await renderDetails(APPOINTMENT, <ThreeServiceProbe />, db);
+      expect(view.queryByTestId("appointment-service-ts-coupe-hint")).toBeNull();
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(view.getByTestId("appointment-service-ts-coupe-hint")).toBeTruthy();
+      expect(view.queryByTestId("appointment-service-ts-balayage-hint")).toBeNull();
+      expect(view.queryByTestId(`appointment-product-${CONCENTRATE_ID}-hint`)).toBeNull();
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      expect(view.queryByTestId("appointment-service-ts-coupe-hint")).toBeNull();
+      expect(view.queryByTestId(`appointment-product-${CONCENTRATE_ID}-hint`)).toBeNull();
+    });
   });
 
   it("keeps an archived Client fully readable, withholds Revente, and keeps Encaisser", async () => {

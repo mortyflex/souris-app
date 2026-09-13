@@ -1,8 +1,10 @@
 // Souris — Appointment Details summary banner
 //
-// One compact banner: total duration and the snapshot total. The per-phase
-// timing (active / processing) is already visible inside each service's
-// phases and is deliberately not repeated as a second breakdown.
+// One compact banner: total duration and the Prestations snapshot subtotal.
+// The per-phase timing (active / processing) is already visible inside each
+// service's phases and is deliberately not repeated as a second breakdown.
+// The real ticket total (services + linked Product Sales) is the separate
+// « Total à encaisser » row below the Products.
 
 import { StyleSheet, View } from 'react-native';
 
@@ -29,9 +31,14 @@ export function AppointmentSummary({ summary }: AppointmentSummaryProps) {
       </View>
       <View style={styles.priceColumn}>
         <AppText variant="metadata" style={styles.finalLabel}>
-          Total
+          Prestations
         </AppText>
-        <AppText variant="summaryValue" selectable style={styles.totalValue}>
+        <AppText
+          variant="summaryValue"
+          selectable
+          style={styles.totalValue}
+          testID="appointment-services-total"
+        >
           {formatPrice(summary.totalPrice)}
         </AppText>
       </View>

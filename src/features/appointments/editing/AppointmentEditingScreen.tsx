@@ -130,10 +130,12 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     );
   }
 
+  // Swipe-to-remove from the Prestations list: DRAFT state only. The
+  // canonical Appointment (and SQLite) change solely through `save`.
   const removeDraft = (draftKey: string) => {
     if (!canRemoveAppointmentItem(drafts.length)) return;
     if (!drafts.some((draft) => getSelectedServiceDraftKey(draft) === draftKey)) return;
-    haptics.selection();
+    haptics.destructive();
     setDrafts((current) =>
       current.filter((draft) => getSelectedServiceDraftKey(draft) !== draftKey),
     );

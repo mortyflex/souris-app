@@ -13,6 +13,7 @@ import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 const mockBack = jest.fn();
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
+const mockDestructiveHaptic = jest.spyOn(haptics, 'destructive').mockImplementation();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack }),
@@ -46,25 +47,46 @@ jest.mock('react-native-reanimated', () => {
     FadeOut: createAnimationBuilder(),
     LinearTransition: createAnimationBuilder(),
     Easing: { bezier: () => () => 0 },
+    Extrapolation: { CLAMP: 'clamp' },
+    SlideOutRight: createAnimationBuilder(),
+    interpolate: (value: number, input: number[], output: number[]) =>
+      value <= input[0] ? output[0] : output[output.length - 1],
     useAnimatedStyle: (style: () => object) => style(),
+    // Runs the reaction on every render with the current shared values.
+    useAnimatedReaction: (
+      prepare: () => unknown,
+      react: (value: unknown, previous: unknown) => void,
+    ) => react(prepare(), null),
     useEvent: () => () => undefined,
     useReducedMotion: () => false,
+    // Stable across renders, like the real hook.
     useSharedValue: (init: unknown) => {
-      let value = init;
-      return {
-        get: () => value,
-        set: (next: unknown) => {
-          value = next;
-        },
-      };
+      const [shared] = React.useState(() => {
+        const holder = {
+          value: init,
+          get: () => holder.value,
+          set: (next: unknown) => {
+            holder.value = next;
+          },
+        };
+        return holder;
+      });
+      return shared;
     },
     withTiming: (value: unknown) => value,
+    withSequence: (...values: unknown[]) => values[values.length - 1],
+    withDelay: (_delay: number, value: unknown) => value,
+    cancelAnimation: () => undefined,
   };
 });
 
 jest.mock('react-native-worklets', () => ({
   scheduleOnRN: (fn: (...args: never[]) => void, ...args: never[]) => fn(...args),
 }));
+
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () =>
+  jest.requireActual('@/shared/ui/testing/mock-reanimated-swipeable'),
+);
 
 jest.mock('expo-symbols', () => ({
   SymbolView: () => null,
@@ -243,9 +265,18 @@ function renderEditor(appointmentId = 'agenda-sofia') {
 }
 
 describe('AppointmentEditingScreen', () => {
+  beforeAll(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+  });
+
   beforeEach(() => {
     mockBack.mockClear();
     mockSuccessHaptic.mockClear();
+    mockDestructiveHaptic.mockClear();
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
   });
 
   it('initializes from the existing Appointment snapshot and keeps the final service', async () => {
@@ -366,12 +397,9 @@ describe('AppointmentEditingScreen', () => {
     });
     expect(view.getAllByLabelText(/^Développer Coupe Brushing 1$/)).toHaveLength(1);
 
-    // Expand and remove the newly-added draft.
+    // Remove the newly-added draft through its swipe action (the trash).
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Développer Coupe Brushing 1'));
-    });
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Retirer Coupe Brushing 1'));
+      fireEvent.press(view.getByLabelText('Retirer Coupe Brushing 1 du rendez-vous'));
     });
     expect(view.queryByLabelText(/^Développer Coupe Brushing 1$/)).toBeNull();
 
@@ -490,6 +518,166 @@ describe('AppointmentEditingScreen', () => {
     const duplicateItems = view.getByTestId('session-duplicate-items').props.children as string;
     expect(duplicateItems).toContain('dup-item-a:Brushing 1:30:');
     expect(duplicateItems).toContain('dup-item-b:Brushing 1:25:');
+  });
+
+  describe('swipe-to-remove a Service', () => {
+    /** Opens the editor on the two-item Appointment (dup-item-a 20 € · dup-item-b 25 €). */
+    async function renderTwoServiceEditor() {
+      const view = await renderEditor();
+      await act(async () => {
+        fireEvent.press(view.getByTestId('add-duplicate-service-appointment'));
+      });
+      await act(async () => {
+        view.rerender(editorTree('duplicate-service-appointment'));
+      });
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(2);
+      return view;
+    }
+
+    function persistedItemIds(view: Awaited<ReturnType<typeof renderEditor>>): string[] {
+      return (view.getByTestId('session-duplicate-items').props.children as string)
+        .split('|')
+        .filter(Boolean)
+        .map((entry) => entry.split(':')[0]!);
+    }
+
+    it('shows no visible Retirer control; each removable Service exposes the swipe action instead', async () => {
+      const view = await renderTwoServiceEditor();
+
+      expect(view.queryByText('Retirer')).toBeNull();
+      expect(view.getAllByLabelText('Retirer Brushing 1 du rendez-vous')).toHaveLength(2);
+      expect(view.getByTestId('appointment-draft-dup-item-a')).toBeTruthy();
+      expect(view.getByTestId('appointment-draft-dup-item-b')).toBeTruthy();
+      // Tap still expands the timing accordion; the price field and steppers are reachable.
+      await act(async () => {
+        fireEvent.press(view.getAllByLabelText(/^Développer Brushing 1$/)[0]);
+      });
+      expect(view.getByLabelText('Prix de Brushing 1')).toBeTruthy();
+      expect(view.getAllByLabelText('Retirer Brushing 1 du rendez-vous')).toHaveLength(2);
+    });
+
+    it('removes the Service from the draft only, then persists it with the existing save', async () => {
+      const view = await renderTwoServiceEditor();
+      const catalogBefore = view.getByTestId('catalog-brushing-1').props.children;
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('appointment-draft-dup-item-b-swipe-partial'));
+      });
+      // Partial swipe: the Service is still in the draft until the trash is tapped.
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(2);
+      await act(async () => {
+        fireEvent.press(view.getByTestId('remove-appointment-draft-dup-item-b'));
+      });
+
+      // Draft: one Service. Canonical Appointment (session + SQLite): still two.
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(1);
+      expect(view.queryByTestId('appointment-draft-dup-item-b')).toBeNull();
+      expect(persistedItemIds(view)).toEqual(['dup-item-a', 'dup-item-b']);
+      expect(mockDestructiveHaptic).toHaveBeenCalledTimes(1);
+      expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(false);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('save-appointment-edit'));
+      });
+
+      expect(persistedItemIds(view)).toEqual(['dup-item-a']);
+      expect(view.getByTestId('catalog-brushing-1').props.children).toBe(catalogBefore);
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it('commits a full swipe exactly once to the draft', async () => {
+      const view = await renderTwoServiceEditor();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('appointment-draft-dup-item-a-swipe-full'));
+      });
+
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(1);
+      expect(view.queryByTestId('appointment-draft-dup-item-a')).toBeNull();
+      expect(mockDestructiveHaptic).toHaveBeenCalledTimes(1);
+      expect(persistedItemIds(view)).toEqual(['dup-item-a', 'dup-item-b']);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('save-appointment-edit'));
+      });
+      expect(persistedItemIds(view)).toEqual(['dup-item-b']);
+    });
+
+    it('never removes the final Service: a lone Service has no swipe action', async () => {
+      const view = await renderTwoServiceEditor();
+      await act(async () => {
+        fireEvent.press(view.getByTestId('appointment-draft-dup-item-b-swipe-full'));
+      });
+
+      expect(view.queryByLabelText('Retirer Brushing 1 du rendez-vous')).toBeNull();
+      expect(view.queryByTestId('appointment-draft-dup-item-a')).toBeNull();
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(1);
+    });
+
+    it('leaves the persisted Appointment untouched when the edit is discarded after a swipe removal', async () => {
+      const view = await renderTwoServiceEditor();
+      await act(async () => {
+        fireEvent.press(view.getByTestId('appointment-draft-dup-item-b-swipe-full'));
+      });
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(1);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('cancel-appointment-edit'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('discard-appointment-edit'));
+      });
+      await settleSheetTransition();
+
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(persistedItemIds(view)).toEqual(['dup-item-a', 'dup-item-b']);
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+
+      // Reopening the editor hydrates both Services again from the persisted snapshot.
+      await act(async () => {
+        view.rerender(editorTree('duplicate-service-appointment-reopened'));
+      });
+      await act(async () => {
+        view.rerender(editorTree('duplicate-service-appointment'));
+      });
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(2);
+    });
+
+    it('plays the swipe hint once on the first removable Service only, after the screen settles', async () => {
+      const view = await renderTwoServiceEditor();
+      expect(view.queryByTestId('appointment-draft-dup-item-a-hint')).toBeNull();
+
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(view.getByTestId('appointment-draft-dup-item-a-hint')).toBeTruthy();
+      expect(view.queryByTestId('appointment-draft-dup-item-b-hint')).toBeNull();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(view.queryByTestId('appointment-draft-dup-item-a-hint')).toBeNull();
+
+      // A later mount of a row (removal promotes dup-item-b) never replays it.
+      await act(async () => {
+        fireEvent.press(view.getByTestId('appointment-draft-dup-item-a-swipe-full'));
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+      expect(view.queryByTestId('appointment-draft-dup-item-b-hint')).toBeNull();
+    });
+
+    it('offers no swipe removal during creation-style lists where removal is disabled', async () => {
+      // The single-Service Appointment: the final Service can never be removed.
+      const view = await renderEditor();
+      expect(view.queryByLabelText('Retirer Balayage du rendez-vous')).toBeNull();
+      expect(view.queryByTestId('appointment-draft-item-sofia')).toBeNull();
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+      expect(view.queryByTestId('appointment-draft-item-sofia-hint')).toBeNull();
+    });
   });
 
   it('keeps a retained item editable when its catalog Service becomes inactive', async () => {

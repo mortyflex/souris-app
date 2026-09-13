@@ -1,4 +1,4 @@
-import type { Product, StockDecrement } from '@/domain/products';
+import type { Product, StockDecrement, StockRestoration } from '@/domain/products';
 
 /**
  * The smallest Product session surface needed by Produits and Sales:
@@ -27,6 +27,12 @@ export interface ProductCatalogSessionValue {
    * it for decrements that were not persisted.
    */
   readonly applyCommittedStockDecrements: (decrements: readonly StockDecrement[]) => void;
+  /**
+   * Reflects stock restorations ALREADY committed by an Appointment-linked
+   * Sale deletion (one SQLite transaction owned by the Sale session). Memory
+   * only — never call it for restorations that were not persisted.
+   */
+  readonly applyCommittedStockRestorations: (restorations: readonly StockRestoration[]) => void;
   /** Removes the catalog record and its Souris-owned image; unknown ids are a no-op. */
   readonly deleteProduct: (productId: string) => void;
 }

@@ -1,55 +1,25 @@
 // Souris — Sortable selected-services list (Appointment service editor)
 //
-// Drag-and-drop reordering of the SÉLECTIONNÉES drafts during creation.
+// The draft-level adapter over the shared SortableRowList: creation Résumé
+// and « Modifier le rendez-vous » render their SelectedServiceDrafts as
+// editor cards, reorder them through the shared drag handle, and — when
+// removal is allowed — wrap every card in the shared SwipeToDeleteRow
+// (swipe right → « Retirer », draft state only; nothing is persisted until
+// the edit is saved). The first removable row present when the list mounts
+// plays the one-time swipe hint.
 //
-// Interaction: press and hold the explicit drag handle → the card lifts
-// slightly → drag vertically → surrounding cards make room → release → the
-// new order settles. The long-press activation keeps normal scrolling,
-// price/processing editing, and Retirer untouched.
-//
-// SharedValue update discipline (Reanimated 4 shareables are frozen on the
-// native side — object-backed shared values must never receive new
-// properties after assignment):
-//
-//   - sharedOrder  (string[]):      whole-array reassignment only;
-//   - sharedHeights (id → height):  whole-object replacement from the JS
-//                                   thread only, read-only inside worklets;
-//   - activeId / dragBase / dragTop: primitive shared values.
-//
-// Each row derives its top position from the current order + heights, so
-// rows animate themselves (withTiming inside useAnimatedStyle) and the
-// parent never maintains a mutated dictionary of positions. A row-local
-// `positioned` guard renders the very first frame without animation to
-// avoid an entrance slide.
-//
-// serviceId is unique within the draft list by product rule: the selection
-// toggle prevents duplicate selections of the same catalog service.
+// serviceId is unique within a creation draft by product rule (the
+// selection toggle prevents duplicates); editing drafts key on their
+// AppointmentItem id, so duplicate retained snapshots stay distinct rows.
 
-import { useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
-  type SharedValue,
-} from 'react-native-reanimated';
-import { SymbolView } from 'expo-symbols';
-import { scheduleOnRN } from 'react-native-worklets';
+import type { ReactNode } from 'react';
 
-import { haptics } from '@/shared/lib/haptics';
-import {
-  duration,
-  easing,
-  interaction,
-  semanticColors,
-  shadowSource,
-  spacing,
-} from '@/shared/ui/theme';
+import { SwipeToDeleteRow, useSwipeHintTarget } from '@/shared/ui/SwipeToDeleteRow';
+import { radii, semanticColors } from '@/shared/ui/theme';
+
 import { getSelectedServiceDraftKey, type SelectedServiceDraft } from '../draft';
 import { AppointmentServiceEditorCard } from './AppointmentServiceEditorCard';
+import { SortableRowList } from './SortableRowList';
 
 export interface SortableDraftEntry {
   readonly draft: SelectedServiceDraft;
@@ -61,8 +31,6 @@ export interface SortableDraftCardProps {
   readonly onToggleExpanded: () => void;
   readonly onUpdatePrice: (price: number) => void;
   readonly onUpdatePhaseDuration: (phaseId: string, durationMinutes: number) => void;
-  readonly onRemove: () => void;
-  readonly canRemove: boolean;
   readonly dragHandle?: ReactNode;
 }
 
@@ -77,17 +45,21 @@ interface SortableDraftListProps {
     phaseId: string,
     durationMinutes: number,
   ) => void;
+  /** Draft-level removal (never persistence): invoked by the row swipe. */
   readonly onRemove: (draftKey: string) => void;
+  /**
+   * When true every row is wrapped in the shared SwipeToDeleteRow (swipe
+   * right → « Retirer ») and the first row plays the one-time swipe hint;
+   * when false (creation Résumé) rows carry no remove interaction at all.
+   */
   readonly canRemove: boolean;
   /** Card renderer; defaults to the shared appointment editor card. */
   readonly renderCard?: (props: SortableDraftCardProps) => ReactNode;
 }
 
-const GAP = spacing.sm;
-const LONG_PRESS_MS = 200;
-const MOVE_EASING = Easing.bezier(...easing.out);
-
-type HeightMap = Record<string, number>;
+function getDraftKey(entry: SortableDraftEntry): string {
+  return getSelectedServiceDraftKey(entry.draft);
+}
 
 export function SortableDraftList({
   entries,
@@ -100,416 +72,49 @@ export function SortableDraftList({
   canRemove,
   renderCard,
 }: SortableDraftListProps) {
-  const [heights, setHeights] = useState<HeightMap>({});
-  const reducedMotion = useReducedMotion();
-
-  const sharedOrder = useSharedValue<string[]>([]);
-  const sharedHeights = useSharedValue<HeightMap>({});
-  const activeId = useSharedValue<string | null>(null);
-  const dragBase = useSharedValue(0);
-  const dragTop = useSharedValue(0);
-
-  const sortable = entries.length > 1;
-  const ready = entries.every((entry) => heights[getDraftKey(entry.draft)] !== undefined);
-  const totalHeight = entries.reduce(
-    (total, entry) => total + (heights[getDraftKey(entry.draft)] ?? 0) + GAP,
-    entries.length > 0 ? -GAP : 0,
-  );
-  const moveDuration = reducedMotion ? 0 : MOVE_DURATION_MS;
-  const liftDuration = reducedMotion ? 0 : duration.state;
-
-  useLayoutEffect(() => {
-    // Whole-object replacement: never add properties to a shared object.
-    sharedHeights.set({ ...heights });
-  }, [heights, sharedHeights]);
-
-  useLayoutEffect(() => {
-    if (activeId.get() !== null) {
-      return;
-    }
-    sharedOrder.set(entries.map((entry) => getDraftKey(entry.draft)));
-  }, [entries, sharedOrder, activeId]);
-
-  const measure = (draftKey: string) => (event: LayoutChangeEvent) => {
-    const { height } = event.nativeEvent.layout;
-    setHeights((current) => {
-      if (current[draftKey] === height) {
-        return current;
-      }
-      return { ...current, [draftKey]: height };
-    });
-  };
+  // The first removable row present when the list mounts plays the swipe
+  // hint once; rows added or promoted later never replay it.
+  const hintKey = useSwipeHintTarget(canRemove && entries[0] ? getDraftKey(entries[0]) : undefined);
 
   return (
-    <View
-      style={[styles.container, ready && { height: totalHeight }]}
-    >
-      {entries.map(({ draft }, index) => {
-        const draftKey = getDraftKey(draft);
+    <SortableRowList
+      entries={entries}
+      getKey={getDraftKey}
+      getLabel={(entry) => entry.draft.serviceName}
+      onReorder={onReorder}
+      renderRow={(entry, { dragHandle }) => {
+        const draftKey = getDraftKey(entry);
+        const cardProps: SortableDraftCardProps = {
+          draft: entry.draft,
+          expanded: expandedDraftId === draftKey,
+          onToggleExpanded: () => onToggleExpanded(draftKey),
+          onUpdatePrice: (price) => onUpdatePrice(draftKey, price),
+          onUpdatePhaseDuration: (phaseId, durationMinutes) =>
+            onUpdatePhaseDuration(draftKey, phaseId, durationMinutes),
+          dragHandle,
+        };
+        const card = renderCard ? renderCard(cardProps) : <AppointmentServiceEditorCard {...cardProps} />;
+        if (!canRemove) return card;
+
+        // Draft-only removal: the swipe hands the key back to the screen, which
+        // mutates its draft state; nothing is persisted until the edit is saved.
         return (
-          <SortableRow
-            key={draftKey}
-            activeId={activeId}
-            dragBase={dragBase}
-            draft={draft}
-            dragTop={dragTop}
-            fromIndex={index}
-            measure={measure(draftKey)}
-            moveDuration={moveDuration}
-            liftDuration={liftDuration}
-            onRemove={() => onRemove(draftKey)}
-            onReorder={onReorder}
-            onUpdatePhaseDuration={(phaseId, durationMinutes) =>
-              onUpdatePhaseDuration(draftKey, phaseId, durationMinutes)
-            }
-            onUpdatePrice={(price) => onUpdatePrice(draftKey, price)}
-            ready={ready}
-            serviceId={draftKey}
-            serviceName={draft.serviceName}
-            sharedHeights={sharedHeights}
-            sharedOrder={sharedOrder}
-            sortable={sortable}
-            canRemove={canRemove}
-            expanded={expandedDraftId === draftKey}
-            onToggleExpanded={() => onToggleExpanded(draftKey)}
-            renderCard={renderCard}
-          />
+          <SwipeToDeleteRow
+            borderRadius={radii.large}
+            deleteAccessibilityLabel={`Retirer ${entry.draft.serviceName} du rendez-vous`}
+            deleteTestID={`remove-appointment-draft-${draftKey}`}
+            hint={draftKey === hintKey}
+            onDelete={() => {
+              onRemove(draftKey);
+              return true;
+            }}
+            surfaceColor={semanticColors.surfaceLavender}
+            testID={`appointment-draft-${draftKey}`}
+          >
+            {card}
+          </SwipeToDeleteRow>
         );
-      })}
-    </View>
+      }}
+    />
   );
 }
-
-const MOVE_DURATION_MS = duration.disclosure;
-
-function triggerDragStartHaptic() {
-  haptics.dragStart();
-}
-
-function triggerDragEndHaptic() {
-  haptics.dragEnd();
-}
-
-function getDraftKey(draft: SelectedServiceDraft): string {
-  return getSelectedServiceDraftKey(draft);
-}
-
-interface DragGestureParams {
-  readonly serviceId: string;
-  readonly fromIndex: number;
-  readonly activeId: SharedValue<string | null>;
-  readonly dragBase: SharedValue<number>;
-  readonly dragTop: SharedValue<number>;
-  readonly sharedHeights: SharedValue<HeightMap>;
-  readonly sharedOrder: SharedValue<string[]>;
-  readonly onReorder: (fromIndex: number, toIndex: number) => void;
-}
-
-function buildPanGesture(params: DragGestureParams) {
-  const {
-    serviceId,
-    fromIndex,
-    activeId,
-    dragBase,
-    dragTop,
-    sharedHeights,
-    sharedOrder,
-    onReorder,
-  } = params;
-
-  const indexOf = (id: string): number => {
-    'worklet';
-    const order = sharedOrder.get();
-    for (let index = 0; index < order.length; index += 1) {
-      if (order[index] === id) {
-        return index;
-      }
-    }
-    return -1;
-  };
-
-  const slotTopOf = (id: string): number => {
-    'worklet';
-    const cardHeights = sharedHeights.get();
-    let top = 0;
-    for (const otherId of sharedOrder.get()) {
-      if (otherId === id) {
-        break;
-      }
-      top += (cardHeights[otherId] ?? 0) + GAP;
-    }
-    return top;
-  };
-
-  const computeInsertIndex = (id: string, fingerTop: number): number => {
-    'worklet';
-    const cardHeights = sharedHeights.get();
-    const draggedCenter = fingerTop + (cardHeights[id] ?? 0) / 2;
-    let cursor = 0;
-    let insertIndex = 0;
-    for (const otherId of sharedOrder.get()) {
-      if (otherId === id) {
-        continue;
-      }
-      const otherCenter = cursor + (cardHeights[otherId] ?? 0) / 2;
-      if (otherCenter < draggedCenter) {
-        insertIndex += 1;
-      }
-      cursor += (cardHeights[otherId] ?? 0) + GAP;
-    }
-    return insertIndex;
-  };
-
-  return Gesture.Pan()
-    .activateAfterLongPress(LONG_PRESS_MS)
-    .onStart(() => {
-      'worklet';
-      activeId.set(serviceId);
-      dragBase.set(slotTopOf(serviceId));
-      dragTop.set(dragBase.get());
-      scheduleOnRN(triggerDragStartHaptic);
-    })
-    .onUpdate((event) => {
-      'worklet';
-      if (activeId.get() !== serviceId) {
-        return;
-      }
-      const fingerTop = dragBase.get() + event.translationY;
-      dragTop.set(fingerTop);
-
-      const currentIndex = indexOf(serviceId);
-      const insertIndex = computeInsertIndex(serviceId, fingerTop);
-      if (currentIndex >= 0 && insertIndex !== currentIndex) {
-        // Whole-array reassignment: the order array is never mutated in place.
-        const nextOrder: string[] = [];
-        for (const otherId of sharedOrder.get()) {
-          if (otherId !== serviceId) {
-            nextOrder.push(otherId);
-          }
-        }
-        nextOrder.splice(insertIndex, 0, serviceId);
-        sharedOrder.set(nextOrder);
-      }
-    })
-    .onFinalize((_event, success) => {
-      'worklet';
-      if (activeId.get() !== serviceId) {
-        return;
-      }
-      const finalIndex = indexOf(serviceId);
-      // Releasing the active flag makes the row's derived style animate
-      // itself into its final slot; no explicit position write is needed.
-      activeId.set(null);
-      if (!success) {
-        const restoredOrder: string[] = [];
-        for (const otherId of sharedOrder.get()) {
-          if (otherId !== serviceId) {
-            restoredOrder.push(otherId);
-          }
-        }
-        restoredOrder.splice(fromIndex, 0, serviceId);
-        sharedOrder.set(restoredOrder);
-        return;
-      }
-      scheduleOnRN(triggerDragEndHaptic);
-      if (finalIndex >= 0) {
-        scheduleOnRN(onReorder, fromIndex, finalIndex);
-      }
-    });
-}
-
-function DragHandle({
-  dragGesture,
-  serviceName,
-}: {
-  readonly dragGesture: ReturnType<typeof buildPanGesture>;
-  readonly serviceName: string;
-}) {
-  return (
-    <GestureDetector gesture={dragGesture}>
-      <View
-        accessibilityLabel={`Déplacer ${serviceName}`}
-        accessibilityRole="adjustable"
-        style={styles.dragHandle}
-      >
-        <SymbolView
-          name={{ ios: 'line.3.horizontal', android: 'drag_indicator' }}
-          size={16}
-          tintColor={semanticColors.foregroundMuted}
-        />
-      </View>
-    </GestureDetector>
-  );
-}
-
-interface SortableRowProps {
-  readonly draft: SelectedServiceDraft;
-  readonly serviceId: string;
-  readonly serviceName: string;
-  readonly fromIndex: number;
-  readonly activeId: SharedValue<string | null>;
-  readonly dragBase: SharedValue<number>;
-  readonly dragTop: SharedValue<number>;
-  readonly sharedHeights: SharedValue<HeightMap>;
-  readonly sharedOrder: SharedValue<string[]>;
-  readonly moveDuration: number;
-  readonly liftDuration: number;
-  readonly ready: boolean;
-  readonly sortable: boolean;
-  readonly expanded: boolean;
-  readonly measure: (event: LayoutChangeEvent) => void;
-  readonly onReorder: (fromIndex: number, toIndex: number) => void;
-  readonly onToggleExpanded: () => void;
-  readonly onUpdatePrice: (price: number) => void;
-  readonly onUpdatePhaseDuration: (phaseId: string, durationMinutes: number) => void;
-  readonly onRemove: () => void;
-  readonly canRemove: boolean;
-  readonly renderCard?: (props: SortableDraftCardProps) => ReactNode;
-}
-
-function SortableRow({
-  draft,
-  serviceId,
-  serviceName,
-  fromIndex,
-  activeId,
-  dragBase,
-  dragTop,
-  sharedHeights,
-  sharedOrder,
-  moveDuration,
-  liftDuration,
-  ready,
-  sortable,
-  expanded,
-  measure,
-  onReorder,
-  onToggleExpanded,
-  onUpdatePrice,
-  onUpdatePhaseDuration,
-  onRemove,
-  canRemove,
-  renderCard,
-}: SortableRowProps) {
-  // Row-local primitive shared value: true once the row has rendered its
-  // first absolute frame. The first frame is applied directly so the row
-  // never animates in from top 0 when the list switches to absolute mode.
-  const positioned = useSharedValue(false);
-  const dragGesture = useMemo(
-    () =>
-      buildPanGesture({
-        serviceId,
-        fromIndex,
-        activeId,
-        dragBase,
-        dragTop,
-        sharedHeights,
-        sharedOrder,
-        onReorder,
-      }),
-    [
-      activeId,
-      dragBase,
-      dragTop,
-      fromIndex,
-      onReorder,
-      serviceId,
-      sharedHeights,
-      sharedOrder,
-    ],
-  );
-
-  const animatedStyle = useAnimatedStyle(() => {
-    const isActive = activeId.get() === serviceId;
-
-    let slot = 0;
-    const cardHeights = sharedHeights.get();
-    for (const otherId of sharedOrder.get()) {
-      if (otherId === serviceId) {
-        break;
-      }
-      slot += (cardHeights[otherId] ?? 0) + GAP;
-    }
-
-    let top = slot;
-    if (isActive) {
-      top = dragTop.get();
-    } else if (ready) {
-      // The updater also runs while the row is still in flow layout. Only
-      // consume the first-frame guard once absolute positioning is active.
-      if (!positioned.get()) {
-        positioned.set(true);
-      } else {
-        top = withTiming(slot, { duration: moveDuration, easing: MOVE_EASING });
-      }
-    }
-
-    return {
-      top,
-      zIndex: isActive ? 10 : 0,
-      transform: [
-        {
-          scale: withTiming(isActive ? interaction.dragLiftScale : 1, {
-            duration: liftDuration,
-          }),
-        },
-      ],
-      shadowColor: shadowSource.navy,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: withTiming(isActive ? 0.16 : 0, { duration: liftDuration }),
-      shadowRadius: 12,
-    };
-  });
-
-  return (
-    <Animated.View
-      onLayout={measure}
-      style={[ready ? styles.rowAbsolute : styles.rowFlow, ready && animatedStyle]}
-    >
-      {renderCard
-        ? renderCard({
-            draft,
-            expanded,
-            onToggleExpanded,
-            onUpdatePrice,
-            onUpdatePhaseDuration,
-            onRemove,
-            canRemove,
-            dragHandle: sortable ? (
-              <DragHandle dragGesture={dragGesture} serviceName={serviceName} />
-            ) : undefined,
-          })
-        : (
-            <AppointmentServiceEditorCard
-              draft={draft}
-              expanded={expanded}
-              dragHandle={
-                sortable ? <DragHandle dragGesture={dragGesture} serviceName={serviceName} /> : undefined
-              }
-              canRemove={canRemove}
-              onRemove={onRemove}
-              onToggleExpanded={onToggleExpanded}
-              onUpdatePhaseDuration={onUpdatePhaseDuration}
-              onUpdatePrice={onUpdatePrice}
-            />
-          )}
-    </Animated.View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { position: 'relative' },
-  rowFlow: { marginBottom: GAP },
-  rowAbsolute: {
-    left: 0,
-    position: 'absolute',
-    right: 0,
-  },
-  dragHandle: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    marginLeft: spacing.xs,
-    width: 44,
-  },
-});

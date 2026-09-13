@@ -8,8 +8,12 @@
 //
 // The draft never reaches the session before Enregistrer, and the catalog
 // Service is never involved: only this Appointment's snapshot changes.
+//
+// On an editable Appointment the row also carries the shared reorder handle
+// (SortableRowList) in its header and is wrapped by Details in the shared
+// SwipeToDeleteRow: tap → timing, drag handle → reorder, swipe → remove.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -52,6 +56,8 @@ interface AppointmentServiceSectionProps {
   readonly editable?: boolean;
   /** Persists the changed durations of this item; returns whether it succeeded. */
   readonly onSaveTiming?: (updates: readonly AppointmentPhaseDurationUpdate[]) => boolean;
+  /** The shared reorder handle, present while the Appointment is editable and has several items. */
+  readonly dragHandle?: ReactNode;
 }
 
 type DraftDurations = Readonly<Record<string, number>>;
@@ -71,6 +77,7 @@ export function AppointmentServiceSection({
   onToggle,
   editable = false,
   onSaveTiming,
+  dragHandle,
 }: AppointmentServiceSectionProps) {
   const { item, timelineItem } = service;
   const simple = isServicePhaseRedundant(service);
@@ -140,21 +147,24 @@ export function AppointmentServiceSection({
 
   return (
     <Animated.View layout={layoutTransition} style={styles.container} testID={`service-section-${item.id}`}>
-      {expandable ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${item.serviceName}, commence à ${formatAppointmentTime(timelineItem.startAt)}`}
-          accessibilityState={{ expanded }}
-          onPress={onToggle}
-          style={({ pressed }) => [styles.header, pressed && styles.pressed]}
-        >
-          {headerContent}
-        </Pressable>
-      ) : (
-        <View accessibilityLabel={item.serviceName} style={styles.header}>
-          {headerContent}
-        </View>
-      )}
+      <View style={styles.headerRow}>
+        {expandable ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${item.serviceName}, commence à ${formatAppointmentTime(timelineItem.startAt)}`}
+            accessibilityState={{ expanded }}
+            onPress={onToggle}
+            style={({ pressed }) => [styles.header, pressed && styles.pressed]}
+          >
+            {headerContent}
+          </Pressable>
+        ) : (
+          <View accessibilityLabel={item.serviceName} style={styles.header}>
+            {headerContent}
+          </View>
+        )}
+        {dragHandle}
+      </View>
       {expandable && expanded && (
         <Animated.View entering={enteringAnimation} exiting={exitingAnimation}>
           {editable ? (
@@ -203,12 +213,14 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.surfaceLavender,
     borderCurve: 'continuous',
     borderRadius: radii.medium,
-    marginBottom: spacing.sm,
     overflow: 'hidden',
   },
+  headerRow: { alignItems: 'center', flexDirection: 'row' },
   header: {
     alignItems: 'center',
+    flex: 1,
     flexDirection: 'row',
+    minWidth: 0,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
