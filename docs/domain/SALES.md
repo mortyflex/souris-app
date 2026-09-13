@@ -5,9 +5,9 @@
 This document defines the Product Sale rules of Souris Sales V1.
 
 V1 scope: COMPLETED Product sales only, created by the professional, optionally attached to a
-Client, decrementing current Product stock atomically. No pending orders, checkout, payment
-methods, refunds, returns, discounts, tax, receipts, cash register, revenue dashboard, loyalty,
-or persistence.
+Client and optionally to the Appointment they were sold during, decrementing current Product stock
+atomically. No pending orders, payment methods on the Sale itself, refunds, returns, discounts,
+tax, receipts, revenue dashboard, or loyalty.
 
 Sales exist to make Product retail and stock easier to manage and to give the Client Profile a
 real, Souris-generated purchase history.
@@ -21,6 +21,8 @@ Sale
 ├── id            stable runtime identity (sale-{timestamp}-{sequence})
 ├── businessId    explicit business ownership
 ├── clientId?     OPTIONAL — a walk-in sale has no Client
+├── appointmentId? OPTIONAL — the Appointment the Sale was sold during (« Revente »)
+├── payment?      OPTIONAL — card / cash received, standalone Sales only (see §4b)
 ├── completedAt   completion instant (Date)
 └── items[]       ordered SaleItem snapshots
     ├── id            stable unique identity ({saleId}-item-{n})
@@ -30,8 +32,8 @@ Sale
     └── quantity      integer >= 1
 ```
 
-There is NO `status`, `total`, `paymentMethod`, `discount`, `tax`, `imageUri`, or `refund`
-field. V1 only creates completed Sales, so a status would carry no information.
+There is NO `status`, `total`, `discount`, `tax`, `imageUri`, or `refund` field. V1 only
+creates completed Sales, so a status would carry no information.
 
 Totals are DERIVED, never stored:
 
@@ -72,9 +74,13 @@ Profile or from Appointment Details preselects that Client (the Appointment's `c
 draft, and the professional may still change or remove it before completion. An unknown
 supplied id falls back to no Client — nothing is invented.
 
-The Appointment is NOT persisted on the Sale: there is no `appointmentId`, `source`, or
-`origin` field. The Appointment is only the navigation context that opened the flow; the Sale
-stays associated with the Client through `clientId`.
+The Appointment may be persisted on the Sale. `appointmentId` is optional and set ONLY when the
+flow was opened from Appointment Details (« Revente ») and the id resolves to an existing
+Appointment; a Sale opened from the Client Profile or from Produits keeps `appointmentId`
+undefined. An Appointment is never inferred from the Client. The link is plain reference
+metadata (no foreign key, no cascade): the Sale snapshot stays valid history even if the
+Appointment later disappears, and it never resolves live Appointment data. Changing or removing
+the Client in the draft does not change the Appointment link — it records where the Sale happened.
 
 `clientId` is optional in the canonical model. A walk-in Product sale is a valid Sale: it decrements stock and is stored
 in the session like any other Sale, but it appears on no Client Profile. Souris never fabricates
@@ -84,6 +90,32 @@ Selecting or removing a Client in the Sale draft never mutates the Client sessio
 history is derived from Sales through `sale.clientId` and never stored on the Client.
 
 ---
+
+## 4b. Standalone Sale Payment
+
+A Sale completed from `Produits → Nouvelle vente` (no `appointmentId`) records what the
+professional actually received — tracking only, never processing:
+
+```text
+SalePayment
+├── paidAt            completion instant
+├── cardAmountCents   integer cents >= 0
+└── cashAmountCents   integer cents >= 0
+```
+
+The cents representation and the amount rules are the Appointment checkout ones
+(`docs/domain/APPOINTMENTS.md` §25b): card only, cash only, or mixed; when the Sale total is
+positive the received total must be positive; the received total may otherwise differ from
+the Sale total. Invalid cents or a zero payment on a priced Sale are completion issues
+(`INVALID_PAYMENT`) and nothing changes.
+
+A Sale sold during an Appointment (« Revente », `appointmentId` set) NEVER carries a payment:
+the Appointment checkout records the whole amount received. A draft that combines both is
+refused (`LINKED_SALE_PAYMENT`). Historical Sales keep `payment = undefined`; Souris never
+fabricates a payment method for them.
+
+The Cash Register counts `sale.payment` ONLY for standalone Sales, so the same money is never
+counted twice (`docs/domain/APPOINTMENTS.md` §25b).
 
 ## 5. Stock Rule
 
@@ -117,6 +149,7 @@ validate the WHOLE draft against the CURRENT Product catalog
 → every referenced Product exists and is active
 → every quantity is an integer >= 1
 → every requested quantity <= available stock
+→ an optional payment is valid and only present on a standalone draft
 → build the immutable Sale snapshot
 → decrement every involved Product stock
 → add the Sale
@@ -131,6 +164,8 @@ INVALID_QUANTITY      productId, quantity
 PRODUCT_MISSING       productId
 PRODUCT_INACTIVE      productId, productName
 INSUFFICIENT_STOCK    productId, productName, requested, available
+INVALID_PAYMENT
+LINKED_SALE_PAYMENT   appointmentId
 ```
 
 The pure domain function (`prepareSaleCompletion`) never applies anything; it returns either
@@ -185,6 +220,24 @@ exposes only `sales`, `getSaleById`, and `completeSale`.
 
 ---
 
+## 10b. Appointment Products (« Produits vendus »)
+
+Appointment Details lists the Products sold during the Appointment:
+
+```text
+sale.appointmentId === appointment.id
+```
+
+rendered EXCLUSIVELY from Sale snapshots (`productName`, `unitPrice`, `quantity`) — never from the
+live Product catalog. Several Sales from the same Appointment are merged into one concise list:
+identical snapshot lines (same Product, name and unit price) add their quantities; a later
+different snapshot stays its own line. A derived `Total produits` closes the list. A Sale of the
+same Client without the Appointment id is not shown there. The Product total also feeds the
+checkout expected total (`docs/domain/APPOINTMENTS.md` §25b) as a UX helper only.
+
+Standalone Sales record their own payment (§4b) and are counted by the Cash Register; a Sale
+sold during an Appointment is counted through the Appointment checkout only.
+
 ## 11. Client Purchase History
 
 The Client Profile `Produits achetés` section derives from the Sale session:
@@ -219,7 +272,6 @@ never in the domain.
 
 ## 14. Non-Goals
 
-Not in this phase: pending orders, checkout workflow, payment providers, card terminal, payment
-methods, refunds, returns, discounts, tax/VAT, receipts/invoices, cash register, accounting,
-revenue dashboard, sales history screen, loyalty, per-sale price editing, image snapshots,
-persistence/backend.
+Not in this phase: pending orders, payment providers, card terminal, payment correction on
+a completed Sale, refunds, returns, discounts, tax/VAT, receipts/invoices, accounting, revenue
+dashboard, sales history screen, loyalty, per-sale price editing, image snapshots, cloud sync.

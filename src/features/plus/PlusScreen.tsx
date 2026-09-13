@@ -9,6 +9,7 @@ import { formatBusinessActivityType } from '@/features/business/presentation';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { usePersistence } from '@/providers/PersistenceProvider';
+import { cashRegisterIcon } from '@/shared/icons/payment-method-icons';
 import { AppText } from '@/shared/ui/AppText';
 import { BrandComposition } from '@/shared/ui/BrandMark';
 import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
@@ -62,6 +63,28 @@ export function PlusScreen() {
             <AppText variant="rowTitle">Prestations & tarifs</AppText>
             <AppText variant="metadata" style={styles.meta}>
               {serviceCountLabel}
+            </AppText>
+          </View>
+          <SymbolView
+            name={{ ios: 'chevron.right', android: 'chevron_right' }}
+            size={15}
+            tintColor={semanticColors.foregroundMuted}
+          />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Caisse, encaissements du jour et du mois"
+          onPress={() => router.push('/cash-register')}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          testID="plus-cash-register"
+        >
+          <View style={styles.iconSurface}>
+            <SymbolView name={cashRegisterIcon} size={19} tintColor={semanticColors.accent} />
+          </View>
+          <View style={styles.copy}>
+            <AppText variant="rowTitle">Caisse</AppText>
+            <AppText variant="metadata" style={styles.meta}>
+              Encaissements du jour et du mois
             </AppText>
           </View>
           <SymbolView

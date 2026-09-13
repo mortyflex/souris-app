@@ -92,3 +92,53 @@ describe('Sale store', () => {
     expect(loadSales(db)).toEqual([]);
   });
 });
+
+describe('Sale payment', () => {
+  const paidAt = new Date(2026, 8, 12, 15, 5, 30, 250);
+
+  it.each([
+    ['card only', { cardAmountCents: 10000, cashAmountCents: 0 }],
+    ['cash only', { cardAmountCents: 0, cashAmountCents: 10000 }],
+    ['mixed', { cardAmountCents: 7500, cashAmountCents: 2500 }],
+  ])('persists a standalone Sale payment (%s) with exact cents across a restart', (_label, amounts) => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+
+    completeSale(db, { ...saleForLea, payment: { paidAt, ...amounts } }, [{ productId: productMask.id, quantity: 2 }]);
+
+    const [reloaded] = loadSnapshot(db).sales;
+    expect(reloaded?.payment).toEqual({ paidAt, ...amounts });
+    expect(reloaded?.payment?.paidAt.getTime()).toBe(paidAt.getTime());
+    expect(
+      db.getFirstSync<{ paid_at: string; card_amount_cents: number; cash_amount_cents: number }>(
+        "SELECT paid_at, card_amount_cents, cash_amount_cents FROM sales WHERE id = 'sale-1'",
+      ),
+    ).toEqual({ paid_at: paidAt.toISOString(), ...{ card_amount_cents: amounts.cardAmountCents, cash_amount_cents: amounts.cashAmountCents } });
+  });
+
+  it('keeps Sales without payment (historical, Appointment-linked) at NULL and hydrates no payment', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+
+    completeSale(db, { ...saleForLea, appointmentId: 'appointment-lea' }, [{ productId: productMask.id, quantity: 2 }]);
+
+    const [reloaded] = loadSales(db);
+    expect('payment' in (reloaded ?? {})).toBe(false);
+    expect(
+      db.getFirstSync<{ paid_at: string | null }>("SELECT paid_at FROM sales WHERE id = 'sale-1'"),
+    ).toEqual({ paid_at: null });
+  });
+
+  it('rejects invalid cents before writing anything', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+
+    expect(() =>
+      completeSale(db, { ...saleForLea, payment: { paidAt, cardAmountCents: -1, cashAmountCents: 0 } }, [
+        { productId: productMask.id, quantity: 2 },
+      ]),
+    ).toThrow(RangeError);
+    expect(loadSales(db)).toEqual([]);
+    expect(findProduct(db, productMask.id)?.stockQuantity).toBe(5);
+  });
+});

@@ -4,9 +4,9 @@ import { bootstrapPersistence, loadSnapshot } from '../bootstrap';
 import { migrateDatabase, readSchemaVersion } from '../migrations';
 import { CURRENT_SCHEMA_VERSION, migrations } from '../schema';
 import { readSeedVersion } from '../seed';
-import { insertAppointment } from '../stores/appointments';
 import { insertClient, loadClients, updateClient } from '../stores/clients';
 import { appointmentLea, createTestSeed } from '../testing/fixtures';
+import { insertHistoricalAppointment } from '../testing/historical-fixtures';
 import { openTestDatabase } from '../testing/node-sqlite-database';
 
 interface CountRow {
@@ -42,7 +42,7 @@ function openSchemaV3Database() {
   db.runSync(insert, ['client-felix', 'Félix', 'Rouge', null, null, '1994-10-12', null]);
   db.runSync(insert, ['client-nadia', 'Nadia', null, null, null, null, '2026-09-01T10:00:00.000Z']);
   db.runSync(insert, ['client-odd', 'Odile', null, null, null, 'inconnu', null]);
-  insertAppointment(db, appointmentLea);
+  insertHistoricalAppointment(db, appointmentLea);
   db.runSync("INSERT INTO souris_metadata (key, value) VALUES ('seed_version', '1')");
   return db;
 }
@@ -55,8 +55,8 @@ describe('schema v4 migration on an existing v3 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(4);
-    expect(CURRENT_SCHEMA_VERSION).toBe(4);
+    expect(readSchemaVersion(db)).toBe(6);
+    expect(CURRENT_SCHEMA_VERSION).toBe(6);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(countRows(db, 'clients')).toBe(4);
@@ -100,7 +100,7 @@ describe('schema v4 migration on an existing v3 database', () => {
     const db = openSchemaV3Database();
     migrateDatabase(db);
 
-    expect(migrateDatabase(db)).toBe(4);
+    expect(migrateDatabase(db)).toBe(6);
     const felix = loadClients(db).find((client) => client.id === 'client-felix');
     expect(felix).toBeDefined();
     updateClient(db, { ...felix!, birthday: { month: 7, day: 21 } });

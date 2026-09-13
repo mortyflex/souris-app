@@ -12,6 +12,7 @@ export type {
   AppointmentItem,
   AppointmentCancellation,
   AppointmentNoShow,
+  AppointmentPayment,
   Appointment,
 } from "./types";
 
@@ -50,3 +51,17 @@ export {
   markAppointmentNoShow,
   finalizePastBusinessDays,
 } from "./lifecycle";
+
+export type { AppointmentPaymentAmounts, AppointmentReferences } from "./payment";
+export {
+  areValidPaymentAmounts,
+  canCheckoutAppointment,
+  canDeleteAppointmentPermanently,
+  canEditAppointmentPayment,
+  checkoutAppointment,
+  eurosToCents,
+  getPaymentTotalCents,
+  isCheckoutTotalAcceptable,
+  isValidPaymentAmountCents,
+  updateAppointmentPayment,
+} from "./payment";

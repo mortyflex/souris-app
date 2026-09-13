@@ -16,8 +16,16 @@
 //
 // Entry contexts: Client Profile and Appointment Details open this screen with
 // an `initialClientId` (resolved on the first render, never a flicker of
-// « Aucune cliente »); the Produits tab opens it without one (walk-in). The
-// origin is navigation-only: nothing about it reaches the Sale.
+// « Aucune cliente »); the Produits tab opens it without one (walk-in).
+// Appointment Details (« Revente ») also passes the Appointment id: when it
+// resolves to a known Appointment, the completed Sale carries it so the
+// Appointment can list its Products. Nothing else about the origin reaches
+// the Sale, and an Appointment is never inferred from the Client.
+//
+// Payment: a STANDALONE Sale records what was received (card / cash) in the
+// shared checkout sheet before it completes; a Sale sold during an
+// Appointment skips that step because the Appointment checkout records the
+// whole amount received.
 
 import { useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
@@ -26,14 +34,17 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { Product } from '@/domain/products';
+import { eurosToCents } from '@/domain/appointments';
 import {
   getSaleTotal,
   prepareSaleCompletion,
   type SaleDraft,
   type SaleDraftLine,
+  type SalePaymentAmounts,
 } from '@/domain/sales';
 import { getClientDisplayName, isClientArchived } from '@/domain/clients';
 import { ClientPickerSheet } from '@/features/clients/selection/ClientPickerSheet';
+import { useOptionalAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { findProductsByBarcode, prepareProductDirectory } from '@/features/products/search/filter-products';
 import { useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
@@ -63,6 +74,7 @@ import {
 import { describeSaleCompletionIssue } from '../presentation';
 import { useSaleSession } from '../session/SaleSessionProvider';
 import { SaleLineRow } from './components/SaleLineRow';
+import { SalePaymentSheet } from './components/SalePaymentSheet';
 import { SaleProductRow } from './components/SaleProductRow';
 import { SaleScanResultSheet, type SaleScanResult } from './components/SaleScanResultSheet';
 import {
@@ -82,14 +94,22 @@ const PREVIEW_INSTANT = new Date(0);
 interface SaleCreationScreenProps {
   /** Client preselected by the entry context; unknown ids fall back to none. */
   readonly initialClientId?: string;
+  /** Appointment the Sale is sold during (Revente); unknown ids fall back to none. */
+  readonly initialAppointmentId?: string;
 }
 
-export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps) {
+export function SaleCreationScreen({ initialClientId, initialAppointmentId }: SaleCreationScreenProps) {
   const router = useRouter();
   const business = useCurrentBusiness();
   const { products, activeProducts, getProductById } = useProductCatalog();
   const { getClientById } = useClientSession();
   const { completeSale } = useSaleSession();
+  const appointmentSession = useOptionalAppointmentSession();
+  // The link is kept only for an Appointment that actually exists; a stale
+  // or foreign route parameter never becomes Sale history.
+  const [appointmentId] = useState<string | undefined>(
+    () => appointmentSession?.getAppointmentById(initialAppointmentId)?.appointment.id,
+  );
 
   const [saleId] = useState(() => createSaleId());
   const lineSequence = useRef(0);
@@ -106,16 +126,19 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
   const [scanResult, setScanResult] = useState<SaleScanResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [discardRequested, setDiscardRequested] = useState(false);
+  const [paymentVisible, setPaymentVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
 
   const client = getClientById(clientId);
   const trimmedQuery = query.trim();
   const searchResults = trimmedQuery.length > 0 ? prepareProductDirectory(activeProducts, trimmedQuery) : [];
 
-  const buildDraft = (completedAt: Date): SaleDraft => ({
+  const buildDraft = (completedAt: Date, payment?: SalePaymentAmounts): SaleDraft => ({
     id: saleId,
     businessId: business.id,
     clientId,
+    appointmentId,
+    ...(payment ? { payment } : {}),
     completedAt,
     lines,
   });
@@ -197,10 +220,10 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
     }
   }, [isLeaving, router]);
 
-  const validate = () => {
+  const complete = (payment?: SalePaymentAmounts) => {
     let result: ReturnType<typeof completeSale>;
     try {
-      result = completeSale(buildDraft(new Date()));
+      result = completeSale(buildDraft(new Date(), payment));
     } catch {
       alertPersistenceFailure();
       return;
@@ -209,8 +232,19 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
       haptics.warning();
       return;
     }
+    setPaymentVisible(false);
     haptics.success();
     setIsLeaving(true);
+  };
+
+  // A standalone Sale records its payment first; a Sale sold during an
+  // Appointment completes directly (the Appointment checkout records the money).
+  const validate = () => {
+    if (appointmentId === undefined) {
+      setPaymentVisible(true);
+      return;
+    }
+    complete();
   };
 
   const cancel = () => {
@@ -380,6 +414,13 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
           title="Valider la vente"
         />
       </SheetActionBar>
+
+      <SalePaymentSheet
+        onClose={() => setPaymentVisible(false)}
+        onConfirm={complete}
+        totalCents={eurosToCents(total)}
+        visible={paymentVisible}
+      />
 
       <ClientPickerSheet
         onClose={() => setClientPickerVisible(false)}

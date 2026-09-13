@@ -7,16 +7,27 @@
 // key: deleting a Product never changes a Sale.
 
 import type { StockDecrement } from '@/domain/products';
-import type { Sale, SaleItem } from '@/domain/sales';
+import type { Sale, SaleItem, SalePayment } from '@/domain/sales';
 
 import { runInTransaction, type SourisDatabase } from '../database';
-import { fromSqlInstant, fromSqlOptional, toSqlInstant, toSqlOptional } from '../values';
+import {
+  fromSqlInstant,
+  fromSqlOptional,
+  fromSqlPaymentColumns,
+  toSqlInstant,
+  toSqlOptional,
+  toSqlPaymentColumns,
+} from '../values';
 
 interface SaleRow {
   readonly id: string;
   readonly business_id: string;
   readonly client_id: string | null;
+  readonly appointment_id: string | null;
   readonly completed_at: string;
+  readonly paid_at: string | null;
+  readonly card_amount_cents: number | null;
+  readonly cash_amount_cents: number | null;
 }
 
 interface SaleItemRow {
@@ -52,15 +63,21 @@ export function loadSales(db: SourisDatabase): readonly Sale[] {
   }
 
   return db
-    .getAllSync<SaleRow>('SELECT id, business_id, client_id, completed_at FROM sales ORDER BY rowid')
+    .getAllSync<SaleRow>(
+      'SELECT id, business_id, client_id, appointment_id, completed_at, paid_at, card_amount_cents, cash_amount_cents FROM sales ORDER BY rowid',
+    )
     .map((row) => {
       const clientId = fromSqlOptional(row.client_id);
+      const appointmentId = fromSqlOptional(row.appointment_id);
+      const payment: SalePayment | undefined = fromSqlPaymentColumns(row);
       return {
         id: row.id,
         businessId: row.business_id,
         ...(clientId !== undefined ? { clientId } : {}),
+        ...(appointmentId !== undefined ? { appointmentId } : {}),
         completedAt: fromSqlInstant(row.completed_at),
         items: itemsBySale.get(row.id) ?? [],
+        ...(payment ? { payment } : {}),
       };
     });
 }
@@ -89,12 +106,17 @@ export function completeSale(
       }
     }
 
-    db.runSync('INSERT INTO sales (id, business_id, client_id, completed_at) VALUES (?, ?, ?, ?)', [
-      sale.id,
-      sale.businessId,
-      toSqlOptional(sale.clientId),
-      toSqlInstant(sale.completedAt),
-    ]);
+    db.runSync(
+      'INSERT INTO sales (id, business_id, client_id, appointment_id, completed_at, paid_at, card_amount_cents, cash_amount_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        sale.id,
+        sale.businessId,
+        toSqlOptional(sale.clientId),
+        toSqlOptional(sale.appointmentId),
+        toSqlInstant(sale.completedAt),
+        ...toSqlPaymentColumns(sale.payment),
+      ],
+    );
     sale.items.forEach((item, position) => {
       db.runSync(
         'INSERT INTO sale_items (sale_id, id, position, product_id, product_name, unit_price, quantity) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -102,4 +124,13 @@ export function completeSale(
       );
     });
   });
+}
+
+/** Number of Sales sold during the Appointment (« Revente »). Deletion guard input. */
+export function countAppointmentSales(db: SourisDatabase, appointmentId: string): number {
+  return (
+    db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM sales WHERE appointment_id = ?', [
+      appointmentId,
+    ])?.count ?? 0
+  );
 }

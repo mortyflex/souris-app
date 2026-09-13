@@ -9,14 +9,24 @@ import {
 } from 'react';
 import { AppState } from 'react-native';
 
-import type { Appointment, Service } from '@/domain/appointments';
+import {
+  canDeleteAppointmentPermanently,
+  checkoutAppointment as recordCheckout,
+  updateAppointmentPayment as correctPayment,
+  type Appointment,
+  type AppointmentPaymentAmounts,
+  type Service,
+} from '@/domain/appointments';
 import { getLocalDateKey } from '@/features/agenda/calendar/week';
 import { useOptionalServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { runInTransaction, type SourisDatabase } from '@/persistence/database';
 import {
+  checkoutAppointment as persistCheckout,
+  countAppointmentReferences,
   deleteAppointment as removeAppointment,
   insertAppointmentWithServiceDefaults,
   updateAppointment as persistAppointment,
+  updateAppointmentPayment as persistPaymentCorrection,
 } from '@/persistence/stores/appointments';
 import { usePersistence } from '@/providers/PersistenceProvider';
 
@@ -153,6 +163,53 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     );
   };
 
+  const replaceEntry = (appointment: Appointment) => {
+    commit(
+      committed.current.map((currentEntry) =>
+        currentEntry.appointment.id === appointment.id ? { appointment } : currentEntry,
+      ),
+    );
+  };
+
+  const requireAppointment = (appointmentId: string, operation: string): Appointment => {
+    const entry = committed.current.find(
+      ({ appointment }) => appointment.id === appointmentId,
+    );
+    if (!entry) throw new Error(`${operation}: Appointment "${appointmentId}" not found`);
+    return entry.appointment;
+  };
+
+  // Checkout: the domain decides eligibility and builds the next record; ONE
+  // transaction then writes status + payment (re-verifying the stored row);
+  // state reflects the record only after the commit.
+  const checkoutAppointment = (appointmentId: string, amounts: AppointmentPaymentAmounts) => {
+    const appointment = requireAppointment(appointmentId, 'checkoutAppointment');
+    const next = recordCheckout(appointment, amounts, new Date());
+    if (next === appointment || !next.payment) {
+      throw new Error(`checkoutAppointment: Appointment "${appointmentId}" cannot be checked out`);
+    }
+    persistCheckout(database, appointmentId, next.payment);
+    replaceEntry(next);
+  };
+
+  const updateAppointmentPayment = (
+    appointmentId: string,
+    amounts: AppointmentPaymentAmounts,
+  ) => {
+    const appointment = requireAppointment(appointmentId, 'updateAppointmentPayment');
+    const next = correctPayment(appointment, amounts);
+    if (next === appointment) {
+      throw new Error(`updateAppointmentPayment: Appointment "${appointmentId}" has no payment`);
+    }
+    persistPaymentCorrection(database, appointmentId, amounts);
+    replaceEntry(next);
+  };
+
+  const getAppointmentDeletionEligibility = (appointmentId: string) => {
+    const references = countAppointmentReferences(database, appointmentId);
+    return { deletable: canDeleteAppointmentPermanently(references), references };
+  };
+
   const deleteAppointment = (appointmentId: string) => {
     const next = removeAppointmentEntryById(committed.current, appointmentId);
     if (next === committed.current) return;
@@ -167,6 +224,9 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
         getAppointmentById,
         addAppointment,
         updateAppointment,
+        checkoutAppointment,
+        updateAppointmentPayment,
+        getAppointmentDeletionEligibility,
         deleteAppointment,
       }}
     >
@@ -181,4 +241,9 @@ export function useAppointmentSession(): AppointmentSessionValue {
     throw new Error('useAppointmentSession must be used inside AppointmentSessionProvider');
   }
   return value;
+}
+
+/** For surfaces that may render with or without an Appointment session (Sale creation). */
+export function useOptionalAppointmentSession(): AppointmentSessionValue | null {
+  return useContext(AppointmentSessionContext);
 }

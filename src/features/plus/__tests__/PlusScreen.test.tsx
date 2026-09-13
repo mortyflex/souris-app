@@ -8,8 +8,10 @@ import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProv
 
 import { formatAppVersion, PlusScreen } from '../PlusScreen';
 
+const mockPush = jest.fn();
+
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({ push: mockPush, back: jest.fn() }),
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
@@ -103,6 +105,20 @@ describe('PlusScreen', () => {
     });
     expect(auth.calls.signOut).toBe(1);
     alertSpy.mockRestore();
+  });
+
+  it('offers the Cash Register under Gestion and opens it', async () => {
+    mockPush.mockClear();
+    const { view } = await renderPlus();
+
+    expect(view.getByText('Caisse')).toBeTruthy();
+    expect(view.getByText('Encaissements du jour et du mois')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('plus-cash-register'));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/cash-register');
   });
 
   it('anchors the decorative settings watermark, hidden from accessibility', async () => {

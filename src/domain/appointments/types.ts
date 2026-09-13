@@ -98,6 +98,22 @@ export interface AppointmentNoShow {
   readonly recordedAt: Date;
 }
 
+/**
+ * The explicit checkout ("Encaisser") recorded by the professional: how
+ * much was actually received by card and by cash, in INTEGER CENTS.
+ *
+ * This is not payment processing — nothing is charged. The amounts are what
+ * the professional confirms having received, which may legitimately differ
+ * from the snapshot total (discount, tip, adjustment). Absent on every
+ * Appointment that was never checked out, including those completed
+ * automatically by previous-day reconciliation.
+ */
+export interface AppointmentPayment {
+  readonly paidAt: Date;
+  readonly cardAmountCents: number;
+  readonly cashAmountCents: number;
+}
+
 export interface Appointment {
   readonly id: string;
   readonly businessId: string;
@@ -109,4 +125,5 @@ export interface Appointment {
   readonly notes?: string;
   readonly cancellation?: AppointmentCancellation;
   readonly noShow?: AppointmentNoShow;
+  readonly payment?: AppointmentPayment;
 }

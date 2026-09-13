@@ -42,7 +42,8 @@ Expo Router, features, or screens. Its public surface:
 database.ts          SourisDatabase — the synchronous SQL boundary every module writes against
 expo-database.ts     expo-sqlite binding (application root only)
 schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v3 (business_profile),
-                     v4 (clients.birthday), SOURIS_TABLES, BUSINESS_SCOPED_TABLES
+                     v4 (clients.birthday), v5 (sales.appointment_id, appointment checkout columns),
+                     v6 (sales payment columns), SOURIS_TABLES, BUSINESS_SCOPED_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
 seed.ts              FirstRunSeed contract + seedDatabaseIfNeeded()
@@ -62,7 +63,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities.
 
@@ -74,14 +75,16 @@ clients             id PK, first_name, last_name?, phone?, email?, birth_date? (
 services            id PK, business_id, name, type, price, active
 service_phases      (service_id FK→services CASCADE, position) PK, id, name, duration_minutes, requires_staff
 appointments        id PK, business_id, client_id, staff_member_id, start_at, status, notes?,
-                    cancelled_at?, cancelled_by?, cancellation_reason?, no_show_recorded_at?
+                    cancelled_at?, cancelled_by?, cancellation_reason?, no_show_recorded_at?,
+                    paid_at? (v5), card_amount_cents? (v5, CHECK >= 0), cash_amount_cents? (v5, CHECK >= 0)
 appointment_items   (appointment_id FK→appointments CASCADE, id) PK, item_order, service_id,
                     service_option_id?, service_name, service_type, price
 appointment_phases  (appointment_id, appointment_item_id, position) PK
                     FK→appointment_items CASCADE, id, name, duration_minutes, requires_staff
 products            id PK, business_id, name, brand?, category?, barcode?, image_uri?, price,
                     stock_quantity (CHECK >= 0), active
-sales               id PK, business_id, client_id?, completed_at
+sales               id PK, business_id, client_id?, appointment_id? (v5), completed_at,
+                    paid_at? (v6), card_amount_cents? (v6, CHECK >= 0), cash_amount_cents? (v6, CHECK >= 0)
 sale_items          (sale_id FK→sales CASCADE, id) PK, position, product_id, product_name,
                     unit_price, quantity (CHECK >= 1)
 business_profile    singleton PK (CHECK = 1), id, owner_user_id, owner_first_name,
@@ -91,7 +94,8 @@ business_profile    singleton PK (CHECK = 1), id, owner_user_id, owner_first_nam
 `business_profile` holds at most ONE row (the `singleton` primary key): the device's account
 binding. It never stores tokens or the owner's email.
 
-Indexes: `appointments(start_at)`, `appointments(client_id)`, `sales(client_id)`.
+Indexes: `appointments(start_at)`, `appointments(client_id)`, `sales(client_id)`,
+`sales(appointment_id)` (v5).
 
 ### Value representation
 
@@ -106,7 +110,13 @@ birthday        civil MM-DD TEXT                  day + month only — parsed in
                                                   a timestamp or a year (legacy `birth_date`
                                                   is retained but neither read nor written)
 optionals       NULL ↔ absent property            never empty strings, never null in domain values
-money           REAL                              current JS number semantics preserved as-is
+money           REAL                              catalog and snapshot prices: current JS number
+                                                  semantics preserved as-is
+checkout cents  INTEGER                           card_amount_cents / cash_amount_cents (appointments
+                                                  and sales) are exact integer cents; NULL with
+                                                  paid_at NULL means "no payment recorded" and
+                                                  hydrates to no payment (values.ts:
+                                                  toSqlPaymentColumns / fromSqlPaymentColumns)
 barcode         TEXT                              leading zeroes preserved
 ```
 
@@ -124,6 +134,10 @@ are plain reference metadata with NO foreign key to the catalog tables:
 Nested rows DO cascade from their owner: deleting an Appointment removes its items and phases;
 deleting a Service removes its catalog phases; deleting a Sale (not exposed today) would remove its
 items. Orphans are impossible.
+
+`sales.appointment_id` (v5) is a plain reference as well: NO foreign key and NO cascade, so deleting
+an Appointment can never delete or rewrite a Sale; instead the Appointment deletion guard (§7b)
+refuses the deletion while a Sale references it.
 
 `client_id` is a plain reference as well, with no foreign key and no cascade. Client removal is
 governed by the lifecycle: archiving only sets `clients.archived_at`, and permanent deletion is
@@ -143,6 +157,45 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v6 — standalone Sale payment
+
+```text
+ALTER TABLE sales ADD COLUMN paid_at TEXT;
+ALTER TABLE sales ADD COLUMN card_amount_cents INTEGER CHECK (card_amount_cents IS NULL OR card_amount_cents >= 0);
+ALTER TABLE sales ADD COLUMN cash_amount_cents INTEGER CHECK (cash_amount_cents IS NULL OR cash_amount_cents >= 0);
+```
+
+An existing v5 database goes `v5 → v6` in one transaction: every Sale keeps its row with the three
+payment columns NULL — historical and Appointment-linked Sales therefore hydrate with
+`payment = undefined`; no payment method is ever fabricated. No wipe, no reseed, no duplicate.
+Re-running is a no-op. Covered by a test that builds a genuine schema-v5 fixture database (a
+standalone and an Appointment-linked Sale), migrates, and asserts version, rows, NULL columns,
+hydrated values, idempotence, then a paid standalone Sale on the migrated database. Only a
+standalone Sale (`appointment_id IS NULL`) may carry a payment (domain rule, §8).
+
+### Schema v5 — Sale ↔ Appointment link and Appointment checkout
+
+```text
+ALTER TABLE sales ADD COLUMN appointment_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_sales_appointment_id ON sales(appointment_id);
+ALTER TABLE appointments ADD COLUMN paid_at TEXT;
+ALTER TABLE appointments ADD COLUMN card_amount_cents INTEGER CHECK (card_amount_cents IS NULL OR card_amount_cents >= 0);
+ALTER TABLE appointments ADD COLUMN cash_amount_cents INTEGER CHECK (cash_amount_cents IS NULL OR cash_amount_cents >= 0);
+```
+
+An existing v4 database goes `v4 → v5` in one transaction: every Sale keeps its row with
+`appointment_id = NULL` (standalone), every Appointment keeps its row with the three payment columns
+NULL — including every historical `COMPLETED` Appointment, which therefore hydrates with
+`payment = undefined` and never appears in the Cash Register. No wipe, no reseed (`seed_version`
+stays), no duplicate. Re-running is a no-op. Covered by a test that builds a genuine schema-v4
+fixture database (a SCHEDULED and a COMPLETED Appointment, one standalone Sale), migrates, and
+asserts version, rows, NULL columns, hydrated values, idempotence, then a checkout and a linked
+Sale on the migrated database.
+
+These local fields (`sales.appointment_id`, `appointments.paid_at / card_amount_cents /
+cash_amount_cents`, and since v6 `sales.paid_at / card_amount_cents / cash_amount_cents`) are the ones
+a future Cloud Sync must carry; no Supabase table exists for them yet.
 
 ### Schema v4 — Client birthday as day + month
 
@@ -334,6 +387,50 @@ is advisory, and the transaction re-verifies before deleting. There is no cascad
 
 ---
 
+### 7b. Appointment checkout and deletion guard
+
+`AppointmentSessionProvider.checkoutAppointment(id, amounts)`:
+
+```text
+domain checkoutAppointment(appointment, amounts, now)   eligibility + next record (throws on invalid cents)
+→ appointments store checkoutAppointment()              ONE transaction:
+     UPDATE appointments
+     SET status = 'COMPLETED', paid_at = ?, card_amount_cents = ?, cash_amount_cents = ?
+     WHERE id = ?
+       AND (status IN ('SCHEDULED', 'CONFIRMED', 'IN_PROGRESS')
+            OR (status = 'COMPLETED' AND paid_at IS NULL))
+     → 0 rows changed ⇒ AppointmentCheckoutConflictError ⇒ ROLLBACK
+→ replace the entry in session state
+```
+
+Status and payment land together — never `COMPLETED` first and the payment afterwards. A failure
+leaves the row and the session unchanged, so nothing appears in the Cash Register.
+
+`updateAppointmentPayment(id, amounts)` only rewrites `card_amount_cents` / `cash_amount_cents`
+of a row whose `paid_at IS NOT NULL` (status and `paid_at` preserved by construction); the session
+entry is replaced after the commit.
+
+Automatic previous-day reconciliation still goes through the generic `updateAppointment()`, which
+writes the payment columns exactly as the record carries them — `NULL` for a record without payment.
+
+`deleteAppointment(id)` (permanent deletion):
+
+```text
+BEGIN
+  SELECT paid_at FROM appointments WHERE id = ?
+  SELECT COUNT(*) FROM sales WHERE appointment_id = ?
+  payment recorded OR linked Sale  ⇒ throw AppointmentDeleteConflictError(id, references) ⇒ ROLLBACK
+  DELETE FROM appointments WHERE id = ?   (items and phases cascade)
+COMMIT
+→ remove the entry from session state
+```
+
+`getAppointmentDeletionEligibility` runs the same counts as an advisory pre-check so Details shows
+« Suppression impossible » instead of a confirmation that cannot succeed. There is no cascade to
+Sales and no `appointment_id = NULL` rewrite.
+
+---
+
 ## 8. Sales Atomicity
 
 `SaleSessionProvider.completeSale`:
@@ -345,7 +442,7 @@ prepareSaleCompletion(draft, products)   pure domain validation + snapshot + dec
         UPDATE products SET stock_quantity = stock_quantity - ?
         WHERE id = ? AND active = 1 AND stock_quantity >= ?
         → 0 rows changed ⇒ SaleStockConflictError ⇒ ROLLBACK
-     INSERT sale; INSERT sale_items
+     INSERT sale (client_id?, appointment_id?, payment columns?); INSERT sale_items
 → applyCommittedStockDecrements()        catalog state reflects the committed stock
 → add the Sale to session state
 ```
@@ -417,12 +514,18 @@ database per test, no extra dependency, no developer device database. `TestPersi
 wraps the real `PersistenceProvider` around such a database with in-memory files, seeded with the
 real first-run seed unless a test supplies its own.
 
-Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2, v2 → v3 and
-v3 → v4 upgrades of existing seeded databases, account binding (profile persisted, every `business_id`
+Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2, v2 → v3,
+v3 → v4, v4 → v5 and v5 → v6 upgrades of existing seeded databases (historical rows are inserted with the
+historical column set through `testing/historical-fixtures.ts`), account binding (profile persisted, every `business_id`
 rewritten, relationships untouched, restart, same-owner rebind, other-owner refusal, multiple local
 ids refusal, rollback), the empty production seed, the development seed under a bound Business id,
 seed-once, restart without duplicates, empty-but-initialized
 databases, every store's round trip (order, instants, `MM-DD` birthday, optionals, `archivedAt`
 Date round trip, snapshots surviving catalog deletion), Sale rollback, the transactional Client
-deletion guard (safe / blocked by Appointment / blocked by Sale / both), image promotion /
+deletion guard (safe / blocked by Appointment / blocked by Sale / both), the atomic Appointment
+checkout (exact cents round trip, refusal for missing / cancelled / no-show / paid rows, invalid
+cents, payment correction, payment kept through generic updates), the Appointment deletion guard
+(payment / linked Sale / both, Sale untouched), the Sale ↔ Appointment link round trip, the standalone Sale payment round trip (card / cash /
+mixed, NULL for linked Sales, invalid cents refused), the source-hygiene guard (no literal NUL
+byte in a store file), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.

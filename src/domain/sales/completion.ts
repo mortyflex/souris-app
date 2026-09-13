@@ -10,8 +10,10 @@
 // session boundary applies the Sale and the stock decrements together as one
 // coherent operation, or applies nothing at all.
 
+import { eurosToCents } from '../appointments/payment';
 import type { Product } from '../products';
-import { createSaleItemSnapshot, isValidSaleQuantity } from './sale';
+import { isSalePaymentAcceptable, type SalePaymentAmounts } from './payment';
+import { createSaleItemSnapshot, getSaleTotal, isValidSaleQuantity } from './sale';
 import type { Sale } from './types';
 
 /** The Product fields Sale completion reads. */
@@ -31,6 +33,10 @@ export interface SaleDraft {
   readonly id: string;
   readonly businessId: string;
   readonly clientId?: string;
+  /** The Appointment the Sale is sold during (Revente); absent for a standalone Sale. */
+  readonly appointmentId?: string;
+  /** Card / cash received — standalone Sales only; never together with `appointmentId`. */
+  readonly payment?: SalePaymentAmounts;
   readonly completedAt: Date;
   readonly lines: readonly SaleDraftLine[];
 }
@@ -42,6 +48,10 @@ export interface ProductStockDecrement {
 
 export type SaleCompletionIssue =
   | { readonly kind: 'EMPTY_SALE' }
+  /** Negative / fractional cents, or nothing received while the Sale total is positive. */
+  | { readonly kind: 'INVALID_PAYMENT' }
+  /** A Sale sold during an Appointment records no payment of its own. */
+  | { readonly kind: 'LINKED_SALE_PAYMENT'; readonly appointmentId: string }
   | { readonly kind: 'INVALID_QUANTITY'; readonly productId: string; readonly quantity: number }
   | { readonly kind: 'PRODUCT_MISSING'; readonly productId: string }
   | { readonly kind: 'PRODUCT_INACTIVE'; readonly productId: string; readonly productName: string }
@@ -121,12 +131,31 @@ export function prepareSaleCompletion(
     return createSaleItemSnapshot({ id: line.id, product, quantity: line.quantity });
   });
 
+  if (draft.payment !== undefined) {
+    if (draft.appointmentId !== undefined) {
+      return { ok: false, issues: [{ kind: 'LINKED_SALE_PAYMENT', appointmentId: draft.appointmentId }] };
+    }
+    if (!isSalePaymentAcceptable(eurosToCents(getSaleTotal({ items })), draft.payment)) {
+      return { ok: false, issues: [{ kind: 'INVALID_PAYMENT' }] };
+    }
+  }
+
   const sale: Sale = {
     id: draft.id,
     businessId: draft.businessId,
     clientId: draft.clientId,
+    ...(draft.appointmentId !== undefined ? { appointmentId: draft.appointmentId } : {}),
     completedAt: new Date(draft.completedAt.getTime()),
     items,
+    ...(draft.payment !== undefined
+      ? {
+          payment: {
+            paidAt: new Date(draft.completedAt.getTime()),
+            cardAmountCents: draft.payment.cardAmountCents,
+            cashAmountCents: draft.payment.cashAmountCents,
+          },
+        }
+      : {}),
   };
 
   const stockDecrements = [...requestedByProduct].map(([productId, quantity]) => ({

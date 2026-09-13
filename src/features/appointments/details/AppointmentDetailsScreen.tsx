@@ -1,5 +1,4 @@
 import { useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useEffect, useState } from "react";
 import {
   Platform,
@@ -11,17 +10,29 @@ import {
 
 import {
   canCancelAppointment,
-  canCompleteAppointment,
+  canCheckoutAppointment,
+  canEditAppointmentPayment,
   canMarkAppointmentNoShow,
   cancelAppointment,
   completeAppointment,
   markAppointmentNoShow,
   shouldAutoCompleteAppointment,
+  type AppointmentPaymentAmounts,
 } from "@/domain/appointments";
 import { isClientArchived } from "@/domain/clients";
+import {
+  AppointmentCheckoutSheet,
+  type AppointmentCheckoutMode,
+} from "@/features/appointments/checkout/AppointmentCheckoutSheet";
+import { getCheckoutExpectation } from "@/features/appointments/checkout/checkout-form";
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
+import {
+  getAppointmentSaleLines,
+  getAppointmentSalesTotal,
+} from "@/features/sales/presentation";
+import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
@@ -39,11 +50,17 @@ import {
   touchTarget,
 } from "@/shared/ui/theme";
 
-import { AppointmentDeletionDialog } from "./components/AppointmentDeletionDialog";
+import {
+  AppointmentDeletionDialog,
+  type AppointmentDeletionDialogMode,
+} from "./components/AppointmentDeletionDialog";
 import {
   AppointmentCancellationSheet,
   AppointmentNoShowSheet,
 } from "./components/AppointmentLifecycleSheets";
+import { AppointmentPaymentSummary } from "./components/AppointmentPaymentSummary";
+import { AppointmentPrimaryActions } from "./components/AppointmentPrimaryActions";
+import { AppointmentProductsSection } from "./components/AppointmentProductsSection";
 import { AppointmentServiceSection } from "./components/AppointmentServiceSection";
 import { AppointmentSummary } from "./components/AppointmentSummary";
 import {
@@ -70,13 +87,21 @@ export function AppointmentDetailsScreen({
   );
   const [now, setNow] = useState(() => new Date());
   const [activeSheet, setActiveSheet] = useState<"cancellation" | "no-show">();
-  const [deletionVisible, setDeletionVisible] = useState(false);
+  const [checkoutMode, setCheckoutMode] = useState<AppointmentCheckoutMode>();
+  const [deletionMode, setDeletionMode] = useState<AppointmentDeletionDialogMode>();
   const [deletedByCurrentScreen, setDeletedByCurrentScreen] = useState(false);
   const horizontalGutter =
     Platform.OS === "android" ? gutter.android : gutter.ios;
-  const { deleteAppointment, getAppointmentById, updateAppointment } =
-    useAppointmentSession();
+  const {
+    checkoutAppointment,
+    deleteAppointment,
+    getAppointmentById,
+    getAppointmentDeletionEligibility,
+    updateAppointment,
+    updateAppointmentPayment,
+  } = useAppointmentSession();
   const { getClientById } = useClientSession();
+  const { sales } = useSaleSession();
   const entry = getAppointmentById(appointmentId);
 
   useEffect(() => {
@@ -124,14 +149,18 @@ export function AppointmentDetailsScreen({
   const clientDisplayName = getResolvedClientDisplayName(client);
   // Revente opens a NEW Sale for the Client: an archived Client keeps her
   // history readable here but is never attached to new business actions.
+  // Encaisser stays possible: an existing Appointment can still be finalized.
   const canSellToClient = client !== undefined && !isClientArchived(client);
   const services = getAppointmentDetailServices(appointment);
   const summary = getAppointmentDetailSummary(appointment);
+  const productLines = getAppointmentSaleLines(sales, appointment.id);
+  const productsTotal = getAppointmentSalesTotal(sales, appointment.id);
   const endAt = getAppointmentEnd(appointment);
   const isTerminal = isTerminalAppointmentStatus(appointment.status);
   const isException =
     appointment.status === "CANCELLED" || appointment.status === "NO_SHOW";
-  const canComplete = canCompleteAppointment(appointment, now);
+  const canCheckout = canCheckoutAppointment(appointment, now);
+  const canEditPayment = canEditAppointmentPayment(appointment);
   const canCancel = canCancelAppointment(appointment);
   const canMarkNoShow = canMarkAppointmentNoShow(appointment, now);
   const canModify = !isTerminal;
@@ -149,10 +178,22 @@ export function AppointmentDetailsScreen({
     }
   };
 
-  const complete = () => {
-    const nextAppointment = completeAppointment(appointment, new Date());
-    if (nextAppointment === appointment) return;
-    if (!persist(() => updateAppointment({ appointment: nextAppointment }))) return;
+  const openSale = () => {
+    if (!client) return;
+    router.push({
+      pathname: "/sales/new",
+      params: { clientId: client.id, appointmentId: appointment.id },
+    });
+  };
+
+  const confirmCheckout = (amounts: AppointmentPaymentAmounts) => {
+    const succeeded = persist(() =>
+      checkoutMode === "edit"
+        ? updateAppointmentPayment(appointment.id, amounts)
+        : checkoutAppointment(appointment.id, amounts),
+    );
+    if (!succeeded) return;
+    setCheckoutMode(undefined);
     haptics.success();
   };
 
@@ -193,8 +234,19 @@ export function AppointmentDetailsScreen({
     haptics.warning();
   };
 
+  // The stored references decide: a recorded checkout or a linked Sale
+  // anchors the Appointment in history and blocks deletion with an
+  // explanation instead of a confirmation that could not succeed.
+  const requestDeletion = () => {
+    let deletable = false;
+    if (!persist(() => {
+      deletable = getAppointmentDeletionEligibility(appointment.id).deletable;
+    })) return;
+    setDeletionMode(deletable ? "confirm" : "blocked");
+  };
+
   const deletePermanently = () => {
-    setDeletionVisible(false);
+    setDeletionMode(undefined);
     if (!persist(() => deleteAppointment(appointment.id))) return;
     setDeletedByCurrentScreen(true);
     haptics.warning();
@@ -302,6 +354,8 @@ export function AppointmentDetailsScreen({
 
         <AppointmentSummary summary={summary} />
 
+        <AppointmentProductsSection lines={productLines} total={productsTotal} />
+
         {appointment.notes && (
           <View style={styles.notes}>
             <AppText variant="control" style={styles.noteLabel}>
@@ -313,42 +367,23 @@ export function AppointmentDetailsScreen({
           </View>
         )}
 
+        {canEditPayment && appointment.payment && (
+          <AppointmentPaymentSummary
+            onEdit={() => setCheckoutMode("edit")}
+            payment={appointment.payment}
+          />
+        )}
+
         <View style={styles.appointmentActions} testID="appointment-actions">
-          {canSellToClient && (
-            <Pressable
-              accessibilityLabel="Revente"
-              accessibilityHint="Vendre un produit à cette cliente"
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: "/sales/new",
-                  params: { clientId: client.id },
-                })
-              }
-              style={({ pressed }) => [
-                styles.saleAction,
-                pressed && styles.saleActionPressed,
-              ]}
-              testID="sell-product"
-            >
-              <SymbolView
-                name={{ ios: "bag.fill", android: "shopping_bag" }}
-                size={18}
-                tintColor={semanticColors.accent}
-              />
-              <AppText variant="control" style={styles.saleActionText}>
-                Revente
-              </AppText>
-            </Pressable>
-          )}
-          {canComplete && (
-            <AppButton
-              onPress={complete}
-              style={styles.fullWidthAction}
-              testID="complete-appointment"
-              title="Terminer"
-            />
-          )}
+          <AppointmentPrimaryActions
+            checkoutLabel={
+              appointment.status === "COMPLETED"
+                ? "Enregistrer un encaissement"
+                : "Encaisser"
+            }
+            onCheckout={canCheckout ? () => setCheckoutMode("checkout") : undefined}
+            onSell={canSellToClient ? openSale : undefined}
+          />
           {hasNormalActions && (
             <View
               style={styles.normalActions}
@@ -395,7 +430,7 @@ export function AppointmentDetailsScreen({
           <Pressable
             accessibilityHint="Supprime le rendez-vous de l’agenda et de l’historique"
             accessibilityRole="button"
-            onPress={() => setDeletionVisible(true)}
+            onPress={requestDeletion}
             style={({ pressed }) => [
               styles.deleteTextAction,
               pressed && styles.deleteTextActionPressed,
@@ -409,6 +444,14 @@ export function AppointmentDetailsScreen({
         </View>
       </ScrollView>
 
+      <AppointmentCheckoutSheet
+        expectation={getCheckoutExpectation(appointment, sales)}
+        initialAmounts={checkoutMode === "edit" ? appointment.payment : undefined}
+        mode={checkoutMode ?? "checkout"}
+        onClose={() => setCheckoutMode(undefined)}
+        onConfirm={confirmCheckout}
+        visible={checkoutMode !== undefined}
+      />
       <AppointmentCancellationSheet
         clientName={clientDisplayName}
         onClose={() => setActiveSheet(undefined)}
@@ -422,9 +465,9 @@ export function AppointmentDetailsScreen({
         visible={!isTerminal && activeSheet === "no-show"}
       />
       <AppointmentDeletionDialog
-        onClose={() => setDeletionVisible(false)}
+        mode={deletionMode}
+        onClose={() => setDeletionMode(undefined)}
         onConfirm={deletePermanently}
-        visible={deletionVisible}
       />
     </SheetScreen>
   );
@@ -506,30 +549,9 @@ const styles = StyleSheet.create({
   },
   noteLabel: { color: semanticColors.foreground, marginBottom: spacing.sm },
   appointmentActions: { gap: spacing.sm, marginTop: spacing.xl },
-  fullWidthAction: { alignSelf: "stretch" },
   normalActions: { flexDirection: "row", gap: spacing.sm },
   normalAction: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm },
   onlyNormalAction: { flex: 0, marginLeft: "auto" },
-  // Contextual commercial action: lavender, borderless, above the lifecycle
-  // actions and visually lighter than the primary Terminer.
-  saleAction: {
-    alignItems: "center",
-    alignSelf: "stretch",
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderCurve: "continuous",
-    borderRadius: radii.medium,
-    flexDirection: "row",
-    gap: spacing.sm,
-    justifyContent: "center",
-    marginBottom: spacing.xs,
-    minHeight: touchTarget[Platform.OS === "android" ? "android" : "ios"],
-    paddingHorizontal: spacing.base,
-  },
-  saleActionPressed: {
-    backgroundColor: semanticColors.borderLavender,
-    transform: [{ scale: interaction.pressedScale }],
-  },
-  saleActionText: { color: semanticColors.accent },
   deleteTextAction: {
     alignItems: "center",
     alignSelf: "center",

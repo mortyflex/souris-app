@@ -180,11 +180,52 @@ WHERE birth_date IS NOT NULL
   AND birth_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]';
 `;
 
+/**
+ * Schema v5 — Appointment checkout & Cash Register V1.
+ *
+ * `sales.appointment_id` links a Sale opened from Appointment Details
+ * (« Revente ») to its Appointment. Plain reference metadata: NO foreign
+ * key and NO cascade, so deleting an Appointment can never delete or rewrite
+ * a historical Sale. Existing Sales keep NULL (standalone).
+ *
+ * `appointments.paid_at / card_amount_cents / cash_amount_cents` hold the
+ * explicit checkout: NULL everywhere means "never checked out" — including
+ * every existing COMPLETED Appointment, which receives no fabricated payment.
+ * A recorded payment has an ISO instant and two non-negative INTEGER cents.
+ * No wipe, no reseed, no row rewritten.
+ */
+const SCHEMA_V5 = `
+ALTER TABLE sales ADD COLUMN appointment_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_sales_appointment_id ON sales(appointment_id);
+ALTER TABLE appointments ADD COLUMN paid_at TEXT;
+ALTER TABLE appointments ADD COLUMN card_amount_cents INTEGER
+  CHECK (card_amount_cents IS NULL OR card_amount_cents >= 0);
+ALTER TABLE appointments ADD COLUMN cash_amount_cents INTEGER
+  CHECK (cash_amount_cents IS NULL OR cash_amount_cents >= 0);
+`;
+
+/**
+ * Schema v6 — standalone Sale payment. The same three nullable columns as
+ * the Appointment checkout: NULL everywhere means "no payment recorded",
+ * which is what every existing Sale keeps (historical and Appointment-linked
+ * Sales never receive a fabricated payment). No wipe, no reseed, no row
+ * rewritten.
+ */
+const SCHEMA_V6 = `
+ALTER TABLE sales ADD COLUMN paid_at TEXT;
+ALTER TABLE sales ADD COLUMN card_amount_cents INTEGER
+  CHECK (card_amount_cents IS NULL OR card_amount_cents >= 0);
+ALTER TABLE sales ADD COLUMN cash_amount_cents INTEGER
+  CHECK (cash_amount_cents IS NULL OR cash_amount_cents >= 0);
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
   { version: 3, up: (db) => db.execSync(SCHEMA_V3) },
   { version: 4, up: (db) => db.execSync(SCHEMA_V4) },
+  { version: 5, up: (db) => db.execSync(SCHEMA_V5) },
+  { version: 6, up: (db) => db.execSync(SCHEMA_V6) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;

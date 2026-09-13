@@ -180,3 +180,60 @@ describe('prepareSaleCompletion', () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe('prepareSaleCompletion — payment', () => {
+  const lines = [{ id: 'sale-1-item-1', productId: 'product-a', quantity: 2 }]; // 40 €
+
+  it.each([
+    ['card only', { cardAmountCents: 4000, cashAmountCents: 0 }],
+    ['cash only', { cardAmountCents: 0, cashAmountCents: 4000 }],
+    ['mixed', { cardAmountCents: 2500, cashAmountCents: 1500 }],
+  ])('records a standalone Sale payment (%s) at the completion instant', (_label, payment) => {
+    const result = prepareSaleCompletion({ ...draft(lines), payment }, [shampoo]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.sale.payment).toEqual({ paidAt: completedAt, ...payment });
+    expect(result.sale.payment?.paidAt).not.toBe(completedAt);
+  });
+
+  it('tolerates a received total that differs from the Sale total', () => {
+    const result = prepareSaleCompletion(
+      { ...draft(lines), payment: { cardAmountCents: 3500, cashAmountCents: 0 } },
+      [shampoo],
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects nothing received for a positive Sale total, and invalid cents', () => {
+    expect(
+      prepareSaleCompletion({ ...draft(lines), payment: { cardAmountCents: 0, cashAmountCents: 0 } }, [shampoo]),
+    ).toEqual({ ok: false, issues: [{ kind: 'INVALID_PAYMENT' }] });
+    expect(
+      prepareSaleCompletion({ ...draft(lines), payment: { cardAmountCents: -1, cashAmountCents: 4000 } }, [shampoo]),
+    ).toEqual({ ok: false, issues: [{ kind: 'INVALID_PAYMENT' }] });
+    expect(
+      prepareSaleCompletion({ ...draft(lines), payment: { cardAmountCents: 10.5, cashAmountCents: 0 } }, [shampoo]),
+    ).toEqual({ ok: false, issues: [{ kind: 'INVALID_PAYMENT' }] });
+  });
+
+  it('keeps a Sale without payment valid (historical, or sold during an Appointment)', () => {
+    const standalone = prepareSaleCompletion(draft(lines), [shampoo]);
+    expect(standalone.ok && 'payment' in standalone.sale).toBe(false);
+
+    const linked = prepareSaleCompletion({ ...draft(lines), appointmentId: 'appointment-1' }, [shampoo]);
+    expect(linked.ok).toBe(true);
+    if (!linked.ok) return;
+    expect(linked.sale.appointmentId).toBe('appointment-1');
+    expect(linked.sale.payment).toBeUndefined();
+  });
+
+  it('refuses a payment on a Sale sold during an Appointment', () => {
+    expect(
+      prepareSaleCompletion(
+        { ...draft(lines), appointmentId: 'appointment-1', payment: { cardAmountCents: 4000, cashAmountCents: 0 } },
+        [shampoo],
+      ),
+    ).toEqual({ ok: false, issues: [{ kind: 'LINKED_SALE_PAYMENT', appointmentId: 'appointment-1' }] });
+  });
+});
