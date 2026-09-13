@@ -237,6 +237,11 @@ nouvelle page. Poignée, en-tête avec titre et fermeture, corps défilant, pied
 Accessibilité gérée par `Souris.sheets()` : `role="dialog"`, `aria-modal`, fermeture par Échap et par
 le scrim, focus placé à l'ouverture et restitué à la fermeture.
 
+Runtime natif : la coquille canonique (surface blanche, poignée Souris, `SheetHeader`,
+`SheetActionBar`, scrim navy 16 %, fermeture par glissement vers le bas puis démontage, politique
+de gestes explicite, jamais de clavier automatique) et la boîte de confirmation Souris sont
+définies dans `DESIGN_OVERRIDES.md` §16 — pas d'`Alert` natif pour les confirmations Souris.
+
 ### États
 
 - **Vide / erreur** (`.state`) : pastille ronde 56px, titre 17px, texte ≤ 30ch, **une seule sortie**.

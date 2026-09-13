@@ -19,6 +19,7 @@ import { haptics } from "@/shared/lib/haptics";
 
 import { AppointmentDetailsScreen } from "../AppointmentDetailsScreen";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
+import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -356,6 +357,7 @@ describe("AppointmentDetailsScreen", () => {
     jest.setSystemTime(new Date(2026, 7, 30, 0, 0, 1));
 
     await user.press(view.getByTestId("confirm-cancellation"));
+    await settleSheetTransition();
 
     expect(view.getByText("Terminé")).toBeTruthy();
     expect(view.queryByText("Annulé par la cliente")).toBeNull();
@@ -387,10 +389,13 @@ describe("AppointmentDetailsScreen", () => {
       fireEvent.press(view.getByTestId("open-permanent-deletion"));
     });
 
+    expect(view.getByTestId("permanent-deletion-dialog")).toBeTruthy();
+    expect(view.getByText("SUPPRESSION")).toBeTruthy();
     expect(view.getByText("Supprimer ce rendez-vous ?")).toBeTruthy();
     expect(
       view.getByText(/supprimé de l’agenda et de l’historique de la cliente/),
     ).toBeTruthy();
+    expect(view.getByText("Retour")).toBeTruthy();
     expect(view.getByTestId("appointment-presence").props.children).toBe(
       "present",
     );

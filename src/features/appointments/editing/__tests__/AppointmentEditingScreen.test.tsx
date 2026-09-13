@@ -9,6 +9,7 @@ import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentEditingScreen } from '../AppointmentEditingScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 const mockBack = jest.fn();
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
@@ -250,8 +251,8 @@ describe('AppointmentEditingScreen', () => {
   it('initializes from the existing Appointment snapshot and keeps the final service', async () => {
     const view = await renderEditor();
 
-    expect(view.getByText('MODIFIER LE RENDEZ-VOUS')).toBeTruthy();
-    expect(view.queryByText('Modifier le rendez-vous')).toBeNull();
+    expect(view.getByText('RENDEZ-VOUS')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Modifier le rendez-vous' })).toBeTruthy();
     expect(view.getByText('95,00 €')).toBeTruthy();
     expect(view.queryByLabelText('Prix de Balayage')).toBeNull();
     expect(view.getByText('1 h + 55 min de pose')).toBeTruthy();
@@ -377,10 +378,8 @@ describe('AppointmentEditingScreen', () => {
     expect(view.getAllByLabelText(/^Développer Coupe Brushing 1$/)).toHaveLength(1);
   });
 
-  it('discards unsaved changes from Annuler without changing session state', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
-      buttons?.find((button) => button.text === 'Abandonner')?.onPress?.();
-    });
+  it('discards unsaved changes from Annuler through the shared dialog without changing session state', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await renderEditor();
 
     await act(async () => {
@@ -393,13 +392,27 @@ describe('AppointmentEditingScreen', () => {
       fireEvent.press(view.getByTestId('cancel-appointment-edit'));
     });
 
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(view.getByTestId('discard-appointment-edit-dialog')).toBeTruthy();
+    expect(view.getByText('Abandonner les modifications ?')).toBeTruthy();
+    expect(view.getByText('Les modifications non enregistrées seront perdues.')).toBeTruthy();
+    expect(mockBack).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('keep-editing-appointment'));
+    });
+    expect(view.queryByTestId('discard-appointment-edit-dialog')).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('cancel-appointment-edit'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('discard-appointment-edit'));
+    });
+
     expect(view.getByTestId('session-items').props.children).toContain('item-sofia:Balayage:95:');
     expect(mockBack).toHaveBeenCalledTimes(1);
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Abandonner les modifications ?',
-      'Les modifications non enregistrées seront perdues.',
-      expect.any(Array),
-    );
     alertSpy.mockRestore();
   });
 
@@ -536,9 +549,6 @@ describe('AppointmentEditingScreen', () => {
   });
 
   it('changes the date keeping the local time of day, and discarding leaves the Appointment unchanged', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
-      buttons?.find((button) => button.text === 'Abandonner')?.onPress?.();
-    });
     const view = await renderEditor();
     const before = Number(view.getByTestId('session-start-at').props.children);
 
@@ -558,10 +568,12 @@ describe('AppointmentEditingScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByTestId('cancel-appointment-edit'));
     });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('discard-appointment-edit'));
+    });
 
     expect(Number(view.getByTestId('session-start-at').props.children)).toBe(before);
     expect(mockBack).toHaveBeenCalledTimes(1);
-    alertSpy.mockRestore();
   });
 
   it('saves a changed date with the local time of day preserved', async () => {
@@ -607,6 +619,7 @@ describe('AppointmentEditingScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByText('Léa Martin'));
     });
+    await settleSheetTransition();
 
     // The editor shows the new client and becomes dirty; the session is untouched.
     expect(view.getByText('Léa Martin')).toBeTruthy();
@@ -622,9 +635,6 @@ describe('AppointmentEditingScreen', () => {
   });
 
   it('discarding an edit preserves the original client', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
-      buttons?.find((button) => button.text === 'Abandonner')?.onPress?.();
-    });
     const view = await renderEditor();
 
     await act(async () => {
@@ -636,12 +646,15 @@ describe('AppointmentEditingScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByText('Léa Martin'));
     });
+    await settleSheetTransition();
     await act(async () => {
       fireEvent.press(view.getByTestId('cancel-appointment-edit'));
     });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('discard-appointment-edit'));
+    });
 
     expect(view.getByTestId('session-client-id').props.children).toBe('client-agenda-sofia');
-    alertSpy.mockRestore();
   });
 
   it('shows the explicit context actions instead of generic wording', async () => {

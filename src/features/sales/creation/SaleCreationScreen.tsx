@@ -9,9 +9,10 @@
 // Live Product values (name, price, image, stock) feed the draft UI; the
 // completed Sale keeps its own snapshot.
 //
-// Presented as a native form sheet like every other Souris creation flow. A
-// draft with lines is guarded against accidental dismissal (Annuler, swipe,
-// hardware back) by one restrained confirmation.
+// Presented as a native form sheet in the canonical Souris shell like every
+// other Souris creation flow (swipe-to-dismiss off; explicit « Annuler »). A
+// draft with lines is guarded against « Annuler » and the hardware back by
+// the shared Souris confirmation dialog.
 //
 // Entry contexts: Client Profile and Appointment Details open this screen with
 // an `initialClientId` (resolved on the first render, never a flicker of
@@ -22,16 +23,7 @@ import { useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { Product } from '@/domain/products';
 import {
@@ -52,8 +44,12 @@ import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BarcodeScannerModal } from '@/shared/ui/BarcodeScannerModal';
+import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
 import { SearchField } from '@/shared/ui/SearchField';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
+import { SheetActionBar } from '@/shared/ui/SheetActionBar';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetScreen } from '@/shared/ui/SheetScreen';
 import {
   foregroundSoft,
   gutter,
@@ -109,6 +105,7 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scanResult, setScanResult] = useState<SaleScanResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [discardRequested, setDiscardRequested] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
 
   const client = getClientById(clientId);
@@ -188,13 +185,10 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
   };
 
   const requestDiscard = () => {
-    Alert.alert('Abandonner la vente ?', 'Les produits ajoutés ne seront pas vendus.', [
-      { text: 'Continuer la vente', style: 'cancel' },
-      { text: 'Abandonner', style: 'destructive', onPress: () => setIsLeaving(true) },
-    ]);
+    setDiscardRequested(true);
   };
 
-  // Guards swipe-to-dismiss and hardware back while a draft holds lines.
+  // Guards the hardware back while a draft holds lines.
   usePreventRemove(lines.length > 0 && !isLeaving, requestDiscard);
 
   useEffect(() => {
@@ -248,28 +242,14 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardContainer}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <AppText variant="eyebrow" style={styles.eyebrow}>
-              VENTE
-            </AppText>
-            <AppText variant="sheetTitle" accessibilityRole="header" numberOfLines={1}>
-              Nouvelle vente
-            </AppText>
-          </View>
-          <AppButton
-            accessibilityLabel="Annuler la vente"
-            onPress={cancel}
-            style={styles.closeButton}
-            title="Annuler"
-            variant="tertiary"
-          />
-        </View>
+    <SheetScreen keyboardAvoiding testID="sale-creation-sheet">
+      <View style={styles.headerZone}>
+        <SheetHeader
+          action={{ accessibilityLabel: 'Annuler la vente', label: 'Annuler', onPress: cancel }}
+          eyebrow="VENTE"
+          title="Nouvelle vente"
+        />
+      </View>
 
         <ScrollView
           contentContainerStyle={styles.content}
@@ -391,16 +371,15 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
           )}
         </ScrollView>
 
-        <View style={styles.footer}>
-          <AppButton
-            accessibilityLabel="Valider la vente"
-            disabled={!validation.ok}
-            onPress={validate}
-            testID="validate-sale"
-            title="Valider la vente"
-          />
-        </View>
-      </KeyboardAvoidingView>
+      <SheetActionBar>
+        <AppButton
+          accessibilityLabel="Valider la vente"
+          disabled={!validation.ok}
+          onPress={validate}
+          testID="validate-sale"
+          title="Valider la vente"
+        />
+      </SheetActionBar>
 
       <ClientPickerSheet
         onClose={() => setClientPickerVisible(false)}
@@ -427,34 +406,38 @@ export function SaleCreationScreen({ initialClientId }: SaleCreationScreenProps)
         }}
         result={scanResult}
       />
-    </SafeAreaView>
+
+      <ConfirmationDialog
+        body="Les produits ajoutés ne seront pas vendus."
+        cancelLabel="Continuer la vente"
+        cancelTestID="keep-sale"
+        confirmLabel="Abandonner"
+        confirmTestID="discard-sale"
+        eyebrow="VENTE"
+        onCancel={() => setDiscardRequested(false)}
+        onConfirm={() => {
+          setDiscardRequested(false);
+          setIsLeaving(true);
+        }}
+        testID="discard-sale-dialog"
+        title="Abandonner la vente ?"
+        visible={discardRequested}
+      />
+    </SheetScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  keyboardContainer: { flex: 1 },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.lg,
-  },
-  headerCopy: { flex: 1, gap: spacing.xs, minWidth: 0 },
-  eyebrow: { color: semanticColors.accent },
-  closeButton: { paddingHorizontal: spacing.md },
+  headerZone: { paddingHorizontal: horizontalGutter },
   content: {
     gap: spacing.xl,
     paddingBottom: spacing['3xl'],
     paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.base,
+    paddingTop: spacing.sm,
   },
   section: { gap: spacing.md },
   clientSurface: {
-    backgroundColor: semanticColors.surfaceElevated,
+    backgroundColor: semanticColors.surfaceLavender,
     borderCurve: 'continuous',
     borderRadius: radii.large,
     gap: spacing.sm,
@@ -479,7 +462,7 @@ const styles = StyleSheet.create({
   },
   notice: { color: rose.rose600 },
   results: {
-    backgroundColor: semanticColors.surfaceElevated,
+    backgroundColor: semanticColors.surfaceLavender,
     borderCurve: 'continuous',
     borderRadius: radii.large,
     paddingHorizontal: spacing.md,
@@ -515,12 +498,4 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   issueText: { color: rose.rose600 },
-  footer: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.md,
-  },
 });

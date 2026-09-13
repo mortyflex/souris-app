@@ -24,9 +24,11 @@ import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 const mockBack = jest.fn();
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
+const mockSelectionHaptic = jest.spyOn(haptics, 'selection').mockImplementation();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack }),
@@ -240,6 +242,48 @@ describe('AppointmentCreationScreen', () => {
   beforeEach(() => {
     mockBack.mockClear();
     mockSuccessHaptic.mockClear();
+    mockSelectionHaptic.mockClear();
+  });
+
+  it('gives exactly one selection haptic when the time control is opened', async () => {
+    const view = await renderCreation();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('time-modifier'));
+    });
+
+    expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('time-value').props.children).toBe('10:15');
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Avancer de 5 minutes'));
+    });
+    expect(view.getByTestId('time-value').props.children).toBe('10:20');
+    // Stepping the time itself adds no further haptic noise.
+    expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens in the canonical Souris sheet shell with a scrollable Client list and no auto-focus', async () => {
+    const view = await renderCreation();
+
+    expect(view.getByTestId('appointment-creation-sheet')).toBeTruthy();
+    expect(view.getByText('NOUVEAU RENDEZ-VOUS')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Cliente' })).toBeTruthy();
+    expect(view.getByLabelText('Annuler la création')).toBeTruthy();
+    expect(view.getByTestId('appointment-creation-actions')).toBeTruthy();
+    expect(view.getByText('Continuer')).toBeTruthy();
+
+    const search = view.getByPlaceholderText('Rechercher une cliente');
+    expect(search.props.autoFocus).toBeFalsy();
+    // The Client list is a real vertical list the professional scrolls through;
+    // scrolling it never closes the creation sheet.
+    const list = view.getByTestId('client-picker-list');
+    expect(list.props.data.length).toBeGreaterThan(60);
+    await act(async () => {
+      fireEvent.scroll(list, { nativeEvent: { contentOffset: { y: 1200 } } });
+    });
+    expect(view.getByTestId('appointment-creation-sheet')).toBeTruthy();
+    expect(view.getByText('NOUVEAU RENDEZ-VOUS')).toBeTruthy();
+    expect(mockBack).not.toHaveBeenCalled();
   });
 
   it('presents a compact grouped selection grid without a selected stack', async () => {
@@ -646,6 +690,7 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByText('Ajouter la cliente'));
     });
+    await settleSheetTransition();
 
     const createdClientId = view.getByTestId('new-client-id').props.children as string;
     expect(createdClientId.length).toBeGreaterThan(0);

@@ -3,17 +3,17 @@
 // Extremely fast entry: Prénom required, everything else optional.
 // Inputs are trimmed; empty optional fields become undefined on the
 // canonical Client. Email validation stays basic UX-level: non-empty
-// emails must look like "something@something.something". Birth date is a
-// full civil YYYY-MM-DD date or nothing — no partial-date model.
+// emails must look like "something@something.something". The birthday is a
+// day + month pair chosen with the selector, or nothing — never a year.
 
-import { isValidCivilDate, type Client } from '@/domain/clients';
+import { isValidClientBirthday, type Client, type ClientBirthday } from '@/domain/clients';
 
 export interface ClientFormValues {
   readonly firstName: string;
   readonly lastName: string;
   readonly phone: string;
   readonly email: string;
-  readonly birthDate: string;
+  readonly birthday: ClientBirthday | undefined;
 }
 
 export const EMPTY_CLIENT_FORM: ClientFormValues = {
@@ -21,7 +21,7 @@ export const EMPTY_CLIENT_FORM: ClientFormValues = {
   lastName: '',
   phone: '',
   email: '',
-  birthDate: '',
+  birthday: undefined,
 };
 
 /** Hydrates the shared form with an existing Client (edit mode). */
@@ -31,7 +31,7 @@ export function toClientFormValues(client: Client): ClientFormValues {
     lastName: client.lastName ?? '',
     phone: client.phone ?? '',
     email: client.email ?? '',
-    birthDate: client.birthDate ?? '',
+    birthday: client.birthday,
   };
 }
 
@@ -41,17 +41,15 @@ export function isAcceptableEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
 }
 
-export function isAcceptableBirthDate(birthDate: string): boolean {
-  const trimmed = birthDate.trim();
-  if (trimmed.length === 0) return true;
-  return isValidCivilDate(trimmed);
+export function isAcceptableBirthday(birthday: ClientBirthday | undefined): boolean {
+  return birthday === undefined || isValidClientBirthday(birthday);
 }
 
 export function isValidClientForm(values: ClientFormValues): boolean {
   return (
     values.firstName.trim().length > 0 &&
     isAcceptableEmail(values.email) &&
-    isAcceptableBirthDate(values.birthDate)
+    isAcceptableBirthday(values.birthday)
   );
 }
 
@@ -69,6 +67,6 @@ export function buildClientFromForm(
     lastName: values.lastName.trim() || undefined,
     phone: values.phone.trim() || undefined,
     email: values.email.trim() || undefined,
-    ...(values.birthDate.trim() ? { birthDate: values.birthDate.trim() } : {}),
+    ...(values.birthday !== undefined ? { birthday: values.birthday } : {}),
   };
 }

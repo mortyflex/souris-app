@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SymbolView } from 'expo-symbols';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/shared/ui/AppText';
+import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
+import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
 import {
+  agenda,
   foregroundSoft,
   gutter,
   interaction,
@@ -57,6 +60,7 @@ function formatWeekRange(date: Date): string {
 }
 
 export function AgendaScreen() {
+  const router = useRouter();
   // Today is always derived from the device clock; it is refreshed on focus,
   // on return from background, and on a rollover check, never frozen at mount.
   const [today, setToday] = useState<Date>(() => startOfLocalDay(new Date()));
@@ -116,15 +120,24 @@ export function AgendaScreen() {
     setSelectedDay(current);
   };
 
+  // The SAME creation flow the timeline opens: a new Appointment on the
+  // selected day at the start of the operational day.
+  const createAppointment = () => {
+    const startAt = new Date(selectedDay);
+    startAt.setHours(agenda.dayStartHour, 0, 0, 0);
+    router.push({ pathname: '/appointments/new', params: { startAt: startAt.toISOString() } });
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={[styles.header, { paddingHorizontal: horizontalGutter }]}>
-        <AppText variant="eyebrow">{mode === 'day' ? formatDate(selectedDay) : 'Vue semaine'}</AppText>
-        <AppText variant="screenTitle" accessibilityRole="header">
-          {mode === 'day' && isSameLocalDay(selectedDay, today) ? "Aujourd'hui" : 'Agenda'}
-        </AppText>
+      <MainScreenHeader
+        eyebrow={mode === 'day' ? formatDate(selectedDay) : 'Vue semaine'}
+        style={styles.header}
+        title={mode === 'day' && isSameLocalDay(selectedDay, today) ? "Aujourd'hui" : 'Agenda'}
+        watermark="agenda"
+      >
         <AgendaViewSwitcher mode={mode} onChange={setMode} />
-      </View>
+      </MainScreenHeader>
       {mode === 'day' ? (
         <>
           <View style={[styles.dayNavigation, { paddingHorizontal: horizontalGutter }]}>
@@ -202,6 +215,11 @@ export function AgendaScreen() {
           onShiftWeek={shiftSelectedWeek}
         />
       )}
+      <FloatingCreateButton
+        accessibilityLabel="Nouveau rendez-vous"
+        onPress={createAppointment}
+        testID="agenda-create-appointment"
+      />
     </SafeAreaView>
   );
 }
@@ -240,7 +258,7 @@ function AgendaDayButton({ day, dayName, hasAppointments, selected, onPress }: A
 
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
-  header: { gap: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.md },
+  header: { paddingBottom: spacing.md },
   dayNavigation: {
     alignItems: 'center',
     flexDirection: 'row',

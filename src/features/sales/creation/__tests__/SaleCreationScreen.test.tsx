@@ -14,6 +14,7 @@ import { haptics } from '@/shared/lib/haptics';
 import { SaleSessionProvider, useSaleSession } from '../../session/SaleSessionProvider';
 import { SaleCreationScreen } from '../SaleCreationScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 const mockBack = jest.fn();
 let mockScannedBarcode = '';
@@ -423,6 +424,7 @@ describe('SaleCreationScreen', () => {
     expect(result.queryByText('Ajouter un produit')).toBeNull();
 
     await act(async () => fireEvent.press(result.getByText('Fermer')));
+    await settleSheetTransition();
     expect(view.queryByTestId('sale-scan-result')).toBeNull();
     expect(view.getByText('Aucun produit ajouté')).toBeTruthy();
   });
@@ -444,6 +446,15 @@ describe('SaleCreationScreen', () => {
     expect(view.queryByTestId(`sale-line-${MASQUE_ID}`)).toBeNull();
   });
 
+  it('presents the canonical sheet shell', async () => {
+    const view = await renderSale();
+
+    expect(view.getByText('VENTE')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Nouvelle vente' })).toBeTruthy();
+    expect(view.getByLabelText('Annuler la vente')).toBeTruthy();
+    expect(view.getByPlaceholderText('Rechercher un produit').props.autoFocus).toBeFalsy();
+  });
+
   it('closes directly when the draft is empty', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await renderSale();
@@ -452,10 +463,11 @@ describe('SaleCreationScreen', () => {
 
     expect(mockBack).toHaveBeenCalledTimes(1);
     expect(alertSpy).not.toHaveBeenCalled();
+    expect(view.queryByTestId('discard-sale-dialog')).toBeNull();
     alertSpy.mockRestore();
   });
 
-  it('asks before abandoning a draft with lines and mutates nothing', async () => {
+  it('asks through the shared dialog before abandoning a draft with lines and mutates nothing', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await renderSale();
 
@@ -464,12 +476,19 @@ describe('SaleCreationScreen', () => {
     await press(view, `sale-product-${MASQUE_ID}`);
     await act(async () => fireEvent.press(view.getByLabelText('Annuler la vente')));
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Abandonner la vente ?',
-      expect.any(String),
-      expect.any(Array),
-    );
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(view.getByTestId('discard-sale-dialog')).toBeTruthy();
+    expect(view.getByText('Abandonner la vente ?')).toBeTruthy();
     expect(mockBack).not.toHaveBeenCalled();
+
+    await press(view, 'keep-sale');
+    expect(view.queryByTestId('discard-sale-dialog')).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(view.getByTestId(`sale-line-quantity-${MASQUE_ID}`).props.children).toBe(1);
+
+    await act(async () => fireEvent.press(view.getByLabelText('Annuler la vente')));
+    await press(view, 'discard-sale');
+    expect(mockBack).toHaveBeenCalledTimes(1);
     expect(view.getByTestId('masque-stock').props.children).toBe(2);
     expect(view.getByTestId('sales-count').props.children).toBe(0);
     alertSpy.mockRestore();

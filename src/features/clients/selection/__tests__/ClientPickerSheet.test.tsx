@@ -5,6 +5,7 @@ import { Pressable, Text } from 'react-native';
 import { ClientSessionProvider, useClientSession } from '../../session/ClientSessionProvider';
 import { ClientPickerSheet } from '../ClientPickerSheet';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
@@ -62,7 +63,26 @@ describe('ClientPickerSheet (shared Client selection)', () => {
     await act(async () => fireEvent.press(view.getByText('Camille Durand')));
 
     expect(view.getByTestId('selected').props.children).toBe('client-agenda-camille:Camille');
+    await settleSheetTransition();
     expect(view.queryByText('Choisir la cliente')).toBeNull();
+  });
+
+  it('is a scroll-safe canonical sheet: header, no pan-to-dismiss, no auto-focus', async () => {
+    const view = await renderPicker();
+
+    await act(async () => fireEvent.press(view.getByTestId('open')));
+    expect(view.getByText('CLIENTE')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Choisir la cliente' })).toBeTruthy();
+    expect(view.getByPlaceholderText('Rechercher une cliente').props.autoFocus).toBeFalsy();
+    const shouldSet = view.getByTestId('bottom-sheet-drag-zone').props.onMoveShouldSetResponder as (
+      event: unknown,
+    ) => boolean;
+    expect(
+      shouldSet({
+        nativeEvent: { touches: [{ pageX: 0, pageY: 0 }], changedTouches: [], identifier: 1 },
+        touchHistory: { touchBank: [], numberActiveTouches: 1, indexOfSingleActiveTouch: 0, mostRecentTimeStamp: 0 },
+      }),
+    ).toBe(false);
   });
 
   it('creates a Client on the fly and selects it without touching other Clients', async () => {
@@ -87,6 +107,7 @@ describe('ClientPickerSheet (shared Client selection)', () => {
     await act(async () => fireEvent.press(view.getByLabelText('Fermer')));
 
     expect(view.getByTestId('selected').props.children).toBe('none');
+    await settleSheetTransition();
     expect(view.queryByText('Choisir la cliente')).toBeNull();
   });
 

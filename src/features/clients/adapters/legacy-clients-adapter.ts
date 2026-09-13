@@ -10,16 +10,17 @@
 //   lastName  → lastName
 //   telephone → phone
 //   email     → email
-//   birthdate → birthDate  (only valid YYYY-MM-DD civil dates; null, missing,
-//                          and non-conforming values are discarded — never
-//                          converted or invented)
+//   birthdate → birthday  (day + month of a well-formed YYYY-MM-DD value only;
+//                         the year is discarded; null, missing, and
+//                         non-conforming values are dropped — never
+//                         converted or invented)
 //
 // EVERYTHING ELSE is discarded. Legacy commercial history (visits, spend,
 // average basket, last visit, no-show history), notes, imported visit notes,
 // age, address and other bookkeeping fields never cross this boundary.
 // Souris commercial and appointment history starts from zero.
 
-import { isValidCivilDate, type Client } from '@/domain/clients';
+import { birthdayFromCivilDate, type Client, type ClientBirthday } from '@/domain/clients';
 
 /** Minimal shape of a legacy record; extra fields are simply ignored. */
 export interface LegacyClientRecord {
@@ -31,15 +32,14 @@ export interface LegacyClientRecord {
   readonly birthdate?: string | null;
 }
 
-function mapBirthDate(value: string | null | undefined): string | undefined {
+function mapBirthday(value: string | null | undefined): ClientBirthday | undefined {
   if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  return isValidCivilDate(trimmed) ? trimmed : undefined;
+  return birthdayFromCivilDate(value);
 }
 
 /** Maps one legacy record to canonical identity/contact only. */
 export function mapLegacyClient(record: LegacyClientRecord): Client {
-  const birthDate = mapBirthDate(record.birthdate);
+  const birthday = mapBirthday(record.birthdate);
 
   return {
     id: record._id,
@@ -47,7 +47,7 @@ export function mapLegacyClient(record: LegacyClientRecord): Client {
     lastName: record.lastName?.trim() || undefined,
     phone: record.telephone?.trim() || undefined,
     email: record.email?.trim() || undefined,
-    ...(birthDate !== undefined ? { birthDate } : {}),
+    ...(birthday !== undefined ? { birthday } : {}),
   };
 }
 

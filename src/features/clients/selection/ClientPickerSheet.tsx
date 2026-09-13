@@ -6,18 +6,19 @@
 // Client source, ACTIVE Clients only — archived Clients are never offered
 // for a new action) and the shared ClientFormSheet for creating a client on
 // the fly. Identity stays clientId-only; selecting never mutates the Client.
+//
+// Scrolling is the primary interaction here, so pan-to-dismiss is disabled:
+// the list scrolls freely and the sheet closes only through « Fermer ».
 
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { AppButton } from '@/shared/ui/AppButton';
-import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { prepareClientDirectory } from '@/features/clients/directory/sort-clients';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import type { Client } from '@/domain/clients';
-import { spacing } from '@/shared/ui/theme';
 
 import { ClientPickerStep } from './ClientPickerStep';
 
@@ -27,7 +28,6 @@ interface ClientPickerSheetProps {
   readonly onClose: () => void;
   readonly onSelectClient: (clientId: string) => void;
 }
-
 
 export function ClientPickerSheet({
   visible,
@@ -62,24 +62,22 @@ export function ClientPickerSheet({
   return (
     <BottomSheet
       backdropLabel="Fermer le sélecteur de cliente"
-      contentStyle={styles.sheetContent}
+      contentStyle={styles.body}
+      dismissOnPanDown={false}
+      header={
+        <SheetHeader
+          action={{ label: 'Fermer', onPress: close }}
+          eyebrow="CLIENTE"
+          title="Choisir la cliente"
+        />
+      }
       height="88%"
       onClose={close}
+      padded={false}
+      testID="client-picker-sheet"
       visible={visible}
     >
-      <View style={styles.header}>
-        <AppText variant="sheetTitle" accessibilityRole="header" style={styles.title}>
-          Choisir la cliente
-        </AppText>
-        <AppButton
-          accessibilityLabel="Fermer"
-          onPress={close}
-          style={styles.closeButton}
-          title="Fermer"
-          variant="tertiary"
-        />
-      </View>
-      <View style={styles.pickerBody}>
+      <View style={styles.body}>
         <ClientPickerStep
           clients={visibleClients}
           query={query}
@@ -101,15 +99,5 @@ export function ClientPickerSheet({
 }
 
 const styles = StyleSheet.create({
-  sheetContent: { flex: 1 },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.base,
-  },
-  title: { flexShrink: 1 },
-  closeButton: { paddingHorizontal: spacing.md },
-  pickerBody: { flex: 1 },
+  body: { flex: 1 },
 });

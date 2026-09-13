@@ -19,7 +19,6 @@ import {
   readBusinessProfile,
 } from '../stores/business-profile';
 import { insertAppointment } from '../stores/appointments';
-import { insertClient } from '../stores/clients';
 import { insertProduct } from '../stores/products';
 import { completeSale } from '../stores/sales';
 import { insertService } from '../stores/services';
@@ -85,7 +84,21 @@ function openSchemaV2Database(): SourisDatabase {
   }
   const seed = createTestSeed();
   db.withTransactionSync(() => {
-    for (const client of seed.clients) insertClient(db, client);
+    // Schema v2 rows carry the historical full birth_date column.
+    for (const client of seed.clients) {
+      db.runSync(
+        'INSERT INTO clients (id, first_name, last_name, phone, email, birth_date, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+          client.id,
+          client.firstName,
+          client.lastName ?? null,
+          client.phone ?? null,
+          client.email ?? null,
+          client.birthday ? `1990-${String(client.birthday.month).padStart(2, '0')}-${String(client.birthday.day).padStart(2, '0')}` : null,
+          null,
+        ],
+      );
+    }
     for (const service of seed.services) insertService(db, service);
     for (const product of seed.products) insertProduct(db, product);
     for (const appointment of seed.appointments) insertAppointment(db, appointment);
@@ -113,13 +126,14 @@ function snapshotWithoutBusinessIds(db: SourisDatabase) {
 describe('schema v3 migration on an existing v2 database', () => {
   it('adds business_profile, keeps every record, has no binding, and reruns as a no-op', () => {
     const db = openSchemaV2Database();
-    const before = snapshotWithoutBusinessIds(db);
     expect(readSchemaVersion(db)).toBe(2);
 
-    expect(migrateDatabase(db)).toBe(3);
-    expect(CURRENT_SCHEMA_VERSION).toBe(3);
-
-    expect(snapshotWithoutBusinessIds(db)).toEqual(before);
+    expect(migrateDatabase(db)).toBe(4);
+    expect(CURRENT_SCHEMA_VERSION).toBe(4);
+    // The migrated snapshot is the reference for every later comparison
+    // (the v3 → v4 birthday copy is covered by birthday-migration.test.ts).
+    const before = snapshotWithoutBusinessIds(db);
+    expect(before.clients).toEqual(createTestSeed().clients);
     expect(countRows(db, 'clients')).toBe(1);
     expect(countRows(db, 'services')).toBe(2);
     expect(countRows(db, 'service_phases')).toBe(4);
@@ -132,7 +146,7 @@ describe('schema v3 migration on an existing v2 database', () => {
     expect(readBusinessProfile(db)).toBeUndefined();
     expect(listLocalBusinessIds(db)).toEqual([BUSINESS_ID]);
 
-    expect(migrateDatabase(db)).toBe(3);
+    expect(migrateDatabase(db)).toBe(4);
     expect(countRows(db, 'business_profile')).toBe(0);
     expect(snapshotWithoutBusinessIds(db)).toEqual(before);
   });
@@ -145,7 +159,7 @@ describe('schema v3 migration on an existing v2 database', () => {
 
     expect(createSeed).not.toHaveBeenCalled();
     expect(snapshot.clients).toHaveLength(1);
-    expect(readSchemaVersion(db)).toBe(3);
+    expect(readSchemaVersion(db)).toBe(4);
   });
 });
 

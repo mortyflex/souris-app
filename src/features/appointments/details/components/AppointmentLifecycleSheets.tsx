@@ -1,10 +1,19 @@
+// Souris — Appointment lifecycle sheets (cancellation, no-show)
+//
+// Both use the canonical Souris drawer with the danger-toned header, a
+// keyboard-safe scrollable body and one fixed destructive action. The
+// cancellation reason field never auto-focuses: the keyboard opens only
+// when the professional taps it.
+
 import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import type { AppointmentCancellationActor } from '@/domain/appointments';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { SheetActionBar } from '@/shared/ui/SheetActionBar';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { fontFamilies, radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 interface AppointmentCancellationSheetProps {
@@ -149,48 +158,36 @@ function LifecycleSheet({
   return (
     <BottomSheet
       backdropLabel="Fermer la confirmation"
+      footer={
+        <SheetActionBar>
+          <AppButton
+            disabled={confirmDisabled}
+            onPress={onConfirm}
+            testID={confirmTestID}
+            title={confirmTitle}
+            variant="danger"
+          />
+        </SheetActionBar>
+      }
+      header={
+        <SheetHeader
+          action={{ label: 'Fermer', onPress: onClose }}
+          eyebrow={eyebrow}
+          title={title}
+          tone="danger"
+        />
+      }
       keyboardAvoiding
       onClose={onClose}
+      scrollable
       testID={testID}
       visible={visible}
     >
-      <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <AppText variant="eyebrow" style={styles.eyebrow}>
-            {eyebrow}
-          </AppText>
-          <AppText accessibilityRole="header" variant="sheetTitle">
-            {title}
-          </AppText>
-        </View>
-        <AppButton
-          accessibilityLabel="Fermer"
-          onPress={onClose}
-          style={styles.closeButton}
-          title="Fermer"
-          variant="tertiary"
-        />
-      </View>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        style={styles.scroll}
-      >
+      <View style={styles.body}>
         <AppText variant="body" style={styles.description}>
           {description}
         </AppText>
-        {children && <View style={styles.body}>{children}</View>}
-      </ScrollView>
-      <View style={styles.footer}>
-        <AppButton
-          disabled={confirmDisabled}
-          onPress={onConfirm}
-          style={styles.confirmButton}
-          testID={confirmTestID}
-          title={confirmTitle}
-          variant="danger"
-        />
+        {children}
       </View>
     </BottomSheet>
   );
@@ -225,20 +222,8 @@ function ActorOption({ actor, label, selected, onPress }: ActorOptionProps) {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.base,
-  },
-  headerCopy: { flex: 1, gap: spacing.xs },
-  eyebrow: { color: rose.rose600 },
-  closeButton: { paddingHorizontal: spacing.md },
+  body: { gap: spacing.lg, paddingBottom: spacing.lg, paddingTop: spacing.xs },
   description: { color: semanticColors.foregroundSoft },
-  scroll: { flexShrink: 1 },
-  scrollContent: { gap: spacing.lg, paddingBottom: spacing.lg },
-  body: { gap: spacing.base },
   fieldGroup: { gap: spacing.sm },
   fieldLabel: { color: semanticColors.foregroundSoft },
   actorOptions: { flexDirection: 'row', gap: spacing.sm },
@@ -288,12 +273,4 @@ const styles = StyleSheet.create({
     minHeight: 80,
     padding: spacing.md,
   },
-  footer: {
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: spacing.lg,
-    paddingBottom: spacing.base,
-    paddingTop: spacing.md,
-  },
-  confirmButton: { alignSelf: 'stretch' },
 });

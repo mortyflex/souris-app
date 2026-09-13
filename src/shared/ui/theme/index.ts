@@ -45,5 +45,5 @@ export {
   tabAndroid,
 } from './typography';
 export { duration, easing, interaction } from './motion';
-export { agenda, touchTarget } from './layout';
+export { agenda, dialog, floatingAction, sheet, touchTarget, watermark } from './layout';
 export { nativeShadows, shadows } from './shadows';

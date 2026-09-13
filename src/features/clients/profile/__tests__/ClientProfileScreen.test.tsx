@@ -163,7 +163,7 @@ function SessionProbe() {
             firstName: 'Félix',
             lastName: 'Rouge',
             phone: '06 11 22 33 44',
-            birthDate: '1994-10-12',
+            birthday: { month: 10, day: 12 },
           })
         }
       />
@@ -340,7 +340,7 @@ describe('ClientProfileScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('shows contact information and a friendly French birthday when present', async () => {
+  it('shows contact information and a day + month birthday, never a year', async () => {
     const view = await renderProfile('client-birthday');
 
     await act(async () => {
@@ -349,7 +349,9 @@ describe('ClientProfileScreen', () => {
 
     expect(view.getByText('Félix Rouge')).toBeTruthy();
     expect(view.getByText('06 11 22 33 44')).toBeTruthy();
-    expect(view.getByText('12 octobre 1994')).toBeTruthy();
+    expect(view.getByText('12 octobre')).toBeTruthy();
+    expect(view.queryByText(/1994/)).toBeNull();
+    expect(view.getByText('Anniversaire')).toBeTruthy();
   });
 
   it('keeps the profile structure stable at zero: Activité with four zeros and the empty Rendez-vous state', async () => {

@@ -68,13 +68,13 @@ describe('schema v2 migration on an existing v1 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(3);
-    expect(CURRENT_SCHEMA_VERSION).toBe(3);
+    expect(readSchemaVersion(db)).toBe(4);
+    expect(CURRENT_SCHEMA_VERSION).toBe(4);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(countRows(db, 'clients')).toBe(2);
     expect(snapshot.clients).toEqual([
-      { id: 'client-lea', firstName: 'Léa', lastName: 'Martin', phone: '06 12 34 56 78', birthDate: '1990-02-29' },
+      { id: 'client-lea', firstName: 'Léa', lastName: 'Martin', phone: '06 12 34 56 78', birthday: { month: 2, day: 29 } },
       { id: 'client-nadia', firstName: 'Nadia' },
     ]);
     expect(snapshot.clients.every((client) => client.archivedAt === undefined)).toBe(true);
@@ -92,7 +92,7 @@ describe('schema v2 migration on an existing v1 database', () => {
     const db = openSchemaV1Database();
     migrateDatabase(db);
 
-    expect(migrateDatabase(db)).toBe(3);
+    expect(migrateDatabase(db)).toBe(4);
     expect(countRows(db, 'clients')).toBe(2);
     expect(
       db.getAllSync<{ name: string }>('PRAGMA table_info(clients)').filter(

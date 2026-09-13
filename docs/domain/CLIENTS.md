@@ -42,32 +42,46 @@ firstName   string
 lastName?   string
 phone?      string
 email?      string
-birthDate?  string   YYYY-MM-DD
-archivedAt? Date     lifecycle marker, absent while active
+birthday?   { month, day }   day + month only, never a year
+archivedAt? Date             lifecycle marker, absent while active
 ```
 
 `id` is a stable identity and never changes — including when identity/contact
 information is edited, archived, or restored.
 
-### birthDate
+### birthday
 
-`birthDate` is a CIVIL calendar date, stored canonically as:
-
-```text
-YYYY-MM-DD
-```
-
-Example:
+Souris needs a Client birthday to recognize an upcoming birthday, offer a
+birthday promotion and show it — never to compute an age. The canonical value
+is therefore a DAY + MONTH pair with no year:
 
 ```text
-1994-10-12
+birthday?: { month: 1..12, day: 1..monthLength }
 ```
 
-It is NOT a timestamp and never a JavaScript Date at local midnight, so
-stored birthdays never shift with timezone. Conversions to/from `Date` happen
-only at input boundaries using local calendar components.
+Examples:
 
-The value is either a full `YYYY-MM-DD` date or absent — there is no
+```text
+{ month: 7, day: 21 }   → « 21 juillet »
+{ month: 2, day: 3 }    → « 3 février »
+{ month: 2, day: 29 }   → « 29 février » (always allowed: no year qualifies it)
+```
+
+Rules (`src/domain/clients/birthday.ts`):
+
+- the year is never asked for, stored, or invented — no `2000-07-21`
+  sentinel, no fake civil date;
+- impossible pairs (`02-30`, `04-31`, month 13) are invalid; the UI selector
+  cannot build them and changing the month clamps a day the new month lacks;
+- the persistence key is the civil `MM-DD` string (`formatBirthdayKey` /
+  `parseBirthdayKey`); the domain value stays the pair;
+- a historical full `YYYY-MM-DD` date (legacy import, schema ≤ v3 rows) maps
+  through `birthdayFromCivilDate`, which keeps day + month and discards the
+  year without validating it — a recorded `1990-02-29` still yields
+  `{ month: 2, day: 29 }`;
+- presentation is French, day first (`formatClientBirthday`: « 1er janvier »).
+
+The value is either a complete day + month pair or absent — there is no
 partial-date model.
 
 Future birthday features (promotions, reminders) will consume this field;
@@ -121,14 +135,15 @@ firstName → firstName
 lastName  → lastName
 telephone → phone
 email     → email
-birthdate → birthDate   only valid YYYY-MM-DD civil dates
+birthdate → birthday    day + month of a well-formed YYYY-MM-DD only
 ```
 
-The legacy `birthdate` field is mapped ONLY when it is a valid `YYYY-MM-DD`
-civil date. `null`, missing, and non-conforming values (other formats,
-partial dates) are discarded — never converted or invented. The current
+The legacy `birthdate` field is mapped ONLY when it is a well-formed
+`YYYY-MM-DD` value with a real day + month pair; the year is discarded.
+`null`, missing, and non-conforming values (other formats, partial dates,
+impossible pairs) are dropped — never converted or invented. The current
 legacy dataset contains no usable birthday value, so imported clients start
-without a `birthDate`.
+without a `birthday`.
 
 EVERYTHING ELSE is ignored. In particular, Souris never imports:
 

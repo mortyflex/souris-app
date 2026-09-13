@@ -8,7 +8,6 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   canCancelAppointment,
@@ -28,6 +27,7 @@ import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
+import { SheetScreen } from "@/shared/ui/SheetScreen";
 import {
   foregroundSoft,
   gutter,
@@ -108,14 +108,14 @@ export function AppointmentDetailsScreen({
     if (deletedByCurrentScreen) return null;
 
     return (
-      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <SheetScreen fit="content">
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Rendez-vous introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
             Ce rendez-vous n&apos;est plus disponible.
           </AppText>
         </View>
-      </SafeAreaView>
+      </SheetScreen>
     );
   }
 
@@ -202,13 +202,14 @@ export function AppointmentDetailsScreen({
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+    <SheetScreen fit="content" testID="appointment-details-sheet">
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
           { paddingHorizontal: horizontalGutter },
         ]}
+        style={styles.scroll}
       >
         <View style={styles.appointmentHeader}>
           <View
@@ -425,13 +426,13 @@ export function AppointmentDetailsScreen({
         onConfirm={deletePermanently}
         visible={deletionVisible}
       />
-    </SafeAreaView>
+    </SheetScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  content: { paddingBottom: spacing["3xl"], paddingTop: spacing.base },
+  scroll: { flexShrink: 1 },
+  content: { paddingBottom: spacing["3xl"], paddingTop: spacing.sm },
   appointmentHeader: { paddingBottom: spacing.xl },
   identityHeader: {
     alignItems: "stretch",
@@ -544,9 +545,9 @@ const styles = StyleSheet.create({
   deleteText: { color: rose.rose600 },
   notFound: {
     alignItems: "center",
-    flex: 1,
     justifyContent: "center",
     paddingHorizontal: spacing.xl,
+    paddingVertical: spacing["3xl"],
   },
   notFoundText: {
     color: foregroundSoft,

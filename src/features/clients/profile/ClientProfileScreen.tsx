@@ -21,7 +21,7 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
 import {
-  formatClientBirthDate,
+  formatClientBirthday,
   getClientDisplayName,
   getClientInitial,
   isClientArchived,
@@ -104,7 +104,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
 
   const activity = getClientActivitySummary(appointments, client.id);
   const purchases = getClientSales(sales, client.id);
-  const hasContactInfo = Boolean(client.phone || client.email || client.birthDate);
+  const hasContactInfo = Boolean(client.phone || client.email || client.birthday);
   const archived = isClientArchived(client);
 
   const openSale = () => {
@@ -293,8 +293,8 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
               <InfoRow label="Téléphone" value={client.phone} />
               <InfoRow label="Email" value={client.email} />
               <InfoRow
-                label="Date de naissance"
-                value={client.birthDate ? formatClientBirthDate(client.birthDate) : undefined}
+                label="Anniversaire"
+                value={client.birthday ? formatClientBirthday(client.birthday) : undefined}
               />
             </View>
           </View>

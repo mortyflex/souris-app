@@ -20,7 +20,7 @@ describe('schema migrations', () => {
     expect(readSchemaVersion(db)).toBe(0);
 
     expect(migrateDatabase(db)).toBe(CURRENT_SCHEMA_VERSION);
-    expect(readSchemaVersion(db)).toBe(3);
+    expect(readSchemaVersion(db)).toBe(4);
 
     const tables = db
       .getAllSync<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")

@@ -5,16 +5,14 @@
 // processing overrides) lives in this screen's state and survives every
 // step transition. The Agenda startAt is shown as appointment context on
 // every step and is never recalculated or replaced.
+//
+// Presented as a native form sheet in the canonical Souris shell
+// (SheetScreen + SheetHeader + SheetActionBar). The route disables
+// swipe-to-dismiss (`src/app/(app)/_layout.tsx`): scrolling the Client list
+// never abandons the draft — leaving goes through the explicit « Annuler ».
 
 import { useCallback, useMemo, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import type { Service } from '@/domain/appointments';
@@ -28,13 +26,10 @@ import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
-import {
-  agenda,
-  gutter,
-  lavender,
-  semanticColors,
-  spacing,
-} from '@/shared/ui/theme';
+import { SheetActionBar } from '@/shared/ui/SheetActionBar';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetScreen } from '@/shared/ui/SheetScreen';
+import { agenda, gutter, lavender, spacing } from '@/shared/ui/theme';
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
 import { AppointmentContextRow } from './components/AppointmentContextRow';
@@ -76,6 +71,8 @@ const startTimeBounds: StartTimeBounds = {
   minMinutes: agenda.dayStartHour * 60,
   maxMinutes: agenda.dayEndHour * 60 - 5,
 };
+
+const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreenProps) {
   const router = useRouter();
@@ -210,153 +207,121 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardContainer}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <AppText variant="eyebrow" style={styles.eyebrow}>
-              NOUVEAU RENDEZ-VOUS
-            </AppText>
-            <AppText variant="sheetTitle" accessibilityRole="header">
-              {stepLabels[step]}
-            </AppText>
-          </View>
-          <AppButton
-            accessibilityLabel="Annuler la création"
-            onPress={() => router.back()}
-            style={styles.cancelButton}
-            title="Annuler"
-            variant="tertiary"
-          />
-        </View>
-
-        <CreationStepper step={step} onStepPress={(target) => navigateToStep(target)} />
-
-        {step !== 2 && (
-          <AppointmentContextRow
-            startAt={draftStartAt}
-            clientName={selectedClientName}
-            onStartAtChange={stepDraftStartAt}
-          />
-        )}
-
-        {step === 0 && (
-          <ClientPickerStep
-            clients={visibleClients}
-            query={clientQuery}
-            selectedClientId={selectedClientId}
-            onChangeQuery={setClientQuery}
-            onAddClientPress={() => setAddClientVisible(true)}
-            onSelectClient={setSelectedClientId}
-          />
-        )}
-        {step === 1 && (
-          <ScrollView
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.catalogContent}
-            style={styles.catalogScroll}
-          >
-            <ServiceSelectionGrid
-              services={activeServices}
-              selectedServiceIds={selectedDrafts.map((draft) => draft.serviceId)}
-              onToggleService={toggleService}
-            />
-          </ScrollView>
-        )}
-        {step === 2 && selectedClient && summary && (
-          <SummaryStep
-            clientName={getClientDisplayName(selectedClient)}
-            entries={selectedDrafts.map((draft) => ({ draft }))}
-            expandedDraftId={expandedDraftId}
-            startAt={draftStartAt}
-            summary={summary}
-            onEditClient={() => navigateToStep(0)}
-            onEditServices={() => navigateToStep(1)}
-            onReorder={reorderSelectedDrafts}
-            onStartAtChange={stepDraftStartAt}
-            onToggleExpanded={(draftKey) =>
-              setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
-            }
-            onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
-              updateDraft(draftKey, (draft) =>
-                updateDraftPhaseDuration(draft, phaseId, durationMinutes),
-              )
-            }
-            onUpdatePrice={(draftKey, price) =>
-              updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
-            }
-          />
-        )}
-
-        <View style={styles.footer}>
-          {step === 1 && (
-            <AppText variant="control" style={styles.selectionFooterCount} testID="selection-count">
-              {formatSelectionCountLabel(selectedDrafts.length)}
-            </AppText>
-          )}
-          <View style={styles.footerButtons}>
-            {step > 0 && (
-              <AppButton
-                accessibilityLabel="Étape précédente"
-                onPress={() => navigateToStep(step - 1)}
-                style={styles.secondaryButton}
-                title="Précédent"
-                variant="secondary"
-              />
-            )}
-            <AppButton
-              disabled={!canContinue}
-              onPress={step === 2 ? create : continueToNextStep}
-              style={styles.primaryButton}
-              title={step === 2 ? 'Créer le rendez-vous' : 'Continuer'}
-            />
-          </View>
-        </View>
-
-        <ClientFormSheet
-          mode="create"
-          onClose={() => setAddClientVisible(false)}
-          onSubmitted={handleClientCreated}
-          visible={addClientVisible}
+    <SheetScreen keyboardAvoiding testID="appointment-creation-sheet">
+      <View style={styles.headerZone}>
+        <SheetHeader
+          action={{
+            accessibilityLabel: 'Annuler la création',
+            label: 'Annuler',
+            onPress: () => router.back(),
+          }}
+          eyebrow="NOUVEAU RENDEZ-VOUS"
+          title={stepLabels[step]}
         />
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </View>
+
+      <CreationStepper step={step} onStepPress={(target) => navigateToStep(target)} />
+
+      {step !== 2 && (
+        <AppointmentContextRow
+          startAt={draftStartAt}
+          clientName={selectedClientName}
+          onStartAtChange={stepDraftStartAt}
+        />
+      )}
+
+      {step === 0 && (
+        <ClientPickerStep
+          clients={visibleClients}
+          query={clientQuery}
+          selectedClientId={selectedClientId}
+          onChangeQuery={setClientQuery}
+          onAddClientPress={() => setAddClientVisible(true)}
+          onSelectClient={setSelectedClientId}
+        />
+      )}
+      {step === 1 && (
+        <ScrollView
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.catalogContent}
+          style={styles.catalogScroll}
+        >
+          <ServiceSelectionGrid
+            services={activeServices}
+            selectedServiceIds={selectedDrafts.map((draft) => draft.serviceId)}
+            onToggleService={toggleService}
+          />
+        </ScrollView>
+      )}
+      {step === 2 && selectedClient && summary && (
+        <SummaryStep
+          clientName={getClientDisplayName(selectedClient)}
+          entries={selectedDrafts.map((draft) => ({ draft }))}
+          expandedDraftId={expandedDraftId}
+          startAt={draftStartAt}
+          summary={summary}
+          onEditClient={() => navigateToStep(0)}
+          onEditServices={() => navigateToStep(1)}
+          onReorder={reorderSelectedDrafts}
+          onStartAtChange={stepDraftStartAt}
+          onToggleExpanded={(draftKey) =>
+            setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
+          }
+          onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
+            updateDraft(draftKey, (draft) =>
+              updateDraftPhaseDuration(draft, phaseId, durationMinutes),
+            )
+          }
+          onUpdatePrice={(draftKey, price) =>
+            updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
+          }
+        />
+      )}
+
+      <SheetActionBar testID="appointment-creation-actions">
+        {step === 1 && (
+          <AppText variant="control" style={styles.selectionFooterCount} testID="selection-count">
+            {formatSelectionCountLabel(selectedDrafts.length)}
+          </AppText>
+        )}
+        <View style={styles.footerButtons}>
+          {step > 0 && (
+            <AppButton
+              accessibilityLabel="Étape précédente"
+              onPress={() => navigateToStep(step - 1)}
+              style={styles.secondaryButton}
+              title="Précédent"
+              variant="secondary"
+            />
+          )}
+          <AppButton
+            disabled={!canContinue}
+            onPress={step === 2 ? create : continueToNextStep}
+            style={styles.primaryButton}
+            title={step === 2 ? 'Créer le rendez-vous' : 'Continuer'}
+          />
+        </View>
+      </SheetActionBar>
+
+      <ClientFormSheet
+        mode="create"
+        onClose={() => setAddClientVisible(false)}
+        onSubmitted={handleClientCreated}
+        visible={addClientVisible}
+      />
+    </SheetScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  keyboardContainer: { flex: 1 },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: Platform.OS === 'android' ? gutter.android : gutter.ios,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-  },
-  headerCopy: { flex: 1, gap: spacing.xs },
-  eyebrow: { color: semanticColors.accent },
-  cancelButton: { paddingHorizontal: spacing.md },
-  footer: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: spacing.sm,
-    paddingHorizontal: Platform.OS === 'android' ? gutter.android : gutter.ios,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
+  headerZone: { paddingHorizontal: horizontalGutter },
   footerButtons: { flexDirection: 'row', gap: spacing.sm },
-  catalogScroll: { backgroundColor: semanticColors.screenWarm, flex: 1 },
+  catalogScroll: { flex: 1 },
   catalogContent: {
     paddingBottom: spacing.xl,
-    paddingHorizontal: Platform.OS === 'android' ? gutter.android : gutter.ios,
+    paddingHorizontal: horizontalGutter,
   },
   selectionFooterCount: {
     color: lavender.lav700,

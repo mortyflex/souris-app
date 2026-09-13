@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { Alert, Text } from "react-native";
+import { Alert, StyleSheet, Text } from "react-native";
 
 import {
   ServiceCatalogProvider,
@@ -9,9 +9,11 @@ import { ServiceEditorScreen } from "../ServiceEditorScreen";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 
 const mockBack = jest.fn();
+const mockSetOptions = jest.fn();
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ back: mockBack }),
+  useNavigation: () => ({ setOptions: mockSetOptions }),
 }));
 
 jest.mock("react-native-reanimated", () => {
@@ -107,7 +109,34 @@ function renderEditor(screen: React.ReactNode) {
 }
 
 describe("ServiceEditorScreen", () => {
-  beforeEach(() => mockBack.mockClear());
+  beforeEach(() => {
+    mockBack.mockClear();
+    mockSetOptions.mockClear();
+  });
+
+  it("opens in the canonical sheet shell without auto-focusing a field", async () => {
+    const view = await renderEditor(<ServiceEditorScreen mode="create" />);
+
+    expect(view.getByText("NOUVELLE PRESTATION")).toBeTruthy();
+    expect(view.getByRole("header", { name: "Ajouter une prestation" })).toBeTruthy();
+    expect(view.getByLabelText("Annuler")).toBeTruthy();
+    // The type chooser is content-fit: never a fixed full-height sheet.
+    const sheetStyle = StyleSheet.flatten(view.getByTestId("service-sheet").props.style);
+    expect(sheetStyle.flex).toBeUndefined();
+    expect(sheetStyle.maxHeight).toBeGreaterThan(0);
+    expect(view.getByText("Type de prestation")).toBeTruthy();
+    expect(view.getByText("Choisissez la structure qui correspond au déroulé réel.")).toBeTruthy();
+    expect(view.getByText("Prestation technique")).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByLabelText("Annuler"));
+    });
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.press(view.getByText("Prestation simple"));
+    });
+    expect(view.getByLabelText("Nom de la prestation").props.autoFocus).toBeFalsy();
+    expect(view.getByLabelText("Prix de la prestation").props.autoFocus).toBeFalsy();
+  });
 
   it("creates a simple Service from the professional-facing fields", async () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
@@ -425,8 +454,8 @@ describe("ServiceEditorScreen", () => {
     expect(view.getByText("35 min")).toBeTruthy();
   });
 
-  it("deletes only after explicit confirmation and closes the details", async () => {
-    const alertSpy = jest.spyOn(Alert, "alert");
+  it("deletes only after the shared Souris confirmation, never a native alert", async () => {
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     const view = await renderEditor(
       <ServiceEditorScreen
         mode="existing"
@@ -437,19 +466,16 @@ describe("ServiceEditorScreen", () => {
     await act(async () => {
       fireEvent.press(view.getByLabelText("Supprimer cette prestation"));
     });
-    expect(alertSpy).toHaveBeenCalledWith(
-      "Supprimer cette prestation ?",
-      expect.stringContaining("Les rendez-vous existants"),
-      expect.anything(),
-    );
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(view.getByTestId("service-deletion-dialog")).toBeTruthy();
+    expect(view.getByText("Supprimer cette prestation ?")).toBeTruthy();
+    expect(view.getByText(/Les rendez-vous existants/)).toBeTruthy();
 
-    // Cancel does nothing.
-    const cancel = alertSpy.mock.calls[0][2]?.find(
-      (button) => button.text === "Annuler",
-    );
+    // Retour does nothing.
     await act(async () => {
-      cancel?.onPress?.();
+      fireEvent.press(view.getByTestId("cancel-service-deletion"));
     });
+    expect(view.queryByTestId("service-deletion-dialog")).toBeNull();
     expect(mockBack).not.toHaveBeenCalled();
     expect(view.getByTestId("managed-service").props.children).toContain(
       "Brushing 1",
@@ -459,12 +485,8 @@ describe("ServiceEditorScreen", () => {
     await act(async () => {
       fireEvent.press(view.getByLabelText("Supprimer cette prestation"));
     });
-    const confirm = alertSpy.mock.calls[1][2]?.find(
-      (button) => button.text === "Supprimer",
-    );
-    expect(confirm).toBeTruthy();
     await act(async () => {
-      confirm?.onPress?.();
+      fireEvent.press(view.getByTestId("confirm-service-deletion"));
     });
 
     expect(view.getByTestId("managed-service").props.children).toBe("");
@@ -473,24 +495,23 @@ describe("ServiceEditorScreen", () => {
     alertSpy.mockRestore();
   });
 
-  it("deactivation closes the details and reactivation does the same", async () => {
-    const alertSpy = jest.spyOn(Alert, "alert");
+  it("deactivation goes through the shared dialog and closes; reactivation does the same", async () => {
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     const view = await renderEditor(
       <ServiceEditorScreen
         mode="existing"
         serviceId="service-brushing-brushing-1"
       />,
     );
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
 
     await act(async () => {
       fireEvent.press(view.getByText("Désactiver"));
     });
-    const deactivate = alertSpy.mock.calls[0][2]?.find(
-      (button) => button.text === "Désactiver",
-    );
-    expect(deactivate).toBeTruthy();
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(view.getByTestId("service-deactivation-dialog")).toBeTruthy();
     await act(async () => {
-      deactivate?.onPress?.();
+      fireEvent.press(view.getByTestId("confirm-service-deactivation"));
     });
 
     expect(mockBack).toHaveBeenCalledTimes(1);
@@ -503,5 +524,23 @@ describe("ServiceEditorScreen", () => {
     expect(mockBack).toHaveBeenCalledTimes(2);
     expect(view.getByTestId("brushing-active").props.children).toBe("true");
     alertSpy.mockRestore();
+  });
+
+  it("disables the swipe while a draft is being edited", async () => {
+    const view = await renderEditor(
+      <ServiceEditorScreen
+        mode="existing"
+        serviceId="service-brushing-brushing-1"
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId("edit-service"));
+    });
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: false });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText("Annuler"));
+    });
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
   });
 });

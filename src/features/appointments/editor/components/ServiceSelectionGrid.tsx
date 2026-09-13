@@ -170,7 +170,7 @@ function ServiceSelectionCard({ service, selected, onPress }: ServiceSelectionCa
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: semanticColors.screenWarm },
+  container: { backgroundColor: semanticColors.surfaceElevated },
   searchArea: {
     paddingBottom: spacing.base,
     paddingTop: spacing.base,

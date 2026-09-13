@@ -5,11 +5,16 @@ import { ProductCatalogProvider, useProductCatalog } from '../../session/Product
 import { ProductCatalogScreen } from '../ProductCatalogScreen';
 import { createMemoryLocalFiles } from '@/persistence/testing/memory-local-files';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { settleFloatingReveal, settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 const mockPush = jest.fn();
 let mockScannedBarcode = '';
 
 jest.mock('expo-router', () => ({
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    const React = jest.requireActual('react') as typeof import('react');
+    React.useEffect(effect, [effect]);
+  },
   useRouter: () => ({ push: mockPush }),
 }));
 
@@ -124,6 +129,15 @@ describe('ProductCatalogScreen', () => {
     expect(view.getByLabelText('Aucune photo pour Masque réparateur 5 min')).toBeTruthy();
   });
 
+  it('anchors the decorative products watermark, hidden from accessibility and touches', async () => {
+    const view = await renderCatalog();
+
+    expect(view.queryByTestId('screen-watermark-products')).toBeNull();
+    const watermark = view.getByTestId('screen-watermark-products', { includeHiddenElements: true });
+    expect(watermark.props.pointerEvents).toBe('none');
+    expect(watermark.props.accessibilityElementsHidden).toBe(true);
+  });
+
   it('shows a Product thumbnail and a restrained fallback without losing row information', async () => {
     const view = await renderCatalog();
 
@@ -178,22 +192,56 @@ describe('ProductCatalogScreen', () => {
     expect(view.getByText('Aucun produit trouvé')).toBeTruthy();
   });
 
-  it('opens the Sale creation flow from the Produits tab', async () => {
+  it('keeps the reference header: title, search, no eyebrow, no inline creation buttons', async () => {
     const view = await renderCatalog();
 
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Nouvelle vente'));
-    });
-    expect(mockPush).toHaveBeenCalledWith('/sales/new');
+    expect(view.getByRole('header', { name: 'Produits' })).toBeTruthy();
+    expect(view.queryByText('PRODUITS')).toBeNull();
+    expect(view.getByPlaceholderText('Rechercher un produit')).toBeTruthy();
+    expect(view.queryByText('Nouvelle vente')).toBeNull();
+    expect(view.queryByText('Ajouter un produit')).toBeNull();
+    // The + reveals shortly after focus; until then it is neither shown nor tappable.
+    expect(view.queryByTestId('products-create')).toBeNull();
+    await settleFloatingReveal();
+    expect(view.getByTestId('products-create')).toBeTruthy();
+    expect(view.queryByTestId('products-create-menu')).toBeNull();
   });
 
-  it('opens the create flow and an existing Product detail', async () => {
+  it('expands the floating + into both creation flows and routes each one', async () => {
     const view = await renderCatalog();
+    await settleFloatingReveal();
 
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Ajouter un produit'));
-    });
+    await act(async () => fireEvent.press(view.getByTestId('products-create')));
+    expect(view.getByTestId('products-create-menu')).toBeTruthy();
+    expect(view.getByLabelText('Nouvelle vente')).toBeTruthy();
+    expect(view.getByLabelText('Ajouter un produit')).toBeTruthy();
+
+    await act(async () => fireEvent.press(view.getByTestId('new-sale')));
+    expect(mockPush).toHaveBeenCalledWith('/sales/new');
+    await settleSheetTransition();
+    expect(view.queryByTestId('products-create-menu')).toBeNull();
+
+    await act(async () => fireEvent.press(view.getByTestId('products-create')));
+    await act(async () => fireEvent.press(view.getByTestId('new-product')));
     expect(mockPush).toHaveBeenCalledWith('/products/new');
+    await settleSheetTransition();
+    expect(view.queryByTestId('products-create-menu')).toBeNull();
+  });
+
+  it('closes the creation menu on an outside tap without routing anywhere', async () => {
+    const view = await renderCatalog();
+    await settleFloatingReveal();
+
+    await act(async () => fireEvent.press(view.getByTestId('products-create')));
+    await act(async () => fireEvent.press(view.getByTestId('products-create-dismiss')));
+    await settleSheetTransition();
+
+    expect(view.queryByTestId('products-create-menu')).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('opens an existing Product detail', async () => {
+    const view = await renderCatalog();
 
     await act(async () => {
       fireEvent.press(view.getByText('Masque réparateur 5 min'));
@@ -239,6 +287,7 @@ describe('ProductCatalogScreen', () => {
     const result = within(view.getByTestId('barcode-result'));
     expect(result.getByText('Produit introuvable')).toBeTruthy();
     expect(result.getByText('0001234567890')).toBeTruthy();
+    expect(view.getAllByTestId('bottom-sheet-scrim')).toHaveLength(1);
 
     await act(async () => fireEvent.press(result.getByText('Ajouter un produit')));
     expect(mockPush).toHaveBeenCalledWith({

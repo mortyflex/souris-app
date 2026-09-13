@@ -124,6 +124,7 @@ export function ClientPickerStep({
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.listContent}
       style={styles.stepList}
+      testID="client-picker-list"
     />
   );
 }

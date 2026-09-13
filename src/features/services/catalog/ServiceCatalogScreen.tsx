@@ -18,10 +18,11 @@ import {
   getServiceProcessingMinutes,
 } from '@/features/services/presentation';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
-import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
+  bottomClearance,
   foregroundSoft,
   gutter,
   interaction,
@@ -46,7 +47,7 @@ export function ServiceCatalogScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.topBar}>
         <Pressable
           accessibilityRole="button"
@@ -79,12 +80,6 @@ export function ServiceCatalogScreen() {
             <AppText variant="screenTitle" accessibilityRole="header">
               Prestations & tarifs
             </AppText>
-            <AppButton
-              accessibilityLabel="Ajouter une prestation"
-              onPress={() => router.push('/services/new')}
-              style={styles.addButton}
-              title="Ajouter une prestation"
-            />
           </View>
         }
         renderSectionHeader={({ section }) => (
@@ -108,6 +103,12 @@ export function ServiceCatalogScreen() {
             </AppText>
           </View>
         }
+      />
+
+      <FloatingCreateButton
+        accessibilityLabel="Ajouter une prestation"
+        onPress={() => router.push('/services/new')}
+        testID="add-service"
       />
     </SafeAreaView>
   );
@@ -177,13 +178,11 @@ const styles = StyleSheet.create({
     transform: [{ scale: interaction.pressedScale }],
   },
   eyebrow: { color: semanticColors.accent },
-  content: { paddingBottom: spacing['3xl'] },
+  content: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
   intro: {
-    gap: spacing.base,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
-  addButton: { alignSelf: 'stretch' },
   sectionHeaderBlock: {
     backgroundColor: semanticColors.screenWarm,
     gap: spacing.sm,

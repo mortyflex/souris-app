@@ -4,7 +4,9 @@
 // session source, grouped into Actives / Archivées (archived Clients stay
 // discoverable, visually secondary, never error-like). Rows stay clean and
 // light (initial avatar, strong name, soft phone) — no per-client cards, no
-// fake metrics. The shared creation sheet is the single way to add a Client.
+// fake metrics. The shared floating + opens the shared creation sheet, the
+// single way to add a Client. The header follows the Produits reference:
+// large title, no eyebrow, search right below (MainScreenHeader).
 
 import { useMemo, useState } from 'react';
 import {
@@ -31,10 +33,12 @@ import {
   type ClientDirectorySection,
 } from '@/features/clients/directory/directory-sections';
 import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
-import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
+import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
 import { SearchField } from '@/shared/ui/SearchField';
 import {
+  bottomClearance,
   foregroundSoft,
   gutter,
   interaction,
@@ -65,24 +69,7 @@ export function ClientDirectoryScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <AppText variant="eyebrow" style={styles.eyebrow}>
-          CLIENTES
-        </AppText>
-        <View style={styles.titleRow}>
-          <AppText variant="screenTitle" accessibilityRole="header" style={styles.title}>
-            Clientes
-          </AppText>
-          <AppButton
-            accessibilityLabel="Ajouter une cliente"
-            onPress={() => setAddClientVisible(true)}
-            style={styles.addButton}
-            testID="add-client-directory"
-            title="Ajouter une cliente"
-            variant="tertiary"
-          />
-        </View>
-      </View>
+      <MainScreenHeader title="Clientes" watermark="clients" />
 
       <View style={styles.searchWrap}>
         <SearchField
@@ -127,6 +114,12 @@ export function ClientDirectoryScreen() {
         )}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+      />
+
+      <FloatingCreateButton
+        accessibilityLabel="Ajouter une cliente"
+        onPress={() => setAddClientVisible(true)}
+        testID="add-client-directory"
       />
 
       <ClientFormSheet
@@ -185,25 +178,12 @@ function ClientRow({ client, onPress }: ClientRowProps) {
 
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  header: {
-    gap: spacing.xs,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.sm,
-  },
-  eyebrow: { color: semanticColors.accent },
-  titleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  title: { color: semanticColors.foreground, flexShrink: 1 },
-  addButton: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   searchWrap: {
     paddingBottom: spacing.sm,
     paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.md,
+    paddingTop: spacing.base,
   },
-  listContent: { paddingBottom: spacing.xl },
+  listContent: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
   sectionHeader: {
     paddingBottom: spacing.xs,
     paddingHorizontal: horizontalGutter + spacing.md,

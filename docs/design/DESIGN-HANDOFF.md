@@ -126,6 +126,19 @@ or replaced by generic icons:
   historical export files and must not be reintroduced. The wordmark is an image, never typeset.
 - The logo never appears on Agenda, Clientes, Produits, or any functional detail/sheet surface.
 
+## Souris native overlay contract (repository truth)
+- Every drawer, form sheet and picker uses the shared shell in `src/shared/ui/`: `BottomSheet`
+  (JS Modal) or `SheetScreen` (native form-sheet routes), `SheetHeader`, `SheetActionBar`.
+  White surface, Souris grabber, one navy scrim (`scrim`), slide-down close before unmount,
+  explicit gesture policy, no automatic keyboard. See `DESIGN_OVERRIDES.md` §16.
+- Every Souris-owned confirmation uses `ConfirmationDialog` (destructive or neutral tone);
+  React Native `Alert` is reserved for error reports and permission explanations.
+- Main tabs use `MainScreenHeader` (Produits is the reference: large title, no duplicate
+  eyebrow, search right below); its decorative `ScreenWatermarkIcon` (calendar / people /
+  product / settings symbol) is anchored to the title block, hidden from accessibility and
+  touches. Primary creation goes through the shared bottom-right `FloatingCreateButton`
+  (direct flow, or a compact anchored menu for several flows). See `DESIGN_OVERRIDES.md` §17.
+
 ## Coding checklist for AI tools
 1. Inspect `index.html` and `DESIGN-MANIFEST.json` first and identify reusable components before coding.
 2. Implement each user-facing screen file as its own route/surface; keep launcher, landing, app, platform, and OS widget files separate.

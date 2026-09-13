@@ -85,27 +85,28 @@ describe('Legacy client import boundary', () => {
     expect(results[1]).toEqual({ id: 'b', firstName: 'Bob', lastName: 'Bricolage' });
   });
 
-  it('maps the actual legacy birthdate field only as a valid civil date', () => {
+  it('maps the legacy birthdate field to a day + month only, dropping the year', () => {
     const result = mapLegacyClient({
       _id: 'abc',
       firstName: 'Léa',
       birthdate: '1994-10-12',
     });
 
-    expect(result.birthDate).toBe('1994-10-12');
+    expect(result.birthday).toEqual({ month: 10, day: 12 });
+    expect('birthDate' in result).toBe(false);
   });
 
   it('discards null, missing, and non-conforming legacy birthdate values', () => {
-    expect(mapLegacyClient({ _id: 'a', firstName: 'Alice', birthdate: null }).birthDate).toBeUndefined();
-    expect(mapLegacyClient({ _id: 'b', firstName: 'Bob' }).birthDate).toBeUndefined();
+    expect(mapLegacyClient({ _id: 'a', firstName: 'Alice', birthdate: null }).birthday).toBeUndefined();
+    expect(mapLegacyClient({ _id: 'b', firstName: 'Bob' }).birthday).toBeUndefined();
     expect(
-      mapLegacyClient({ _id: 'c', firstName: 'Camille', birthdate: '12/10/1994' }).birthDate,
+      mapLegacyClient({ _id: 'c', firstName: 'Camille', birthdate: '12/10/1994' }).birthday,
     ).toBeUndefined();
     expect(
-      mapLegacyClient({ _id: 'd', firstName: 'Dora', birthdate: '1994-13-45' }).birthDate,
+      mapLegacyClient({ _id: 'd', firstName: 'Dora', birthdate: '1994-13-45' }).birthday,
     ).toBeUndefined();
     expect(
-      mapLegacyClient({ _id: 'e', firstName: 'Emma', birthdate: '' }).birthDate,
+      mapLegacyClient({ _id: 'e', firstName: 'Emma', birthdate: '' }).birthday,
     ).toBeUndefined();
   });
 });
