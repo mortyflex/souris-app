@@ -91,6 +91,13 @@ route from the Auth and Business states (`src/providers/root-route.ts`) and guar
 `CurrentBusinessProvider`, so no operational state exists in the tree while signed out. See
 `docs/architecture/AUTH.md`.
 
+The main navigation `(app)/(tabs)/_layout.tsx` is Expo Router's `NativeTabs`
+(`expo-router/unstable-native-tabs`): the platform's own tab bar (UIKit, Liquid Glass on iOS 26;
+Material bottom navigation on Android) with four static triggers — Agenda, Clientes, Produits,
+Plus — wrapped in the Souris navigation theme (`src/providers/navigation-theme.ts`). Operational
+workflows are pushed from the `(app)` Stack above the tabs, so the bar shows only on the four
+main screens. See `docs/design/DESIGN_OVERRIDES.md` §18.
+
 Route files should remain thin.
 
 They may:

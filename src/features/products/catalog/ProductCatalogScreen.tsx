@@ -149,6 +149,10 @@ export function ProductCatalogScreen() {
           sections={sections}
           initialNumToRender={80}
           keyExtractor={(product) => product.id}
+          // The native tab bar overlays the page: the system bottom inset
+          // keeps the last row scrollable above it (bottomClearance then
+          // clears the floating +).
+          contentInsetAdjustmentBehavior="automatic"
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

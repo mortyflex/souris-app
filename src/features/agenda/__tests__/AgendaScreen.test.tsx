@@ -58,6 +58,13 @@ describe('AgendaScreen', () => {
     expect(view.getByRole('header', { name: "Aujourd'hui" })).toBeTruthy();
   });
 
+  it('lets the day timeline scroll above the native tab bar through the system content inset', async () => {
+    const view = await renderAgenda();
+    const timelines = view.container.queryAll((node) => node.type === 'RCTScrollView');
+    expect(timelines).toHaveLength(1);
+    expect(timelines[0].props.contentInsetAdjustmentBehavior).toBe('automatic');
+  });
+
   it('opens the existing Appointment creation flow from the floating +', async () => {
     const view = await renderAgenda();
     await settleFloatingReveal();

@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser } from '@/features/auth/testing/fake-auth-gateway';
@@ -25,8 +25,12 @@ jest.mock('react-native-safe-area-context', () => {
   return {
     SafeAreaView: ({ children, ...props }: { readonly children?: React.ReactNode }) =>
       React.createElement(View, props, children),
+    useSafeAreaInsets: () => ({ top: 0, bottom: mockBottomInset, left: 0, right: 0 }),
   };
 });
+
+// Bottom safe area reported to Plus (inside a native tab: bar + home indicator).
+let mockBottomInset = 0;
 
 async function renderPlus() {
   const auth = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
@@ -108,6 +112,18 @@ describe('PlusScreen', () => {
     const watermark = view.getByTestId('screen-watermark-settings', { includeHiddenElements: true });
     expect(watermark.props.pointerEvents).toBe('none');
     expect(watermark.props.accessibilityElementsHidden).toBe(true);
+  });
+
+  it('keeps its non-scrolling content above the native tab bar through the bottom safe area', async () => {
+    mockBottomInset = 83;
+    try {
+      const { view } = await renderPlus();
+      expect(StyleSheet.flatten(view.getByTestId('plus-content').props.style)).toMatchObject({
+        paddingBottom: 83,
+      });
+    } finally {
+      mockBottomInset = 0;
+    }
   });
 
   it('shows the version only when the manifest provides one', () => {

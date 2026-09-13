@@ -138,6 +138,9 @@ or replaced by generic icons:
   product / settings symbol) is anchored to the title block, hidden from accessibility and
   touches. Primary creation goes through the shared bottom-right `FloatingCreateButton`
   (direct flow, or a compact anchored menu for several flows). See `DESIGN_OVERRIDES.md` §17.
+- Main navigation is the platform's native tab bar (Expo Router `NativeTabs`): Apple's Liquid
+  Glass on iOS 26, Material bottom navigation on Android, four static tabs, Souris violet for the
+  selected tab only. Never an imitation glass bar, never a « + » tab. See `DESIGN_OVERRIDES.md` §18.
 
 ## Coding checklist for AI tools
 1. Inspect `index.html` and `DESIGN-MANIFEST.json` first and identify reusable components before coding.

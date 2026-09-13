@@ -2,11 +2,17 @@
 //
 // The ONE floating creation action of screens whose primary action is
 // "add / create": a compact violet circle with a white plus, fixed
-// bottom-right above the tab bar / home indicator (its own bottom safe-area
-// edge, so it works inside a tab and on a pushed screen alike), with a light
+// bottom-right above the tab bar / home indicator, with a light
 // lavender-tinted elevation. Never part of the scrolling content — screens
 // keep `bottomClearance` padding under their lists so the last row scrolls
 // above it.
+//
+// Positioning is purely safe-area based: the anchor sits `floatingAction.inset`
+// above its own bottom safe-area edge. Inside a main tab, Expo Router's native
+// tabs scope the safe area to the tab screen, so on iOS that edge already
+// includes the system tab bar (Liquid Glass on iOS 26) plus the home
+// indicator; on a pushed screen it is the home indicator alone. The native
+// bar's height is never measured, hardcoded or guessed.
 //
 // Reveal on focus: several screens carry the + in the same place, so a tab
 // switch would read as the button sliding from one screen to the next. The

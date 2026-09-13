@@ -585,3 +585,45 @@ keyboard. The day column only lists the days of the selected month (February: 29
 shorter than the selected day resolves it to the last valid day and the wheel settles there.
 One selection haptic per row change while scrolling, never per pixel. The model stays
 `{ month, day }` (SQLite v4, no fake year).
+
+---
+
+## 18. Main Navigation — Native Tabs (Liquid Glass)
+
+The four main tabs — **Agenda · Clientes · Produits · Plus**, in that order, static for the whole
+app lifetime — live on the platform's own tab bar through Expo Router `NativeTabs`
+(`src/app/(app)/(tabs)/_layout.tsx`). The JavaScript tab bar of the export (`.tabs`, DESIGN.md §5)
+is no longer reproduced natively.
+
+- **iOS**: UIKit's tab bar. On iOS 26, with a binary compiled by Xcode 26+, it is Apple's native
+  Liquid Glass — the system material, sampling the page beneath it. Older iOS shows the standard
+  system tab bar. Souris never fakes the glass: no BlurView, no translucent view, no gradient, no
+  opaque forced background, no version-conditional custom bar.
+- **Android**: native Material bottom navigation, with Material icons — not an imitation of
+  Liquid Glass.
+- **Icons / labels**: system symbols, visible native labels, native selected state.
+  Agenda `calendar` / `calendar_month`; Clientes `person.2` → `person.2.fill` / `group`;
+  Produits `shippingbox` → `shippingbox.fill` / `inventory_2`; Plus `ellipsis` / `more_horiz`
+  (« Plus » is more than settings, so no gear). No icon package.
+- **Tint**: the selected tab uses the Souris accent (`semanticColors.accent`) and nothing else is
+  restyled — the system owns the material, layout and typography of the bar.
+- **Theme**: the tabs are wrapped in the Souris navigation theme
+  (`src/providers/navigation-theme.ts`, light only), whose background is the canonical white
+  screen, so a tab switch never flashes a foreign colour behind the glass.
+- **Scroll edge**: `disableTransparentOnScrollEdge` is set because every main screen keeps its
+  fixed `MainScreenHeader` above its list — UIKit's scroll-edge detection therefore never finds
+  the list and, on iOS 18 and earlier, would draw a permanently transparent bar. Liquid Glass
+  ignores bar backgrounds, so iOS 26 keeps its native behaviour.
+- **Minimize on scroll**: NOT enabled. The bar stays stable while the professional works; the
+  minimize behaviour is evaluated separately later.
+- **Content under the bar (iOS)**: the bar overlays the page. The main lists (Agenda day / week,
+  Clientes, Produits) opt into the system content inset (`contentInsetAdjustmentBehavior`), and
+  keep `bottomClearance` above it so the last row scrolls above the floating +. Plus does not
+  scroll and pads its content by the tab's bottom safe area. No tab-bar height is measured,
+  hardcoded or guessed.
+- **Floating creation** stays the `FloatingCreateButton` of §17, positioned by its own bottom
+  safe-area edge — inside a native tab that edge already includes the system bar plus the home
+  indicator. The Produits mini-menu anchors above the + and closes when the tab loses focus.
+  Creation is never a tab: the bar is navigation, the + is contextual action.
+- **Reselect**: native behaviour (pop to the tab root / scroll to top where the system finds a
+  scroll view); no custom reselect logic.

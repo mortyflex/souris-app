@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatBusinessActivityType } from '@/features/business/presentation';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
@@ -28,11 +29,20 @@ export function PlusScreen() {
   const { services } = useServiceCatalog();
   const business = useCurrentBusiness();
   const [accountVisible, setAccountVisible] = useState(false);
+  // Plus does not scroll and the native tab bar overlays the page, so the
+  // content keeps clear of the bar through the tab's own bottom safe area
+  // (Expo Router scopes it to the tab screen; on a home-indicator device it
+  // already includes the indicator).
+  const insets = useSafeAreaInsets();
   const serviceCountLabel = `${services.length} prestation${services.length > 1 ? 's' : ''}`;
   const activityLabel = formatBusinessActivityType(business.activityType);
 
   return (
-    <Screen header={<MainScreenHeader title="Plus" watermark="settings" />}>
+    <Screen
+      header={<MainScreenHeader title="Plus" watermark="settings" />}
+      style={{ paddingBottom: insets.bottom }}
+      testID="plus-content"
+    >
       <View style={styles.managementSection}>
         <SectionHeader title="Gestion" />
         <Pressable
