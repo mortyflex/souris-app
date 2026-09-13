@@ -2,13 +2,13 @@
 //
 // Shared by NEW Appointment Creation (Résumé) and existing Appointment
 // Editing. Collapsed it is a compact recognition/reorder row; expanded it
-// exposes quick price and per-phase duration adjustment. Structural changes
-// (rename, add, remove, reorder, active/processing type) stay in
-// Prestations & tarifs.
+// exposes quick price adjustment and the shared per-phase timing editor
+// (±5 minute steppers, no keyboard). Structural changes (rename, add,
+// remove, reorder, active/processing type) stay in Prestations & tarifs.
 //
-// The card never decides whether adjustments reach the catalog: the
-// showCatalogHint flag and the commit itself belong to the parent use case
-// (Creation commits on success; Editing never does).
+// Every adjustment is Appointment-snapshot data: neither Creation nor
+// Editing writes the Service catalog. Official defaults are edited only from
+// Prestations & tarifs.
 
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -28,14 +28,13 @@ import {
   fontFamilies,
   foregroundSoft,
   interaction,
-  peach,
   radii,
   rose,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
-import { parsePositiveDurationInput } from '@/features/services/editor/service-form';
 import type { SortableDraftCardProps } from './SortableDraftList';
+import { AppointmentPhaseTimingEditor } from './AppointmentPhaseTimingEditor';
 import {
   formatPriceInput,
   getDraftDurationMinutes,
@@ -46,10 +45,6 @@ import { formatCreationDuration, formatCreationPrice } from '../presentation';
 
 const TRANSITION_EASING = Easing.bezier(...easing.out);
 
-interface AppointmentServiceEditorCardProps extends SortableDraftCardProps {
-  /** Creation-only: explains that adjustments become future catalog defaults. */
-  readonly showCatalogHint?: boolean;
-}
 
 export function AppointmentServiceEditorCard({
   draft,
@@ -60,8 +55,7 @@ export function AppointmentServiceEditorCard({
   onRemove,
   canRemove,
   dragHandle,
-  showCatalogHint = false,
-}: AppointmentServiceEditorCardProps) {
+}: SortableDraftCardProps) {
   const [priceText, setPriceText] = useState(() => formatPriceInput(draft.price));
   const [priceInvalid, setPriceInvalid] = useState(false);
   const [priceFocused, setPriceFocused] = useState(false);
@@ -177,64 +171,19 @@ export function AppointmentServiceEditorCard({
               </AppText>
             )}
 
-            {draft.serviceType === 'SERVICE' ? (
-              <View style={styles.fieldRow}>
-                <AppText variant="metadata" style={styles.fieldLabel}>
-                  Durée
-                </AppText>
-                <PhaseDurationField
-                  accessibilityLabel={`Durée de ${draft.serviceName}`}
-                  minutes={draft.phases[0]?.durationMinutes ?? 0}
-                  onCommit={(minutes) =>
-                    draft.phases[0] &&
-                    onUpdatePhaseDuration(draft.phases[0].id, minutes)
-                  }
-                  phaseId={draft.phases[0]?.id ?? 'missing-phase'}
-                />
-              </View>
-            ) : (
-              <View style={styles.durations}>
+            <View style={styles.durations}>
+              {draft.serviceType === 'TECHNIQUE' && (
                 <AppText variant="metadata" style={styles.fieldLabel}>
                   Durées
                 </AppText>
-                {draft.phases.map((phase) => (
-                  <View
-                    key={phase.id}
-                    style={[
-                      styles.phaseRow,
-                      phase.requiresStaff ? styles.activePhaseRow : styles.processingPhaseRow,
-                    ]}
-                  >
-                    <AppText
-                      variant="metadata"
-                      numberOfLines={1}
-                      style={[
-                        styles.phaseName,
-                        !phase.requiresStaff && styles.processingPhaseName,
-                      ]}
-                    >
-                      {phase.name}
-                    </AppText>
-                    <PhaseDurationField
-                      accessibilityLabel={`Durée de ${phase.name}`}
-                      minutes={phase.durationMinutes}
-                      onCommit={(minutes) => onUpdatePhaseDuration(phase.id, minutes)}
-                      phaseId={phase.id}
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {showCatalogHint && (
-              <AppText
-                variant="metadata"
-                style={styles.catalogHint}
-                testID="catalog-commit-hint"
-              >
-                Les modifications seront enregistrées pour les prochains rendez-vous.
-              </AppText>
-            )}
+              )}
+              <AppointmentPhaseTimingEditor
+                onChangePhaseDuration={onUpdatePhaseDuration}
+                phases={draft.phases}
+                serviceName={draft.serviceName}
+                serviceType={draft.serviceType}
+              />
+            </View>
 
             {canRemove && (
               <View style={styles.removeRow}>
@@ -258,69 +207,6 @@ export function AppointmentServiceEditorCard({
         </Animated.View>
       )}
     </Animated.View>
-  );
-}
-
-interface PhaseDurationFieldProps {
-  readonly phaseId: string;
-  readonly minutes: number;
-  readonly accessibilityLabel: string;
-  readonly onCommit: (minutes: number) => void;
-}
-
-function PhaseDurationField({
-  phaseId,
-  minutes,
-  accessibilityLabel,
-  onCommit,
-}: PhaseDurationFieldProps) {
-  const [text, setText] = useState(() => String(minutes));
-  const [invalid, setInvalid] = useState(false);
-  const [focused, setFocused] = useState(false);
-
-  const handleChange = (value: string) => {
-    setText(value);
-    const parsed = parsePositiveDurationInput(value);
-    if (parsed === undefined) {
-      setInvalid(value.trim().length > 0);
-      return;
-    }
-    setInvalid(false);
-    onCommit(parsed);
-  };
-
-  const handleBlur = () => {
-    setFocused(false);
-    if (invalid) {
-      setText(String(minutes));
-      setInvalid(false);
-    }
-  };
-
-  return (
-    <View
-      style={[
-        styles.inputShell,
-        styles.durationShell,
-        focused && styles.inputShellFocused,
-        invalid && styles.inputShellInvalid,
-      ]}
-    >
-      <TextInput
-        accessibilityLabel={accessibilityLabel}
-        keyboardType="number-pad"
-        onBlur={handleBlur}
-        onChangeText={handleChange}
-        onFocus={() => setFocused(true)}
-        selectTextOnFocus
-        style={styles.input}
-        testID={`phase-duration-${phaseId}`}
-        value={text}
-      />
-      <AppText variant="metadata" style={styles.suffix}>
-        min
-      </AppText>
-    </View>
   );
 }
 
@@ -406,25 +292,7 @@ const styles = StyleSheet.create({
   },
   suffix: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginLeft: spacing.xs },
   fieldError: { color: rose.rose600 },
-  durations: { gap: spacing.sm },
-  phaseRow: {
-    alignItems: 'center',
-    borderRadius: radii.medium,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  activePhaseRow: { backgroundColor: semanticColors.surface },
-  processingPhaseRow: { backgroundColor: semanticColors.surfacePeach },
-  phaseName: { color: foregroundSoft, flex: 1, minWidth: 0 },
-  processingPhaseName: { color: peach.peach700 },
-  durationShell: { backgroundColor: semanticColors.surfaceElevated },
-  catalogHint: {
-    color: semanticColors.foregroundMuted,
-    lineHeight: 18,
-  },
+  durations: { gap: spacing.xs },
   removeRow: {
     alignItems: 'flex-end',
     paddingHorizontal: spacing.md,

@@ -136,6 +136,14 @@ professional never needs to switch to Week view solely to navigate the calendar 
 
 Tapping an appointment from either Agenda view opens its read-only Appointment Details experience.
 
+### Late appointments
+
+The Day view normally shows 08:00 → 20:00, but 20:00 is not a limit. A professional may schedule
+19:00 + 3 h, 20:00 → 23:00, or even 22:00 + 3 h: the day simply grows downward as far as the latest
+visible block needs (plus a small margin), and the whole block remains scrollable — nothing is clipped at
+20:00. An appointment running past midnight stays one block on its start day, with clock labels continuing
+as 23:00, 00:00, 01:00. Ordinary days keep their compact height; the initial scroll position does not change.
+
 ---
 
 ## 6. Real Service Timing
@@ -228,9 +236,9 @@ interval. The professional may tap a visible processing gap because that interva
 Appointment timeline while the professional is available. Existing appointment overlap never blocks creation.
 
 The Agenda tap is the initial proposal, not a lock: during creation the professional may adjust the start
-time in ±5-minute steps on the same local date, within the operational Agenda day — earliest 08:00, latest
-19:55, strictly before the 20:00 end boundary. All creation calculations (context, Summary, appointment end)
-follow the edited draft start time.
+time in ±5-minute steps on the same local date — earliest 08:00 (operational day start), latest 23:55. The
+20:00 Agenda boundary is a display default and never rejects a late start. All creation calculations
+(context, Summary, appointment end) follow the edited draft start time.
 
 ### Prestations step — fast multi-selection
 
@@ -248,29 +256,24 @@ The Résumé step hosts the selected services as a vertical ordered stack (drag 
 cards collapsed by default, one expanded at a time). The stack order IS the Appointment item order and
 therefore the timeline. Expanded cards expose quick adjustments:
 
-- SERVICE: `Prix` and `Durée` (the canonical single staff-required phase);
-- TECHNIQUE: `Prix` and a compact per-phase duration editor (`Durées`) — no phase rename, add, remove,
+- SERVICE: `Prix` and one `Durée` row (the canonical single staff-required phase);
+- TECHNIQUE: `Prix` and a compact per-phase timing editor (`Durées`) — no phase rename, add, remove,
   reorder, or active/processing switching (those structural changes belong to Prestations & tarifs);
-- durations must stay positive integer minutes; prices use the supported euro input.
+- every duration uses the shared `[ − ] XX min [ + ]` stepper (5-minute steps, 0 allowed, no keyboard);
+  prices use the supported euro input.
 
-### Creation adjustments become future catalog defaults
+### Timing ownership
 
-During NEW Appointment Creation, adjusted prices and phase durations also update the Service catalog so
-future Appointments use them. This is deliberately communicated by a quiet line inside the expanded editor:
-« Les modifications seront enregistrées pour les prochains rendez-vous. »
+```text
+Prestations & tarifs                 = official Service defaults (the ONLY place they change)
+Appointment create / edit / details  = Appointment snapshot only
+```
 
-The commit is atomic with creation:
-
-- nothing is written to the catalog on keystrokes — the draft owns the values;
-- only Services still selected at successful creation update the catalog (same stable Service id, same
-  phase ids and order);
-- abandoning or cancelling creation leaves the catalog unchanged;
-- deselecting a modified Service drops its draft and never commits it;
-- the Appointment snapshot and the catalog update use exactly the same final draft values;
-- existing historical Appointments keep their snapshots untouched.
-
-Existing Appointment EDITING keeps its snapshot-specific semantics: retained item adjustments never
-rewrite the catalog.
+Creating an Appointment reads the current Service defaults, copies them into the Appointment snapshot,
+lets the professional customize that snapshot, and persists ONLY the snapshot. It never writes back to
+the Service, its phases, or any catalog default — there is no implicit update and no « update defaults »
+option. A pose set to 0 on today's Balayage leaves the catalog at its official value, and tomorrow's
+Balayage starts from the catalog again.
 
 The initial address book and catalog use normalized legacy sources. The Cliente step reads the shared
 Client source — the same directory as the Clientes tab — and a new Client can be added directly from
@@ -297,12 +300,9 @@ During NEW Appointment Creation the professional may adjust, inside the Résumé
 The Summary step always reflects the adjusted draft values: price, durations, appointment end, elapsed
 duration, and total price are recalculated from the adjusted draft.
 
-The FINAL Appointment Creation UX pass changed the previous override rule: on successful creation these
-adjusted values are ALSO committed to the Service catalog (`ServiceCatalogProvider`) so future Appointments
-use them as defaults — see « Creation adjustments become future catalog defaults » above. The Appointment
-snapshot and the catalog update are both built from the same final draft. Abandoning creation, cancelling,
-or deselecting a modified Service never touches the catalog. Existing Appointment EDITING remains
-snapshot-specific and never rewrites the catalog.
+These adjustments are Appointment-specific: the snapshot is built from the final draft and the Service
+catalog is never written by creation (see « Timing ownership » above). Creation, editing, and Details all
+share the same stepper semantics — 5-minute steps, 0 allowed, snapshot only.
 
 ### Service order during creation
 
@@ -322,7 +322,8 @@ Existing appointments support service-composition editing:
 - adding services from the current catalog;
 - removing services, except the final remaining service;
 - reordering services;
-- editing appointment-specific processing duration where appropriate;
+- editing appointment-specific phase durations (active and processing) with the same `[ − ] XX min [ + ]`
+  stepper as Appointment Details — 5-minute steps, zero allowed, no minute text input, no keyboard;
 - changing appointment-specific price.
 
 Editing starts from the AppointmentItem snapshots already stored on the appointment. Existing prices, names, phase
@@ -403,7 +404,7 @@ Appointment Details exposes only relevant actions:
 
 ```text
 Rendez-vous · Cliente · date · heure · statut
-Prestations (ordered services, expandable phases)
+Prestations (ordered services; each row expands into its phase timing)
 Durée totale · Total                          (one banner; no separate active / processing breakdown)
 Produits vendus                               (only when a linked Product Sale exists; Total produits)
 Note
@@ -412,6 +413,27 @@ Encaissement                                  (once checked out: total, Carte / 
 Absence · Annuler · Modifier                  (lifecycle actions, below)
 Supprimer                                     (secondary destructive text action)
 ```
+
+### Appointment-specific timing from Details
+
+Each Service row of an editable Appointment is an accordion. Tapping it expands the per-phase timing of
+that Service in place:
+
+```text
+Balayage                                 1 h 25
+  Application        [ − ]  45 min  [ + ]
+  Temps de pose      [ − ]  40 min  [ + ]
+  Durée 1 h 25                 [ Enregistrer ]
+```
+
+- each tap changes the phase by 5 minutes; 0 min is valid (a skipped pose today) and the control never
+  goes negative; no keyboard is involved;
+- the changes stay a local draft until « Enregistrer », which persists the whole Service atomically; then
+  `Durée totale`, the end time, the collapsed row and the Agenda block update immediately;
+- ONLY this Appointment changes: the Service catalog keeps its official timing and the next Appointment
+  created with the same Service starts from the catalog again. Official defaults are edited from
+  Prestations & tarifs only;
+- `COMPLETED`, `CANCELLED`, and `NO_SHOW` Appointments keep their phases read-only.
 
 ### Checkout (« Encaisser »)
 

@@ -30,7 +30,7 @@ export interface SelectedServiceDraft {
   readonly price: number;
   /** Owned phase snapshots used by both creation and existing appointment editing. */
   readonly phases: readonly EditablePhase[];
-  /** Kept for creation's catalog-override input and draft-level compatibility. */
+  /** Snapshot-level duration overrides keyed by phase id (never written to the catalog). */
   readonly phaseDurationOverrides: Readonly<Record<string, number>>;
 }
 

@@ -7,9 +7,10 @@
 // - the Prestations step is a compact grouped multi-selection grid without
 //   a selected-services stack;
 // - the Résumé step hosts the ordered stacked accordion editor;
-// - price and phase-duration adjustments commit to the catalog only when
-//   creation succeeds, and the Appointment snapshot uses the same values;
-// - abandoned creations and deselected services never touch the catalog;
+// - price and phase-duration adjustments (5-minute stepper, zero allowed)
+//   reach the Appointment snapshot ONLY — the Service catalog is never
+//   written by creation, whether it succeeds, is abandoned, or a modified
+//   service is deselected;
 // - a client can be created directly from the picker.
 
 import { act, fireEvent, render } from '@testing-library/react-native';
@@ -23,6 +24,9 @@ import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/s
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
+import { loadAppointments } from '@/persistence/stores/appointments';
+import { loadServices } from '@/persistence/stores/services';
+import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
@@ -161,9 +165,11 @@ function SessionProbe() {
   );
 }
 
-function creationTree(screenKey: number) {
+type TestDatabase = ReturnType<typeof openTestDatabase>;
+
+function creationTree(screenKey: number, database?: TestDatabase) {
   return (
-    <TestPersistenceProvider>
+    <TestPersistenceProvider database={database}>
       <ClientSessionProvider>
       <ServiceCatalogProvider>
         <AppointmentSessionProvider>
@@ -176,13 +182,13 @@ function creationTree(screenKey: number) {
   );
 }
 
-function renderCreation() {
-  return render(creationTree(0));
+function renderCreation(database?: TestDatabase) {
+  return render(creationTree(0, database));
 }
 
-async function restartCreation(view: Rendered, screenKey: number) {
+async function restartCreation(view: Rendered, screenKey: number, database?: TestDatabase) {
   await act(async () => {
-    view.rerender(creationTree(screenKey));
+    view.rerender(creationTree(screenKey, database));
   });
 }
 
@@ -230,6 +236,24 @@ async function continueToSummary(view: Rendered) {
   await act(async () => {
     fireEvent.press(view.getByText('Continuer'));
   });
+}
+
+const BALAYAGE_ACTIVE = 'technique-balayage-balayage-1-active';
+const BALAYAGE_POSE = 'technique-balayage-balayage-1-processing';
+const BRUSHING_PHASE = 'service-brushing-brushing-1-phase';
+
+/** Taps the shared ±5 stepper `times` times (negative = decrement). */
+async function stepPhase(view: Rendered, phaseId: string, times: number) {
+  const action = times < 0 ? 'decrement' : 'increment';
+  for (let index = 0; index < Math.abs(times); index += 1) {
+    await act(async () => {
+      fireEvent.press(view.getByTestId(`phase-duration-${phaseId}-${action}`));
+    });
+  }
+}
+
+function phaseValue(view: Rendered, phaseId: string): string {
+  return view.getByTestId(`phase-duration-${phaseId}-value`).props.children as string;
 }
 
 async function expandService(view: Rendered, name: string) {
@@ -364,18 +388,18 @@ describe('AppointmentCreationScreen', () => {
     });
     expect(view.getAllByText('50,00 €').length).toBeGreaterThanOrEqual(1);
 
-    // Per-phase durations: active 90 stays, pose 60 → 45.
-    expect(view.getByLabelText('Durée de Balayage 1').props.value).toBe('90');
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Durée de Temps de pose'), '45');
-    });
-    expect(
-      view.getByText('Les modifications seront enregistrées pour les prochains rendez-vous.'),
-    ).toBeTruthy();
+    // Per-phase durations through the shared ±5 stepper (no keyboard):
+    // active 90 stays, pose 60 → 45.
+    expect(view.queryByLabelText('Durée de Temps de pose')).toBeNull();
+    expect(phaseValue(view, BALAYAGE_ACTIVE)).toBe('90 min');
+    await stepPhase(view, BALAYAGE_POSE, -3);
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('45 min');
+    expect(view.queryByText(/prochains rendez-vous/)).toBeNull();
 
     // Summary reflects the adjusted draft values.
     expect(view.getByText('10:15 – 12:30')).toBeTruthy();
-    expect(view.getByText('45 min')).toBeTruthy();
+    // Stepper value + Temps de pose summary row.
+    expect(view.getAllByText('45 min')).toHaveLength(2);
     expect(view.getByText('1 h 30 min')).toBeTruthy();
     expect(view.getByText('2 h 15 min')).toBeTruthy();
     expect(view.getAllByText('50,00 €').length).toBe(2);
@@ -388,16 +412,16 @@ describe('AppointmentCreationScreen', () => {
     await continueToSummary(view);
     await expandService(view, 'Balayage 1');
     expect(view.getByDisplayValue('50,00')).toBeTruthy();
-    expect(view.getByLabelText('Durée de Temps de pose').props.value).toBe('45');
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('45 min');
 
-    // Creation commits both the Appointment snapshot and the future default.
+    // Creation writes the Appointment snapshot only; the catalog keeps 45 / 90 + 60.
     await act(async () => {
       fireEvent.press(view.getByText('Créer le rendez-vous'));
     });
 
     const catalog = view.getByTestId('catalog-balayage').props.children as string;
     expect(catalog).toBe(
-      '50:technique-balayage-balayage-1-active=90,technique-balayage-balayage-1-processing=45',
+      '45:technique-balayage-balayage-1-active=90,technique-balayage-balayage-1-processing=60',
     );
     const appointments = view.getByTestId('appointments-probe').props.children as string;
     expect(appointments).toContain('Balayage 1:50:90/45');
@@ -423,15 +447,16 @@ describe('AppointmentCreationScreen', () => {
 
     await expandService(view, 'Balayage 1');
     expect(view.getByLabelText('Prix de Balayage 1')).toBeTruthy();
-    expect(view.getByLabelText('Durée de Balayage 1')).toBeTruthy();
-    expect(view.getByLabelText('Durée de Temps de pose')).toBeTruthy();
+    expect(view.getByTestId(`phase-duration-${BALAYAGE_ACTIVE}`)).toBeTruthy();
+    expect(view.getByTestId(`phase-duration-${BALAYAGE_POSE}`)).toBeTruthy();
 
     // Expanding another card collapses the previous one.
     await expandService(view, 'Coupe Brushing 1');
     expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
     expect(view.getByLabelText('Prix de Coupe Brushing 1')).toBeTruthy();
-    // A SERVICE exposes one simple Durée field.
-    expect(view.getByLabelText('Durée de Coupe Brushing 1')).toBeTruthy();
+    // A SERVICE exposes one simple Durée stepper.
+    expect(view.getByText('Durée')).toBeTruthy();
+    expect(view.getByLabelText('Réduire la durée de Coupe Brushing 1 de 5 minutes')).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(view.getByLabelText('Réduire Coupe Brushing 1'));
@@ -507,7 +532,7 @@ describe('AppointmentCreationScreen', () => {
     ).toEqual(['Déplacer Brushing 1', 'Déplacer Balayage 1', 'Déplacer Chignon']);
   });
 
-  it('simple service price and duration become catalog defaults only on success', async () => {
+  it('keeps a simple service price and duration on the snapshot; the catalog stays at its defaults', async () => {
     const view = await renderCreation();
     await selectClientBeyond60(view);
 
@@ -519,20 +544,16 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prix de Brushing 1'), '25');
     });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Durée de Brushing 1'), '35');
-    });
+    await stepPhase(view, BRUSHING_PHASE, 1);
 
-    // Before creation the catalog keeps its current defaults.
-    expect(view.getByTestId('catalog-brushing-1').props.children).toContain('20:');
+    const catalogBefore = view.getByTestId('catalog-brushing-1').props.children as string;
+    expect(catalogBefore).toBe('20:service-brushing-brushing-1-phase=30');
 
     await act(async () => {
       fireEvent.press(view.getByText('Créer le rendez-vous'));
     });
 
-    expect(view.getByTestId('catalog-brushing-1').props.children).toContain(
-      '25:service-brushing-brushing-1-phase=35',
-    );
+    expect(view.getByTestId('catalog-brushing-1').props.children).toBe(catalogBefore);
     const appointments = view.getByTestId('appointments-probe').props.children as string;
     expect(appointments).toContain('Brushing 1:25:35');
   });
@@ -548,9 +569,7 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '110');
     });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Durée de Temps de pose'), '55');
-    });
+    await stepPhase(view, BALAYAGE_POSE, -1);
 
     await act(async () => {
       fireEvent.press(view.getByLabelText('Annuler la création'));
@@ -563,58 +582,100 @@ describe('AppointmentCreationScreen', () => {
     );
   });
 
-  it('keeps earlier Appointment snapshots unchanged when defaults are updated', async () => {
-    const view = await renderCreation();
+  it('never writes the catalog: a zero pose stays on Appointment A and Appointment B starts from 40 again', async () => {
+    const db = openTestDatabase();
+    const view = await renderCreation(db);
+    const servicesBefore = loadServices(db);
 
-    // First appointment uses catalog defaults (45 / 90 + 60).
-    await selectClientBeyond60(view);
-    await searchService(view, 'balayage 1');
-    await selectService(view, 'Balayage 1');
-    await continueToSummary(view);
-    await act(async () => {
-      fireEvent.press(view.getByText('Créer le rendez-vous'));
-    });
-
-    // Second appointment adjusts the defaults: 110 / 35 + 55.
-    await restartCreation(view, 1);
+    // Appointment A: Balayage 1 initializes from the catalog (90 / 60), pose → 0.
     await selectClientBeyond60(view);
     await searchService(view, 'balayage 1');
     await selectService(view, 'Balayage 1');
     await continueToSummary(view);
     await expandService(view, 'Balayage 1');
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '110');
-    });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Durée de Balayage 1'), '35');
-    });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Durée de Temps de pose'), '55');
-    });
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('60 min');
+    await stepPhase(view, BALAYAGE_POSE, -13);
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('0 min');
+    // 90 min of active work, no pose: the end moves from 12:45 to 11:45.
+    expect(view.getByText('10:15 – 11:45')).toBeTruthy();
     await act(async () => {
       fireEvent.press(view.getByText('Créer le rendez-vous'));
     });
 
-    // Catalog default and newest appointment use the new values…
-    const catalog = view.getByTestId('catalog-balayage').props.children as string;
-    expect(catalog).toBe(
-      '110:technique-balayage-balayage-1-active=35,technique-balayage-balayage-1-processing=55',
+    // Appointment A carries 0; the catalog (memory AND SQLite) is untouched.
+    let appointments = view.getByTestId('appointments-probe').props.children as string;
+    expect(appointments).toContain('Balayage 1:45:90/0');
+    expect(view.getByTestId('catalog-balayage').props.children).toBe(
+      '45:technique-balayage-balayage-1-active=90,technique-balayage-balayage-1-processing=60',
     );
-    // …while the earlier Appointment keeps its booked snapshot.
-    const appointments = view.getByTestId('appointments-probe').props.children as string;
-    expect(appointments).toContain('Balayage 1:45:90/60');
-    expect(appointments).toContain('Balayage 1:110:35/55');
+    expect(loadServices(db)).toEqual(servicesBefore);
+    const storedA = loadAppointments(db).at(-1);
+    expect(storedA?.items[0]?.phases.map((phase) => phase.durationMinutes)).toEqual([90, 0]);
+    expect(storedA?.items[0]?.phases).toHaveLength(2);
 
-    // A third creation starts from the new defaults.
-    await restartCreation(view, 2);
+    // Appointment B starts from the catalog default again: 60, not 0.
+    await restartCreation(view, 1, db);
     await selectClientBeyond60(view);
     await searchService(view, 'balayage 1');
     await selectService(view, 'Balayage 1');
     await continueToSummary(view);
     await expandService(view, 'Balayage 1');
-    expect(view.getByDisplayValue('110,00')).toBeTruthy();
-    expect(view.getByLabelText('Durée de Balayage 1').props.value).toBe('35');
-    expect(view.getByLabelText('Durée de Temps de pose').props.value).toBe('55');
+    expect(view.getByDisplayValue('45,00')).toBeTruthy();
+    expect(phaseValue(view, BALAYAGE_ACTIVE)).toBe('90 min');
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('60 min');
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    appointments = view.getByTestId('appointments-probe').props.children as string;
+    expect(appointments).toContain('Balayage 1:45:90/0');
+    expect(appointments).toContain('Balayage 1:45:90/60');
+    expect(loadServices(db)).toEqual(servicesBefore);
+  });
+
+  it('steps creation timing 10 → 5 → 0 → 0, then back up, and keeps the zero phase', async () => {
+    const db = openTestDatabase();
+    const view = await renderCreation(db);
+    await selectClientBeyond60(view);
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+    await expandService(view, 'Balayage 1');
+
+    // 60 → 10 first, then the canonical 10 → 5 → 0 → 0 sequence.
+    await stepPhase(view, BALAYAGE_POSE, -10);
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('10 min');
+    await stepPhase(view, BALAYAGE_POSE, -1);
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('5 min');
+    await stepPhase(view, BALAYAGE_POSE, -1);
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('0 min');
+    expect(
+      view.getByLabelText('Réduire le temps de pose de 5 minutes').props.accessibilityState.disabled,
+    ).toBe(true);
+    await stepPhase(view, BALAYAGE_POSE, -1);
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('0 min');
+    await stepPhase(view, BALAYAGE_POSE, 2);
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('10 min');
+    await stepPhase(view, BALAYAGE_POSE, -2);
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('0 min');
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    // Persisted as zero, phase kept, catalog pose still 60.
+    const stored = loadAppointments(db).at(-1);
+    expect(stored?.items[0]?.phases[1]).toEqual({
+      id: BALAYAGE_POSE,
+      name: 'Temps de pose',
+      durationMinutes: 0,
+      requiresStaff: false,
+    });
+    expect(
+      loadServices(db)
+        .find((service) => service.id === 'technique-balayage-balayage-1')
+        ?.phases.map((phase) => phase.durationMinutes),
+    ).toEqual([90, 60]);
   });
 
   it('steps the draft start time and recalculates the summary without changing durations', async () => {

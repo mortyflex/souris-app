@@ -32,7 +32,19 @@ export type {
 } from "./snapshot";
 export { createAppointmentItemSnapshot } from "./snapshot";
 
-export { reorderAppointmentItems, updateAppointmentPhaseDuration } from "./mutations";
+export type { AppointmentPhaseDurationUpdate } from "./mutations";
+export {
+  reorderAppointmentItems,
+  updateAppointmentItemPhaseDurations,
+  updateAppointmentPhaseDuration,
+} from "./mutations";
+
+export type { PhaseDurationStepDirection } from "./phase-duration";
+export {
+  PHASE_DURATION_STEP_MINUTES,
+  isValidPhaseDurationMinutes,
+  stepPhaseDurationMinutes,
+} from "./phase-duration";
 
 export type { AppointmentItemEditDraft } from "./editing";
 export {
@@ -42,6 +54,8 @@ export {
 } from "./editing";
 
 export {
+  canEditAppointment,
+  isEditableAppointmentStatus,
   canCompleteAppointment,
   canCancelAppointment,
   canMarkAppointmentNoShow,

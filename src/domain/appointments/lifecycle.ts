@@ -17,6 +17,18 @@ const CANCELLABLE_STATUSES: ReadonlySet<Appointment['status']> = new Set([
   'CONFIRMED',
 ]);
 
+/**
+ * The ONE editing eligibility rule: services, timing, start, and client of an
+ * Appointment can change until it reaches a terminal historical outcome
+ * (COMPLETED, CANCELLED, NO_SHOW). A paid Appointment is COMPLETED and
+ * therefore read-only.
+ */
+const EDITABLE_STATUSES: ReadonlySet<Appointment['status']> = new Set([
+  'SCHEDULED',
+  'CONFIRMED',
+  'IN_PROGRESS',
+]);
+
 const NO_SHOWABLE_STATUSES: ReadonlySet<Appointment['status']> = new Set([
   'SCHEDULED',
   'CONFIRMED',
@@ -29,6 +41,14 @@ function localDayOrdinal(date: Date): number {
 
 function isPreviousLocalDay(candidate: Date, reference: Date): boolean {
   return localDayOrdinal(candidate) < localDayOrdinal(reference);
+}
+
+export function isEditableAppointmentStatus(status: Appointment['status']): boolean {
+  return EDITABLE_STATUSES.has(status);
+}
+
+export function canEditAppointment(appointment: Appointment): boolean {
+  return isEditableAppointmentStatus(appointment.status);
 }
 
 export function canCompleteAppointment(appointment: Appointment, now: Date): boolean {

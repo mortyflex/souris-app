@@ -18,7 +18,12 @@ import { agenda, bottomClearance, gutter, rose, semanticColors } from '@/shared/
 
 import { getAgendaAppointmentPalette } from '../appointment-palette';
 import { buildAgendaStaffSegments } from '../layout/agenda-staff-segments';
-import { calculateDayIntervalLayout, minutesFromDayStart } from '../layout/day-layout';
+import { calculateDayIntervalLayout } from '../layout/day-layout';
+import {
+  calculateDayTimelineRange,
+  formatTimelineClockLabel,
+  minutesFromDayMidnight,
+} from '../layout/day-range';
 import { startAtFromTimelinePosition } from '../interaction/timeline-position';
 import { AppointmentBlock } from './AppointmentBlock';
 
@@ -28,8 +33,7 @@ interface DayTimelineProps {
 }
 
 const quarterHeight = agenda.hourHeight / 4;
-const quarterCount = (agenda.dayEndHour - agenda.dayStartHour) * 4;
-const timelineHeight = (agenda.dayEndHour - agenda.dayStartHour) * agenda.hourHeight;
+const minuteHeight = agenda.hourHeight / 60;
 
 export function DayTimeline({ day, appointments }: DayTimelineProps) {
   const router = useRouter();
@@ -46,17 +50,27 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
   const intervalLayouts = calculateDayIntervalLayout(visibleSegments);
   const layoutById = new Map(intervalLayouts.map((layout) => [layout.id, layout]));
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
+  // The canvas covers the normal operational day and grows only as far as
+  // the latest visible block of the selected day requires (past 20:00, or
+  // past midnight for a very late Appointment). Only the height changes:
+  // the initial scroll position stays at the top of the day.
+  const range = calculateDayTimelineRange(day, visibleSegments, {
+    defaultEndHour: agenda.dayEndHour,
+    defaultStartHour: agenda.dayStartHour,
+  });
+  const quarterCount = (range.endMinutes - range.startMinutes) / 15;
+  const timelineHeight = (range.endMinutes - range.startMinutes) * minuteHeight;
+  const topOf = (date: Date) => (minutesFromDayMidnight(day, date) - range.startMinutes) * minuteHeight;
+  const nowMinutes = minutesFromDayMidnight(day, now);
   const showNow =
-    isSameDay(day, now) &&
-    now.getHours() >= agenda.dayStartHour &&
-    now.getHours() < agenda.dayEndHour;
-  const nowTop = minutesFromDayStart(now, agenda.dayStartHour) * (agenda.hourHeight / 60);
+    isSameDay(day, now) && nowMinutes >= range.startMinutes && nowMinutes < range.endMinutes;
+  const nowTop = topOf(now);
   const eventLeft = agenda.timelineGutter;
   const eventWidth = Math.max(160, width - eventLeft - horizontalGutter);
 
   const openCreationAtPosition = (event: GestureResponderEvent) => {
     const startAt = startAtFromTimelinePosition(day, event.nativeEvent.locationY, {
-      dayEndHour: agenda.dayEndHour,
+      dayEndHour: range.endMinutes / 60,
       dayStartHour: agenda.dayStartHour,
       hourHeight: agenda.hourHeight,
     });
@@ -81,14 +95,13 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.canvas, { height: timelineHeight, width }]}>
+      <View style={[styles.canvas, { height: timelineHeight, width }]} testID="agenda-day-canvas">
         {Array.from({ length: quarterCount + 1 }, (_, index) => {
           const isFullHour = index % 4 === 0;
-          const hour = agenda.dayStartHour + Math.floor(index / 4);
-          const minute = (index % 4) * 15;
+          const minutes = range.startMinutes + index * 15;
           return (
             <View
-              key={`${hour}:${minute}`}
+              key={minutes}
               pointerEvents="none"
               style={[styles.timeRow, { top: index * quarterHeight }]}
             >
@@ -96,7 +109,7 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
                 variant={isFullHour ? 'agendaHour' : 'agendaQuarter'}
                 style={[styles.timeLabel, isFullHour ? styles.fullHourLabel : styles.quarterLabel]}
               >
-                {`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`}
+                {formatTimelineClockLabel(minutes)}
               </AppText>
               <View
                 style={[
@@ -120,16 +133,16 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
         {visibleSegments.map((segment) => {
           const layout = layoutById.get(segment.id);
           if (!layout) return null;
-          const top =
-            minutesFromDayStart(segment.startAt, agenda.dayStartHour) * (agenda.hourHeight / 60);
+          const top = topOf(segment.startAt);
           const height = Math.max(
             1,
-            (segment.endAt.getTime() - segment.startAt.getTime()) / 60_000 * (agenda.hourHeight / 60),
+            ((segment.endAt.getTime() - segment.startAt.getTime()) / 60_000) * minuteHeight,
           );
           const columnWidth = eventWidth / layout.columnCount;
           return (
             <View
               key={segment.id}
+              testID={`agenda-segment-${segment.id}`}
               style={{
                 height,
                 left: eventLeft + layout.column * columnWidth + 3,

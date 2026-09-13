@@ -11,6 +11,7 @@ import {
 import {
   canCancelAppointment,
   canCheckoutAppointment,
+  canEditAppointment,
   canEditAppointmentPayment,
   canMarkAppointmentNoShow,
   cancelAppointment,
@@ -18,6 +19,7 @@ import {
   markAppointmentNoShow,
   shouldAutoCompleteAppointment,
   type AppointmentPaymentAmounts,
+  type AppointmentPhaseDurationUpdate,
 } from "@/domain/appointments";
 import { isClientArchived } from "@/domain/clients";
 import {
@@ -98,6 +100,7 @@ export function AppointmentDetailsScreen({
     getAppointmentById,
     getAppointmentDeletionEligibility,
     updateAppointment,
+    updateAppointmentItemTiming,
     updateAppointmentPayment,
   } = useAppointmentSession();
   const { getClientById } = useClientSession();
@@ -163,7 +166,9 @@ export function AppointmentDetailsScreen({
   const canEditPayment = canEditAppointmentPayment(appointment);
   const canCancel = canCancelAppointment(appointment);
   const canMarkNoShow = canMarkAppointmentNoShow(appointment, now);
-  const canModify = !isTerminal;
+  // The ONE editing eligibility rule (domain): timing accordions and the
+  // Modifier action open together and close together.
+  const canModify = canEditAppointment(appointment);
   const hasNormalActions = canMarkNoShow || canCancel || canModify;
 
   // Every lifecycle write goes through the persisted session; a failed write
@@ -176,6 +181,19 @@ export function AppointmentDetailsScreen({
       alertPersistenceFailure();
       return false;
     }
+  };
+
+  // Appointment-specific timing: ONE atomic write of the item's phase
+  // durations; the catalog Service is never involved.
+  const saveServiceTiming = (
+    appointmentItemId: string,
+    updates: readonly AppointmentPhaseDurationUpdate[],
+  ): boolean => {
+    const succeeded = persist(() =>
+      updateAppointmentItemTiming(appointment.id, appointmentItemId, updates),
+    );
+    if (succeeded) haptics.success();
+    return succeeded;
   };
 
   const openSale = () => {
@@ -346,8 +364,10 @@ export function AppointmentDetailsScreen({
         {services.map((service) => (
           <AppointmentServiceSection
             key={service.item.id}
+            editable={canModify}
             expanded={expandedItemIds.has(service.item.id)}
             service={service}
+            onSaveTiming={(updates) => saveServiceTiming(service.item.id, updates)}
             onToggle={() => toggleItem(service.item.id)}
           />
         ))}

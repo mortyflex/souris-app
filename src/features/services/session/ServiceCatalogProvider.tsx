@@ -59,19 +59,6 @@ export function ServiceCatalogProvider({ children }: PropsWithChildren) {
     );
   };
 
-  const applyCommittedServiceUpdates = (updated: readonly Service[]) => {
-    if (updated.length === 0) return;
-    const byId = new Map(updated.map((service) => [service.id, service]));
-    setServices((current) =>
-      current.map((existing) => {
-        const next = byId.get(existing.id);
-        return next
-          ? copyService({ ...next, id: existing.id, businessId: existing.businessId })
-          : existing;
-      }),
-    );
-  };
-
   const setServiceActive = (serviceId: string, active: boolean) => {
     persistServiceActive(database, serviceId, active);
     setServices((current) =>
@@ -97,18 +84,12 @@ export function ServiceCatalogProvider({ children }: PropsWithChildren) {
         addService,
         updateService,
         setServiceActive,
-        applyCommittedServiceUpdates,
         deleteService,
       }}
     >
       {children}
     </ServiceCatalogContext.Provider>
   );
-}
-
-/** The catalog when a ServiceCatalogProvider is present above; null otherwise. */
-export function useOptionalServiceCatalog(): ServiceCatalogSessionValue | null {
-  return useContext(ServiceCatalogContext);
 }
 
 export function useServiceCatalog(): ServiceCatalogSessionValue {

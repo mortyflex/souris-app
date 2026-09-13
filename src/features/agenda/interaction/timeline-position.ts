@@ -8,7 +8,9 @@ export interface TimelinePositionOptions {
 /**
  * Converts a vertical position in the day grid into a local appointment start.
  * The returned time is always inside the displayed day and snapped to the
- * nearest quarter hour by default.
+ * nearest quarter hour by default. A grid that extends past midnight (very
+ * late Appointment) still creates on the SELECTED day: taps beyond it clamp
+ * to the last slot before midnight.
  */
 export function startAtFromTimelinePosition(
   day: Date,
@@ -17,7 +19,7 @@ export function startAtFromTimelinePosition(
 ): Date {
   const snapMinutes = options.snapMinutes ?? 15;
   const dayStartMinutes = options.dayStartHour * 60;
-  const dayEndMinutes = options.dayEndHour * 60;
+  const dayEndMinutes = Math.min(options.dayEndHour * 60, 24 * 60 - snapMinutes);
   const rawMinutes = dayStartMinutes + (positionY / options.hourHeight) * 60;
   const boundedMinutes = Math.min(
     dayEndMinutes,

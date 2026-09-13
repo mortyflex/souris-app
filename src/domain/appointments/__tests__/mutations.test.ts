@@ -4,6 +4,7 @@ import {
   getProcessingDurationMinutes,
   getStaffActiveDurationMinutes,
   reorderAppointmentItems,
+  updateAppointmentItemPhaseDurations,
   updateAppointmentPhaseDuration,
   type Appointment,
   type AppointmentItem,
@@ -218,5 +219,102 @@ describe("updateAppointmentPhaseDuration", () => {
     expect(() =>
       updateAppointmentPhaseDuration(apt, "item-technique", "ph-unknown", 45),
     ).toThrow(/ph-unknown/);
+  });
+});
+
+describe("updateAppointmentItemPhaseDurations", () => {
+  const balayageService: Service = {
+    id: "service-balayage",
+    businessId: "biz-1",
+    name: "Balayage",
+    type: "TECHNIQUE",
+    price: 95,
+    active: true,
+    phases: [
+      phase("bal-application", "Application", 45, true),
+      phase("bal-pose", "Temps de pose", 40, false),
+    ],
+  };
+
+  function snapshotFromCatalog(itemId: string, order: number): AppointmentItem {
+    return {
+      id: itemId,
+      serviceId: balayageService.id,
+      order,
+      serviceName: balayageService.name,
+      serviceType: balayageService.type,
+      price: balayageService.price,
+      phases: balayageService.phases.map((entry) => ({ ...entry })),
+    };
+  }
+
+  it("changes only the targeted Appointment snapshot; the catalog and later snapshots keep 40", () => {
+    const appointmentA = appointment([snapshotFromCatalog("item-a", 0)]);
+
+    const adjusted = updateAppointmentItemPhaseDurations(appointmentA, "item-a", [
+      { phaseId: "bal-pose", durationMinutes: 5 },
+    ]);
+
+    expect(adjusted.items[0].phases[1].durationMinutes).toBe(5);
+    expect(appointmentA.items[0].phases[1].durationMinutes).toBe(40);
+    expect(balayageService.phases[1].durationMinutes).toBe(40);
+
+    // A new Appointment B created afterwards still starts from the catalog.
+    const appointmentB = { ...appointment([snapshotFromCatalog("item-b", 0)]), id: "apt-2" };
+    expect(appointmentB.items[0].phases[1].durationMinutes).toBe(40);
+    expect(getElapsedDurationMinutes(adjusted)).toBe(50);
+    expect(getElapsedDurationMinutes(appointmentB)).toBe(85);
+  });
+
+  it("keeps a zero-minute phase in the snapshot instead of removing it", () => {
+    const source = appointment([snapshotFromCatalog("item-a", 0)]);
+
+    const adjusted = updateAppointmentItemPhaseDurations(source, "item-a", [
+      { phaseId: "bal-pose", durationMinutes: 0 },
+    ]);
+
+    expect(adjusted.items[0].phases).toHaveLength(2);
+    expect(adjusted.items[0].phases[1]).toEqual(phase("bal-pose", "Temps de pose", 0, false));
+    expect(getProcessingDurationMinutes(adjusted)).toBe(0);
+    expect(getElapsedDurationMinutes(adjusted)).toBe(45);
+    const timeline = calculateAppointmentTimeline(adjusted);
+    expect(timeline.items[0].phases[1].startAt).toEqual(timeline.items[0].phases[1].endAt);
+  });
+
+  it("applies several phases of one item at once and leaves the other items untouched by reference", () => {
+    const coupe = item("item-coupe", 0, "Coupe", "SERVICE", [phase("coupe", "Coupe", 30, true)]);
+    const balayage = snapshotFromCatalog("item-balayage", 1);
+    const brushing = item("item-brushing", 2, "Brushing", "SERVICE", [
+      phase("brushing", "Brushing", 25, true),
+    ]);
+    const source = appointment([coupe, balayage, brushing]);
+
+    const adjusted = updateAppointmentItemPhaseDurations(source, "item-balayage", [
+      { phaseId: "bal-application", durationMinutes: 30 },
+      { phaseId: "bal-pose", durationMinutes: 5 },
+    ]);
+
+    expect(adjusted.items[0]).toBe(coupe);
+    expect(adjusted.items[2]).toBe(brushing);
+    expect(adjusted.items[1].phases.map((entry) => entry.durationMinutes)).toEqual([30, 5]);
+    expect(source.items[1].phases.map((entry) => entry.durationMinutes)).toEqual([45, 40]);
+    expect(getStaffActiveDurationMinutes(adjusted)).toBe(85);
+  });
+
+  it("rejects an invalid duration or an unknown phase without touching the Appointment", () => {
+    const source = appointment([snapshotFromCatalog("item-a", 0)]);
+
+    expect(() =>
+      updateAppointmentItemPhaseDurations(source, "item-a", [
+        { phaseId: "bal-pose", durationMinutes: -5 },
+      ]),
+    ).toThrow(RangeError);
+    expect(() =>
+      updateAppointmentItemPhaseDurations(source, "item-a", [
+        { phaseId: "bal-pose", durationMinutes: 10 },
+        { phaseId: "missing", durationMinutes: 10 },
+      ]),
+    ).toThrow(/not found/);
+    expect(source.items[0].phases[1].durationMinutes).toBe(40);
   });
 });

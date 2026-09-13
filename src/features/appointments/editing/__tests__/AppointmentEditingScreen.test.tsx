@@ -269,11 +269,15 @@ describe('AppointmentEditingScreen', () => {
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prix de Balayage'), '90');
     });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText('Durée de Temps de pose'), '40');
-    });
+    // Timing uses the shared ±5 stepper: no minute TextInput, no keyboard.
+    expect(view.queryByLabelText('Durée de Temps de pose')).toBeNull();
+    for (let index = 0; index < 3; index += 1) {
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Réduire le temps de pose de 5 minutes'));
+      });
+    }
 
-    expect(view.getByLabelText('Durée de Temps de pose').props.value).toBe('40');
+    expect(view.getByTestId('phase-duration-sofia-processing-value').props.children).toBe('40 min');
     expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(false);
     expect(mockSuccessHaptic).not.toHaveBeenCalled();
 
@@ -682,5 +686,46 @@ describe('AppointmentEditingScreen', () => {
     expect(view.queryByText('Léa Martin')).toBeNull();
     expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
     expect(view.getByText('Sofia Petit')).toBeTruthy();
+  });
+
+  it('steps every phase by five down to zero and saves the snapshot only', async () => {
+    const view = await renderEditor();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage'));
+    });
+    // Every duration control is a stepper; no number-pad input remains.
+    expect(
+      view.container.queryAll(
+        (node) => node.type === 'TextInput' && node.props.keyboardType === 'number-pad',
+      ),
+    ).toHaveLength(0);
+    expect(view.getByTestId('phase-duration-sofia-application-value').props.children).toBe('30 min');
+
+    // 55 → 0 in eleven steps; the minus control then disables (never negative).
+    for (let index = 0; index < 12; index += 1) {
+      await act(async () => {
+        fireEvent.press(view.getByTestId('phase-duration-sofia-processing-decrement'));
+      });
+    }
+    expect(view.getByTestId('phase-duration-sofia-processing-value').props.children).toBe('0 min');
+    expect(
+      view.getByTestId('phase-duration-sofia-processing-decrement').props.accessibilityState.disabled,
+    ).toBe(true);
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Augmenter Application de 5 minutes'));
+    });
+    expect(view.getByTestId('phase-duration-sofia-application-value').props.children).toBe('35 min');
+    expect(view.getAllByText('1 h 5 min').length).toBeGreaterThan(0);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('save-appointment-edit'));
+    });
+
+    // Zero persists explicitly and the phase is kept; the catalog is untouched.
+    expect(view.getByTestId('session-items').props.children).toContain(
+      'item-sofia:Balayage:95:sofia-application=35,sofia-processing=0,sofia-finish=30',
+    );
+    expect(view.getByTestId('catalog-brushing-1').props.children).toBe('20:30:true');
   });
 });

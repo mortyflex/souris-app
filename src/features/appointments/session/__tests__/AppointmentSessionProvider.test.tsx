@@ -6,11 +6,7 @@ import {
   type AppStateStatus,
 } from 'react-native';
 
-import type { Appointment, Service } from '@/domain/appointments';
-import {
-  ServiceCatalogProvider,
-  useServiceCatalog,
-} from '@/features/services/session/ServiceCatalogProvider';
+import type { Appointment } from '@/domain/appointments';
 
 import {
   AppointmentSessionProvider,
@@ -102,86 +98,6 @@ function Probe() {
     </>
   );
 }
-
-const BRUSHING_ID = 'service-brushing-brushing-1';
-
-function CatalogProbe() {
-  const { addAppointment } = useAppointmentSession();
-  const { getServiceById } = useServiceCatalog();
-  const brushing = getServiceById(BRUSHING_ID);
-  const withDefaults = (updates: readonly Service[]) => {
-    try {
-      addAppointment({ appointment: addedAppointment }, updates);
-    } catch {
-      // The failure is observed through unchanged state below.
-    }
-  };
-
-  return (
-    <>
-      <Text testID="brushing">
-        {brushing ? `${brushing.price}:${brushing.phases[0]?.durationMinutes}` : 'missing'}
-      </Text>
-      <Pressable
-        testID="create-with-defaults"
-        onPress={() =>
-          brushing &&
-          withDefaults([
-            { ...brushing, price: brushing.price + 5, phases: [{ ...brushing.phases[0]!, durationMinutes: 99 }] },
-          ])
-        }
-      />
-      <Pressable
-        testID="create-with-broken-defaults"
-        onPress={() =>
-          brushing &&
-          withDefaults([
-            { ...brushing, price: brushing.price + 5 },
-            { ...brushing, id: 'service-vanished' },
-          ])
-        }
-      />
-    </>
-  );
-}
-
-describe('AppointmentSessionProvider — atomic creation with catalog defaults', () => {
-  function renderWithCatalog() {
-    return render(
-      <TestPersistenceProvider>
-        <ServiceCatalogProvider>
-          <AppointmentSessionProvider>
-            <Probe />
-            <CatalogProbe />
-          </AppointmentSessionProvider>
-        </ServiceCatalogProvider>
-      </TestPersistenceProvider>,
-    );
-  }
-
-  it('commits the Appointment and the Service defaults together', async () => {
-    const view = await renderWithCatalog();
-    const before = view.getByTestId('brushing').props.children as string;
-
-    await act(async () => fireEvent.press(view.getByTestId('create-with-defaults')));
-
-    expect(view.getByText('legacy-client-added')).toBeTruthy();
-    const after = view.getByTestId('brushing').props.children as string;
-    expect(after).not.toBe(before);
-    expect(after.endsWith(':99')).toBe(true);
-  });
-
-  it('leaves both the session and the catalog unchanged when the transaction fails', async () => {
-    const view = await renderWithCatalog();
-    const before = view.getByTestId('brushing').props.children as string;
-
-    await act(async () => fireEvent.press(view.getByTestId('create-with-broken-defaults')));
-
-    expect(view.getByText('not-found')).toBeTruthy();
-    expect(view.getByTestId('brushing').props.children).toBe(before);
-    expect(view.getByText('count:9')).toBeTruthy();
-  });
-});
 
 describe('AppointmentSessionProvider', () => {
   beforeAll(() => {

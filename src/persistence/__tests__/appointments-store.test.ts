@@ -4,9 +4,9 @@ import { bootstrapPersistence, loadSnapshot } from '../bootstrap';
 import {
   deleteAppointment,
   insertAppointment,
-  insertAppointmentWithServiceDefaults,
   loadAppointments,
   updateAppointment,
+  updateAppointmentItemPhaseDurations,
 } from '../stores/appointments';
 import { loadServices } from '../stores/services';
 import { appointmentLea, createTestSeed, serviceColor, serviceCut } from '../testing/fixtures';
@@ -125,43 +125,29 @@ describe('Appointment store', () => {
     expect(countRows(db, 'appointment_phases')).toBe(0);
   });
 
-  it('commits a new Appointment and its Service catalog defaults together', () => {
+  it('creates the Appointment snapshot only: adjusted timing never reaches the Service rows', () => {
     const db = openTestDatabase();
     bootstrapPersistence(db, () => createTestSeed({ appointments: [] }));
-    const cheaperCut = { ...serviceCut, price: 38, phases: [{ ...serviceCut.phases[0]!, durationMinutes: 40 }] };
+    const [color, cut] = appointmentLea.items;
+    const adjusted: Appointment = {
+      ...appointmentLea,
+      items: [
+        {
+          ...color!,
+          price: 110,
+          phases: color!.phases.map((phase, index) =>
+            index === 1 ? { ...phase, durationMinutes: 0 } : phase,
+          ),
+        },
+        { ...cut!, phases: [{ ...cut!.phases[0]!, durationMinutes: 5 }] },
+      ],
+    };
 
-    insertAppointmentWithServiceDefaults(db, appointmentLea, [cheaperCut]);
+    insertAppointment(db, adjusted);
 
-    expect(loadAppointments(db)).toEqual([appointmentLea]);
-    expect(loadServices(db).find((service) => service.id === serviceCut.id)).toEqual(cheaperCut);
-    expect(loadServices(db).find((service) => service.id === serviceColor.id)).toEqual(serviceColor);
-  });
-
-  it('rolls back the Appointment when a Service default update fails', () => {
-    const db = openTestDatabase();
-    bootstrapPersistence(db, () => createTestSeed({ appointments: [] }));
-    const cheaperCut = { ...serviceCut, price: 38 };
-    const vanished = { ...serviceColor, id: 'service-vanished', price: 1 };
-
-    expect(() =>
-      insertAppointmentWithServiceDefaults(db, appointmentLea, [cheaperCut, vanished]),
-    ).toThrow('not found');
-
-    expect(loadAppointments(db)).toEqual([]);
-    expect(countRows(db, 'appointment_items')).toBe(0);
+    expect(loadAppointments(db)).toEqual([adjusted]);
+    expect(loadAppointments(db)[0]?.items[0]?.phases[1]?.durationMinutes).toBe(0);
     expect(loadServices(db)).toEqual([serviceColor, serviceCut]);
-  });
-
-  it('rolls back the Service defaults when the Appointment write fails', () => {
-    const db = openTestDatabase();
-    bootstrapPersistence(db, createTestSeed);
-    const cheaperCut = { ...serviceCut, price: 38 };
-
-    // Same id as the seeded Appointment → primary key violation.
-    expect(() => insertAppointmentWithServiceDefaults(db, appointmentLea, [cheaperCut])).toThrow();
-
-    expect(loadAppointments(db)).toEqual([appointmentLea]);
-    expect(loadServices(db).find((service) => service.id === serviceCut.id)).toEqual(serviceCut);
   });
 
   it('rolls back the whole write when a nested row is invalid', () => {
@@ -175,5 +161,82 @@ describe('Appointment store', () => {
     expect(() => insertAppointment(db, broken)).toThrow();
     expect(countRows(db, 'appointments')).toBe(0);
     expect(countRows(db, 'appointment_items')).toBe(0);
+  });
+
+  describe('appointment-specific timing', () => {
+    const colorItemId = 'appointment-lea-item-0';
+    const processingPhaseId = serviceColor.phases[1]!.id;
+
+    function reloadLea(db: ReturnType<typeof openTestDatabase>) {
+      return loadAppointments(db).find((entry) => entry.id === appointmentLea.id)!;
+    }
+
+    it('persists a zero-minute phase as zero and keeps the phase row after a reload', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+
+      updateAppointmentItemPhaseDurations(db, appointmentLea.id, colorItemId, [
+        { phaseId: processingPhaseId, durationMinutes: 0 },
+      ]);
+
+      const reloaded = reloadLea(db);
+      expect(reloaded.items[0]?.phases).toHaveLength(serviceColor.phases.length);
+      expect(reloaded.items[0]?.phases[1]).toEqual({ ...serviceColor.phases[1]!, durationMinutes: 0 });
+      expect(countRows(db, 'appointment_phases')).toBe(4);
+    });
+
+    it('writes several phases of one item atomically and never touches the catalog or other items', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+      const [application, processing] = serviceColor.phases;
+
+      updateAppointmentItemPhaseDurations(db, appointmentLea.id, colorItemId, [
+        { phaseId: application!.id, durationMinutes: 7 },
+        { phaseId: processing!.id, durationMinutes: 12 },
+      ]);
+
+      const reloaded = reloadLea(db);
+      expect(reloaded.items[0]?.phases.map((phase) => phase.durationMinutes)).toEqual([7, 12, serviceColor.phases[2]!.durationMinutes]);
+      expect(reloaded.items[1]).toEqual(appointmentLea.items[1]);
+      expect(loadServices(db).find((service) => service.id === serviceColor.id)).toEqual(serviceColor);
+    });
+
+    it('rolls back every phase when one phase does not belong to the item', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+
+      expect(() =>
+        updateAppointmentItemPhaseDurations(db, appointmentLea.id, colorItemId, [
+          { phaseId: processingPhaseId, durationMinutes: 5 },
+          { phaseId: 'cut', durationMinutes: 5 },
+        ]),
+      ).toThrow('not found');
+
+      expect(reloadLea(db)).toEqual(appointmentLea);
+    });
+
+    it('refuses timing changes once the stored Appointment is terminal, and for an unknown Appointment', () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, createTestSeed);
+      updateAppointment(db, { ...appointmentLea, status: 'COMPLETED' });
+
+      expect(() =>
+        updateAppointmentItemPhaseDurations(db, appointmentLea.id, colorItemId, [
+          { phaseId: processingPhaseId, durationMinutes: 5 },
+        ]),
+      ).toThrow('no longer allows timing changes');
+      expect(() =>
+        updateAppointmentItemPhaseDurations(db, 'appointment-unknown', colorItemId, [
+          { phaseId: processingPhaseId, durationMinutes: 5 },
+        ]),
+      ).toThrow('no longer allows timing changes');
+      expect(() =>
+        updateAppointmentItemPhaseDurations(db, appointmentLea.id, colorItemId, [
+          { phaseId: processingPhaseId, durationMinutes: -5 },
+        ]),
+      ).toThrow(RangeError);
+
+      expect(reloadLea(db).items[0]?.phases[1]?.durationMinutes).toBe(serviceColor.phases[1]!.durationMinutes);
+    });
   });
 });
