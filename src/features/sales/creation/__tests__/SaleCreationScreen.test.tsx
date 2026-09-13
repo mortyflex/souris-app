@@ -1,5 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Alert, Pressable, Text } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 
 import { archiveClient } from '@/domain/clients';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
@@ -133,6 +133,39 @@ function createSeedWithArchivedCamille() {
       client.id === 'client-agenda-camille' ? archiveClient(client, new Date(2026, 8, 1)) : client,
     ),
   };
+}
+
+/**
+ * Exactly three Clients: A and B active, C archived. Small enough for the
+ * picker to render the whole active directory without any search typed.
+ */
+function createThreeClientSeed() {
+  const seed = createDevelopmentSeed(new Date());
+  return {
+    ...seed,
+    appointments: [],
+    clients: [
+      { id: 'client-a', firstName: 'Alice', lastName: 'Aubert' },
+      { id: 'client-b', firstName: 'Bianca', lastName: 'Bonnet' },
+      archiveClient({ id: 'client-c', firstName: 'Chloé', lastName: 'Caron' }, new Date(2026, 8, 1)),
+    ],
+  };
+}
+
+type TestNode = ReturnType<Awaited<ReturnType<typeof render>>['getByTestId']>;
+
+/** Host (native) ancestors of `node`, nearest first, up to and including the `boundaryTestID` node. */
+function hostAncestorsUpTo(node: TestNode, boundaryTestID: string): TestNode[] {
+  const ancestors: TestNode[] = [];
+  let current = node.parent;
+  while (current) {
+    if (typeof current.type === 'string') {
+      ancestors.push(current);
+      if (current.props.testID === boundaryTestID) return ancestors;
+    }
+    current = current.parent;
+  }
+  throw new Error(`${boundaryTestID} is not an ancestor`);
 }
 
 function renderSale(initialClientId?: string, createSeed?: () => ReturnType<typeof createDevelopmentSeed>) {
@@ -507,5 +540,48 @@ describe('SaleCreationScreen', () => {
 
     expect(view.queryByText('Camille Durand')).toBeNull();
     expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+  });
+
+  it('lists the active directory in the shared picker inside a bounded list area (regression: blank picker)', async () => {
+    const view = await renderSale(undefined, createThreeClientSeed);
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+    expect(view.getByText('Aucune cliente')).toBeTruthy();
+
+    await act(async () => fireEvent.press(view.getByLabelText('Choisir une cliente')));
+
+    expect(view.getByText('CLIENTE')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Choisir la cliente' })).toBeTruthy();
+    // Nothing typed: the whole active directory is offered; the archived Client never.
+    expect(view.getByText('Alice Aubert')).toBeTruthy();
+    expect(view.getByText('Bianca Bonnet')).toBeTruthy();
+    expect(view.queryByText('Chloé Caron')).toBeNull();
+    expect(view.queryByText('Aucune cliente trouvée')).toBeNull();
+
+    // The list needs real height: from the FlatList up to the sheet surface every
+    // host ancestor grows. A shrink-only ancestor collapses the list to zero
+    // height inside the fixed-height sheet — the blank picker.
+    const list = view.getByTestId('client-picker-list');
+    expect(StyleSheet.flatten(list.props.style)).toMatchObject({ flex: 1 });
+    const chain = hostAncestorsUpTo(list, 'client-picker-sheet');
+    expect(chain.length).toBeGreaterThan(0);
+    for (const ancestor of chain) {
+      expect(StyleSheet.flatten(ancestor.props.style)).toMatchObject({ flex: 1 });
+    }
+
+    await act(async () => fireEvent.press(view.getByText('Alice Aubert')));
+
+    expect(within(view.getByTestId('sale-client')).getByText('Alice Aubert')).toBeTruthy();
+    expect(view.getByLabelText('Modifier la cliente')).toBeTruthy();
+    await settleSheetTransition();
+    expect(view.queryByText('Choisir la cliente')).toBeNull();
+
+    // The draft is otherwise untouched: line, total, stock and the Sale session.
+    expect(view.getByTestId(`sale-line-increment-${MASQUE_ID}`)).toBeTruthy();
+    expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(50));
+    expect(view.getByTestId('masque-stock').props.children).toBe(2);
+    expect(view.getByTestId('sales-count').props.children).toBe(0);
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

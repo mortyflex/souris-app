@@ -62,7 +62,11 @@ interface BottomSheetProps {
   readonly dismissOnHardwareBack?: boolean;
   /** Lifts the sheet above the keyboard (forms and text entry). */
   readonly keyboardAvoiding?: boolean;
-  /** Fixed sheet height (e.g. '88%'); otherwise the sheet fits its content. */
+  /**
+   * Fixed sheet height (e.g. '88%'): the body then fills the surface below the
+   * header, so a long list gets a bounded area with real height. Otherwise the
+   * sheet fits its content (up to the detent).
+   */
   readonly height?: DimensionValue;
   /** Canonical header, rendered inside the drag zone. */
   readonly header?: ReactNode;
@@ -177,6 +181,10 @@ export function BottomSheet({
     outputRange: [1, 0],
   });
   const Anchor = keyboardAvoiding ? KeyboardAvoidingView : View;
+  // A content-fit sheet is sized by its body, so the shell only shrinks. A
+  // fixed-height sheet is the opposite: the shell and the body must GROW into
+  // the surface, otherwise a flex child (a FlatList) collapses to zero height.
+  const fillsSurface = height !== undefined;
   const bodyStyle = [padded && styles.padded, contentStyle];
 
   return (
@@ -218,7 +226,7 @@ export function BottomSheet({
             <SafeAreaView
               accessibilityViewIsModal
               edges={keyboardVisible ? [] : ['bottom']}
-              style={styles.content}
+              style={[styles.content, fillsSurface && styles.fill]}
               testID={testID}
             >
               <View
@@ -236,12 +244,12 @@ export function BottomSheet({
                   keyboardDismissMode="interactive"
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
-                  style={styles.scroll}
+                  style={[styles.scroll, fillsSurface && styles.fill]}
                 >
                   {children}
                 </ScrollView>
               ) : (
-                <View style={[styles.body, bodyStyle]}>{children}</View>
+                <View style={[styles.body, fillsSurface && styles.fill, bodyStyle]}>{children}</View>
               )}
               {footer}
             </SafeAreaView>
@@ -306,4 +314,5 @@ const styles = StyleSheet.create({
   padded: { paddingHorizontal: horizontalGutter },
   body: { flexShrink: 1 },
   scroll: { flexShrink: 1 },
+  fill: { flex: 1 },
 });
