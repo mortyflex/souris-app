@@ -354,6 +354,8 @@ Service activation/deletion   single statement (phases cascade)
 Appointment create            appointment + items + phases (snapshot only; no Service row is written)
 Appointment edit              metadata + full item/phase replacement (snapshot only)
 Appointment timing            editability re-check + phase duration rows of one item (snapshot only)
+Appointment item reorder      editability re-check + item_order rewritten by stable item id (Details)
+Appointment item removal      editability + last-item re-check + item and phase rows + order normalization
 Appointment delete            single statement (items/phases cascade)
 Appointment reconciliation    every previous-day finalization in one transaction
 Product create/edit           single row, after the durable image copy
@@ -426,7 +428,9 @@ COMMIT
 
 `getAppointmentDeletionEligibility` runs the same counts as an advisory pre-check so Details shows
 « Suppression impossible » instead of a confirmation that cannot succeed. There is no cascade to
-Sales and no `appointment_id = NULL` rewrite.
+Sales and no `appointment_id = NULL` rewrite. The counts are always read from the stored rows at
+tap time, never cached: once the last linked Sale has been emptied and removed by a sold-Product
+deletion (§8), an unpaid Appointment becomes deletable again while a paid one stays blocked.
 
 ---
 
@@ -448,6 +452,37 @@ prepareSaleCompletion(draft, products)   pure domain validation + snapshot + dec
 
 The stored quantity is the final authority. No committed Sale without its decrements; no
 decrement without its committed Sale. The `stock_quantity >= 0` CHECK is a second guard.
+
+`SaleSessionProvider.deleteAppointmentProduct(appointmentId, identity)` is the inverse — the
+deletion of ONE displayed Product row of Appointment Details — with the same discipline:
+
+```text
+domain removeAppointmentProduct(sales, appointmentId, identity)
+     matching lines across the linked Sales (productId + productName + unitPrice),
+     summed restoration, Sales that become empty, next collection
+     → nothing matching / a matching Sale with its own payment ⇒ refused, nothing written
+→ sales store deleteAppointmentProduct()      ONE transaction:
+     SELECT si.sale_id, si.quantity, s.paid_at FROM sale_items si JOIN sales s
+        WHERE s.appointment_id = ? AND si.product_id = ? AND si.product_name = ? AND si.unit_price = ?
+        → no row ⇒ PRODUCT_NOT_SOLD; any paid_at set ⇒ SALE_HAS_PAYMENT ⇒ ROLLBACK
+     UPDATE products SET stock_quantity = stock_quantity + Σ quantity WHERE id = ?
+        → 0 rows changed (Product deleted) ⇒ PRODUCT_MISSING ⇒ ROLLBACK
+     DELETE FROM sale_items WHERE sale_id = ? AND <same identity>      (matching lines only)
+     for each touched Sale: no item left ⇒ DELETE FROM sales WHERE id = ?; otherwise keep it
+→ applyCommittedStockRestorations()           catalog state reflects the restored stock
+→ replace the Sale collection in session state
+```
+
+Stock is restored, the matching lines removed and the emptied Sales deleted together — never the
+stock first and the lines later. A failure anywhere leaves the stock, every line, every Sale and the
+session untouched (`AppointmentProductDeleteConflictError` carries the reason); a missing Product
+aborts instead of removing lines whose stock cannot be given back. A Sale that still holds other
+Products is preserved — Sales stay separate records until emptied. The exact stored quantities are
+restored (no clamping); there is no Sale-level stored total to maintain (totals are derived).
+`appointments.paid_at / card_amount_cents / cash_amount_cents` are never read or written by this
+operation: the recorded Appointment payment — and therefore the Cash Register — is untouched. No
+schema change was needed: `sales.appointment_id` (v5) and the `sale_items` snapshot rows already
+carry everything the transaction reads.
 
 ---
 
@@ -525,6 +560,10 @@ deletion guard (safe / blocked by Appointment / blocked by Sale / both), the ato
 checkout (exact cents round trip, refusal for missing / cancelled / no-show / paid rows, invalid
 cents, payment correction, payment kept through generic updates), the Appointment deletion guard
 (payment / linked Sale / both, Sale untouched), the Sale ↔ Appointment link round trip, the standalone Sale payment round trip (card / cash /
-mixed, NULL for linked Sales, invalid cents refused), the source-hygiene guard (no literal NUL
+mixed, NULL for linked Sales, invalid cents refused), the atomic Appointment-linked Product deletion
+(summed stock restored exactly and matching lines removed across two Reventes, the emptied Sale
+deleted and the mixed Sale kept, the last Sale removed, snapshot-identity matching at another unit
+price, no clamping, refusal of unsold / paid, abort on a deleted Product, rollback of the
+restoration when a later write fails), the source-hygiene guard (no literal NUL
 byte in a store file), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.

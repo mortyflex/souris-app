@@ -213,10 +213,44 @@ several ACTIVE matches   → explicit choice among active Products only
 
 ---
 
-## 10. Immutability
+## 10. Immutability and Appointment-linked Product Deletion
 
-Completed Sales are immutable in V1. There is no edit, delete, refund, or return flow. The session
-exposes only `sales`, `getSaleById`, and `completeSale`.
+Completed Sales are never edited: there is no line editing, refund, return, or price correction.
+The session exposes `sales`, `getSaleById`, `completeSale`, and ONE explicit correction:
+`deleteAppointmentProduct(appointmentId, identity)`.
+
+From Appointment Details the professional removes a **displayed Product row** (§10b) — for
+example « Shampoo ×2 » — not a Sale. Deletion is a correction of an entry, not a refund flow:
+
+- it removes **every matching SaleItem snapshot** across the Sales sold during that Appointment
+  (`appointmentId` set, `payment` undefined), matched on the snapshot identity
+  `productId + productName + unitPrice`. Other Products of those Sales are untouched;
+- a parent Sale is deleted **only once it holds no line any more**; a Sale that still contains
+  other Products is preserved (trimmed). Underlying Sales therefore remain separate records until
+  — and unless — they are emptied. Nothing is ever rewritten merely for display;
+- it **restores the summed quantity atomically**: `stock 5 → ×1 + ×1 → stock 3 → delete → stock 5`,
+  the exact quantity, never clamped by any editor display limit. The stock restoration, the item
+  removal and the empty-Sale cleanup happen in ONE SQLite transaction; a failure leaves the stock,
+  every line, every Sale and the session untouched. A Product that no longer exists in the catalog
+  aborts the deletion (`PRODUCT_MISSING`) — no line is removed while its stock cannot be restored;
+- it never rewrites other Sales, the Product catalog price, or unrelated stock;
+- it **never touches the Appointment payment**. When the Appointment was already checked out, the
+  expected total decreases and the recorded payment stays exactly as recorded: Souris cannot know
+  whether the money was refunded, genuinely received, or whether the entry was simply wrong.
+  `Modifier l’encaissement` remains the correction mechanism. The Cash Register, which counts
+  `appointment.payment` and never linked Sales, is therefore unchanged by the deletion;
+- eligibility is deliberately narrow (`removeAppointmentProduct`): nothing matching
+  (`PRODUCT_NOT_SOLD`) or a matching Sale carrying its own payment (`SALE_HAS_PAYMENT`) is refused,
+  because touching a paid Sale would need a payment / Caisse decision this rule does not make. A
+  standalone Sale of the same Client and Product is never a candidate.
+
+Worked example — Sale A: Shampoo ×1 + Mask ×1; Sale B: Shampoo ×1. Details shows Shampoo ×2 and
+Mask ×1. Deleting Shampoo restores Shampoo +2, keeps Sale A with Mask ×1, deletes the emptied Sale B,
+and Details shows Mask ×1. The Client's `Produits achetés` follows the same canonical Sale state.
+
+Once the last linked Sale is emptied and removed, the Appointment permanent-deletion guard is
+re-evaluated from the stored references: an Appointment without payment becomes deletable again,
+an Appointment with a recorded payment stays blocked (`docs/domain/APPOINTMENTS.md` §28).
 
 ---
 
@@ -229,11 +263,17 @@ sale.appointmentId === appointment.id
 ```
 
 rendered EXCLUSIVELY from Sale snapshots (`productName`, `unitPrice`, `quantity`) — never from the
-live Product catalog. Several Sales from the same Appointment are merged into one concise list:
-identical snapshot lines (same Product, name and unit price) add their quantities; a later
-different snapshot stays its own line. A derived `Total produits` closes the list. A Sale of the
-same Client without the Appointment id is not shown there. The Product total also feeds the
-checkout expected total (`docs/domain/APPOINTMENTS.md` §25b) as a UX helper only.
+live Product catalog. The **Product is the visual unit**: one row per sold Product snapshot, with
+the aggregated quantity, the snapshot unit price and the aggregated line total. Identical
+snapshots (same `productId`, `productName` and `unitPrice`) sold through several Reventes add their
+quantities into ONE row (`getAppointmentProductLines`, `src/domain/appointments`); the same Product
+genuinely sold at another snapshot price or under another name stays its own truthful row. No
+Sale container, subtotal or « Revente » label is shown — the section title already says what these
+are — and there is no visible delete button: each row is swiped to delete (§10). The section badge
+counts TOTAL UNITS (Shampoo ×2 + Mask ×1 → 3). A Sale of the same Client without the Appointment
+id is not shown there. The linked Sale snapshots also feed the ONE canonical Appointment expected
+total — `Total à encaisser` in Details and `Total attendu` in the checkout
+(`docs/domain/APPOINTMENTS.md` §25b).
 
 Standalone Sales record their own payment (§4b) and are counted by the Cash Register; a Sale
 sold during an Appointment is counted through the Appointment checkout only.
@@ -273,5 +313,6 @@ never in the domain.
 ## 14. Non-Goals
 
 Not in this phase: pending orders, payment providers, card terminal, payment correction on
-a completed Sale, refunds, returns, discounts, tax/VAT, receipts/invoices, accounting, revenue
-dashboard, sales history screen, loyalty, per-sale price editing, image snapshots, cloud sync.
+a completed Sale, line-by-line Sale editing or deletion, deletion of a standalone (paid) Sale,
+refunds, returns, discounts, tax/VAT, receipts/invoices, accounting, revenue dashboard, sales
+history screen, loyalty, per-sale price editing, image snapshots, cloud sync.

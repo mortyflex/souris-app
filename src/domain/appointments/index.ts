@@ -34,7 +34,9 @@ export { createAppointmentItemSnapshot } from "./snapshot";
 
 export type { AppointmentPhaseDurationUpdate } from "./mutations";
 export {
+  removeAppointmentItem,
   reorderAppointmentItems,
+  reorderAppointmentItemsByIds,
   updateAppointmentItemPhaseDurations,
   updateAppointmentPhaseDuration,
 } from "./mutations";
@@ -79,3 +81,19 @@ export {
   isValidPaymentAmountCents,
   updateAppointmentPayment,
 } from "./payment";
+
+export type { AppointmentExpectedTotal } from "./expected-total";
+export {
+  getAppointmentExpectedTotal,
+  getAppointmentLinkedSales,
+  getSaleTotalCents,
+} from "./expected-total";
+
+export type { AppointmentProductIdentity, AppointmentProductLine } from "./linked-products";
+export {
+  getAppointmentProductKey,
+  getAppointmentProductLines,
+  getAppointmentProductUnitCount,
+  isSameProductSnapshot,
+  toAppointmentProductIdentity,
+} from "./linked-products";

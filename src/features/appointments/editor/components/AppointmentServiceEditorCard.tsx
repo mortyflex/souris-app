@@ -3,8 +3,11 @@
 // Shared by NEW Appointment Creation (Résumé) and existing Appointment
 // Editing. Collapsed it is a compact recognition/reorder row; expanded it
 // exposes quick price adjustment and the shared per-phase timing editor
-// (±5 minute steppers, no keyboard). Structural changes (rename, add,
-// remove, reorder, active/processing type) stay in Prestations & tarifs.
+// (±5 minute steppers, no keyboard). Removing the Service from an existing
+// Appointment draft is a swipe on the row (SortableDraftList wraps the card
+// in the shared SwipeToDeleteRow) — the card carries no remove control.
+// Structural changes (rename, add, remove, reorder, active/processing type)
+// stay in Prestations & tarifs.
 //
 // Every adjustment is Appointment-snapshot data: neither Creation nor
 // Editing writes the Service catalog. Official defaults are edited only from
@@ -52,8 +55,6 @@ export function AppointmentServiceEditorCard({
   onToggleExpanded,
   onUpdatePrice,
   onUpdatePhaseDuration,
-  onRemove,
-  canRemove,
   dragHandle,
 }: SortableDraftCardProps) {
   const [priceText, setPriceText] = useState(() => formatPriceInput(draft.price));
@@ -184,25 +185,6 @@ export function AppointmentServiceEditorCard({
                 serviceType={draft.serviceType}
               />
             </View>
-
-            {canRemove && (
-              <View style={styles.removeRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Retirer ${draft.serviceName}`}
-                  hitSlop={spacing.sm}
-                  onPress={onRemove}
-                  style={({ pressed }) => [
-                    styles.removeAction,
-                    pressed && styles.removeActionPressed,
-                  ]}
-                >
-                  <AppText variant="metadata" style={styles.removeText}>
-                    Retirer
-                  </AppText>
-                </Pressable>
-              </View>
-            )}
           </View>
         </Animated.View>
       )}
@@ -293,17 +275,4 @@ const styles = StyleSheet.create({
   suffix: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginLeft: spacing.xs },
   fieldError: { color: rose.rose600 },
   durations: { gap: spacing.xs },
-  removeRow: {
-    alignItems: 'flex-end',
-    paddingHorizontal: spacing.md,
-  },
-  removeAction: {
-    alignItems: 'center',
-    borderRadius: radii.small,
-    justifyContent: 'center',
-    minHeight: 32,
-    paddingHorizontal: spacing.sm,
-  },
-  removeActionPressed: { backgroundColor: semanticColors.surfaceRose },
-  removeText: { color: rose.rose600 },
 });

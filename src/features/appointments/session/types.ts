@@ -44,6 +44,25 @@ export interface AppointmentSessionValue {
     updates: readonly AppointmentPhaseDurationUpdate[],
   ) => void;
   /**
+   * Direct reorder from Appointment Details by STABLE item ids (every item
+   * exactly once): ONE transaction rewrites `order` after re-verifying
+   * editability; state changes only after the commit. Never writes the
+   * Service catalog. Throws when the Appointment is not editable, the ids do
+   * not match, or the write fails — nothing changes then.
+   */
+  readonly reorderAppointmentItems: (
+    appointmentId: string,
+    orderedItemIds: readonly string[],
+  ) => void;
+  /**
+   * Direct removal of ONE AppointmentItem from Appointment Details: ONE
+   * transaction deletes the item and its phases and normalizes the remaining
+   * order after re-verifying editability and the last-item rule; state
+   * changes only after the commit. Linked Sales, stock, payment and the
+   * catalog are untouched. Throws — and changes nothing — otherwise.
+   */
+  readonly removeAppointmentItem: (appointmentId: string, appointmentItemId: string) => void;
+  /**
    * Explicit checkout (« Encaisser »): ONE transaction writes COMPLETED and
    * the recorded card/cash cents together; state changes only after the
    * commit. Throws when the Appointment is not eligible or the write fails.

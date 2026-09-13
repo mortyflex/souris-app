@@ -54,17 +54,51 @@ function describePayment(sale: { readonly payment?: SaleDraft['payment'] } | und
 
 function Probe() {
   const { addProduct, deleteProduct, getProductById, updateProduct } = useProductCatalog();
-  const { sales, getSaleById, completeSale } = useSaleSession();
+  const { sales, getSaleById, completeSale, deleteAppointmentProduct } = useSaleSession();
   const [lastResult, setLastResult] = useState<SaleCompletionResult | null>(null);
+  const [deletionOutcome, setDeletionOutcome] = useState('none');
   const a = getProductById('product-a');
   const b = getProductById('product-b');
   const firstSale = getSaleById('sale-1');
 
   const run = (input: SaleDraft) => setLastResult(completeSale(input));
+  const remove = (appointmentId: string, productId: string, productName: string, unitPrice: number) => {
+    try {
+      deleteAppointmentProduct(appointmentId, { productId, productName, unitPrice });
+      setDeletionOutcome('deleted');
+    } catch (error) {
+      setDeletionOutcome(error instanceof Error ? error.name : 'error');
+    }
+  };
 
   return (
     <>
       <Text testID="sales-count">{sales.length}</Text>
+      <Text testID="sale-ids">{sales.map((sale) => sale.id).join(',')}</Text>
+      <Text testID="sale-lines">
+        {sales.map((sale) => `${sale.id}:${sale.items.map((item) => `${item.productId}x${item.quantity}`).join('+')}`).join('|')}
+      </Text>
+      <Text testID="deletion-outcome">{deletionOutcome}</Text>
+      <Pressable testID="delete-shampoo" onPress={() => remove('appointment-1', 'product-a', 'Shampooing', 20)} />
+      <Pressable testID="delete-care" onPress={() => remove('appointment-1', 'product-b', 'Soin', 18)} />
+      <Pressable testID="delete-shampoo-elsewhere" onPress={() => remove('appointment-9', 'product-a', 'Shampooing', 20)} />
+      <Pressable testID="delete-shampoo-repriced" onPress={() => remove('appointment-1', 'product-a', 'Shampooing', 25)} />
+      <Pressable
+        testID="sell-linked-two"
+        onPress={() =>
+          run(
+            draft(
+              'sale-linked-two',
+              [
+                { id: 'sale-linked-two-item-1', productId: 'product-a', quantity: 2 },
+                { id: 'sale-linked-two-item-2', productId: 'product-b', quantity: 1 },
+              ],
+              'client-1',
+              'appointment-1',
+            ),
+          )
+        }
+      />
       <Text testID="stock-a">{a?.stockQuantity ?? 'gone'}</Text>
       <Text testID="stock-b">{b?.stockQuantity ?? 'gone'}</Text>
       <Text testID="result">
@@ -265,6 +299,63 @@ describe('SaleSessionProvider', () => {
     expect(view.getByTestId('result').props.children).toBe('ok');
     expect(view.getByTestId('sales-count').props.children).toBe(1);
     expect(view.getByTestId('stock-a').props.children).toBe(4);
+  });
+
+  describe('Appointment-linked Product deletion', () => {
+    it('removes the aggregated Product across two Reventes, restores the summed stock, keeps the other line', async () => {
+      const view = await renderSession();
+      await act(async () => fireEvent.press(view.getByTestId('seed')));
+      // sale-linked: Shampooing ×1 · sale-linked-two: Shampooing ×2 + Soin ×1
+      await act(async () => fireEvent.press(view.getByTestId('sell-linked')));
+      await act(async () => fireEvent.press(view.getByTestId('sell-linked-two')));
+      expect(view.getByTestId('stock-a').props.children).toBe(2);
+      expect(view.getByTestId('stock-b').props.children).toBe(0);
+
+      await act(async () => fireEvent.press(view.getByTestId('delete-shampoo')));
+
+      expect(view.getByTestId('deletion-outcome').props.children).toBe('deleted');
+      expect(view.getByTestId('sale-lines').props.children).toBe('sale-linked-two:product-bx1');
+      expect(view.getByTestId('stock-a').props.children).toBe(5);
+      expect(view.getByTestId('stock-b').props.children).toBe(0);
+
+      await act(async () => fireEvent.press(view.getByTestId('delete-care')));
+
+      expect(view.getByTestId('sales-count').props.children).toBe(0);
+      expect(view.getByTestId('stock-b').props.children).toBe(1);
+    });
+
+    it('refuses an unsold Product, another Appointment, or another snapshot price without touching state', async () => {
+      const view = await renderSession();
+      await act(async () => fireEvent.press(view.getByTestId('seed')));
+      await act(async () => fireEvent.press(view.getByTestId('sell-a-2')));
+      await act(async () => fireEvent.press(view.getByTestId('sell-linked')));
+      expect(view.getByTestId('stock-a').props.children).toBe(2);
+
+      await act(async () => fireEvent.press(view.getByTestId('delete-care')));
+      expect(view.getByTestId('deletion-outcome').props.children).toBe('Error');
+      await act(async () => fireEvent.press(view.getByTestId('delete-shampoo-elsewhere')));
+      expect(view.getByTestId('deletion-outcome').props.children).toBe('Error');
+      await act(async () => fireEvent.press(view.getByTestId('delete-shampoo-repriced')));
+      expect(view.getByTestId('deletion-outcome').props.children).toBe('Error');
+
+      // The standalone Sale of the same Product is never a candidate.
+      expect(view.getByTestId('sale-ids').props.children).toBe('sale-1,sale-linked');
+      expect(view.getByTestId('stock-a').props.children).toBe(2);
+    });
+
+    it('keeps every line and the stock when the Product no longer exists', async () => {
+      const view = await renderSession();
+      await act(async () => fireEvent.press(view.getByTestId('seed')));
+      await act(async () => fireEvent.press(view.getByTestId('sell-linked-two')));
+      await act(async () => fireEvent.press(view.getByTestId('delete-a')));
+      expect(view.getByTestId('stock-a').props.children).toBe('gone');
+
+      await act(async () => fireEvent.press(view.getByTestId('delete-shampoo')));
+
+      expect(view.getByTestId('deletion-outcome').props.children).toBe('AppointmentProductDeleteConflictError');
+      expect(view.getByTestId('sale-lines').props.children).toBe('sale-linked-two:product-ax2+product-bx1');
+      expect(view.getByTestId('stock-b').props.children).toBe(0);
+    });
   });
 
   it('preserves historical snapshots through Product edits, deactivation and deletion', async () => {

@@ -3,7 +3,11 @@
 // Replaces « Encaisser » once a payment exists: the received total, then
 // the card / cash split (a zero method is not listed), then the restrained
 // correction action. Values are the stored integer cents — never a live
-// recalculation.
+// recalculation. When the expected total no longer matches what was
+// received (a Revente removed after checkout, a discount, a tip), one quiet
+// « Écart » line shows the signed difference — received minus expected —
+// exactly as the checkout sheet does. The payment itself is never rewritten
+// here; « Modifier l’encaissement » remains the correction.
 
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
@@ -14,18 +18,25 @@ import {
   paymentMethodLabels,
   type PaymentMethod,
 } from '@/shared/icons/payment-method-icons';
-import { formatEuroCents } from '@/shared/lib/money';
+import { formatEuroCents, formatSignedEuroCents } from '@/shared/lib/money';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { foregroundSoft, lavender, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 interface AppointmentPaymentSummaryProps {
   readonly payment: AppointmentPayment;
+  /** The canonical expected total; an « Écart » line appears only when it differs. */
+  readonly expectedTotalCents: number;
   readonly onEdit: () => void;
 }
 
-export function AppointmentPaymentSummary({ payment, onEdit }: AppointmentPaymentSummaryProps) {
+export function AppointmentPaymentSummary({
+  payment,
+  expectedTotalCents,
+  onEdit,
+}: AppointmentPaymentSummaryProps) {
   const total = getPaymentTotalCents(payment);
+  const difference = total - expectedTotalCents;
   const allMethods: readonly { readonly method: PaymentMethod; readonly cents: number }[] = [
     { method: 'CARD', cents: payment.cardAmountCents },
     { method: 'CASH', cents: payment.cashAmountCents },
@@ -55,6 +66,11 @@ export function AppointmentPaymentSummary({ payment, onEdit }: AppointmentPaymen
           ))}
         </View>
       )}
+      {difference !== 0 && (
+        <AppText variant="metadata" style={styles.difference} testID="appointment-payment-difference">
+          Écart : {formatSignedEuroCents(difference)}
+        </AppText>
+      )}
       <AppButton
         accessibilityLabel="Modifier l’encaissement"
         onPress={onEdit}
@@ -82,5 +98,6 @@ const styles = StyleSheet.create({
   methodRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, minHeight: 28 },
   methodLabel: { color: foregroundSoft, flex: 1 },
   methodValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  difference: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
   editAction: { alignSelf: 'flex-start', marginLeft: -spacing.md, marginTop: spacing.xs },
 });

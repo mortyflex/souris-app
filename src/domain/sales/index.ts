@@ -24,3 +24,10 @@ export type {
   SaleStockSource,
 } from './completion';
 export { prepareSaleCompletion } from './completion';
+export type {
+  AppointmentProductRemoval,
+  AppointmentProductRemovalIssue,
+  AppointmentProductRemovalResult,
+  ProductStockRestoration,
+} from './deletion';
+export { isAppointmentLinkedSale, removeAppointmentProduct } from './deletion';

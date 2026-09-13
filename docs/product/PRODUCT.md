@@ -320,7 +320,12 @@ the current order.
 Existing appointments support service-composition editing:
 
 - adding services from the current catalog;
-- removing services, except the final remaining service;
+- removing services, except the final remaining service — by swiping the Service card to the right
+  (the same Souris swipe-to-delete interaction as `Produits vendus`: a rose destructive surface and a
+  trash icon labelled `Retirer <Service> du rendez-vous`; a partial swipe leaves the trash available to
+  tap, a full swipe removes on release). There is no visible `Retirer` button. The removal changes the
+  editing draft ONLY: the persisted Appointment keeps the Service until `Enregistrer les modifications`
+  is tapped, and cancelling the edit leaves it untouched. A lone Service card cannot be swiped;
 - reordering services;
 - editing appointment-specific phase durations (active and processing) with the same `[ − ] XX min [ + ]`
   stepper as Appointment Details — 5-minute steps, zero allowed, no minute text input, no keyboard;
@@ -404,15 +409,36 @@ Appointment Details exposes only relevant actions:
 
 ```text
 Rendez-vous · Cliente · date · heure · statut
-Prestations (ordered services; each row expands into its phase timing)
-Durée totale · Total                          (one banner; no separate active / processing breakdown)
-Produits vendus                               (only when a linked Product Sale exists; Total produits)
+Prestations (ordered services; each row expands into its phase timing;
+             editable Appointment: drag handle to reorder, swipe right to remove)
+Durée totale · Prestations                    (one banner; no separate active / processing breakdown)
+Produits vendus                               (only when a linked Product Sale exists; one row per sold
+                                               Product, quantities aggregated; swipe right to delete)
+TOTAL À ENCAISSER                             (always shown: Prestations + linked Products)
 Note
 Encaissement                                  (once checked out: total, Carte / Espèces, Modifier l’encaissement)
 [ Revente ] [ Encaisser ]                     (side by side, same height; Encaisser is the primary violet action)
 Absence · Annuler · Modifier                  (lifecycle actions, below)
 Supprimer                                     (secondary destructive text action)
 ```
+
+### Quick Service adjustments from Details
+
+Appointment Details is the fast operational surface for an editable Appointment (`SCHEDULED`,
+`CONFIRMED`, compatibility `IN_PROGRESS`): tap a Service for its timing, drag its handle to reorder,
+swipe it right to remove. `Modifier le rendez-vous` remains the place for broader edits — adding
+Services, changing the Client or the date/time. Every adjustment from Details changes THIS
+Appointment's snapshot only and is persisted immediately (no draft, no Save): the Service catalog,
+its defaults and other Appointments never change.
+
+- **Reorder** — the same long-press drag handle as `Modifier le rendez-vous`; the drop persists the new
+  order at once, the timeline, end time and Agenda block follow. A refused write puts the rows back.
+- **Remove** — the same right swipe as `Produits vendus` (rose surface, trash labelled
+  `Retirer <Service> du rendez-vous`; partial swipe reveals, full swipe removes on release). The
+  Service leaves the Appointment immediately; `Prestations`, `Durée totale`, `TOTAL À ENCAISSER`, the
+  checkout `Total attendu` and the Agenda recalculate. Linked Product Sales, stock and the recorded
+  payment are untouched. A lone Service can never be removed, so it shows no swipe and no handle.
+- Terminal Appointments stay read-only: no timing controls, no handle, no swipe.
 
 ### Appointment-specific timing from Details
 
@@ -445,6 +471,12 @@ normalized to integer cents, a `Reste …` shortcut that fills the remaining exp
 are all valid; a positive total is required unless the appointment costs nothing. Confirming writes the completed
 status and the payment in one transaction; the sheet closes and Details shows the `Encaissement` summary.
 `Modifier l’encaissement` reopens the same sheet prefilled to correct the split without creating a second record.
+
+`Total attendu` in the sheet and `TOTAL À ENCAISSER` in Details are the SAME derivation (service snapshots plus
+linked Product Sales, `docs/domain/APPOINTMENTS.md` §25b): for one Appointment they never disagree, before or
+after a Revente is added or deleted. When the received amount differs from the expected total — a discount, a tip,
+or a Revente deleted after checkout — the `Encaissement` summary shows a quiet `Écart : ±…` line; the recorded
+payment itself is never changed automatically.
 
 Souris does not process payments: no card is charged, no terminal or provider is involved. `Encaisser` records
 what the professional received.
@@ -756,8 +788,31 @@ professional never selects them again and never sees a transient « Aucune clien
 through `Revente` also carries the Appointment it was sold during, so Appointment Details lists it
 under `Produits vendus` (name, quantity, snapshot unit price, line total, `Total produits`) as soon
 as the professional returns — a Sale opened from Produits or the Client Profile carries no
-Appointment. `Revente` stays available on completed appointments because that is a natural moment
-to sell a Product. The wording is context-specific: `Revente` in Appointment Details,
+Appointment. The Product is the visual unit there: the same Product sold again through a later
+`Revente` reads as ONE row with its summed quantity (« ACG Shampoo — ×2 · 10,00 € — 20,00 € »),
+never as two rows; a different snapshot price stays its own row. No « Revente » label, subtotal or
+delete button is shown, the `Produits vendus` badge counts total units, and `TOTAL À ENCAISSER`
+below recomputes immediately. `Revente` stays available on completed appointments because that
+is a natural moment to sell a Product.
+
+**Deleting a sold Product (swipe).** Each `Produits vendus` row is swiped to the right, like a
+cart line in a polished native app. A partial swipe makes the row follow the finger, progressively
+reveals a rose destructive surface with a trash icon (`Supprimer <Produit> des produits vendus`),
+and releasing before the full-swipe threshold leaves the trash available — tapping it deletes. A
+full swipe keeps the surface following the finger across the row; releasing past the threshold
+commits the deletion once (one quiet selection tick when the threshold is crossed, the warning
+haptic on commit) and the row slides away. No confirmation dialog interrupts the gesture, for an
+unpaid or a paid Appointment alike: selling the Product again is the operational undo, and stock
+comes back automatically. Deleting a displayed row removes exactly what it shows — every matching
+sold line across the Reventes of the Appointment (« Shampoo ×2 » from two Sales restores
+Shampoo +2), keeps other Products of those Sales (Mask stays), drops a Sale only once it is empty,
+removes the lines from the Client's `Produits achetés`, and `TOTAL À ENCAISSER` drops accordingly.
+When the Appointment was already checked out, the recorded payment and the Caisse stay exactly as
+they are, Details shows the `Écart`, and `Modifier l’encaissement` remains the correction. If
+persistence refuses the deletion (for example the Product no longer exists in the catalog, so its
+stock cannot be restored), the row closes again, nothing changes, and the usual
+« Enregistrement impossible » notice appears. A standalone Sale from Produits cannot be deleted this
+way. The wording is context-specific: `Revente` in Appointment Details,
 `Vendre un produit` on the Client Profile, `Nouvelle vente` in Produits. On success the flow simply returns to where it was opened
 (Client Profile, Appointment Details, or Produits), and a Client-attached Sale appears in that
 Client's `Produits achetés`.

@@ -3,18 +3,18 @@
 // The shared CheckoutSheet with Appointment wording: the expectation block
 // lists the service snapshot total and the Products sold during the
 // Appointment (linked Sales); the same sheet corrects a recorded payment.
+// The expectation is the ONE canonical `AppointmentExpectedTotal` the
+// Details ticket also shows — the sheet never recomputes it.
 
-import type { AppointmentPaymentAmounts } from '@/domain/appointments';
+import type { AppointmentExpectedTotal, AppointmentPaymentAmounts } from '@/domain/appointments';
 import { CheckoutSheet, type CheckoutSummaryLine } from '@/features/checkout/CheckoutSheet';
-
-import { getExpectedTotalCents, type CheckoutExpectation } from './checkout-form';
 
 export type AppointmentCheckoutMode = 'checkout' | 'edit';
 
 interface AppointmentCheckoutSheetProps {
   readonly visible: boolean;
   readonly mode: AppointmentCheckoutMode;
-  readonly expectation: CheckoutExpectation;
+  readonly expectation: AppointmentExpectedTotal;
   /** Recorded amounts when editing; the sheet opens prefilled with them. */
   readonly initialAmounts?: AppointmentPaymentAmounts;
   readonly onClose: () => void;
@@ -39,7 +39,7 @@ export function AppointmentCheckoutSheet({
   return (
     <CheckoutSheet
       confirmTitle={mode === 'edit' ? 'Enregistrer' : 'Encaisser'}
-      expectedTotalCents={getExpectedTotalCents(expectation)}
+      expectedTotalCents={expectation.expectedTotalCents}
       initialAmounts={initialAmounts}
       onClose={onClose}
       onConfirm={onConfirm}
