@@ -2,8 +2,6 @@ import {
   calculateAppointmentTimeline,
   getElapsedDurationMinutes,
   getOrderedItems,
-  getProcessingDurationMinutes,
-  getStaffActiveDurationMinutes,
   type Appointment,
   type AppointmentItem,
   type TimelineItem,
@@ -25,10 +23,13 @@ export interface AppointmentDetailService {
   readonly timelineItem: TimelineItem;
 }
 
+/**
+ * The read-first banner of Appointment Details: total duration and snapshot
+ * total only. Per-phase active / processing timing stays visible inside each
+ * service's phases; it is deliberately not repeated here.
+ */
 export interface AppointmentDetailSummary {
   readonly elapsedMinutes: number;
-  readonly activeMinutes: number;
-  readonly processingMinutes: number;
   readonly totalPrice: number;
 }
 
@@ -56,8 +57,6 @@ export function getAppointmentDetailSummary(
 ): AppointmentDetailSummary {
   return {
     elapsedMinutes: getElapsedDurationMinutes(appointment),
-    activeMinutes: getStaffActiveDurationMinutes(appointment),
-    processingMinutes: getProcessingDurationMinutes(appointment),
     totalPrice: getOrderedItems(appointment).reduce((total, item) => total + item.price, 0),
   };
 }

@@ -10,6 +10,7 @@ import {
   type Appointment,
   type AppointmentCancellationActor,
 } from '@/domain/appointments';
+import { formatEuros } from '@/shared/lib/money';
 
 const statusLabels = {
   SCHEDULED: 'Planifié',
@@ -57,12 +58,7 @@ export function formatDurationMinutes(minutes: number): string {
 }
 
 export function formatPrice(value: number): string {
-  return new Intl.NumberFormat('fr-FR', {
-    currency: 'EUR',
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-    style: 'currency',
-  }).format(value);
+  return formatEuros(value);
 }
 
 export function getAppointmentEnd(appointment: Appointment): Date {

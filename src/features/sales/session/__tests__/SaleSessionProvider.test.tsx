@@ -30,14 +30,26 @@ const care: Product = {
   active: true,
 };
 
-function draft(id: string, lines: SaleDraft['lines'], clientId?: string): SaleDraft {
+function draft(
+  id: string,
+  lines: SaleDraft['lines'],
+  clientId?: string,
+  appointmentId?: string,
+  payment?: SaleDraft['payment'],
+): SaleDraft {
   return {
     id,
     businessId: 'business-test',
     clientId,
+    appointmentId,
+    ...(payment ? { payment } : {}),
     completedAt: new Date(2026, 8, 11, 10),
     lines,
   };
+}
+
+function describePayment(sale: { readonly payment?: SaleDraft['payment'] } | undefined): string {
+  return sale?.payment ? `${sale.payment.cardAmountCents}/${sale.payment.cashAmountCents}` : 'none';
 }
 
 function Probe() {
@@ -70,6 +82,26 @@ function Probe() {
           : 'missing'}
       </Text>
       <Text testID="sale-1-client">{firstSale?.clientId ?? 'walk-in'}</Text>
+      <Text testID="sale-1-appointment">{firstSale?.appointmentId ?? 'standalone'}</Text>
+      <Text testID="sale-linked-appointment">
+        {getSaleById('sale-linked')?.appointmentId ?? 'standalone'}
+      </Text>
+      <Text testID="sale-linked-payment">{describePayment(getSaleById('sale-linked'))}</Text>
+      <Text testID="sale-paid-payment">{describePayment(getSaleById('sale-paid'))}</Text>
+      <Pressable
+        testID="sell-paid-mixed"
+        onPress={() =>
+          run(
+            draft(
+              'sale-paid',
+              [{ id: 'sale-paid-item-1', productId: 'product-a', quantity: 1 }],
+              undefined,
+              undefined,
+              { cardAmountCents: 1500, cashAmountCents: 500 },
+            ),
+          )
+        }
+      />
       <Pressable
         testID="seed"
         onPress={() => {
@@ -104,6 +136,19 @@ function Probe() {
               { id: 'sale-4-item-1', productId: 'product-a', quantity: 1 },
               { id: 'sale-4-item-2', productId: 'product-deleted', quantity: 1 },
             ]),
+          )
+        }
+      />
+      <Pressable
+        testID="sell-linked"
+        onPress={() =>
+          run(
+            draft(
+              'sale-linked',
+              [{ id: 'sale-linked-item-1', productId: 'product-a', quantity: 1 }],
+              'client-1',
+              'appointment-1',
+            ),
           )
         }
       />
@@ -183,6 +228,32 @@ describe('SaleSessionProvider', () => {
     expect(view.getByTestId('result').props.children).toBe('PRODUCT_MISSING');
     expect(view.getByTestId('sales-count').props.children).toBe(0);
     expect(view.getByTestId('stock-a').props.children).toBe(5);
+  });
+
+  it('keeps the Appointment link of a Revente Sale and leaves other Sales standalone', async () => {
+    const view = await renderSession();
+    await act(async () => fireEvent.press(view.getByTestId('seed')));
+
+    await act(async () => fireEvent.press(view.getByTestId('sell-a-2')));
+    await act(async () => fireEvent.press(view.getByTestId('sell-linked')));
+
+    expect(view.getByTestId('sales-count').props.children).toBe(2);
+    expect(view.getByTestId('sale-1-appointment').props.children).toBe('standalone');
+    expect(view.getByTestId('sale-linked-appointment').props.children).toBe('appointment-1');
+    expect(view.getByTestId('stock-a').props.children).toBe(2);
+  });
+
+  it('persists a standalone Sale payment through the session and keeps linked Sales without one', async () => {
+    const view = await renderSession();
+    await act(async () => fireEvent.press(view.getByTestId('seed')));
+
+    await act(async () => fireEvent.press(view.getByTestId('sell-paid-mixed')));
+    await act(async () => fireEvent.press(view.getByTestId('sell-linked')));
+
+    expect(view.getByTestId('result').props.children).toBe('ok');
+    expect(view.getByTestId('sale-paid-payment').props.children).toBe('1500/500');
+    expect(view.getByTestId('sale-linked-payment').props.children).toBe('none');
+    expect(view.getByTestId('stock-a').props.children).toBe(3);
   });
 
   it('keeps walk-in Sales valid and stock-affecting', async () => {

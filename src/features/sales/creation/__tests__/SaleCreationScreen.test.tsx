@@ -2,6 +2,7 @@ import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 
 import { archiveClient } from '@/domain/clients';
+import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { createDevelopmentSeed } from '@/providers/development-seed';
 import {
@@ -82,6 +83,10 @@ function Probe() {
       <Text testID="sales-count">{sales.length}</Text>
       <Text testID="masque-stock">{masque?.stockQuantity ?? 'gone'}</Text>
       <Text testID="concentrate-stock">{concentrate?.stockQuantity ?? 'gone'}</Text>
+      <Text testID="last-sale-appointment">{lastSale?.appointmentId ?? 'standalone'}</Text>
+      <Text testID="last-sale-payment">
+        {lastSale?.payment ? `${lastSale.payment.cardAmountCents}/${lastSale.payment.cashAmountCents}` : 'none'}
+      </Text>
       <Text testID="last-sale">
         {lastSale
           ? `${lastSale.clientId ?? 'walk-in'}|${lastSale.items
@@ -183,8 +188,41 @@ function renderSale(initialClientId?: string, createSeed?: () => ReturnType<type
   );
 }
 
+/** The Appointment Details entry (« Revente »): the screen also receives the Appointment id. */
+function renderSaleFromAppointment(initialAppointmentId: string, initialClientId = 'client-agenda-sofia') {
+  return render(
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
+        <ProductCatalogProvider>
+          <SaleSessionProvider>
+            <AppointmentSessionProvider>
+              <SaleCreationScreen
+                initialAppointmentId={initialAppointmentId}
+                initialClientId={initialClientId}
+              />
+              <Probe />
+            </AppointmentSessionProvider>
+          </SaleSessionProvider>
+        </ProductCatalogProvider>
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
+  );
+}
+
 async function press(view: Awaited<ReturnType<typeof render>>, testID: string) {
   await act(async () => fireEvent.press(view.getByTestId(testID)));
+}
+
+/** Standalone Sales record their payment before completing: enter card / cash, then confirm. */
+async function payAndConfirm(view: Awaited<ReturnType<typeof render>>, card: string, cash = '') {
+  expect(view.getByTestId('sale-payment-sheet')).toBeTruthy();
+  await act(async () => {
+    fireEvent.changeText(view.getByTestId('checkout-amount-card'), card);
+  });
+  await act(async () => {
+    fireEvent.changeText(view.getByTestId('checkout-amount-cash'), cash);
+  });
+  await press(view, 'confirm-checkout');
 }
 
 async function search(view: Awaited<ReturnType<typeof render>>, text: string) {
@@ -238,11 +276,95 @@ describe('SaleCreationScreen', () => {
     await press(view, `sale-product-${MASQUE_ID}`);
 
     await press(view, 'validate-sale');
+    await payAndConfirm(view, '50');
 
     expect(view.getByTestId('last-sale').props.children).toBe(
       'client-agenda-camille|Masque réparateur 5 min:50:1',
     );
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('links a Sale opened from Appointment Details to that Appointment', async () => {
+    const view = await renderSaleFromAppointment('agenda-sofia');
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+
+    await press(view, 'validate-sale');
+
+    // Sold during an Appointment: no payment step, the Appointment checkout records the money.
+    expect(view.queryByTestId('sale-payment-sheet')).toBeNull();
+    expect(view.getByTestId('last-sale-appointment').props.children).toBe('agenda-sofia');
+    expect(view.getByTestId('last-sale-payment').props.children).toBe('none');
+    expect(view.getByTestId('last-sale').props.children).toBe(
+      'client-agenda-sofia|Masque réparateur 5 min:50:1',
+    );
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops an unknown Appointment id instead of inventing a link', async () => {
+    const view = await renderSaleFromAppointment('appointment-unknown');
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+
+    await press(view, 'validate-sale');
+    await payAndConfirm(view, '50');
+
+    expect(view.getByTestId('last-sale-appointment').props.children).toBe('standalone');
+    expect(view.getByTestId('last-sale-payment').props.children).toBe('5000/0');
+  });
+
+  it('keeps a Sale opened from Produits standalone and records its payment', async () => {
+    const view = await renderSale();
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+
+    await press(view, 'validate-sale');
+
+    expect(view.getByText('ENCAISSEMENT')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Encaisser la vente' })).toBeTruthy();
+    expect(view.getByText('Total vente')).toBeTruthy();
+    expect(view.getByTestId('checkout-sale-total').props.children).toBe(formatServicePrice(50));
+    expect(view.getByTestId('checkout-amount-card').props.autoFocus).toBeFalsy();
+    expect(view.getByTestId('checkout-amount-cash').props.autoFocus).toBeFalsy();
+    expect(view.getByTestId('confirm-checkout').props.accessibilityState.disabled).toBe(true);
+    expect(view.getByTestId('sales-count').props.children).toBe(0);
+    await payAndConfirm(view, '', '50');
+
+    expect(view.getByTestId('last-sale-appointment').props.children).toBe('standalone');
+    expect(view.getByTestId('last-sale-payment').props.children).toBe('0/5000');
+  });
+
+  it('records a mixed card + cash payment and lets the received total differ', async () => {
+    const view = await renderSale();
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+
+    await press(view, 'validate-sale');
+    await payAndConfirm(view, '30', '15');
+
+    expect(view.getByTestId('last-sale-payment').props.children).toBe('3000/1500');
+    expect(view.getByTestId('masque-stock').props.children).toBe(1);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the payment step be cancelled without completing the Sale', async () => {
+    const view = await renderSale();
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+
+    await press(view, 'validate-sale');
+    await act(async () => fireEvent.press(view.getByLabelText('Annuler l’encaissement')));
+    await settleSheetTransition();
+
+    expect(view.queryByTestId('sale-payment-sheet')).toBeNull();
+    expect(view.getByTestId('sales-count').props.children).toBe(0);
+    expect(view.getByTestId('masque-stock').props.children).toBe(2);
+    expect(mockBack).not.toHaveBeenCalled();
   });
 
   it('falls back to no Client when the supplied id is unknown, without inventing data', async () => {
@@ -356,6 +478,8 @@ describe('SaleCreationScreen', () => {
     await press(view, `sale-line-increment-${CONCENTRATE_ID}`);
 
     await press(view, 'validate-sale');
+    expect(view.getByTestId('checkout-sale-total').props.children).toBe(formatServicePrice(74));
+    await payAndConfirm(view, '74');
 
     expect(view.getByTestId('sales-count').props.children).toBe(1);
     expect(view.getByTestId('last-sale').props.children).toBe(
@@ -374,6 +498,7 @@ describe('SaleCreationScreen', () => {
     await press(view, `sale-product-${MASQUE_ID}`);
 
     await press(view, 'validate-sale');
+    await payAndConfirm(view, '50');
 
     expect(view.getByTestId('last-sale').props.children).toBe('walk-in|Masque réparateur 5 min:50:1');
     expect(view.getByTestId('masque-stock').props.children).toBe(1);

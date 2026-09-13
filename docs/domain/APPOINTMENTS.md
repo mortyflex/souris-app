@@ -37,7 +37,8 @@ Appointment
 ├── items[]
 ├── notes?
 ├── cancellation?
-└── noShow?
+├── noShow?
+└── payment?
 ```
 
 An AppointmentItem conceptually contains:
@@ -844,6 +845,50 @@ The operational Agenda is a projection of professional occupancy, not a complete
 `NO_SHOW` before Day segments, overlap columns, or Week rows are calculated. Those outcomes therefore leave the
 time slot visually free and never reduce the width of another appointment at the same time.
 
+## 25b. Checkout and Payment (« Encaisser »)
+
+Manual completion from Appointment Details is a **checkout**: the professional confirms the Appointment is
+finished AND records how much was actually received. This is not payment processing — Souris never charges a
+card, talks to a terminal, or acts as a fiscal point of sale.
+
+The Appointment owns its payment; there is no parallel payment subsystem:
+
+```text
+AppointmentPayment
+├── paidAt            instant of the explicit checkout
+├── cardAmountCents   integer cents >= 0
+└── cashAmountCents   integer cents >= 0
+```
+
+Rules:
+
+- amounts are **integer cents**; `totalPaidCents = cardAmountCents + cashAmountCents` is derived, never stored;
+- a checkout may be 100 % card, 100 % cash, or mixed; nothing forces exactly one method;
+- the recorded total may legitimately differ from the snapshot total (discount, tip, adjustment). When the
+  expected total is positive, the recorded total must be positive; a zero checkout is valid only for an
+  Appointment that costs nothing;
+- **manual checkout is allowed** from `SCHEDULED` / `CONFIRMED` / compatibility `IN_PROGRESS` once
+  `appointment.startAt <= now` (the former `Terminer` eligibility), and for a `COMPLETED` Appointment that
+  carries no payment yet (« Enregistrer un encaissement » — status stays `COMPLETED`);
+- `CANCELLED` and `NO_SHOW` can never be checked out; an already paid Appointment cannot be checked out twice;
+- **automatic previous-local-day completion never records a payment**: it only sets `status = COMPLETED`.
+  Existing `COMPLETED` Appointments keep `payment = undefined`; Souris never fabricates historical revenue;
+- a checkout is atomic: `status = COMPLETED` and the payment are written together in ONE transaction, and
+  the session state changes only after the commit. On failure nothing changes and nothing appears in the
+  Cash Register;
+- **correction**: a completed Appointment with a payment may have its card/cash split edited. The status and
+  the original `paidAt` are preserved; no second record is created.
+
+The **Cash Register** (`src/domain/cash-register`) derives ONLY from money explicitly recorded through
+Souris: every `appointment.payment`, plus `sale.payment` of STANDALONE Sales (no `appointmentId`,
+`docs/domain/SALES.md` §4b). A Sale sold during an Appointment is never counted separately — the Appointment
+checkout already recorded that money (services 75 € + linked products 20 € recorded as 95 € → Caisse 95 €, not
+115 €). Each payment is grouped by the device-local civil day or calendar month of its own `paidAt` — never
+from status alone, from the Client `Total dépensé` metric, or from Sale snapshot totals. Totals are never stored.
+
+Client activity keeps its existing semantics: `Total dépensé` remains the sum of AppointmentItem snapshot
+prices of `COMPLETED` Appointments, independent of any recorded payment.
+
 ---
 
 # 26. Cancellation
@@ -925,6 +970,12 @@ Appointment Details exposes deletion only as a secondary destructive action, inc
 `CANCELLED`, and `NO_SHOW` records. It requires a focused irreversible-action confirmation, then removes the
 record and returns to the previous screen. Cancellation and no-show never trigger deletion automatically.
 
+**Deletion guard.** An Appointment that carries a recorded payment (Cash Register history) or that a Product
+Sale references (`sale.appointmentId`) cannot be permanently deleted: historical integrity wins. The session
+pre-checks the stored references so Details shows « Suppression impossible » instead of a confirmation, and the
+store re-verifies inside the deletion transaction (`canDeleteAppointmentPermanently`). There is no cascade and
+no hidden `appointmentId = NULL` rewrite of Sales.
+
 ---
 
 # 29. Terminal Appointments
@@ -997,6 +1048,11 @@ no-show preservation
 operational Agenda exclusion for cancellation/no-show
 overlap calculation without cancellation/no-show
 manual completion eligibility
+manual checkout (card / cash / mixed, invalid amounts, eligibility)
+payment correction (split changes, status and paidAt preserved)
+automatic completion without payment
+cash register day / month derivation with local civil dates
+deletion guard (payment, linked Sale)
 previous-local-day automatic completion
 same-day non-completion
 terminal-state preservation
@@ -1065,6 +1121,10 @@ The following must remain true unless an explicit product decision changes them:
 14. CANCELLED and NO_SHOW remain historical records but do not occupy the operational Agenda.
 
 15. Permanent deletion explicitly removes an incorrect or duplicate Appointment and all values derived from it.
+
+16. A payment exists only through an explicit checkout; automatic completion never records one.
+
+17. The Cash Register derives only from recorded payments (Appointment checkouts and standalone Sale payments), never counting an Appointment-linked Sale twice; an Appointment with a payment or a linked Sale is never deleted.
 ```
 
 These invariants are the foundation of Souris scheduling.

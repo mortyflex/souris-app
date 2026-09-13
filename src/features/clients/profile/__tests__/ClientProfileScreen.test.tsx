@@ -437,6 +437,12 @@ describe('ClientProfileScreen', () => {
     });
     await act(async () => fireEvent.press(view.getByTestId('sale-product-6974bff937a5d89c2d9afbd0')));
     await act(async () => fireEvent.press(view.getByTestId('validate-sale')));
+    // A Sale sold from the profile is standalone: its payment is recorded before it completes.
+    expect(view.getByTestId('sale-payment-sheet')).toBeTruthy();
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId('checkout-amount-card'), '50');
+    });
+    await act(async () => fireEvent.press(view.getByTestId('confirm-checkout')));
 
     expect(mockBack).toHaveBeenCalledTimes(1);
     const purchases = within(view.getByTestId('client-purchases'));

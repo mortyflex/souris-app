@@ -15,7 +15,16 @@ import {
   ClientSessionProvider,
   useClientSession,
 } from "@/features/clients/session/ClientSessionProvider";
+import {
+  ProductCatalogProvider,
+  useProductCatalog,
+} from "@/features/products/session/ProductCatalogProvider";
+import {
+  SaleSessionProvider,
+  useSaleSession,
+} from "@/features/sales/session/SaleSessionProvider";
 import { haptics } from "@/shared/lib/haptics";
+import { formatEuroCents, formatEuros } from "@/shared/lib/money";
 
 import { AppointmentDetailsScreen } from "../AppointmentDetailsScreen";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
@@ -24,6 +33,7 @@ import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockWarningHaptic = jest.spyOn(haptics, "warning").mockImplementation();
+const mockSuccessHaptic = jest.spyOn(haptics, "success").mockImplementation();
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
@@ -91,6 +101,10 @@ jest.mock("react-native-safe-area-context", () => {
   };
 });
 
+// Real legacy catalog identities of the development seed.
+const MASQUE_ID = "6974bff937a5d89c2d9afbd0"; // Masque réparateur 5 min · 50 €
+const CONCENTRATE_ID = "68d802c055b09988d663415f"; // Acidic bonding concentrate · 12 €
+
 function ClientLifecycleProbe() {
   const { archiveClient } = useClientSession();
   return (
@@ -107,11 +121,109 @@ function AppointmentPresence({
   readonly appointmentId: string;
 }) {
   const { getAppointmentById } = useAppointmentSession();
+  const entry = getAppointmentById(appointmentId);
   return (
-    <Text testID="appointment-presence">
-      {getAppointmentById(appointmentId) ? "present" : "missing"}
-    </Text>
+    <>
+      <Text testID="appointment-presence">{entry ? "present" : "missing"}</Text>
+      <Text testID="appointment-status">{entry?.appointment.status ?? "none"}</Text>
+      <Text testID="appointment-payment-probe">
+        {entry?.appointment.payment
+          ? `${entry.appointment.payment.cardAmountCents}/${entry.appointment.payment.cashAmountCents}`
+          : "none"}
+      </Text>
+    </>
   );
+}
+
+/** Completes Sales through the canonical session: two linked to Sofia's appointment, one not. */
+function SaleProbe() {
+  const { setProductStock } = useProductCatalog();
+  const { completeSale } = useSaleSession();
+  const completedAt = new Date(2026, 7, 29, 14, 30);
+  return (
+    <>
+      <Pressable
+        testID="stock-products"
+        onPress={() => {
+          setProductStock(MASQUE_ID, 5);
+          setProductStock(CONCENTRATE_ID, 3);
+        }}
+      />
+      <Pressable
+        testID="sell-linked-shampoo"
+        onPress={() => {
+          completeSale({
+            id: "sale-linked-a",
+            businessId: "business-test",
+            clientId: "client-agenda-sofia",
+            appointmentId: "agenda-sofia",
+            completedAt,
+            lines: [{ id: "sale-linked-a-1", productId: MASQUE_ID, quantity: 2 }],
+          });
+        }}
+      />
+      <Pressable
+        testID="sell-linked-serum"
+        onPress={() => {
+          completeSale({
+            id: "sale-linked-b",
+            businessId: "business-test",
+            clientId: "client-agenda-sofia",
+            appointmentId: "agenda-sofia",
+            completedAt,
+            lines: [{ id: "sale-linked-b-1", productId: CONCENTRATE_ID, quantity: 1 }],
+          });
+        }}
+      />
+      <Pressable
+        testID="sell-unlinked"
+        onPress={() => {
+          completeSale({
+            id: "sale-unlinked",
+            businessId: "business-test",
+            clientId: "client-agenda-sofia",
+            completedAt,
+            lines: [{ id: "sale-unlinked-1", productId: CONCENTRATE_ID, quantity: 1 }],
+          });
+        }}
+      />
+    </>
+  );
+}
+
+function renderDetails(appointmentId = "agenda-sofia", probes?: React.ReactNode) {
+  return render(
+    <TestPersistenceProvider>
+      <ClientSessionProvider>
+        <ProductCatalogProvider>
+          <SaleSessionProvider>
+            <AppointmentSessionProvider>
+              <AppointmentDetailsScreen appointmentId={appointmentId} />
+              <AppointmentPresence appointmentId={appointmentId} />
+              <SaleProbe />
+              {probes}
+            </AppointmentSessionProvider>
+          </SaleSessionProvider>
+        </ProductCatalogProvider>
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
+  );
+}
+
+async function press(view: Awaited<ReturnType<typeof render>>, testID: string) {
+  await act(async () => {
+    fireEvent.press(view.getByTestId(testID));
+  });
+}
+
+async function typeAmount(
+  view: Awaited<ReturnType<typeof render>>,
+  method: "card" | "cash",
+  text: string,
+) {
+  await act(async () => {
+    fireEvent.changeText(view.getByTestId(`checkout-amount-${method}`), text);
+  });
 }
 
 describe("AppointmentDetailsScreen", () => {
@@ -124,6 +236,7 @@ describe("AppointmentDetailsScreen", () => {
     mockPush.mockClear();
     mockBack.mockClear();
     mockWarningHaptic.mockClear();
+    mockSuccessHaptic.mockClear();
   });
 
   afterAll(() => {
@@ -131,15 +244,7 @@ describe("AppointmentDetailsScreen", () => {
   });
 
   it("moves Modifier from the identity header to the rightmost normal action", async () => {
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
     expect(view.getByText("Sofia Petit")).toBeTruthy();
     expect(
@@ -155,9 +260,7 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.queryByText("Actions")).toBeNull();
     expect(view.queryByText("Actions secondaires")).toBeNull();
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("modify-appointment"));
-    });
+    await press(view, "modify-appointment");
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: "/appointments/edit/[appointmentId]",
@@ -169,20 +272,13 @@ describe("AppointmentDetailsScreen", () => {
     const user = userEvent.setup({
       advanceTimers: (delay) => jest.advanceTimersByTime(delay),
     });
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
     expect(view.getByTestId("modify-appointment")).toBeTruthy();
     expect(view.getByTestId("open-cancellation")).toBeTruthy();
     expect(view.getByTestId("open-permanent-deletion")).toBeTruthy();
-    expect(view.queryByTestId("complete-appointment")).toBeNull();
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
+    expect(view.queryByText("Terminer")).toBeNull();
     expect(view.queryByTestId("open-no-show")).toBeNull();
 
     await user.press(view.getByTestId("open-cancellation"));
@@ -210,63 +306,43 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByText("Empêchement")).toBeTruthy();
     expect(view.queryByTestId("modify-appointment")).toBeNull();
     expect(view.queryByTestId("open-cancellation")).toBeNull();
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
   });
 
-  it("offers Revente above the lifecycle actions with the Appointment Client, before and after completion", async () => {
+  it("shows Revente and Encaisser side by side, above the lifecycle actions, and links the Sale to the Appointment", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
-    expect(view.getByText("Revente")).toBeTruthy();
-    expect(view.queryByText("Vendre un produit")).toBeNull();
+    expect(view.queryByText("Terminer")).toBeNull();
+    expect(view.queryByTestId("complete-appointment")).toBeNull();
+    const primaryRow = within(view.getByTestId("appointment-primary-actions"));
+    expect(
+      primaryRow.getAllByRole("button").map(({ props }) => props.testID),
+    ).toEqual(["sell-product", "checkout-appointment"]);
+    expect(primaryRow.getByText("Revente")).toBeTruthy();
+    expect(primaryRow.getByText("Encaisser")).toBeTruthy();
     expect(
       within(view.getByTestId("appointment-normal-actions")).queryByTestId("sell-product"),
     ).toBeNull();
     const actionOrder = within(view.getByTestId("appointment-actions"))
       .getAllByRole("button")
       .map(({ props }) => props.testID);
-    expect(actionOrder.indexOf("sell-product")).toBe(0);
-    expect(actionOrder.indexOf("sell-product")).toBeLessThan(
-      actionOrder.indexOf("complete-appointment"),
+    expect(actionOrder.indexOf("checkout-appointment")).toBeLessThan(
+      actionOrder.indexOf("open-no-show"),
     );
 
-    await act(async () => {
-      fireEvent.press(view.getByLabelText("Revente"));
-    });
+    await press(view, "sell-product");
     expect(mockPush).toHaveBeenCalledWith({
       pathname: "/sales/new",
-      params: { clientId: "client-agenda-sofia" },
+      params: { clientId: "client-agenda-sofia", appointmentId: "agenda-sofia" },
     });
-    expect(Object.keys(mockPush.mock.calls[0][0].params)).toEqual(["clientId"]);
-
-    await act(async () => {
-      fireEvent.press(view.getByTestId("complete-appointment"));
-    });
-    expect(view.getByText("Terminé")).toBeTruthy();
-    expect(view.getByTestId("sell-product")).toBeTruthy();
-    expect(view.queryByTestId("modify-appointment")).toBeNull();
   });
 
-  it("completes a started same-day appointment without requiring a start action", async () => {
+  it("checks out a started same-day appointment by card and shows the recorded payment", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
-    expect(view.getByTestId("complete-appointment")).toBeTruthy();
+    expect(view.getByTestId("checkout-appointment")).toBeTruthy();
     expect(view.getByTestId("open-no-show")).toBeTruthy();
     expect(view.getByTestId("open-cancellation")).toBeTruthy();
     expect(view.queryByText("Démarrer")).toBeNull();
@@ -276,81 +352,136 @@ describe("AppointmentDetailsScreen", () => {
         .map(({ props }) => props.testID),
     ).toEqual(["open-no-show", "open-cancellation", "modify-appointment"]);
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("complete-appointment"));
-    });
+    await press(view, "checkout-appointment");
+
+    expect(view.getByTestId("checkout-sheet")).toBeTruthy();
+    expect(view.getByText("ENCAISSEMENT")).toBeTruthy();
+    expect(view.getByText("Encaisser le rendez-vous")).toBeTruthy();
+    expect(view.getByTestId("checkout-amount-card").props.autoFocus).toBeFalsy();
+    expect(view.getByTestId("checkout-amount-cash").props.autoFocus).toBeFalsy();
+    expect(view.getByTestId("checkout-services-total").props.children).toBe(formatEuroCents(9500));
+    expect(view.queryByTestId("checkout-products-total")).toBeNull();
+    expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(9500));
+    expect(view.getByTestId("confirm-checkout").props.accessibilityState.disabled).toBe(true);
+    expect(view.getByTestId("appointment-status").props.children).toBe("SCHEDULED");
+
+    await typeAmount(view, "card", "95");
+    expect(view.getByTestId("checkout-entered-total").props.children).toBe(formatEuroCents(9500));
+    expect(view.queryByTestId("checkout-difference")).toBeNull();
+    expect(view.getByTestId("confirm-checkout").props.accessibilityState.disabled).toBe(false);
+
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
 
     expect(view.getByText("Terminé")).toBeTruthy();
-    expect(view.queryByTestId("complete-appointment")).toBeNull();
+    expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("9500/0");
+    expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    expect(view.queryByTestId("checkout-sheet")).toBeNull();
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
     expect(view.queryByTestId("open-no-show")).toBeNull();
     expect(view.queryByTestId("open-cancellation")).toBeNull();
     expect(view.queryByTestId("modify-appointment")).toBeNull();
+    expect(view.getByTestId("sell-product")).toBeTruthy();
+
+    const payment = within(view.getByTestId("appointment-payment"));
+    expect(payment.getByText("Encaissement")).toBeTruthy();
+    expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(9500));
+    expect(view.getByTestId("appointment-payment-card")).toBeTruthy();
+    expect(view.queryByTestId("appointment-payment-cash")).toBeNull();
+    expect(view.getByTestId("edit-payment")).toBeTruthy();
+  });
+
+  it("records a mixed card + cash checkout and lets the split be corrected without a second record", async () => {
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    const view = await renderDetails();
+
+    await press(view, "checkout-appointment");
+    await typeAmount(view, "card", "50");
+    await typeAmount(view, "cash", "25");
+    expect(view.getByTestId("checkout-entered-total").props.children).toBe(formatEuroCents(7500));
+    expect(view.getByTestId("checkout-difference").props.children).toEqual([
+      "Écart : ",
+      `-${formatEuroCents(2000)}`,
+    ]);
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("5000/2500");
+    expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(7500));
+    expect(within(view.getByTestId("appointment-payment-card")).getByText(formatEuroCents(5000))).toBeTruthy();
+    expect(within(view.getByTestId("appointment-payment-cash")).getByText(formatEuroCents(2500))).toBeTruthy();
+
+    await press(view, "edit-payment");
+    expect(view.getByRole("header", { name: "Modifier l’encaissement" })).toBeTruthy();
+    expect(view.getByTestId("checkout-amount-card").props.value).toBe("50,00");
+    expect(view.getByTestId("checkout-amount-cash").props.value).toBe("25,00");
+    await typeAmount(view, "card", "30");
+    await typeAmount(view, "cash", "45");
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("3000/4500");
+    expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(7500));
+    expect(view.getAllByTestId("appointment-payment")).toHaveLength(1);
+  });
+
+  it("offers to record a checkout on an automatically completed appointment without changing its status", async () => {
+    const view = await renderDetails("agenda-anais");
+
+    expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
+    expect(view.queryByTestId("appointment-payment-total")).toBeNull();
+    expect(view.getByText("Enregistrer un encaissement")).toBeTruthy();
+
+    await press(view, "checkout-appointment");
+    await typeAmount(view, "cash", "42");
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("0/4200");
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
   });
 
   it("makes start-time actions available on the next wall-clock minute", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 13, 59, 30));
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
-    expect(view.queryByTestId("complete-appointment")).toBeNull();
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
     expect(view.queryByTestId("open-no-show")).toBeNull();
 
     await act(async () => {
       jest.advanceTimersByTime(30_000);
     });
 
-    expect(view.getByTestId("complete-appointment")).toBeTruthy();
+    expect(view.getByTestId("checkout-appointment")).toBeTruthy();
     expect(view.getByTestId("open-no-show")).toBeTruthy();
   });
 
   it("confirms and preserves a started same-day no-show", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("open-no-show"));
-    });
+    await press(view, "open-no-show");
     expect(view.getByText("Marquer comme absence ?")).toBeTruthy();
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("confirm-no-show"));
-    });
+    await press(view, "confirm-no-show");
 
     expect(view.getByText("Absence")).toBeTruthy();
-    expect(view.queryByTestId("complete-appointment")).toBeNull();
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
     expect(view.queryByTestId("open-no-show")).toBeNull();
     expect(view.queryByTestId("open-cancellation")).toBeNull();
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
   });
 
-  it("lets previous-local-day completion win over a stale cancellation sheet", async () => {
+  it("lets previous-local-day completion win over a stale cancellation sheet, without any payment", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 23, 59, 30));
     const user = userEvent.setup({
       advanceTimers: (delay) => jest.advanceTimersByTime(delay),
     });
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
     await user.press(view.getByTestId("open-cancellation"));
     await user.press(view.getByTestId("cancellation-actor-client"));
@@ -362,19 +493,11 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByText("Terminé")).toBeTruthy();
     expect(view.queryByText("Annulé par la cliente")).toBeNull();
     expect(view.queryByTestId("cancellation-sheet")).toBeNull();
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
   });
 
   it("requires a focused confirmation and lets Retour preserve the appointment", async () => {
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-          <AppointmentPresence appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
     const deleteAction = view.getByTestId("open-permanent-deletion");
     expect(deleteAction.props.accessibilityRole).toBe("button");
@@ -385,9 +508,7 @@ describe("AppointmentDetailsScreen", () => {
       "present",
     );
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("open-permanent-deletion"));
-    });
+    await press(view, "open-permanent-deletion");
 
     expect(view.getByTestId("permanent-deletion-dialog")).toBeTruthy();
     expect(view.getByText("SUPPRESSION")).toBeTruthy();
@@ -401,9 +522,7 @@ describe("AppointmentDetailsScreen", () => {
     );
     expect(mockWarningHaptic).not.toHaveBeenCalled();
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("cancel-permanent-deletion"));
-    });
+    await press(view, "cancel-permanent-deletion");
 
     expect(view.queryByTestId("permanent-deletion-dialog")).toBeNull();
     expect(view.getByTestId("appointment-presence").props.children).toBe(
@@ -413,27 +532,14 @@ describe("AppointmentDetailsScreen", () => {
   });
 
   it("permanently deletes the appointment, triggers warning haptics, and closes Details", async () => {
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-          <AppointmentPresence appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("open-permanent-deletion"));
-    });
+    await press(view, "open-permanent-deletion");
     expect(view.getByTestId("appointment-presence").props.children).toBe(
       "present",
     );
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("confirm-permanent-deletion"));
-    });
+    await press(view, "confirm-permanent-deletion");
 
     expect(view.getByTestId("appointment-presence").props.children).toBe(
       "missing",
@@ -447,16 +553,7 @@ describe("AppointmentDetailsScreen", () => {
     const user = userEvent.setup({
       advanceTimers: (delay) => jest.advanceTimersByTime(delay),
     });
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-          <AppointmentPresence appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+    const view = await renderDetails();
 
     await user.press(view.getByTestId("open-cancellation"));
     await user.press(view.getByTestId("cancellation-actor-client"));
@@ -477,48 +574,105 @@ describe("AppointmentDetailsScreen", () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it("shows concise processing phases without redundant wording", async () => {
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-        <AppointmentSessionProvider>
-          <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-        </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+  it("blocks permanent deletion of a paid appointment with an explanation instead of a confirmation", async () => {
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    const view = await renderDetails();
+    await press(view, "checkout-appointment");
+    await typeAmount(view, "card", "95");
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    await press(view, "open-permanent-deletion");
+
+    expect(view.queryByTestId("permanent-deletion-dialog")).toBeNull();
+    expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
+    expect(view.getByText("Suppression impossible")).toBeTruthy();
+    expect(view.getByText(/encaissement enregistré/)).toBeTruthy();
+    expect(view.queryByTestId("confirm-permanent-deletion")).toBeNull();
+
+    await press(view, "close-appointment-deletion-blocked");
+
+    expect(view.queryByTestId("appointment-deletion-blocked")).toBeNull();
+    expect(view.getByTestId("appointment-presence").props.children).toBe("present");
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it("blocks permanent deletion of an appointment linked to a Product Sale and keeps the Sale", async () => {
+    const view = await renderDetails();
+    await press(view, "stock-products");
+    await press(view, "sell-linked-shampoo");
+
+    await press(view, "open-permanent-deletion");
+
+    expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
+    expect(view.queryByTestId("permanent-deletion-dialog")).toBeNull();
+    expect(view.getByTestId("appointment-presence").props.children).toBe("present");
+    expect(view.getByTestId("appointment-products")).toBeTruthy();
+  });
+
+  it("removes the active / processing time breakdown but keeps Durée totale and the service phases", async () => {
+    const view = await renderDetails();
+
+    expect(view.getByText("Durée totale")).toBeTruthy();
+    expect(view.getByText("1 h 55 min")).toBeTruthy();
+    expect(view.queryByText("Temps actif")).toBeNull();
+    expect(view.queryByText("Temps")).toBeNull();
+    expect(view.queryByText("Temps de pose")).toBeNull();
 
     await act(async () => {
       fireEvent.press(view.getByLabelText(/Balayage, commence à/));
     });
 
-    expect(view.getAllByText("Temps de pose").length).toBeGreaterThanOrEqual(1);
+    expect(view.getAllByText("Temps de pose")).toHaveLength(1);
+    expect(view.queryByText("Temps actif")).toBeNull();
     expect(view.queryByText("Professionnelle disponible")).toBeNull();
     expect(view.queryByText("Professionnelle occupée")).toBeNull();
   });
 
-  it("keeps an archived Client fully readable but withholds Revente", async () => {
-    const view = await render(
-      <TestPersistenceProvider>
-        <ClientSessionProvider>
-          <AppointmentSessionProvider>
-            <AppointmentDetailsScreen appointmentId="agenda-sofia" />
-            <ClientLifecycleProbe />
-          </AppointmentSessionProvider>
-        </ClientSessionProvider>
-      </TestPersistenceProvider>,
-    );
+  it("lists the Products sold during the appointment from Sale snapshots, not the Client's other Sales", async () => {
+    const view = await renderDetails();
+    expect(view.queryByTestId("appointment-products")).toBeNull();
+
+    await press(view, "stock-products");
+    await press(view, "sell-linked-shampoo");
+    await press(view, "sell-linked-serum");
+    await press(view, "sell-unlinked");
+
+    const products = within(view.getByTestId("appointment-products"));
+    expect(products.getByText("Produits vendus")).toBeTruthy();
+    const lines = products.getAllByTestId("appointment-product-line");
+    expect(lines).toHaveLength(2);
+    expect(within(lines[0]!).getByText("Masque réparateur 5 min")).toBeTruthy();
+    expect(within(lines[0]!).getByText(`×2 · ${formatEuros(50)}`)).toBeTruthy();
+    expect(within(lines[0]!).getByText(formatEuros(100))).toBeTruthy();
+    expect(within(lines[1]!).getByText("Acidic bonding concentrate")).toBeTruthy();
+    expect(within(lines[1]!).getByText(`×1 · ${formatEuros(12)}`)).toBeTruthy();
+    expect(view.getByTestId("appointment-products-total").props.children).toBe(formatEuros(112));
+
+    // The checkout expectation includes the linked Products, not the unlinked Sale.
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    await press(view, "checkout-appointment");
+    expect(view.getByTestId("checkout-services-total").props.children).toBe(formatEuroCents(9500));
+    expect(view.getByTestId("checkout-products-total").props.children).toBe(formatEuroCents(11200));
+    expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(20700));
+  });
+
+  it("keeps an archived Client fully readable, withholds Revente, and keeps Encaisser", async () => {
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    const view = await renderDetails("agenda-sofia", <ClientLifecycleProbe />);
 
     expect(view.getByTestId("sell-product")).toBeTruthy();
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("archive-sofia"));
-    });
+    await press(view, "archive-sofia");
 
     expect(view.getByText("Sofia Petit")).toBeTruthy();
     expect(view.queryByText("Cliente inconnue")).toBeNull();
     expect(view.queryByTestId("sell-product")).toBeNull();
     expect(view.queryByText("Revente")).toBeNull();
+    expect(view.getByTestId("checkout-appointment")).toBeTruthy();
     expect(view.getByTestId("appointment-normal-actions")).toBeTruthy();
     expect(view.getByTestId("open-permanent-deletion")).toBeTruthy();
   });

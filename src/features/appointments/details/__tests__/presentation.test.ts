@@ -65,17 +65,14 @@ describe('Appointment details presentation', () => {
     ]);
   });
 
-  it('keeps processing distinguishable and calculates multi-service totals', () => {
+  it('keeps processing distinguishable per phase and summarizes only total duration and price', () => {
     const services = getAppointmentDetailServices(appointment());
     const summary = getAppointmentDetailSummary(appointment());
 
     expect(services[0].timelineItem.phases[1].requiresStaff).toBe(false);
-    expect(summary).toEqual({
-      elapsedMinutes: 80,
-      activeMinutes: 45,
-      processingMinutes: 35,
-      totalPrice: 137,
-    });
+    expect(summary).toEqual({ elapsedMinutes: 80, totalPrice: 137 });
+    expect('activeMinutes' in summary).toBe(false);
+    expect('processingMinutes' in summary).toBe(false);
   });
 
   it('formats durations without inventing fractional values', () => {

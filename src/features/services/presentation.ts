@@ -1,4 +1,5 @@
 import type { Service } from '@/domain/appointments';
+import { formatEuros } from '@/shared/lib/money';
 
 export function formatServiceDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
@@ -8,12 +9,7 @@ export function formatServiceDuration(minutes: number): string {
 }
 
 export function formatServicePrice(value: number): string {
-  return new Intl.NumberFormat('fr-FR', {
-    currency: 'EUR',
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-    style: 'currency',
-  }).format(value);
+  return formatEuros(value);
 }
 
 export function getServiceDurationMinutes(

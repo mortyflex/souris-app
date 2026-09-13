@@ -382,16 +382,50 @@ next local calendar day
 → automatically COMPLETED
 ```
 
-There is no `Démarrer` action. `Terminer` is an optional immediate shortcut once the appointment start time has
-been reached. It is available from `SCHEDULED`, `CONFIRMED`, and compatibility `IN_PROGRESS`.
+There is no `Démarrer` action. Manual completion is `Encaisser` (checkout): once the appointment start time has
+been reached, the professional confirms the appointment is finished AND records what was actually received by
+card and/or cash. It is available from `SCHEDULED`, `CONFIRMED`, and compatibility `IN_PROGRESS`. The former
+plain `Terminer` action no longer exists in the interface; automatic previous-day completion remains the normal
+path and never records a payment.
 
 Appointment Details exposes only relevant actions:
 
 - a future `SCHEDULED` / `CONFIRMED` appointment can be modified or cancelled;
-- once its start time is reached, it can also be completed or marked as no-show;
-- compatibility `IN_PROGRESS` exposes only completion as a lifecycle outcome action;
+- once its start time is reached, it can also be checked out (`Encaisser`) or marked as no-show;
+- compatibility `IN_PROGRESS` exposes only checkout as a lifecycle outcome action;
 - `COMPLETED`, `CANCELLED`, and `NO_SHOW` are read-only terminal lifecycle outcomes, while permanent deletion
-  remains available as a separate secondary data-correction action.
+  remains available as a separate secondary data-correction action — refused with « Suppression impossible »
+  when the appointment carries a recorded checkout or a linked Product Sale;
+- a `COMPLETED` appointment without a recorded checkout (automatic completion, historical records) offers
+  `Enregistrer un encaissement`, which records the amounts without changing its status.
+
+### Appointment Details layout
+
+```text
+Rendez-vous · Cliente · date · heure · statut
+Prestations (ordered services, expandable phases)
+Durée totale · Total                          (one banner; no separate active / processing breakdown)
+Produits vendus                               (only when a linked Product Sale exists; Total produits)
+Note
+Encaissement                                  (once checked out: total, Carte / Espèces, Modifier l’encaissement)
+[ Revente ] [ Encaisser ]                     (side by side, same height; Encaisser is the primary violet action)
+Absence · Annuler · Modifier                  (lifecycle actions, below)
+Supprimer                                     (secondary destructive text action)
+```
+
+### Checkout (« Encaisser »)
+
+Tapping `Encaisser` opens the canonical Souris sheet `ENCAISSEMENT — Encaisser le rendez-vous` with the keyboard
+closed. It shows a compact expectation (`Prestations`, `Produits` when linked Sales exist, `Total attendu`) as a
+helper, then two payment rows — `Carte` and `Espèces` — with editable French decimal amounts (`75`, `75,50`)
+normalized to integer cents, a `Reste …` shortcut that fills the remaining expected amount with one explicit tap,
+`Total encaissé`, and a restrained `Écart : ±…` when the received total differs. Card only, cash only, or a mix
+are all valid; a positive total is required unless the appointment costs nothing. Confirming writes the completed
+status and the payment in one transaction; the sheet closes and Details shows the `Encaissement` summary.
+`Modifier l’encaissement` reopens the same sheet prefilled to correct the split without creating a second record.
+
+Souris does not process payments: no card is charged, no terminal or provider is involved. `Encaisser` records
+what the professional received.
 
 Untouched previous-local-day appointments are reconciled at the Appointment session boundary when the app starts,
 returns active on a new local day, or crosses a local-day boundary while open. The operation is idempotent. Same-day
@@ -696,18 +730,20 @@ Produits              → Nouvelle vente      (secondary — walk-in, no Client)
 ```
 
 From the Client Profile and Appointment Details the Client is resolved on the first render — the
-professional never selects them again and never sees a transient « Aucune cliente ». The
-Appointment is only a navigation context: the Sale is associated with the Client, never with the
-Appointment, and `Revente` stays available on completed appointments because that is a natural
-moment to sell a Product. The wording is context-specific: `Revente` in Appointment Details,
+professional never selects them again and never sees a transient « Aucune cliente ». A Sale opened
+through `Revente` also carries the Appointment it was sold during, so Appointment Details lists it
+under `Produits vendus` (name, quantity, snapshot unit price, line total, `Total produits`) as soon
+as the professional returns — a Sale opened from Produits or the Client Profile carries no
+Appointment. `Revente` stays available on completed appointments because that is a natural moment
+to sell a Product. The wording is context-specific: `Revente` in Appointment Details,
 `Vendre un produit` on the Client Profile, `Nouvelle vente` in Produits. On success the flow simply returns to where it was opened
 (Client Profile, Appointment Details, or Produits), and a Client-attached Sale appears in that
 Client's `Produits achetés`.
 
-In Appointment Details, `Revente` is a contextual commercial action (shopping-bag icon +
-label) placed ABOVE the lifecycle actions (`Terminer`, `Absence` / `Annuler` / `Modifier`),
-visually lighter than the primary `Terminer`; it is never presented as another lifecycle
-outcome. The Produits tab keeps `Nouvelle vente` beside
+In Appointment Details, `Revente` (shopping-bag icon + label, lavender) sits side by side with
+the primary `Encaisser` (card icon + label, violet) in one row of equal height, ABOVE the
+lifecycle actions (`Absence` / `Annuler` / `Modifier`); it is never presented as another lifecycle
+outcome. When the Client is archived, `Revente` is withheld and `Encaisser` takes the row. The Produits tab keeps `Nouvelle vente` beside
 `Ajouter un produit` as the walk-in entry.
 
 The flow is one focused native form sheet (`Nouvelle vente`), presented like the other Souris
@@ -737,11 +773,18 @@ back can discard it. The flow itself:
   returns to `Produits` where the updated stock is visible immediately. A final stock failure
   keeps the screen open, explains which Product lacks stock, and mutates nothing.
 
-Sales V1 deliberately excludes: pending orders, checkout, payment methods, card terminal,
-refunds, returns, discounts, per-sale price editing, VAT, receipts, cash register, accounting,
-revenue dashboard, a Sales history screen or tab, loyalty, and persistence. Stock remains direct
-V1 state: there is still no stock-movement history — a completed Sale simply decrements the
-quantity.
+Sales V1 deliberately excludes: pending orders, payment methods on standalone Sales, card
+terminal, refunds, returns, discounts, per-sale price editing, VAT, receipts, accounting, revenue
+dashboard, a Sales history screen or tab, and loyalty. Stock remains direct V1 state: there is
+still no stock-movement history — a completed Sale simply decrements the quantity.
+
+**Standalone Product Sale payment.** `Produits → Nouvelle vente`: after `Valider la vente` the same
+Souris checkout sheet (`ENCAISSEMENT — Encaisser la vente`) shows `Total vente` and the `Carte` /
+`Espèces` rows, keyboard closed; card only, cash only, or mixed; a positive received total is
+required when the Sale total is positive; the received total may differ. Confirming completes the
+Sale with its payment and decrements stock in one operation; `Annuler` returns to the draft with
+nothing sold. A Sale opened through `Revente` from Appointment Details skips this step: its money is
+recorded by the Appointment checkout. Historical Sales without payment are never assigned a method.
 
 Product management should remain simple.
 
@@ -882,7 +925,38 @@ Compte
 - Aide
 ```
 
-Current implementation (Account & Onboarding V1): a `Compte` section shows the Business identity
+Current implementation: the `Gestion` section holds `Prestations & tarifs` and `Caisse`.
+
+### Caisse (Cash Register V1)
+
+`Plus → Caisse` shows, in one glance, the money the professional received:
+
+```text
+Jour | Mois                              (segmented control; Jour is the default)
+‹  Samedi 12 septembre 2026  ›           (previous / next day; « Aujourd’hui » shortcut when elsewhere)
+
+1 240,00 €                               (large, navy)
+encaissé aujourd’hui                     (« encaissé ce jour » / « encaissé ce mois-ci » / « encaissé ce mois »)
+3 encaissements
+
+[ Carte   980,00 € ]  [ Espèces   260,00 € ]
+```
+
+- `Jour` sums the payments whose `paidAt` falls on the selected device-local civil day; `Mois` sums the
+  selected calendar month (never a rolling 30-day window); previous / next navigate freely into history, and
+  tapping the displayed day opens the canonical Souris date picker to jump to any historical day;
+- the amounts derive ONLY from money explicitly recorded: appointment checkouts (`appointment.payment`) and
+  standalone Product Sale payments (`sale.payment`). Automatically completed appointments, cancellations,
+  no-shows and Sales without payment contribute nothing; a Sale sold during an appointment is already inside
+  the appointment's recorded amount and is never added a second time;
+- the wording is « encaissé » — what was received — never an accounting-grade turnover claim;
+- editing a checkout updates the register immediately; nothing is stored or cached;
+- an empty day or month simply shows `0,00 €` with `Carte 0,00 €` / `Espèces 0,00 €` — no illustration;
+- no chart, accounting table, VAT, expense, or profit view. Not V1.
+
+The Client `Total dépensé` metric is unchanged and independent from the Cash Register.
+
+Account & Onboarding V1: a `Compte` section shows the Business identity
 (name + activity, e.g. `Maison Léa` / `Coiffure`) and opens a restrained account sheet (activity,
 responsable, email, phone, `Se déconnecter`). Sign-out asks for an explicit, non-alarming
 confirmation: "Les données restent enregistrées sur cet appareil." Souris never claims local data is

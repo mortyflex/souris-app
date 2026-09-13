@@ -1,0 +1,3 @@
+# Souris — source files are text: always diff them textually
+*.ts text diff
+*.tsx text diff

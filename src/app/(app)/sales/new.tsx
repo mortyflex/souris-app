@@ -2,9 +2,20 @@ import { useLocalSearchParams } from 'expo-router';
 
 import { SaleCreationScreen } from '@/features/sales/creation/SaleCreationScreen';
 
-export default function NewSaleRoute() {
-  const { clientId } = useLocalSearchParams<{ clientId?: string | string[] }>();
-  const initialClientId = Array.isArray(clientId) ? clientId[0] : clientId;
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
-  return <SaleCreationScreen initialClientId={initialClientId} />;
+export default function NewSaleRoute() {
+  const { clientId, appointmentId } = useLocalSearchParams<{
+    clientId?: string | string[];
+    appointmentId?: string | string[];
+  }>();
+
+  return (
+    <SaleCreationScreen
+      initialAppointmentId={firstParam(appointmentId)}
+      initialClientId={firstParam(clientId)}
+    />
+  );
 }

@@ -17,6 +17,7 @@ import {
 } from '../stores/clients';
 import { completeSale } from '../stores/sales';
 import { appointmentLea, clientLea, createTestSeed } from '../testing/fixtures';
+import { insertHistoricalAppointment } from '../testing/historical-fixtures';
 import { openTestDatabase } from '../testing/node-sqlite-database';
 
 interface CountRow {
@@ -55,7 +56,7 @@ function openSchemaV1Database() {
     'INSERT INTO clients (id, first_name, last_name, phone, email, birth_date) VALUES (?, ?, ?, ?, ?, ?)',
     ['client-nadia', 'Nadia', null, null, null, null],
   );
-  insertAppointment(db, appointmentLea);
+  insertHistoricalAppointment(db, appointmentLea);
   db.runSync("INSERT INTO souris_metadata (key, value) VALUES ('seed_version', '1')");
   return db;
 }
@@ -68,8 +69,8 @@ describe('schema v2 migration on an existing v1 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(4);
-    expect(CURRENT_SCHEMA_VERSION).toBe(4);
+    expect(readSchemaVersion(db)).toBe(6);
+    expect(CURRENT_SCHEMA_VERSION).toBe(6);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(countRows(db, 'clients')).toBe(2);
@@ -92,7 +93,7 @@ describe('schema v2 migration on an existing v1 database', () => {
     const db = openSchemaV1Database();
     migrateDatabase(db);
 
-    expect(migrateDatabase(db)).toBe(4);
+    expect(migrateDatabase(db)).toBe(6);
     expect(countRows(db, 'clients')).toBe(2);
     expect(
       db.getAllSync<{ name: string }>('PRAGMA table_info(clients)').filter(

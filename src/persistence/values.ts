@@ -37,3 +37,48 @@ export function toSqlOptional(value: string | undefined): SqlValue {
 export function fromSqlOptional(value: string | null): string | undefined {
   return value === null ? undefined : value;
 }
+
+/**
+ * Recorded payment (Appointment checkout, standalone Sale) ↔ the three
+ * nullable columns `paid_at`, `card_amount_cents`, `cash_amount_cents`. A
+ * payment exists only when `paid_at` is set; historical rows hydrate to no
+ * payment at all. Amounts are exact non-negative integer cents.
+ */
+export interface PaymentColumns {
+  readonly paid_at: string | null;
+  readonly card_amount_cents: number | null;
+  readonly cash_amount_cents: number | null;
+}
+
+export interface RecordedPayment {
+  readonly paidAt: Date;
+  readonly cardAmountCents: number;
+  readonly cashAmountCents: number;
+}
+
+export function assertAmountCents(value: number, column: string): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${column} must be a non-negative integer number of cents, got ${value}`);
+  }
+  return value;
+}
+
+export function toSqlPaymentColumns(
+  payment: RecordedPayment | undefined,
+): readonly [SqlValue, SqlValue, SqlValue] {
+  if (!payment) return [null, null, null];
+  return [
+    toSqlInstant(payment.paidAt),
+    assertAmountCents(payment.cardAmountCents, 'card_amount_cents'),
+    assertAmountCents(payment.cashAmountCents, 'cash_amount_cents'),
+  ];
+}
+
+export function fromSqlPaymentColumns(row: PaymentColumns): RecordedPayment | undefined {
+  if (row.paid_at === null) return undefined;
+  return {
+    paidAt: fromSqlInstant(row.paid_at),
+    cardAmountCents: row.card_amount_cents ?? 0,
+    cashAmountCents: row.cash_amount_cents ?? 0,
+  };
+}
