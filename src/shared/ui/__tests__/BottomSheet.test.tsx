@@ -2,11 +2,12 @@
 //
 // Behavior only (no animation frame values): render, dismissal policy,
 // the close transition lifecycle (slide down THEN unmount / onDismissed),
-// the scroll-safe variant, the canonical header action and the fixed
-// action area.
+// the scroll-safe variant, the canonical header action, the fixed
+// action area and the fixed-height layout contract (a long list must get a
+// bounded area with real height).
 
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { AppButton } from '../AppButton';
 import { BottomSheet } from '../BottomSheet';
@@ -57,6 +58,16 @@ jest.mock('react-native-safe-area-context', () => {
       React.createElement(View, props, children),
   };
 });
+
+type TestNode = ReturnType<Awaited<ReturnType<typeof render>>['getByText']>;
+
+/** Nearest host (native) ancestor of a rendered node. */
+function hostParent(node: TestNode): TestNode {
+  let current = node.parent;
+  while (current && typeof current.type !== 'string') current = current.parent;
+  if (!current) throw new Error('No host ancestor');
+  return current;
+}
 
 async function renderSheet(overrides: Partial<React.ComponentProps<typeof BottomSheet>> = {}) {
   const onClose = jest.fn();
@@ -225,5 +236,23 @@ describe('BottomSheet', () => {
 
     await act(async () => fireEvent.press(view.getByText('Enregistrer')));
     expect(onPrimary).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a fixed-height sheet fill its surface so a long list gets a bounded area', async () => {
+    const { view } = await renderSheet({ height: '88%' });
+
+    // Surface (safe area) and body both GROW: a flex child inside (a FlatList)
+    // would otherwise collapse to zero height under a shrink-only ancestor.
+    expect(StyleSheet.flatten(view.getByTestId('sheet').props.style)).toMatchObject({ flex: 1 });
+    expect(StyleSheet.flatten(hostParent(view.getByText('Contenu')).props.style)).toMatchObject({
+      flex: 1,
+    });
+  });
+
+  it('keeps a content-fit sheet sized by its body', async () => {
+    const { view } = await renderSheet();
+
+    expect(StyleSheet.flatten(view.getByTestId('sheet').props.style).flex).toBeUndefined();
+    expect(StyleSheet.flatten(hostParent(view.getByText('Contenu')).props.style).flex).toBeUndefined();
   });
 });
