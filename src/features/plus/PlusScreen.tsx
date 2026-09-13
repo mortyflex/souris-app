@@ -10,6 +10,7 @@ import { useServiceCatalog } from '@/features/services/session/ServiceCatalogPro
 import { usePersistence } from '@/providers/PersistenceProvider';
 import { AppText } from '@/shared/ui/AppText';
 import { BrandComposition } from '@/shared/ui/BrandMark';
+import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
 import { Screen } from '@/shared/ui/Screen';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
@@ -31,10 +32,7 @@ export function PlusScreen() {
   const activityLabel = formatBusinessActivityType(business.activityType);
 
   return (
-    <Screen>
-      <AppText variant="screenTitle" accessibilityRole="header">
-        Plus
-      </AppText>
+    <Screen header={<MainScreenHeader title="Plus" watermark="settings" />}>
       <View style={styles.managementSection}>
         <SectionHeader title="Gestion" />
         <Pressable

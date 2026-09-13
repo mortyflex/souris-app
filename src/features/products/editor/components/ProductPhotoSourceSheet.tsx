@@ -11,6 +11,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 interface ProductPhotoSourceSheetProps {
@@ -35,14 +36,12 @@ export function ProductPhotoSourceSheet({
   return (
     <BottomSheet
       backdropLabel="Fermer"
+      header={<SheetHeader eyebrow="PHOTO" title="Photo du produit" />}
       onClose={onClose}
       onDismissed={onDismissed}
       testID="product-photo-sheet"
       visible={visible}
     >
-      <AppText accessibilityRole="header" variant="sheetTitle" style={styles.title}>
-        Photo du produit
-      </AppText>
       <View style={styles.options}>
         <SourceOption
           icon={{ ios: 'camera.fill', android: 'photo_camera' }}
@@ -106,7 +105,6 @@ function SourceOption({ icon, label, destructive = false, onPress, testID }: Sou
 }
 
 const styles = StyleSheet.create({
-  title: { paddingBottom: spacing.sm, paddingTop: spacing.base },
   options: { gap: spacing.xs, paddingBottom: spacing.base },
   option: {
     alignItems: 'center',
@@ -129,5 +127,5 @@ const styles = StyleSheet.create({
   },
   optionIconDestructive: { backgroundColor: semanticColors.surfaceRose },
   optionLabelDestructive: { color: rose.rose600 },
-  cancel: { marginBottom: spacing.sm },
+  cancel: { marginBottom: spacing.base },
 });

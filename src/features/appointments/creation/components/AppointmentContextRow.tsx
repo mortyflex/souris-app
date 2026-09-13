@@ -4,12 +4,14 @@
 // appointment editing screen. Keeps "who + when" visible without a large
 // date/profile card.
 //
-// The time is the creation draft start time: tapping Changer l'horaire
-// reveals a compact ±5 minute control. The calendar date never changes here.
+// The time is the creation draft start time: tapping Changer l'horaire gives
+// one selection haptic and reveals a compact ±5 minute control. The calendar
+// date never changes here.
 
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
+import { haptics } from '@/shared/lib/haptics';
 import { AppText } from '@/shared/ui/AppText';
 import {
   gutter,
@@ -67,7 +69,10 @@ export function AppointmentContextRow({
               accessibilityRole="button"
               accessibilityLabel="Changer l'horaire"
               hitSlop={spacing.sm}
-              onPress={() => setEditing(true)}
+              onPress={() => {
+                haptics.selection();
+                setEditing(true);
+              }}
               style={({ pressed }) => [styles.editAction, pressed && styles.editActionPressed]}
               testID="time-modifier"
             >
@@ -84,7 +89,7 @@ export function AppointmentContextRow({
 
 const styles = StyleSheet.create({
   contextRow: {
-    backgroundColor: semanticColors.surfaceElevated,
+    backgroundColor: semanticColors.surfaceLavender,
     borderCurve: 'continuous',
     borderRadius: radii.large,
     gap: spacing.sm,
@@ -105,7 +110,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   editActionPressed: {
-    backgroundColor: semanticColors.surfaceLavender,
+    backgroundColor: semanticColors.surfaceLavenderStrong,
     transform: [{ scale: interaction.pressedScale }],
   },
   editActionText: { color: semanticColors.accent },

@@ -9,9 +9,9 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import type { Product } from '@/domain/products';
-import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { foregroundSoft, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { SaleProductRow } from './SaleProductRow';
@@ -28,6 +28,17 @@ interface SaleScanResultSheetProps {
   readonly onClose: () => void;
 }
 
+function titleOf(result: SaleScanResult): string {
+  switch (result.kind) {
+    case 'multiple':
+      return 'Plusieurs produits trouvés';
+    case 'unknown':
+      return 'Produit introuvable';
+    case 'inactive':
+      return 'Produit inactif';
+  }
+}
+
 export function SaleScanResultSheet({
   result,
   draftQuantityOf,
@@ -37,6 +48,11 @@ export function SaleScanResultSheet({
   return (
     <BottomSheet
       backdropLabel="Fermer le résultat du scan"
+      header={
+        result ? (
+          <SheetHeader action={{ label: 'Fermer', onPress: onClose }} eyebrow="SCAN" title={titleOf(result)} />
+        ) : undefined
+      }
       onClose={onClose}
       testID="sale-scan-result"
       visible={result !== null}
@@ -45,9 +61,6 @@ export function SaleScanResultSheet({
         <View style={styles.content}>
           {result.kind === 'multiple' ? (
             <>
-              <AppText variant="sheetTitle" accessibilityRole="header">
-                Plusieurs produits trouvés
-              </AppText>
               <AppText variant="metadata" style={styles.copy}>
                 Choisissez le produit à ajouter à la vente.
               </AppText>
@@ -67,21 +80,15 @@ export function SaleScanResultSheet({
               </ScrollView>
             </>
           ) : (
-            <>
-              <AppText variant="sheetTitle" accessibilityRole="header">
-                {result.kind === 'unknown' ? 'Produit introuvable' : 'Produit inactif'}
-              </AppText>
-              <AppText variant="metadata" style={styles.copy}>
-                {result.kind === 'unknown'
-                  ? 'Aucun produit ne correspond à ce code-barres.'
-                  : 'Ce produit est inactif.'}
-              </AppText>
-            </>
+            <AppText variant="metadata" style={styles.copy}>
+              {result.kind === 'unknown'
+                ? 'Aucun produit ne correspond à ce code-barres.'
+                : 'Ce produit est inactif.'}
+            </AppText>
           )}
           <AppText selectable variant="control" style={styles.barcode}>
             {result.barcode}
           </AppText>
-          <AppButton onPress={onClose} title="Fermer" variant="secondary" />
         </View>
       )}
     </BottomSheet>
@@ -92,7 +99,7 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
     paddingBottom: spacing.base,
-    paddingTop: spacing.base,
+    paddingTop: spacing.xs,
   },
   copy: { color: foregroundSoft },
   matches: { flexGrow: 0, maxHeight: 320 },

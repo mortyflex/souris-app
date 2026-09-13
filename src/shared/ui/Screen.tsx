@@ -6,12 +6,15 @@
 // would otherwise repeat:
 //   - approved application background;
 //   - top safe-area handling (notch / status bar);
-//   - platform horizontal gutter (20 iOS / 16 Android);
-//   - common top spacing before the screen header.
+//   - an optional full-bleed `header` slot (MainScreenHeader) rendered after
+//     the safe area and before the gutter, so its watermark anchors to the
+//     title block;
+//   - platform horizontal gutter (20 iOS / 16 Android) for the content.
 //
-// Deliberately out of scope: scrolling, headers, keyboard behavior,
-// loading and error states. Future screens own those concerns.
+// Deliberately out of scope: scrolling, keyboard behavior, loading and error
+// states. Screens own those concerns.
 
+import type { ReactNode } from 'react';
 import { Platform, StyleSheet, View, type ViewProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,10 +22,23 @@ import { colors, gutter, spacing } from './theme';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
-export function Screen({ children, style, ...rest }: ViewProps) {
+interface ScreenProps extends ViewProps {
+  readonly header?: ReactNode;
+}
+
+export function Screen({ header, children, style, ...rest }: ScreenProps) {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={[styles.content, { paddingHorizontal: horizontalGutter }, style]} {...rest}>
+      {header}
+      <View
+        style={[
+          styles.content,
+          header === undefined && styles.contentWithoutHeader,
+          { paddingHorizontal: horizontalGutter },
+          style,
+        ]}
+        {...rest}
+      >
         {children}
       </View>
     </SafeAreaView>
@@ -34,8 +50,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
-    flex: 1,
-    paddingTop: spacing.md,
-  },
+  content: { flex: 1 },
+  contentWithoutHeader: { paddingTop: spacing.md },
 });

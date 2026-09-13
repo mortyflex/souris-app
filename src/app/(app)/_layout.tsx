@@ -5,6 +5,11 @@
 // Appointment, Service, Product, or Sale state exists in the tree while the
 // user is signed out, and every screen stamps new records with the bound
 // Business through CurrentBusinessProvider.
+//
+// Every workflow route is a native form sheet configured ONCE in
+// src/providers/sheet-route-options.ts with the canonical Souris shell and an
+// explicit gesture policy (workflows with long scrolling bodies never dismiss
+// on a swipe — closing goes through their « Annuler »).
 
 import { Stack } from 'expo-router';
 
@@ -15,14 +20,12 @@ import { ClientSessionProvider } from '@/features/clients/session/ClientSessionP
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
+import { contentSheet, editorSheet, workflowSheet } from '@/providers/sheet-route-options';
 import { colors, semanticColors } from '@/shared/ui/theme';
 
-const warmSheet = {
-  presentation: 'formSheet' as const,
+const pushedScreen = {
   headerShown: false,
   contentStyle: { backgroundColor: semanticColors.screenWarm },
-  sheetAllowedDetents: [0.92],
-  sheetGrabberVisible: true,
 };
 
 export default function AppLayout() {
@@ -43,44 +46,17 @@ export default function AppLayout() {
                     contentStyle: { backgroundColor: colors.background },
                   }}>
                   <Stack.Screen name="(tabs)" />
-                  <Stack.Screen
-                    name="appointments/[appointmentId]"
-                    options={{
-                      presentation: 'formSheet',
-                      headerShown: false,
-                      contentStyle: { backgroundColor: semanticColors.screenWarm },
-                      sheetAllowedDetents: 'fitToContents',
-                      sheetGrabberVisible: true,
-                    }}
-                  />
-                  <Stack.Screen name="appointments/new" options={warmSheet} />
-                  <Stack.Screen name="appointments/edit/[appointmentId]" options={warmSheet} />
-                  <Stack.Screen
-                    name="clients/[clientId]"
-                    options={{
-                      headerShown: false,
-                      contentStyle: { backgroundColor: semanticColors.screenWarm },
-                    }}
-                  />
-                  <Stack.Screen
-                    name="services/index"
-                    options={{
-                      headerShown: false,
-                      contentStyle: { backgroundColor: semanticColors.screenWarm },
-                    }}
-                  />
-                  <Stack.Screen name="services/new" options={warmSheet} />
-                  <Stack.Screen name="services/[serviceId]" options={warmSheet} />
-                  <Stack.Screen
-                    name="products/index"
-                    options={{
-                      headerShown: false,
-                      contentStyle: { backgroundColor: semanticColors.screenWarm },
-                    }}
-                  />
-                  <Stack.Screen name="products/new" options={warmSheet} />
-                  <Stack.Screen name="products/[productId]" options={warmSheet} />
-                  <Stack.Screen name="sales/new" options={warmSheet} />
+                  <Stack.Screen name="appointments/[appointmentId]" options={contentSheet} />
+                  <Stack.Screen name="appointments/new" options={workflowSheet} />
+                  <Stack.Screen name="appointments/edit/[appointmentId]" options={workflowSheet} />
+                  <Stack.Screen name="clients/[clientId]" options={pushedScreen} />
+                  <Stack.Screen name="services/index" options={pushedScreen} />
+                  <Stack.Screen name="services/new" options={editorSheet} />
+                  <Stack.Screen name="services/[serviceId]" options={editorSheet} />
+                  <Stack.Screen name="products/index" options={pushedScreen} />
+                  <Stack.Screen name="products/new" options={editorSheet} />
+                  <Stack.Screen name="products/[productId]" options={editorSheet} />
+                  <Stack.Screen name="sales/new" options={workflowSheet} />
                 </Stack>
               </AppointmentSessionProvider>
             </SaleSessionProvider>

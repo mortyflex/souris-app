@@ -7,19 +7,15 @@
 // Existing AppointmentItems hydrate ONLY from their snapshots; the catalog
 // grid uses a separate pending-add selection. Editing an existing
 // Appointment never writes the catalog.
+//
+// Presented in the canonical Souris sheet shell; swipe-to-dismiss is off
+// (route options). A dirty draft is guarded against « Annuler » and the
+// hardware back by the shared Souris confirmation dialog.
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   canRemoveAppointmentItem,
@@ -35,12 +31,12 @@ import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
-import {
-  gutter,
-  semanticColors,
-  spacing,
-} from '@/shared/ui/theme';
+import { SheetActionBar } from '@/shared/ui/SheetActionBar';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetScreen } from '@/shared/ui/SheetScreen';
+import { gutter, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { createNewAppointmentItemId } from '../creation/runtime-ids';
 import { ServiceSelectionGrid } from '../editor/components/ServiceSelectionGrid';
@@ -70,7 +66,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   const router = useRouter();
   const { getAppointmentById, updateAppointment } = useAppointmentSession();
   const { getClientById } = useClientSession();
-  const { getServiceById, activeServices } = useServiceCatalog();
+  const { activeServices } = useServiceCatalog();
   const entry = getAppointmentById(appointmentId);
   const appointment = entry?.appointment;
   const [initialDrafts] = useState<readonly SelectedServiceDraft[]>(() =>
@@ -85,6 +81,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   const [draftClientId, setDraftClientId] = useState<string | undefined>(initialClientId);
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
   const [clientPickerVisible, setClientPickerVisible] = useState(false);
+  const [discardRequested, setDiscardRequested] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const isDirty =
     !areDraftsEqual(drafts, initialDrafts) ||
@@ -96,14 +93,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   const clientName = getResolvedClientDisplayName(getClientById(draftClientId));
 
   const requestDiscard = () => {
-    Alert.alert(
-      'Abandonner les modifications ?',
-      'Les modifications non enregistrées seront perdues.',
-      [
-        { text: 'Continuer la modification', style: 'cancel' },
-        { text: 'Abandonner', style: 'destructive', onPress: () => setIsLeaving(true) },
-      ],
-    );
+    setDiscardRequested(true);
   };
 
   usePreventRemove(isDirty && !isLeaving && !isTerminal, requestDiscard);
@@ -116,27 +106,27 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 
   if (!entry || !appointment || !initialStartAt || !draftStartAt || !initialClientId) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <SheetScreen fit="content">
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Rendez-vous introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
             Ce rendez-vous n&apos;est plus disponible.
           </AppText>
         </View>
-      </SafeAreaView>
+      </SheetScreen>
     );
   }
 
   if (isTerminal) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <SheetScreen fit="content">
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Modification indisponible</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
             Ce rendez-vous a un statut final et ne peut plus être modifié.
           </AppText>
         </View>
-      </SafeAreaView>
+      </SheetScreen>
     );
   }
 
@@ -212,134 +202,121 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardContainer}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <AppText variant="eyebrow" accessibilityRole="header" style={styles.eyebrow}>
-              MODIFIER LE RENDEZ-VOUS
-            </AppText>
-          </View>
-          <AppButton
-            accessibilityLabel="Annuler les modifications"
-            onPress={cancel}
-            style={styles.cancelButton}
-            testID="cancel-appointment-edit"
-            title="Annuler"
-            variant="tertiary"
-          />
-        </View>
-
-        <ScrollView
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.editorContent, { paddingHorizontal: horizontalGutter }]}
-        >
-          <EditableAppointmentContext
-            clientName={clientName}
-            startAt={draftStartAt}
-            onEditClient={() => setClientPickerVisible(true)}
-            onStartAtChange={setDraftStartAt}
-          />
-
-          <View style={styles.selectedSection}>
-            <SectionHeader count={drafts.length} title="Prestations" />
-            <SortableDraftList
-              canRemove={drafts.length > 1}
-              entries={drafts.map((draft) => ({ draft }))}
-              expandedDraftId={expandedDraftId}
-              onRemove={removeDraft}
-              onReorder={reorderSelectedDrafts}
-              onToggleExpanded={(draftKey) =>
-                setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
-              }
-              onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
-                updateDraft(draftKey, (draft) =>
-                  updateDraftPhaseDuration(draft, phaseId, durationMinutes),
-                )
-              }
-              onUpdatePrice={(draftKey, price) =>
-                updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
-              }
-            />
-          </View>
-
-          <View style={styles.catalogSection}>
-            <ServiceSelectionGrid
-              services={activeServices}
-              selectedServiceIds={drafts.map((draft) => draft.serviceId)}
-              onToggleService={addServiceImmediately}
-            />
-          </View>
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <AppButton
-            onPress={cancel}
-            style={styles.secondaryButton}
-            title="Annuler"
-            variant="secondary"
-          />
-          <AppButton
-            disabled={!isDirty}
-            onPress={save}
-            style={styles.primaryButton}
-            testID="save-appointment-edit"
-            title="Enregistrer les modifications"
-          />
-        </View>
-
-        <ClientPickerSheet
-          selectedClientId={draftClientId}
-          visible={clientPickerVisible}
-          onClose={() => setClientPickerVisible(false)}
-          onSelectClient={(clientId) => {
-            setDraftClientId(clientId);
-            setClientPickerVisible(false);
+    <SheetScreen keyboardAvoiding testID="appointment-editing-sheet">
+      <View style={styles.headerZone}>
+        <SheetHeader
+          action={{
+            accessibilityLabel: 'Annuler les modifications',
+            label: 'Annuler',
+            onPress: cancel,
+            testID: 'cancel-appointment-edit',
           }}
+          eyebrow="RENDEZ-VOUS"
+          title="Modifier le rendez-vous"
         />
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </View>
+
+      <ScrollView
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.editorContent, { paddingHorizontal: horizontalGutter }]}
+      >
+        <EditableAppointmentContext
+          clientName={clientName}
+          startAt={draftStartAt}
+          onEditClient={() => setClientPickerVisible(true)}
+          onStartAtChange={setDraftStartAt}
+        />
+
+        <View style={styles.selectedSection}>
+          <SectionHeader count={drafts.length} title="Prestations" />
+          <SortableDraftList
+            canRemove={drafts.length > 1}
+            entries={drafts.map((draft) => ({ draft }))}
+            expandedDraftId={expandedDraftId}
+            onRemove={removeDraft}
+            onReorder={reorderSelectedDrafts}
+            onToggleExpanded={(draftKey) =>
+              setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
+            }
+            onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
+              updateDraft(draftKey, (draft) =>
+                updateDraftPhaseDuration(draft, phaseId, durationMinutes),
+              )
+            }
+            onUpdatePrice={(draftKey, price) =>
+              updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
+            }
+          />
+        </View>
+
+        <View style={styles.catalogSection}>
+          <ServiceSelectionGrid
+            services={activeServices}
+            selectedServiceIds={drafts.map((draft) => draft.serviceId)}
+            onToggleService={addServiceImmediately}
+          />
+        </View>
+      </ScrollView>
+
+      <SheetActionBar direction="row">
+        <AppButton
+          onPress={cancel}
+          style={styles.secondaryButton}
+          title="Annuler"
+          variant="secondary"
+        />
+        <AppButton
+          disabled={!isDirty}
+          onPress={save}
+          style={styles.primaryButton}
+          testID="save-appointment-edit"
+          title="Enregistrer les modifications"
+        />
+      </SheetActionBar>
+
+      <ClientPickerSheet
+        selectedClientId={draftClientId}
+        visible={clientPickerVisible}
+        onClose={() => setClientPickerVisible(false)}
+        onSelectClient={(clientId) => {
+          setDraftClientId(clientId);
+          setClientPickerVisible(false);
+        }}
+      />
+
+      <ConfirmationDialog
+        body="Les modifications non enregistrées seront perdues."
+        cancelLabel="Continuer la modification"
+        cancelTestID="keep-editing-appointment"
+        confirmLabel="Abandonner"
+        confirmTestID="discard-appointment-edit"
+        eyebrow="MODIFICATIONS"
+        onCancel={() => setDiscardRequested(false)}
+        onConfirm={() => {
+          setDiscardRequested(false);
+          setIsLeaving(true);
+        }}
+        testID="discard-appointment-edit-dialog"
+        title="Abandonner les modifications ?"
+        visible={discardRequested}
+      />
+    </SheetScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  keyboardContainer: { flex: 1 },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: spacing.xs,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.sm,
-  },
-  headerCopy: { flex: 1 },
-  eyebrow: { color: semanticColors.accent },
-  cancelButton: { paddingHorizontal: spacing.md },
+  headerZone: { paddingHorizontal: horizontalGutter },
   editorContent: {
     gap: spacing.base,
     paddingBottom: spacing.xl,
-    paddingTop: spacing.base,
+    paddingTop: spacing.sm,
   },
   selectedSection: { gap: spacing.sm },
   catalogSection: { gap: spacing.sm },
-  footer: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.md,
-  },
   secondaryButton: { paddingHorizontal: spacing.base },
   primaryButton: { flex: 1 },
-  notFound: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
-  notFoundText: { color: semanticColors.foregroundMuted, marginTop: spacing.sm, textAlign: 'center' },
+  notFound: { alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing['3xl'] },
+  notFoundText: { color: semanticColors.foregroundMuted, textAlign: 'center' },
 });

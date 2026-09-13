@@ -42,7 +42,7 @@ Expo Router, features, or screens. Its public surface:
 database.ts          SourisDatabase — the synchronous SQL boundary every module writes against
 expo-database.ts     expo-sqlite binding (application root only)
 schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v3 (business_profile),
-                     SOURIS_TABLES, BUSINESS_SCOPED_TABLES
+                     v4 (clients.birthday), SOURIS_TABLES, BUSINESS_SCOPED_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
 seed.ts              FirstRunSeed contract + seedDatabaseIfNeeded()
@@ -62,15 +62,15 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3)
+## 3. Schema (v1 + v2 + v3 + v4)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities.
 
 ```text
 souris_metadata     key PK, value                                   seed marker and future flags
 
-clients             id PK, first_name, last_name?, phone?, email?, birth_date?,
-                    archived_at?                                    (v2)
+clients             id PK, first_name, last_name?, phone?, email?, birth_date? (legacy, ≤ v3),
+                    archived_at? (v2), birthday? (v4, MM-DD)
 services            id PK, business_id, name, type, price, active
 service_phases      (service_id FK→services CASCADE, position) PK, id, name, duration_minutes, requires_staff
 appointments        id PK, business_id, client_id, staff_member_id, start_at, status, notes?,
@@ -101,8 +101,10 @@ instants        ISO-8601 UTC TEXT                 startAt, cancelledAt, recorded
                                                   archivedAt (NULL = active Client)
                                                   restored as Date; local calendar behavior
                                                   is unchanged because the instant is exact
-birthDate       civil YYYY-MM-DD TEXT             stored and restored as the same string, NEVER
-                                                  converted to a Date or timestamp
+birthday        civil MM-DD TEXT                  day + month only — parsed into the domain
+                                                  `{ month, day }` pair on load, NEVER a Date,
+                                                  a timestamp or a year (legacy `birth_date`
+                                                  is retained but neither read nor written)
 optionals       NULL ↔ absent property            never empty strings, never null in domain values
 money           REAL                              current JS number semantics preserved as-is
 barcode         TEXT                              leading zeroes preserved
@@ -141,6 +143,25 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v4 — Client birthday as day + month
+
+```text
+ALTER TABLE clients ADD COLUMN birthday TEXT;
+UPDATE clients SET birthday = substr(birth_date, 6, 5)
+WHERE birth_date IS NOT NULL AND birth_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]';
+```
+
+An existing v3 database goes `v3 → v4` in one transaction: every Client keeps its row, the
+month + day of every well-formed historical `birth_date` is copied into `birthday` (`MM-DD`),
+the year is dropped, and no other row is touched — no wipe, no reseed (`seed_version` stays),
+no Client loss. The legacy `birth_date` column is retained untouched for backward
+compatibility but is no longer read or written: the hydrated Client never pretends the
+historical year was meaningful (`docs/domain/CLIENTS.md` §2). Malformed legacy values leave
+`birthday` NULL. Re-running is a no-op. Covered by a test that builds a genuine schema-v3
+fixture database with full `birth_date` values (including a `02-29`), an archived Client and an
+Appointment, migrates, and asserts version, rows, keys, the untouched legacy column, and the
+hydrated day + month values.
 
 ### Schema v3 — local account binding
 
@@ -194,7 +215,7 @@ with the v1 column set, migrates, and asserts version, rows, and NULL lifecycle.
 
 ```text
 first launch:  empty database
-               → migrate to the current schema (v3)
+               → migrate to the current schema (v4)
                → seed_version absent → run the production seed ONCE, in one transaction
                    Clients / Services / Products / Appointments / Sales = []   (EMPTY)
                → write souris_metadata.seed_version = 1
@@ -396,12 +417,12 @@ database per test, no extra dependency, no developer device database. `TestPersi
 wraps the real `PersistenceProvider` around such a database with in-memory files, seeded with the
 real first-run seed unless a test supplies its own.
 
-Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2 and v2 → v3
-upgrades of existing seeded databases, account binding (profile persisted, every `business_id`
+Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2, v2 → v3 and
+v3 → v4 upgrades of existing seeded databases, account binding (profile persisted, every `business_id`
 rewritten, relationships untouched, restart, same-owner rebind, other-owner refusal, multiple local
 ids refusal, rollback), the empty production seed, the development seed under a bound Business id,
 seed-once, restart without duplicates, empty-but-initialized
-databases, every store's round trip (order, instants, civil birthDate, optionals, `archivedAt`
+databases, every store's round trip (order, instants, `MM-DD` birthday, optionals, `archivedAt`
 Date round trip, snapshots surviving catalog deletion), Sale rollback, the transactional Client
 deletion guard (safe / blocked by Appointment / blocked by Sale / both), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.

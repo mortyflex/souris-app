@@ -451,7 +451,7 @@ firstName
 lastName?
 phone?
 email?
-birthDate?   YYYY-MM-DD civil calendar date
+birthday?    { month, day } — day + month only, never a year
 ```
 
 A Client selected during Appointment creation is the SAME Client later used
@@ -485,7 +485,7 @@ looks deleted or erroneous.
 ### Creating and editing a Client
 
 A restrained `Ajouter une cliente` action opens the shared Client form
-(Prénom required; Nom, Téléphone, Email, Date de naissance optional). A new
+(Prénom required; Nom, Téléphone, Email, Anniversaire optional). A new
 Client appears immediately in the directory and in the Appointment Creation
 picker, and can be created directly from the picker when the person is not
 found.
@@ -567,9 +567,13 @@ haptic feedback only after it actually succeeded.
 
 ### Birthday
 
-`birthDate` is an optional civil calendar date (`YYYY-MM-DD`), never a
-timestamp. It is displayed as a friendly French date (e.g. `12 octobre
-1994`). Birthday promotions, reminders, and age display are future features.
+`birthday` is an optional day + month pair (`{ month, day }`), never a
+timestamp and never a year: Souris only needs it to recognize an upcoming
+birthday, offer a birthday promotion and show it. The Client form asks for the
+day and the month with an inline selector (no keyboard, no year wheel;
+February offers 29 days), and the profile shows a friendly French day + month
+(e.g. `12 octobre`). Birthday promotions and reminders are future features;
+age display is out of scope by design (`docs/domain/CLIENTS.md` §2).
 
 ### Purchased products
 
@@ -593,7 +597,7 @@ firstName → firstName
 lastName  → lastName
 telephone → phone
 email     → email
-birthdate → birthDate (only valid YYYY-MM-DD civil dates)
+birthdate → birthday (day + month of a well-formed YYYY-MM-DD; the year is dropped)
 ```
 
 Existing commercial history is intentionally not migrated.

@@ -10,20 +10,18 @@
 //
 // id/businessId are stable across edits. Current stock is direct V1 state —
 // stock-movement history belongs to the future Sales/Inventory domain.
+//
+// Presented in the canonical Souris sheet shell, sized to its content: the
+// read-first details never leave a blank middle area, and the form grows up
+// to the standard detent. The keyboard stays closed until a field is tapped.
+// Deactivation and deletion use the shared Souris confirmation dialog.
+// Swipe-to-dismiss is allowed while reading and disabled while a draft is
+// being edited (navigation option toggled here).
 
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useEffect, useState } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import type { Product } from "@/domain/products";
 import { ProductImage } from "@/features/products/components/ProductImage";
@@ -34,7 +32,11 @@ import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
 import { BarcodeScannerModal } from "@/shared/ui/BarcodeScannerModal";
+import { ConfirmationDialog } from "@/shared/ui/ConfirmationDialog";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
+import { SheetActionBar } from "@/shared/ui/SheetActionBar";
+import { SheetHeader } from "@/shared/ui/SheetHeader";
+import { SheetScreen } from "@/shared/ui/SheetScreen";
 import { TextField } from "@/shared/ui/TextField";
 import {
   foregroundSoft,
@@ -48,6 +50,7 @@ import {
 
 import { useProductCatalog } from "../session/ProductCatalogProvider";
 import { ProductPhotoField } from "./components/ProductPhotoField";
+import { StockStepper } from "./components/StockStepper";
 import {
   buildProductFromForm,
   EMPTY_PRODUCT_FORM,
@@ -65,6 +68,8 @@ interface ProductEditorScreenProps {
   readonly initialBarcode?: string;
 }
 
+type ProductConfirmation = "deactivate" | "delete";
+
 const horizontalGutter =
   Platform.OS === "android" ? gutter.android : gutter.ios;
 
@@ -74,6 +79,7 @@ export function ProductEditorScreen({
   initialBarcode,
 }: ProductEditorScreenProps) {
   const router = useRouter();
+  const navigation = useNavigation();
   const business = useCurrentBusiness();
   const {
     addProduct,
@@ -97,10 +103,16 @@ export function ProductEditorScreen({
   const [editing, setEditing] = useState(mode === "create");
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmation, setConfirmation] = useState<ProductConfirmation>();
+
+  // A draft under edition must not be lost to a swipe; reading may dismiss.
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: !editing });
+  }, [editing, navigation]);
 
   if (mode === "existing" && !product) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+      <SheetScreen fit="content">
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Produit introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
@@ -112,7 +124,7 @@ export function ProductEditorScreen({
             variant="secondary"
           />
         </View>
-      </SafeAreaView>
+      </SheetScreen>
     );
   }
 
@@ -179,162 +191,158 @@ export function ProductEditorScreen({
     }
   };
 
-  const changeActiveState = () => {
+  const commitActiveState = (active: boolean) => {
     if (!product) return;
-    const commit = (active: boolean) => {
-      try {
-        setProductActive(product.id, active);
-      } catch {
-        alertPersistenceFailure();
-        return;
-      }
-      haptics.selection();
-      router.back();
-    };
-
-    if (!product.active) {
-      commit(true);
+    try {
+      setProductActive(product.id, active);
+    } catch {
+      alertPersistenceFailure();
       return;
     }
-
-    Alert.alert(
-      "Désactiver ce produit ?",
-      "Le produit restera dans le catalogue mais ne sera plus actif.",
-      [
-        { text: "Annuler", style: "cancel" },
-        { text: "Désactiver", onPress: () => commit(false) },
-      ],
-    );
+    haptics.selection();
+    router.back();
   };
 
-  const requestDelete = () => {
+  const changeActiveState = () => {
     if (!product) return;
+    if (!product.active) {
+      commitActiveState(true);
+      return;
+    }
+    setConfirmation("deactivate");
+  };
 
-    Alert.alert(
-      "Supprimer ce produit ?",
-      "Il sera supprimé du catalogue.\nCette action est irréversible.",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: () => {
-            try {
-              deleteProduct(product.id);
-            } catch {
-              alertPersistenceFailure();
-              return;
-            }
-            haptics.warning();
-            router.back();
-          },
-        },
-      ],
-    );
+  const confirmDeactivate = () => {
+    setConfirmation(undefined);
+    commitActiveState(false);
+  };
+
+  const confirmDelete = () => {
+    if (!product) return;
+    setConfirmation(undefined);
+    try {
+      deleteProduct(product.id);
+    } catch {
+      alertPersistenceFailure();
+      return;
+    }
+    haptics.warning();
+    router.back();
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.keyboardContainer}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <AppText variant="eyebrow" style={styles.eyebrow}>
-              {mode === "create" ? "NOUVEAU PRODUIT" : "PRODUIT"}
-            </AppText>
-            <AppText
-              variant="sheetTitle"
-              accessibilityRole="header"
-              numberOfLines={1}
-            >
-              {title}
-            </AppText>
-          </View>
-          <AppButton
-            accessibilityLabel={closeLabel}
-            onPress={close}
-            style={styles.closeButton}
-            title={closeLabel}
-            variant="tertiary"
-          />
-        </View>
+    <SheetScreen fit="content" keyboardAvoiding testID="product-sheet">
+      <View style={styles.headerZone}>
+        <SheetHeader
+          action={{ label: closeLabel, onPress: close }}
+          divider
+          eyebrow={mode === "create" ? "NOUVEAU PRODUIT" : "PRODUIT"}
+          title={title}
+          titleNumberOfLines={1}
+        />
+      </View>
 
-        {editing && values && validation ? (
-          <ProductForm
-            attempted={attempted}
-            duplicateBarcodeProduct={duplicateBarcodeProduct}
-            validation={validation}
-            values={values}
-            onChangeField={updateField}
-          />
-        ) : product ? (
-          <ProductReadView product={product} />
-        ) : null}
+      {editing && values && validation ? (
+        <ProductForm
+          attempted={attempted}
+          duplicateBarcodeProduct={duplicateBarcodeProduct}
+          validation={validation}
+          values={values}
+          onChangeField={updateField}
+        />
+      ) : product ? (
+        <ProductReadView product={product} />
+      ) : null}
 
-        {values && editing && (
-          <View style={styles.footer}>
-            {mode === "existing" && (
-              <AppButton
-                onPress={close}
-                style={styles.secondaryButton}
-                testID="cancel-product-edit"
-                title="Annuler"
-                variant="secondary"
-              />
-            )}
+      {values && editing && (
+        <SheetActionBar direction="row">
+          {mode === "existing" && (
             <AppButton
-              disabled={!validation?.valid || saving}
-              onPress={() => void save()}
+              onPress={close}
+              style={styles.secondaryButton}
+              testID="cancel-product-edit"
+              title="Annuler"
+              variant="secondary"
+            />
+          )}
+          <AppButton
+            disabled={!validation?.valid || saving}
+            onPress={() => void save()}
+            style={styles.primaryButton}
+            testID="save-product"
+            title={
+              mode === "create"
+                ? "Ajouter le produit"
+                : "Enregistrer les modifications"
+            }
+          />
+        </SheetActionBar>
+      )}
+
+      {mode === "existing" && !editing && product && (
+        <SheetActionBar testID="product-read-actions">
+          <View style={styles.readFooterRow}>
+            <AppButton
+              onPress={changeActiveState}
+              style={styles.secondaryButton}
+              title={product.active ? "Désactiver" : "Réactiver"}
+              variant="secondary"
+            />
+            <AppButton
+              onPress={() => {
+                setValues(toProductFormValues(product));
+                setAttempted(false);
+                setEditing(true);
+              }}
               style={styles.primaryButton}
-              testID="save-product"
-              title={
-                mode === "create"
-                  ? "Ajouter le produit"
-                  : "Enregistrer les modifications"
-              }
+              testID="edit-product"
+              title="Modifier"
             />
           </View>
-        )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Supprimer ce produit"
+            onPress={() => setConfirmation("delete")}
+            style={({ pressed }) => [
+              styles.deleteAction,
+              pressed && styles.deleteActionPressed,
+            ]}
+          >
+            <AppText variant="control" style={styles.deleteText}>
+              Supprimer
+            </AppText>
+          </Pressable>
+        </SheetActionBar>
+      )}
 
-        {mode === "existing" && !editing && product && (
-          <View style={styles.readFooterContainer}>
-            <View style={[styles.footer, styles.readFooterRow]}>
-              <AppButton
-                onPress={changeActiveState}
-                style={styles.secondaryButton}
-                title={product.active ? "Désactiver" : "Réactiver"}
-                variant="secondary"
-              />
-              <AppButton
-                onPress={() => {
-                  setValues(toProductFormValues(product));
-                  setAttempted(false);
-                  setEditing(true);
-                }}
-                style={styles.primaryButton}
-                testID="edit-product"
-                title="Modifier"
-              />
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Supprimer ce produit"
-              onPress={requestDelete}
-              style={({ pressed }) => [
-                styles.deleteAction,
-                pressed && styles.deleteActionPressed,
-              ]}
-            >
-              <AppText variant="control" style={styles.deleteText}>
-                 Supprimer
-              </AppText>
-            </Pressable>
-          </View>
-        )}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <ConfirmationDialog
+        body="Le produit restera dans le catalogue mais ne sera plus actif."
+        cancelLabel="Annuler"
+        cancelTestID="cancel-product-deactivation"
+        confirmLabel="Désactiver"
+        confirmTestID="confirm-product-deactivation"
+        eyebrow="PRODUIT"
+        onCancel={() => setConfirmation(undefined)}
+        onConfirm={confirmDeactivate}
+        testID="product-deactivation-dialog"
+        title="Désactiver ce produit ?"
+        tone="neutral"
+        visible={confirmation === "deactivate"}
+      />
+      <ConfirmationDialog
+        body="Il sera supprimé du catalogue. Cette action est irréversible."
+        cancelLabel="Retour"
+        cancelTestID="cancel-product-deletion"
+        confirmLabel="Supprimer"
+        confirmTestID="confirm-product-deletion"
+        eyebrow="SUPPRESSION"
+        onCancel={() => setConfirmation(undefined)}
+        onConfirm={confirmDelete}
+        testID="product-deletion-dialog"
+        title="Supprimer ce produit ?"
+        visible={confirmation === "delete"}
+      />
+    </SheetScreen>
   );
 }
 
@@ -385,6 +393,7 @@ function ProductForm({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.formContent}
+        style={styles.scroll}
       >
         <ProductPhotoField
           imageUri={values.imageUri}
@@ -393,7 +402,6 @@ function ProductForm({
         />
         <TextField
           accessibilityLabel="Nom du produit"
-          autoFocus
           error={
             attempted && !validation.nameValid
               ? "Le nom est requis."
@@ -448,17 +456,8 @@ function ProductForm({
           suffix="€"
           value={values.price}
         />
-        <TextField
-          accessibilityLabel="Stock du produit"
-          error={
-            attempted && !validation.stockValid
-              ? "Indiquez une quantité entière, positive ou nulle."
-              : undefined
-          }
-          keyboardType="number-pad"
-          label="Stock"
-          onChangeText={(text) => onChangeField("stockQuantity", text)}
-          placeholder="0"
+        <StockStepper
+          onChange={(stockQuantity) => onChangeField("stockQuantity", stockQuantity)}
           value={values.stockQuantity}
         />
       </ScrollView>
@@ -483,6 +482,8 @@ function ProductReadView({ product }: { readonly product: Product }) {
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.readContent}
+      style={styles.scroll}
+      testID="product-read-view"
     >
       {product.imageUri && (
         <ProductImage
@@ -568,24 +569,11 @@ function ReadRow({
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  keyboardContainer: { flex: 1 },
-  header: {
-    alignItems: "center",
-    borderBottomColor: semanticColors.borderSubtle,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.lg,
-  },
-  headerCopy: { flex: 1, gap: spacing.xs, minWidth: 0 },
-  eyebrow: { color: semanticColors.accent },
-  closeButton: { paddingHorizontal: spacing.md },
+  headerZone: { paddingHorizontal: horizontalGutter },
+  scroll: { flexShrink: 1 },
   formContent: {
     gap: spacing.base,
-    paddingBottom: spacing["3xl"],
+    paddingBottom: spacing.xl,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
@@ -603,8 +591,8 @@ const styles = StyleSheet.create({
     opacity: interaction.pressedOpacity,
   },
   readContent: {
-    gap: spacing.xl,
-    paddingBottom: spacing["3xl"],
+    gap: spacing.lg,
+    paddingBottom: spacing.lg,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
@@ -646,29 +634,9 @@ const styles = StyleSheet.create({
   },
   stockLabel: { color: semanticColors.foregroundSoft },
   stockEmpty: { color: rose.rose600 },
-  footer: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.md,
-  },
   secondaryButton: { flex: 1 },
   primaryButton: { flex: 1.4 },
-  readFooterContainer: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingBottom: spacing.xs,
-  },
-  readFooterRow: {
-    backgroundColor: "transparent",
-    borderTopWidth: 0,
-    paddingBottom: 0,
-  },
+  readFooterRow: { flexDirection: "row", gap: spacing.sm },
   deleteAction: {
     alignItems: "center",
     justifyContent: "center",
@@ -682,10 +650,10 @@ const styles = StyleSheet.create({
   deleteText: { color: rose.rose600 },
   notFound: {
     alignItems: "center",
-    flex: 1,
     gap: spacing.md,
     justifyContent: "center",
     paddingHorizontal: spacing.xl,
+    paddingVertical: spacing["3xl"],
   },
   notFoundText: { color: foregroundSoft, textAlign: "center" },
 });

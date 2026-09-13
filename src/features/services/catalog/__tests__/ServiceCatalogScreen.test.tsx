@@ -4,11 +4,16 @@ import { Pressable, Text } from 'react-native';
 import { ServiceCatalogProvider, useServiceCatalog } from '../../session/ServiceCatalogProvider';
 import { ServiceCatalogScreen } from '../ServiceCatalogScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { settleFloatingReveal } from '@/shared/ui/testing/sheet-transitions';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 
 jest.mock('expo-router', () => ({
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    const React = jest.requireActual('react') as typeof import('react');
+    React.useEffect(effect, [effect]);
+  },
   useRouter: () => ({ push: mockPush, back: mockBack }),
 }));
 
@@ -89,11 +94,15 @@ describe('ServiceCatalogScreen', () => {
   it('opens the create flow', async () => {
     const view = await renderCatalog();
 
+    await settleFloatingReveal();
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Ajouter une prestation'));
+      fireEvent.press(view.getByTestId('add-service'));
     });
 
     expect(mockPush).toHaveBeenCalledWith('/services/new');
+    // The former large inline CTA is gone; the shared floating + is the only entry.
+    expect(view.queryByText('Ajouter une prestation')).toBeNull();
+    expect(view.getByTestId('add-service').props.accessibilityLabel).toBe('Ajouter une prestation');
   });
 
   it('moves a deactivated Service out of the active group without removing it', async () => {

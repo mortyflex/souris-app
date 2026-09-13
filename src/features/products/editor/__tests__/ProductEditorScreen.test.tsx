@@ -1,6 +1,6 @@
-import { act, fireEvent, render } from "@testing-library/react-native";
+import { act, fireEvent, render, within } from "@testing-library/react-native";
 import { useState } from "react";
-import { Alert, Pressable, Text } from "react-native";
+import { Alert, Pressable, StyleSheet, Text } from "react-native";
 
 import {
   ProductCatalogProvider,
@@ -9,8 +9,10 @@ import {
 import { ProductEditorScreen } from "../ProductEditorScreen";
 import { createMemoryLocalFiles } from "@/persistence/testing/memory-local-files";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
+import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 
 const mockBack = jest.fn();
+const mockSetOptions = jest.fn();
 let mockScannedBarcode = "";
 let mockPhotoResult:
   | { readonly status: "selected"; readonly uri: string }
@@ -38,6 +40,7 @@ function createDeferred<Value>() {
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ back: mockBack }),
+  useNavigation: () => ({ setOptions: mockSetOptions }),
 }));
 
 jest.mock("expo-symbols", () => ({ SymbolView: () => null }));
@@ -181,7 +184,7 @@ jest.mock("react-native-safe-area-context", () => {
 });
 
 function CatalogProbe() {
-  const { products } = useProductCatalog();
+  const { addProduct, products } = useProductCatalog();
   const managed =
     products.find((product) => product.name === "Shampooing Test") ??
     products.find((product) => product.id === "6974bff937a5d89c2d9afbd0");
@@ -204,7 +207,60 @@ function CatalogProbe() {
           : "gone"}
       </Text>
       <Text testID="catalog-count">{products.length}</Text>
+      <Text testID="legacy-stock">
+        {products.find((product) => product.id === "product-legacy-stock")?.stockQuantity ?? "-"}
+      </Text>
+      <Pressable
+        testID="add-legacy-stock-product"
+        onPress={() =>
+          void addProduct({
+            id: "product-legacy-stock",
+            businessId: "business-test",
+            name: "Laque legacy",
+            price: 12,
+            stockQuantity: 47,
+            active: true,
+          })
+        }
+      />
     </>
+  );
+}
+
+async function pressTimes(
+  view: Awaited<ReturnType<typeof render>>,
+  testID: string,
+  times: number,
+) {
+  for (let index = 0; index < times; index += 1) {
+    await act(async () => {
+      fireEvent.press(view.getByTestId(testID));
+    });
+  }
+}
+
+function SeededLegacyStockEditor() {
+  const { addProduct } = useProductCatalog();
+  const [open, setOpen] = useState(false);
+
+  if (open) {
+    return <ProductEditorScreen mode="existing" productId="product-legacy-stock" />;
+  }
+
+  return (
+    <Pressable
+      testID="open-legacy-stock-product"
+      onPress={() => {
+        void addProduct({
+          id: "product-legacy-stock",
+          businessId: "business-test",
+          name: "Laque legacy",
+          price: 12,
+          stockQuantity: 47,
+          active: true,
+        }).then(() => setOpen(true));
+      }}
+    />
   );
 }
 
@@ -254,6 +310,7 @@ function renderEditor(screen: React.ReactNode) {
 describe("ProductEditorScreen", () => {
   beforeEach(() => {
     mockBack.mockClear();
+    mockSetOptions.mockClear();
     mockScannedBarcode = "";
     mockPhotoResult = { status: "selected", uri: "file:///products/raw.jpg" };
     mockCapturedUri = "file:///products/raw.jpg";
@@ -293,9 +350,12 @@ describe("ProductEditorScreen", () => {
     await act(async () => {
       fireEvent.changeText(view.getByLabelText("Prix du produit"), "25");
     });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText("Stock du produit"), "4");
-    });
+    await pressTimes(view, "stock-increment", 4);
+    expect(view.getByTestId("stock-value").props.children).toBe(4);
+    // Opening the form never auto-focuses a field.
+    for (const label of ["Nom du produit", "Marque du produit", "Prix du produit"]) {
+      expect(view.getByLabelText(label).props.autoFocus).toBeFalsy();
+    }
     // One media affordance, no explanatory paragraph.
     expect(view.getByTestId("product-photo-empty")).toBeTruthy();
     expect(view.getAllByLabelText("Ajouter une photo")).toHaveLength(1);
@@ -312,10 +372,12 @@ describe("ProductEditorScreen", () => {
     expect(view.queryByLabelText("Supprimer la photo")).toBeNull();
     expect(view.queryByTestId("mock-camera-capture")).toBeNull();
 
-    // Source sheet → (dismissed) → camera: never both at once.
+    // Source sheet → slides down → (dismissed) → camera: never both at once.
     await act(async () =>
       fireEvent.press(view.getByLabelText("Prendre une photo")),
     );
+    expect(view.queryByTestId("mock-camera-capture")).toBeNull();
+    await settleSheetTransition();
     expect(view.queryByTestId("product-photo-sheet")).toBeNull();
     expect(view.queryByTestId("bottom-sheet-scrim")).toBeNull();
     expect(view.getByTestId("mock-camera-capture")).toBeTruthy();
@@ -361,7 +423,7 @@ describe("ProductEditorScreen", () => {
     alertSpy.mockRestore();
   });
 
-  it("rejects invalid stock and price inputs", async () => {
+  it("rejects an invalid price and bounds the stock selector to 0–30", async () => {
     const view = await renderEditor(<ProductEditorScreen mode="create" />);
 
     await act(async () => {
@@ -371,15 +433,69 @@ describe("ProductEditorScreen", () => {
       );
     });
     await act(async () => {
-      fireEvent.changeText(view.getByLabelText("Prix du produit"), "25");
+      fireEvent.changeText(view.getByLabelText("Prix du produit"), "-2");
     });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText("Stock du produit"), "2.5");
-    });
-
     expect(
       view.getByTestId("save-product").props.accessibilityState?.disabled,
     ).toBe(true);
+
+    // No free-form stock input; the stepper stays inside 0–30.
+    expect(view.queryByLabelText("Stock du produit")).toBeNull();
+    expect(view.getByTestId("stock-decrement").props.accessibilityState).toMatchObject({ disabled: true });
+    await pressTimes(view, "stock-increment", 31);
+    expect(view.getByTestId("stock-value").props.children).toBe(30);
+    expect(view.getByTestId("stock-increment").props.accessibilityState).toMatchObject({ disabled: true });
+    await pressTimes(view, "stock-decrement", 1);
+    expect(view.getByTestId("stock-value").props.children).toBe(29);
+  });
+
+  it("keeps a legacy stock above 30 intact unless the professional changes it", async () => {
+    const view = await renderEditor(<SeededLegacyStockEditor />);
+
+    await act(async () =>
+      fireEvent.press(view.getByTestId("open-legacy-stock-product")),
+    );
+    expect(within(view.getByTestId("product-read-view")).getByText("47")).toBeTruthy();
+
+    // Saving an unrelated field preserves the exact quantity.
+    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    expect(view.getByTestId("stock-value").props.children).toBe(47);
+    expect(view.getByTestId("stock-increment").props.accessibilityState).toMatchObject({ disabled: true });
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText("Prix du produit"), "13");
+    });
+    await act(async () => fireEvent.press(view.getByTestId("save-product")));
+    expect(view.getByTestId("legacy-stock").props.children).toBe(47);
+
+    // Lowering it is an intentional change, one unit at a time.
+    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await pressTimes(view, "stock-decrement", 1);
+    expect(view.getByTestId("stock-value").props.children).toBe(46);
+    await act(async () => fireEvent.press(view.getByTestId("save-product")));
+    expect(view.getByTestId("legacy-stock").props.children).toBe(46);
+  });
+
+  it("sizes the details to their content and disables the swipe only while editing", async () => {
+    const view = await renderEditor(
+      <ProductEditorScreen
+        mode="existing"
+        productId="6974bff937a5d89c2d9afbd0"
+      />,
+    );
+
+    const sheetStyle = StyleSheet.flatten(view.getByTestId("product-sheet").props.style);
+    expect(sheetStyle.flex).toBeUndefined();
+    expect(sheetStyle.maxHeight).toBeGreaterThan(0);
+    expect(view.getByText("PRODUIT")).toBeTruthy();
+    expect(view.getByRole("header", { name: "Masque réparateur 5 min" })).toBeTruthy();
+    expect(view.getByLabelText("Fermer")).toBeTruthy();
+    expect(view.getByTestId("product-read-actions")).toBeTruthy();
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
+
+    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: false });
+    await act(async () => fireEvent.press(view.getByTestId("cancel-product-edit")));
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
   });
 
   it("hydrates an existing Product and edits it with stable identity", async () => {
@@ -405,9 +521,7 @@ describe("ProductEditorScreen", () => {
     await act(async () => {
       fireEvent.changeText(view.getByLabelText("Prix du produit"), "29");
     });
-    await act(async () => {
-      fireEvent.changeText(view.getByLabelText("Stock du produit"), "7");
-    });
+    await pressTimes(view, "stock-increment", 7);
     await act(async () => {
       fireEvent.press(view.getByTestId("save-product"));
     });
@@ -453,6 +567,7 @@ describe("ProductEditorScreen", () => {
     );
 
     expect(mockPickProductPhotoFromLibrary).toHaveBeenCalledTimes(1);
+    await settleSheetTransition();
     expect(view.queryByTestId("product-photo-sheet")).toBeNull();
     expect(view.getByTestId("product-form-image-source").props.source).toEqual({
       uri: REPLACEMENT_IMAGE_URI,
@@ -589,6 +704,7 @@ describe("ProductEditorScreen", () => {
     );
 
     expect(view.queryByTestId("product-form-image-source")).toBeNull();
+    await settleSheetTransition();
     expect(view.queryByTestId("product-photo-sheet")).toBeNull();
     expect(view.getByTestId("product-photo-empty")).toBeTruthy();
     expect(view.getByLabelText("Ajouter une photo")).toBeTruthy();
@@ -643,6 +759,7 @@ describe("ProductEditorScreen", () => {
       fireEvent.press(view.getByLabelText("Choisir dans la photothèque")),
     );
 
+    await settleSheetTransition();
     expect(view.queryByTestId("product-photo-sheet")).toBeNull();
     expect(alertSpy).toHaveBeenLastCalledWith(
       "Accès à la photothèque refusé",
@@ -655,8 +772,8 @@ describe("ProductEditorScreen", () => {
     alertSpy.mockRestore();
   });
 
-  it("deactivates and reactivates with the details closing each time", async () => {
-    const alertSpy = jest.spyOn(Alert, "alert");
+  it("deactivates through the shared Souris dialog and reactivates, closing each time", async () => {
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     const view = await renderEditor(
       <ProductEditorScreen
         mode="existing"
@@ -667,12 +784,11 @@ describe("ProductEditorScreen", () => {
     await act(async () => {
       fireEvent.press(view.getByText("Désactiver"));
     });
-    const deactivate = alertSpy.mock.calls[0][2]?.find(
-      (button) => button.text === "Désactiver",
-    );
-    expect(deactivate).toBeTruthy();
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(view.getByTestId("product-deactivation-dialog")).toBeTruthy();
+    expect(view.getByText("Désactiver ce produit ?")).toBeTruthy();
     await act(async () => {
-      deactivate?.onPress?.();
+      fireEvent.press(view.getByTestId("confirm-product-deactivation"));
     });
 
     expect(mockBack).toHaveBeenCalledTimes(1);
@@ -686,8 +802,8 @@ describe("ProductEditorScreen", () => {
     alertSpy.mockRestore();
   });
 
-  it("deletes only after explicit confirmation and closes the details", async () => {
-    const alertSpy = jest.spyOn(Alert, "alert");
+  it("deletes only after the shared Souris confirmation, never a native alert", async () => {
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     const view = await renderEditor(
       <ProductEditorScreen
         mode="existing"
@@ -698,18 +814,16 @@ describe("ProductEditorScreen", () => {
     await act(async () => {
       fireEvent.press(view.getByLabelText("Supprimer ce produit"));
     });
-    expect(alertSpy).toHaveBeenCalledWith(
-      "Supprimer ce produit ?",
-      "Il sera supprimé du catalogue.\nCette action est irréversible.",
-      expect.anything(),
-    );
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(view.getByTestId("product-deletion-dialog")).toBeTruthy();
+    expect(view.getByText("SUPPRESSION")).toBeTruthy();
+    expect(view.getByText("Supprimer ce produit ?")).toBeTruthy();
+    expect(view.getByText(/Cette action est irréversible/)).toBeTruthy();
 
-    const cancel = alertSpy.mock.calls[0][2]?.find(
-      (button) => button.text === "Annuler",
-    );
     await act(async () => {
-      cancel?.onPress?.();
+      fireEvent.press(view.getByTestId("cancel-product-deletion"));
     });
+    expect(view.queryByTestId("product-deletion-dialog")).toBeNull();
     expect(mockBack).not.toHaveBeenCalled();
     expect(view.getByTestId("managed-product").props.children).toContain(
       "Masque réparateur",
@@ -718,12 +832,8 @@ describe("ProductEditorScreen", () => {
     await act(async () => {
       fireEvent.press(view.getByLabelText("Supprimer ce produit"));
     });
-    const confirm = alertSpy.mock.calls[1][2]?.find(
-      (button) => button.text === "Supprimer",
-    );
-    expect(confirm).toBeTruthy();
     await act(async () => {
-      confirm?.onPress?.();
+      fireEvent.press(view.getByTestId("confirm-product-deletion"));
     });
 
     expect(view.getByTestId("managed-product").props.children).toBe("");

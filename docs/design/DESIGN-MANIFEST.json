@@ -385,5 +385,40 @@
     "package": "@expo-google-fonts/plus-jakarta-sans",
     "runtimeScale": "src/shared/ui/theme/typography.ts",
     "historicalExportFamily": "Inter (reference-export only, not to be reintroduced)"
+  },
+  "overlays": {
+    "reference": "Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confirmations)",
+    "runtimeComponents": {
+      "bottomSheet": "src/shared/ui/BottomSheet.tsx",
+      "sheetScreen": "src/shared/ui/SheetScreen.tsx",
+      "sheetHeader": "src/shared/ui/SheetHeader.tsx",
+      "sheetActionBar": "src/shared/ui/SheetActionBar.tsx",
+      "confirmationDialog": "src/shared/ui/ConfirmationDialog.tsx",
+      "screenWatermarkIcon": "src/shared/ui/ScreenWatermarkIcon.tsx",
+      "sheetRouteOptions": "src/providers/sheet-route-options.ts",
+      "mainScreenHeader": "src/shared/ui/MainScreenHeader.tsx",
+      "floatingCreateButton": "src/shared/ui/FloatingCreateButton.tsx",
+      "birthdayWheelPicker": "src/features/clients/creation/components/BirthdayWheelPicker.tsx"
+    },
+    "tokens": {
+      "scrim": "theme.scrim (canonical navy at 16 %)",
+      "sheet": "theme.sheet (detent 0.92, grabber 40 × 5, dismiss threshold)",
+      "dialog": "theme.dialog (max width 360)",
+      "watermark": "theme.watermark (size, opacity)",
+      "floatingAction": "theme.floatingAction (size 56, inset, menu gap)"
+    },
+    "rules": [
+      "One white sheet shell, one grabber, one scrim, one header, one action area for every drawer and form sheet.",
+      "Closing a sheet slides it down and fades the scrim before unmounting; it never disappears instantly.",
+      "Pan-to-dismiss lives on the grabber/header zone only; scroll-safe sheets and workflow routes disable it.",
+      "Presenting an overlay never opens the keyboard; no autoFocus.",
+      "Souris-owned confirmations use ConfirmationDialog, never React Native Alert.",
+      "Main tabs carry one decorative, accessibility-hidden semantic watermark icon.",
+      "Main tabs share MainScreenHeader; Produits is the reference (title, no duplicate eyebrow, search below); the watermark anchors to the title block, never the device edge.",
+      "Primary creation uses the shared bottom-right FloatingCreateButton: a single flow opens directly, several flows expand into a compact anchored menu.",
+      "Short chooser sheets are content-fit and never fill the screen with empty space.",
+      "The Client birthday is a day/month wheel; the model stays { month, day } with no year."
+    ],
+    "documentation": "DESIGN_OVERRIDES.md §16–§17"
   }
 }

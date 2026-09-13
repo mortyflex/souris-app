@@ -13,12 +13,8 @@ import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
-import {
-  interaction,
-  radii,
-  semanticColors,
-  spacing,
-} from '@/shared/ui/theme';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
   formatCreationDateShort,
@@ -153,12 +149,16 @@ export function EditableAppointmentContext({
 
       <BottomSheet
         backdropLabel="Annuler la sélection de date"
+        header={
+          <SheetHeader
+            action={{ label: 'Annuler', onPress: cancelDatePicker }}
+            eyebrow="RENDEZ-VOUS"
+            title="Date du rendez-vous"
+          />
+        }
         onClose={cancelDatePicker}
         visible={Platform.OS === 'ios' && datePickerOpen}
       >
-        <AppText variant="sheetTitle" accessibilityRole="header" style={styles.pickerTitle}>
-          Date du rendez-vous
-        </AppText>
         <DateTimePicker
           accentColor={semanticColors.accent}
           display="spinner"
@@ -219,7 +219,6 @@ const styles = StyleSheet.create({
   },
   modifyPressed: { backgroundColor: semanticColors.surfaceLavenderStrong },
   modifyText: { color: semanticColors.accent },
-  pickerTitle: { paddingVertical: spacing.base },
   pickerFooter: {
     flexDirection: 'row',
     gap: spacing.sm,

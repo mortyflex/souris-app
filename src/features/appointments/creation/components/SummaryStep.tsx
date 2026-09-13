@@ -21,6 +21,7 @@ import Animated, {
   useReducedMotion,
 } from 'react-native-reanimated';
 
+import { haptics } from '@/shared/lib/haptics';
 import { AppText } from '@/shared/ui/AppText';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
@@ -126,7 +127,10 @@ export function SummaryStep({
             <BlockAction
               accessibilityLabel="Changer l'horaire"
               label="Changer l'horaire"
-              onPress={() => setEditingTime(true)}
+              onPress={() => {
+                haptics.selection();
+                setEditingTime(true);
+              }}
               testID="time-modifier"
             />
           )}

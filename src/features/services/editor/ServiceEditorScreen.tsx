@@ -1,16 +1,7 @@
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
-import { useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useEffect, useState } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import type { Service, ServiceType } from "@/domain/appointments";
 import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
@@ -25,7 +16,11 @@ import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
+import { ConfirmationDialog } from "@/shared/ui/ConfirmationDialog";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
+import { SheetActionBar } from "@/shared/ui/SheetActionBar";
+import { SheetHeader } from "@/shared/ui/SheetHeader";
+import { SheetScreen } from "@/shared/ui/SheetScreen";
 import {
   foregroundSoft,
   gutter,
@@ -55,6 +50,8 @@ import {
 
 export type ServiceEditorMode = "create" | "existing";
 
+type ServiceConfirmation = "deactivate" | "delete";
+
 interface ServiceEditorScreenProps {
   readonly mode: ServiceEditorMode;
   readonly serviceId?: string;
@@ -68,6 +65,7 @@ export function ServiceEditorScreen({
   serviceId,
 }: ServiceEditorScreenProps) {
   const router = useRouter();
+  const navigation = useNavigation();
   const business = useCurrentBusiness();
   const {
     addService,
@@ -86,10 +84,16 @@ export function ServiceEditorScreen({
   const [editing, setEditing] = useState(mode === "create");
   const [attempted, setAttempted] = useState(false);
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<ServiceConfirmation>();
+
+  // A draft under edition must not be lost to a swipe; reading may dismiss.
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: !editing });
+  }, [editing, navigation]);
 
   if (mode === "existing" && !service) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+      <SheetScreen fit="content">
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Prestation introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
@@ -101,7 +105,7 @@ export function ServiceEditorScreen({
             variant="secondary"
           />
         </View>
-      </SafeAreaView>
+      </SheetScreen>
     );
   }
 
@@ -185,87 +189,56 @@ export function ServiceEditorScreen({
     haptics.success();
   };
 
-  const changeActiveState = () => {
+  const commitActiveState = (active: boolean) => {
     if (!service) return;
-    const commit = (active: boolean) => {
-      try {
-        setServiceActive(service.id, active);
-      } catch {
-        alertPersistenceFailure();
-        return;
-      }
-      haptics.selection();
-      router.back();
-    };
-
-    if (!service.active) {
-      commit(true);
+    try {
+      setServiceActive(service.id, active);
+    } catch {
+      alertPersistenceFailure();
       return;
     }
-
-    Alert.alert(
-      "Désactiver cette prestation ?",
-      "La prestation ne sera plus proposée lors de la création d’un rendez-vous.",
-      [
-        { text: "Annuler", style: "cancel" },
-        { text: "Désactiver", onPress: () => commit(false) },
-      ],
-    );
+    haptics.selection();
+    router.back();
   };
 
-  const requestDelete = () => {
+  const changeActiveState = () => {
     if (!service) return;
+    if (!service.active) {
+      commitActiveState(true);
+      return;
+    }
+    setConfirmation("deactivate");
+  };
 
-    Alert.alert(
-      "Supprimer cette prestation ?",
-      "Elle sera supprimée du catalogue et ne pourra plus être ajoutée à de nouveaux rendez-vous.\n\nLes rendez-vous existants qui utilisent cette prestation resteront inchangés.",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Supprimer",
-          style: "destructive",
-          onPress: () => {
-            try {
-              deleteService(service.id);
-            } catch {
-              alertPersistenceFailure();
-              return;
-            }
-            haptics.warning();
-            router.back();
-          },
-        },
-      ],
-    );
+  const confirmDeactivate = () => {
+    setConfirmation(undefined);
+    commitActiveState(false);
+  };
+
+  const confirmDelete = () => {
+    if (!service) return;
+    setConfirmation(undefined);
+    try {
+      deleteService(service.id);
+    } catch {
+      alertPersistenceFailure();
+      return;
+    }
+    haptics.warning();
+    router.back();
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.keyboardContainer}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <AppText variant="eyebrow" style={styles.eyebrow}>
-              {mode === "create" ? "NOUVELLE PRESTATION" : "PRESTATION"}
-            </AppText>
-            <AppText
-              variant="sheetTitle"
-              accessibilityRole="header"
-              numberOfLines={1}
-            >
-              {title}
-            </AppText>
-          </View>
-          <AppButton
-            accessibilityLabel={closeLabel}
-            onPress={close}
-            style={styles.closeButton}
-            title={closeLabel}
-            variant="tertiary"
-          />
-        </View>
+    <SheetScreen fit="content" keyboardAvoiding testID="service-sheet">
+      <View style={styles.headerZone}>
+        <SheetHeader
+          action={{ label: closeLabel, onPress: close }}
+          divider
+          eyebrow={mode === "create" ? "NOUVELLE PRESTATION" : "PRESTATION"}
+          title={title}
+          titleNumberOfLines={1}
+        />
+      </View>
 
         {mode === "create" && !values ? (
           <ServiceKindPicker onSelect={chooseType} />
@@ -310,7 +283,7 @@ export function ServiceEditorScreen({
         ) : null}
 
         {values && editing && (
-          <View style={styles.footer}>
+          <SheetActionBar direction="row">
             {mode === "existing" && (
               <AppButton
                 onPress={close}
@@ -330,12 +303,12 @@ export function ServiceEditorScreen({
                   : "Enregistrer les modifications"
               }
             />
-          </View>
+          </SheetActionBar>
         )}
 
         {mode === "existing" && !editing && service && (
-          <View style={styles.readFooterContainer}>
-            <View style={[styles.footer, styles.readFooterRow]}>
+          <SheetActionBar testID="service-read-actions">
+            <View style={styles.readFooterRow}>
               <AppButton
                 onPress={changeActiveState}
                 style={styles.secondaryButton}
@@ -357,7 +330,7 @@ export function ServiceEditorScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Supprimer cette prestation"
-              onPress={requestDelete}
+              onPress={() => setConfirmation("delete")}
               style={({ pressed }) => [
                 styles.deleteAction,
                 pressed && styles.deleteActionPressed,
@@ -367,10 +340,37 @@ export function ServiceEditorScreen({
                 Supprimer
               </AppText>
             </Pressable>
-          </View>
+          </SheetActionBar>
         )}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+      <ConfirmationDialog
+        body="La prestation ne sera plus proposée lors de la création d’un rendez-vous."
+        cancelLabel="Annuler"
+        cancelTestID="cancel-service-deactivation"
+        confirmLabel="Désactiver"
+        confirmTestID="confirm-service-deactivation"
+        eyebrow="PRESTATION"
+        onCancel={() => setConfirmation(undefined)}
+        onConfirm={confirmDeactivate}
+        testID="service-deactivation-dialog"
+        title="Désactiver cette prestation ?"
+        tone="neutral"
+        visible={confirmation === "deactivate"}
+      />
+      <ConfirmationDialog
+        body="Elle sera supprimée du catalogue et ne pourra plus être ajoutée à de nouveaux rendez-vous. Les rendez-vous existants qui utilisent cette prestation resteront inchangés."
+        cancelLabel="Retour"
+        cancelTestID="cancel-service-deletion"
+        confirmLabel="Supprimer"
+        confirmTestID="confirm-service-deletion"
+        eyebrow="SUPPRESSION"
+        onCancel={() => setConfirmation(undefined)}
+        onConfirm={confirmDelete}
+        testID="service-deletion-dialog"
+        title="Supprimer cette prestation ?"
+        visible={confirmation === "delete"}
+      />
+    </SheetScreen>
   );
 }
 
@@ -384,6 +384,7 @@ function ServiceKindPicker({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.kindContent}
+      style={styles.scroll}
     >
       <AppText variant="sectionTitle">Type de prestation</AppText>
       <AppText variant="metadata" style={styles.kindIntro}>
@@ -486,6 +487,7 @@ function ServiceForm({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.formContent}
+      style={styles.scroll}
     >
       <View style={styles.kindLabel}>
         <AppText variant="metadata" style={styles.kindLabelText}>
@@ -496,7 +498,6 @@ function ServiceForm({
       </View>
       <TextField
         accessibilityLabel="Nom de la prestation"
-        autoFocus
         error={
           attempted && !validation.nameValid ? "Le nom est requis." : undefined
         }
@@ -587,6 +588,7 @@ function ServiceReadView({ service }: { readonly service: Service }) {
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.readContent}
+      style={styles.scroll}
     >
       <View style={styles.statusLine}>
         <View
@@ -668,24 +670,11 @@ function ReadMetric({
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  keyboardContainer: { flex: 1 },
-  header: {
-    alignItems: "center",
-    borderBottomColor: semanticColors.borderSubtle,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.sm,
-  },
-  headerCopy: { flex: 1, gap: 2, minWidth: 0 },
-  eyebrow: { color: semanticColors.accent },
-  closeButton: { paddingHorizontal: spacing.md },
+  headerZone: { paddingHorizontal: horizontalGutter },
+  scroll: { flexShrink: 1 },
   kindContent: {
     gap: spacing.md,
-    paddingBottom: spacing["3xl"],
+    paddingBottom: spacing.xl,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.xl,
   },
@@ -717,7 +706,7 @@ const styles = StyleSheet.create({
   kindDescription: { color: foregroundSoft, lineHeight: 18 },
   formContent: {
     gap: spacing.base,
-    paddingBottom: spacing["3xl"],
+    paddingBottom: spacing.xl,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
@@ -732,8 +721,8 @@ const styles = StyleSheet.create({
   phasesSection: { gap: spacing.md, paddingTop: spacing.sm },
   formError: { color: semanticColors.foregroundSoft },
   readContent: {
-    gap: spacing.xl,
-    paddingBottom: spacing["3xl"],
+    gap: spacing.lg,
+    paddingBottom: spacing.lg,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
@@ -785,29 +774,9 @@ const styles = StyleSheet.create({
   activeLabel: { color: semanticColors.accent },
   processingLabel: { color: peach.peach700 },
   phaseDuration: { fontVariant: ["tabular-nums"] },
-  footer: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.md,
-  },
   secondaryButton: { flex: 1 },
   primaryButton: { flex: 1.4 },
-  readFooterContainer: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingBottom: spacing.xs,
-  },
-  readFooterRow: {
-    backgroundColor: "transparent",
-    borderTopWidth: 0,
-    paddingBottom: 0,
-  },
+  readFooterRow: { flexDirection: "row", gap: spacing.sm },
   deleteAction: {
     alignItems: "center",
     justifyContent: "center",
@@ -821,10 +790,10 @@ const styles = StyleSheet.create({
   deleteText: { color: rose.rose600 },
   notFound: {
     alignItems: "center",
-    flex: 1,
     gap: spacing.md,
     justifyContent: "center",
     paddingHorizontal: spacing.xl,
+    paddingVertical: spacing["3xl"],
   },
   notFoundText: { color: foregroundSoft, textAlign: "center" },
 });

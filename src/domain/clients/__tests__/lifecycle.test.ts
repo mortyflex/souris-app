@@ -12,7 +12,7 @@ const active: Client = {
   firstName: 'Léa',
   lastName: 'Martin',
   phone: '06 12 34 56 78',
-  birthDate: '1990-02-29',
+  birthday: { month: 2, day: 29 },
 };
 
 describe('Client lifecycle', () => {

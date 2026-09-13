@@ -1,15 +1,10 @@
-import { Modal, Platform, Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+// Souris — permanent Appointment deletion dialog
+//
+// Deletion is different from cancellation and no-show: it removes the
+// record from the Agenda and from the Client history. The wording is owned
+// here; the surface is the shared Souris confirmation dialog.
 
-import { AppButton } from "@/shared/ui/AppButton";
-import { AppText } from "@/shared/ui/AppText";
-import {
-  gutter,
-  radii,
-  rose,
-  semanticColors,
-  spacing,
-} from "@/shared/ui/theme";
+import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
 
 interface AppointmentDeletionDialogProps {
   readonly visible: boolean;
@@ -23,80 +18,18 @@ export function AppointmentDeletionDialog({
   onConfirm,
 }: AppointmentDeletionDialogProps) {
   return (
-    <Modal
-      animationType="fade"
-      onRequestClose={onClose}
-      transparent
+    <ConfirmationDialog
+      body="Il sera supprimé de l’agenda et de l’historique de la cliente. Cette action est irréversible."
+      cancelLabel="Retour"
+      cancelTestID="cancel-permanent-deletion"
+      confirmLabel="Supprimer"
+      confirmTestID="confirm-permanent-deletion"
+      eyebrow="SUPPRESSION"
+      onCancel={onClose}
+      onConfirm={onConfirm}
+      testID="permanent-deletion-dialog"
+      title="Supprimer ce rendez-vous ?"
       visible={visible}
-    >
-      <SafeAreaView style={styles.modalRoot} edges={["top", "bottom"]}>
-        <Pressable
-          accessibilityLabel="Fermer la confirmation de suppression"
-          onPress={onClose}
-          style={styles.backdrop}
-        />
-        <View
-          accessibilityRole="alert"
-          accessibilityViewIsModal
-          style={styles.dialog}
-          testID="permanent-deletion-dialog"
-        >
-          <AppText variant="eyebrow" style={styles.eyebrow}>
-            SUPPRESSION
-          </AppText>
-          <AppText accessibilityRole="header" variant="sheetTitle">
-            Supprimer ce rendez-vous ?
-          </AppText>
-          <AppText variant="body" style={styles.description}>
-            Il sera supprimé de l’agenda et de l’historique de la cliente. Cette
-            action est irréversible.
-          </AppText>
-          <View style={styles.actions}>
-            <AppButton
-              onPress={onClose}
-              testID="cancel-permanent-deletion"
-              title="Retour"
-              variant="secondary"
-            />
-            <AppButton
-              onPress={onConfirm}
-              testID="confirm-permanent-deletion"
-              title="Supprimer"
-              variant="danger"
-            />
-          </View>
-        </View>
-      </SafeAreaView>
-    </Modal>
+    />
   );
 }
-
-const horizontalGutter =
-  Platform.OS === "android" ? gutter.android : gutter.ios;
-
-const styles = StyleSheet.create({
-  modalRoot: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: horizontalGutter,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(25, 22, 63, 0.28)",
-  },
-  dialog: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderColor: rose.rose200,
-    borderCurve: "continuous",
-    borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: spacing.md,
-    maxWidth: 360,
-    padding: spacing.lg,
-    width: "100%",
-  },
-  eyebrow: { color: rose.rose600 },
-  description: { color: semanticColors.foregroundSoft },
-  actions: { gap: spacing.sm, paddingTop: spacing.xs },
-});

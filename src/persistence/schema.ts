@@ -162,10 +162,29 @@ CREATE TABLE IF NOT EXISTS business_profile (
 );
 `;
 
+/**
+ * Schema v4 — Client birthday as day + month only. The new `birthday` column
+ * holds the civil `MM-DD` key (docs/domain/CLIENTS.md §2). Existing rows keep
+ * their birthday: the month and day of every well-formed historical
+ * `birth_date` (`YYYY-MM-DD`) are copied, the year is dropped, and nothing
+ * else is touched — no wipe, no reseed, no Client loss. The legacy
+ * `birth_date` column is retained untouched for backward compatibility but is
+ * no longer read or written; the hydrated Client never pretends the year was
+ * meaningful.
+ */
+const SCHEMA_V4 = `
+ALTER TABLE clients ADD COLUMN birthday TEXT;
+UPDATE clients
+SET birthday = substr(birth_date, 6, 5)
+WHERE birth_date IS NOT NULL
+  AND birth_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]';
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
   { version: 3, up: (db) => db.execSync(SCHEMA_V3) },
+  { version: 4, up: (db) => db.execSync(SCHEMA_V4) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;

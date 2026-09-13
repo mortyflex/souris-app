@@ -1,15 +1,16 @@
 // Souris — Products catalog screen (Produits tab)
 //
 // Light operational product catalog: search, Actifs/Inactifs groups,
-// deterministic French alphabetical order. "Nouvelle vente" is the single
-// Sale entry point; no dashboard KPIs, no sales metrics. Stock is visible but
-// restrained.
+// deterministic French alphabetical order. The shared floating + is the
+// single creation entry: it expands into « Nouvelle vente » (the single Sale
+// entry point) and « Ajouter un produit ». No dashboard KPIs, no sales
+// metrics. Stock is visible but restrained. This screen's header is the
+// reference composition of every main tab (docs/design/DESIGN_OVERRIDES.md §17).
 
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import {
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -25,10 +26,15 @@ import { formatServicePrice } from '@/features/services/presentation';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BarcodeScannerModal } from '@/shared/ui/BarcodeScannerModal';
+import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
+import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
 import { Screen } from '@/shared/ui/Screen';
 import { SearchField } from '@/shared/ui/SearchField';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
 import {
+  bottomClearance,
   foregroundSoft,
   gutter,
   interaction,
@@ -61,6 +67,10 @@ export function ProductCatalogScreen() {
   const [query, setQuery] = useState('');
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+
+  // Leaving the tab never leaves a detached open menu behind.
+  useFocusEffect(useCallback(() => () => setCreateMenuOpen(false), []));
 
   const searching = query.trim().length > 0;
   const directory = prepareProductDirectory(products, query);
@@ -109,11 +119,7 @@ export function ProductCatalogScreen() {
   );
 
   return (
-    <Screen>
-      <AppText variant="screenTitle" accessibilityRole="header">
-        Produits
-      </AppText>
-
+    <Screen header={<MainScreenHeader title="Produits" watermark="products" />}>
       <View style={styles.searchArea}>
         <SearchField
           accessibilityLabel="Rechercher un produit"
@@ -122,22 +128,6 @@ export function ProductCatalogScreen() {
           trailingAccessory={scanAccessory}
           value={query}
         />
-        <View style={styles.actions}>
-          <AppButton
-            accessibilityLabel="Nouvelle vente"
-            onPress={() => router.push('/sales/new')}
-            style={styles.action}
-            testID="new-sale"
-            title="Nouvelle vente"
-          />
-          <AppButton
-            accessibilityLabel="Ajouter un produit"
-            onPress={() => router.push('/products/new')}
-            style={styles.action}
-            title="Ajouter un produit"
-            variant="secondary"
-          />
-        </View>
       </View>
 
       {products.length === 0 ? (
@@ -186,87 +176,93 @@ export function ProductCatalogScreen() {
         />
       )}
 
+      <FloatingCreateButton
+        accessibilityLabel="Créer"
+        actions={[
+          {
+            icon: { ios: 'bag', android: 'shopping_bag' },
+            label: 'Nouvelle vente',
+            onPress: () => router.push('/sales/new'),
+            testID: 'new-sale',
+          },
+          {
+            icon: { ios: 'shippingbox', android: 'inventory_2' },
+            label: 'Ajouter un produit',
+            onPress: () => router.push('/products/new'),
+            testID: 'new-product',
+          },
+        ]}
+        menuOpen={createMenuOpen}
+        onMenuOpenChange={setCreateMenuOpen}
+        testID="products-create"
+      />
+
       <BarcodeScannerModal
         onClose={() => setScannerVisible(false)}
         onScanned={handleScanned}
         visible={scannerVisible}
       />
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setScanResult(null)}
-        transparent
+      <BottomSheet
+        backdropLabel="Fermer le résultat du scan"
+        header={
+          scanResult ? (
+            <SheetHeader
+              action={{ label: 'Fermer', onPress: () => setScanResult(null) }}
+              eyebrow="SCAN"
+              title={scanResult.matches.length === 0 ? 'Produit introuvable' : 'Plusieurs produits trouvés'}
+            />
+          ) : undefined
+        }
+        onClose={() => setScanResult(null)}
+        testID="barcode-result"
         visible={scanResult !== null}
       >
-        <View accessibilityViewIsModal style={styles.resultOverlay}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Fermer le résultat du scan"
-            onPress={() => setScanResult(null)}
-            style={StyleSheet.absoluteFill}
-          />
-          {scanResult && (
-            <View style={styles.resultCard} testID="barcode-result">
-              {scanResult.matches.length === 0 ? (
-                <>
-                  <AppText variant="sheetTitle">Produit introuvable</AppText>
-                  <AppText variant="metadata" style={styles.resultCopy}>
-                    Aucun produit ne correspond à ce code-barres.
-                  </AppText>
-                  <AppText selectable variant="control" style={styles.scannedBarcode}>
-                    {scanResult.barcode}
-                  </AppText>
-                  <View style={styles.resultActions}>
-                    <AppButton
-                      onPress={() => setScanResult(null)}
-                      style={styles.resultButton}
-                      title="Fermer"
-                      variant="secondary"
-                    />
-                    <AppButton
+        {scanResult && (
+          <View style={styles.resultContent}>
+            {scanResult.matches.length === 0 ? (
+              <>
+                <AppText variant="metadata" style={styles.resultCopy}>
+                  Aucun produit ne correspond à ce code-barres.
+                </AppText>
+                <AppText selectable variant="control" style={styles.scannedBarcode}>
+                  {scanResult.barcode}
+                </AppText>
+                <AppButton
+                  onPress={() => {
+                    const barcode = scanResult.barcode;
+                    setScanResult(null);
+                    router.push({ pathname: '/products/new', params: { barcode } });
+                  }}
+                  title="Ajouter un produit"
+                />
+              </>
+            ) : (
+              <>
+                <AppText selectable variant="metadata" style={styles.resultCopy}>
+                  Choisissez le produit correspondant au code-barres {scanResult.barcode}.
+                </AppText>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  style={styles.matchesList}
+                >
+                  {scanResult.matches.map((product) => (
+                    <ProductRow
+                      key={product.id}
                       onPress={() => {
-                        const barcode = scanResult.barcode;
                         setScanResult(null);
-                        router.push({ pathname: '/products/new', params: { barcode } });
+                        openProduct(product.id);
                       }}
-                      style={styles.resultButton}
-                      title="Ajouter un produit"
+                      product={product}
                     />
-                  </View>
-                </>
-              ) : (
-                <>
-                  <AppText variant="sheetTitle">Plusieurs produits trouvés</AppText>
-                  <AppText selectable variant="metadata" style={styles.resultCopy}>
-                    Choisissez le produit correspondant au code-barres {scanResult.barcode}.
-                  </AppText>
-                  <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                    style={styles.matchesList}
-                  >
-                    {scanResult.matches.map((product) => (
-                      <ProductRow
-                        key={product.id}
-                        onPress={() => {
-                          setScanResult(null);
-                          openProduct(product.id);
-                        }}
-                        product={product}
-                      />
-                    ))}
-                  </ScrollView>
-                  <AppButton
-                    onPress={() => setScanResult(null)}
-                    title="Fermer"
-                    variant="secondary"
-                  />
-                </>
-              )}
-            </View>
-          )}
-        </View>
-      </Modal>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+          </View>
+        )}
+      </BottomSheet>
     </Screen>
   );
 }
@@ -327,12 +323,7 @@ function ProductRow({
 }
 
 const styles = StyleSheet.create({
-  searchArea: {
-    gap: spacing.md,
-    paddingTop: spacing.base,
-  },
-  actions: { flexDirection: 'row', gap: spacing.sm },
-  action: { flex: 1 },
+  searchArea: { paddingTop: spacing.base },
   scanAction: {
     alignItems: 'center',
     borderRadius: radii.small,
@@ -344,7 +335,7 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.surfaceLavenderStrong,
     opacity: interaction.pressedOpacity,
   },
-  listContent: { paddingBottom: spacing['3xl'] },
+  listContent: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
   sectionHeader: {
     marginTop: spacing['2xl'],
     paddingBottom: spacing.sm,
@@ -379,21 +370,10 @@ const styles = StyleSheet.create({
     color: foregroundSoft,
     textAlign: 'center',
   },
-  resultOverlay: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(25, 22, 63, 0.42)',
-    flex: 1,
-    justifyContent: 'center',
-    padding: horizontalGutter,
-  },
-  resultCard: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
+  resultContent: {
     gap: spacing.md,
-    maxHeight: '80%',
-    padding: spacing.lg,
-    width: '100%',
+    paddingBottom: spacing.base,
+    paddingTop: spacing.xs,
   },
   resultCopy: { color: foregroundSoft },
   scannedBarcode: {
@@ -405,7 +385,5 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     textAlign: 'center',
   },
-  resultActions: { flexDirection: 'row', gap: spacing.sm },
-  resultButton: { flex: 1 },
-  matchesList: { flexGrow: 0 },
+  matchesList: { flexGrow: 0, maxHeight: 320 },
 });

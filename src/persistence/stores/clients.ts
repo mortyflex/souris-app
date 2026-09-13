@@ -1,7 +1,10 @@
 // Souris — Client store
 //
-// birth_date is a civil YYYY-MM-DD string and stays a string end to end:
-// it is never turned into a Date or a timestamp (docs/domain/CLIENTS.md).
+// birthday (schema v4) is the civil `MM-DD` key of the Client birthday and
+// stays a string end to end: it is parsed into the day + month domain value
+// on load and never turned into a Date, a timestamp or a year
+// (docs/domain/CLIENTS.md). The legacy `birth_date` column (schema ≤ v3) is
+// retained but no longer read or written.
 //
 // archived_at (schema v2) is an ISO instant or NULL. NULL is the active
 // state; the domain value is a Date, restored exactly. Permanent deletion
@@ -10,6 +13,8 @@
 
 import {
   canDeleteClientPermanently,
+  formatBirthdayKey,
+  parseBirthdayKey,
   type Client,
   type ClientReferences,
 } from '@/domain/clients';
@@ -23,7 +28,7 @@ interface ClientRow {
   readonly last_name: string | null;
   readonly phone: string | null;
   readonly email: string | null;
-  readonly birth_date: string | null;
+  readonly birthday: string | null;
   readonly archived_at: string | null;
 }
 
@@ -46,7 +51,7 @@ function toClient(row: ClientRow): Client {
   const lastName = fromSqlOptional(row.last_name);
   const phone = fromSqlOptional(row.phone);
   const email = fromSqlOptional(row.email);
-  const birthDate = fromSqlOptional(row.birth_date);
+  const birthday = row.birthday === null ? undefined : parseBirthdayKey(row.birthday);
   const archivedAt = row.archived_at === null ? undefined : fromSqlInstant(row.archived_at);
   return {
     id: row.id,
@@ -54,29 +59,33 @@ function toClient(row: ClientRow): Client {
     ...(lastName !== undefined ? { lastName } : {}),
     ...(phone !== undefined ? { phone } : {}),
     ...(email !== undefined ? { email } : {}),
-    ...(birthDate !== undefined ? { birthDate } : {}),
+    ...(birthday !== undefined ? { birthday } : {}),
     ...(archivedAt !== undefined ? { archivedAt } : {}),
   };
+}
+
+function toBirthdayColumn(client: Client) {
+  return toSqlOptional(client.birthday === undefined ? undefined : formatBirthdayKey(client.birthday));
 }
 
 export function loadClients(db: SourisDatabase): readonly Client[] {
   return db
     .getAllSync<ClientRow>(
-      'SELECT id, first_name, last_name, phone, email, birth_date, archived_at FROM clients ORDER BY rowid',
+      'SELECT id, first_name, last_name, phone, email, birthday, archived_at FROM clients ORDER BY rowid',
     )
     .map(toClient);
 }
 
 export function insertClient(db: SourisDatabase, client: Client): void {
   db.runSync(
-    'INSERT INTO clients (id, first_name, last_name, phone, email, birth_date, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [
       client.id,
       client.firstName,
       toSqlOptional(client.lastName),
       toSqlOptional(client.phone),
       toSqlOptional(client.email),
-      toSqlOptional(client.birthDate),
+      toBirthdayColumn(client),
       client.archivedAt === undefined ? null : toSqlInstant(client.archivedAt),
     ],
   );
@@ -88,13 +97,13 @@ export function insertClient(db: SourisDatabase, client: Client): void {
  */
 export function updateClient(db: SourisDatabase, client: Client): void {
   const result = db.runSync(
-    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birth_date = ? WHERE id = ?',
+    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ? WHERE id = ?',
     [
       client.firstName,
       toSqlOptional(client.lastName),
       toSqlOptional(client.phone),
       toSqlOptional(client.email),
-      toSqlOptional(client.birthDate),
+      toBirthdayColumn(client),
       client.id,
     ],
   );

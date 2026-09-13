@@ -33,8 +33,9 @@ describe('createInitialClients (real legacy data only)', () => {
     }
   });
 
-  it('no client has an invented birthDate', () => {
+  it('no client has an invented birthday', () => {
     for (const client of clients) {
+      expect('birthday' in client).toBe(false);
       expect('birthDate' in client).toBe(false);
     }
   });

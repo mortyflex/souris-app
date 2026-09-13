@@ -31,19 +31,33 @@ describe('Client store', () => {
     updateClient(db, edited);
 
     expect(loadClients(db)).toEqual([
-      { id: 'client-lea', firstName: 'Léa', lastName: 'Martin-Durand', email: 'lea@example.com', birthDate: '1990-02-29' },
+      { id: 'client-lea', firstName: 'Léa', lastName: 'Martin-Durand', email: 'lea@example.com', birthday: { month: 2, day: 29 } },
     ]);
   });
 
-  it('stores birthDate as the exact civil string, never as an instant', () => {
+  it('stores the birthday as the MM-DD key without any year, and restores day + month', () => {
     const db = openTestDatabase();
     bootstrapPersistence(db, createTestSeed);
 
-    const stored = db.getFirstSync<{ birth_date: string }>(
-      "SELECT birth_date FROM clients WHERE id = 'client-lea'",
+    const stored = db.getFirstSync<{ birthday: string; birth_date: string | null }>(
+      "SELECT birthday, birth_date FROM clients WHERE id = 'client-lea'",
     );
-    expect(stored?.birth_date).toBe('1990-02-29');
-    expect(loadClients(db)[0]?.birthDate).toBe('1990-02-29');
+    expect(stored?.birthday).toBe('02-29');
+    expect(stored?.birth_date).toBeNull();
+    expect(loadClients(db)[0]?.birthday).toEqual({ month: 2, day: 29 });
+  });
+
+  it('clears the birthday when an edit removes it', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+
+    updateClient(db, { ...clientLea, birthday: undefined });
+
+    expect(loadClients(db)[0]?.birthday).toBeUndefined();
+    expect(
+      db.getFirstSync<{ birthday: string | null }>("SELECT birthday FROM clients WHERE id = 'client-lea'")
+        ?.birthday,
+    ).toBeNull();
   });
 
   it('refuses to update an unknown Client', () => {

@@ -6,10 +6,16 @@ import { prepareClientDirectory } from '../sort-clients';
 import { ClientDirectoryScreen } from '../ClientDirectoryScreen';
 import { ClientSessionProvider, useClientSession } from '../../session/ClientSessionProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { settleFloatingReveal } from '@/shared/ui/testing/sheet-transitions';
+import { screenWatermarkOptics } from '@/shared/ui/ScreenWatermarkIcon';
 
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    const React = jest.requireActual('react') as typeof import('react');
+    React.useEffect(effect, [effect]);
+  },
   useRouter: () => ({ push: mockPush }),
 }));
 
@@ -65,11 +71,35 @@ describe('ClientDirectoryScreen', () => {
     mockPush.mockClear();
   });
 
-  it('renders the directory with the search field', async () => {
+  it('renders the Produits-style header: title, search, no eyebrow, no top text action', async () => {
     const view = await renderDirectory();
 
-    expect(view.getByText('Clientes')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Clientes' })).toBeTruthy();
+    expect(view.queryByText('CLIENTES')).toBeNull();
+    expect(view.queryByText('Ajouter une cliente')).toBeNull();
     expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+    expect(view.getByPlaceholderText('Rechercher une cliente').props.autoFocus).toBeFalsy();
+    await settleFloatingReveal();
+    const create = view.getByTestId('add-client-directory');
+    expect(create.props.accessibilityRole).toBe('button');
+    expect(create.props.accessibilityLabel).toBe('Ajouter une cliente');
+  });
+
+  it('anchors the decorative clients watermark, hidden from accessibility and touches', async () => {
+    const view = await renderDirectory();
+
+    expect(view.queryByTestId('screen-watermark-clients')).toBeNull();
+    const watermark = view.getByTestId('screen-watermark-clients', { includeHiddenElements: true });
+    expect(watermark.props.pointerEvents).toBe('none');
+    expect(watermark.props.accessibilityElementsHidden).toBe(true);
+    // The people symbol gets its optical variant so the heads and shoulders
+    // stay readable around the header; Produits keeps the reference geometry.
+    expect(screenWatermarkOptics.clients.scale).toBeGreaterThan(screenWatermarkOptics.products.scale);
+    expect(screenWatermarkOptics.clients.rise).toBeGreaterThan(screenWatermarkOptics.products.rise);
+    expect(view.getByRole('header', { name: 'Clientes' })).toBeTruthy();
+    expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+    await settleFloatingReveal();
+    expect(view.getByTestId('add-client-directory')).toBeTruthy();
   });
 
   it('finds "Léa" by searching "lea" (accent-insensitive)', async () => {
@@ -132,12 +162,15 @@ describe('ClientDirectoryScreen', () => {
     });
   });
 
-  it('adds a client from the directory and shows it immediately', async () => {
+  it('adds a client through the floating + and shows it immediately', async () => {
     const view = await renderDirectory();
 
+    expect(view.queryByTestId('client-form-sheet')).toBeNull();
+    await settleFloatingReveal();
     await act(async () => {
       fireEvent.press(view.getByTestId('add-client-directory'));
     });
+    expect(view.getByTestId('client-form-sheet')).toBeTruthy();
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prénom'), 'Zélie');
     });

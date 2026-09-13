@@ -1,7 +1,7 @@
 import {
   buildClientFromForm,
   EMPTY_CLIENT_FORM,
-  isAcceptableBirthDate,
+  isAcceptableBirthday,
   isAcceptableEmail,
   isValidClientForm,
   toClientFormValues,
@@ -26,7 +26,7 @@ describe('Client form', () => {
       lastName: '   ',
       phone: '',
       email: ' ',
-      birthDate: '',
+      birthday: undefined,
     });
 
     expect(result).toEqual({ id: 'c1', firstName: 'Léa' });
@@ -38,7 +38,7 @@ describe('Client form', () => {
       lastName: ' Martin ',
       phone: ' 06 12 34 56 78 ',
       email: ' lea@example.com ',
-      birthDate: ' 1994-10-12 ',
+      birthday: { month: 10, day: 12 },
     });
 
     expect(result).toEqual({
@@ -47,18 +47,18 @@ describe('Client form', () => {
       lastName: 'Martin',
       phone: '06 12 34 56 78',
       email: 'lea@example.com',
-      birthDate: '1994-10-12',
+      birthday: { month: 10, day: 12 },
     });
   });
 
-  it('creates a client without a birth date', () => {
+  it('creates a client without a birthday', () => {
     const result = buildClientFromForm('c1', {
       ...EMPTY_CLIENT_FORM,
       firstName: 'Léa',
-      birthDate: '',
+      birthday: undefined,
     });
 
-    expect('birthDate' in result).toBe(false);
+    expect('birthday' in result).toBe(false);
   });
 
   it('hydrates an existing client into form values', () => {
@@ -68,7 +68,7 @@ describe('Client form', () => {
       lastName: 'Martin',
       phone: '06 12 34 56 78',
       email: 'lea@example.com',
-      birthDate: '1994-10-12',
+      birthday: { month: 10, day: 12 },
     });
 
     expect(values).toEqual({
@@ -76,7 +76,7 @@ describe('Client form', () => {
       lastName: 'Martin',
       phone: '06 12 34 56 78',
       email: 'lea@example.com',
-      birthDate: '1994-10-12',
+      birthday: { month: 10, day: 12 },
     });
   });
 
@@ -88,29 +88,29 @@ describe('Client form', () => {
       lastName: '',
       phone: '',
       email: '',
-      birthDate: '',
+      birthday: undefined,
     });
   });
 
-  describe('birthDate', () => {
-    it('accepts an empty birth date', () => {
-      expect(isAcceptableBirthDate('')).toBe(true);
-      expect(isAcceptableBirthDate('   ')).toBe(true);
+  describe('birthday', () => {
+    it('accepts no birthday', () => {
+      expect(isAcceptableBirthday(undefined)).toBe(true);
     });
 
-    it('accepts a full YYYY-MM-DD civil date', () => {
-      expect(isAcceptableBirthDate('1994-10-12')).toBe(true);
+    it('accepts a real day + month, including 29 février', () => {
+      expect(isAcceptableBirthday({ month: 10, day: 12 })).toBe(true);
+      expect(isAcceptableBirthday({ month: 2, day: 29 })).toBe(true);
     });
 
-    it('rejects partial or non-civil birth dates', () => {
-      expect(isAcceptableBirthDate('12/10/1994')).toBe(false);
-      expect(isAcceptableBirthDate('1994-10')).toBe(false);
-      expect(isAcceptableBirthDate('12 octobre 1994')).toBe(false);
+    it('rejects impossible pairs', () => {
+      expect(isAcceptableBirthday({ month: 2, day: 30 })).toBe(false);
+      expect(isAcceptableBirthday({ month: 4, day: 31 })).toBe(false);
+      expect(isAcceptableBirthday({ month: 13, day: 1 })).toBe(false);
     });
 
-    it('blocks form submission when the birth date is malformed', () => {
+    it('blocks form submission when the birthday is impossible', () => {
       expect(
-        isValidClientForm({ ...EMPTY_CLIENT_FORM, firstName: 'Léa', birthDate: '1994-02-30' }),
+        isValidClientForm({ ...EMPTY_CLIENT_FORM, firstName: 'Léa', birthday: { month: 2, day: 30 } }),
       ).toBe(false);
     });
   });

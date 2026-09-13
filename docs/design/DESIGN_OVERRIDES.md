@@ -340,9 +340,10 @@ Extends §11.
   centre`, one shutter. One modal is active at a time; sheets are never stacked and the camera is
   never embedded in a drawer. No barcode framing or scanner language.
 - Every small bottom drawer (confirmations, pickers, action lists, forms) uses the shared
-  `BottomSheet` primitive: one navy scrim (`scrim`, canonical navy at 16 %) that fades with the
-  Modal while the sheet slides up from the bottom edge. No frosted or white veil, no blur, no scrim
-  that travels with the sheet, and no per-screen backdrop definitions.
+  `BottomSheet` primitive: one navy scrim (`scrim`, canonical navy at 16 %) that fades in while
+  the sheet slides up from the bottom edge and fades out while it slides down. No frosted or white
+  veil, no blur, no scrim that travels with the sheet, and no per-screen backdrop definitions.
+  The complete overlay contract is §16.
 - When a photo is added, replaced, or finishes background removal in the Product form, the visual
   reveals with a short scale/fade settle (spring, ≈ 240 ms) and a small activity badge while the
   transparent version is being prepared. Reduced motion renders the final state directly.
@@ -358,9 +359,10 @@ introducing a POS visual language:
 
 - `Nouvelle vente` is a primary action beside a secondary `Ajouter un produit` on the Produits
   tab — no new tab, no KPI, no cash-register surface;
-- Sale creation is one native form sheet (0.92 detent, grabber) with the standard eyebrow / sheet
-  title / tertiary `Annuler` header and a sticky primary footer (`Valider la vente`), like the
-  Product editor — never a full-screen modal that would collide with the status bar;
+- Sale creation is one native form sheet in the canonical Souris shell (§16: white surface,
+  Souris grabber, `SheetHeader` with eyebrow / title / tertiary `Annuler`, sticky
+  `SheetActionBar` with `Valider la vente`, no swipe-to-dismiss), like the Product editor — never
+  a full-screen modal that would collide with the status bar;
 - Product selection is operational: tapping a search or scan result adds the Product IMMEDIATELY
   (or increments its single line) with a selection haptic and no intermediate confirmation. The
   scroll position stays stable so several additions can follow each other;
@@ -416,3 +418,170 @@ runtime integrates the SAME canonical assets (`assets/brand/logo-mark.png`, `log
   the technical slug / package name.
 - Dark logo variants, alternative palettes, and new artwork are out of scope: the three canonical
   assets are the identity.
+
+---
+
+## 16. Overlay Consistency V1 — Sheets, Dialogs, Keyboard, Main-Screen Identity
+
+Every Souris overlay now shares ONE visual and behavioral language. The reference is the
+Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confirmations).
+
+### Bottom sheet (`src/shared/ui/BottomSheet.tsx`, `SheetScreen.tsx`)
+
+- **Shell** — full-width white surface (`surfaceElevated`), `radii.ios.sheet` top corners, the
+  Souris grabber (40 × 5, `borderSubtle`), platform gutter, bottom safe area. The same shell
+  serves the JS drawer (`BottomSheet`, a Modal) and every native form-sheet route
+  (`SheetScreen` inside `presentation: 'formSheet'`, configured once in
+  `src/providers/sheet-route-options.ts`: white `contentStyle`, `sheetCornerRadius`, system
+  grabber hidden so the Souris grabber is the only one). Workflow sheets use the 0.92 detent;
+  read-first sheets (Appointment details, Product / Service details) use `fitToContents` so a
+  short detail never leaves a blank middle area, capped at the same detent (`sheet.detent`).
+- **Header** — `SheetHeader`: optional purple uppercase eyebrow (rose for lifecycle /
+  destructive sheets), large navy multiline title, one tertiary text action top-right
+  (« Fermer » / « Annuler »). No decorative borders; an optional hairline only under tall
+  workflow headers.
+- **Action area** — `SheetActionBar`: hairline-separated white bar with the platform gutter,
+  anchored below the scrolling body, safe-area cleared by the shell. One predictable behavior
+  everywhere: with the keyboard open the whole sheet lifts (iOS `padding`), the body scrolls,
+  and the bar stays reachable; the bottom safe-area inset is dropped while the keyboard is up so
+  there is never a double inset.
+- **Motion** — open = slide up + scrim fade in; close = slide down + scrim fade out, THEN the
+  Modal unmounts and `onDismissed` fires (chaining a second presentation is always safe).
+  A sheet never disappears instantly. `duration.panel` with the sheet easing; reduced motion
+  renders end states directly.
+- **Scrim** — exactly one canonical `scrim` (navy 16 %) for sheets and dialogs. No white veil,
+  no ad-hoc opacities. Native form sheets use the system dim (platform-owned). A nested drawer
+  (Client form over the Client picker, a dialog over a sheet) adds its own scrim — accepted as
+  a natural second layer, never a third.
+- **Gesture policy** — explicit per sheet: `dismissOnBackdropPress`, `dismissOnPanDown`,
+  `dismissOnHardwareBack`. Pan-to-dismiss lives ONLY on the grabber/header zone, so body
+  scrolling always wins. Scroll-safe sheets (Client form, Client picker) and every workflow
+  route (Appointment creation / editing, Product and Service creation, Sale creation) disable
+  the swipe entirely (`gestureEnabled: false`); Product / Service details allow it while
+  reading and disable it while editing. Leaving a workflow is always an explicit « Annuler ».
+- **Keyboard** — presenting a drawer, form or sheet NEVER opens the keyboard: no `autoFocus`,
+  no imperative focus. The keyboard opens only when a field is tapped; the focused field stays
+  visible inside the bounded, keyboard-safe scroll (`keyboardShouldPersistTaps="handled"`).
+
+### Confirmation dialog (`src/shared/ui/ConfirmationDialog.tsx`)
+
+- The ONE Souris-owned confirmation: near-full-width centered card (`dialog.maxWidth`),
+  `radii.large`, hairline border, `scrim` backdrop, fade in/out. Uppercase eyebrow, large
+  navy title, soft body, then full-width stacked actions: soft lavender secondary
+  (« Retour » / « Annuler ») above the confirm.
+- `tone="destructive"` — rose eyebrow and the restrained rose outlined confirm (`danger`),
+  never a solid danger slab. Used for permanent Client, Product, Service and Appointment
+  deletion and for discarding a Sale or Appointment-edit draft.
+- `tone="neutral"` — accent eyebrow and a primary confirm: sign-out, Product / Service
+  deactivation, and explanation-only dialogs (single « Compris »).
+- Wording stays feature-owned; the primitive never names an entity. React Native `Alert` is
+  not used for Souris-owned confirmations — it remains only for error reports
+  (`alertPersistenceFailure`), permission explanations, and the development-only reset.
+
+### Main-screen identity (`src/shared/ui/ScreenWatermarkIcon.tsx`)
+
+- Each main tab carries ONE large, low-contrast semantic symbol anchored in the top-right
+  corner and partially cropped by the right edge so it reads as embedded in the page surface:
+  Agenda `calendar`, Clientes `person.2`, Produits `shippingbox`, Plus `gearshape` (Material
+  equivalents on Android). `watermark.size` / `watermark.opacity` / `watermark.crop*` and one
+  position for all four — anchored to the title block by `MainScreenHeader` (§17), never to the
+  device edge. Symbols do not fill their box the same way, so a symbol may carry a restrained
+  optical scale and rise (`screenWatermarkOptics`: the two people of Clientes grow and lift so
+  the heads and shoulders stay readable above the search field); the shared anchor, the
+  right-edge crop and the opacity never change per screen.
+- Decoration only: absolutely positioned under the content, `pointerEvents="none"`, hidden from
+  accessibility, no layout impact, never a button or a card, never competing with the title.
+
+### Related controls introduced by this pass
+
+- **Birthday selector** (`BirthdayField` + `BirthdayWheelPicker`) — the Client form asks for
+  a day + month only, inline, with a two-column native-feeling wheel (Jour / Mois, French month
+  names, February offers 29, a shorter month resolves the day to its last valid one). No year
+  column, no typing, no nested overlay; « Effacer » removes it. See §17 and
+  `docs/domain/CLIENTS.md` §2.
+- **Stock stepper** (`StockStepper`) — Product stock is chosen with a `[−] n [+]` control
+  (0–30, hold to repeat) instead of a text field. A legacy quantity above 30 is shown exactly and
+  can only be lowered one unit at a time; saving unrelated fields never clamps it.
+
+---
+
+## 17. Main-Screen Composition, Floating Creation and Short Sheets (UI Consistency V1 polish)
+
+### Main-screen header — Produits is the reference
+
+`MainScreenHeader` (`src/shared/ui/MainScreenHeader.tsx`) is the ONE header composition of the
+main tabs and of every screen that wants the same identity:
+
+```text
+Produits                                  [watermark, cropped by the right edge]
+
+[ Rechercher un produit                                             scanner ]
+```
+
+- one large screen title on the platform gutter, `spacing.md` below the top safe area;
+  Produits and Clientes carry NO uppercase eyebrow — the title is never repeated. Agenda keeps
+  its contextual eyebrow (the selected date / « Vue semaine ») above « Aujourd'hui » /
+  « Agenda » because it is information, not a duplicate; Plus keeps its approved content;
+- optional trailing content inside the gutter (Agenda's view switcher);
+- the decorative watermark is anchored to the TITLE BLOCK — a full-width, unpadded view — so
+  its right crop and its vertical relationship to the title are identical on every screen and
+  the status bar, the Dynamic Island and the rounded corners never move it. No per-screen top
+  offsets: the block is rendered after the safe area (`Screen`'s `header` slot, or directly
+  under the screen's `SafeAreaView`);
+- the search field, when present, sits `spacing.base` under the title with the same field
+  dimensions everywhere (`SearchField`). No inline creation buttons in the header area.
+
+### Floating creation action (`src/shared/ui/FloatingCreateButton.tsx`)
+
+- The ONE creation entry of screens whose primary action is « ajouter / créer »: a violet
+  circle (`floatingAction.size` 56) with a white plus, fixed bottom-right on the platform
+  gutter, `floatingAction.inset` above its own bottom safe-area edge (so it sits above the tab
+  bar in a tab and above the home indicator on a pushed screen), the light lavender
+  `nativeShadows.floating` elevation, a subtle press scale and one selection haptic. No text,
+  no Material FAB, no card.
+- Never part of the scrolling content; lists keep `bottomClearance` bottom padding so the last
+  row scrolls above it.
+- Reveal on focus: because several screens carry the + in the same place, a tab switch must
+  never read as the button sliding from one screen to the next. The button starts hidden and
+  unavailable (no touches, not announced); `floatingAction.revealDelay` after the screen gains
+  focus it fades and rises `floatingAction.revealRise` into place over `duration.state` — no
+  bounce, no overshoot. Losing focus hides it at once, closes any menu and resets the reveal.
+  Reduced motion shows it immediately.
+- A single flow opens directly: Clientes → the shared Client form; Agenda → Appointment
+  creation on the selected day; Prestations & tarifs → Service creation.
+- Several flows expand into a compact menu anchored above the button (fade + rise + light
+  scale, `duration.disclosure`; reduced motion renders the end state): right-aligned pills with
+  the label and a lavender icon disc, a transparent outside-tap layer, the plus rotating to a
+  cross while open. Choosing an option closes the menu first, then runs the flow; leaving the
+  screen closes it. No scrim, no drawer, no native action sheet. Produits: « Nouvelle vente »
+  (`bag`) and « Ajouter un produit » (`shippingbox`).
+
+### Short sheets are content-fit
+
+A chooser or a short form presented as a native sheet uses the `editorSheet` route options
+(`fitToContents`) with `SheetScreen fit="content"`: the New Service type chooser
+(« Prestation simple » / « Prestation technique ») ends after its options with normal
+breathing room and never fills the screen with an empty lower half. The height still caps at
+the canonical detent when a form grows, and the swipe stays disabled while a draft is edited.
+
+### Client form action bar
+
+Client create and edit share the same `SheetActionBar` inside the shared `BottomSheet`: the
+canonical `spacing.base` breathing room below the action, above the sheet's bottom safe area
+(dropped while the keyboard is up, so the action stays reachable and never doubles the inset).
+No Client-specific margins.
+
+### Appointment creation — time control haptic
+
+Tapping « Changer l'horaire » gives exactly one selection haptic (`haptics.selection`) when
+the ±5-minute control opens; stepping the time and the wheel-free date context add no further
+haptic noise.
+
+### Birthday wheel
+
+The Client birthday is chosen with `BirthdayWheelPicker`: two snapping columns (Jour / Mois),
+the centered row highlighted on the lavender band, French month names, no year column, no
+keyboard. The day column only lists the days of the selected month (February: 29); a month
+shorter than the selected day resolves it to the last valid day and the wheel settles there.
+One selection haptic per row change while scrolling, never per pixel. The model stays
+`{ month, day }` (SQLite v4, no fake year).

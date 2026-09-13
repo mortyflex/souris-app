@@ -11,6 +11,8 @@
 // the canonical model. Activity statistics are always DERIVED from Souris
 // Appointment state — never stored on the Client.
 
+import type { ClientBirthday } from './birthday';
+
 export interface Client {
   readonly id: string;
   readonly firstName: string;
@@ -18,10 +20,10 @@ export interface Client {
   readonly phone?: string;
   readonly email?: string;
   /**
-   * Civil calendar date of birth in canonical YYYY-MM-DD form.
-   * NOT a timestamp — never a Date at local midnight. Optional.
+   * Birthday as a day + month only (see birthday.ts). Souris never stores,
+   * asks for, or invents a birth year. Optional.
    */
-  readonly birthDate?: string;
+  readonly birthday?: ClientBirthday;
   /**
    * Lifecycle marker. Absent for an active Client; the exact instant of the
    * archive otherwise. Archiving never deletes anything and never touches

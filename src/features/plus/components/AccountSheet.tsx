@@ -1,10 +1,15 @@
 // Souris — account sheet (Plus › Compte)
 //
-// Business identity, the signed-in email, and the sign-out action. Wording
-// rule: local data stays on the device and is NOT described as backed up or
-// synchronized — operational cloud sync does not exist yet.
+// Business identity, the signed-in email, and the sign-out action. This
+// sheet is the canonical Souris drawer reference (docs/design/
+// DESIGN_OVERRIDES.md §16): shared shell, header and close transition.
+// Signing out is consequential but not destructive, so its confirmation is
+// the neutral variant of the shared dialog. Wording rule: local data stays on
+// the device and is NOT described as backed up or synchronized — operational
+// cloud sync does not exist yet.
 
-import { Alert, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/features/auth/session/AuthProvider';
 import { formatBusinessActivityType, formatBusinessOwnerName } from '@/features/business/presentation';
@@ -12,6 +17,8 @@ import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessP
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { semanticColors, spacing } from '@/shared/ui/theme';
 
 interface AccountSheetProps {
@@ -22,33 +29,24 @@ interface AccountSheetProps {
 export function AccountSheet({ visible, onClose }: AccountSheetProps) {
   const business = useCurrentBusiness();
   const { state, signOut } = useAuth();
+  const [signOutRequested, setSignOutRequested] = useState(false);
   const email = state.status === 'authenticated' ? state.user.email : undefined;
 
-  const requestSignOut = () => {
-    Alert.alert(
-      'Se déconnecter ?',
-      'Vous devrez vous reconnecter pour accéder à Souris. Les données restent enregistrées sur cet appareil.',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Se déconnecter', style: 'destructive', onPress: () => void signOut() },
-      ],
-    );
+  const confirmSignOut = () => {
+    setSignOutRequested(false);
+    void signOut();
   };
 
   return (
-    <BottomSheet backdropLabel="Fermer le compte" onClose={onClose} testID="account-sheet" visible={visible}>
-      <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <AppText variant="eyebrow" style={styles.eyebrow}>
-            COMPTE
-          </AppText>
-          <AppText variant="sheetTitle" accessibilityRole="header" numberOfLines={2}>
-            {business.name}
-          </AppText>
-        </View>
-        <AppButton accessibilityLabel="Fermer" onPress={onClose} style={styles.closeButton} title="Fermer" variant="tertiary" />
-      </View>
-
+    <BottomSheet
+      backdropLabel="Fermer le compte"
+      header={
+        <SheetHeader action={{ label: 'Fermer', onPress: onClose }} eyebrow="COMPTE" title={business.name} />
+      }
+      onClose={onClose}
+      testID="account-sheet"
+      visible={visible}
+    >
       <View style={styles.details}>
         <DetailRow label="Activité" value={formatBusinessActivityType(business.activityType)} />
         <DetailRow label="Responsable" value={formatBusinessOwnerName(business)} />
@@ -57,8 +55,28 @@ export function AccountSheet({ visible, onClose }: AccountSheetProps) {
       </View>
 
       <View style={styles.footer}>
-        <AppButton onPress={requestSignOut} testID="sign-out" title="Se déconnecter" variant="dangerSoft" />
+        <AppButton
+          onPress={() => setSignOutRequested(true)}
+          testID="sign-out"
+          title="Se déconnecter"
+          variant="dangerSoft"
+        />
       </View>
+
+      <ConfirmationDialog
+        body="Vous devrez vous reconnecter pour accéder à Souris. Les données restent enregistrées sur cet appareil."
+        cancelLabel="Annuler"
+        cancelTestID="cancel-sign-out"
+        confirmLabel="Se déconnecter"
+        confirmTestID="confirm-sign-out"
+        eyebrow="COMPTE"
+        onCancel={() => setSignOutRequested(false)}
+        onConfirm={confirmSignOut}
+        testID="sign-out-dialog"
+        title="Se déconnecter ?"
+        tone="neutral"
+        visible={signOutRequested}
+      />
     </BottomSheet>
   );
 }
@@ -77,17 +95,7 @@ function DetailRow({ label, value }: { readonly label: string; readonly value: s
 }
 
 const styles = StyleSheet.create({
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.base,
-  },
-  headerCopy: { flex: 1, gap: spacing.xs },
-  eyebrow: { color: semanticColors.accent },
-  closeButton: { paddingHorizontal: spacing.md },
-  details: { gap: spacing.sm, paddingBottom: spacing.base, paddingTop: spacing.sm },
+  details: { gap: spacing.sm, paddingBottom: spacing.base, paddingTop: spacing.xs },
   detailRow: {
     borderBottomColor: semanticColors.borderSubtle,
     borderBottomWidth: StyleSheet.hairlineWidth,

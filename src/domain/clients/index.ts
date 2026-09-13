@@ -9,8 +9,12 @@ export {
   type ClientReferences,
 } from './lifecycle';
 export {
-  formatCivilDate,
-  formatClientBirthDate,
-  isValidCivilDate,
-  parseCivilDate,
-} from './birthDate';
+  BIRTHDAY_MONTH_NAMES,
+  birthdayFromCivilDate,
+  formatBirthdayKey,
+  formatClientBirthday,
+  getBirthdayMonthLength,
+  isValidClientBirthday,
+  parseBirthdayKey,
+  type ClientBirthday,
+} from './birthday';
