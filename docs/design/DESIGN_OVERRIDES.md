@@ -388,11 +388,30 @@ The exported reference shows the logos only inside a web launcher and an onboard
 runtime integrates the SAME canonical assets (`assets/brand/logo-mark.png`, `logo-wordmark.png`,
 `logo-lockup.png` — transparent PNGs, never modified) at deliberate brand moments only:
 
-- **App icon** — derived from `logo-mark.png`: the mark's artwork spans 68 % of a 1024 px canvas,
-  centered, flattened on `lavender.lav200` (`#E1D6F9`) for iOS (`assets/images/icon.png`). Android
-  adaptive icon: transparent foreground with the artwork at 56 % of the canvas (inside the safe
-  circle), `backgroundColor` `#E1D6F9`, alpha-only monochrome layer from the same render. Light
-  lavender is used because the navy strokes would vanish on navy/violet; no wordmark in the icon.
+- **iOS app icon (Liquid Glass)** — `assets/brand/Souris.icon`, an Apple Icon Composer document
+  referenced by `ios.icon`; Xcode compiles it and renders every size, appearance and pre-26 fallback
+  from it. Direction: lavender document background + canonical navy mouse + pink nose, three visual
+  elements and nothing else; no medallion, disc, ring, halo, glow or plate behind the mouse — the
+  depth comes only from the mouse and nose materials. Layers, back to front: document fill
+  `lavender.lav200` (`#E1D6F9`); group `02 Mouse` — the canonical navy strokes of `logo-mark.png`,
+  artwork at 74 % of the canvas width (up from 68 %, so the mark reads large and confident), shadow
+  50 %, translucency off so navy stays rich; group `03 Nose` — the canonical pink nose, shadow 55 %,
+  translucency 15 % (small glass bead, slightly more raised than the strokes). Specular, refraction
+  and blur stay at Icon Composer defaults. No highlight, shadow, blur, gradient or corner mask is
+  baked into the mouse or nose layers (`assets/brand/icon-source/`): the system material provides
+  the depth. Dark
+  appearance: strokes recoloured `#E1D6F9`, nose unchanged, background left to the system's dark
+  treatment (a navy `#19163F` dark fill can be set in the Icon Composer GUI; the file does not carry
+  a document-level dark fill). Mono / tinted:
+  system rendering from the layer silhouettes. No wordmark in the icon. The glass treatment belongs
+  to the system icon only; it does not replace the flat canonical mark used in-app.
+- **Fallback raster icon** — `assets/images/icon.png` (mark at 68 % on `#E1D6F9`) stays as the
+  top-level `icon` for Expo Go, web metadata and any tooling that needs a flat PNG. It is not the
+  iOS icon any more.
+- **Android icon** — unchanged, platform-appropriate, no glass imitation: adaptive icon with a
+  transparent foreground (artwork at 56 % of the canvas, inside the safe circle),
+  `backgroundColor` `#E1D6F9`, alpha-only monochrome layer from the same render. Light lavender is
+  used because the navy strokes would vanish on navy/violet.
 - **Native splash** — `expo-splash-screen`: white `#FFFFFF` background (identical to the Agenda
   first frame). iOS shows `assets/images/splash-ios.png` at `imageWidth` 260: a DERIVED transparent
   PNG stacking `logo-mark.png` above `logo-wordmark.png` (mark half the wordmark width, wordmark

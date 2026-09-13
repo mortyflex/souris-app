@@ -10,6 +10,7 @@
     "backgroundColor": "#FFFFFF",
     "ios": {
       "bundleIdentifier": "com.mortyflex.sourisapp",
+      "icon": "./assets/brand/Souris.icon",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

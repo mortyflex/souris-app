@@ -319,8 +319,43 @@
     },
     "appIcon": {
       "source": "assets/brand/logo-mark.png",
+      "ios": {
+        "iconComposer": "assets/brand/Souris.icon",
+        "configKey": "ios.icon",
+        "material": "Liquid Glass rendered by the system; no baked effects; no wordmark",
+        "direction": "lavender document background + canonical navy mouse + pink nose; three elements only, nothing behind the mouse",
+        "layers": [
+          {
+            "group": "background",
+            "kind": "document-fill",
+            "color": "#E1D6F9",
+            "dark": "system dark treatment (no document-level dark fill in file)"
+          },
+          {
+            "group": "02 Mouse",
+            "file": "assets/brand/icon-source/02-mouse-mark.png",
+            "artworkWidthFraction": 0.74,
+            "translucency": 0,
+            "shadow": 0.5,
+            "darkFill": "#E1D6F9"
+          },
+          {
+            "group": "03 Nose",
+            "file": "assets/brand/icon-source/03-mouse-nose.png",
+            "translucency": 0.15,
+            "shadow": 0.55
+          }
+        ],
+        "appearances": [
+          "default",
+          "dark",
+          "mono",
+          "tinted"
+        ],
+        "sources": "assets/brand/icon-source/README.md"
+      },
       "derived": {
-        "ios": "assets/images/icon.png",
+        "iosFallback": "assets/images/icon.png",
         "androidForeground": "assets/images/android-icon-foreground.png",
         "androidMonochrome": "assets/images/android-icon-monochrome.png",
         "favicon": "assets/images/favicon.png"
