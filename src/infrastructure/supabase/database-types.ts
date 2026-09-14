@@ -1,9 +1,12 @@
 // Souris — remote schema types (hand-written, V1 scope)
 //
-// Mirrors supabase/migrations exactly. Type aliases (not interfaces) on
-// purpose: supabase-js requires the implicit index signature. Only the account-level table exists
-// remotely; operational data (Clients, Appointments, Services, Products,
-// Sales) is NOT synchronized in this milestone.
+// Covers the `businesses` table ONLY. Type aliases (not interfaces) on
+// purpose: supabase-js requires the implicit index signature. The operational
+// tables created by Cloud Sync V1A (supabase/migrations/20260914120000_…) are
+// deliberately NOT typed here until the first operational adapter exists
+// (V1B); the migration files are the source of truth for the remote schema
+// (docs/architecture/CLOUD_SYNC.md §14.1). Nothing operational is
+// synchronized yet.
 
 export type BusinessRow = {
   id: string;

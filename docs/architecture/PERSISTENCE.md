@@ -21,7 +21,9 @@ Since Account & Onboarding V1 the database also holds the **local account bindin
 
 Explicit non-goals: cloud backup of operational data, conflict resolution, multi-device sync,
 offline sync engine. Authentication and the Business profile live in Supabase
-(`docs/architecture/AUTH.md`); operational data stays local-first only.
+(`docs/architecture/AUTH.md`); operational data stays local-first only. The remote operational
+schema and the sync contract that will connect this database to Supabase are defined in
+`docs/architecture/CLOUD_SYNC.md` (Cloud Sync V1A: schema only, no runtime sync yet).
 
 ---
 
@@ -194,8 +196,9 @@ asserts version, rows, NULL columns, hydrated values, idempotence, then a checko
 Sale on the migrated database.
 
 These local fields (`sales.appointment_id`, `appointments.paid_at / card_amount_cents /
-cash_amount_cents`, and since v6 `sales.paid_at / card_amount_cents / cash_amount_cents`) are the ones
-a future Cloud Sync must carry; no Supabase table exists for them yet.
+cash_amount_cents`, and since v6 `sales.paid_at / card_amount_cents / cash_amount_cents`) are
+mirrored one-to-one by the remote `appointments` / `sales` tables of Cloud Sync V1A
+(`docs/architecture/CLOUD_SYNC.md` §3); nothing writes them remotely yet.
 
 ### Schema v4 — Client birthday as day + month
 
@@ -567,3 +570,27 @@ price, no clamping, refusal of unsold / paid, abort on a deleted Product, rollba
 restoration when a later write fails), the source-hygiene guard (no literal NUL
 byte in a store file), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.
+
+---
+
+## 12. Connection to the Cloud Layer
+
+`docs/architecture/CLOUD_SYNC.md` defines the remote operational schema (Cloud Sync V1A). What
+this local layer must keep true for the later phases:
+
+- SQLite stays the operational source of truth; the future sync worker reads and writes it
+  through the existing stores, and screens never query Supabase for operational data;
+- the remote schema mirrors this one table for table, with two boundary conversions owned by
+  the sync layer: `clients` receives the bound Business id (the local table has none) and
+  `products.image_uri` is never uploaded;
+- HARD PREREQUISITE before V1C: the euro `REAL` price columns (`services.price`,
+  `appointment_items.price`, `products.price`, `sale_items.unit_price`) must first be migrated to
+  integer cents by a forward SQLite migration; the remote columns are integer cents and a
+  per-sync conversion is not an acceptable substitute (CLOUD_SYNC.md §3.1). Not part of V1A;
+- HARD PREREQUISITE before V1C: the runtime id generators (`<prefix>-<Date.now()>-<counter>`)
+  must emit globally unique ids (CLOUD_SYNC.md §5.2); existing ids are never rewritten;
+- the aggregate boundaries are the transaction boundaries of §7: CLIENT, SERVICE + phases,
+  APPOINTMENT + items + phases, PRODUCT, SALE + items;
+- V1B will add a `sync_outbox` written inside the same `runInTransaction` as the business
+  mutation (no `sync_status` column on business tables) and per-aggregate acknowledged remote
+  versions; neither exists in schema v6.
