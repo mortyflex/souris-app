@@ -13,12 +13,19 @@
 // and a parent Sale is deleted only once it holds no item any more. A
 // Product that no longer exists aborts the whole operation — no line is
 // removed while its stock cannot be restored.
+//
+// Sync outbox (Cloud Sync V1B), within the same transactions: completion
+// marks the SALE (UPSERT) and every decremented PRODUCT (UPSERT); removal
+// marks the restored PRODUCT (UPSERT), each trimmed SALE (UPSERT — its
+// item set changed) and each emptied SALE (DELETE). Sale lines never sync
+// on their own.
 
 import type { AppointmentProductIdentity } from '@/domain/appointments';
 import type { StockDecrement, StockRestoration } from '@/domain/products';
 import type { Sale, SaleItem, SalePayment } from '@/domain/sales';
 
 import { runInTransaction, type SourisDatabase } from '../database';
+import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
 import {
   fromSqlInstant,
   fromSqlOptional,
@@ -144,6 +151,7 @@ export function completeSale(
       if (result.changes !== 1) {
         throw new SaleStockConflictError(decrement.productId);
       }
+      markAggregateUpserted(db, 'PRODUCT', decrement.productId);
     }
 
     db.runSync(
@@ -163,6 +171,7 @@ export function completeSale(
         [sale.id, item.id, position, item.productId, item.productName, item.unitPrice, item.quantity],
       );
     });
+    markAggregateUpserted(db, 'SALE', sale.id);
   });
 }
 
@@ -209,6 +218,7 @@ export function deleteAppointmentProduct(
       [quantity, productId],
     );
     if (restored.changes !== 1) throw refuse('PRODUCT_MISSING');
+    markAggregateUpserted(db, 'PRODUCT', productId);
 
     const saleIds = [...new Set(rows.map((row) => row.sale_id))];
     const removedSaleIds: string[] = [];
@@ -225,8 +235,10 @@ export function deleteAppointmentProduct(
         )?.count ?? 0;
       if (remaining === 0) {
         db.runSync('DELETE FROM sales WHERE id = ?', [saleId]);
+        markAggregateDeleted(db, 'SALE', saleId);
         removedSaleIds.push(saleId);
       } else {
+        markAggregateUpserted(db, 'SALE', saleId);
         trimmedSaleIds.push(saleId);
       }
     }

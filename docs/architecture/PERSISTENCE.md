@@ -19,11 +19,15 @@ Sales (with item snapshots)
 Since Account & Onboarding V1 the database also holds the **local account binding** (schema v3,
 §3/§4b): which Business — and which owning Auth user — this device's data belongs to.
 
+Since Cloud Sync V1B the database also holds the **local sync bookkeeping** (schema v7, §3/§7c):
+the outbox of aggregates whose current local state must reach the remote, and the remote revision
+last acknowledged per aggregate.
+
 Explicit non-goals: cloud backup of operational data, conflict resolution, multi-device sync,
-offline sync engine. Authentication and the Business profile live in Supabase
+network sync engine. Authentication and the Business profile live in Supabase
 (`docs/architecture/AUTH.md`); operational data stays local-first only. The remote operational
 schema and the sync contract that will connect this database to Supabase are defined in
-`docs/architecture/CLOUD_SYNC.md` (Cloud Sync V1A: schema only, no runtime sync yet).
+`docs/architecture/CLOUD_SYNC.md` (V1A remote schema, V1B local outbox; no runtime transfer yet).
 
 ---
 
@@ -45,19 +49,22 @@ database.ts          SourisDatabase — the synchronous SQL boundary every modul
 expo-database.ts     expo-sqlite binding (application root only)
 schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v3 (business_profile),
                      v4 (clients.birthday), v5 (sales.appointment_id, appointment checkout columns),
-                     v6 (sales payment columns), SOURIS_TABLES, BUSINESS_SCOPED_TABLES
+                     v6 (sales payment columns), v7 (sync_outbox, sync_state),
+                     SOURIS_TABLES, BUSINESS_SCOPED_TABLES, SYNC_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
 seed.ts              FirstRunSeed contract + seedDatabaseIfNeeded()
 bootstrap.ts         migrate → seed → load PersistedSnapshot
 development-reset.ts clearPersistedDataForDevelopment() (__DEV__ only)
-stores/*.ts          load / insert / update / delete per entity, with row ↔ domain mappers
+stores/*.ts          load / insert / update / delete per entity, with row ↔ domain mappers;
+                     every mutation marks its aggregate in the sync outbox (§7c)
+sync/                aggregate vocabulary + bound Business id, sync_outbox, sync_state (§7c)
 files/               LocalFiles boundary + expo-file-system binding
 testing/             node:sqlite database, in-memory files, fixtures (tests only)
 ```
 
-No ORM, no repository/factory abstractions. SQL lives only in `src/persistence/stores`. Screens and
-components never see SQL, rows, or the database.
+No ORM, no repository/factory abstractions. SQL lives only in `src/persistence/stores` and
+`src/persistence/sync`. Screens and components never see SQL, rows, or the database.
 
 The synchronous expo-sqlite API is used deliberately: mutations remain synchronous provider calls
 (validate → write → set state), the dataset is small and local, and the existing screen contracts
@@ -65,7 +72,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities.
 
@@ -91,10 +98,20 @@ sale_items          (sale_id FK→sales CASCADE, id) PK, position, product_id, p
                     unit_price, quantity (CHECK >= 1)
 business_profile    singleton PK (CHECK = 1), id, owner_user_id, owner_first_name,
                     owner_last_name?, name, activity_type, phone?, created_at, updated_at   (v3)
+sync_outbox         id PK AUTOINCREMENT, business_id, aggregate_type (CHECK vocabulary), aggregate_id,
+                    operation (CHECK UPSERT|DELETE), revision (CHECK >= 1), created_at, updated_at,
+                    attempt_count (CHECK >= 0), last_error?, next_attempt_at?,
+                    UNIQUE (business_id, aggregate_type, aggregate_id)                       (v7)
+sync_state          (business_id, aggregate_type, aggregate_id) PK, remote_version (CHECK >= 1),
+                    last_synced_at                                                          (v7)
 ```
 
 `business_profile` holds at most ONE row (the `singleton` primary key): the device's account
 binding. It never stores tokens or the owner's email.
+
+`sync_outbox` and `sync_state` are local sync bookkeeping (§7c, CLOUD_SYNC.md §10): they hold
+aggregate identities and revisions only, never business data, are not part of the hydrated
+snapshot, and are never uploaded.
 
 Indexes: `appointments(start_at)`, `appointments(client_id)`, `sales(client_id)`,
 `sales(appointment_id)` (v5).
@@ -159,6 +176,25 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v7 — local sync outbox and acknowledged revisions (Cloud Sync V1B)
+
+```text
+CREATE TABLE sync_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id, aggregate_type, aggregate_id,
+                          operation, revision, created_at, updated_at, attempt_count, last_error, next_attempt_at,
+                          UNIQUE (business_id, aggregate_type, aggregate_id));
+CREATE TABLE sync_state  (business_id, aggregate_type, aggregate_id, remote_version, last_synced_at,
+                          PRIMARY KEY (business_id, aggregate_type, aggregate_id));
+```
+
+An existing v6 database goes `v6 → v7` in one transaction: the two tables are created EMPTY. No
+business row is read or rewritten, no wipe, no reseed (`seed_version` stays), the account binding is
+untouched. Existing aggregates receive neither an outbox entry (pre-existing data is handled by the
+V1C bootstrap decision, CLOUD_SYNC.md §11) nor a fabricated `remote_version`. Re-running is a no-op.
+Covered by a test that builds a genuine schema-v6 fixture database on a BOUND device (Client,
+Services, Products, Appointment, linked Sale, `business_profile`), migrates through the normal
+bootstrap, and asserts version, unchanged snapshot, empty sync tables, kept binding and seed marker,
+idempotence, and that the first mutation after the upgrade records exactly one scoped outbox entry.
 
 ### Schema v6 — standalone Sale payment
 
@@ -271,7 +307,7 @@ with the v1 column set, migrates, and asserts version, rows, and NULL lifecycle.
 
 ```text
 first launch:  empty database
-               → migrate to the current schema (v4)
+               → migrate to the current schema (v7)
                → seed_version absent → run the production seed ONCE, in one transaction
                    Clients / Services / Products / Appointments / Sales = []   (EMPTY)
                → write souris_metadata.seed_version = 1
@@ -346,26 +382,36 @@ State changes only after the write succeeds. A database failure throws before an
 screens report it through one concise alert (`alertPersistenceFailure`) and leave the form as-is.
 There is no optimistic update and no global error framework.
 
-Transaction boundaries (`runInTransaction` joins an enclosing transaction instead of nesting):
+Transaction boundaries (`runInTransaction` joins an enclosing transaction instead of nesting).
+Since Cloud Sync V1B every boundary below that changes syncable data ALSO writes its aggregate's
+outbox entry inside the same transaction (§7c):
 
 ```text
-Client create/edit            single row (edit never touches archived_at)
-Client archive/restore        single statement on archived_at
-Client permanent deletion     reference counts + DELETE in one transaction   (§7a)
-Service create/edit           service row + full phase-list replacement
-Service activation/deletion   single statement (phases cascade)
-Appointment create            appointment + items + phases (snapshot only; no Service row is written)
-Appointment edit              metadata + full item/phase replacement (snapshot only)
-Appointment timing            editability re-check + phase duration rows of one item (snapshot only)
-Appointment item reorder      editability re-check + item_order rewritten by stable item id (Details)
-Appointment item removal      editability + last-item re-check + item and phase rows + order normalization
-Appointment delete            single statement (items/phases cascade)
-Appointment reconciliation    every previous-day finalization in one transaction
-Product create/edit           single row, after the durable image copy
-Product stock/activation      single statement
-Sale completion               stock revalidation + decrements + sale + items   (§8)
-First-run seed                everything                                        (§5)
-Development reset             every DELETE + seed marker                        (§10)
+Client create/edit            row (edit never touches archived_at)              + CLIENT UPSERT
+Client archive/restore        archived_at                                        + CLIENT UPSERT
+Client permanent deletion     reference counts + DELETE (§7a)                    + CLIENT DELETE
+Service create/edit           service row + full phase-list replacement          + SERVICE UPSERT
+Service activation            active                                             + SERVICE UPSERT
+Service deletion              DELETE (phases cascade)                            + SERVICE DELETE
+Appointment create            appointment + items + phases (snapshot only)       + APPOINTMENT UPSERT
+Appointment edit              metadata + full item/phase replacement             + APPOINTMENT UPSERT
+Appointment timing            editability re-check + phase durations of one item + APPOINTMENT UPSERT
+Appointment item reorder      editability re-check + item_order by stable id     + APPOINTMENT UPSERT
+Appointment item removal      editability + last-item re-check + rows + order    + APPOINTMENT UPSERT
+Appointment checkout/payment  status + payment columns (§7b)                     + APPOINTMENT UPSERT
+Appointment delete            references re-check + DELETE (cascade) (§7b)       + APPOINTMENT DELETE
+Appointment reconciliation    every previous-day finalization in one transaction + APPOINTMENT UPSERT each
+Product create/edit           row, after the durable image copy                  + PRODUCT UPSERT
+Product stock/activation      one column                                         + PRODUCT UPSERT
+Product deletion              DELETE                                             + PRODUCT DELETE
+Sale completion               stock revalidation + decrements + sale + items (§8) + SALE UPSERT
+                                                                                  + PRODUCT UPSERT per decrement
+Sold-Product removal          re-verification + restoration + lines + empty Sales + PRODUCT UPSERT
+                              (§8)                                                + SALE UPSERT (trimmed)
+                                                                                  + SALE DELETE (emptied)
+First-run seed                everything (§5) — through the stores, so a BOUND database records the
+                              seeded aggregates; the production seed is empty and runs unbound
+Development reset             every DELETE + sync tables + seed marker (§10)
 ```
 
 ---
@@ -434,6 +480,39 @@ COMMIT
 Sales and no `appointment_id = NULL` rewrite. The counts are always read from the stored rows at
 tap time, never cached: once the last linked Sale has been emptied and removed by a sold-Product
 deletion (§8), an unpaid Appointment becomes deletable again while a paid one stays blocked.
+
+---
+
+### 7c. Sync outbox integration (Cloud Sync V1B)
+
+`src/persistence/sync/outbox.ts` — `markAggregateUpserted(db, type, id)` /
+`markAggregateDeleted(db, type, id)`, called by the store from INSIDE its own transaction, after
+the business statements:
+
+```text
+BEGIN
+  business statements (as above)
+  SELECT id FROM business_profile WHERE singleton = 1
+    unbound ⇒ no outbox row (nothing to scope it to; an unbound device cannot sync)
+    bound   ⇒ INSERT INTO sync_outbox (business_id, aggregate_type, aggregate_id, operation, revision 1, now, now)
+              ON CONFLICT (business_id, aggregate_type, aggregate_id) DO UPDATE SET
+                operation = new operation, revision = revision + 1, updated_at = now,
+                attempt_count = 0, last_error = NULL, next_attempt_at = NULL   (retry state belongs to the failed revision)
+COMMIT
+```
+
+Consequences the tests lock in (`sync-outbox.test.ts`): one mutation = one entry; repeated edits of
+one aggregate coalesce into that entry (same `id`, same `created_at`, `revision` + 1); a child edit
+(phase, item, sale line) marks its parent; DELETE overrides a pending UPSERT and survives the local
+row; recreating a deleted aggregate with the same id turns the entry back into UPSERT; a failing
+outbox write rolls the business mutation back and a failing business write leaves no entry; an
+unbound database records nothing; every entry carries the bound Business UUID; entries survive a
+restart and never appear in the snapshot; a refused deletion writes nothing; `sync_state` is never
+written by a mutation. The full coalescing table, DELETE semantics and the worker contract are in
+CLOUD_SYNC.md §10.
+
+Providers and screens are unchanged: no provider calls the sync module, and no mutation is enqueued
+after a commit. `readBoundBusinessId` (one indexed SELECT) is the only extra read per mutation.
 
 ---
 
@@ -528,7 +607,9 @@ Development builds show a `Développement › Réinitialiser les données locale
 (`__DEV__` only, compiled out of production). It runs `resetForDevelopment()`:
 
 ```text
-DELETE every operational table + remove seed_version (one transaction; business_profile is KEPT)
+DELETE every operational table + sync_outbox + sync_state + remove seed_version
+  (one transaction; business_profile is KEPT — pending intents and acknowledged revisions
+   describe rows the reset removes, so they go with them)
 → delete <documents>/products/                       (owned images only)
 → bootstrap again with the DEVELOPMENT seed (legacy pilot data + Agenda fixtures), stamped with
   the bound Business id so the reset never introduces a second business id
@@ -552,8 +633,8 @@ wraps the real `PersistenceProvider` around such a database with in-memory files
 real first-run seed unless a test supplies its own.
 
 Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2, v2 → v3,
-v3 → v4, v4 → v5 and v5 → v6 upgrades of existing seeded databases (historical rows are inserted with the
-historical column set through `testing/historical-fixtures.ts`), account binding (profile persisted, every `business_id`
+v3 → v4, v4 → v5, v5 → v6 and v6 → v7 upgrades of existing seeded databases (historical rows are inserted with the
+historical column set through `testing/historical-fixtures.ts`, which write no outbox entry), account binding (profile persisted, every `business_id`
 rewritten, relationships untouched, restart, same-owner rebind, other-owner refusal, multiple local
 ids refusal, rollback), the empty production seed, the development seed under a bound Business id,
 seed-once, restart without duplicates, empty-but-initialized
@@ -567,7 +648,10 @@ mixed, NULL for linked Sales, invalid cents refused), the atomic Appointment-lin
 (summed stock restored exactly and matching lines removed across two Reventes, the emptied Sale
 deleted and the mixed Sale kept, the last Sale removed, snapshot-identity matching at another unit
 price, no clamping, refusal of unsold / paid, abort on a deleted Product, rollback of the
-restoration when a later write fails), the source-hygiene guard (no literal NUL
+restoration when a later write fails), the sync outbox (§7c: scoping, one entry per mutation,
+coalescing, child → parent marking, DELETE semantics, atomicity both ways, restart, conditional
+settle, development reset) and `sync_state` round trip (exact version and instant, restart,
+upsert, Business scoping, refusal of fabricated versions), the source-hygiene guard (no literal NUL
 byte in a store file), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.
 
@@ -591,6 +675,7 @@ this local layer must keep true for the later phases:
   must emit globally unique ids (CLOUD_SYNC.md §5.2); existing ids are never rewritten;
 - the aggregate boundaries are the transaction boundaries of §7: CLIENT, SERVICE + phases,
   APPOINTMENT + items + phases, PRODUCT, SALE + items;
-- V1B will add a `sync_outbox` written inside the same `runInTransaction` as the business
-  mutation (no `sync_status` column on business tables) and per-aggregate acknowledged remote
-  versions; neither exists in schema v6.
+- V1B (schema v7) added `sync_outbox`, written inside the same `runInTransaction` as the business
+  mutation (no `sync_status` column on business tables), and `sync_state`, the per-aggregate
+  acknowledged remote version (§7c, CLOUD_SYNC.md §10). Nothing reads either at runtime yet: the
+  V1C worker is the first consumer.

@@ -8,8 +8,8 @@ shared between devices. It does NOT change how the application works: SQLite sta
 operational database and the UI keeps reading and writing it.
 
 ```text
-V1A  Remote Schema & Sync Contract        ← this document (schema + contract, no runtime)
-V1B  Local Outbox & Sync Metadata
+V1A  Remote Schema & Sync Contract        done — remote schema + contract (§3–§9)
+V1B  Local Outbox & Sync Metadata         done — local outbox + acknowledged revisions (§10)
 V1C  Initial Upload + Incremental Push
 V1D  Pull + New Device Restore
 V1E  Conflict / Retry Hardening
@@ -18,15 +18,20 @@ V1F  Product Image Sync
 
 State after V1A: the remote operational tables, constraints, triggers, RLS and grants exist in
 `supabase/migrations/20260914120000_create_operational_sync_schema.sql`. No application code
-reads or writes them. Nothing is uploaded, downloaded, restored or synchronized. The product must
-keep saying so (`docs/architecture/AUTH.md` §1).
+reads or writes them.
+
+State after V1B: SQLite schema v7 adds `sync_outbox` and `sync_state` (§10). Every local
+business mutation records its aggregate in the outbox inside its own transaction. Nothing reads
+the outbox yet except tests: no push, no pull, no worker, no Supabase operational write. Nothing
+is uploaded, downloaded, restored or synchronized. The product must keep saying so
+(`docs/architecture/AUTH.md` §1).
 
 ---
 
 ## 2. Local-first model
 
 ```text
-UI ──► feature provider ──► SQLite (source of truth) ──► [V1B outbox] ──► [V1C/V1D sync worker] ──► Supabase
+UI ──► feature provider ──► SQLite (source of truth + sync_outbox, one transaction) ──► [V1C/V1D sync worker] ──► Supabase
                                         ▲                                                            │
                                         └──────────────────── [V1D pull / restore] ◄─────────────────┘
 ```
@@ -332,45 +337,140 @@ CRDT, no operational transform.
 
 ---
 
-## 10. Future local outbox (design for V1B — not implemented)
+## 10. Local outbox and acknowledged revisions (V1B — implemented, schema v7)
 
-Preferred model: one SQLite outbox table written in the SAME transaction as the business
-mutation, instead of `sync_status` columns on every table.
+Source: `src/persistence/schema.ts` (v7), `src/persistence/sync/{aggregate,outbox,state}.ts`, the
+five stores under `src/persistence/stores/`. PERSISTENCE.md §4 (migration) and §7c (mutation
+integration) hold the local-layer view; this section is the sync contract.
+
+### 10.1 Schema
 
 ```sql
 CREATE TABLE sync_outbox (
-  seq            INTEGER PRIMARY KEY AUTOINCREMENT,
-  aggregate      TEXT NOT NULL CHECK (aggregate IN ('CLIENT','SERVICE','APPOINTMENT','PRODUCT','SALE')),
-  entity_id      TEXT NOT NULL,
-  operation      TEXT NOT NULL CHECK (operation IN ('UPSERT','DELETE')),
-  enqueued_at    TEXT NOT NULL,
-  attempts       INTEGER NOT NULL DEFAULT 0,
-  last_error     TEXT,
-  UNIQUE (aggregate, entity_id)          -- one pending entry per aggregate; a later mutation
-);                                       -- refreshes enqueued_at instead of adding a row
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,   -- FIFO position; never reused
+  business_id     TEXT NOT NULL,                       -- bound Business UUID (business_profile.id)
+  aggregate_type  TEXT NOT NULL CHECK (aggregate_type IN ('CLIENT','SERVICE','APPOINTMENT','PRODUCT','SALE')),
+  aggregate_id    TEXT NOT NULL,                       -- the aggregate's own stable id
+  operation       TEXT NOT NULL CHECK (operation IN ('UPSERT','DELETE')),
+  revision        INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),   -- +1 per coalesced mutation
+  created_at      TEXT NOT NULL,                       -- ISO instant of the first pending mutation
+  updated_at      TEXT NOT NULL,                       -- ISO instant of the latest coalesced mutation
+  attempt_count   INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  last_error      TEXT,
+  next_attempt_at TEXT,                                -- NULL = eligible now
+  UNIQUE (business_id, aggregate_type, aggregate_id)   -- ONE current pending record per aggregate
+);
 
 CREATE TABLE sync_state (
-  aggregate      TEXT NOT NULL,
-  entity_id      TEXT NOT NULL,
-  acknowledged_sync_version INTEGER NOT NULL,
-  PRIMARY KEY (aggregate, entity_id)
+  business_id     TEXT NOT NULL,
+  aggregate_type  TEXT NOT NULL CHECK (aggregate_type IN ('CLIENT','SERVICE','APPOINTMENT','PRODUCT','SALE')),
+  aggregate_id    TEXT NOT NULL,
+  remote_version  INTEGER NOT NULL CHECK (remote_version >= 1),   -- server-assigned sync_version last acknowledged
+  last_synced_at  TEXT NOT NULL,
+  PRIMARY KEY (business_id, aggregate_type, aggregate_id)
 );
--- plus souris_metadata keys: sync_pull_cursor_<table>, sync_bootstrap_state
 ```
 
-Contract:
+No `sync_status` column exists on any business table. The outbox row carries the aggregate's
+identity only — never a payload: the worker reads the CURRENT local aggregate at push time. Both
+tables are local bookkeeping: not part of the hydrated snapshot, never uploaded, cleared by the
+development reset together with the operational data (PERSISTENCE.md §10).
 
-- every store mutation that changes an aggregate enqueues `(aggregate, entity_id, UPSERT|DELETE)`
-  inside `runInTransaction` — the mutation and its outbox entry commit or roll back together;
-- the worker reads the outbox in `seq` order, loads the CURRENT aggregate from SQLite (not a
-  stored payload), converts at the boundary (§3), and performs an idempotent conditional upsert
-  keyed by `(business_id, id)`; success deletes the entry and updates `sync_state`;
-- a DELETE entry sends a tombstone (`deleted_at`), never a remote hard delete;
-- an entity that no longer exists locally with an UPSERT entry is treated as DELETE;
-- retries are bounded with backoff; permanent failures stay in the outbox with `last_error` and
-  are visible to the user, never discarded;
-- the outbox is local bookkeeping: it is not part of the snapshot the UI hydrates, and it is not
-  uploaded.
+### 10.2 Aggregate mapping (child → parent)
+
+```text
+local write                                                    outbox entry
+clients row (insert / identity edit / archive / restore)        CLIENT      UPSERT
+clients row permanent deletion                                  CLIENT      DELETE
+services row and/or service_phases (any edit, activation)       SERVICE     UPSERT
+services row deletion (phases cascade)                          SERVICE     DELETE
+appointments row and/or appointment_items / appointment_phases  APPOINTMENT UPSERT
+  (create, edit, timing, reorder, item removal, checkout,
+   payment correction, previous-day reconciliation)
+appointments row permanent deletion                             APPOINTMENT DELETE
+products row (edit, activation, manual stock)                   PRODUCT     UPSERT
+products stock changed by Sale completion / removal             PRODUCT     UPSERT (one per Product)
+products row deletion                                           PRODUCT     DELETE
+sales + sale_items completion                                   SALE        UPSERT
+sale_items trimmed by an Appointment-linked Product removal     SALE        UPSERT (its child set changed)
+sales row emptied and deleted by that removal                   SALE        DELETE
+```
+
+Children (`service_phases`, `appointment_items`, `appointment_phases`, `sale_items`) never create
+an entry of their own; the remote contract (§6) replaces the parent's complete child set.
+
+### 10.3 Atomic write rule
+
+`markAggregateUpserted(db, type, id)` / `markAggregateDeleted(db, type, id)` are called by the
+store INSIDE its own `runInTransaction`, after the business statements. Mutation and outbox row
+commit or roll back together (verified both ways: a failing outbox write leaves the business row
+unchanged; a failing business write leaves no outbox row). Nothing is ever enqueued after a commit,
+and no provider or screen touches the outbox.
+
+### 10.4 Business scoping
+
+`business_id` is always `business_profile.id`, read inside the transaction. While the database is
+unbound (no `business_profile` row — a fresh install before Business setup, or a development
+database) the stores write NO outbox row at all: there is no Business to scope it to, and an
+unbound device cannot sync anyway (§3). Data that exists before binding is covered by the V1C
+bootstrap decision (§11: local populated / remote empty → initial upload of every aggregate), not
+by the outbox. Binding itself records nothing. The device-account conflict protection
+(PERSISTENCE.md §4b, AUTH.md §6) is unchanged.
+
+### 10.5 Coalescing rules (deterministic, per `(business_id, aggregate_type, aggregate_id)`)
+
+```text
+current entry     new mutation   result (same row: id and created_at never change)
+—                 UPSERT         INSERT  operation UPSERT, revision 1
+—                 DELETE         INSERT  operation DELETE, revision 1
+UPSERT            UPSERT         operation UPSERT, revision + 1, updated_at refreshed
+UPSERT            DELETE         operation DELETE, revision + 1          (DELETE overrides UPSERT)
+DELETE            UPSERT         operation UPSERT, revision + 1          (aggregate recreated with the same id:
+                                                                          the current local state is "exists")
+DELETE            DELETE         operation DELETE, revision + 1
+```
+
+Every coalesced mutation also resets the retry metadata — `attempt_count = 0`,
+`last_error = NULL`, `next_attempt_at = NULL` — because that metadata belongs to the revision that
+failed: a newer local revision is eligible at once and never inherits a stale failure or backoff.
+Three edits of one Client, or a phase edit followed by an activation toggle of one Service,
+therefore leave ONE row whose current state is what the worker pushes.
+
+### 10.6 DELETE semantics
+
+A DELETE entry is written in the transaction that deletes the local row and survives it: it holds
+`business_id`, `aggregate_type`, `aggregate_id` and nothing else, which is exactly what V1C needs
+to send a remote tombstone (`deleted_at`) without reading any local row. A refused deletion (Client
+with history, Appointment with payment or linked Sale, Sale removal of a paid Sale) writes no entry.
+V1C decides what a DELETE means for an aggregate that has no acknowledged remote revision (never
+pushed): drop the entry or tombstone a row the remote may hold from another path — never a hard
+delete (§8).
+
+### 10.7 sync_state meaning
+
+`sync_state` is the remote `sync_version` (§7) this device last ACKNOWLEDGED for an aggregate, with
+the acknowledgement instant. It is not UI state. No local mutation writes it; the migration creates
+it empty and existing rows receive no fabricated version — a local-only aggregate has no row, which
+means "no acknowledged remote revision". Only the V1C/V1D worker writes it, with the server-assigned
+version it actually observed, and V1E compares it with the current remote version (§9).
+`writeAcknowledgedRemoteVersion` refuses non-positive or non-integer versions; the CHECK does too.
+
+### 10.8 Worker contract for V1C (not implemented)
+
+```text
+read an eligible entry (business_id = bound id, next_attempt_at IS NULL or <= now), remember (id, revision)
+UPSERT → load the CURRENT aggregate from SQLite; missing locally ⇒ treat as DELETE
+         convert at the boundary (§3); conditional upsert keyed (business_id, id) against the acknowledged version (§9)
+DELETE → send a tombstone (deleted_at); never a remote hard delete
+success → ONE transaction: settleSyncOutboxEntry(id, revision) + writeAcknowledgedRemoteVersion(observed server version)
+          settle is CONDITIONAL on the revision: a mutation coalesced during the push keeps the entry
+          (with its newer revision) and it is pushed again with the fresh local state
+failure → recordSyncOutboxFailure(id, message, next_attempt_at)   bounded backoff, never discarded
+ordering → by aggregate dependency (CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE — remote FKs) then by id
+```
+
+Plus `souris_metadata` keys for pull cursors and the bootstrap decision (§11), still to be added
+in V1C/V1D.
 
 ---
 
@@ -444,21 +544,31 @@ businesses after the privilege revoke               owner SELECT / INSERT / UPDA
 
 ---
 
-## 14. Explicit non-goals of V1A
+## 14. Explicit non-goals of V1A / V1B
 
-No runtime sync, no outbox, no upload, no restore, no background task, no image upload, no
+V1A: no runtime sync, no outbox, no upload, no restore, no background task, no image upload, no
 conflict UI, no local schema change.
+
+V1B: no remote write or read of operational data, no Supabase operational repository, no push or
+pull worker, no network retry, no bootstrap upload, no restore, no conflict handling, no timer or
+background task, no image sync, no change to runtime ids, no money migration. The local outbox is
+written and tested; nothing consumes it yet.
 
 ### 14.1 `database-types.ts` is intentionally incomplete
 
 `src/infrastructure/supabase/database-types.ts` is the hand-written supabase-js `Database` type.
 It covers `businesses` ONLY. It does not describe the nine operational tables of this migration,
-and it will not until V1B introduces the first operational adapter, because a type without a
-consumer is dead code and would drift. Anyone reading that file must not take it as the full
+and it will not until V1C introduces the first operational adapter (V1B added no remote code),
+because a type without a consumer is dead code and would drift. Anyone reading that file must not take it as the full
 remote schema: the migration files under `supabase/migrations/` are the source of truth.
 
 ### 14.2 Prerequisites before V1C (real push / pull)
 
-1. Local monetary values persisted as integer cents (§3.1).
-2. Globally collision-resistant ids from every runtime generator (§5.2).
-3. V1B outbox and acknowledged versions (§10).
+1. Local monetary values persisted as integer cents (§3.1) — still open; V1B did not need it.
+2. Globally collision-resistant ids from every runtime generator (§5.2) — still open; V1B changed
+   no id generator (the outbox keys on the existing ids, which stay valid remote keys).
+3. ~~V1B outbox and acknowledged versions (§10)~~ — done.
+
+What V1C still has to build on top of §10: the operational Supabase adapter and boundary
+conversion, the bootstrap decision (§11), the push worker with the conditional settle, the
+acknowledgement writes, `souris_metadata` cursors, and the user-visible pending / failed state.

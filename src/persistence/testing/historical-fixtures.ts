@@ -5,11 +5,45 @@
 // inserted here with the column set those schemas actually had (v1 rows;
 // every later column is added by the migrations under test).
 
-import type { Appointment } from '@/domain/appointments';
+import type { Appointment, Service } from '@/domain/appointments';
+import type { Product } from '@/domain/products';
 import type { Sale } from '@/domain/sales';
 
 import type { SourisDatabase } from '../database';
 import { toSqlBoolean, toSqlInstant, toSqlOptional } from '../values';
+
+/** Service row + phases with the schema v1 column set (unchanged since; no outbox side effect). */
+export function insertHistoricalService(db: SourisDatabase, service: Service): void {
+  db.runSync(
+    'INSERT INTO services (id, business_id, name, type, price, active) VALUES (?, ?, ?, ?, ?, ?)',
+    [service.id, service.businessId, service.name, service.type, service.price, toSqlBoolean(service.active)],
+  );
+  service.phases.forEach((phase, position) => {
+    db.runSync(
+      'INSERT INTO service_phases (service_id, position, id, name, duration_minutes, requires_staff) VALUES (?, ?, ?, ?, ?, ?)',
+      [service.id, position, phase.id, phase.name, phase.durationMinutes, toSqlBoolean(phase.requiresStaff)],
+    );
+  });
+}
+
+/** Product row with the schema v1 column set (unchanged since; no outbox side effect). */
+export function insertHistoricalProduct(db: SourisDatabase, product: Product): void {
+  db.runSync(
+    'INSERT INTO products (id, business_id, name, brand, category, barcode, image_uri, price, stock_quantity, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      product.id,
+      product.businessId,
+      product.name,
+      toSqlOptional(product.brand),
+      toSqlOptional(product.category),
+      toSqlOptional(product.barcode),
+      toSqlOptional(product.imageUri),
+      product.price,
+      product.stockQuantity,
+      toSqlBoolean(product.active),
+    ],
+  );
+}
 
 /** Appointment row + items + phases with the schema v1 column set (no payment columns). */
 export function insertHistoricalAppointment(db: SourisDatabase, appointment: Appointment): void {

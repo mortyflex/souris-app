@@ -19,7 +19,6 @@ import {
   readBusinessProfile,
 } from '../stores/business-profile';
 import { insertProduct } from '../stores/products';
-import { insertService } from '../stores/services';
 import {
   appointmentLea,
   BUSINESS_ID,
@@ -30,7 +29,12 @@ import {
   serviceColor,
   serviceCut,
 } from '../testing/fixtures';
-import { insertHistoricalAppointment, insertHistoricalSale } from '../testing/historical-fixtures';
+import {
+  insertHistoricalAppointment,
+  insertHistoricalProduct,
+  insertHistoricalSale,
+  insertHistoricalService,
+} from '../testing/historical-fixtures';
 import { openTestDatabase } from '../testing/node-sqlite-database';
 
 interface CountRow {
@@ -98,8 +102,8 @@ function openSchemaV2Database(): SourisDatabase {
         ],
       );
     }
-    for (const service of seed.services) insertService(db, service);
-    for (const product of seed.products) insertProduct(db, product);
+    for (const service of seed.services) insertHistoricalService(db, service);
+    for (const product of seed.products) insertHistoricalProduct(db, product);
     for (const appointment of seed.appointments) insertHistoricalAppointment(db, appointment);
     insertHistoricalSale(db, saleLea);
     db.runSync("INSERT INTO souris_metadata (key, value) VALUES ('seed_version', '1')");
@@ -127,8 +131,8 @@ describe('schema v3 migration on an existing v2 database', () => {
     const db = openSchemaV2Database();
     expect(readSchemaVersion(db)).toBe(2);
 
-    expect(migrateDatabase(db)).toBe(6);
-    expect(CURRENT_SCHEMA_VERSION).toBe(6);
+    expect(migrateDatabase(db)).toBe(7);
+    expect(CURRENT_SCHEMA_VERSION).toBe(7);
     // The migrated snapshot is the reference for every later comparison
     // (the v3 → v4 birthday copy is covered by birthday-migration.test.ts).
     const before = snapshotWithoutBusinessIds(db);
@@ -145,7 +149,7 @@ describe('schema v3 migration on an existing v2 database', () => {
     expect(readBusinessProfile(db)).toBeUndefined();
     expect(listLocalBusinessIds(db)).toEqual([BUSINESS_ID]);
 
-    expect(migrateDatabase(db)).toBe(6);
+    expect(migrateDatabase(db)).toBe(7);
     expect(countRows(db, 'business_profile')).toBe(0);
     expect(snapshotWithoutBusinessIds(db)).toEqual(before);
   });
@@ -158,7 +162,7 @@ describe('schema v3 migration on an existing v2 database', () => {
 
     expect(createSeed).not.toHaveBeenCalled();
     expect(snapshot.clients).toHaveLength(1);
-    expect(readSchemaVersion(db)).toBe(6);
+    expect(readSchemaVersion(db)).toBe(7);
   });
 });
 

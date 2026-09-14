@@ -1,12 +1,28 @@
 // Souris — shared persistence test fixtures (never imported by app code)
 
 import type { Appointment, Service } from '@/domain/appointments';
+import type { BusinessProfile } from '@/domain/business';
 import type { Client } from '@/domain/clients';
 import type { Product } from '@/domain/products';
 
 import type { FirstRunSeed } from '../seed';
 
 export const BUSINESS_ID = 'business-test';
+
+/** The remote Business UUID a bound test database belongs to (sync tests). */
+export const REMOTE_BUSINESS_ID = '8f5c2a1e-3b7d-4c9a-9e2f-1a2b3c4d5e6f';
+
+export const remoteBusinessProfile: BusinessProfile = {
+  id: REMOTE_BUSINESS_ID,
+  ownerUserId: 'a1b2c3d4-0000-4000-8000-000000000001',
+  ownerFirstName: 'Léa',
+  ownerLastName: 'Martin',
+  name: 'Maison Léa',
+  activityType: 'HAIRDRESSING',
+  phone: '06 12 34 56 78',
+  createdAt: new Date('2026-09-12T10:00:00.000Z'),
+  updatedAt: new Date('2026-09-12T10:00:00.000Z'),
+};
 
 export const clientLea: Client = {
   id: 'client-lea',
