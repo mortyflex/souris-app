@@ -472,7 +472,7 @@ success is plain back-stack navigation.
 Local persistence exists and is documented in `docs/architecture/PERSISTENCE.md`.
 
 ```text
-src/persistence/     expo-sqlite boundary, schema v1 + v2, migrations, first-run seed, stores,
+src/persistence/     expo-sqlite boundary, schema v1 → v7 (forward-only migrations), first-run seed, stores,
                      LocalFiles boundary for durable Product images (plain TypeScript)
 src/providers/       PersistenceProvider: migrate → seed once → hydrate → render
 ```

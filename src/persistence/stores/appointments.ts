@@ -5,6 +5,12 @@
 // phases are stored by position. `service_id` is historical metadata with
 // no foreign key: deleting a catalog Service never changes an Appointment,
 // and no Appointment write (create, edit, timing) ever touches Service rows.
+//
+// Items and phases never sync on their own: every write — metadata, timing,
+// reorder, item removal, checkout, payment correction, lifecycle outcome —
+// marks the APPOINTMENT aggregate in the sync outbox within the same
+// transaction (Cloud Sync V1B); permanent deletion leaves an APPOINTMENT
+// DELETE entry that outlives the rows.
 
 import {
   canDeleteAppointmentPermanently,
@@ -25,6 +31,7 @@ import {
 } from '@/domain/appointments';
 
 import { runInTransaction, type SourisDatabase } from '../database';
+import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
 import { countAppointmentSales } from './sales';
 import {
   assertAmountCents,
@@ -214,6 +221,7 @@ export function insertAppointment(db: SourisDatabase, appointment: Appointment):
       [appointment.id, appointment.businessId, ...metadataParams(appointment)],
     );
     writeItems(db, appointment);
+    markAggregateUpserted(db, 'APPOINTMENT', appointment.id);
   });
 }
 
@@ -232,6 +240,7 @@ export function updateAppointment(db: SourisDatabase, appointment: Appointment):
     }
     db.runSync('DELETE FROM appointment_items WHERE appointment_id = ?', [appointment.id]);
     writeItems(db, appointment);
+    markAggregateUpserted(db, 'APPOINTMENT', appointment.id);
   });
 }
 
@@ -283,6 +292,7 @@ export function updateAppointmentItemPhaseDurations(
         );
       }
     }
+    markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
   });
 }
 
@@ -358,6 +368,7 @@ export function reorderAppointmentItems(
         throw new AppointmentItemConflictError(appointmentId, 'ITEM_NOT_FOUND');
       }
     });
+    markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
   });
 }
 
@@ -402,6 +413,7 @@ export function removeAppointmentItem(
           [index, appointmentId, itemId],
         );
       });
+    markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
   });
 }
 
@@ -432,6 +444,7 @@ export function checkoutAppointment(
     if (result.changes !== 1) {
       throw new AppointmentCheckoutConflictError(appointmentId);
     }
+    markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
   });
 }
 
@@ -454,6 +467,7 @@ export function updateAppointmentPayment(
     if (result.changes !== 1) {
       throw new AppointmentCheckoutConflictError(appointmentId);
     }
+    markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
   });
 }
 
@@ -488,7 +502,7 @@ export function countAppointmentReferences(
  *
  *   → a recorded payment or a linked Sale: AppointmentDeleteConflictError,
  *     nothing written (no cascade, no `appointment_id = NULL` rewrite)
- *   → otherwise DELETE
+ *   → otherwise DELETE + APPOINTMENT DELETE outbox entry
  */
 export function deleteAppointment(db: SourisDatabase, appointmentId: string): void {
   runInTransaction(db, () => {
@@ -496,6 +510,7 @@ export function deleteAppointment(db: SourisDatabase, appointmentId: string): vo
     if (!canDeleteAppointmentPermanently(references)) {
       throw new AppointmentDeleteConflictError(appointmentId, references);
     }
-    db.runSync('DELETE FROM appointments WHERE id = ?', [appointmentId]);
+    const result = db.runSync('DELETE FROM appointments WHERE id = ?', [appointmentId]);
+    if (result.changes === 1) markAggregateDeleted(db, 'APPOINTMENT', appointmentId);
   });
 }

@@ -3,10 +3,15 @@
 // A Service and its ordered phases are written together. Phases are stored
 // by position and reloaded in that exact order; a Service edit replaces the
 // whole phase list atomically.
+//
+// Phases never sync on their own: every write — including a phase-only edit
+// — marks the SERVICE aggregate in the sync outbox within the same
+// transaction (Cloud Sync V1B). Deletion leaves a SERVICE DELETE entry.
 
 import type { Service, ServicePhase, ServiceType } from '@/domain/appointments';
 
 import { runInTransaction, type SourisDatabase } from '../database';
+import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
 import { fromSqlBoolean, toSqlBoolean } from '../values';
 
 interface ServiceRow {
@@ -90,6 +95,7 @@ export function insertService(db: SourisDatabase, service: Service): void {
       ],
     );
     writePhases(db, service);
+    markAggregateUpserted(db, 'SERVICE', service.id);
   });
 }
 
@@ -105,14 +111,24 @@ export function updateService(db: SourisDatabase, service: Service): void {
     }
     db.runSync('DELETE FROM service_phases WHERE service_id = ?', [service.id]);
     writePhases(db, service);
+    markAggregateUpserted(db, 'SERVICE', service.id);
   });
 }
 
 export function setServiceActive(db: SourisDatabase, serviceId: string, active: boolean): void {
-  db.runSync('UPDATE services SET active = ? WHERE id = ?', [toSqlBoolean(active), serviceId]);
+  runInTransaction(db, () => {
+    const result = db.runSync('UPDATE services SET active = ? WHERE id = ?', [
+      toSqlBoolean(active),
+      serviceId,
+    ]);
+    if (result.changes === 1) markAggregateUpserted(db, 'SERVICE', serviceId);
+  });
 }
 
 /** Removes the catalog record and its phases; Appointment snapshots are untouched. */
 export function deleteService(db: SourisDatabase, serviceId: string): void {
-  db.runSync('DELETE FROM services WHERE id = ?', [serviceId]);
+  runInTransaction(db, () => {
+    const result = db.runSync('DELETE FROM services WHERE id = ?', [serviceId]);
+    if (result.changes === 1) markAggregateDeleted(db, 'SERVICE', serviceId);
+  });
 }

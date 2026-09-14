@@ -20,7 +20,7 @@ describe('schema migrations', () => {
     expect(readSchemaVersion(db)).toBe(0);
 
     expect(migrateDatabase(db)).toBe(CURRENT_SCHEMA_VERSION);
-    expect(readSchemaVersion(db)).toBe(6);
+    expect(readSchemaVersion(db)).toBe(7);
 
     const tables = db
       .getAllSync<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
@@ -38,6 +38,8 @@ describe('schema migrations', () => {
         'sales',
         'sale_items',
         'business_profile',
+        'sync_outbox',
+        'sync_state',
       ]),
     );
   });

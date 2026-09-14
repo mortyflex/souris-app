@@ -219,6 +219,58 @@ ALTER TABLE sales ADD COLUMN cash_amount_cents INTEGER
   CHECK (cash_amount_cents IS NULL OR cash_amount_cents >= 0);
 `;
 
+/**
+ * Schema v7 — Cloud Sync V1B: local outbox and sync acknowledgement state.
+ *
+ * `sync_outbox` holds ONE current pending record per aggregate — the
+ * `(business_id, aggregate_type, aggregate_id)` key is UNIQUE — written in
+ * the same transaction as the business mutation it describes. `operation`
+ * is the latest local intent (UPSERT: the current local row must reach the
+ * remote; DELETE: a remote tombstone must be sent; the local row is already
+ * gone). The row carries only the aggregate identity, never a payload: the
+ * future worker reads the current local aggregate at push time.
+ * `revision` increases on every coalesced mutation so a worker can settle an
+ * entry only if nothing changed while it was pushing. `attempt_count`,
+ * `last_error` and `next_attempt_at` are worker bookkeeping (V1C) tied to
+ * that revision; a coalesced mutation resets them.
+ *
+ * `sync_state` records, per aggregate, the remote `sync_version` last
+ * acknowledged by this device. It is never written by a local mutation and
+ * starts empty: a local-only entity has no acknowledged remote revision.
+ *
+ * Both tables are created empty. No business row is touched, no wipe, no
+ * reseed. `business_id` is the bound Business UUID (`business_profile.id`).
+ */
+const SCHEMA_V7 = `
+CREATE TABLE IF NOT EXISTS sync_outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (
+    aggregate_type IN ('CLIENT', 'SERVICE', 'APPOINTMENT', 'PRODUCT', 'SALE')
+  ),
+  aggregate_id TEXT NOT NULL,
+  operation TEXT NOT NULL CHECK (operation IN ('UPSERT', 'DELETE')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  last_error TEXT,
+  next_attempt_at TEXT,
+  UNIQUE (business_id, aggregate_type, aggregate_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_state (
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (
+    aggregate_type IN ('CLIENT', 'SERVICE', 'APPOINTMENT', 'PRODUCT', 'SALE')
+  ),
+  aggregate_id TEXT NOT NULL,
+  remote_version INTEGER NOT NULL CHECK (remote_version >= 1),
+  last_synced_at TEXT NOT NULL,
+  PRIMARY KEY (business_id, aggregate_type, aggregate_id)
+);
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -226,6 +278,7 @@ export const migrations: readonly Migration[] = [
   { version: 4, up: (db) => db.execSync(SCHEMA_V4) },
   { version: 5, up: (db) => db.execSync(SCHEMA_V5) },
   { version: 6, up: (db) => db.execSync(SCHEMA_V6) },
+  { version: 7, up: (db) => db.execSync(SCHEMA_V7) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;
@@ -249,3 +302,11 @@ export const SOURIS_TABLES = [
 
 /** The tables whose rows carry a `business_id`; the ONLY columns account binding rewrites. */
 export const BUSINESS_SCOPED_TABLES = ['services', 'appointments', 'products', 'sales'] as const;
+
+/**
+ * Local sync bookkeeping (schema v7). Not operational data: never part of
+ * the hydrated snapshot, never uploaded. Cleared with the operational tables
+ * by the development reset, because pending intents and acknowledged remote
+ * revisions describe rows that the reset removes.
+ */
+export const SYNC_TABLES = ['sync_outbox', 'sync_state'] as const;

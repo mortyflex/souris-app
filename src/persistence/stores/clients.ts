@@ -10,6 +10,10 @@
 // state; the domain value is a Date, restored exactly. Permanent deletion
 // verifies Appointment and Sale references INSIDE its transaction, so the
 // stored rows — never in-memory arrays — decide whether it is allowed.
+//
+// Every mutation marks the CLIENT aggregate in the sync outbox within its own
+// transaction (Cloud Sync V1B): identity edits, archive and restore are
+// UPSERTs; permanent deletion is a DELETE that outlives the row.
 
 import {
   canDeleteClientPermanently,
@@ -20,6 +24,7 @@ import {
 } from '@/domain/clients';
 
 import { runInTransaction, type SourisDatabase } from '../database';
+import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
 import { fromSqlInstant, fromSqlOptional, toSqlInstant, toSqlOptional } from '../values';
 
 interface ClientRow {
@@ -77,18 +82,21 @@ export function loadClients(db: SourisDatabase): readonly Client[] {
 }
 
 export function insertClient(db: SourisDatabase, client: Client): void {
-  db.runSync(
-    'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [
-      client.id,
-      client.firstName,
-      toSqlOptional(client.lastName),
-      toSqlOptional(client.phone),
-      toSqlOptional(client.email),
-      toBirthdayColumn(client),
-      client.archivedAt === undefined ? null : toSqlInstant(client.archivedAt),
-    ],
-  );
+  runInTransaction(db, () => {
+    db.runSync(
+      'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        client.id,
+        client.firstName,
+        toSqlOptional(client.lastName),
+        toSqlOptional(client.phone),
+        toSqlOptional(client.email),
+        toBirthdayColumn(client),
+        client.archivedAt === undefined ? null : toSqlInstant(client.archivedAt),
+      ],
+    );
+    markAggregateUpserted(db, 'CLIENT', client.id);
+  });
 }
 
 /**
@@ -96,37 +104,46 @@ export function insertClient(db: SourisDatabase, client: Client): void {
  * lifecycle column is untouched: identity edits never archive or restore.
  */
 export function updateClient(db: SourisDatabase, client: Client): void {
-  const result = db.runSync(
-    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ? WHERE id = ?',
-    [
-      client.firstName,
-      toSqlOptional(client.lastName),
-      toSqlOptional(client.phone),
-      toSqlOptional(client.email),
-      toBirthdayColumn(client),
-      client.id,
-    ],
-  );
-  if (result.changes !== 1) {
-    throw new Error(`updateClient: Client "${client.id}" not found`);
-  }
+  runInTransaction(db, () => {
+    const result = db.runSync(
+      'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ? WHERE id = ?',
+      [
+        client.firstName,
+        toSqlOptional(client.lastName),
+        toSqlOptional(client.phone),
+        toSqlOptional(client.email),
+        toBirthdayColumn(client),
+        client.id,
+      ],
+    );
+    if (result.changes !== 1) {
+      throw new Error(`updateClient: Client "${client.id}" not found`);
+    }
+    markAggregateUpserted(db, 'CLIENT', client.id);
+  });
 }
 
 export function archiveClient(db: SourisDatabase, clientId: string, archivedAt: Date): void {
-  const result = db.runSync('UPDATE clients SET archived_at = ? WHERE id = ?', [
-    toSqlInstant(archivedAt),
-    clientId,
-  ]);
-  if (result.changes !== 1) {
-    throw new Error(`archiveClient: Client "${clientId}" not found`);
-  }
+  runInTransaction(db, () => {
+    const result = db.runSync('UPDATE clients SET archived_at = ? WHERE id = ?', [
+      toSqlInstant(archivedAt),
+      clientId,
+    ]);
+    if (result.changes !== 1) {
+      throw new Error(`archiveClient: Client "${clientId}" not found`);
+    }
+    markAggregateUpserted(db, 'CLIENT', clientId);
+  });
 }
 
 export function restoreClient(db: SourisDatabase, clientId: string): void {
-  const result = db.runSync('UPDATE clients SET archived_at = NULL WHERE id = ?', [clientId]);
-  if (result.changes !== 1) {
-    throw new Error(`restoreClient: Client "${clientId}" not found`);
-  }
+  runInTransaction(db, () => {
+    const result = db.runSync('UPDATE clients SET archived_at = NULL WHERE id = ?', [clientId]);
+    if (result.changes !== 1) {
+      throw new Error(`restoreClient: Client "${clientId}" not found`);
+    }
+    markAggregateUpserted(db, 'CLIENT', clientId);
+  });
 }
 
 /** Counts the stored Appointments and Sales referencing the Client, whatever their status. */
@@ -147,7 +164,7 @@ export function countClientReferences(db: SourisDatabase, clientId: string): Cli
  *
  *   count Appointment refs → count Sale refs
  *   → any reference: ClientDeleteConflictError, nothing written
- *   → otherwise DELETE the Client row
+ *   → otherwise DELETE the Client row + CLIENT DELETE outbox entry
  *
  * Never cascades, never nulls `client_id`, never anonymizes.
  */
@@ -161,5 +178,6 @@ export function deleteClientPermanently(db: SourisDatabase, clientId: string): v
     if (result.changes !== 1) {
       throw new Error(`deleteClientPermanently: Client "${clientId}" not found`);
     }
+    markAggregateDeleted(db, 'CLIENT', clientId);
   });
 }
