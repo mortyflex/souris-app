@@ -39,10 +39,12 @@ import {
   fromSqlInstant,
   fromSqlOptional,
   fromSqlPaymentColumns,
+  fromSqlPriceCents,
   toSqlBoolean,
   toSqlInstant,
   toSqlOptional,
   toSqlPaymentColumns,
+  toSqlPriceCents,
 } from '../values';
 
 interface AppointmentRow {
@@ -70,7 +72,7 @@ interface AppointmentItemRow {
   readonly service_option_id: string | null;
   readonly service_name: string;
   readonly service_type: ServiceType;
-  readonly price: number;
+  readonly price_cents: number;
 }
 
 interface AppointmentPhaseRow {
@@ -142,7 +144,7 @@ export function loadAppointments(db: SourisDatabase): readonly Appointment[] {
 
   const itemsByAppointment = new Map<string, AppointmentItem[]>();
   for (const row of db.getAllSync<AppointmentItemRow>(
-    'SELECT appointment_id, id, item_order, service_id, service_option_id, service_name, service_type, price FROM appointment_items ORDER BY appointment_id, item_order',
+    'SELECT appointment_id, id, item_order, service_id, service_option_id, service_name, service_type, price_cents FROM appointment_items ORDER BY appointment_id, item_order',
   )) {
     const serviceOptionId = fromSqlOptional(row.service_option_id);
     const item: AppointmentItem = {
@@ -152,7 +154,7 @@ export function loadAppointments(db: SourisDatabase): readonly Appointment[] {
       order: row.item_order,
       serviceName: row.service_name,
       serviceType: row.service_type,
-      price: row.price,
+      price: fromSqlPriceCents(row.price_cents),
       phases: phasesByItem.get(itemKey(row.appointment_id, row.id)) ?? [],
     };
     const items = itemsByAppointment.get(row.appointment_id) ?? [];
@@ -170,7 +172,7 @@ export function loadAppointments(db: SourisDatabase): readonly Appointment[] {
 function writeItems(db: SourisDatabase, appointment: Appointment): void {
   for (const item of appointment.items) {
     db.runSync(
-      'INSERT INTO appointment_items (appointment_id, id, item_order, service_id, service_option_id, service_name, service_type, price) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO appointment_items (appointment_id, id, item_order, service_id, service_option_id, service_name, service_type, price_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         appointment.id,
         item.id,
@@ -179,7 +181,7 @@ function writeItems(db: SourisDatabase, appointment: Appointment): void {
         toSqlOptional(item.serviceOptionId),
         item.serviceName,
         item.serviceType,
-        item.price,
+        toSqlPriceCents(item.price, 'appointment_items.price_cents'),
       ],
     );
     item.phases.forEach((phase, position) => {

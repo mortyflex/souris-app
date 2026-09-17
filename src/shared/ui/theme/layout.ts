@@ -41,12 +41,12 @@ export const dialog = {
 // anchored to the screen title block by MainScreenHeader — never to the
 // device edge — so the safe area never changes where it sits on the page.
 export const watermark = {
-  size: 168,
-  opacity: 0.07,
+  size: 255,
+  opacity: 0.05,
   /** Fraction of the glyph that leaves the page through the right edge. */
   cropRight: 0.28,
   /** Fraction of the glyph that rises above the title block. */
-  cropTop: 0.22,
+  cropTop: 0.15,
 } as const;
 
 // Shared floating create action (+): one size and one bottom-right inset for

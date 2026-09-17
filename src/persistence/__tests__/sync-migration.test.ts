@@ -87,21 +87,26 @@ describe('schema v7 migration on an existing v6 database', () => {
     const db = openSchemaV6Database();
     expect(readSchemaVersion(db)).toBe(6);
     expect(tableNames(db)).not.toEqual(expect.arrayContaining(['sync_outbox', 'sync_state']));
-    const before = loadSnapshot(db);
     const createSeed = jest.fn(createTestSeed);
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(7);
-    expect(CURRENT_SCHEMA_VERSION).toBe(7);
+    expect(readSchemaVersion(db)).toBe(8);
+    expect(CURRENT_SCHEMA_VERSION).toBe(8);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(tableNames(db)).toEqual(expect.arrayContaining(['sync_outbox', 'sync_state']));
-    expect(snapshot).toEqual(before);
+    // The v6 rows hydrate exactly as they were written (the v8 cents conversion is covered by money-migration.test.ts).
     expect(snapshot.clients).toEqual([clientLea]);
-    expect(snapshot.services).toHaveLength(2);
-    expect(snapshot.products).toHaveLength(2);
-    expect(snapshot.appointments).toHaveLength(1);
+    expect(snapshot.services).toEqual([
+      { ...serviceColor, businessId: REMOTE_BUSINESS_ID },
+      { ...serviceCut, businessId: REMOTE_BUSINESS_ID },
+    ]);
+    expect(snapshot.products).toEqual([
+      { ...productMask, businessId: REMOTE_BUSINESS_ID },
+      { ...productSerum, businessId: REMOTE_BUSINESS_ID },
+    ]);
+    expect(snapshot.appointments).toEqual([{ ...appointmentLea, businessId: REMOTE_BUSINESS_ID }]);
     expect(snapshot.sales).toEqual([sale]);
     expect(countRows(db, 'service_phases')).toBe(4);
     expect(countRows(db, 'appointment_items')).toBe(2);
@@ -117,7 +122,7 @@ describe('schema v7 migration on an existing v6 database', () => {
     migrateDatabase(db);
     const before = loadSnapshot(db);
 
-    expect(migrateDatabase(db)).toBe(7);
+    expect(migrateDatabase(db)).toBe(8);
     expect(loadSnapshot(db)).toEqual(before);
     expect(countSyncOutboxRows(db)).toBe(0);
   });

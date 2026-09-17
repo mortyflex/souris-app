@@ -1,7 +1,10 @@
 // Souris — SQLite value mapping helpers
 //
 // The only place where SQLite representations (0/1 booleans, ISO instants,
-// NULL optionals) are converted. Canonical domain values never see them.
+// NULL optionals, integer cents) are converted. Canonical domain values
+// never see them.
+
+import { eurosToCents } from '@/domain/appointments';
 
 import type { SqlValue } from './database';
 
@@ -61,6 +64,29 @@ export function assertAmountCents(value: number, column: string): number {
     throw new RangeError(`${column} must be a non-negative integer number of cents, got ${value}`);
   }
   return value;
+}
+
+/**
+ * Catalog and snapshot prices (`services.price_cents`, `products.price_cents`,
+ * `appointment_items.price_cents`, `sale_items.unit_price_cents`) are stored
+ * as exact non-negative INTEGER cents since schema v8; the domain keeps its
+ * euro-number contract (`price`, `unitPrice`). These two functions are the
+ * ONLY conversion between the two: writes go through the domain rounding
+ * rule, reads divide an integer by 100, which is exact for any amount that
+ * is meaningful at two decimals — a stored value round-trips unchanged.
+ */
+export function toSqlPriceCents(euros: number, column: string): number {
+  if (!Number.isFinite(euros) || euros < 0) {
+    throw new RangeError(`${column} must be a finite non-negative euro amount, got ${euros}`);
+  }
+  return assertAmountCents(eurosToCents(euros), column);
+}
+
+export function fromSqlPriceCents(cents: number): number {
+  if (!Number.isInteger(cents) || cents < 0) {
+    throw new RangeError(`fromSqlPriceCents: stored value ${cents} is not a non-negative integer number of cents`);
+  }
+  return cents / 100;
 }
 
 export function toSqlPaymentColumns(

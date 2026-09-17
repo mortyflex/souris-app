@@ -271,6 +271,46 @@ CREATE TABLE IF NOT EXISTS sync_state (
 );
 `;
 
+/**
+ * Schema v8 — Cloud Sync V1C-0: monetary values persisted as integer cents.
+ *
+ * The four euro `REAL` price columns (`services.price`,
+ * `appointment_items.price`, `products.price`, `sale_items.unit_price`)
+ * become exact non-negative INTEGER cents under explicit names
+ * (`price_cents`, `unit_price_cents`), the representation the remote
+ * schema already uses and that a sync engine can compare byte for byte.
+ *
+ * Per table, in ONE transaction with the version bump: add the cents
+ * column, convert every existing row with `ROUND(value * 100)` (never a
+ * truncating cast: 12.50 → 1250, 0.99 → 99, 0.29 → 29), then drop the
+ * legacy REAL column so no runtime SQL can still read or write it. SQLite
+ * rewrites the rows in place: ids, rowid order, foreign keys and cascades,
+ * snapshots, ordering, checkout cents and every other column are untouched.
+ * No wipe, no reseed, no row deleted. Requires SQLite ≥ 3.35 (`DROP
+ * COLUMN`); expo-sqlite bundles 3.50.
+ */
+const SCHEMA_V8 = `
+ALTER TABLE services ADD COLUMN price_cents INTEGER NOT NULL DEFAULT 0
+  CHECK (price_cents >= 0);
+UPDATE services SET price_cents = CAST(ROUND(price * 100) AS INTEGER);
+ALTER TABLE services DROP COLUMN price;
+
+ALTER TABLE appointment_items ADD COLUMN price_cents INTEGER NOT NULL DEFAULT 0
+  CHECK (price_cents >= 0);
+UPDATE appointment_items SET price_cents = CAST(ROUND(price * 100) AS INTEGER);
+ALTER TABLE appointment_items DROP COLUMN price;
+
+ALTER TABLE products ADD COLUMN price_cents INTEGER NOT NULL DEFAULT 0
+  CHECK (price_cents >= 0);
+UPDATE products SET price_cents = CAST(ROUND(price * 100) AS INTEGER);
+ALTER TABLE products DROP COLUMN price;
+
+ALTER TABLE sale_items ADD COLUMN unit_price_cents INTEGER NOT NULL DEFAULT 0
+  CHECK (unit_price_cents >= 0);
+UPDATE sale_items SET unit_price_cents = CAST(ROUND(unit_price * 100) AS INTEGER);
+ALTER TABLE sale_items DROP COLUMN unit_price;
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -279,6 +319,7 @@ export const migrations: readonly Migration[] = [
   { version: 5, up: (db) => db.execSync(SCHEMA_V5) },
   { version: 6, up: (db) => db.execSync(SCHEMA_V6) },
   { version: 7, up: (db) => db.execSync(SCHEMA_V7) },
+  { version: 8, up: (db) => db.execSync(SCHEMA_V8) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;

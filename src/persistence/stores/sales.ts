@@ -30,9 +30,11 @@ import {
   fromSqlInstant,
   fromSqlOptional,
   fromSqlPaymentColumns,
+  fromSqlPriceCents,
   toSqlInstant,
   toSqlOptional,
   toSqlPaymentColumns,
+  toSqlPriceCents,
 } from '../values';
 
 interface SaleRow {
@@ -51,9 +53,11 @@ interface SaleItemRow {
   readonly id: string;
   readonly product_id: string;
   readonly product_name: string;
-  readonly unit_price: number;
+  readonly unit_price_cents: number;
   readonly quantity: number;
 }
+
+const UNIT_PRICE_COLUMN = 'sale_items.unit_price_cents';
 
 export class SaleStockConflictError extends Error {
   constructor(readonly productId: string) {
@@ -96,14 +100,14 @@ export interface AppointmentProductDeletionOutcome {
 export function loadSales(db: SourisDatabase): readonly Sale[] {
   const itemsBySale = new Map<string, SaleItem[]>();
   for (const row of db.getAllSync<SaleItemRow>(
-    'SELECT sale_id, id, product_id, product_name, unit_price, quantity FROM sale_items ORDER BY sale_id, position',
+    'SELECT sale_id, id, product_id, product_name, unit_price_cents, quantity FROM sale_items ORDER BY sale_id, position',
   )) {
     const items = itemsBySale.get(row.sale_id) ?? [];
     items.push({
       id: row.id,
       productId: row.product_id,
       productName: row.product_name,
-      unitPrice: row.unit_price,
+      unitPrice: fromSqlPriceCents(row.unit_price_cents),
       quantity: row.quantity,
     });
     itemsBySale.set(row.sale_id, items);
@@ -167,8 +171,16 @@ export function completeSale(
     );
     sale.items.forEach((item, position) => {
       db.runSync(
-        'INSERT INTO sale_items (sale_id, id, position, product_id, product_name, unit_price, quantity) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [sale.id, item.id, position, item.productId, item.productName, item.unitPrice, item.quantity],
+        'INSERT INTO sale_items (sale_id, id, position, product_id, product_name, unit_price_cents, quantity) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+          sale.id,
+          item.id,
+          position,
+          item.productId,
+          item.productName,
+          toSqlPriceCents(item.unitPrice, UNIT_PRICE_COLUMN),
+          item.quantity,
+        ],
       );
     });
     markAggregateUpserted(db, 'SALE', sale.id);
@@ -180,7 +192,7 @@ export function completeSale(
  * snapshot across the Sales sold during it — and restores the summed
  * quantity, in ONE transaction:
  *
- *   SELECT the matching items (appointment_id + product_id + product_name + unit_price)
+ *   SELECT the matching items (appointment_id + product_id + product_name + unit_price_cents)
  *     → none ⇒ PRODUCT_NOT_SOLD; a paid parent Sale ⇒ SALE_HAS_PAYMENT
  *   UPDATE products SET stock_quantity = stock_quantity + Σ quantity
  *     → 0 rows changed ⇒ PRODUCT_MISSING
@@ -196,15 +208,17 @@ export function deleteAppointmentProduct(
   appointmentId: string,
   identity: AppointmentProductIdentity,
 ): AppointmentProductDeletionOutcome {
-  const { productId, productName, unitPrice } = identity;
+  const { productId, productName } = identity;
+  // The snapshot identity is matched on the stored cents, exactly as written.
+  const unitPriceCents = toSqlPriceCents(identity.unitPrice, UNIT_PRICE_COLUMN);
   const refuse = (reason: AppointmentProductDeleteRefusal) =>
     new AppointmentProductDeleteConflictError(appointmentId, productId, reason);
 
   let outcome: AppointmentProductDeletionOutcome | undefined;
   runInTransaction(db, () => {
     const rows = db.getAllSync<{ sale_id: string; quantity: number; paid_at: string | null }>(
-      'SELECT si.sale_id, si.quantity, s.paid_at FROM sale_items si JOIN sales s ON s.id = si.sale_id WHERE s.appointment_id = ? AND si.product_id = ? AND si.product_name = ? AND si.unit_price = ? ORDER BY s.rowid, si.position',
-      [appointmentId, productId, productName, unitPrice],
+      'SELECT si.sale_id, si.quantity, s.paid_at FROM sale_items si JOIN sales s ON s.id = si.sale_id WHERE s.appointment_id = ? AND si.product_id = ? AND si.product_name = ? AND si.unit_price_cents = ? ORDER BY s.rowid, si.position',
+      [appointmentId, productId, productName, unitPriceCents],
     );
     if (rows.length === 0) throw refuse('PRODUCT_NOT_SOLD');
     if (rows.some((row) => row.paid_at !== null)) throw refuse('SALE_HAS_PAYMENT');
@@ -225,8 +239,8 @@ export function deleteAppointmentProduct(
     const trimmedSaleIds: string[] = [];
     for (const saleId of saleIds) {
       db.runSync(
-        'DELETE FROM sale_items WHERE sale_id = ? AND product_id = ? AND product_name = ? AND unit_price = ?',
-        [saleId, productId, productName, unitPrice],
+        'DELETE FROM sale_items WHERE sale_id = ? AND product_id = ? AND product_name = ? AND unit_price_cents = ?',
+        [saleId, productId, productName, unitPriceCents],
       );
       const remaining =
         db.getFirstSync<{ count: number }>(

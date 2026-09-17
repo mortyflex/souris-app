@@ -8,12 +8,13 @@ shared between devices. It does NOT change how the application works: SQLite sta
 operational database and the UI keeps reading and writing it.
 
 ```text
-V1A  Remote Schema & Sync Contract        done — remote schema + contract (§3–§9)
-V1B  Local Outbox & Sync Metadata         done — local outbox + acknowledged revisions (§10)
-V1C  Initial Upload + Incremental Push
-V1D  Pull + New Device Restore
-V1E  Conflict / Retry Hardening
-V1F  Product Image Sync
+V1A    Remote Schema & Sync Contract        done — remote schema + contract (§3–§9)
+V1B    Local Outbox & Sync Metadata         done — local outbox + acknowledged revisions (§10)
+V1C-0  Local Sync Prerequisites             done — UUID v4 top-level ids (§5) + integer-cents persistence (§3.1)
+V1C    Initial Upload + Incremental Push
+V1D    Pull + New Device Restore
+V1E    Conflict / Retry Hardening
+V1F    Product Image Sync
 ```
 
 State after V1A: the remote operational tables, constraints, triggers, RLS and grants exist in
@@ -21,10 +22,14 @@ State after V1A: the remote operational tables, constraints, triggers, RLS and g
 reads or writes them.
 
 State after V1B: SQLite schema v7 adds `sync_outbox` and `sync_state` (§10). Every local
-business mutation records its aggregate in the outbox inside its own transaction. Nothing reads
-the outbox yet except tests: no push, no pull, no worker, no Supabase operational write. Nothing
-is uploaded, downloaded, restored or synchronized. The product must keep saying so
-(`docs/architecture/AUTH.md` §1).
+business mutation records its aggregate in the outbox inside its own transaction.
+
+State after V1C-0: the two hard prerequisites of a real transfer are met locally. Every NEW
+Client, Service, Appointment, Product and Sale id is a UUID v4 (§5.2), and SQLite schema v8
+persists every price as integer cents under the remote column names (§3.1,
+PERSISTENCE.md §4). Still nothing reads the outbox except tests: no push, no pull, no worker,
+no bootstrap upload, no Supabase operational write. Nothing is uploaded, downloaded, restored or
+synchronized. The product must keep saying so (`docs/architecture/AUTH.md` §1).
 
 ---
 
@@ -90,7 +95,8 @@ Database-level rules mirrored from the domain:
 ```text
 SQLite                                   Supabase                          Conversion (sync boundary only)
 clients has no business_id               clients.business_id NOT NULL      stamp the bound Business id (business_profile.id)
-price / unit_price REAL (euro number)    price_cents / unit_price_cents    eurosToCents (domain rule) ⇄ cents / 100
+price_cents / unit_price_cents INTEGER   price_cents / unit_price_cents    none — identical integer cents since schema v8 (V1C-0);
+                                                                           the euro view exists only in the row mappers (values.ts)
 booleans INTEGER 0/1                     boolean                           values.ts helpers
 instants ISO-8601 TEXT                   timestamptz                       Date ⇄ ISO string
 products.image_uri (device file path)    — (absent)                        never uploaded; V1F adds a Storage reference
@@ -101,20 +107,33 @@ business_id TEXT                         business_id uuid                  must 
 A device whose `business_id` values are not the bound remote UUID (an unbound development
 database using `fixture-business`) cannot sync; binding (PERSISTENCE.md §4b) is the prerequisite.
 
-### 3.1 Money — hard prerequisite before V1C
+### 3.1 Money — hard prerequisite before V1C (DONE in V1C-0, schema v8)
 
-Live inspection (schema v6): `services.price`, `appointment_items.price`, `products.price` and
-`sale_items.unit_price` are SQLite `REAL` euro numbers; only `card_amount_cents` /
-`cash_amount_cents` (appointments, sales) are already integer cents. The remote columns are
-integer cents and stay so.
+Until schema v7, `services.price`, `appointment_items.price`, `products.price` and
+`sale_items.unit_price` were SQLite `REAL` euro numbers; only `card_amount_cents` /
+`cash_amount_cents` (appointments, sales) were integer cents. Converting at the sync boundary on
+every push and pull was never an acceptable substitute: a euro `REAL` round-tripped through cents
+is not guaranteed to be byte-identical, so a pull would report spurious local changes and the
+conflict contract (§9) would misfire.
 
-**Before any real push or pull (before V1C), the local persisted monetary values must be
-migrated to integer cents** (a forward SQLite migration adding `price_cents` /
-`unit_price_cents`, converting with `eurosToCents`, and switching the stores and domain price
-fields to cents). Converting at the sync boundary on every push and pull is not an acceptable
-substitute: a euro `REAL` round-tripped through cents is not guaranteed to be byte-identical, so
-the pull would report spurious local changes and the conflict contract (§9) would misfire. This
-migration is NOT part of V1A and is not implemented here.
+Schema v8 (Cloud Sync V1C-0, PERSISTENCE.md §4) resolved it locally, in one forward migration:
+
+```text
+services.price            REAL  →  services.price_cents            INTEGER NOT NULL CHECK >= 0
+appointment_items.price   REAL  →  appointment_items.price_cents   INTEGER NOT NULL CHECK >= 0
+products.price            REAL  →  products.price_cents            INTEGER NOT NULL CHECK >= 0
+sale_items.unit_price     REAL  →  sale_items.unit_price_cents     INTEGER NOT NULL CHECK >= 0
+conversion                 CAST(ROUND(value * 100) AS INTEGER)  — 12.50 → 1250, 0.99 → 99; legacy column dropped
+```
+
+Local and remote monetary columns are now the same names, the same type and the same exact
+integer values; the sync layer copies them without any conversion. The domain keeps its
+euro-number contract (`Service.price`, `Product.price`, `AppointmentItem.price`,
+`SaleItem.unitPrice`, checked-out amounts already in cents): `values.ts` `toSqlPriceCents`
+(the domain `eurosToCents` rounding rule) and `fromSqlPriceCents` (integer ÷ 100, exact at two
+decimals) are the ONLY conversion, and a stored value round-trips unchanged. No provider, screen
+or domain total changed; the Cash Register and the Appointment expected total were already integer
+cents.
 
 ---
 
@@ -177,51 +196,55 @@ repeats inside one Service. Position uniqueness is kept remotely as a second, de
 - `service_id` on appointment items and `product_id` on sale items are snapshot metadata with
   no foreign key, exactly like SQLite (PERSISTENCE.md §3).
 
-### 5.1 Current generators are NOT globally collision-resistant (inspected 2026-09-14)
+### 5.1 Runtime generators (since V1C-0)
 
-None of the runtime generators uses a UUID, nanoid or any random / device-unique component. All
-of them are `<prefix>-<Date.now()>-<counter>` where the counter is a module variable that
-restarts at 1 on every app launch:
+Every NEW top-level aggregate id is a random UUID v4 (RFC 4122, 122 random bits) produced by
+`expo-crypto` `randomUUID()` through ONE module, `src/shared/lib/uuid.ts` (`createUuidV4`),
+which refuses to return anything that is not a canonical UUID v4. Child ids keep deriving from
+their parent id:
 
 ```text
-src/features/clients/creation/runtime-ids.ts        createClientId            client-<ms>-<n>
-src/features/appointments/creation/runtime-ids.ts   createAppointmentId       appointment-<ms>-<n>
-                                                    createAppointmentItemId   <appointmentId>-item-<order>
+src/features/clients/creation/runtime-ids.ts        createClientId             <uuid v4>
+src/features/appointments/creation/runtime-ids.ts   createAppointmentId        <uuid v4>
+                                                    createAppointmentItemId    <appointmentId>-item-<order>
                                                     createNewAppointmentItemId <appointmentId>-item-new-<ms>-<n>
-src/features/services/editor/runtime-ids.ts         createServiceId           service-<ms>-<n>
-                                                    createServicePhaseId      <serviceId>-phase-<ms>-<n>
-src/features/products/editor/runtime-ids.ts         createProductId           product-<ms>-<n>
-src/features/sales/creation/runtime-ids.ts          createSaleId              sale-<ms>-<n>
-                                                    createSaleItemId          <saleId>-item-<sequence>
-src/features/services/adapters/*                    legacy import             service-<slug> (deterministic,
-                                                                              development reset only)
+src/features/services/editor/runtime-ids.ts         createServiceId            <uuid v4>
+                                                    createServicePhaseId       <serviceId>-phase-<ms>-<n>
+src/features/products/editor/runtime-ids.ts         createProductId            <uuid v4>
+src/features/sales/creation/runtime-ids.ts          createSaleId               <uuid v4>
+                                                    createSaleItemId           <saleId>-item-<sequence>
+src/features/services/adapters/*                    legacy import              service-<slug> (deterministic,
+                                                                               development reset only)
 ```
 
 Snapshot phase ids inside an Appointment reuse the catalog phase id (`domain/appointments/
 snapshot.ts`); they are unique only within their item, which the remote key
 `(business_id, appointment_id, appointment_item_id, id)` covers.
 
-Within ONE Business this is safe today because one device writes the data. It is not safe once
-two devices of the same Business create records independently: the same millisecond and the same
-post-launch counter produce the same key, and a remote upsert on `(business_id, id)` would then
-silently merge two different records. Derived child ids (`<parentId>-item-<n>`) inherit the
-parent's collision risk.
+Before V1C-0 (inspected 2026-09-14) every generator was `<prefix>-<Date.now()>-<counter>` with a
+module counter restarting at 1 on each launch — safe for one device per Business, not for two
+devices creating records independently (same millisecond + same post-launch counter = same key,
+silently merged by a remote upsert on `(business_id, id)`). Records created that way keep their
+ids: they were produced by a single device per Business and stay valid, unique remote keys.
 
-### 5.2 Required strategy (hard prerequisite before V1C push)
+### 5.2 Strategy (hard prerequisite before V1C push — DONE in V1C-0)
 
-- Every top-level generator above emits a UUID v4 (random, 122 bits) — via the Expo-provided
-  `expo-crypto` `randomUUID()` (a dependency decision for the phase that changes them, not V1A)
-  or an equivalent cryptographically random source. Prefixes may stay for readability
-  (`client-<uuid>`); the column type remains TEXT remotely and locally.
-- Child generators keep deriving from the parent id (`<parentUuid>-item-<n>`, `<parentUuid>-phase-<n>`):
-  once the parent is globally unique, the child key `(business_id, parent_id, id)` is too.
-- Existing ids are NEVER rewritten: they were created by a single device per Business and stay
-  valid remote keys. Only NEW records must use the new generators.
+- Every top-level generator emits a plain UUID v4, without prefix; the column type stays TEXT
+  remotely and locally, so old `<prefix>-<ms>-<n>` ids and new UUIDs coexist in the same column
+  and nothing distinguishes them.
+- Child generators keep deriving from the parent id (`<parentUuid>-item-<n>`,
+  `<parentUuid>-phase-<ms>-<n>`): once the parent is globally unique, the child key
+  `(business_id, parent_id, id)` is too. Child identity semantics are unchanged.
+- Existing ids were NEVER rewritten: no data migration, no id rewrite, no fixture change. Only
+  NEW records use the new generators.
 - Deterministic legacy ids remain a development-only concern (they never reach a bound
   production database through the empty first-run seed).
+- Covered by tests: canonical v4 shape, no repeat across 10 000 generations, distinct across a
+  simulated restart in the same frozen millisecond, refusal of a non-UUID from the platform, and
+  each feature generator (top-level UUID, derived child ids).
 
-Until the generators are replaced, no phase may enable multi-device writes for one Business
-(V1D restore onto a second device that then creates records is the first scenario affected).
+Multi-device creation for one Business is therefore safe on the identity side; enabling it
+still waits for the push / pull phases.
 
 ---
 
@@ -544,7 +567,7 @@ businesses after the privilege revoke               owner SELECT / INSERT / UPDA
 
 ---
 
-## 14. Explicit non-goals of V1A / V1B
+## 14. Explicit non-goals of V1A / V1B / V1C-0
 
 V1A: no runtime sync, no outbox, no upload, no restore, no background task, no image upload, no
 conflict UI, no local schema change.
@@ -553,6 +576,12 @@ V1B: no remote write or read of operational data, no Supabase operational reposi
 pull worker, no network retry, no bootstrap upload, no restore, no conflict handling, no timer or
 background task, no image sync, no change to runtime ids, no money migration. The local outbox is
 written and tested; nothing consumes it yet.
+
+V1C-0: no remote write or read of operational data, no Supabase operational adapter, no push or
+pull worker, no bootstrap upload, no restore, no conflict handling, no change to the domain
+money contract (euro numbers stay the domain / UI representation), no rewrite of any existing id,
+no change to child id semantics. Only the two local prerequisites: UUID v4 top-level generators
+(one new dependency, `expo-crypto`) and SQLite schema v8 (integer cents).
 
 ### 14.1 `database-types.ts` is intentionally incomplete
 
@@ -564,10 +593,13 @@ remote schema: the migration files under `supabase/migrations/` are the source o
 
 ### 14.2 Prerequisites before V1C (real push / pull)
 
-1. Local monetary values persisted as integer cents (§3.1) — still open; V1B did not need it.
-2. Globally collision-resistant ids from every runtime generator (§5.2) — still open; V1B changed
-   no id generator (the outbox keys on the existing ids, which stay valid remote keys).
+1. ~~Local monetary values persisted as integer cents (§3.1)~~ — done in V1C-0 (schema v8).
+2. ~~Globally collision-resistant ids from every runtime generator (§5.2)~~ — done in V1C-0
+   (UUID v4 through `src/shared/lib/uuid.ts`; existing ids untouched, the outbox keys on them as
+   before).
 3. ~~V1B outbox and acknowledged versions (§10)~~ — done.
+
+Actual remote transfer remains NOT implemented.
 
 What V1C still has to build on top of §10: the operational Supabase adapter and boundary
 conversion, the bootstrap decision (§11), the push worker with the conditional settle, the

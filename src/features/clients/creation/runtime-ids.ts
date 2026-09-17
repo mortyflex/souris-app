@@ -1,11 +1,11 @@
-let clientSequence = 0;
+import { createUuidV4 } from '@/shared/lib/uuid';
 
 /**
- * Runtime-only Client identity for the current in-memory session, mirroring
- * the appointment runtime-id pattern. ID generation stays at the application
- * boundary — never inside the Client domain.
+ * Identity of a NEW Client: a globally unique UUID v4, safe for creation on
+ * several devices of the same Business. ID generation stays at the
+ * application boundary — never inside the Client domain. Existing Client
+ * ids are never rewritten.
  */
-export function createClientId(now = new Date()): string {
-  clientSequence += 1;
-  return `client-${now.getTime()}-${clientSequence}`;
+export function createClientId(): string {
+  return createUuidV4();
 }

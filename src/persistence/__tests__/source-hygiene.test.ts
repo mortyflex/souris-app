@@ -30,4 +30,22 @@ describe('persistence source files', () => {
     // The escape produces the same runtime string the literal byte produced.
     expect(`a\0b`).toBe('a' + String.fromCharCode(0) + 'b');
   });
+
+  it('never name the legacy euro REAL columns dropped by schema v8 in any SQL statement', () => {
+    // Every SQL statement of a store is a single-line quoted string literal;
+    // the legacy `price` / `unit_price` columns may only survive as `*_cents`.
+    const stringLiteral = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g;
+    const sqlStatement = /\b(?:SELECT|INSERT|UPDATE|DELETE)\b/;
+    const legacyColumn = /\b(?:price|unit_price)\b(?!_cents)/;
+    let statements = 0;
+    for (const path of listTypeScriptFiles(STORES_DIRECTORY)) {
+      const literals = (readFileSync(path, 'utf8').match(stringLiteral) ?? []).filter((literal) =>
+        sqlStatement.test(literal),
+      );
+      statements += literals.length;
+      const offending = literals.filter((literal) => legacyColumn.test(literal));
+      expect({ path, offending }).toEqual({ path, offending: [] });
+    }
+    expect(statements).toBeGreaterThan(20);
+  });
 });

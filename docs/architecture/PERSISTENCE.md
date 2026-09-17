@@ -23,11 +23,18 @@ Since Cloud Sync V1B the database also holds the **local sync bookkeeping** (sch
 the outbox of aggregates whose current local state must reach the remote, and the remote revision
 last acknowledged per aggregate.
 
+Since Cloud Sync V1C-0 every persisted **monetary value is an integer number of cents** (schema v8,
+§3/§4): the four euro `REAL` price columns were converted in place and dropped, so the local rows
+carry exactly the representation the remote schema uses. New top-level records (Client, Service,
+Appointment, Product, Sale) receive a **UUID v4** id (`src/shared/lib/uuid.ts`); existing ids are
+never rewritten.
+
 Explicit non-goals: cloud backup of operational data, conflict resolution, multi-device sync,
 network sync engine. Authentication and the Business profile live in Supabase
 (`docs/architecture/AUTH.md`); operational data stays local-first only. The remote operational
 schema and the sync contract that will connect this database to Supabase are defined in
-`docs/architecture/CLOUD_SYNC.md` (V1A remote schema, V1B local outbox; no runtime transfer yet).
+`docs/architecture/CLOUD_SYNC.md` (V1A remote schema, V1B local outbox, V1C-0 local
+prerequisites; no runtime transfer yet).
 
 ---
 
@@ -50,6 +57,7 @@ expo-database.ts     expo-sqlite binding (application root only)
 schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v3 (business_profile),
                      v4 (clients.birthday), v5 (sales.appointment_id, appointment checkout columns),
                      v6 (sales payment columns), v7 (sync_outbox, sync_state),
+                     v8 (price_cents / unit_price_cents replace the euro REAL price columns),
                      SOURIS_TABLES, BUSINESS_SCOPED_TABLES, SYNC_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
@@ -72,30 +80,35 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8)
 
-Canonical string ids are primary keys everywhere; SQLite never assigns identities.
+Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
+Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
+through each feature's `runtime-ids.ts`); ids created before that (`<prefix>-<ms>-<n>`,
+deterministic legacy ids, fixtures) stay exactly as stored — the column type is TEXT and nothing
+distinguishes the two shapes. Nested child ids (phases, items, sale lines) keep deriving from
+their parent id and are unique inside that parent only (CLOUD_SYNC.md §5).
 
 ```text
 souris_metadata     key PK, value                                   seed marker and future flags
 
 clients             id PK, first_name, last_name?, phone?, email?, birth_date? (legacy, ≤ v3),
                     archived_at? (v2), birthday? (v4, MM-DD)
-services            id PK, business_id, name, type, price, active
+services            id PK, business_id, name, type, price_cents (v8, CHECK >= 0), active
 service_phases      (service_id FK→services CASCADE, position) PK, id, name, duration_minutes, requires_staff
 appointments        id PK, business_id, client_id, staff_member_id, start_at, status, notes?,
                     cancelled_at?, cancelled_by?, cancellation_reason?, no_show_recorded_at?,
                     paid_at? (v5), card_amount_cents? (v5, CHECK >= 0), cash_amount_cents? (v5, CHECK >= 0)
 appointment_items   (appointment_id FK→appointments CASCADE, id) PK, item_order, service_id,
-                    service_option_id?, service_name, service_type, price
+                    service_option_id?, service_name, service_type, price_cents (v8, CHECK >= 0)
 appointment_phases  (appointment_id, appointment_item_id, position) PK
                     FK→appointment_items CASCADE, id, name, duration_minutes, requires_staff
-products            id PK, business_id, name, brand?, category?, barcode?, image_uri?, price,
-                    stock_quantity (CHECK >= 0), active
+products            id PK, business_id, name, brand?, category?, barcode?, image_uri?,
+                    price_cents (v8, CHECK >= 0), stock_quantity (CHECK >= 0), active
 sales               id PK, business_id, client_id?, appointment_id? (v5), completed_at,
                     paid_at? (v6), card_amount_cents? (v6, CHECK >= 0), cash_amount_cents? (v6, CHECK >= 0)
 sale_items          (sale_id FK→sales CASCADE, id) PK, position, product_id, product_name,
-                    unit_price, quantity (CHECK >= 1)
+                    unit_price_cents (v8, CHECK >= 0), quantity (CHECK >= 1)
 business_profile    singleton PK (CHECK = 1), id, owner_user_id, owner_first_name,
                     owner_last_name?, name, activity_type, phone?, created_at, updated_at   (v3)
 sync_outbox         id PK AUTOINCREMENT, business_id, aggregate_type (CHECK vocabulary), aggregate_id,
@@ -129,8 +142,14 @@ birthday        civil MM-DD TEXT                  day + month only — parsed in
                                                   a timestamp or a year (legacy `birth_date`
                                                   is retained but neither read nor written)
 optionals       NULL ↔ absent property            never empty strings, never null in domain values
-money           REAL                              catalog and snapshot prices: current JS number
-                                                  semantics preserved as-is
+prices          INTEGER cents (v8)                services.price_cents, products.price_cents,
+                                                  appointment_items.price_cents, sale_items.unit_price_cents:
+                                                  exact non-negative integer cents (CHECK >= 0). The
+                                                  domain keeps its euro-number contract (`price`,
+                                                  `unitPrice`); values.ts `toSqlPriceCents` (the domain
+                                                  `eurosToCents` rounding rule) / `fromSqlPriceCents`
+                                                  (integer ÷ 100, exact at two decimals) are the ONLY
+                                                  conversion, so a stored value round-trips unchanged
 checkout cents  INTEGER                           card_amount_cents / cash_amount_cents (appointments
                                                   and sales) are exact integer cents; NULL with
                                                   paid_at NULL means "no payment recorded" and
@@ -176,6 +195,37 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v8 — monetary values as integer cents (Cloud Sync V1C-0)
+
+```text
+ALTER TABLE services          ADD COLUMN price_cents      INTEGER NOT NULL DEFAULT 0 CHECK (price_cents >= 0);
+UPDATE      services          SET price_cents = CAST(ROUND(price * 100) AS INTEGER);
+ALTER TABLE services          DROP COLUMN price;
+-- identical block for appointment_items.price → price_cents, products.price → price_cents,
+-- and sale_items.unit_price → unit_price_cents
+```
+
+An existing v7 database goes `v7 → v8` in one transaction: per table, the cents column is added,
+every existing row is converted with `ROUND(value * 100)` — never a truncating cast, so
+`12.50 → 1250`, `0.99 → 99`, `0.29 → 29`, `1234.56 → 123456` — and the legacy euro `REAL` column
+is dropped, so no runtime SQL can still read or write it. SQLite rewrites the rows in place: every
+id, the `rowid` order the stores read by, item order and phase positions, foreign keys and
+cascades, snapshots, the checkout / Sale payment cents, the account binding, the seed marker and
+the `sync_outbox` / `sync_state` rows are untouched. No wipe, no reseed, no row deleted or
+duplicated. Re-running is a no-op. `DROP COLUMN` needs SQLite ≥ 3.35; expo-sqlite bundles 3.50.
+Covered by `money-migration.test.ts`, which builds a genuine schema-v7 fixture database on a BOUND
+device with representative decimal prices in all four tables, a checked-out Appointment, a linked
+and a paid standalone Sale and pending sync rows, migrates through the normal bootstrap, and
+asserts version, exact integer cents (`typeof = integer`), dropped legacy columns, NOT NULL and
+CHECK constraints, unchanged ids / rowid order / relationships / payment columns / sync rows, the
+hydrated euro values, identical expected-total and Cash Register results, idempotence, and integer
+cents for writes made after the upgrade.
+
+The domain and every provider / screen keep the euro-number contract (`Service.price`,
+`Product.price`, `AppointmentItem.price`, `SaleItem.unitPrice`); only the row mappers convert
+(§3, value representation). Checkout and Cash Register amounts were already integer cents and are
+untouched.
 
 ### Schema v7 — local sync outbox and acknowledged revisions (Cloud Sync V1B)
 
@@ -307,7 +357,7 @@ with the v1 column set, migrates, and asserts version, rows, and NULL lifecycle.
 
 ```text
 first launch:  empty database
-               → migrate to the current schema (v7)
+               → migrate to the current schema (v8)
                → seed_version absent → run the production seed ONCE, in one transaction
                    Clients / Services / Products / Appointments / Sales = []   (EMPTY)
                → write souris_metadata.seed_version = 1
@@ -545,7 +595,7 @@ domain removeAppointmentProduct(sales, appointmentId, identity)
      → nothing matching / a matching Sale with its own payment ⇒ refused, nothing written
 → sales store deleteAppointmentProduct()      ONE transaction:
      SELECT si.sale_id, si.quantity, s.paid_at FROM sale_items si JOIN sales s
-        WHERE s.appointment_id = ? AND si.product_id = ? AND si.product_name = ? AND si.unit_price = ?
+        WHERE s.appointment_id = ? AND si.product_id = ? AND si.product_name = ? AND si.unit_price_cents = ?
         → no row ⇒ PRODUCT_NOT_SOLD; any paid_at set ⇒ SALE_HAS_PAYMENT ⇒ ROLLBACK
      UPDATE products SET stock_quantity = stock_quantity + Σ quantity WHERE id = ?
         → 0 rows changed (Product deleted) ⇒ PRODUCT_MISSING ⇒ ROLLBACK
@@ -555,8 +605,9 @@ domain removeAppointmentProduct(sales, appointmentId, identity)
 → replace the Sale collection in session state
 ```
 
-Stock is restored, the matching lines removed and the emptied Sales deleted together — never the
-stock first and the lines later. A failure anywhere leaves the stock, every line, every Sale and the
+The snapshot identity is matched on the stored integer cents of the displayed unit price (the
+same `toSqlPriceCents` conversion the line was written with). Stock is restored, the matching
+lines removed and the emptied Sales deleted together — never the stock first and the lines later. A failure anywhere leaves the stock, every line, every Sale and the
 session untouched (`AppointmentProductDeleteConflictError` carries the reason); a missing Product
 aborts instead of removing lines whose stock cannot be given back. A Sale that still holds other
 Products is preserved — Sales stay separate records until emptied. The exact stored quantities are
@@ -633,8 +684,13 @@ wraps the real `PersistenceProvider` around such a database with in-memory files
 real first-run seed unless a test supplies its own.
 
 Covered: fresh migration, idempotence, refusal of newer versions, the v1 → v2, v2 → v3,
-v3 → v4, v4 → v5, v5 → v6 and v6 → v7 upgrades of existing seeded databases (historical rows are inserted with the
-historical column set through `testing/historical-fixtures.ts`, which write no outbox entry), account binding (profile persisted, every `business_id`
+v3 → v4, v4 → v5, v5 → v6, v6 → v7 and v7 → v8 upgrades of existing seeded databases (historical rows are inserted with the
+historical column set — euro `REAL` prices through v7 — by `testing/historical-fixtures.ts`, which write no outbox entry), the
+monetary persistence (`money-persistence.test.ts`: the `toSqlPriceCents` / `fromSqlPriceCents` pair on representative
+amounts and the exact round trip of every cents value, integer cents stored for Service / Product / Appointment snapshot /
+Sale line prices, exact edited prices, identical expected total, Sale total, Cash Register and formatted euros after a
+restart, cents-based identity matching of an Appointment-linked Product removal, refusal of negative or non-finite
+prices before any write, no euro `REAL` column on a fresh database), account binding (profile persisted, every `business_id`
 rewritten, relationships untouched, restart, same-owner rebind, other-owner refusal, multiple local
 ids refusal, rollback), the empty production seed, the development seed under a bound Business id,
 seed-once, restart without duplicates, empty-but-initialized
@@ -651,8 +707,9 @@ price, no clamping, refusal of unsold / paid, abort on a deleted Product, rollba
 restoration when a later write fails), the sync outbox (§7c: scoping, one entry per mutation,
 coalescing, child → parent marking, DELETE semantics, atomicity both ways, restart, conditional
 settle, development reset) and `sync_state` round trip (exact version and instant, restart,
-upsert, Business scoping, refusal of fabricated versions), the source-hygiene guard (no literal NUL
-byte in a store file), image promotion /
+upsert, Business scoping, refusal of fabricated versions), the source-hygiene guards (no literal NUL
+byte in a store file; no store SQL statement naming the euro `price` / `unit_price` columns dropped by
+v8), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.
 
 ---
@@ -667,12 +724,13 @@ this local layer must keep true for the later phases:
 - the remote schema mirrors this one table for table, with two boundary conversions owned by
   the sync layer: `clients` receives the bound Business id (the local table has none) and
   `products.image_uri` is never uploaded;
-- HARD PREREQUISITE before V1C: the euro `REAL` price columns (`services.price`,
-  `appointment_items.price`, `products.price`, `sale_items.unit_price`) must first be migrated to
-  integer cents by a forward SQLite migration; the remote columns are integer cents and a
-  per-sync conversion is not an acceptable substitute (CLOUD_SYNC.md §3.1). Not part of V1A;
-- HARD PREREQUISITE before V1C: the runtime id generators (`<prefix>-<Date.now()>-<counter>`)
-  must emit globally unique ids (CLOUD_SYNC.md §5.2); existing ids are never rewritten;
+- ~~HARD PREREQUISITE before V1C: the euro `REAL` price columns must first be migrated to integer
+  cents~~ — DONE in V1C-0 (schema v8, §4): `services.price_cents`, `appointment_items.price_cents`,
+  `products.price_cents` and `sale_items.unit_price_cents` are exact integer cents, identical to
+  the remote columns (CLOUD_SYNC.md §3.1); the sync boundary needs no money conversion;
+- ~~HARD PREREQUISITE before V1C: the runtime id generators must emit globally unique ids~~ —
+  DONE in V1C-0: every new Client / Service / Appointment / Product / Sale id is a UUID v4 from
+  `expo-crypto` (`src/shared/lib/uuid.ts`, CLOUD_SYNC.md §5.2); existing ids were never rewritten;
 - the aggregate boundaries are the transaction boundaries of §7: CLIENT, SERVICE + phases,
   APPOINTMENT + items + phases, PRODUCT, SALE + items;
 - V1B (schema v7) added `sync_outbox`, written inside the same `runInTransaction` as the business

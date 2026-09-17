@@ -96,7 +96,7 @@ describe('ClientPickerSheet (shared Client selection)', () => {
     });
     await act(async () => fireEvent.press(view.getByText('Ajouter la cliente')));
 
-    expect(view.getByTestId('selected').props.children).toMatch(/^client-\d+-\d+:Nour$/);
+    expect(view.getByTestId('selected').props.children).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:Nour$/);
     expect(Number(view.getByTestId('client-count').props.children)).toBe(initialCount + 1);
   });
 

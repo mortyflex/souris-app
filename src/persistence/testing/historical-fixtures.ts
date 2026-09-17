@@ -3,7 +3,10 @@
 // Migration tests build databases exactly as OLDER builds left them. The
 // current stores write today's columns, so rows of historical schemas are
 // inserted here with the column set those schemas actually had (v1 rows;
-// every later column is added by the migrations under test).
+// every later column is added by the migrations under test). Prices are
+// written as the euro REAL values schemas v1 → v7 stored; schema v8
+// converts them to integer cents, so these helpers only fit databases
+// that have not reached v8 yet.
 
 import type { Appointment, Service } from '@/domain/appointments';
 import type { Product } from '@/domain/products';
@@ -12,7 +15,7 @@ import type { Sale } from '@/domain/sales';
 import type { SourisDatabase } from '../database';
 import { toSqlBoolean, toSqlInstant, toSqlOptional } from '../values';
 
-/** Service row + phases with the schema v1 column set (unchanged since; no outbox side effect). */
+/** Service row + phases with the schema v1 column set (valid through v7: euro `price` REAL; no outbox side effect). */
 export function insertHistoricalService(db: SourisDatabase, service: Service): void {
   db.runSync(
     'INSERT INTO services (id, business_id, name, type, price, active) VALUES (?, ?, ?, ?, ?, ?)',
@@ -26,7 +29,7 @@ export function insertHistoricalService(db: SourisDatabase, service: Service): v
   });
 }
 
-/** Product row with the schema v1 column set (unchanged since; no outbox side effect). */
+/** Product row with the schema v1 column set (valid through v7: euro `price` REAL; no outbox side effect). */
 export function insertHistoricalProduct(db: SourisDatabase, product: Product): void {
   db.runSync(
     'INSERT INTO products (id, business_id, name, brand, category, barcode, image_uri, price, stock_quantity, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -45,7 +48,7 @@ export function insertHistoricalProduct(db: SourisDatabase, product: Product): v
   );
 }
 
-/** Appointment row + items + phases with the schema v1 column set (no payment columns). */
+/** Appointment row + items + phases with the schema v1 column set (no payment columns; euro item `price` REAL, valid through v7). */
 export function insertHistoricalAppointment(db: SourisDatabase, appointment: Appointment): void {
   db.runSync(
     'INSERT INTO appointments (id, business_id, client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -94,7 +97,7 @@ export function insertHistoricalAppointment(db: SourisDatabase, appointment: App
   }
 }
 
-/** Sale row + items with the schema v1 column set (no appointment_id column). */
+/** Sale row + items with the schema v1 column set (no appointment_id column; euro `unit_price` REAL, valid through v7). */
 export function insertHistoricalSale(db: SourisDatabase, sale: Sale): void {
   db.runSync('INSERT INTO sales (id, business_id, client_id, completed_at) VALUES (?, ?, ?, ?)', [
     sale.id,
@@ -110,7 +113,7 @@ export function insertHistoricalSale(db: SourisDatabase, sale: Sale): void {
   });
 }
 
-/** Sale row + items with the schema v5 column set (appointment_id, no payment columns). */
+/** Sale row + items with the schema v5 column set (appointment_id, no payment columns; euro `unit_price` REAL, valid through v7). */
 export function insertSchemaV5Sale(db: SourisDatabase, sale: Sale): void {
   db.runSync(
     'INSERT INTO sales (id, business_id, client_id, appointment_id, completed_at) VALUES (?, ?, ?, ?, ?)',

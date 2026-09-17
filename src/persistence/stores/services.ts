@@ -12,14 +12,14 @@ import type { Service, ServicePhase, ServiceType } from '@/domain/appointments';
 
 import { runInTransaction, type SourisDatabase } from '../database';
 import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
-import { fromSqlBoolean, toSqlBoolean } from '../values';
+import { fromSqlBoolean, fromSqlPriceCents, toSqlBoolean, toSqlPriceCents } from '../values';
 
 interface ServiceRow {
   readonly id: string;
   readonly business_id: string;
   readonly name: string;
   readonly type: ServiceType;
-  readonly price: number;
+  readonly price_cents: number;
   readonly active: number;
 }
 
@@ -52,14 +52,14 @@ export function loadServices(db: SourisDatabase): readonly Service[] {
 
   return db
     .getAllSync<ServiceRow>(
-      'SELECT id, business_id, name, type, price, active FROM services ORDER BY rowid',
+      'SELECT id, business_id, name, type, price_cents, active FROM services ORDER BY rowid',
     )
     .map((row) => ({
       id: row.id,
       businessId: row.business_id,
       name: row.name,
       type: row.type,
-      price: row.price,
+      price: fromSqlPriceCents(row.price_cents),
       phases: phasesByService.get(row.id) ?? [],
       active: fromSqlBoolean(row.active),
     }));
@@ -84,13 +84,13 @@ function writePhases(db: SourisDatabase, service: Service): void {
 export function insertService(db: SourisDatabase, service: Service): void {
   runInTransaction(db, () => {
     db.runSync(
-      'INSERT INTO services (id, business_id, name, type, price, active) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO services (id, business_id, name, type, price_cents, active) VALUES (?, ?, ?, ?, ?, ?)',
       [
         service.id,
         service.businessId,
         service.name,
         service.type,
-        service.price,
+        toSqlPriceCents(service.price, 'services.price_cents'),
         toSqlBoolean(service.active),
       ],
     );
@@ -103,8 +103,14 @@ export function insertService(db: SourisDatabase, service: Service): void {
 export function updateService(db: SourisDatabase, service: Service): void {
   runInTransaction(db, () => {
     const result = db.runSync(
-      'UPDATE services SET name = ?, type = ?, price = ?, active = ? WHERE id = ?',
-      [service.name, service.type, service.price, toSqlBoolean(service.active), service.id],
+      'UPDATE services SET name = ?, type = ?, price_cents = ?, active = ? WHERE id = ?',
+      [
+        service.name,
+        service.type,
+        toSqlPriceCents(service.price, 'services.price_cents'),
+        toSqlBoolean(service.active),
+        service.id,
+      ],
     );
     if (result.changes !== 1) {
       throw new Error(`updateService: Service "${service.id}" not found`);
