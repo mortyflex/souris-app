@@ -2,8 +2,9 @@
 //
 // Shown when Supabase requires the email link before issuing a session. It
 // states what happened and offers the way back to sign-in; the resend action
-// is restrained and reports its own outcome. No deep-link handling: the link
-// confirms the address in the browser, then the owner signs in normally.
+// is restrained and reports its own outcome. No token handling: the link
+// confirms the address in the browser, returns to the app on the sign-in
+// screen (sourisapp://sign-in), and the owner signs in normally.
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';

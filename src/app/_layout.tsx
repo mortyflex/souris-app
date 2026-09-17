@@ -17,9 +17,12 @@ import { createAccountGateways, type AccountGateways } from '@/infrastructure/su
 import { openSourisDatabase } from '@/persistence/expo-database';
 import { createExpoLocalFiles } from '@/persistence/files/expo-local-files';
 import { readBusinessProfile } from '@/persistence/stores/business-profile';
-import { createDevelopmentSeed } from '@/providers/development-seed';
 import { createFirstRunSeed } from '@/providers/first-run-seed';
-import { PersistenceProvider, usePersistence } from '@/providers/PersistenceProvider';
+import {
+  PersistenceProvider,
+  usePersistence,
+  type DevelopmentSeedContext,
+} from '@/providers/PersistenceProvider';
 import { RootNavigator } from '@/providers/RootNavigator';
 import { colors, duration } from '@/shared/ui/theme';
 
@@ -37,6 +40,19 @@ import { colors, duration } from '@/shared/ui/theme';
 // or an unbranded surface.
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: duration.settle, fade: true });
+
+// The development seed embeds the pilot address book and catalogs. It is
+// required inside a `__DEV__` branch (never imported statically) so Metro
+// drops the whole module graph from release bundles: no pilot personal data
+// ships inside a TestFlight / App Store binary.
+const createDevelopmentSeed = __DEV__
+  ? ({ businessId }: DevelopmentSeedContext) => {
+      const seed =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('@/providers/development-seed') as typeof import('@/providers/development-seed');
+      return seed.createDevelopmentSeed(new Date(), businessId);
+    }
+  : undefined;
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -63,7 +79,7 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <GestureHandlerRootView style={styles.root}>
         <PersistenceProvider
-          createDevelopmentSeed={({ businessId }) => createDevelopmentSeed(new Date(), businessId)}
+          createDevelopmentSeed={createDevelopmentSeed}
           createSeed={createFirstRunSeed}
           files={files}
           onSettled={() => setPersistenceSettled(true)}

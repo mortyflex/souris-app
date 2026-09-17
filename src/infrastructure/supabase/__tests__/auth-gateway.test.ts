@@ -1,6 +1,12 @@
 import { AuthApiError, AuthRetryableFetchError, AuthWeakPasswordError } from '@supabase/supabase-js';
 
-import { createSupabaseAuthGateway, mapSupabaseAuthError, type SupabaseAuthApi } from '../auth-gateway';
+import appConfig from '../../../../app.json';
+import {
+  createSupabaseAuthGateway,
+  EMAIL_CONFIRMATION_REDIRECT_URL,
+  mapSupabaseAuthError,
+  type SupabaseAuthApi,
+} from '../auth-gateway';
 
 const session = (id: string, email: string) => ({ user: { id, email } });
 
@@ -100,6 +106,18 @@ describe('createSupabaseAuthGateway', () => {
     expect(await failing.signUp({ email: 'a@b.fr', password: 'short' })).toEqual({ kind: 'failed', failure: { code: 'WEAK_PASSWORD' } });
   });
 
+  it('sends the confirmation link back to the Souris app, never to the Supabase Site URL', async () => {
+    expect(EMAIL_CONFIRMATION_REDIRECT_URL).toBe(`${appConfig.expo.scheme}://sign-in`);
+
+    const api = createAuthApi();
+    await createSupabaseAuthGateway(api).signUp({ email: 'a@b.fr', password: 'password123' });
+    expect((api.signUp as jest.Mock).mock.calls[0]?.[0]).toEqual({
+      email: 'a@b.fr',
+      password: 'password123',
+      options: { emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL },
+    });
+  });
+
   it('signs in, maps wrong credentials, resends, and forwards session changes except the initial one', async () => {
     const api = createAuthApi({
       signInWithPassword: jest
@@ -112,7 +130,11 @@ describe('createSupabaseAuthGateway', () => {
     expect(await gateway.signIn({ email: 'a@b.fr', password: 'x' })).toEqual({ kind: 'failed', failure: { code: 'INVALID_CREDENTIALS' } });
     expect(await gateway.signIn({ email: 'a@b.fr', password: 'y' })).toEqual({ kind: 'authenticated', user: { id: 'u1', email: 'a@b.fr' } });
     expect(await gateway.resendSignUpConfirmation('a@b.fr')).toEqual({ kind: 'sent' });
-    expect((api.resend as jest.Mock).mock.calls[0]?.[0]).toEqual({ type: 'signup', email: 'a@b.fr' });
+    expect((api.resend as jest.Mock).mock.calls[0]?.[0]).toEqual({
+      type: 'signup',
+      email: 'a@b.fr',
+      options: { emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL },
+    });
 
     const seen: unknown[] = [];
     const unsubscribe = gateway.onSessionChange((user) => seen.push(user));

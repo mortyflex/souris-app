@@ -88,8 +88,12 @@ the state.
 
 Email confirmation: `signUp` returns either an immediate session (confirmation disabled) or
 `confirmation-required` (confirmation enabled) → the "Vérifiez votre boîte mail" screen with
-"Retour à la connexion" and a restrained resend. The link is opened in the browser; the app does
-not implement deep-link verification in V1. An already registered email is reported as such.
+"Retour à la connexion" and a restrained resend. Sign-up and resend pass
+`emailRedirectTo = sourisapp://sign-in` (`EMAIL_CONFIRMATION_REDIRECT_URL`): the link is verified
+in the browser, then returns to the app on the sign-in screen, never to the Supabase Site URL
+(localhost by default). The URL must be allow-listed in the Supabase Dashboard
+(docs/release/TESTFLIGHT.md §3). The app does not consume the tokens carried by that redirect in
+V1: the owner signs in with their password. An already registered email is reported as such.
 
 Password recovery is **deliberately absent** in V1: no "Mot de passe oublié ?" entry exists until
 the native recovery / deep-link flow is designed properly. No dead button.
@@ -208,3 +212,6 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY  sb_publishable_…
 Both come from the Supabase project Connect / API configuration and are public client
 configuration. `.env.example` is versioned; `.env` and every other `.env.*` file are ignored. The
 secret key, `service_role`, and the database password never enter the application.
+
+EAS Build never receives `.env` (gitignored): store builds read the same two variables from the
+EAS "production" environment (docs/release/TESTFLIGHT.md §2).

@@ -28,6 +28,14 @@ export type SupabaseAuthApi = Pick<
   'getSession' | 'signUp' | 'signInWithPassword' | 'signOut' | 'resend' | 'onAuthStateChange'
 >;
 
+/**
+ * Where the confirmation email link lands once Supabase verified the address:
+ * the Souris app itself (app.json `scheme`), on the sign-in screen. Without it
+ * Supabase falls back to the project Site URL (localhost by default). The URL
+ * must be allow-listed in Supabase › Authentication › URL Configuration.
+ */
+export const EMAIL_CONFIRMATION_REDIRECT_URL = 'sourisapp://sign-in';
+
 function toAuthUser(user: Pick<User, 'id' | 'email'>): AuthUser {
   return user.email ? { id: user.id, email: user.email } : { id: user.id };
 }
@@ -81,7 +89,11 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi): AuthGateway {
     },
 
     async signUp({ email, password }: AuthCredentials): Promise<SignUpOutcome> {
-      const { data, error } = await auth.signUp({ email, password });
+      const { data, error } = await auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL },
+      });
       if (error) return { kind: 'failed', failure: mapSupabaseAuthError(error) };
       if (data.session) return { kind: 'authenticated', user: toAuthUser(data.session.user) };
       if (data.user) {
@@ -109,7 +121,11 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi): AuthGateway {
     },
 
     async resendSignUpConfirmation(email: string): Promise<ResendOutcome> {
-      const { error } = await auth.resend({ type: 'signup', email });
+      const { error } = await auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL },
+      });
       return error ? { kind: 'failed', failure: mapSupabaseAuthError(error) } : { kind: 'sent' };
     },
 
