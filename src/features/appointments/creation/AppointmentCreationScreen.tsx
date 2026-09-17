@@ -46,7 +46,13 @@ import {
   updateDraftPrice,
   type SelectedServiceDraft,
 } from './draft';
-import { stepStartAt, type StartTimeBounds } from './draft-start';
+import {
+  getStartHourRange,
+  setStartTimeOfDay,
+  stepStartAt,
+  type StartTimeBounds,
+  type StartTimeOfDay,
+} from './draft-start';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 
 import { createAppointmentId, createAppointmentItemId } from './runtime-ids';
@@ -63,7 +69,7 @@ interface AppointmentCreationScreenProps {
 const staffMemberId = 'staff-amelie';
 /**
  * Valid manual start times begin at the operational Agenda day start and
- * stay on the selected local date: with ±5-minute steps the latest start is
+ * stay on the selected local date: with 5-minute minutes the latest start is
  * 23:55. The normal 20:00 Agenda boundary is a display default, not a
  * scheduling limit — a late Appointment simply extends the visible day.
  */
@@ -71,6 +77,8 @@ const startTimeBounds: StartTimeBounds = {
   minMinutes: agenda.dayStartHour * 60,
   maxMinutes: 24 * 60 - 5,
 };
+
+const startHourRange = getStartHourRange(startTimeBounds);
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
@@ -167,8 +175,8 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
     setStep((current) => (current === 2 ? current : (current + 1) as CreationStep));
   };
 
-  const stepDraftStartAt = (deltaMinutes: number) => {
-    setDraftStartAt((current) => stepStartAt(current, deltaMinutes, startTimeBounds));
+  const chooseDraftStartTime = (time: StartTimeOfDay) => {
+    setDraftStartAt((current) => setStartTimeOfDay(current, time, startTimeBounds));
   };
 
   const create = () => {
@@ -223,7 +231,9 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         <AppointmentContextRow
           startAt={draftStartAt}
           clientName={selectedClientName}
-          onStartAtChange={stepDraftStartAt}
+          maxHour={startHourRange.maxHour}
+          minHour={startHourRange.minHour}
+          onStartAtChange={chooseDraftStartTime}
         />
       )}
 
@@ -262,7 +272,9 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
           onEditClient={() => navigateToStep(0)}
           onEditServices={() => navigateToStep(1)}
           onReorder={reorderSelectedDrafts}
-          onStartAtChange={stepDraftStartAt}
+          maxHour={startHourRange.maxHour}
+          minHour={startHourRange.minHour}
+          onStartAtChange={chooseDraftStartTime}
           onToggleExpanded={(draftKey) =>
             setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
           }

@@ -106,7 +106,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 
   if (!entry || !appointment || !initialStartAt || !draftStartAt || !initialClientId) {
     return (
-      <SheetScreen fit="content">
+      <SheetScreen>
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Rendez-vous introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
@@ -119,7 +119,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 
   if (isTerminal) {
     return (
-      <SheetScreen fit="content">
+      <SheetScreen>
         <View style={styles.notFound}>
           <AppText variant="stateTitle">Modification indisponible</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>

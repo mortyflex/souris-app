@@ -56,7 +56,11 @@ const mockAlert = jest.spyOn(Alert, "alert").mockImplementation();
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
+  useNavigation: () => ({ dispatch: jest.fn() }),
 }));
+
+// SheetScreen (content fit) holds the route's removal while the sheet slides down.
+jest.mock("expo-router/react-navigation", () => ({ usePreventRemove: jest.fn() }));
 
 jest.mock("react-native-reanimated", () => {
   const React = jest.requireActual("react") as typeof import("react");
@@ -1367,6 +1371,43 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.getByText("10:00 – 10:50")).toBeTruthy();
       expect(view.getByTestId("catalog-durations").props.children).toBe(catalogBefore);
       expect(mockSelectionHaptic).toHaveBeenCalled();
+    });
+
+    it("never toggles a Service card from a swipe: only a tap expands or collapses it", async () => {
+      const db = openTestDatabase();
+      persistThreeServiceAppointment(db);
+      const view = await renderDetails(APPOINTMENT, <ThreeServiceProbe />, db);
+      const header = () => view.getByLabelText(/^Balayage, commence à/);
+      const expanded = () => header().props.accessibilityState.expanded as boolean;
+      const content = view.getByTestId("appointment-service-ts-balayage-content");
+      const touch = (pageX: number, pageY: number) => ({ nativeEvent: { pageX, pageY } });
+
+      // The row content never claims a touch that starts, jitters or scrolls…
+      expect(content.props.onStartShouldSetResponderCapture(touch(100, 300))).toBe(false);
+      expect(content.props.onMoveShouldSetResponderCapture(touch(104, 301))).toBe(false);
+      expect(content.props.onMoveShouldSetResponderCapture(touch(106, 360))).toBe(false);
+      // …but takes the press away from the header as soon as it moves sideways,
+      // and gives it back to anyone who asks (a scroll view).
+      expect(content.props.onMoveShouldSetResponderCapture(touch(110, 302))).toBe(true);
+      expect(content.props.onResponderTerminationRequest()).toBe(true);
+
+      // Collapsed + partial swipe → still collapsed, Delete revealed.
+      expect(expanded()).toBe(false);
+      await press(view, "appointment-service-ts-balayage-swipe-partial");
+      expect(expanded()).toBe(false);
+      expect(view.getByLabelText("Retirer Balayage du rendez-vous")).toBeTruthy();
+
+      // A tap is still THE way to expand…
+      await act(async () => fireEvent.press(header()));
+      expect(expanded()).toBe(true);
+      // …and an expanded card stays expanded through a partial swipe.
+      await press(view, "appointment-service-ts-balayage-swipe-partial");
+      expect(expanded()).toBe(true);
+
+      // Expanded + full swipe → removed, without collapsing first.
+      await press(view, "appointment-service-ts-balayage-swipe-full");
+      expect(view.queryByTestId("service-section-ts-balayage")).toBeNull();
+      expect(storedOrder(db)).toEqual(["ts-coupe", "ts-brushing"]);
     });
 
     it("keeps linked Product Sales, stock and purchase history when a Service is removed", async () => {

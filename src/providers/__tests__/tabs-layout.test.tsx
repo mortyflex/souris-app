@@ -92,9 +92,10 @@ describe('main navigation (NativeTabs)', () => {
 
     expect(tabs.props.tintColor).toBe(colors.accent);
     expect(tabs.props.disableTransparentOnScrollEdge).toBe(true);
-    // Native material only: no forced background, blur, label restyling or minimize behaviour.
+    // Native material only: UIKit's thinner system material for a more translucent bar,
+    // no forced background, label restyling or minimize behaviour.
     expect(tabs.props.backgroundColor).toBeUndefined();
-    expect(tabs.props.blurEffect).toBeUndefined();
+    expect(tabs.props.blurEffect).toBe('systemThinMaterial');
     expect(tabs.props.labelStyle).toBeUndefined();
     expect(tabs.props.iconColor).toBeUndefined();
     expect(tabs.props.minimizeBehavior).toBeUndefined();

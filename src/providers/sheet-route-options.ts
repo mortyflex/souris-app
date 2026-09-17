@@ -1,41 +1,47 @@
-// Souris — native sheet route options
+// Souris — sheet route options
 //
-// The ONE place that configures how Expo Router presents Souris workflow
-// routes as native form sheets, so every route shares the canonical shell
-// (white surface, sheet radius, Souris grabber drawn by SheetScreen instead
-// of the system one) and an explicit gesture policy:
+// The ONE place that configures how Expo Router presents Souris sheet routes,
+// so every route shares the canonical shell drawn by `SheetScreen` (satin
+// overlay surface, sheet radius, Souris grabber) and an explicit gesture policy.
 //
-//   workflowSheet  fixed detent, swipe-to-dismiss DISABLED — long scrolling
-//                  bodies (Client list, catalog grid, Sale lines) must never
-//                  abandon a draft; leaving goes through « Annuler »;
-//   editorSheet    content-sized editors (Product / Service details, creation
-//                  choosers and forms) that never fill the screen with empty
-//                  space; the screen toggles the swipe off while a draft is
-//                  edited (navigation.setOptions);
-//   contentSheet   read-first details sized to their content, swipe allowed.
+//   workflowSheet  NATIVE form sheet on the system's large detent (the only one
+//                  iOS 26 keeps attached to the screen edges), swipe-to-dismiss
+//                  DISABLED — long scrolling bodies (Client list, catalog grid,
+//                  Sale lines) must never abandon a draft; leaving goes through
+//                  « Annuler ». Paired with `<SheetScreen fit="fill">`.
+//
+//   editorSheet    content-sized sheets (Product / Service details, creation
+//   contentSheet   choosers and forms, Appointment details). A native sheet
+//                  below the large detent is floated by iOS 26 as an inset card
+//                  (side margins, gap below, four rounded corners), so these
+//                  routes are TRANSPARENT MODALS and `<SheetScreen
+//                  fit="content">` draws the shared SheetPresentation itself:
+//                  full width, flush with the bottom, identical to every
+//                  BottomSheet. SheetScreen owns the open / close transition
+//                  (hence no navigator animation) and the swipe / outside-tap
+//                  policy (`dismissible`, off while a draft is edited), so the
+//                  native gesture stays off.
 
-import { radii, semanticColors, sheet } from '@/shared/ui/theme';
-
-const sheetShell = {
-  presentation: 'formSheet' as const,
-  headerShown: false,
-  contentStyle: { backgroundColor: semanticColors.surfaceElevated },
-  sheetCornerRadius: radii.ios.sheet,
-  sheetGrabberVisible: false,
-};
+import { overlayMaterial, radii, sheet } from '@/shared/ui/theme';
 
 export const workflowSheet = {
-  ...sheetShell,
-  sheetAllowedDetents: [sheet.detent] as number[],
+  presentation: 'formSheet' as const,
+  headerShown: false,
+  contentStyle: { backgroundColor: overlayMaterial.surface },
+  sheetCornerRadius: radii.ios.sheet,
+  sheetGrabberVisible: false,
+  sheetAllowedDetents: [sheet.workflowDetent] as number[],
   gestureEnabled: false,
 };
 
-export const editorSheet = {
-  ...sheetShell,
-  sheetAllowedDetents: 'fitToContents' as const,
+const routeSheet = {
+  presentation: 'transparentModal' as const,
+  headerShown: false,
+  animation: 'none' as const,
+  contentStyle: { backgroundColor: 'transparent' },
+  gestureEnabled: false,
 };
 
-export const contentSheet = {
-  ...sheetShell,
-  sheetAllowedDetents: 'fitToContents' as const,
-};
+export const editorSheet = routeSheet;
+
+export const contentSheet = routeSheet;

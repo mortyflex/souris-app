@@ -12,11 +12,35 @@
 //                    return) on ONE row per screen, skipped under reduced
 //                    motion and never repeated.
 //
+//   press guard    → as soon as a touch shows horizontal intent it is a SWIPE,
+//                    never a tap: the row content loses the press (expand /
+//                    collapse, buttons) before the swipe gesture even starts;
+//
 // The full-swipe threshold scales with the measured row width so it is
 // "clearly crossed" on every device, with a floor for rows that have not
 // been measured yet.
 
 export const DELETE_ACTION_WIDTH = 72;
+
+/** Horizontal travel (pt) after which the swipeable's own pan gesture activates. */
+export const SWIPE_ACTIVATION_DISTANCE = 12;
+
+/**
+ * Horizontal travel (pt) from which a touch is a swipe and no longer a tap.
+ * Below the pan activation on purpose: the press is withdrawn BEFORE the row
+ * starts to move. Above the jitter of a finger that simply taps.
+ */
+export const SWIPE_INTENT_DISTANCE = 8;
+
+/**
+ * True once a touch has clearly moved sideways: far enough, and more sideways
+ * than vertically — so a vertical scroll never counts and keeps its presses'
+ * usual behaviour.
+ */
+export function hasHorizontalSwipeIntent(dx: number, dy: number): boolean {
+  const horizontal = Math.abs(dx);
+  return horizontal >= SWIPE_INTENT_DISTANCE && horizontal > Math.abs(dy);
+}
 
 /** Fraction of the row width the finger must travel before release commits. */
 export const FULL_SWIPE_RATIO = 0.6;

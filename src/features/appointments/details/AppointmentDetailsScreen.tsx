@@ -543,6 +543,9 @@ export function AppointmentDetailsScreen({
               )}
             </View>
           )}
+          {/* Pushes the destructive action as low as the sheet allows: it takes
+              any spare height, and never less than a clear separation. */}
+          <View style={styles.deleteSpacer} />
           <Pressable
             accessibilityHint="Supprime le rendez-vous de l’agenda et de l’historique"
             accessibilityRole="button"
@@ -591,7 +594,10 @@ export function AppointmentDetailsScreen({
 
 const styles = StyleSheet.create({
   scroll: { flexShrink: 1 },
-  content: { paddingBottom: spacing["3xl"], paddingTop: spacing.sm },
+  // Grows with the sheet so the actions block can push « Supprimer » down; the
+  // bottom breathing room sits ABOVE the destructive action, not under it (the
+  // sheet shell already clears the home indicator).
+  content: { flexGrow: 1, paddingBottom: spacing.sm, paddingTop: spacing.sm },
   appointmentHeader: { paddingBottom: spacing.xl },
   identityHeader: {
     alignItems: "stretch",
@@ -664,15 +670,15 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
   },
   noteLabel: { color: semanticColors.foreground, marginBottom: spacing.sm },
-  appointmentActions: { gap: spacing.sm, marginTop: spacing.xl },
+  appointmentActions: { flexGrow: 1, gap: spacing.sm, marginTop: spacing.xl },
   normalActions: { flexDirection: "row", gap: spacing.sm },
   normalAction: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm },
   onlyNormalAction: { flex: 0, marginLeft: "auto" },
+  deleteSpacer: { flexGrow: 1, minHeight: spacing.xl },
   deleteTextAction: {
     alignItems: "center",
     alignSelf: "center",
     justifyContent: "center",
-    marginTop: spacing.sm,
     minHeight: touchTarget[Platform.OS === "android" ? "android" : "ios"],
     paddingHorizontal: spacing.md,
   },

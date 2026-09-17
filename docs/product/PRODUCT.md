@@ -235,8 +235,9 @@ The selected grid position is local time, clamped to the displayed day, and roun
 interval. The professional may tap a visible processing gap because that interval remains part of the
 Appointment timeline while the professional is available. Existing appointment overlap never blocks creation.
 
-The Agenda tap is the initial proposal, not a lock: during creation the professional may adjust the start
-time in ±5-minute steps on the same local date — earliest 08:00 (operational day start), latest 23:55. The
+The Agenda tap is the initial proposal, not a lock: during creation the professional may choose another start
+time on the hour / minute wheels (5-minute minutes) on the same local date — earliest 08:00 (operational day
+start), latest 23:55. Editing an existing Appointment uses the same wheels over the whole day. The
 20:00 Agenda boundary is a display default and never rejects a late start. All creation calculations
 (context, Summary, appointment end) follow the edited draft start time.
 
@@ -325,7 +326,9 @@ Existing appointments support service-composition editing:
   trash icon labelled `Retirer <Service> du rendez-vous`; a partial swipe leaves the trash available to
   tap, a full swipe removes on release). There is no visible `Retirer` button. The removal changes the
   editing draft ONLY: the persisted Appointment keeps the Service until `Enregistrer les modifications`
-  is tapped, and cancelling the edit leaves it untouched. A lone Service card cannot be swiped;
+  is tapped, and cancelling the edit leaves it untouched. A lone Service card cannot be swiped. A swipe
+  is never a tap: it never expands or collapses the card (collapsed stays collapsed, expanded stays
+  expanded, until removal) — only a tap toggles it. This holds for every swipe-to-delete row;
 - reordering services;
 - editing appointment-specific phase durations (active and processing) with the same `[ − ] XX min [ + ]`
   stepper as Appointment Details — 5-minute steps, zero allowed, no minute text input, no keyboard;

@@ -31,6 +31,13 @@ export default function TabsLayout() {
         // as permanently "at the edge" and draw a transparent bar. Liquid
         // Glass ignores bar backgrounds, so iOS 26 is unaffected.
         disableTransparentOnScrollEdge
+        // UIKit's own thinner bar material, so the page and the pastel Agenda
+        // cards read through the bar a little more on iOS 18 and earlier. Still
+        // the system material, never a blur layer of ours. iOS 26 ignores every
+        // bar-material prop (verified): Liquid Glass is not tunable, it samples
+        // whatever scrolls beneath the bar — see TabBarGlassScrollEdge, which
+        // keeps that content crisp under the glass.
+        blurEffect="systemThinMaterial"
         tintColor={semanticColors.accent}
       >
         <NativeTabs.Trigger name="index">

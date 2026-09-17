@@ -1,18 +1,16 @@
-import { Pressable, StyleSheet } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { AppText } from "@/shared/ui/AppText";
 import {
   getAppointmentStatusLabel,
   isTerminalAppointmentStatus,
 } from "@/features/appointments/presentation";
-import {
-  foregroundSoft,
-  interaction,
-  radii,
-  semanticColors,
-} from "@/shared/ui/theme";
+import { gloss, interaction, nativeShadows, radii } from "@/shared/ui/theme";
 
-import type { AgendaAppointmentPalette } from "../appointment-palette";
+import {
+  getAgendaAppointmentCardColors,
+  type AgendaAppointmentPalette,
+} from "../appointment-palette";
 import type { AgendaStaffSegment } from "../layout/agenda-staff-segments";
 import {
   getAgendaSegmentContent,
@@ -42,11 +40,10 @@ export function AppointmentBlock({
   const statusLabel = isTerminalAppointmentStatus(segment.status)
     ? getAppointmentStatusLabel(segment.status)
     : undefined;
-  const isCompleted = segment.status === "COMPLETED";
-  const backgroundColor = isCompleted ? semanticColors.surface : palette.background;
-  const accentColor = isCompleted ? semanticColors.foregroundMuted : palette.accent;
-  const primaryTextColor = isCompleted ? foregroundSoft : palette.primaryText;
-  const secondaryTextColor = isCompleted ? foregroundSoft : palette.secondaryText;
+  const cardColors = getAgendaAppointmentCardColors(palette, segment.status);
+  // A quarter-hour block is barely taller than two small radii: the corner
+  // follows the height so short cards stay planning cards, never pills.
+  const borderRadius = Math.min(radii.small, Math.max(3, Math.round(height / 4)));
   const accessibilityLabel = [
     clientName,
     segment.serviceName,
@@ -65,31 +62,38 @@ export function AppointmentBlock({
       style={({ pressed }) => [
         styles.container,
         {
-          backgroundColor,
-          borderLeftColor: accentColor,
+          backgroundColor: cardColors.background,
+          borderLeftColor: cardColors.accent,
+          borderRadius,
         },
+        cardColors.glossy && nativeShadows.card,
         pressed && styles.pressed,
       ]}
     >
+      {cardColors.glossy && (
+        <View pointerEvents="none" style={styles.sheen} testID="appointment-block-gloss">
+          <View style={styles.sheenEdge} />
+        </View>
+      )}
       {content.mode === "lines" && (
         <>
           <AppText
             variant="rowTitle"
             numberOfLines={1}
-            style={[styles.clientName, { color: primaryTextColor }]}
+            style={[styles.clientName, { color: cardColors.primaryText }]}
           >
             {content.clientLabel}
           </AppText>
           <AppText
             variant="metadata"
             numberOfLines={1}
-            style={[styles.serviceName, { color: secondaryTextColor }]}
+            style={[styles.serviceName, { color: cardColors.secondaryText }]}
           >
             {content.serviceLabel}
             {content.showReprise && (
               <AppText
                 variant="metadata"
-                style={[styles.inlineState, { color: semanticColors.foregroundSoft }]}
+                style={[styles.inlineState, { color: cardColors.tertiaryText }]}
               >
                 {" · Reprise"}
               </AppText>
@@ -97,7 +101,7 @@ export function AppointmentBlock({
             {content.phaseLabel && !content.phaseOnSeparateLine && (
               <AppText
                 variant="metadata"
-                style={{ color: semanticColors.foregroundSoft }}
+                style={{ color: cardColors.tertiaryText }}
               >
                 {" · "}
                 {content.phaseLabel}
@@ -108,7 +112,7 @@ export function AppointmentBlock({
             <AppText
               variant="metadata"
               numberOfLines={1}
-              style={[styles.phaseName, { color: semanticColors.foregroundSoft }]}
+              style={[styles.phaseName, { color: cardColors.tertiaryText }]}
             >
               {content.phaseLabel}
             </AppText>
@@ -119,12 +123,12 @@ export function AppointmentBlock({
         <AppText
           variant="chip"
           numberOfLines={1}
-          style={[styles.compactLine, { color: primaryTextColor }]}
+          style={[styles.compactLine, { color: cardColors.primaryText }]}
         >
           {content.compactClientLabel}
           <AppText
             variant="metadata"
-            style={{ color: semanticColors.foregroundSoft }}
+            style={{ color: cardColors.tertiaryText }}
           >
             {" · "}
             {content.compactSecondaryLabel}
@@ -138,13 +142,19 @@ export function AppointmentBlock({
 const styles = StyleSheet.create({
   container: {
     borderLeftWidth: 3,
-    borderRadius: radii.small,
     flex: 1,
     justifyContent: "center",
     overflow: "hidden",
     paddingHorizontal: 6,
     paddingVertical: 0,
   },
+  // Polished finish: a light vertical sheen under the text, closed by a
+  // one-pixel top highlight. Decorative only — never intercepts touches.
+  sheen: {
+    ...StyleSheet.absoluteFill,
+    experimental_backgroundImage: gloss.card.sheen,
+  },
+  sheenEdge: { backgroundColor: gloss.card.edge, height: 1 },
   clientName: { lineHeight: 16 },
   serviceName: { lineHeight: 15 },
   inlineState: { lineHeight: 15 },

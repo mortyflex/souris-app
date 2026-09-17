@@ -10,6 +10,7 @@ import { haptics } from '@/shared/lib/haptics';
 import { AppointmentEditingScreen } from '../AppointmentEditingScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
+import { settleWheelOn, wheelRowKeys, wheelValue } from '@/shared/ui/testing/wheels';
 
 const mockBack = jest.fn();
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
@@ -556,6 +557,35 @@ describe('AppointmentEditingScreen', () => {
       expect(view.getAllByLabelText('Retirer Brushing 1 du rendez-vous')).toHaveLength(2);
     });
 
+    it('keeps the expansion state of an editor card through a swipe: only a tap toggles it', async () => {
+      const view = await renderTwoServiceEditor();
+      const content = view.getByTestId('appointment-draft-dup-item-b-content');
+      const touch = (pageX: number, pageY: number) => ({ nativeEvent: { pageX, pageY } });
+
+      // Same shared guard as every swipe-to-delete row: sideways = swipe, never a tap.
+      expect(content.props.onStartShouldSetResponderCapture(touch(80, 200))).toBe(false);
+      expect(content.props.onMoveShouldSetResponderCapture(touch(82, 260))).toBe(false);
+      expect(content.props.onMoveShouldSetResponderCapture(touch(92, 203))).toBe(true);
+
+      // Collapsed → partial swipe → both cards still collapsed.
+      await act(async () => {
+        fireEvent.press(view.getByTestId('appointment-draft-dup-item-b-swipe-partial'));
+      });
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(2);
+      expect(view.queryByLabelText(/^Réduire Brushing 1$/)).toBeNull();
+
+      // A tap expands one card; a partial swipe on it leaves it expanded.
+      await act(async () => {
+        fireEvent.press(view.getAllByLabelText(/^Développer Brushing 1$/)[1]);
+      });
+      expect(view.getAllByLabelText(/^Réduire Brushing 1$/)).toHaveLength(1);
+      await act(async () => {
+        fireEvent.press(view.getByTestId('appointment-draft-dup-item-b-swipe-partial'));
+      });
+      expect(view.getAllByLabelText(/^Réduire Brushing 1$/)).toHaveLength(1);
+      expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(1);
+    });
+
     it('removes the Service from the draft only, then persists it with the existing save', async () => {
       const view = await renderTwoServiceEditor();
       const catalogBefore = view.getByTestId('catalog-brushing-1').props.children;
@@ -721,9 +751,17 @@ describe('AppointmentEditingScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByLabelText("Changer l'heure"));
     });
-    await act(async () => {
-      fireEvent.press(view.getByLabelText('Avancer de 5 minutes'));
-    });
+    // Same wheels as Creation, opened on the Appointment's own start time; an
+    // existing Appointment may sit anywhere in its day (00 → 23).
+    const start = new Date(before);
+    expect(wheelValue(view, 'start-time-wheel-hour')).toBe(`${start.getHours()} heures`);
+    expect(wheelValue(view, 'start-time-wheel-minute')).toBe(`${start.getMinutes()} minutes`);
+    expect(wheelRowKeys(view, 'start-time-wheel-hour')).toEqual(
+      Array.from({ length: 24 }, (_, index) => String(index)),
+    );
+
+    await settleWheelOn(view, 'start-time-wheel-hour', '23');
+    await settleWheelOn(view, 'start-time-wheel-minute', '40');
     await act(async () => {
       fireEvent.press(view.getByLabelText("Terminer la modification de l'heure"));
     });
@@ -734,8 +772,14 @@ describe('AppointmentEditingScreen', () => {
       fireEvent.press(view.getByTestId('save-appointment-edit'));
     });
 
-    const after = Number(view.getByTestId('session-start-at').props.children);
-    expect(after - before).toBe(5 * 60 * 1000);
+    // Same local date, the chosen time of day.
+    const after = new Date(Number(view.getByTestId('session-start-at').props.children));
+    expect([after.getFullYear(), after.getMonth(), after.getDate()]).toEqual([
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate(),
+    ]);
+    expect([after.getHours(), after.getMinutes()]).toEqual([23, 40]);
     expect(view.getByTestId('session-items').props.children).toContain('item-sofia:Balayage:95:');
     expect(mockBack).toHaveBeenCalledTimes(1);
   });

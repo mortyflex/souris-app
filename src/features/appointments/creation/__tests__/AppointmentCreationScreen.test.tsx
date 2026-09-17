@@ -29,6 +29,7 @@ import { loadServices } from '@/persistence/stores/services';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
+import { settleWheelOn, wheelRowKeys, wheelValue } from '@/shared/ui/testing/wheels';
 
 const mockBack = jest.fn();
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
@@ -277,13 +278,48 @@ describe('AppointmentCreationScreen', () => {
     });
 
     expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
-    expect(view.getByTestId('time-value').props.children).toBe('10:15');
+    // The wheels open on the draft start time, 24-hour, no AM/PM.
+    expect(wheelValue(view, 'start-time-wheel-hour')).toBe('10 heures');
+    expect(wheelValue(view, 'start-time-wheel-minute')).toBe('15 minutes');
+
+    // One restrained haptic per value the wheel actually snaps to…
+    await settleWheelOn(view, 'start-time-wheel-minute', '20');
+    expect(wheelValue(view, 'start-time-wheel-minute')).toBe('20 minutes');
+    expect(mockSelectionHaptic).toHaveBeenCalledTimes(2);
+    // …and none when it settles back on the same row.
+    await settleWheelOn(view, 'start-time-wheel-minute', '20');
+    expect(mockSelectionHaptic).toHaveBeenCalledTimes(2);
+  });
+
+  it('chooses the start time on two independent 24-hour wheels within the operational day', async () => {
+    const view = await renderCreation();
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Avancer de 5 minutes'));
+      fireEvent.press(view.getByTestId('time-modifier'));
     });
-    expect(view.getByTestId('time-value').props.children).toBe('10:20');
-    // Stepping the time itself adds no further haptic noise.
-    expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+
+    // Hours of the operational day, minutes on the 5-minute grid.
+    expect(wheelRowKeys(view, 'start-time-wheel-hour')).toEqual(
+      Array.from({ length: 16 }, (_, index) => String(8 + index)),
+    );
+    expect(wheelRowKeys(view, 'start-time-wheel-minute')).toEqual(
+      Array.from({ length: 12 }, (_, index) => String(index * 5)),
+    );
+
+    // 19:00 is two flicks; one wheel never moves the other.
+    await settleWheelOn(view, 'start-time-wheel-hour', '19');
+    expect(wheelValue(view, 'start-time-wheel-hour')).toBe('19 heures');
+    expect(wheelValue(view, 'start-time-wheel-minute')).toBe('15 minutes');
+    await settleWheelOn(view, 'start-time-wheel-minute', '00');
+    expect(wheelValue(view, 'start-time-wheel-hour')).toBe('19 heures');
+    expect(wheelValue(view, 'start-time-wheel-minute')).toBe('0 minutes');
+
+    // The last start of the day.
+    await settleWheelOn(view, 'start-time-wheel-hour', '23');
+    await settleWheelOn(view, 'start-time-wheel-minute', '55');
+    await act(async () => {
+      fireEvent.press(view.getByLabelText("Terminer la modification de l'heure"));
+    });
+    expect(view.getByText(/· 23:55$/)).toBeTruthy();
   });
 
   it('opens in the canonical Souris sheet shell with a scrollable Client list and no auto-focus', async () => {
@@ -692,13 +728,10 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByLabelText("Changer l'horaire"));
     });
-    expect(view.getByTestId('time-value').props.children).toBe('10:15');
-    for (let index = 0; index < 3; index += 1) {
-      await act(async () => {
-        fireEvent.press(view.getByLabelText('Avancer de 5 minutes'));
-      });
-    }
-    expect(view.getByTestId('time-value').props.children).toBe('10:30');
+    expect(wheelValue(view, 'start-time-wheel-hour')).toBe('10 heures');
+    expect(wheelValue(view, 'start-time-wheel-minute')).toBe('15 minutes');
+    await settleWheelOn(view, 'start-time-wheel-minute', '30');
+    expect(wheelValue(view, 'start-time-wheel-minute')).toBe('30 minutes');
     await act(async () => {
       fireEvent.press(view.getByLabelText("Terminer la modification de l'heure"));
     });

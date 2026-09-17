@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
+import { TabBarGlassScrollEdge } from '@/shared/ui/TabBarGlassScrollEdge';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
@@ -86,98 +87,100 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
   }, []);
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.scrollContent}
-      // The native tab bar overlays the page: the system bottom inset keeps
-      // the last quarter-hour scrollable above it (bottomClearance then clears
-      // the floating +).
-      contentInsetAdjustmentBehavior="automatic"
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[styles.canvas, { height: timelineHeight, width }]} testID="agenda-day-canvas">
-        {Array.from({ length: quarterCount + 1 }, (_, index) => {
-          const isFullHour = index % 4 === 0;
-          const minutes = range.startMinutes + index * 15;
-          return (
-            <View
-              key={minutes}
-              pointerEvents="none"
-              style={[styles.timeRow, { top: index * quarterHeight }]}
-            >
-              <AppText
-                variant={isFullHour ? 'agendaHour' : 'agendaQuarter'}
-                style={[styles.timeLabel, isFullHour ? styles.fullHourLabel : styles.quarterLabel]}
-              >
-                {formatTimelineClockLabel(minutes)}
-              </AppText>
+    <TabBarGlassScrollEdge>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        // The native tab bar overlays the page: the system bottom inset keeps
+        // the last quarter-hour scrollable above it (bottomClearance then clears
+        // the floating +).
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.canvas, { height: timelineHeight, width }]} testID="agenda-day-canvas">
+          {Array.from({ length: quarterCount + 1 }, (_, index) => {
+            const isFullHour = index % 4 === 0;
+            const minutes = range.startMinutes + index * 15;
+            return (
               <View
-                style={[
-                  styles.gridLine,
-                  isFullHour ? styles.fullHourLine : styles.quarterLine,
-                  { right: horizontalGutter },
-                ]}
-              />
-            </View>
-          );
-        })}
+                key={minutes}
+                pointerEvents="none"
+                style={[styles.timeRow, { top: index * quarterHeight }]}
+              >
+                <AppText
+                  variant={isFullHour ? 'agendaHour' : 'agendaQuarter'}
+                  style={[styles.timeLabel, isFullHour ? styles.fullHourLabel : styles.quarterLabel]}
+                >
+                  {formatTimelineClockLabel(minutes)}
+                </AppText>
+                <View
+                  style={[
+                    styles.gridLine,
+                    isFullHour ? styles.fullHourLine : styles.quarterLine,
+                    { right: horizontalGutter },
+                  ]}
+                />
+              </View>
+            );
+          })}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Créer un rendez-vous"
-          accessibilityHint="Choisit l'heure du rendez-vous dans la grille"
-          onPress={openCreationAtPosition}
-          style={[styles.emptySlotSurface, { height: timelineHeight, left: eventLeft, width: eventWidth }]}
-        />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Créer un rendez-vous"
+            accessibilityHint="Choisit l'heure du rendez-vous dans la grille"
+            onPress={openCreationAtPosition}
+            style={[styles.emptySlotSurface, { height: timelineHeight, left: eventLeft, width: eventWidth }]}
+          />
 
-        {visibleSegments.map((segment) => {
-          const layout = layoutById.get(segment.id);
-          if (!layout) return null;
-          const top = topOf(segment.startAt);
-          const height = Math.max(
-            1,
-            ((segment.endAt.getTime() - segment.startAt.getTime()) / 60_000) * minuteHeight,
-          );
-          const columnWidth = eventWidth / layout.columnCount;
-          return (
+          {visibleSegments.map((segment) => {
+            const layout = layoutById.get(segment.id);
+            if (!layout) return null;
+            const top = topOf(segment.startAt);
+            const height = Math.max(
+              1,
+              ((segment.endAt.getTime() - segment.startAt.getTime()) / 60_000) * minuteHeight,
+            );
+            const columnWidth = eventWidth / layout.columnCount;
+            return (
+              <View
+                key={segment.id}
+                testID={`agenda-segment-${segment.id}`}
+                style={{
+                  height,
+                  left: eventLeft + layout.column * columnWidth + 3,
+                  position: 'absolute',
+                  top,
+                  width: columnWidth - 6,
+                }}
+              >
+                <AppointmentBlock
+                  clientName={segment.clientName}
+                  height={height}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/appointments/[appointmentId]',
+                      params: { appointmentId: segment.appointmentId },
+                    })
+                  }
+                  palette={segment.palette}
+                  segment={segment}
+                />
+              </View>
+            );
+          })}
+
+          {showNow && (
             <View
-              key={segment.id}
-              testID={`agenda-segment-${segment.id}`}
-              style={{
-                height,
-                left: eventLeft + layout.column * columnWidth + 3,
-                position: 'absolute',
-                top,
-                width: columnWidth - 6,
-              }}
+              pointerEvents="none"
+              style={[styles.nowLine, { right: horizontalGutter, top: nowTop }]}
             >
-              <AppointmentBlock
-                clientName={segment.clientName}
-                height={height}
-                onPress={() =>
-                  router.push({
-                    pathname: '/appointments/[appointmentId]',
-                    params: { appointmentId: segment.appointmentId },
-                  })
-                }
-                palette={segment.palette}
-                segment={segment}
-              />
+              <View style={styles.nowDot} />
+              <View style={styles.nowRule} />
             </View>
-          );
-        })}
-
-        {showNow && (
-          <View
-            pointerEvents="none"
-            style={[styles.nowLine, { right: horizontalGutter, top: nowTop }]}
-          >
-            <View style={styles.nowDot} />
-            <View style={styles.nowRule} />
-          </View>
-        )}
-      </View>
-    </ScrollView>
+          )}
+        </View>
+      </ScrollView>
+    </TabBarGlassScrollEdge>
   );
 }
 

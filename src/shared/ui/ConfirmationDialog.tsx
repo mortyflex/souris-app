@@ -17,7 +17,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from './AppButton';
 import { AppText } from './AppText';
-import { dialog, gutter, radii, rose, scrim, semanticColors, spacing } from './theme';
+import { SurfaceGloss } from './SurfaceGloss';
+import {
+  dialog,
+  gutter,
+  nativeShadows,
+  overlayMaterial,
+  radii,
+  rose,
+  scrim,
+  semanticColors,
+  spacing,
+} from './theme';
 
 interface ConfirmationDialogProps {
   readonly visible: boolean;
@@ -68,6 +79,7 @@ export function ConfirmationDialog({
           style={[styles.card, tone === 'destructive' && styles.destructiveCard]}
           testID={testID}
         >
+          <SurfaceGloss shape={styles.cardShape} testID="confirmation-dialog-gloss" />
           {eyebrow && (
             <AppText
               variant="eyebrow"
@@ -132,20 +144,25 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: scrim,
   },
+  // Same satin material as the sheets and no outline at all: light and depth
+  // edge the card. The destructive tone leans the surface a whisper toward
+  // rose and is carried by the rose eyebrow and the rose-filled confirm.
   card: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderColor: semanticColors.borderSubtle,
+    backgroundColor: overlayMaterial.surface,
     borderCurve: 'continuous',
     borderRadius: radii.large,
-    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    ...nativeShadows.lifted,
     gap: spacing.md,
     maxWidth: dialog.maxWidth,
     padding: spacing.lg,
     width: '100%',
   },
-  destructiveCard: { borderColor: rose.rose200 },
+  cardShape: { borderRadius: radii.large },
+  destructiveCard: { backgroundColor: overlayMaterial.surfaceDestructive },
   eyebrow: { color: semanticColors.accent },
-  destructiveEyebrow: { color: rose.rose600 },
+  // rose700 keeps the small eyebrow ≥ 4.5:1 on the tinted surface.
+  destructiveEyebrow: { color: rose.rose700 },
   body: { color: semanticColors.foregroundSoft },
   actions: { gap: spacing.sm, paddingTop: spacing.xs },
   confirm: { justifyContent: 'center' },

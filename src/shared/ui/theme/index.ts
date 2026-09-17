@@ -15,6 +15,8 @@ export {
   lavender,
   rose,
   peach,
+  appointmentPastels,
+  overlayMaterial,
   foregroundSoft,
   scrim,
   semanticColors,
@@ -47,3 +49,4 @@ export {
 export { duration, easing, interaction } from './motion';
 export { agenda, dialog, floatingAction, sheet, touchTarget, watermark } from './layout';
 export { nativeShadows, shadows } from './shadows';
+export { gloss } from './gloss';

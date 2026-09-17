@@ -64,8 +64,12 @@ function nativeShadow(boxShadow: string, elevation: number): ViewStyle {
 }
 
 export const nativeShadows = {
+  // Barely-there depth under a glossy Agenda appointment card.
+  card: nativeShadow('0 1px 3px rgba(31, 28, 61, 0.10)', 1),
   raised: nativeShadow('0 4px 14px rgba(31, 28, 61, 0.10)', 2),
   lifted: nativeShadow('0 8px 20px rgba(31, 28, 61, 0.16)', 4),
   floating: nativeShadow('0 5px 16px rgba(101, 65, 153, 0.18)', 4),
+  // Upward lift that separates a bottom sheet from the dimmed page.
+  sheet: nativeShadow('0 -6px 24px rgba(31, 28, 61, 0.12)', 8),
   footer: nativeShadow('0 -4px 14px rgba(31, 28, 61, 0.08)', 2),
 } as const satisfies Record<string, ViewStyle>;

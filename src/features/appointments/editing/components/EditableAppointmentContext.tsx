@@ -2,7 +2,7 @@
 //
 // Light "who + when" surface where the Client and the Date / Heure of the
 // editing draft can be changed. Reuses the current Creation compact controls:
-// the inline ±5 minute TimeStepper and the native date picker pattern from
+// the shared start-time wheels (StartTimePicker) and the native date picker pattern from
 // the shared client form (iOS wheel sheet, Android dialog). No giant form,
 // no decorative borders.
 
@@ -20,10 +20,10 @@ import {
   formatCreationDateShort,
   formatCreationTime,
 } from '../../creation/presentation';
-import { TimeStepper } from '../../creation/components/TimeStepper';
+import { StartTimePicker } from '../../creation/components/StartTimePicker';
 import {
   changeAppointmentLocalDate,
-  stepAppointmentStartAt,
+  setAppointmentLocalTime,
 } from '../start-at';
 
 interface EditableAppointmentContextProps {
@@ -101,12 +101,12 @@ export function EditableAppointmentContext({
       </View>
 
       {editingTime ? (
-        <TimeStepper
-          startAt={startAt}
-          onStep={(deltaMinutes) =>
-            onStartAtChange(stepAppointmentStartAt(startAt, deltaMinutes))
+        <StartTimePicker
+          onChange={({ hour, minute }) =>
+            onStartAtChange(setAppointmentLocalTime(startAt, hour, minute))
           }
           onDone={() => setEditingTime(false)}
+          startAt={startAt}
         />
       ) : (
         <View style={styles.fieldRow}>

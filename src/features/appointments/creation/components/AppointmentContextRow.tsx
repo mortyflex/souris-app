@@ -5,7 +5,7 @@
 // date/profile card.
 //
 // The time is the creation draft start time: tapping Changer l'horaire gives
-// one selection haptic and reveals a compact ±5 minute control. The calendar
+// one selection haptic and reveals the shared start-time wheels. The calendar
 // date never changes here.
 
 import { useState } from 'react';
@@ -21,22 +21,28 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
+import type { StartTimeOfDay } from '../draft-start';
 import { formatCreationDateShort, formatCreationTime } from '../presentation';
-import { TimeStepper } from './TimeStepper';
+import { StartTimePicker } from './StartTimePicker';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 interface AppointmentContextRowProps {
   readonly startAt: Date;
   readonly clientName?: string;
-  /** Called with a ± minutes delta when the professional steps the time. */
-  readonly onStartAtChange?: (deltaMinutes: number) => void;
+  /** Called with the time of day chosen on the wheels. */
+  readonly onStartAtChange?: (time: StartTimeOfDay) => void;
+  /** Hours offered by the wheels, both inclusive. */
+  readonly minHour?: number;
+  readonly maxHour?: number;
 }
 
 export function AppointmentContextRow({
   startAt,
   clientName,
   onStartAtChange,
+  minHour,
+  maxHour,
 }: AppointmentContextRowProps) {
   const [editing, setEditing] = useState(false);
   const editable = onStartAtChange !== undefined;
@@ -53,10 +59,12 @@ export function AppointmentContextRow({
           <AppText variant="metadata" numberOfLines={1} style={styles.editDate}>
             {formatCreationDateShort(startAt)}
           </AppText>
-          <TimeStepper
-            startAt={startAt}
-            onStep={(deltaMinutes) => onStartAtChange?.(deltaMinutes)}
+          <StartTimePicker
+            maxHour={maxHour}
+            minHour={minHour}
+            onChange={(time) => onStartAtChange?.(time)}
             onDone={() => setEditing(false)}
+            startAt={startAt}
           />
         </>
       ) : (

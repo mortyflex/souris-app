@@ -1,6 +1,6 @@
-import { useNavigation, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import type { Service, ServiceType } from "@/domain/appointments";
@@ -65,7 +65,6 @@ export function ServiceEditorScreen({
   serviceId,
 }: ServiceEditorScreenProps) {
   const router = useRouter();
-  const navigation = useNavigation();
   const business = useCurrentBusiness();
   const {
     addService,
@@ -85,11 +84,6 @@ export function ServiceEditorScreen({
   const [attempted, setAttempted] = useState(false);
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<ServiceConfirmation>();
-
-  // A draft under edition must not be lost to a swipe; reading may dismiss.
-  useEffect(() => {
-    navigation.setOptions({ gestureEnabled: !editing });
-  }, [editing, navigation]);
 
   if (mode === "existing" && !service) {
     return (
@@ -229,7 +223,18 @@ export function ServiceEditorScreen({
   };
 
   return (
-    <SheetScreen fit="content" keyboardAvoiding testID="service-sheet">
+    <SheetScreen
+      // Type chooser, form and details are distinct sheets: each change slides
+      // in, never swaps.
+      contentKey={
+        mode === "create" && !values ? "kind" : editing ? "edit" : "read"
+      }
+      // A draft under edition must not be lost to a swipe; reading may dismiss.
+      dismissible={!editing}
+      fit="content"
+      keyboardAvoiding
+      testID="service-sheet"
+    >
       <View style={styles.headerZone}>
         <SheetHeader
           action={{ label: closeLabel, onPress: close }}

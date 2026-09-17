@@ -163,8 +163,9 @@ deliberately differs:
 
 - three steps with a connected stepper — `Cliente → Prestations → Résumé`;
 - the Agenda-selected date/time is pinned as a compact appointment-context row on every step (never a large
-  date card). The time is a creation draft: a restrained `Modifier` reveals an inline ±5-minute control on
-  the same local date, bounded by the operational Agenda day;
+  date card). The time is a creation draft: a restrained « Changer l'horaire » reveals the inline start-time
+  wheels (hours + 5-minute minutes, see « Appointment start time — wheels ») on the same local date, bounded
+  by the operational Agenda day;
 - the client picker searches the complete normalized address book with a virtualized list and no display cap;
   its search field uses a symbol icon and a clear `Rechercher une cliente` placeholder instead of field
   instructions;
@@ -447,19 +448,22 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
 
 ### Bottom sheet (`src/shared/ui/BottomSheet.tsx`, `SheetScreen.tsx`)
 
-- **Shell** — full-width white surface (`surfaceElevated`), `radii.ios.sheet` top corners, the
-  Souris grabber (40 × 5, `borderSubtle`), platform gutter, bottom safe area. The same shell
-  serves the JS drawer (`BottomSheet`, a Modal) and every native form-sheet route
-  (`SheetScreen` inside `presentation: 'formSheet'`, configured once in
-  `src/providers/sheet-route-options.ts`: white `contentStyle`, `sheetCornerRadius`, system
-  grabber hidden so the Souris grabber is the only one). Workflow sheets use the 0.92 detent;
+- **Shell** — full-width satin overlay surface (§20; formerly flat white), `radii.ios.sheet` top
+  corners, the Souris grabber (40 × 5, translucent navy `overlayMaterial.grabber`), platform gutter, bottom safe area. The same shell
+  serves the JS drawer (`BottomSheet`, a Modal) and every sheet route (`SheetScreen`; native
+  `formSheet` for workflows, transparent route + shared `SheetPresentation` for content-fit
+  sheets — see §20 Geometry; configured once in
+  `src/providers/sheet-route-options.ts`: overlay-surface `contentStyle`, `sheetCornerRadius`, system
+  grabber hidden so the Souris grabber is the only one). Workflow sheets use the system's large detent (`sheet.workflowDetent`, §20 — the only detent
+  iOS 26 keeps attached to the screen edges);
   read-first sheets (Appointment details, Product / Service details) use `fitToContents` so a
   short detail never leaves a blank middle area, capped at the same detent (`sheet.detent`).
 - **Header** — `SheetHeader`: optional purple uppercase eyebrow (rose for lifecycle /
   destructive sheets), large navy multiline title, one tertiary text action top-right
   (« Fermer » / « Annuler »). No decorative borders; an optional hairline only under tall
   workflow headers.
-- **Action area** — `SheetActionBar`: hairline-separated white bar with the platform gutter,
+- **Action area** — `SheetActionBar`: no divider and no fill of its own, so body, actions and
+  bottom safe area read as one continuous material (§20), with the platform gutter,
   anchored below the scrolling body, safe-area cleared by the shell. One predictable behavior
   everywhere: with the keyboard open the whole sheet lifts (iOS `padding`), the body scrolls,
   and the bar stays reachable; the bottom safe-area inset is dropped while the keyboard is up so
@@ -485,11 +489,12 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
 ### Confirmation dialog (`src/shared/ui/ConfirmationDialog.tsx`)
 
 - The ONE Souris-owned confirmation: near-full-width centered card (`dialog.maxWidth`),
-  `radii.large`, hairline border, `scrim` backdrop, fade in/out. Uppercase eyebrow, large
+  `radii.large`, the overlay material with NO outline (§20), `scrim` backdrop, fade in/out. Uppercase eyebrow, large
   navy title, soft body, then full-width stacked actions: soft lavender secondary
   (« Retour » / « Annuler ») above the confirm.
-- `tone="destructive"` — rose eyebrow and the restrained rose outlined confirm (`danger`),
-  never a solid danger slab. Used for permanent Client, Product, Service and Appointment
+- `tone="destructive"` — rose eyebrow, a whisper-rose surface and a soft rose-FILLED confirm
+  (`danger`: `rose100` fill, `rose700` text, no outline) — never an outlined button, never a
+  solid danger slab. Used for permanent Client, Product, Service and Appointment
   deletion and for discarding a Sale or Appointment-edit draft.
 - `tone="neutral"` — accent eyebrow and a primary confirm: sign-out, Product / Service
   deactivation, and explanation-only dialogs (single « Compris »).
@@ -590,11 +595,31 @@ canonical `spacing.base` breathing room below the action, above the sheet's bott
 (dropped while the keyboard is up, so the action stays reachable and never doubles the inset).
 No Client-specific margins.
 
-### Appointment creation — time control haptic
+### Appointment start time — wheels
 
-Tapping « Changer l'horaire » gives exactly one selection haptic (`haptics.selection`) when
-the ±5-minute control opens; stepping the time and the wheel-free date context add no further
-haptic noise.
+The Appointment START time is chosen on two adjacent wheels — **Heures** and **Minutes** —
+instead of the former ±5 stepper: reaching 19:00 is one flick, not a series of + presses. ONE
+implementation serves Appointment creation (context row and Summary step) and Appointment
+editing: `StartTimePicker` (appointments) on the shared `TimeWheelPicker` /
+`WheelColumn` (`src/shared/ui/`), the very mechanics of the birthday wheel.
+
+- 24-hour, no AM/PM, two-digit labels; minutes on the 5-minute grid (00, 05 … 55). Native
+  inertial scrolling, rows snap to the centered band; the selected row is strong, its neighbours
+  progressively fade. Each wheel owns its scroll: moving one never moves the other.
+- The wheels open on the current start time. A start that is off the grid (an Appointment
+  created « now » at 11:26) is never silently rounded: that exact minute stays on the wheel, in
+  order, until another one is picked.
+- Hours: creation offers the operational day (08 → 23, latest start 23:55, same local date);
+  editing offers the whole day (00 → 23) on the Appointment's own date — the date only changes
+  through « Changer la date », and an Appointment that then ends after midnight runs into the
+  next day as before. The rules are pure functions (`setStartTimeOfDay`,
+  `setAppointmentLocalTime`).
+- Haptics: one selection haptic when « Changer l'horaire » opens the wheels, then one per value a
+  wheel ACTUALLY snaps to — never per scroll event, never when it settles back on the same row.
+- Accessibility: each wheel is one adjustable element announcing « 19 heures » / « 5 minutes »;
+  increment / decrement move one row.
+- Durations are NOT chosen here: service, phase and processing times keep their own ± controls
+  (APPOINTMENTS.md §14.2).
 
 ### Birthday wheel
 
@@ -646,3 +671,131 @@ is no longer reproduced natively.
   Creation is never a tab: the bar is navigation, the + is contextual action.
 - **Reselect**: native behaviour (pop to the tab root / scroll to top where the system finds a
   scroll view); no custom reselect logic.
+
+---
+
+## 19. Agenda Visual Language — Pastel Planning Cards, Gloss, Candy +
+
+This section supersedes the « calmer operational exception » wording of §10 for Agenda appointment
+cards, the flat violet circle of §17 and the « nothing else is restyled » wording of §18, for
+presentation only. Occupancy, segments, statuses and navigation behave exactly as before.
+
+- **Palette**: appointment cards use eight soft but visible pastel families — lavender, blush,
+  peach, mint, powder blue, butter, coral, lilac (`appointmentPastels` in
+  `src/shared/ui/theme/colors.ts`). Lavender, blush and peach reuse the approved steps; the new
+  families follow the same OKLCH recipe at their own hue. The family is derived deterministically
+  from the Appointment id (`src/features/agenda/appointment-palette.ts`): stable across renders,
+  shared by every segment and the Week row of one Appointment, never random. Washed-out grey is
+  never an active colour.
+- **Status**: scheduled / confirmed / in-progress keep the vivid `fill`; completed calms down to
+  the family's `calm` tone with soft text and no gloss; cancelled / no-show are desaturated
+  neutral (they do not occupy the operational Agenda today, §5).
+- **Text**: navy client name, family `deep` tone for the service line, `foregroundSoft` for phase
+  and reprise. Every pairing is ≥ 4.5:1 (navy ≥ 11:1) and covered by
+  `appointment-palette.test.ts`.
+- **Shape**: `radii.small` (8), reduced on short blocks (a quarter of the height, minimum 3) so
+  a quarter-hour card never reads as a pill.
+- **Gloss** (`src/shared/ui/theme/gloss.ts`): a light top-down white sheen, a one-pixel top
+  highlight and the barely-there `nativeShadows.card` depth. No blur, no glassmorphism. The layers
+  only lighten the fill, so dark text never loses contrast.
+- **Floating +**: same size, placement, hit target, reveal and behaviour (§17). Finish is a refined
+  glossy candy: Souris violet deepening to lavender 700, a top sheen that fades before the glyph,
+  a small **elliptical** specular highlight near the top, a moulded inner edge (inset light), the
+  existing round `nativeShadows.floating`. Every gloss layer lives in ONE circular clip
+  (`overflow: hidden`, radius = half the button): nothing but the round shadow is ever drawn
+  outside the circle. The highlight is a circle squashed into a true ellipse — a radius alone
+  only yields a rounded rectangle, which reads as a glass card laid on the button and is
+  forbidden. No border on the clip. The white + keeps ≥ 4.5:1. The button is shared, so Clientes,
+  Produits and Prestations carry the same finish.
+- **Bottom bar — iOS 18 and earlier**: NativeTabs asks UIKit for its thinner system material
+  (`blurEffect="systemThinMaterial"`) so the page reads through the bar more. Still the system's
+  own material — no BlurView, no custom bar.
+- **Bottom bar — iOS 26 (Liquid Glass)**: the glass material is NOT tunable. Every bar-material
+  prop of NativeTabs / react-native-screens (`backgroundColor`, `blurEffect`, `shadowColor`) is
+  ignored by the system there (verified in the simulator: a forced red bar changes iOS 18, not
+  iOS 26), and no glass variant or opacity prop exists. What Souris controls is what the glass
+  samples: iOS 26 lays a dimming scroll-edge fog over scroll content under the bar, which greys
+  the pastel cards before the glass refracts them. The Agenda day and week scroll views hide that
+  bottom edge effect through `TabBarGlassScrollEdge` (`src/shared/ui/`, UIKit's own
+  `UIScrollEdgeEffect` via `ScrollViewMarker` from `react-native-screens/experimental`), so the
+  bar refracts crisp, luminous content. The system keeps icons and labels legible by itself.
+  That entry point is marked experimental upstream: the wrapper is its single consumer and must
+  be rechecked on every react-native-screens upgrade. Clientes and Produits keep the default
+  edge effect until decided otherwise.
+
+---
+
+## 20. Overlay Material — Satin Sheets, Drawers and Dialogs
+
+Supersedes the « white surface » wording of §16 for presentation only. Sizes, spacing, radii,
+scrim, motion, gestures and dismissal policies of §16 are unchanged.
+
+- **One material, three primitives.** `BottomSheet`, `SheetScreen` (+ `sheet-route-options`
+  `contentStyle`) and `ConfirmationDialog` share the same surface and the same finish, so every
+  consumer inherits it. No feature paints its own sheet or dialog background.
+- **Surface** — `overlayMaterial.surface` (`lavender.lav025`): near-white lavender instead of
+  flat `#FFF`, still lighter than `surfaceLavender`, so lavender, neutral AND white inner cards
+  all read on it. **Opaque on purpose**: without a blur, even 3 % translucency lets the page
+  ghost through the text (verified in the simulator). Souris adds no blur view for this; the
+  glass feel comes from light, not from see-through.
+- **Finish** — `SurfaceGloss` (`src/shared/ui/`), rendered first inside the surface under its
+  content: a full-width highlight that starts at the very top edge and dissolves to nothing
+  (`gloss.surface.sheen`, `sheenHeight`) — it has no lower edge, so it can never read as a
+  rectangle inside the surface — plus ONE bright top hairline (`gloss.surface.topLight`) drawn as
+  an inset shadow so it follows the top corners. Nothing is drawn along the sides or the bottom and
+  no surface carries an outline: the material is edged by light and depth only. Clipped to the
+  surface shape, decoration only (no touches, hidden from accessibility, no layout).
+- **Depth** — restrained: `nativeShadows.sheet` lifts a drawer off the dimmed page,
+  `nativeShadows.lifted` carries the dialog. Native form sheets keep the system's own shadow and
+  dim. No glow.
+- **Grabber** — translucent navy, so it takes the tint of the material it sits in, inside the
+  highlight.
+- **Dialogs** — same material, no outline around the card or any action. `destructive` leans the
+  surface a whisper toward rose (`overlayMaterial.surfaceDestructive`), uses a `rose700` eyebrow
+  (≥ 4.5:1 on that tint) and the rose-filled `danger` confirm (`rose700` on `rose100`, ≥ 6:1);
+  cancel stays the soft lavender fill. The same `danger` button serves the cancellation / no-show
+  drawers.
+- **Geometry** — a sheet is attached to the screen: full width, flush with the bottom edge, top
+  corners only, bottom safe area INSIDE the surface, no divider between body, actions and safe
+  area. The JS `BottomSheet` guarantees this on every iOS version. Native form sheets depend on
+  the system: iOS 26 floats every sheet below the large detent as an inset card (side margins,
+  gap below, four rounded corners) and UIKit offers no opt-out in portrait
+  (`prefersEdgeAttachedInCompactHeight` is landscape-only). Therefore:
+  - **workflow routes** (Appointment creation / editing, Sale creation) stay NATIVE form sheets
+    on the large detent, the one detent iOS 26 keeps attached (`<SheetScreen fit="fill">`);
+  - **content-fit routes** (Appointment details, Product / Service details and creation) are
+    TRANSPARENT-MODAL routes whose sheet Souris draws itself (`<SheetScreen fit="content">`),
+    with the very same `SheetPresentation` as every `BottomSheet` — scrim, slide, material,
+    grabber-zone pan, safe area. They are identical to a drawer on every iOS version.
+- **Leaving a content-fit route** — nothing special in the screens: `router.back()`, a hardware
+  back or a reset is HELD (`usePreventRemove`) while the sheet slides down and the scrim fades,
+  then the same action goes through; the route never vanishes instantly. Swipe-down and
+  outside-tap follow `dismissible` (off while a Product / Service draft is edited — the former
+  `gestureEnabled` rule). A native workflow sheet pushed from a content-fit route (« Modifier »)
+  presents above it normally. Error states of a NATIVE route use the native shell
+  (`fit="fill"`), never a sheet inside the sheet.
+- **Every appearance is a transition** (`SheetPresentation`, so drawers and sheet routes alike):
+  - the first surface slides up only once it is REALLY laid out natively. Started at mount, the
+    slide runs while the UI thread is still mounting the screen: its clock advances unseen and
+    the first displayed frame already shows the sheet almost in place (measured: ~90 % of the
+    travel gone 70 ms after the tap) — it reads as « appears instantly ».
+    `sheet.layoutWaitFallback` only covers a layout event that never comes;
+  - second-level flows that replace the content of a mounted sheet (Product details → edit,
+    Service type chooser → form, Service details → edit, and back) declare a `contentKey`. A
+    change brings the new content as a NEW surface sliding up over the previous one, which keeps
+    its last content, takes no touches, is hidden from assistive tech and slides away beneath it
+    at the very moment the new one starts. Same duration and easing as the opening. Never an
+    instant swap, never a flash. Reduced motion swaps directly.
+- **Bottom safe area** — kept inside the surface as plain padding from the window metrics known
+  at launch (Souris is portrait-locked), a resting probe only ever raising it. A native
+  safe-area view mounted while a modal is still being presented measures 0 and never recomputes
+  — actions then sit on the home indicator.
+- **Destructive action placement** (Appointment details) — « Supprimer » sits as low as the
+  sheet allows: a flexible spacer (never less than `spacing.xl`) separates it from the primary
+  actions, the content container grows with the sheet, and the breathing room sits ABOVE it, not
+  under it. It stays in the scroll flow, so a tall appointment simply scrolls to it.
+- **Keyboard accessory** — a pad keyboard with `returnKeyType="done"` gets React Native's own iOS
+  accessory button, hardcoded « Done »; any such input must set
+  `inputAccessoryViewButtonLabel="OK"` (Checkout amounts). No English string in Souris-owned UI.
+- **Not part of the material** — main screens, cards, fields, the camera / scanner full-screen
+  modals and the floating-create menu keep their own surfaces: not everything is glass.

@@ -4,8 +4,6 @@
 // civil calendar semantics are preserved: dates are rebuilt with the local
 // Date constructor, never serialized through UTC strings.
 
-const MINUTE_MS = 60_000;
-
 /** Keeps the time of day while moving to another local calendar date. */
 export function changeAppointmentLocalDate(startAt: Date, newDate: Date): Date {
   return new Date(
@@ -17,9 +15,15 @@ export function changeAppointmentLocalDate(startAt: Date, newDate: Date): Date {
   );
 }
 
-/** Steps the start time by a ± minutes delta on the same local date. */
-export function stepAppointmentStartAt(startAt: Date, deltaMinutes: number): Date {
-  return new Date(startAt.getTime() + deltaMinutes * MINUTE_MS);
+/**
+ * Sets the time of day chosen on the start-time wheels, on the same local
+ * calendar date. Any hour is allowed (00:xx → 23:xx): an existing Appointment
+ * may sit anywhere in its day, and the date only changes through the date
+ * picker. An Appointment that then ends after midnight simply runs into the
+ * next day, as before. Seconds are dropped.
+ */
+export function setAppointmentLocalTime(startAt: Date, hour: number, minute: number): Date {
+  return new Date(startAt.getFullYear(), startAt.getMonth(), startAt.getDate(), hour, minute);
 }
 
 /** True when two starts differ at minute precision. */

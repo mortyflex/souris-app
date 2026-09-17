@@ -255,6 +255,10 @@ function PaymentMethodField({ method, value, onChangeText, error, remainingCents
       <View style={styles.amountShell}>
         <TextInput
           accessibilityLabel={`Montant ${label.toLowerCase()}`}
+          // The decimal pad has no return key, so iOS shows React Native's own
+          // accessory button — hardcoded « Done » unless labelled. It only
+          // dismisses the keyboard.
+          inputAccessoryViewButtonLabel="OK"
           keyboardType="decimal-pad"
           onBlur={() => setFocused(false)}
           onChangeText={onChangeText}

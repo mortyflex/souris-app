@@ -55,8 +55,10 @@ export function AppButton({
         style={[
           variant === 'primary'
             ? styles.primaryText
-            : variant === 'danger' || variant === 'dangerSoft'
+            : variant === 'danger'
               ? styles.dangerText
+              : variant === 'dangerSoft'
+                ? styles.dangerSoftText
               : variant === 'tertiary'
                 ? styles.tertiaryText
                 : styles.secondaryText,
@@ -83,7 +85,9 @@ const styles = StyleSheet.create({
     borderColor: semanticColors.borderSubtle,
   },
   disabledText: { color: semanticColors.foregroundMuted },
-  dangerText: { color: rose.rose600 },
+  // Deeper rose on the rose fill: clearly destructive, readable (≥ 6:1), never neon.
+  dangerText: { color: rose.rose700 },
+  dangerSoftText: { color: rose.rose600 },
   primaryText: { color: semanticColors.surfaceElevated },
   secondaryText: { color: semanticColors.foreground },
   tertiaryText: { color: semanticColors.accent },
@@ -93,11 +97,8 @@ const variants = StyleSheet.create({
   primary: { backgroundColor: semanticColors.accent },
   secondary: { backgroundColor: semanticColors.surfaceLavender },
   tertiary: { backgroundColor: 'transparent' },
-  danger: {
-    backgroundColor: 'transparent',
-    borderColor: rose.rose200,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  // The destructive confirm: a soft rose fill, never an outline.
+  danger: { backgroundColor: rose.rose100 },
   dangerSoft: { backgroundColor: semanticColors.surfaceRose },
 });
 
@@ -115,8 +116,7 @@ const pressedVariants = StyleSheet.create({
     transform: [{ scale: interaction.pressedScale }],
   },
   danger: {
-    backgroundColor: rose.rose050,
-    borderColor: rose.rose600,
+    backgroundColor: rose.rose200,
     transform: [{ scale: interaction.pressedScale }],
   },
   dangerSoft: {

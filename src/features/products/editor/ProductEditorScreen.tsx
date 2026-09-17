@@ -16,11 +16,11 @@
 // to the standard detent. The keyboard stays closed until a field is tapped.
 // Deactivation and deletion use the shared Souris confirmation dialog.
 // Swipe-to-dismiss is allowed while reading and disabled while a draft is
-// being edited (navigation option toggled here).
+// being edited (`dismissible` on the sheet shell).
 
-import { useNavigation, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import type { Product } from "@/domain/products";
@@ -79,7 +79,6 @@ export function ProductEditorScreen({
   initialBarcode,
 }: ProductEditorScreenProps) {
   const router = useRouter();
-  const navigation = useNavigation();
   const business = useCurrentBusiness();
   const {
     addProduct,
@@ -104,11 +103,6 @@ export function ProductEditorScreen({
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmation, setConfirmation] = useState<ProductConfirmation>();
-
-  // A draft under edition must not be lost to a swipe; reading may dismiss.
-  useEffect(() => {
-    navigation.setOptions({ gestureEnabled: !editing });
-  }, [editing, navigation]);
 
   if (mode === "existing" && !product) {
     return (
@@ -231,7 +225,15 @@ export function ProductEditorScreen({
   };
 
   return (
-    <SheetScreen fit="content" keyboardAvoiding testID="product-sheet">
+    <SheetScreen
+      // Details and edition are two sheets: the change slides in, never swaps.
+      contentKey={editing ? "edit" : "read"}
+      // A draft under edition must not be lost to a swipe; reading may dismiss.
+      dismissible={!editing}
+      fit="content"
+      keyboardAvoiding
+      testID="product-sheet"
+    >
       <View style={styles.headerZone}>
         <SheetHeader
           action={{ label: closeLabel, onPress: close }}

@@ -1,65 +1,88 @@
 // Souris — SheetScreen
 //
-// The shell of a native form-sheet ROUTE (Expo Router `presentation:
-// 'formSheet'`): the same white surface, grabber, bottom safe area and
-// keyboard strategy as the shared BottomSheet, so a workflow presented as a
-// route (Appointment creation/editing, Product and Service editors, Sale
-// creation, Appointment details) reads exactly like a drawer presented as a
-// Modal. Radius, scrim and gesture policy of the native sheet are configured
-// once in `src/app/(app)/_layout.tsx` (`sheetRouteOptions`).
+// The shell of a sheet ROUTE, so a workflow presented as a route reads exactly
+// like a drawer presented by state. Two presentations, chosen by `fit` and
+// paired with the route options of `src/providers/sheet-route-options.ts`:
 //
-// `fit="fill"` occupies the whole detent (workflows with long scrolling
-// bodies); `fit="content"` sizes the screen to its content (read-first
-// details) and caps it at the canonical detent so a long body still scrolls.
+// `fit="fill"` (workflowSheet) — a NATIVE form sheet on the system's large
+//   detent: Appointment creation / editing, Sale creation. Long keyboard-heavy
+//   workflows keep the platform sheet; the large detent is the one iOS 26
+//   leaves attached to the screen edges. This shell only draws the satin
+//   material, the grabber, the bottom safe area and the keyboard strategy.
+//
+// `fit="content"` (contentSheet / editorSheet) — the shared SheetPresentation
+//   hosted in a TRANSPARENT-MODAL route: Appointment details, Product and
+//   Service details / creation. A native sheet sized to its content sits below
+//   the large detent, and iOS 26 floats those as an inset card (side margins,
+//   gap below, four rounded corners) with no UIKit opt-out. Drawing the sheet
+//   ourselves keeps it full width, flush with the bottom and identical to every
+//   BottomSheet on every iOS version.
+//
+//   The route is left like any other: `router.back()`, a push over it, a
+//   hardware back. `usePreventRemove` holds the removal while the sheet slides
+//   down and the scrim fades, then lets the very same navigation action through —
+//   screens need no special close call, and the route never vanishes instantly.
+//   `dismissible` is the swipe / outside-tap policy (off while a draft is
+//   edited); leaving through « Annuler » / « Fermer » always works.
 
-import type { ReactNode } from 'react';
+import { useNavigation, useRouter } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   View,
-  useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { SheetGrabber } from './BottomSheet';
-import { semanticColors, sheet } from './theme';
+import { SheetGrabber, SheetPresentation } from './SheetPresentation';
+import { SurfaceGloss } from './SurfaceGloss';
+import { overlayMaterial, radii } from './theme';
 
 interface SheetScreenProps {
   readonly children: ReactNode;
   readonly fit?: 'fill' | 'content';
   /** Lifts fixed actions above the keyboard (forms and text entry). */
   readonly keyboardAvoiding?: boolean;
+  /**
+   * `fit="content"` only: swipe-down and outside-tap may dismiss the sheet.
+   * Turn off while a draft is being edited.
+   */
+  readonly dismissible?: boolean;
+  /**
+   * `fit="content"` only: identity of what the sheet shows. A change (details →
+   * edit, type chooser → form) arrives as a new sheet sliding up over the
+   * previous one instead of an instant swap.
+   */
+  readonly contentKey?: string;
   readonly style?: StyleProp<ViewStyle>;
   readonly testID?: string;
 }
 
-export function SheetScreen({
+export function SheetScreen({ fit = 'fill', ...props }: SheetScreenProps) {
+  return fit === 'fill' ? <NativeSheetShell {...props} /> : <RouteSheet {...props} />;
+}
+
+type ShellProps = Omit<SheetScreenProps, 'fit'>;
+
+function NativeSheetShell({
   children,
-  fit = 'fill',
   keyboardAvoiding = false,
   style,
   testID,
-}: SheetScreenProps) {
-  const { height: windowHeight } = useWindowDimensions();
+}: Omit<ShellProps, 'dismissible' | 'contentKey'>) {
   const Body = keyboardAvoiding ? KeyboardAvoidingView : View;
 
   return (
-    <SafeAreaView
-      edges={['bottom']}
-      style={[
-        styles.root,
-        fit === 'fill' ? styles.fill : { maxHeight: windowHeight * sheet.detent },
-        style,
-      ]}
-      testID={testID}
-    >
+    <SafeAreaView edges={['bottom']} style={[styles.root, styles.fill, style]} testID={testID}>
+      <SurfaceGloss shape={styles.shape} testID="sheet-screen-gloss" />
       <SheetGrabber />
       <Body
         behavior={keyboardAvoiding && Platform.OS === 'ios' ? 'padding' : undefined}
-        style={fit === 'fill' ? styles.fill : styles.shrink}
+        style={styles.fill}
       >
         {children}
       </Body>
@@ -67,8 +90,67 @@ export function SheetScreen({
   );
 }
 
+function RouteSheet({
+  children,
+  keyboardAvoiding = false,
+  dismissible = true,
+  contentKey,
+  style,
+  testID,
+}: ShellProps) {
+  const router = useRouter();
+  const navigation = useNavigation();
+  type RemovalAction = Parameters<typeof navigation.dispatch>[0];
+  // held → the close transition plays → released → the action goes through.
+  const [removal, setRemoval] = useState<{ action: RemovalAction; released: boolean }>();
+
+  // Every way out of the route (back, a reset, hardware back) first plays the
+  // close transition; the held action then goes through untouched.
+  usePreventRemove(!removal?.released, ({ data }) => {
+    setRemoval({ action: data.action, released: false });
+  });
+
+  useEffect(() => {
+    if (removal?.released) navigation.dispatch(removal.action);
+  }, [navigation, removal]);
+
+  const release = () => {
+    setRemoval((held) => held && { ...held, released: true });
+  };
+
+  return (
+    <SheetPresentation
+      backdropLabel="Fermer la fiche"
+      contentKey={contentKey}
+      contentStyle={style}
+      dismissOnBackdropPress={dismissible}
+      dismissOnPanDown={dismissible}
+      keyboardAvoiding={keyboardAvoiding}
+      onClose={() => router.back()}
+      onCloseTransitionEnd={release}
+      padded={false}
+      scrimTestID="sheet-screen-scrim"
+      surfaceTestID="sheet-screen-surface"
+      testID={testID}
+      visible={removal === undefined}
+    >
+      {children}
+    </SheetPresentation>
+  );
+}
+
 const styles = StyleSheet.create({
-  root: { backgroundColor: semanticColors.surfaceElevated },
+  // Same top corners as `sheetCornerRadius`, so the top light follows them.
+  root: {
+    backgroundColor: overlayMaterial.surface,
+    borderCurve: 'continuous',
+    borderTopLeftRadius: radii.ios.sheet,
+    borderTopRightRadius: radii.ios.sheet,
+    overflow: 'hidden',
+  },
+  shape: {
+    borderTopLeftRadius: radii.ios.sheet,
+    borderTopRightRadius: radii.ios.sheet,
+  },
   fill: { flex: 1 },
-  shrink: { flexShrink: 1 },
 });

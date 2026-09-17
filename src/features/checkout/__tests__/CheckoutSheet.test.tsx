@@ -56,6 +56,8 @@ describe('CheckoutSheet', () => {
       const input = view.getByTestId(`checkout-amount-${method}`);
       expect(input.props.autoFocus).toBeFalsy();
       expect(input.props.keyboardType).toBe('decimal-pad');
+      // The pad's iOS accessory button is labelled in French, never the default « Done ».
+      expect(input.props.inputAccessoryViewButtonLabel).toBe('OK');
       expect(input.props.value).toBe('');
     }
     expect(view.getByText('Prestations')).toBeTruthy();

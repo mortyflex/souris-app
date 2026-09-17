@@ -2,6 +2,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SymbolView } from 'expo-symbols';
 
 import { AppText } from '@/shared/ui/AppText';
+import { TabBarGlassScrollEdge } from '@/shared/ui/TabBarGlassScrollEdge';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import {
   bottomClearance,
@@ -105,26 +106,28 @@ export function WeekView({
           />
         </Pressable>
       </View>
-      <ScrollView
-        // Native tab bar overlay: system bottom inset, see DayTimeline.
-        contentInsetAdjustmentBehavior="automatic"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingHorizontal: horizontalGutter, paddingBottom: bottomPadding },
-        ]}
-      >
-        {groups.map((group) => (
-          <WeekDaySection
-            key={`${group.day.getFullYear()}-${group.day.getMonth()}-${group.day.getDate()}`}
-            appointments={group.appointments}
-            day={group.day}
-            selectedDay={selectedDay}
-            today={today}
-            onSelectDay={onSelectDay}
-          />
-        ))}
-      </ScrollView>
+      <TabBarGlassScrollEdge>
+        <ScrollView
+          // Native tab bar overlay: system bottom inset, see DayTimeline.
+          contentInsetAdjustmentBehavior="automatic"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingHorizontal: horizontalGutter, paddingBottom: bottomPadding },
+          ]}
+        >
+          {groups.map((group) => (
+            <WeekDaySection
+              key={`${group.day.getFullYear()}-${group.day.getMonth()}-${group.day.getDate()}`}
+              appointments={group.appointments}
+              day={group.day}
+              selectedDay={selectedDay}
+              today={today}
+              onSelectDay={onSelectDay}
+            />
+          ))}
+        </ScrollView>
+      </TabBarGlassScrollEdge>
     </View>
   );
 }

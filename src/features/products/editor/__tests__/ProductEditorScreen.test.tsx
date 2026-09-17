@@ -12,7 +12,6 @@ import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProv
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 
 const mockBack = jest.fn();
-const mockSetOptions = jest.fn();
 let mockScannedBarcode = "";
 let mockPhotoResult:
   | { readonly status: "selected"; readonly uri: string }
@@ -40,8 +39,11 @@ function createDeferred<Value>() {
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ back: mockBack }),
-  useNavigation: () => ({ setOptions: mockSetOptions }),
+  useNavigation: () => ({ dispatch: jest.fn() }),
 }));
+
+// SheetScreen (content fit) holds the route's removal while the sheet slides down.
+jest.mock("expo-router/react-navigation", () => ({ usePreventRemove: jest.fn() }));
 
 jest.mock("expo-symbols", () => ({ SymbolView: () => null }));
 
@@ -310,7 +312,6 @@ function renderEditor(screen: React.ReactNode) {
 describe("ProductEditorScreen", () => {
   beforeEach(() => {
     mockBack.mockClear();
-    mockSetOptions.mockClear();
     mockScannedBarcode = "";
     mockPhotoResult = { status: "selected", uri: "file:///products/raw.jpg" };
     mockCapturedUri = "file:///products/raw.jpg";
@@ -483,19 +484,24 @@ describe("ProductEditorScreen", () => {
       />,
     );
 
-    const sheetStyle = StyleSheet.flatten(view.getByTestId("product-sheet").props.style);
-    expect(sheetStyle.flex).toBeUndefined();
-    expect(sheetStyle.maxHeight).toBeGreaterThan(0);
+    // Sized by its content, capped at the canonical detent.
+    expect(StyleSheet.flatten(view.getByTestId("product-sheet").props.style).flex).toBeUndefined();
+    const surfaceStyle = StyleSheet.flatten(view.getByTestId("sheet-screen-surface").props.style);
+    expect(surfaceStyle.flex).toBeUndefined();
+    expect(surfaceStyle.maxHeight).toBeGreaterThan(0);
     expect(view.getByText("PRODUIT")).toBeTruthy();
     expect(view.getByRole("header", { name: "Masque réparateur 5 min" })).toBeTruthy();
     expect(view.getByLabelText("Fermer")).toBeTruthy();
     expect(view.getByTestId("product-read-actions")).toBeTruthy();
-    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
+    // Reading may be dismissed by a swipe or an outside tap; a draft may not.
+    const outsideTapAllowed = () =>
+      view.getByTestId("sheet-screen-scrim").props.accessibilityState?.disabled !== true;
+    expect(outsideTapAllowed()).toBe(true);
 
     await act(async () => fireEvent.press(view.getByTestId("edit-product")));
-    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: false });
+    expect(outsideTapAllowed()).toBe(false);
     await act(async () => fireEvent.press(view.getByTestId("cancel-product-edit")));
-    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
+    expect(outsideTapAllowed()).toBe(true);
   });
 
   it("hydrates an existing Product and edits it with stable identity", async () => {

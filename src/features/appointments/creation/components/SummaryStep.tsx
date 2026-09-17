@@ -37,6 +37,7 @@ import {
 } from '@/shared/ui/theme';
 
 import { SortableDraftList, type SortableDraftEntry } from '../../editor/components/SortableDraftList';
+import type { StartTimeOfDay } from '../draft-start';
 import type { AppointmentCreationSummary } from '../presentation';
 import {
   formatCreationDate,
@@ -44,7 +45,7 @@ import {
   formatCreationPrice,
   formatCreationTime,
 } from '../presentation';
-import { TimeStepper } from './TimeStepper';
+import { StartTimePicker } from './StartTimePicker';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
@@ -64,7 +65,10 @@ interface SummaryStepProps {
   ) => void;
   readonly onEditClient: () => void;
   readonly onEditServices: () => void;
-  readonly onStartAtChange: (deltaMinutes: number) => void;
+  readonly onStartAtChange: (time: StartTimeOfDay) => void;
+  /** Hours offered by the start-time wheels, both inclusive. */
+  readonly minHour?: number;
+  readonly maxHour?: number;
 }
 
 export function SummaryStep({
@@ -80,6 +84,8 @@ export function SummaryStep({
   onEditClient,
   onEditServices,
   onStartAtChange,
+  minHour,
+  maxHour,
 }: SummaryStepProps) {
   const [editingTime, setEditingTime] = useState(false);
   const reducedMotion = useReducedMotion();
@@ -139,10 +145,12 @@ export function SummaryStep({
         </AppText>
         {editingTime ? (
           <Animated.View entering={timeEntering} exiting={timeExiting}>
-            <TimeStepper
-              startAt={startAt}
-              onStep={onStartAtChange}
+            <StartTimePicker
+              maxHour={maxHour}
+              minHour={minHour}
+              onChange={onStartAtChange}
               onDone={() => setEditingTime(false)}
+              startAt={startAt}
             />
           </Animated.View>
         ) : (

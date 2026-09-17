@@ -9,12 +9,14 @@ import { ServiceEditorScreen } from "../ServiceEditorScreen";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 
 const mockBack = jest.fn();
-const mockSetOptions = jest.fn();
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ back: mockBack }),
-  useNavigation: () => ({ setOptions: mockSetOptions }),
+  useNavigation: () => ({ dispatch: jest.fn() }),
 }));
+
+// SheetScreen (content fit) holds the route's removal while the sheet slides down.
+jest.mock("expo-router/react-navigation", () => ({ usePreventRemove: jest.fn() }));
 
 jest.mock("react-native-reanimated", () => {
   const React = jest.requireActual("react") as typeof import("react");
@@ -111,7 +113,6 @@ function renderEditor(screen: React.ReactNode) {
 describe("ServiceEditorScreen", () => {
   beforeEach(() => {
     mockBack.mockClear();
-    mockSetOptions.mockClear();
   });
 
   it("opens in the canonical sheet shell without auto-focusing a field", async () => {
@@ -121,9 +122,11 @@ describe("ServiceEditorScreen", () => {
     expect(view.getByRole("header", { name: "Ajouter une prestation" })).toBeTruthy();
     expect(view.getByLabelText("Annuler")).toBeTruthy();
     // The type chooser is content-fit: never a fixed full-height sheet.
-    const sheetStyle = StyleSheet.flatten(view.getByTestId("service-sheet").props.style);
-    expect(sheetStyle.flex).toBeUndefined();
-    expect(sheetStyle.maxHeight).toBeGreaterThan(0);
+    // Sized by its content, capped at the canonical detent.
+    expect(StyleSheet.flatten(view.getByTestId("service-sheet").props.style).flex).toBeUndefined();
+    const surfaceStyle = StyleSheet.flatten(view.getByTestId("sheet-screen-surface").props.style);
+    expect(surfaceStyle.flex).toBeUndefined();
+    expect(surfaceStyle.maxHeight).toBeGreaterThan(0);
     expect(view.getByText("Type de prestation")).toBeTruthy();
     expect(view.getByText("Choisissez la structure qui correspond au déroulé réel.")).toBeTruthy();
     expect(view.getByText("Prestation technique")).toBeTruthy();
@@ -503,7 +506,6 @@ describe("ServiceEditorScreen", () => {
         serviceId="service-brushing-brushing-1"
       />,
     );
-    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
 
     await act(async () => {
       fireEvent.press(view.getByText("Désactiver"));
@@ -534,13 +536,18 @@ describe("ServiceEditorScreen", () => {
       />,
     );
 
+    // Reading may be dismissed by a swipe or an outside tap; a draft may not.
+    const outsideTapAllowed = () =>
+      view.getByTestId("sheet-screen-scrim").props.accessibilityState?.disabled !== true;
+    expect(outsideTapAllowed()).toBe(true);
+
     await act(async () => {
       fireEvent.press(view.getByTestId("edit-service"));
     });
-    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: false });
+    expect(outsideTapAllowed()).toBe(false);
     await act(async () => {
       fireEvent.press(view.getByLabelText("Annuler"));
     });
-    expect(mockSetOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
+    expect(outsideTapAllowed()).toBe(true);
   });
 });

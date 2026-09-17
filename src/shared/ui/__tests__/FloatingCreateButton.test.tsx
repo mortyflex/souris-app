@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 
@@ -62,6 +63,24 @@ async function settleReveal() {
 
 describe('FloatingCreateButton', () => {
   beforeEach(() => selectionHaptic.mockClear());
+
+  it('keeps every gloss layer inside one circular clip the size of the button', async () => {
+    const view = await render(
+      <FloatingCreateButton accessibilityLabel="Ajouter une cliente" onPress={jest.fn()} testID="create" />,
+    );
+    await settleReveal();
+
+    const radius = floatingAction.size / 2;
+    const button = StyleSheet.flatten(view.getByTestId('create').props.style);
+    const gloss = view.getByTestId('create-gloss', { includeHiddenElements: true });
+    const clip = StyleSheet.flatten(gloss.props.style);
+
+    expect(button).toMatchObject({ borderRadius: radius, height: floatingAction.size, width: floatingAction.size });
+    expect(clip).toMatchObject({ borderRadius: radius, bottom: 0, left: 0, overflow: 'hidden', right: 0, top: 0 });
+    // Decoration only: never a touch target, never a border that could box the circle.
+    expect(gloss.props.pointerEvents).toBe('none');
+    expect(clip.borderWidth).toBeUndefined();
+  });
 
   it('starts hidden and unavailable, then reveals shortly after focus', async () => {
     const onPress = jest.fn();

@@ -35,6 +35,7 @@ export const rose = {
   rose100: '#FFE1E6', // oklch(0.938 0.038 6) — rose pastel light
   rose200: '#FEC9D3', // oklch(0.885 0.062 6) — danger button border
   rose600: '#CF3869', // oklch(0.58 0.19 6) — now-line, error text, destructive action
+  rose700: '#893A4F', // oklch(0.46 0.11 6) — text on rose fills (≥ 6:1 on rose100), blush identity
 } as const;
 
 // Peach — processing/unattended time and regained availability.
@@ -45,6 +46,24 @@ export const peach = {
   peach100: '#FFE8D4', // oklch(0.945 0.038 62) — processing time fill
   peach200: '#FDD6B5', // oklch(0.900 0.062 62) — processing time stripe border
   peach700: '#955816', // oklch(0.52 0.11 62) — processing time accent / text
+} as const;
+
+// Agenda appointment pastels — the colourful planning-card families
+// (DESIGN_OVERRIDES.md §19). Lavender, blush and peach reuse the approved steps
+// above; the other families follow the same OKLCH recipe at their own hue,
+// chroma reduced only as far as the sRGB gamut requires:
+//   calm oklch(0.972 ~0.016 h) — completed card
+//   fill oklch(0.895 ~0.06 h)  — active card (butter sits lighter to stay yellow)
+//   deep oklch(0.46 ~0.11 h)   — identity edge and secondary text, ≥ 5:1 on fill
+export const appointmentPastels = {
+  lavender: { calm: lavender.lav050, fill: lavender.lav200, deep: lavender.lav700 },
+  blush: { calm: rose.rose050, fill: rose.rose200, deep: rose.rose700 },
+  peach: { calm: peach.peach050, fill: peach.peach200, deep: '#7F490C' }, // oklch(0.46 0.10 62)
+  mint: { calm: '#ECF9F3', fill: '#B7EAD2', deep: '#05684B' }, // hue 165
+  powderBlue: { calm: '#EEF7FE', fill: '#BCE2FE', deep: '#015E8C' }, // hue 240
+  butter: { calm: '#FDF8E2', fill: '#F6EBB1', deep: '#695700' }, // hue 98, fill oklch(0.935 0.075 98)
+  coral: { calm: '#FEF3F1', fill: '#FED0C8', deep: '#8B3C31' }, // hue 30
+  lilac: { calm: '#FCF2FB', fill: '#F5CEF0', deep: '#793F75' }, // hue 330
 } as const;
 
 // Secondary readable foreground — readable secondary metadata text.
@@ -75,6 +94,22 @@ export const semanticColors = {
   foreground: colors.foreground,
   foregroundSoft,
   foregroundMuted: colors.muted,
+} as const;
+
+// Overlay material — the satin surface of sheets, drawers and confirmation
+// dialogs (DESIGN_OVERRIDES.md §20). Near-white lavender rather than flat
+// white, light enough that lavender, neutral and white inner cards still read
+// on it. Deliberately OPAQUE: without a blur, even 3 % translucency lets the
+// page ghost through the text. The glass feel comes from the rim and the
+// highlight (`gloss.surface`), not from see-through. Approved colours and their
+// alpha variants only. No outline of any kind: the material is edged by light
+// (top highlight) and depth (shadow), never by a drawn border.
+export const overlayMaterial = {
+  surface: lavender.lav025,
+  /** Destructive confirmations: the same surface leaning a whisper toward rose050. */
+  surfaceDestructive: '#FDF6F9', // midpoint of lavender.lav025 and rose.rose050
+  /** Grabber: translucent navy, so it takes the tint of the material. */
+  grabber: 'rgba(25, 22, 63, 0.16)',
 } as const;
 
 // Modal scrim — one restrained navy dim behind bottom sheets and dialogs.

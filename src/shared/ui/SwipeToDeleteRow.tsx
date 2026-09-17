@@ -25,12 +25,31 @@
 // entirely under reduced motion; cancelled by any touch before or while it
 // plays. Screens designate at most ONE row per instance (`useSwipeHintTarget`).
 //
+// Swipe never taps: a row's content often has its own press — a header that
+// expands / collapses the card, steppers, buttons. Those are React Native
+// presses, and nothing cancels them when the swipe starts: gesture-handler
+// withdraws React Native touches by walking up to the app's root surface,
+// which a modally presented screen (every Souris sheet route) is not part of.
+// Worse, the row FOLLOWS the finger, so the touch never leaves the pressed
+// element: releasing a swipe fired its `onPress` and toggled the card. The
+// content wrapper therefore claims the JS responder as soon as the touch shows
+// horizontal intent (`hasHorizontalSwipeIntent`, before the pan activates):
+// the pressed element is terminated and can no longer fire. The native swipe,
+// the reorder long-press and vertical scrolling are separate native gestures
+// and are untouched; a plain tap never moves sideways, so it still presses.
+//
 // This component knows nothing about Products, Sales or Services: wording
 // (accessibility label) and semantics stay with the caller.
 
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  View,
+  type GestureResponderEvent,
+  type LayoutChangeEvent,
+} from 'react-native';
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -54,6 +73,7 @@ import { haptics } from '@/shared/lib/haptics';
 
 import {
   DELETE_ACTION_WIDTH,
+  hasHorizontalSwipeIntent,
   isFullSwipe,
   shouldPlaySwipeHint,
   SWIPE_HINT_DELAY_MS,
@@ -61,6 +81,7 @@ import {
   SWIPE_HINT_OFFSET,
   SWIPE_HINT_RETURN_MS,
   SWIPE_HINT_REVEAL_MS,
+  SWIPE_ACTIVATION_DISTANCE,
   SWIPE_HINT_TOTAL_MS,
 } from './swipe-to-delete';
 import { duration, easing, rose, semanticColors, spacing } from './theme';
@@ -233,6 +254,21 @@ export function SwipeToDeleteRow({
     if (armed.get()) commitDeletion();
   };
 
+  // Swipe never taps (see the header): remember where the touch began, then
+  // take the JS responder away from the pressed content once it moves sideways.
+  const touchOrigin = useRef<{ readonly x: number; readonly y: number } | undefined>(undefined);
+  const rememberTouchOrigin = (event: GestureResponderEvent) => {
+    touchOrigin.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
+    return false;
+  };
+  const claimSwipe = (event: GestureResponderEvent) => {
+    const origin = touchOrigin.current;
+    return (
+      origin !== undefined &&
+      hasHorizontalSwipeIntent(event.nativeEvent.pageX - origin.x, event.nativeEvent.pageY - origin.y)
+    );
+  };
+
   const onRowLayout = (event: LayoutChangeEvent) => {
     rowWidth.set(event.nativeEvent.layout.width);
   };
@@ -254,7 +290,7 @@ export function SwipeToDeleteRow({
         <ReanimatedSwipeable
           ref={swipeable}
           childrenContainerStyle={{ backgroundColor: surfaceColor }}
-          dragOffsetFromLeftEdge={12}
+          dragOffsetFromLeftEdge={SWIPE_ACTIVATION_DISTANCE}
           leftThreshold={DELETE_ACTION_WIDTH}
           onSwipeableWillOpen={onRelease}
           overshootFriction={1}
@@ -271,7 +307,14 @@ export function SwipeToDeleteRow({
           )}
           testID={testID}
         >
-          {children}
+          <View
+            onMoveShouldSetResponderCapture={claimSwipe}
+            onResponderTerminationRequest={() => true}
+            onStartShouldSetResponderCapture={rememberTouchOrigin}
+            testID={`${testID}-content`}
+          >
+            {children}
+          </View>
         </ReanimatedSwipeable>
       </Animated.View>
     </View>

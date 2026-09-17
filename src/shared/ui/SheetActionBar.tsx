@@ -1,7 +1,8 @@
 // Souris — SheetActionBar
 //
-// The ONE fixed action area of Souris sheets: separated from the scrolling
-// body by a hairline, white surface, platform gutter, one canonical breathing
+// The ONE fixed action area of Souris sheets: no divider and no fill of its own
+// (it never overlays the body), so the body, the actions and the bottom safe
+// area read as ONE continuous sheet material; platform gutter, one canonical breathing
 // room below the actions, and no bottom safe-area handling of its own (the
 // sheet shell — BottomSheet or SheetScreen — already clears the home
 // indicator, and drops that inset while the keyboard is up). Buttons are laid
@@ -10,7 +11,7 @@
 import type { ReactNode } from 'react';
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { gutter, semanticColors, spacing } from './theme';
+import { gutter, spacing } from './theme';
 
 interface SheetActionBarProps {
   readonly children: ReactNode;
@@ -32,9 +33,6 @@ const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios
 
 const styles = StyleSheet.create({
   bar: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderTopColor: semanticColors.borderSubtle,
-    borderTopWidth: StyleSheet.hairlineWidth,
     flexShrink: 0,
     gap: spacing.sm,
     paddingBottom: spacing.base,

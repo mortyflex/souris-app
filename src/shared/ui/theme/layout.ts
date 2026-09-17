@@ -24,10 +24,18 @@ export const touchTarget = {
 // Canonical Souris sheet shell — shared by the JS BottomSheet (Modal) and the
 // native form-sheet routes so both read as ONE presentation.
 export const sheet = {
-  /** Fraction of the window a workflow sheet occupies (native detent and JS max height). */
+  /** Max height of a JS drawer and of a content-fit native sheet, as a fraction of the window. */
   detent: 0.92,
+  /**
+   * Native detent of workflow form sheets: the system's large detent. iOS 26
+   * floats every smaller sheet as an inset card (side margins, gap below, four
+   * rounded corners); only the large detent stays attached to the screen edges.
+   */
+  workflowDetent: 1,
   grabberWidth: 40,
   grabberHeight: 5,
+  /** Longest wait (ms) for a surface's first native layout before it slides in anyway. */
+  layoutWaitFallback: 160,
   /** Vertical drag on the grabber/header zone beyond which a sheet dismisses. */
   dismissThreshold: 96,
 } as const;
