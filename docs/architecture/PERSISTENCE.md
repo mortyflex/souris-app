@@ -566,6 +566,59 @@ CLOUD_SYNC.md §10.
 Providers and screens are unchanged: no provider calls the sync module, and no mutation is enqueued
 after a commit. `readBoundBusinessId` (one indexed SELECT) is the only extra read per mutation.
 
+### 7d. Sync push worker — what it reads and writes locally (Cloud Sync V1C)
+
+The push worker (`src/persistence/sync/push-worker.ts`, contract in CLOUD_SYNC.md §15) is the first
+consumer of the outbox. It needed NO schema change (still v8) and it never writes an operational
+row: SQLite stays the source of truth, and a failed, blocked or absent sync changes nothing the UI
+reads.
+
+```text
+reads    business_profile.id                       the ONLY Business it may push for (unbound ⇒ no run)
+         souris_metadata['sync_bootstrap']          first-sync decision { businessId, decision, decidedAt } — trusted
+                                                    only while still current (CLOUD_SYNC.md §11.0): EMPTY holds only
+                                                    while no aggregate row and no outbox entry exists; ALREADY_SYNCED
+                                                    only while sync_state has a row for the Business
+         souris_metadata['sync_initial_upload_approval']
+                                                    explicit approval { businessId, approvedAt }; ignored unless it
+                                                    names the bound Business (CLOUD_SYNC.md §11.1)
+         sync_outbox (eligible entries)             business_id = bound id, next_attempt_at NULL or <= now,
+                                                    ordered CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE, then id
+         the CURRENT aggregate rows, raw            aggregate-payload.ts — integer cents copied as stored (no euro
+                                                    round trip), 0/1 → boolean, ISO text validated; `image_uri`
+                                                    and `birth_date` are never selected; a business-scoped row
+                                                    stamped with another Business id is refused, never pushed
+         sync_state.remote_version                  sent as the expected version
+writes   souris_metadata['sync_bootstrap']          every classification; ONE transaction with the two rows below
+         sync_outbox                                ONLY when the upload was approved for this Business —
+                                                    enqueueInitialUpload: INSERT … SELECT … ON CONFLICT DO NOTHING
+                                                    (existing entries untouched, acknowledged aggregates skipped)
+         souris_metadata['sync_initial_upload_approval']
+                                                    DELETED in that same transaction (one-time approval)
+         success  → ONE transaction: sync_state ← server version, DELETE outbox WHERE id = ? AND revision = ?
+         failure  → UPDATE attempt_count / last_error / next_attempt_at WHERE id = ? AND revision = ?
+                    (a newer local revision never inherits a failure; last_error is a machine code, never row data)
+         ABSENT   → settle + DELETE the sync_state row (the remote holds no such aggregate)
+```
+
+`EMPTY` is not an acknowledgement. The worker re-reads the local tables, `sync_outbox` and
+`sync_state` at every run (three indexed `SELECT 1 … LIMIT 1`) before trusting a stored decision;
+only real `sync_state` rows — written exclusively from server-returned versions — make pushes
+automatic. A device that stored `EMPTY` and then received its first records is classified again and
+stops at `INITIAL_UPLOAD_REQUIRES_APPROVAL`, its outbox entries untouched.
+
+Existing local data is never enqueued or pushed automatically: "local populated + remote empty"
+without that approval is a STOP that writes nothing but the diagnostic decision. The only writer of
+the approval is `approveInitialUpload(db, businessId)` (`sync/bootstrap.ts`) — one transaction that
+checks the binding (`business_profile.id` must be that exact UUID) and refuses when a push decision
+is already stored. No provider, store or product screen calls it; its single caller is the
+`__DEV__`-only development sync control (CLOUD_SYNC.md §15.9), behind a second confirmation.
+
+Every database call is synchronous and short (one aggregate at a time); the network awaits sit
+between them, so no transaction is ever held open across a request and store mutations interleave
+freely with a run — which is exactly what the conditional settle is for. The initial enqueue is one
+`INSERT … SELECT` per aggregate table.
+
 ---
 
 ## 8. Sales Atomicity
@@ -660,9 +713,13 @@ Development builds show a `Développement › Réinitialiser les données locale
 (`__DEV__` only, compiled out of production). It runs `resetForDevelopment()`:
 
 ```text
-DELETE every operational table + sync_outbox + sync_state + remove seed_version
-  (one transaction; business_profile is KEPT — pending intents and acknowledged revisions
-   describe rows the reset removes, so they go with them)
+DELETE every operational table + sync_outbox + sync_state + remove seed_version + remove sync_bootstrap
+  + remove sync_initial_upload_approval
+  (one transaction; business_profile is KEPT — pending intents, acknowledged revisions, the
+   first-sync decision and any initial-upload approval describe rows the reset removes, so they go
+   with them. The next sync run classifies both sides again: development fixtures are a STOP
+   whether the remote Business is populated or empty — never an upload under a stale decision or
+   a stale approval)
 → delete <documents>/products/                       (owned images only)
 → bootstrap again with the DEVELOPMENT seed (synthetic clients, pilot catalogs + Agenda fixtures), stamped with
   the bound Business id so the reset never introduces a second business id
@@ -671,6 +728,10 @@ DELETE every operational table + sync_outbox + sync_state + remove seed_version
 
 A fresh development install therefore starts empty like production; the reset is the explicit
 way to load the pilot data and fixtures.
+
+The same `Développement` section holds `Sync V1C (test)`, the development sync control
+(CLOUD_SYNC.md §15.9): it only reads the sync bookkeeping and calls the existing
+`approveInitialUpload` / push worker — no store, no schema and no reset behavior changed.
 
 The schema is kept. Alternatives: uninstall the app, or delete `souris.db` from the app's SQLite
 directory with a device file browser.
@@ -708,8 +769,27 @@ deleted and the mixed Sale kept, the last Sale removed, snapshot-identity matchi
 price, no clamping, refusal of unsold / paid, abort on a deleted Product, rollback of the
 restoration when a later write fails), the sync outbox (§7c: scoping, one entry per mutation,
 coalescing, child → parent marking, DELETE semantics, atomicity both ways, restart, conditional
-settle, development reset) and `sync_state` round trip (exact version and instant, restart,
-upsert, Business scoping, refusal of fabricated versions), the source-hygiene guards (no literal NUL
+settle, development reset, a failure recorded for an overtaken revision being dropped) and `sync_state` round trip (exact version and instant, restart,
+upsert, Business scoping, refusal of fabricated versions), the Cloud Sync V1C push (§7d — `sync-bootstrap.test.ts`:
+the classification cases with and without approval, refusal of a malformed remote count, local population, the stored decision,
+`enqueueInitialUpload`, `isStoredPushDecisionCurrent` (EMPTY stale on the first aggregate or outbox entry,
+ALREADY_SYNCED needing real Business-scoped acknowledged state); `sync-push-worker.test.ts`, through the real stores and an in-memory remote with the RPC
+contract: the E2E regression "EMPTY is not a synchronization acknowledgement" (EMPTY → Client / Service / Product →
+BLOCKED with the remote still empty → approval → the 3 uploaded; EMPTY surviving a restart while empty; first
+mutation requiring approval; stale EMPTY re-classified against a remote populated meanwhile; no UPSERT under EMPTY
+even for an aggregate appearing during the run; ALREADY_SYNCED without acknowledged state; a really synchronized
+Business pushing automatically), a new account staying empty, populated local + empty remote doing nothing before approval (run after run,
+mutations included), approval recording only, approval for Business A never authorizing Business B (API refusal and
+forged record), approval surviving a restart, queuing the initial aggregates once and being consumed, an interrupted
+approved upload resuming without fabricated acknowledgement, approval never overriding a populated remote, the
+development reset clearing it, already-synchronized Businesses pushing automatically, the STOP states and their re-evaluation, no decision while offline, unbound / mismatched /
+non-UUID / concurrent runs skipped, Business isolation, a foreign-Business row never pushed, aggregate + ordered
+children + snapshots, exact cents and no image path, dependency order, version acknowledgement, a mutation during
+the upload, offline, lost acknowledgement retried idempotently, bounded backoff with code-only errors, version
+conflicts leaving the remote untouched, tombstone DELETE, never-remote DELETE, UPSERT of a vanished row, recreation
+after a tombstone; `sync-gateway.test.ts`: the Supabase adapter and its error mapping; `CloudSyncRunner.test.tsx`:
+live-bound-session gating, no upload before approval from launch / foreground / tick, offline / signed-out /
+unconfigured silence, foreground and tick triggers), the source-hygiene guards (no literal NUL
 byte in a store file; no store SQL statement naming the euro `price` / `unit_price` columns dropped by
 v8), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.
@@ -721,8 +801,9 @@ rollback / replacement / removal / external-asset safety, and the provider boots
 `docs/architecture/CLOUD_SYNC.md` defines the remote operational schema (Cloud Sync V1A). What
 this local layer must keep true for the later phases:
 
-- SQLite stays the operational source of truth; the future sync worker reads and writes it
-  through the existing stores, and screens never query Supabase for operational data;
+- SQLite stays the operational source of truth; screens never query Supabase for operational data.
+  The V1C push worker only READS operational rows (raw, §7d); the V1D pull will write them through
+  the existing stores;
 - the remote schema mirrors this one table for table, with two boundary conversions owned by
   the sync layer: `clients` receives the bound Business id (the local table has none) and
   `products.image_uri` is never uploaded;
@@ -737,5 +818,7 @@ this local layer must keep true for the later phases:
   APPOINTMENT + items + phases, PRODUCT, SALE + items;
 - V1B (schema v7) added `sync_outbox`, written inside the same `runInTransaction` as the business
   mutation (no `sync_status` column on business tables), and `sync_state`, the per-aggregate
-  acknowledged remote version (§7c, CLOUD_SYNC.md §10). Nothing reads either at runtime yet: the
-  V1C worker is the first consumer.
+  acknowledged remote version (§7c, CLOUD_SYNC.md §10);
+- V1C added the push worker (§7d, CLOUD_SYNC.md §15), their first runtime consumer: a one-way upload
+  through one atomic, version-conditional remote function. It reads aggregates raw and writes only
+  sync bookkeeping; the stores, providers and screens are unchanged. Pull / restore is V1D.

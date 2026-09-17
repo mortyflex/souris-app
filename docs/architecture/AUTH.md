@@ -11,10 +11,13 @@ SQLite     every operational record (Clients, Services, Appointments, Products, 
            local account binding — unchanged operational database, local-first
 ```
 
-Explicit non-goal of V1: **operational cloud sync**. Clients, Appointments, Services, Products, and
-Sales are NOT uploaded, downloaded, backed up, or synchronized. The only remote data is the Auth
-identity and the `businesses` row. The product must never claim otherwise (no "sauvegardé",
-"synchronisé", "données sécurisées dans le cloud"). Cloud Sync is the next milestone.
+Account & Onboarding V1 itself synchronizes nothing. Since Cloud Sync V1C
+(`docs/architecture/CLOUD_SYNC.md` §15) the operational data of a bound Business is UPLOADED
+(one-way push, owner-only RLS; data that existed before the first sync only after an explicit
+approval, CLOUD_SYNC.md §11.1) once the session is live — but nothing is downloaded or restored
+yet (V1D), so the remote copy cannot bring data back to a device. Until restore exists the product
+must still never claim a backup (no "sauvegardé", "synchronisé", "données sécurisées dans le
+cloud"); the UI copy is unchanged.
 
 ---
 

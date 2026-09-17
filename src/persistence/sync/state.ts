@@ -4,7 +4,7 @@
 // last acknowledged (after a successful push or an applied pull) and when.
 // It is NOT UI state and is NEVER written by a local business mutation: a
 // local-only aggregate simply has no row, which means "no acknowledged remote
-// revision". Only a future sync worker (V1C/V1D) writes here, with the
+// revision". Only the sync worker (V1C push, V1D pull) writes here, with the
 // server-assigned version it actually observed — never a fabricated value.
 // V1E conflict detection compares this acknowledged version with the current
 // remote one (docs/architecture/CLOUD_SYNC.md §9).
@@ -76,6 +76,32 @@ export function readAcknowledgedRemoteVersion(
     [businessId, ref.aggregateType, ref.aggregateId],
   );
   return row ? toEntry(row) : undefined;
+}
+
+/**
+ * Forgets the acknowledged revision of one aggregate. Used ONLY when the
+ * remote reports that it holds no row at all for a locally deleted aggregate
+ * (push result ABSENT): there is no remote revision left to acknowledge.
+ */
+export function clearAcknowledgedRemoteVersion(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+): void {
+  db.runSync(
+    'DELETE FROM sync_state WHERE business_id = ? AND aggregate_type = ? AND aggregate_id = ?',
+    [businessId, ref.aggregateType, ref.aggregateId],
+  );
+}
+
+/** Whether this device ever acknowledged a remote revision for the Business. */
+export function hasAcknowledgedRemoteState(db: SourisDatabase, businessId: string): boolean {
+  return (
+    db.getFirstSync<{ readonly found: number }>(
+      'SELECT 1 AS found FROM sync_state WHERE business_id = ? LIMIT 1',
+      [businessId],
+    ) !== null
+  );
 }
 
 /** Every acknowledged revision of the Business, in stable key order. */

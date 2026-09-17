@@ -25,6 +25,16 @@ import {
 
 import { AccountSheet } from './components/AccountSheet';
 
+// Development sync control (Cloud Sync V1C test bench). Required inside a
+// `__DEV__` branch — never imported statically — so Metro drops the module
+// and everything only it pulls in from release bundles: a TestFlight / App
+// Store binary contains no approval control, reachable or not.
+const DevelopmentSyncSheet = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./development/DevelopmentSyncSheet') as typeof import('./development/DevelopmentSyncSheet'))
+      .DevelopmentSyncSheet
+  : undefined;
+
 export function PlusScreen() {
   const router = useRouter();
   const { services } = useServiceCatalog();
@@ -159,11 +169,13 @@ function BrandSection({ version }: { readonly version: string | undefined }) {
 }
 
 /**
- * Development builds only: resets the local database to its first-run seed.
- * Compiled out of production bundles by the `__DEV__` guard above.
+ * Development builds only: resets the local database to its first-run seed,
+ * and opens the Cloud Sync V1C test control. Compiled out of production
+ * bundles by the `__DEV__` guard above.
  */
 function DevelopmentSection() {
   const { resetForDevelopment } = usePersistence();
+  const [syncControlVisible, setSyncControlVisible] = useState(false);
 
   const requestReset = () => {
     Alert.alert(
@@ -195,6 +207,30 @@ function DevelopmentSection() {
           </AppText>
         </View>
       </Pressable>
+      {DevelopmentSyncSheet && (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Contrôle Sync V1C, développement"
+            onPress={() => setSyncControlVisible(true)}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            testID="development-sync-open"
+          >
+            <View style={styles.copy}>
+              <AppText variant="rowTitle" style={styles.developmentTitle}>
+                Sync V1C (test)
+              </AppText>
+              <AppText variant="metadata" style={styles.meta}>
+                État, approbation de l’envoi initial, push manuel
+              </AppText>
+            </View>
+          </Pressable>
+          <DevelopmentSyncSheet
+            onClose={() => setSyncControlVisible(false)}
+            visible={syncControlVisible}
+          />
+        </>
+      )}
     </View>
   );
 }

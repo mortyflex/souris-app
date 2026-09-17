@@ -255,6 +255,22 @@ describe('sync outbox — retry metadata belongs to the failed revision', () => 
     expect(after!.updatedAt.getTime()).toBeGreaterThanOrEqual(before.updatedAt.getTime());
   }
 
+  it('a failure recorded for an OVERTAKEN revision is dropped: the newer revision stays eligible at once (V1C)', () => {
+    const db = openBoundDatabase();
+    updateService(db, { ...serviceCut, businessId: REMOTE_BUSINESS_ID, price: 45 });
+    const [observed] = outbox(db);
+    updateService(db, { ...serviceCut, businessId: REMOTE_BUSINESS_ID, price: 46 });
+
+    expect(recordSyncOutboxFailure(db, observed!.id, 'REJECTED:23514', failedAt, observed!.revision)).toBe(false);
+    const [current] = outbox(db);
+    expect(current).toMatchObject({ revision: 2, attemptCount: 0 });
+    expect('lastError' in current!).toBe(false);
+    expect('nextAttemptAt' in current!).toBe(false);
+
+    expect(recordSyncOutboxFailure(db, current!.id, 'REJECTED:23514', failedAt, current!.revision)).toBe(true);
+    expect(outbox(db)[0]).toMatchObject({ revision: 2, attemptCount: 1, lastError: 'REJECTED:23514', nextAttemptAt: failedAt });
+  });
+
   it('failed UPSERT → local edit: same row, revision + 1, retry state reset', () => {
     const db = openBoundDatabase();
     updateService(db, { ...serviceCut, businessId: REMOTE_BUSINESS_ID, price: 45 });

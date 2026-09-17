@@ -179,16 +179,110 @@ export function settleSyncOutboxEntry(
   );
 }
 
-/** Records one failed attempt: count, message, and when the entry becomes eligible again. */
+/**
+ * Records one failed attempt: count, a STABLE machine code (never a server
+ * message — it may quote row values), and when the entry becomes eligible
+ * again. Conditional on the revision the worker observed: a mutation
+ * coalesced during the attempt already reset the retry metadata, and the
+ * newer revision must stay eligible at once. Returns whether it was recorded.
+ */
 export function recordSyncOutboxFailure(
   db: SourisDatabase,
   entryId: number,
   error: string,
   nextAttemptAt: Date | undefined,
-): void {
-  db.runSync(
-    'UPDATE sync_outbox SET attempt_count = attempt_count + 1, last_error = ?, next_attempt_at = ? WHERE id = ?',
-    [error, nextAttemptAt === undefined ? null : toSqlInstant(nextAttemptAt), entryId],
+  observedRevision?: number,
+): boolean {
+  const next = nextAttemptAt === undefined ? null : toSqlInstant(nextAttemptAt);
+  const result =
+    observedRevision === undefined
+      ? db.runSync(
+          'UPDATE sync_outbox SET attempt_count = attempt_count + 1, last_error = ?, next_attempt_at = ? WHERE id = ?',
+          [error, next, entryId],
+        )
+      : db.runSync(
+          'UPDATE sync_outbox SET attempt_count = attempt_count + 1, last_error = ?, next_attempt_at = ? WHERE id = ? AND revision = ?',
+          [error, next, entryId, observedRevision],
+        );
+  return result.changes === 1;
+}
+
+/**
+ * Push order of the worker (CLOUD_SYNC.md §10.8): remote foreign keys make a
+ * Client precede its Appointments and Sales, and an Appointment precede its
+ * linked Sale; inside one type the FIFO `id` order is kept.
+ */
+const PUSH_ORDER_SQL = `CASE aggregate_type
+  WHEN 'CLIENT' THEN 0 WHEN 'SERVICE' THEN 1 WHEN 'PRODUCT' THEN 2 WHEN 'APPOINTMENT' THEN 3 ELSE 4 END`;
+
+/** Entries of the Business whose backoff elapsed (`next_attempt_at` NULL or <= now), in push order. */
+export function loadEligibleSyncOutbox(
+  db: SourisDatabase,
+  businessId: string,
+  now: Date,
+): readonly SyncOutboxEntry[] {
+  return db
+    .getAllSync<SyncOutboxRow>(
+      `${SELECT_ENTRY} WHERE business_id = ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?) ORDER BY ${PUSH_ORDER_SQL}, id`,
+      [businessId, toSqlInstant(now)],
+    )
+    .map(toEntry);
+}
+
+/**
+ * Initial upload (CLOUD_SYNC.md §11): records an UPSERT intent for EVERY
+ * local aggregate of the bound Business that has neither a pending entry
+ * nor an acknowledged remote revision. Existing entries are left exactly as
+ * they are (no revision bump, no operation change), nothing is written to
+ * `sync_state`: the aggregates are queued, not declared synchronized.
+ * Business-scoped rows stamped with another id are NOT enqueued. Returns the
+ * number of entries created. Called ONLY by the push worker, inside the
+ * transaction that consumes the explicit approval (CLOUD_SYNC.md §11.1).
+ */
+export function enqueueInitialUpload(db: SourisDatabase, businessId: string, now: Date): number {
+  const instant = toSqlInstant(now);
+  const sources: readonly (readonly [SyncAggregateType, string, boolean])[] = [
+    ['CLIENT', 'clients', false],
+    ['SERVICE', 'services', true],
+    ['PRODUCT', 'products', true],
+    ['APPOINTMENT', 'appointments', true],
+    ['SALE', 'sales', true],
+  ];
+  let created = 0;
+  runInTransaction(db, () => {
+    for (const [aggregateType, table, scoped] of sources) {
+      created += db.runSync(
+        `INSERT INTO sync_outbox (business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at)
+         SELECT ?, ?, source.id, 'UPSERT', 1, ?, ?
+         FROM ${table} AS source
+         WHERE NOT EXISTS (
+             SELECT 1 FROM sync_state
+             WHERE sync_state.business_id = ? AND sync_state.aggregate_type = ? AND sync_state.aggregate_id = source.id
+           )${scoped ? ' AND source.business_id = ?' : ''}
+         ORDER BY source.rowid
+         ON CONFLICT(business_id, aggregate_type, aggregate_id) DO NOTHING`,
+        [
+          businessId,
+          aggregateType,
+          instant,
+          instant,
+          businessId,
+          aggregateType,
+          ...(scoped ? [businessId] : []),
+        ],
+      ).changes;
+    }
+  });
+  return created;
+}
+
+/** Whether the Business has ANY pending entry, eligible or not (one indexed SELECT). */
+export function hasPendingSyncOutbox(db: SourisDatabase, businessId: string): boolean {
+  return (
+    db.getFirstSync<{ readonly found: number }>(
+      'SELECT 1 AS found FROM sync_outbox WHERE business_id = ? LIMIT 1',
+      [businessId],
+    ) !== null
   );
 }
 

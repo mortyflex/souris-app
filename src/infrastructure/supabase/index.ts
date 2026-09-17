@@ -6,15 +6,19 @@
 
 import { AuthGatewayError, type AuthGateway } from '@/features/auth/gateway';
 import { BusinessGatewayError, type BusinessGateway } from '@/features/business/gateway';
+import type { SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
 
 import { createSupabaseAuthGateway } from './auth-gateway';
 import { createSupabaseBusinessGateway } from './business-gateway';
 import { getSupabaseClient } from './client';
 import { SupabaseConfigurationError } from './config';
+import { createSupabaseSyncGateway } from './sync-gateway';
 
 export interface AccountGateways {
   readonly auth: AuthGateway;
   readonly business: BusinessGateway;
+  /** Undefined when Supabase is not configured: cloud sync then never runs. */
+  readonly sync: SyncRemoteGateway | undefined;
 }
 
 function createUnconfiguredGateways(): AccountGateways {
@@ -32,6 +36,7 @@ function createUnconfiguredGateways(): AccountGateways {
       listOwnedBusinesses: () => Promise.reject(new BusinessGatewayError('UNKNOWN')),
       createBusiness: () => Promise.reject(new BusinessGatewayError('UNKNOWN')),
     },
+    sync: undefined,
   };
 }
 
@@ -41,6 +46,7 @@ export function createAccountGateways(): AccountGateways {
     return {
       auth: createSupabaseAuthGateway(client.auth),
       business: createSupabaseBusinessGateway(client),
+      sync: createSupabaseSyncGateway(client),
     };
   } catch (error) {
     if (error instanceof SupabaseConfigurationError) {

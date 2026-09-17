@@ -1,12 +1,14 @@
 // Souris — remote schema types (hand-written, V1 scope)
 //
-// Covers the `businesses` table ONLY. Type aliases (not interfaces) on
-// purpose: supabase-js requires the implicit index signature. The operational
-// tables created by Cloud Sync V1A (supabase/migrations/20260914120000_…) are
-// deliberately NOT typed here until the first operational adapter exists
-// (V1B); the migration files are the source of truth for the remote schema
-// (docs/architecture/CLOUD_SYNC.md §14.1). Nothing operational is
-// synchronized yet.
+// Covers the `businesses` table and the two Cloud Sync V1C push functions
+// (supabase/migrations/20260917120000_…) — exactly what the application
+// calls. Type aliases (not interfaces) on purpose: supabase-js requires the
+// implicit index signature. The nine operational TABLES created by Cloud
+// Sync V1A are deliberately NOT typed here: the sync adapter never touches
+// them directly (every operational write goes through `sync_push_aggregate`),
+// and a type without a consumer would drift. The migration files are the
+// source of truth for the remote schema (docs/architecture/CLOUD_SYNC.md
+// §14.1).
 
 export type BusinessRow = {
   id: string;
@@ -37,6 +39,25 @@ export type BusinessUpdate = {
   phone?: string | null;
 }
 
+/** jsonb result of `public.sync_push_aggregate`; validated at the adapter boundary. */
+export type SyncPushAggregateResult = {
+  status: string;
+  sync_version?: number | null;
+}
+
+export type SyncPushAggregateArgs = {
+  p_business_id: string;
+  p_aggregate_type: string;
+  p_aggregate_id: string;
+  p_operation: string;
+  /** NULL = this device never acknowledged the aggregate. */
+  p_expected_version: number | null;
+  /** NULL for a DELETE. */
+  p_payload: Json | null;
+}
+
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
 export type Database = {
   public: {
     Tables: {
@@ -48,7 +69,16 @@ export type Database = {
       };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      sync_count_business_aggregates: {
+        Args: { p_business_id: string };
+        Returns: number;
+      };
+      sync_push_aggregate: {
+        Args: SyncPushAggregateArgs;
+        Returns: SyncPushAggregateResult;
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

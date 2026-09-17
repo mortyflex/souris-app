@@ -17,6 +17,7 @@ import { createAccountGateways, type AccountGateways } from '@/infrastructure/su
 import { openSourisDatabase } from '@/persistence/expo-database';
 import { createExpoLocalFiles } from '@/persistence/files/expo-local-files';
 import { readBusinessProfile } from '@/persistence/stores/business-profile';
+import { CloudSyncRunner } from '@/providers/CloudSyncRunner';
 import { createFirstRunSeed } from '@/providers/first-run-seed';
 import {
   PersistenceProvider,
@@ -33,6 +34,7 @@ import { colors, duration } from '@/shared/ui/theme';
 //   hideAsync() once both are settled and the first surface is committed
 //     ↓ local Supabase session restoration + local account binding (no network needed)
 //   RootNavigator: booting surface (same brand composition) → Welcome | Business setup | App
+//   CloudSyncRunner: fire-and-forget push of local data, only with a live bound session
 //
 // Nothing renders underneath the splash until fonts and persistence are
 // settled, and the root gate never mounts a protected screen before the
@@ -107,7 +109,10 @@ function AccountSession({ gateways }: { readonly gateways: AccountGateways }) {
   return (
     <AuthProvider gateway={gateways.auth} resolveLocalOwner={resolveLocalOwner}>
       <BusinessSessionProvider gateway={gateways.business}>
-        <RootNavigator />
+        {/* Renders nothing of its own; pushes local data only once the live session is bound to its Business. */}
+        <CloudSyncRunner gateway={gateways.sync}>
+          <RootNavigator />
+        </CloudSyncRunner>
       </BusinessSessionProvider>
     </AuthProvider>
   );

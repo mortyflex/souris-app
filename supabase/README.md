@@ -1,10 +1,11 @@
 # Souris — Supabase
 
-Remote scope today: **Auth identity + `businesses`** (Account & Onboarding V1) and, since Cloud
-Sync V1A, the **operational schema** (`clients`, `services`, `service_phases`, `appointments`,
-`appointment_items`, `appointment_phases`, `products`, `sales`, `sale_items`). The operational
-tables are schema only: no application code reads or writes them yet, nothing is uploaded or
-restored. Contract: `docs/architecture/CLOUD_SYNC.md`.
+Remote scope today: **Auth identity + `businesses`** (Account & Onboarding V1), the **operational
+schema** of Cloud Sync V1A (`clients`, `services`, `service_phases`, `appointments`,
+`appointment_items`, `appointment_phases`, `products`, `sales`, `sale_items`) and, since Cloud Sync
+V1C, the two **push functions** the mobile app uploads through (`sync_push_aggregate`,
+`sync_count_business_aggregates`). The app never writes an operational table directly and nothing is
+downloaded or restored yet. Contract: `docs/architecture/CLOUD_SYNC.md` (§15 for V1C).
 
 ## Applying the migrations
 
@@ -13,8 +14,15 @@ Apply, in order:
 
 ```text
 migrations/20260912120000_create_businesses.sql                 (already applied on the project)
-migrations/20260914120000_create_operational_sync_schema.sql    (Cloud Sync V1A — not applied yet)
+migrations/20260914120000_create_operational_sync_schema.sql    (Cloud Sync V1A)
+migrations/20260917120000_create_sync_push_functions.sql        (Cloud Sync V1C — must be applied BY HAND;
+                                                                 nothing applies it automatically)
 ```
+
+Check the dashboard (Database › Migrations, or the presence of the tables / functions) before
+running a file: this list does not track what the project already has. Until the V1C migration is
+applied the app keeps working locally; every sync run stops at its first request (`PGRST202`) and
+all pending data stays queued on the device.
 
 with one of:
 
@@ -22,8 +30,9 @@ with one of:
 2. **CLI** — `npx supabase login`, `npx supabase link --project-ref <ref>`, then
    `npx supabase db push`. Linking writes `supabase/config.toml`; review it before committing.
 
-Each migration must run exactly once; re-running one fails on `create table` (by design — nothing
-is dropped). The V1A migration requires `businesses` to exist and does not touch its rows; it only
+Each migration must run exactly once; re-running one fails on `create table` / `create function`
+(by design — nothing is dropped). The V1C migration only creates two functions and their grants: it
+touches no table, no row, no policy. The V1A migration requires `businesses` to exist and does not touch its rows; it only
 revokes the default `delete / truncate / references / trigger` privileges `authenticated` still
 held on `businesses`.
 
@@ -84,3 +93,33 @@ API with a user session), using your Business id:
 
 The same checks were executed against both migrations in an isolated in-process Postgres when
 this migration was written (see `docs/architecture/CLOUD_SYNC.md` §13).
+
+## Verifying the push functions (Cloud Sync V1C)
+
+After applying `20260917120000_create_sync_push_functions.sql`, in the SQL Editor:
+
+```sql
+-- both functions: SECURITY INVOKER (prosecdef = false), search_path pinned, no anon execute
+select p.proname, p.prosecdef, p.proconfig,
+       has_function_privilege('anon', p.oid, 'execute') as anon_exec,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and p.proname in ('sync_push_aggregate', 'sync_count_business_aggregates');
+```
+
+Behavior checks as the signed-in owner, with your Business id (use a throwaway aggregate id):
+
+- `select public.sync_count_business_aggregates('<business id>')` returns the row count; with another
+  Business id it fails with `42501`;
+- a first `sync_push_aggregate(…, 'CLIENT', 'check-1', 'UPSERT', null, '{"first_name":"Test"}')` returns
+  `APPLIED` / `sync_version` 1; the identical call again returns the same version; the same call
+  with another `first_name` and `p_expected_version` = null returns `CONFLICT` and changes nothing;
+- `…, 'DELETE', 1, null` tombstones the row (`deleted_at` set, row still selectable); a DELETE of an
+  id that never existed returns `ABSENT` and creates nothing;
+- a SERVICE payload with two phases at the same `position` fails with `23505` and leaves NO
+  `services` row behind.
+
+The same checks (45, including cross-Business refusals and child-set atomicity) were executed
+against the three migrations in an isolated in-process Postgres when this migration was written
+(`docs/architecture/CLOUD_SYNC.md` §15.6).

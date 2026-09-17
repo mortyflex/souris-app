@@ -480,8 +480,9 @@ src/providers/       PersistenceProvider: migrate → seed once → hydrate → 
 The domain stays independent from it: `src/persistence` depends on domain types only, and row ↔
 domain mapping happens exclusively inside the stores. Screens never see SQL or rows.
 
-Schema v3 adds the local account binding (`business_profile`, one row). Operational cloud sync,
-backup, and multi-device restoration remain deferred; the local schema must not guess their shape.
+Schema v3 adds the local account binding (`business_profile`, one row). Operational cloud sync is
+specified in `CLOUD_SYNC.md`: the local outbox (V1B) and the one-way push worker
+(`src/persistence/sync/`, V1C) exist; pull, restore and multi-device use remain deferred.
 
 ---
 

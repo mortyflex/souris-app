@@ -107,6 +107,35 @@ describe('PlusScreen', () => {
     alertSpy.mockRestore();
   });
 
+  it('development builds: the Développement section opens the Cloud Sync test control', async () => {
+    const { view } = await renderPlus();
+
+    expect(view.getByTestId('development-reset-database')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('development-sync-open'));
+    });
+    expect(view.getByTestId('development-sync-sheet')).toBeTruthy();
+    // This test database is not bound: nothing can be approved or run from here.
+    expect(view.getByTestId('development-sync-business').props.children).toBe('Aucun (base non liée)');
+    expect(view.getByTestId('development-sync-approve').props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it('production path: no development section, no sync control, no approval action', async () => {
+    const flags = globalThis as unknown as { __DEV__: boolean };
+    flags.__DEV__ = false;
+    try {
+      const { view } = await renderPlus();
+      expect(view.getByText('Prestations & tarifs')).toBeTruthy();
+      expect(view.queryByText('Développement')).toBeNull();
+      expect(view.queryByTestId('development-reset-database')).toBeNull();
+      expect(view.queryByTestId('development-sync-open')).toBeNull();
+      expect(view.queryByTestId('development-sync-sheet')).toBeNull();
+      expect(view.queryByText('Approve initial upload')).toBeNull();
+    } finally {
+      flags.__DEV__ = true;
+    }
+  });
+
   it('offers the Cash Register under Gestion and opens it', async () => {
     mockPush.mockClear();
     const { view } = await renderPlus();
