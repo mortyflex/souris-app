@@ -1,16 +1,19 @@
 // Souris — Initial clients source
 //
-// The ONE approved production Client import: the strictly-mapped legacy
-// address book, nothing else. Development clients (referenced by the Agenda
-// fixtures) live in development-clients.ts and are added only by the
-// development seed, never by the production first-run seed.
+// The development address book: a SYNTHETIC legacy-shaped dataset
+// (synthetic-legacy-clients.ts — no real person) strictly mapped through the
+// legacy import boundary, nothing else. Reached only by the development seed
+// and tests; the production first-run seed is empty. Development clients
+// referenced by the Agenda fixtures live in development-clients.ts.
+//
+// No real client address book is ever tracked in this repository.
 
 import type { Client } from '@/domain/clients';
 
 import { mapLegacyClients } from '../adapters/legacy-clients-adapter';
-import { clients_list } from './legacy-clients';
+import { syntheticLegacyClients } from './synthetic-legacy-clients';
 
-/** Builds the canonical legacy Client import used by the production first-run seed. */
+/** Builds the synthetic address book used by the development seed and tests. */
 export function createInitialClients(): readonly Client[] {
-  return mapLegacyClients(clients_list);
+  return mapLegacyClients(syntheticLegacyClients);
 }

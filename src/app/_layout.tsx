@@ -41,10 +41,10 @@ import { colors, duration } from '@/shared/ui/theme';
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: duration.settle, fade: true });
 
-// The development seed embeds the pilot address book and catalogs. It is
-// required inside a `__DEV__` branch (never imported statically) so Metro
-// drops the whole module graph from release bundles: no pilot personal data
-// ships inside a TestFlight / App Store binary.
+// The development seed embeds the synthetic address book, the pilot catalogs,
+// and the Agenda fixtures. It is required inside a `__DEV__` branch (never
+// imported statically) so Metro drops the whole module graph from release
+// bundles: no development data ships inside a TestFlight / App Store binary.
 const createDevelopmentSeed = __DEV__
   ? ({ businessId }: DevelopmentSeedContext) => {
       const seed =

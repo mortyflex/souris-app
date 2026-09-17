@@ -282,7 +282,7 @@ src/providers/PersistenceProvider.tsx   application persistence bootstrap (see P
 src/providers/RootNavigator.tsx         root navigation gate over the Auth + Business states
 src/providers/root-route.ts             pure route resolution (booting / auth / onboarding / app / …)
 src/providers/first-run-seed.ts         one-time production seed (EMPTY since Account V1)
-src/providers/development-seed.ts       legacy pilot data + Agenda fixtures (__DEV__ reset / tests)
+src/providers/development-seed.ts       synthetic clients, pilot catalogs + Agenda fixtures (__DEV__ reset / tests)
 src/providers/persistence-failure.ts    the one concise "Enregistrement impossible" alert
 
 src/features/auth/session/AuthProvider.tsx                     who is signed in?

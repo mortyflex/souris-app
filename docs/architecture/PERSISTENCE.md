@@ -368,8 +368,10 @@ next launches: migrate (no-op) → seed_version present → skip seed → load s
 
 Since Account & Onboarding V1 the production first-run seed is **empty**: a fresh real install
 starts with no pilot Clients, Services, Products, Appointments, or Sales, and shows the intentional
-empty states. The legacy pilot address book and catalogs are business-specific data of the first
-professional; they were never meant to become universal customer data.
+empty states. The pilot catalogs are business-specific data of the first professional; they were
+never meant to become universal customer data. The development address book is SYNTHETIC
+(`src/features/clients/data/synthetic-legacy-clients.ts`): a real client address book is personal
+data and is never tracked in the repository.
 
 Existing installs are untouched: their `seed_version` marker is already present, so the seed is
 never consulted again and the pilot data they already hold stays exactly as it is.
@@ -662,7 +664,7 @@ DELETE every operational table + sync_outbox + sync_state + remove seed_version
   (one transaction; business_profile is KEPT — pending intents and acknowledged revisions
    describe rows the reset removes, so they go with them)
 → delete <documents>/products/                       (owned images only)
-→ bootstrap again with the DEVELOPMENT seed (legacy pilot data + Agenda fixtures), stamped with
+→ bootstrap again with the DEVELOPMENT seed (synthetic clients, pilot catalogs + Agenda fixtures), stamped with
   the bound Business id so the reset never introduces a second business id
 → load → remount feature providers
 ```

@@ -45,8 +45,8 @@ export interface PersistenceValue {
   readonly snapshot: PersistedSnapshot;
   /**
    * Development-only: wipes every persisted record and owned image (the
-   * account binding is kept), seeds the DEVELOPMENT seed (legacy pilot data +
-   * fixtures) under the bound Business id, and remounts the feature
+   * account binding is kept), seeds the DEVELOPMENT seed (synthetic clients,
+   * pilot catalogs + fixtures) under the bound Business id, and remounts the feature
    * providers. No-op in production builds.
    */
   readonly resetForDevelopment: () => void;

@@ -141,9 +141,15 @@ birthdate → birthday    day + month of a well-formed YYYY-MM-DD only
 The legacy `birthdate` field is mapped ONLY when it is a well-formed
 `YYYY-MM-DD` value with a real day + month pair; the year is discarded.
 `null`, missing, and non-conforming values (other formats, partial dates,
-impossible pairs) are dropped — never converted or invented. The current
-legacy dataset contains no usable birthday value, so imported clients start
+impossible pairs) are dropped — never converted or invented. The pilot
+legacy export contained no usable birthday value, so imported clients start
 without a `birthday`.
+
+A real address book is personal data: it is NEVER tracked in the repository.
+The only tracked legacy-shaped dataset is the synthetic development one
+(`src/features/clients/data/synthetic-legacy-clients.ts`: fictional names,
+phone numbers from the ranges reserved for fiction, `example.com` emails),
+which keeps this contract exercised by the development seed and the tests.
 
 EVERYTHING ELSE is ignored. In particular, Souris never imports:
 

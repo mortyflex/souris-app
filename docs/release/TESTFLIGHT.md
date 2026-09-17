@@ -21,8 +21,8 @@ Consequences for the pilot:
   does not;
 - the first TestFlight must be treated as **pilot testing, not as the sole production storage**.
   Keep the existing agenda / client tool as the reference until V1C + V1D ship;
-- a fresh install starts EMPTY (production first-run seed). The legacy pilot address book is
-  development-only data and is not part of release bundles.
+- a fresh install starts EMPTY (production first-run seed). The development seed (synthetic
+  address book, pilot catalogs, Agenda fixtures) is not part of release bundles.
 
 ## 2. EAS configuration
 

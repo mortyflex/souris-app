@@ -40,7 +40,7 @@ describe('production first-run seed', () => {
 });
 
 describe('development seed', () => {
-  it('carries the legacy pilot data, the Agenda fixtures, and their clients', () => {
+  it('carries the synthetic address book, the Agenda fixtures, and their clients', () => {
     const development = createDevelopmentSeed(new Date(2026, 8, 11, 10));
     const legacyClients = createInitialClients();
 

@@ -1,7 +1,8 @@
 // Souris — development seed
 //
-// The pilot data set for development builds and tests: the legacy client
-// address book, the legacy service and product catalogs, the Agenda demo
+// The data set for development builds and tests: the SYNTHETIC client address
+// book (no real person — a real address book is never tracked in this
+// repository), the legacy service and product catalogs, the Agenda demo
 // Appointments (relative to `now`), and the clients they reference. Reached
 // only through the __DEV__ reset on the Plus tab and through
 // TestPersistenceProvider — never through the production first-run path.

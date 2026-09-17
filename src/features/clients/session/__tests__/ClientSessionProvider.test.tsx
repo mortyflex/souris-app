@@ -68,7 +68,7 @@ function Probe() {
   );
 }
 
-// TestPersistenceProvider seeds the DEVELOPMENT seed: legacy clients + fixture clients.
+// TestPersistenceProvider seeds the DEVELOPMENT seed: synthetic clients + fixture clients.
 const seededClientCount = createInitialClients().length + developmentClients.length;
 
 describe('ClientSessionProvider', () => {

@@ -1,9 +1,9 @@
 // Souris — Appointment Creation screen integration test
 //
-// Runs the real screen against the real normalized legacy clients and
+// Runs the real screen against the normalized synthetic address book and the
 // catalog. Proves the key creation behaviors end to end:
 // - the Agenda start time is visible from the first step;
-// - a client far beyond index 60 in the legacy source is reachable;
+// - a client far beyond index 60 in the client source is reachable;
 // - the Prestations step is a compact grouped multi-selection grid without
 //   a selected-services stack;
 // - the Résumé step hosts the ordered stacked accordion editor;

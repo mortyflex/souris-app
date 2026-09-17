@@ -1,6 +1,8 @@
 // Souris — Legacy clients import boundary
 //
-// Source: src/features/clients/data/legacy-clients.ts
+// Source: a legacy address-book export. The repository only ever tracks the
+//         synthetic one (src/features/clients/data/synthetic-legacy-clients.ts);
+//         a real address book never enters the source tree.
 // Target: canonical Souris Client (src/domain/clients)
 //
 // The STRICT import rule (docs/domain/CLIENTS.md §Legacy import contract):
