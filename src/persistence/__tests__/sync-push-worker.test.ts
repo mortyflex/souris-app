@@ -152,14 +152,16 @@ describe('bootstrap — first sync of a bound Business', () => {
     expect(loadSyncState(db, REMOTE_BUSINESS_ID)).toEqual([]);
     expect(readSyncBootstrapRecord(db, REMOTE_BUSINESS_ID)?.decision).toBe('EMPTY');
 
-    // While still empty the stored decision stands: the remote is not asked again.
+    // V1D: a stored EMPTY is asked again at every run (one count, nothing else) — the Business may
+    // have been populated from another device meanwhile, which is a restore, not an empty account.
     expect(await run()).toMatchObject({ status: 'PUSHED', bootstrap: 'EMPTY', pushed: 0 });
-    expect(remote.countCalls).toBe(1);
+    expect(remote.countCalls).toBe(2);
+    expect(remote.pulls).toEqual([]); // nothing is pulled from a Business just counted empty
 
     // EMPTY is not an acknowledgement: the first local aggregate makes it stale (regression block below).
     insertClient(db, clientLea);
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'INITIAL_UPLOAD_REQUIRES_APPROVAL' });
-    expect(remote.countCalls).toBe(2);
+    expect(remote.countCalls).toBe(3);
     expect(remote.list(REMOTE_BUSINESS_ID)).toEqual([]);
   });
 
@@ -218,7 +220,7 @@ describe('bootstrap — first sync of a bound Business', () => {
     expect((remote.find(REMOTE_BUSINESS_ID, 'CLIENT', 'client-lea')?.payload as RemoteClientPayload).first_name).toBe('Léa-Rose');
   });
 
-  it('local empty + remote populated: STOP (V1D restore) — nothing pushed, re-evaluated on the next run', async () => {
+  it('local empty + remote populated: STOP (restore needs its approval) — nothing pushed or pulled, re-evaluated on the next run', async () => {
     const db = openEmptyBoundDatabase();
     const { remote, run } = setup(db);
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-remote', {
@@ -227,6 +229,7 @@ describe('bootstrap — first sync of a bound Business', () => {
 
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'RESTORE_REQUIRED' });
     expect(readSyncBootstrapRecord(db, REMOTE_BUSINESS_ID)?.decision).toBe('RESTORE_REQUIRED');
+    expect(remote.pulls).toEqual([]);
 
     // Data created locally meanwhile is NOT pushed: both sides are now populated.
     insertClient(db, clientLea);
@@ -465,7 +468,7 @@ describe('EMPTY is not a synchronization acknowledgement (E2E regression)', () =
     expect(ack(db, 'CLIENT', clientLea.id)).toBe(2);
   });
 
-  it('EMPTY survives a restart while the device is still empty: no re-classification, no request', async () => {
+  it('EMPTY survives a restart while the device is still empty: re-counted (V1D), still EMPTY, nothing uploaded', async () => {
     const db = openEmptyBoundDatabase();
     const first = setup(db);
     expect(await first.run()).toMatchObject({ bootstrap: 'EMPTY' });
@@ -473,8 +476,9 @@ describe('EMPTY is not a synchronization acknowledgement (E2E regression)', () =
     bootstrapPersistence(db, emptySeed); // relaunch: migrate + seed-once + hydrate
     const { run } = setup(db, first.remote); // a new worker on the same database
     expect(await run()).toEqual({ status: 'PUSHED', bootstrap: 'EMPTY', initialUploadEnqueued: 0, pushed: 0, failed: 0, conflicts: [] });
-    expect(first.remote.countCalls).toBe(1);
+    expect(first.remote.countCalls).toBe(2); // one count per explicit run — see the V1D restore tests
     expect(first.remote.requests).toEqual([]);
+    expect(first.remote.pulls).toEqual([]);
     expect(readSyncBootstrapRecord(db, REMOTE_BUSINESS_ID)?.decision).toBe('EMPTY');
     // Nothing to upload, so nothing to approve either.
     expect(approveInitialUpload(db, REMOTE_BUSINESS_ID, NOW)).toEqual({ status: 'REFUSED', reason: 'NOT_REQUIRED' });
@@ -863,7 +867,7 @@ describe('conflicts — a changed remote aggregate is never overwritten', () => 
         { aggregateType: 'CLIENT', aggregateId: clientLea.id, operation: 'UPSERT', acknowledgedVersion: 1, remoteVersion: 2 },
       ],
     });
-    expect(remote.find(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id)).toEqual({ payload: elsewhere, syncVersion: 2, deleted: false });
+    expect(remote.find(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id)).toMatchObject({ payload: elsewhere, syncVersion: 2, deleted: false });
     expect(ack(db, 'CLIENT', clientLea.id)).toBe(1);
     expect(findSyncOutboxEntry(db, REMOTE_BUSINESS_ID, { aggregateType: 'CLIENT', aggregateId: clientLea.id }))
       .toMatchObject({ operation: 'UPSERT', attemptCount: 1, lastError: 'CONFLICT' });

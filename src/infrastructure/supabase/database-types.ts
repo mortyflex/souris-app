@@ -1,11 +1,14 @@
 // Souris — remote schema types (hand-written, V1 scope)
 //
-// Covers the `businesses` table and the two Cloud Sync V1C push functions
-// (supabase/migrations/20260917120000_…) — exactly what the application
+// Covers the `businesses` table, the two Cloud Sync V1C push functions
+// (supabase/migrations/20260917120000_…) and the V1D pull function
+// (supabase/migrations/20260917200000_…) — exactly what the application
 // calls. Type aliases (not interfaces) on purpose: supabase-js requires the
 // implicit index signature. The nine operational TABLES created by Cloud
 // Sync V1A are deliberately NOT typed here: the sync adapter never touches
-// them directly (every operational write goes through `sync_push_aggregate`),
+// them directly (every operational write goes through `sync_push_aggregate`,
+// every operational read through `sync_pull_business_aggregates`, whose jsonb
+// answer is validated by `parseRemoteBusinessSnapshot`, not typed here),
 // and a type without a consumer would drift. The migration files are the
 // source of truth for the remote schema (docs/architecture/CLOUD_SYNC.md
 // §14.1).
@@ -77,6 +80,11 @@ export type Database = {
       sync_push_aggregate: {
         Args: SyncPushAggregateArgs;
         Returns: SyncPushAggregateResult;
+      };
+      sync_pull_business_aggregates: {
+        /** `p_since` NULL = the complete dataset (restore, first pull). */
+        Args: { p_business_id: string; p_since: string | null };
+        Returns: Json;
       };
     };
     Enums: { [_ in never]: never };

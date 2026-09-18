@@ -12,7 +12,7 @@ V1A    Remote Schema & Sync Contract        done — remote schema + contract (�
 V1B    Local Outbox & Sync Metadata         done — local outbox + acknowledged revisions (§10)
 V1C-0  Local Sync Prerequisites             done — UUID v4 top-level ids (§5) + integer-cents persistence (§3.1)
 V1C    Initial Upload + Incremental Push    done — bootstrap decision, push RPC, push worker, runner (§15)
-V1D    Pull + New Device Restore
+V1D    Pull + New Device Restore            done — read RPC, approved transactional restore, incremental pull (§16)
 V1E    Conflict / Retry Hardening
 V1F    Product Image Sync
 ```
@@ -40,6 +40,19 @@ backup: until V1D a remote copy cannot bring data back to a device (`docs/archit
 §1). The remote migration `20260917120000_create_sync_push_functions.sql` must be applied by hand
 (`supabase/README.md`); until it is, every run stops at its first request and nothing is lost.
 
+State after V1D: data comes BACK. An EMPTY device bound to a populated Business is
+`RESTORE_REQUIRED`; after one explicit, Business-scoped approval (§11.2) the next run downloads the
+complete Business through ONE consistent read function, validates all of it, and rebuilds SQLite in
+ONE local transaction (§16.4) — acknowledged versions, clean outbox, `ALREADY_SYNCED`. From then on
+every run pushes, then pulls what changed remotely (§16.5): a remote revision is applied only to a
+locally CLEAN aggregate; remote newer + local dirty is a reported conflict that overwrites neither
+side (§16.6); remote tombstones follow the local deletion rules (§16.7); nothing that came from the
+remote is ever pushed back. The restore has its production entry point — the restore prompt of
+§16.11, the only sync surface of a release build. Still no conflict RESOLUTION (V1E), no image sync
+(V1F), no SQLite schema change (still v8), no other sync UI. The remote migration
+`20260917200000_create_sync_pull_function.sql` must be applied by hand; until it is, restore and
+pull fail harmlessly (`UNKNOWN`) and the V1C push keeps working.
+
 ---
 
 ## 2. Local-first model
@@ -47,7 +60,7 @@ backup: until V1D a remote copy cannot bring data back to a device (`docs/archit
 ```text
 UI ──► feature provider ──► SQLite (source of truth + sync_outbox, one transaction) ──► V1C push worker (§15) ──► Supabase
                                         ▲                                                            │
-                                        └──────────────────── [V1D pull / restore] ◄─────────────────┘
+                                        └──────────────────── V1D pull / restore (§16) ◄─────────────┘
 ```
 
 Invariants that every later phase must keep:
@@ -304,10 +317,11 @@ Properties the engine may rely on:
 - `updated_at` is the server transaction time; device clocks never participate in ordering;
 - the client cannot lower, raise or freeze either value: the trigger ignores what it sends.
 
-Incremental pull (V1D) reads rows where `updated_at > cursor` per table for the bound Business,
-ordered by `updated_at`, and applies them idempotently by `(business_id, id)`. Because
-`updated_at` is transaction start time, the cursor must be advanced conservatively (overlap
-window, idempotent apply); rows already at the acknowledged `sync_version` are skipped.
+Incremental pull (V1D, §16.5) reads the aggregates where `updated_at > cursor − overlap` for the
+bound Business and applies them idempotently by `(business_id, id)`. Because `updated_at` is
+transaction START time, a write can commit after a pull that is already "later" than it: the cursor
+is a server time, the device re-reads a 5-minute overlap before it, and rows already at the
+acknowledged `sync_version` are skipped.
 
 ---
 
@@ -335,7 +349,7 @@ Auth user with operational rows is therefore refused until those rows are remove
 
 ---
 
-## 9. Conflict contract (detection implemented in V1C — §15.4; resolution is V1E)
+## 9. Conflict contract (detection implemented in V1C push — §15.4 — and V1D pull — §16.6; resolution is V1E)
 
 Per aggregate row the device keeps (V1B) the last **acknowledged remote `sync_version`** and a
 local **dirty** flag (the outbox entry). The server holds the **current remote `sync_version`**.
@@ -503,12 +517,12 @@ failure → recordSyncOutboxFailure(id, message, next_attempt_at)   bounded back
 ordering → by aggregate dependency (CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE — remote FKs) then by id
 ```
 
-The bootstrap decision lives in `souris_metadata` (`sync_bootstrap`, §11). Pull cursors are still
-to be added in V1D.
+The bootstrap decision lives in `souris_metadata` (`sync_bootstrap`, §11), and so do the V1D pull
+cursor (`sync_pull_cursor`, §16.5) and the restore approval (`sync_initial_restore_approval`, §11.2).
 
 ---
 
-## 11. Bootstrap / restore rules (bootstrap decision implemented in V1C; restore is V1D)
+## 11. Bootstrap / restore rules (bootstrap decision implemented in V1C; restore in V1D)
 
 First sync of a bound Business, decided from the population of BOTH sides (tombstones count as
 remote rows). Source: `src/persistence/sync/bootstrap.ts` (`classifySyncBootstrap`, pure), driven
@@ -522,9 +536,12 @@ local populated   remote empty            → INITIAL_UPLOAD_REQUIRES_APPROVAL
                   NOT approved                                        STOP — nothing enqueued, nothing pushed (§11.1)
 local populated   remote empty            → INITIAL_UPLOAD           enqueue every local aggregate, push
                   approved for THIS Business
-local empty       remote populated        → RESTORE_REQUIRED         STOP — needs the V1D restore
+local empty       remote populated        → RESTORE_REQUIRED         STOP — nothing fetched, nothing written (§11.2)
+                  NOT approved
+local empty       remote populated        → RESTORE_REQUIRED         the run performs the transactional restore
+                  approved for THIS Business                          (§16.4) → ALREADY_SYNCED
 local populated   remote populated        → RECONCILIATION_REQUIRED  STOP — never local-wins or remote-wins
-                  (no acknowledged state)                             silently; an approval changes nothing here
+                  (no acknowledged state)                             silently; NO approval changes anything here
 ```
 
 Classification is automatic and harmless: it reads one remote count and writes no operational or
@@ -543,7 +560,8 @@ isStoredPushDecisionCurrent(db, businessId, decision)       src/persistence/sync
                                                              used by the worker, the periodic check and the approval
 INITIAL_UPLOAD   always            the explicit approval for this Business: an interrupted upload resumes
 ALREADY_SYNCED   only while sync_state really holds an acknowledged revision for this Business
-EMPTY            only while NO local aggregate AND NO outbox entry exists
+EMPTY            only while NO local aggregate AND NO outbox entry exists — and, since V1D, the WORKER
+                 counts the remote again at every run even then (see below)
 STOP decisions   never             re-evaluated at every explicit run
 ```
 
@@ -551,8 +569,16 @@ A stored decision that is no longer current is simply classified again at the ne
 REAL remote. So `EMPTY` → the first Client / Service / Product → the next run finds `EMPTY` stale →
 local populated, remote empty, no acknowledged state → `INITIAL_UPLOAD_REQUIRES_APPROVAL` → STOP,
 the pending entries are NOT pushed (and if the remote was populated meanwhile:
-`RECONCILIATION_REQUIRED`). While the device stays empty, the stored `EMPTY` stands across restarts
-without asking the remote again. Under a fresh `EMPTY` the run may only settle deletions of
+`RECONCILIATION_REQUIRED`).
+
+Since V1D a stored `EMPTY` is additionally re-counted by the worker at EVERY run (one
+`sync_count_business_aggregates` call, nothing else): "the remote was empty when we looked" says
+nothing about now. A device that kept trusting it would never discover that its Business was
+populated meanwhile from another device — it would sit on an empty screen instead of reaching
+`RESTORE_REQUIRED`, and its first new record would turn it into `RECONCILIATION_REQUIRED`.
+`isStoredPushDecisionCurrent` is unchanged (an empty device with a stored `EMPTY` still has no initial
+upload to approve, and the foreground tick still never polls); only the worker's shortcut was
+removed. Under a fresh `EMPTY` the run may only settle deletions of
 aggregates the remote never held (`ABSENT`, §15.5): the worker refuses any UPSERT under `EMPTY`,
 including an aggregate that appears while the run is in flight.
 
@@ -637,18 +663,38 @@ Business id anywhere in the code path, `~/.souris-private-data` is never read, a
 binding rules are untouched: an existing Business is never rebound, and a populated remote Business
 (e.g. a test one) is a STOP, not a merge target. The pilot transfer is §15.7.
 
-New-device restore:
+### 11.2 Initial restore — explicit, Business-scoped approval (V1D)
 
-```text
-sign in → resolve Business (AUTH.md §5) → bind the empty local database
-→ detect empty local DB → download the complete Business snapshot (every table, tombstones excluded)
-→ convert at the boundary → populate SQLite in ONE transaction (children with their parents,
-  stock as stored, payments as stored) → write ack versions and pull cursors → UI continues reading SQLite
+"Local empty + remote populated" is a new phone — and also a development device after a wipe, or a
+device bound by mistake to a Business full of someone's test data. Rebuilding a database is not
+something the device decides alone: without an approval the run returns `BLOCKED / RESTORE_REQUIRED`
+and does NOT even fetch the dataset.
+
+```ts
+approveInitialRestore(db, businessId, now?)   // src/persistence/sync/bootstrap.ts
+  → { status: 'APPROVED', approval: { businessId, approvedAt } }
+  → { status: 'REFUSED', reason: 'NOT_BOUND' | 'BUSINESS_MISMATCH' | 'NOT_REQUIRED' | 'LOCAL_NOT_EMPTY' }
 ```
 
-A restore that fails midway leaves the database empty (transaction rollback), never partially
-restored. A device already bound to another account keeps the DEVICE_ACCOUNT_CONFLICT behavior
-(AUTH.md §6).
+- **Explicit.** Two callers only, both behind a confirmation naming the Business: the production
+  restore prompt (§16.11 — the ONLY sync surface of a release build) and the DEVELOPMENT sync
+  control (§15.9). A source-level test locks that in.
+- **Exact Business.** Refused unless the database is bound to that very UUID; refused as
+  `NOT_REQUIRED` once the device synchronizes (acknowledged state, or a current push decision);
+  refused as `LOCAL_NOT_EMPTY` when any operational row exists — a restore NEVER runs over local data.
+- **Persisted, Business-scoped.** `souris_metadata['sync_initial_restore_approval']` =
+  `{ businessId, approvedAt }`. A record naming another Business id authorizes nothing.
+- **Records only.** Approving fetches nothing and writes no row. The NEXT run classifies both sides
+  again; only "local empty + remote populated" for that same Business restores. Local populated
+  meanwhile → `RECONCILIATION_REQUIRED`, whatever was approved.
+- **Retry-safe, not one-shot.** Unlike the upload approval (consumed by the enqueue it authorizes),
+  the restore approval is cleared INSIDE the restore transaction, i.e. only when a restore commits.
+  A failed or interrupted restore leaves SQLite untouched and the approval pending: the next run —
+  after a restart too — simply tries again. There is no intermediate "restoring" state to repair.
+- **Cleared by the development reset** with the rest of the sync bookkeeping.
+
+The restore itself is §16.4. A device already bound to another account keeps the
+DEVICE_ACCOUNT_CONFLICT behavior (AUTH.md §6).
 
 ---
 
@@ -690,7 +736,7 @@ businesses after the privilege revoke               owner SELECT / INSERT / UPDA
 
 ---
 
-## 14. Explicit non-goals of V1A / V1B / V1C-0 / V1C
+## 14. Explicit non-goals of V1A / V1B / V1C-0 / V1C / V1D
 
 V1A: no runtime sync, no outbox, no upload, no restore, no background task, no image upload, no
 conflict UI, no local schema change.
@@ -711,13 +757,23 @@ pull, no restore, no conflict resolution or conflict UI, no merge, no image sync
 background task, no batching, no SQLite schema change, no production seed, no pilot data in the
 repository, no automatic rebind of a Business, no `service_role` key, no user-visible sync status.
 
+V1D: no conflict resolution, no conflict records, no merge (a conflict is reported and both sides are
+left alone), no reconciliation of two populated datasets (`RECONCILIATION_REQUIRED` stays a STOP), no
+automatic restore, no sync UI beyond the RESTORE_REQUIRED prompt (§16.11), no image sync (`image_uri` stays
+local-only: absent after a restore, untouched by a pull), no pagination of the remote read, no
+realtime subscription, no background task, no SQLite schema change, no pilot data or identifier in
+the repository, no `service_role` key.
+
 ### 14.1 `database-types.ts` is intentionally incomplete
 
 `src/infrastructure/supabase/database-types.ts` is the hand-written supabase-js `Database` type.
-It covers the `businesses` table and the two V1C functions (`sync_push_aggregate`,
-`sync_count_business_aggregates`) — exactly what the application calls. It does NOT describe the
-nine operational tables: the sync adapter never touches them directly (every operational write goes
-through the push function), and a type without a consumer would drift. The migration files under
+It covers the `businesses` table, the two V1C functions (`sync_push_aggregate`,
+`sync_count_business_aggregates`) and the V1D read function (`sync_pull_business_aggregates`, typed
+as returning `Json`) — exactly what the application calls. It does NOT describe the nine operational
+tables: the sync adapter never touches them directly (every operational write goes through the push
+function, every read through the pull function, whose answer is validated at run time by
+`parseRemoteBusinessSnapshot` rather than trusted through a static type), and a type without a
+consumer would drift. The migration files under
 `supabase/migrations/` are the source of truth for the remote schema.
 
 ### 14.2 Prerequisites before V1C (all done)
@@ -868,11 +924,11 @@ no acknowledged version  remote row    → same rule (the row came from another 
 acknowledged version     no remote row → CONFLICT (administrative hard delete), never silently recreated
 ```
 
-V1C only DETECTS. A conflicted aggregate stays local-only-dirty until V1D (pull) and V1E
-(resolution) exist; the local row keeps working normally and later local edits keep coalescing
+V1C only DETECTS (and so does the V1D pull, §16.6). A conflicted aggregate stays local-only-dirty
+until V1E (resolution) exists; the local row keeps working normally and later local edits keep coalescing
 into the same entry. Known limit: if an answer is lost AND the user edits the same aggregate before
 the retry, the retry differs from the remote state and is reported as a conflict although no other
-device was involved — conservative by design, resolved by V1D/V1E.
+device was involved — conservative by design, resolved by V1E.
 
 ### 15.5 DELETE behavior
 
@@ -949,18 +1005,19 @@ existing synthetic fixtures).
 Legacy ids (`service-<slug>`, `client-<ms>-<n>`) are valid remote keys as they are (§5.2): nothing
 is rewritten for the upload.
 
-### 15.8 What V1D / V1E still have to build
+### 15.8 What V1E and later still have to build
 
-Pull cursors and incremental pull, new-device restore (`RESTORE_REQUIRED` exit), the explicit
-reconciliation entry point (`RECONCILIATION_REQUIRED` exit), a user-facing entry point for the
-initial-upload approval (`INITIAL_UPLOAD_REQUIRES_APPROVAL` exit, §11.1), conflict records and resolution
-(§9), a user-visible pending / failed / conflict state, batching of the initial upload if its
-duration ever matters (one request per aggregate today), and product image sync (V1F).
+Done in V1D: pull cursor and incremental pull, new-device restore (`RESTORE_REQUIRED` exit) with its
+production prompt (§16.11). Still open: the explicit reconciliation entry point
+(`RECONCILIATION_REQUIRED` exit), a user-facing entry point for the initial-upload approval (§11.1 —
+development control only today), conflict records and resolution (§9), a user-visible pending / failed / conflict state,
+batching of the initial upload and pagination of the restore read if their size ever matters, an
+in-place refresh of the screens after a pull (§16.8), and product image sync (V1F).
 
 ### 15.9 Development sync control (`__DEV__` only — not product UI)
 
 `Plus › Développement › Sync V1C (test)` opens `src/features/plus/development/DevelopmentSyncSheet.tsx`,
-a test bench for the supervised real-device / simulator validation of §11.1 and §15.3:
+a test bench for the supervised real-device / simulator validation of §11.1, §11.2, §15.3 and §16:
 
 ```text
 shows     the Business this DEVICE is bound to (business_profile name + id), the stored bootstrap state
@@ -972,12 +1029,332 @@ Approve initial upload  enabled ONLY when the stored state is INITIAL_UPLOAD_REQ
                         waiting → second confirmation naming the exact Business name and id → state re-read →
                         approveInitialUpload(db, thatId). Nothing approves implicitly: not opening the sheet,
                         not running sync, not cancelling; approving uploads nothing by itself
+Restauration / Curseur  (V1D) whether a restore is REQUIRED or APPROVED-and-waiting, and the pull cursor
+Approve restore         (V1D) enabled ONLY when the stored state is RESTORE_REQUIRED with no restore approval
+                        waiting → the same second confirmation (exact Business name and id) → state re-read →
+                        approveInitialRestore(db, thatId). Approving restores nothing: the NEXT run does
+Run sync now (V1D)      also performs the approved restore, and the pull that follows every push. Its last
+                        result line (RESTORED · counts, or PUSHED · … · pull …) is kept at module level,
+                        because a restore remounts the tree — this sheet included (§16.8)
 ```
 
 Production boundary: the module is `require`d inside a `__DEV__` branch of `PlusScreen` (never a
 static import), so Metro drops it from release bundles; the section that opens it renders only under
 `__DEV__`; the component returns nothing and its handlers refuse to act outside `__DEV__`. A
 source-level test locks this in (single guarded `require`, no other reference, no other caller of
-`approveInitialUpload`, no hardcoded id / email / privileged key, no logging). The runner's
+`approveInitialUpload` or `approveInitialRestore`, the restore reachable from the sync worker only,
+no hardcoded id / email / privileged key in the control or in the sync layer, no logging). The runner's
 triggers and conditions are unchanged: `runNow` is one more explicit trigger of the same run. The
 row avoids the words the product must not display on Plus ("cloud", "sauvegardé", "synchronisé").
+
+---
+
+## 16. New-device restore + incremental pull (V1D — implemented)
+
+```text
+src/persistence/sync/remote-gateway.ts     + pullBusinessAggregates (returns UNVALIDATED wire JSON), RemoteBusinessSnapshot
+src/persistence/sync/remote-snapshot.ts    the gate: wire JSON → validated snapshot (pure); reference closure; dependency order
+src/persistence/sync/remote-apply.ts       ONE validated remote aggregate / tombstone → SQLite rows. No outbox, no sync_state
+src/persistence/sync/restore.ts            approved new-device restore: fetch → validate → ONE transaction
+src/persistence/sync/pull-worker.ts        incremental pull: clean → apply, dirty → conflict, tombstones, cursor
+src/persistence/sync/pull-cursor.ts        souris_metadata['sync_pull_cursor'] + the overlap rule
+src/persistence/sync/bootstrap.ts          + approveInitialRestore / readInitialRestoreApproval (§11.2)
+src/persistence/sync/push-worker.ts        the run: bootstrap → (approved restore) | push → pull
+src/infrastructure/supabase/sync-gateway.ts + the pull RPC binding
+src/providers/CloudSyncRunner.tsx          + reloadSnapshot() after a run that wrote operational rows
+src/persistence/testing/fake-sync-remote.ts + the pull contract (tests only)
+supabase/migrations/20260917200000_create_sync_pull_function.sql
+```
+
+### 16.1 Remote read strategy — why an RPC
+
+A restore or a pull needs every aggregate WITH its complete child set, at the `sync_version` that
+describes exactly those children. Plain PostgREST table reads (`services`, then `service_phases`,
+then `appointments`, …) are separate requests, i.e. separate snapshots: a push landing between two
+of them hands the device a Service row of one revision with the phases of another — and the device
+would then ACKNOWLEDGE a version whose content it does not hold, which silently defeats the conflict
+contract (§9) for that aggregate. Embedding (`select=*,service_phases(*)`) fixes one family per
+request but still gives five snapshots, needs SELECT-shaped types for nine tables, and cannot express
+"changed since, tombstones included, in creation order" uniformly. So ALL operational reads go through
+one function, exactly as all writes go through one (§15.1).
+
+```sql
+public.sync_pull_business_aggregates(p_business_id uuid, p_since timestamptz) → jsonb
+  -- { "pulled_at": "<server now(), ISO-8601 UTC ms>",
+  --   "clients": [...], "services": [...], "products": [...], "appointments": [...], "sales": [...] }
+  -- every aggregate: id, sync_version, deleted_at + exactly the columns sync_push_aggregate accepts
+  -- services + phases[] · appointments + items[] (each + phases[]) · sales + items[]
+public.sync_instant_text(timestamptz) → text     -- formatting helper: UTC, milliseconds, "Z"
+```
+
+- ONE SQL statement ⇒ ONE snapshot whatever the isolation level; `STABLE`, read-only.
+- `p_since` NULL = the complete dataset (restore, first pull); otherwise `updated_at > p_since`, served
+  by the `(business_id, updated_at)` indexes of V1A. A child-only edit moves its parent's `updated_at`
+  (V1A triggers), so it comes back as its parent.
+- Tombstones are INCLUDED (a pull must download deletions) and returned WITHOUT children.
+- Families are ordered by `created_at, id`, children by position: a restore rebuilds the local list
+  order (`ORDER BY rowid`) of the device that uploaded the data.
+- Instants are emitted in the exact form the device pushed (`2026-09-11T09:15:00.000Z`) instead of
+  the session-dependent timestamptz → jsonb rendering; the device never stored more than
+  milliseconds, so a pushed instant comes back byte for byte. The parser still accepts any valid
+  ISO rendering (offsets, microseconds) and normalizes it.
+- `SECURITY INVOKER`, `search_path = ''`, explicit `is_business_owner` → `42501` (an RLS "0 rows"
+  would read as an EMPTY Business — the worst possible misreading for a restore), EXECUTE for
+  `authenticated` only, no `service_role`, no `SECURITY DEFINER`. The owner-only SELECT policies of
+  V1A still decide every row: the function adds consistency, not privilege.
+
+Size: one response holds the whole read. That is the right trade for the pilot (hundreds of Clients,
+a catalog, months of Appointments: well under a megabyte); pagination is deliberately not built — it
+would give up the single snapshot — and is listed in §15.8 for when a dataset outgrows it.
+
+### 16.2 Validation before any write
+
+`pullBusinessAggregates` returns UNVALIDATED JSON. `parseRemoteBusinessSnapshot`
+(`remote-snapshot.ts`, pure) validates the WHOLE answer before a single row is written; it never
+returns a partial snapshot:
+
+```text
+shape            pulled_at + the five families, each an array of objects
+identity         id non-empty, unique per family; sync_version a safe integer >= 1; deleted_at an instant or NULL
+money            every *_cents a non-negative safe INTEGER (a euro 0.99 is refused); quantity >= 1; stock >= 0
+vocabularies     service type, appointment status, cancelled_by
+lifecycle        cancelled_at + cancelled_by together; reason only when cancelled
+payment          paid_at + card + cash: all three or none; never on an Appointment-linked Sale
+children         ids and positions / item_order unique inside their parent; returned sorted
+client birthday  must be readable by the local mapper (`parseBirthdayKey`)
+tombstones       identity + version only; NO payload — columns and children are never read as live data
+errors           name the FIELD PATH (`clients[].last_name`), never a value (a row can hold a name or a phone)
+```
+
+A complete dataset must also be closed over its references (`assertSnapshotReferences`): a live
+Appointment / Sale names a live Client, a linked Sale a live Appointment — the invariant the local
+deletion guards maintain on every device. Anything refused ⇒ `INVALID_REMOTE_DATA`, nothing written.
+
+### 16.3 Writing a remote aggregate — never through the stores
+
+`remote-apply.ts` is the mirror of `aggregate-payload.ts`. It writes rows with raw SQL and NOTHING
+else: a store mutation records an outbox entry, which is exactly what a change originating from the
+remote must never do (it would be pushed straight back). It never writes `sync_state` either — the
+caller owns the transaction and the acknowledgement.
+
+```text
+cents, ids, child ids, positions, item_order   copied exactly; no euro round trip, no renumbering
+existing parent row                            UPDATED in place (rowid = list order kept), child set REPLACED (§6)
+products.image_uri                             never written: NULL on insert, kept on update
+clients.birth_date (legacy)                    never touched
+business_id                                    the bound Business; a local row with that id under ANOTHER
+                                               Business id is refused (LocalAggregateScopeError)
+references (pull)                              an Appointment / Sale whose Client / Appointment is not held
+                                               locally is NOT written (RemoteReferenceMissingError)
+```
+
+### 16.4 Restore flow
+
+```text
+run → classification RESTORE_REQUIRED + approveInitialRestore for THIS Business   (§11.2) — else BLOCKED
+1. fetch     pullBusinessAggregates(businessId, since = none)      the complete dataset, one snapshot
+2. validate  parseRemoteBusinessSnapshot + assertSnapshotReferences — BEFORE touching SQLite
+3. ONE SQLite transaction (restoreBusinessSnapshot):
+     re-verify, INSIDE the transaction    still bound to this Business · approval present · no acknowledged
+                                          state · NO operational row (the fetch was awaited: the device may
+                                          have changed meanwhile) — else RESTORE_REFUSED
+     write every LIVE aggregate           CLIENT → SERVICE → PRODUCT → APPOINTMENT → SALE, children with their
+                                          parent, in remote creation order; tombstones are not written
+     sync_state ← each remote sync_version   tombstones included: they are known revisions
+     DELETE the Business's sync_outbox rows
+     sync_pull_cursor ← pulled_at
+     sync_bootstrap ← ALREADY_SYNCED
+     the approval is consumed
+→ RESTORED { clients, services, products, appointments, sales, tombstones }
+```
+
+Failure at ANY point — offline, function not deployed (`UNKNOWN`), not the owner (`FORBIDDEN`), invalid
+dataset, a SQLite error in the middle of the transaction — returns `FAILED` with SQLite exactly as it
+was: still empty, still `RESTORE_REQUIRED`, approval still pending. Retry is the next run; nothing
+has to be repaired (verified by failing the transaction after four families were already written).
+
+Outbox: with empty tables and no acknowledged state, a pending entry can only describe an aggregate
+that no longer exists locally and was never uploaded by this device (nothing is pushed under a STOP
+decision, `EMPTY` never uploads an UPSERT). Those intents mean nothing to the restored dataset and
+are dropped inside the restore transaction, so the outbox is clean afterwards.
+
+### 16.5 Incremental pull
+
+Runs at the end of every run whose decision is `ALREADY_SYNCED` or `INITIAL_UPLOAD` — never under
+`EMPTY` (the remote was just counted empty), never under a STOP, and not when the push pass was
+stopped by a run-level failure. **Push goes first**: a push whose answer was lost is acknowledged by
+its retry (§15.2) before the pull looks at it; pull-first would misread it as "remote newer + local
+dirty".
+
+```text
+since = sync_pull_cursor − 5 min (PULL_OVERLAP_MS); no cursor yet = everything
+fetch + validate the whole answer (§16.1, §16.2)                      failure ⇒ pull FAILED, nothing applied
+the device must still be bound to this Business (the fetch was awaited)
+per aggregate — live ones in dependency order, THEN tombstones in REVERSE dependency order:
+  remote sync_version <= acknowledged        known revision                       → skipped
+  a pending outbox entry exists (DIRTY)      CONFLICT — neither side touched      → reported (§16.6)
+  clean, live                                ONE transaction: row + child set + sync_state ← remote version
+  clean, tombstone                           ONE transaction: guarded local deletion + sync_state (§16.7)
+  could not be applied                       rolled back, NOT acknowledged        → failed
+cursor ← pulled_at ONLY when failed = 0
+```
+
+- The dirty check, the write and the acknowledgement happen in one synchronous turn after the await:
+  no local mutation can slip between "is it clean?" and "apply".
+- The cursor is a SERVER time end to end; the device clock never takes part. The overlap exists
+  because `updated_at` is the START of the writing transaction (§7): a write that began before a pull
+  and committed after it is older than that pull's `pulled_at`. Five minutes is far beyond what a
+  remote transaction can last; re-read rows cost one version comparison each.
+- A conflict does NOT hold the cursor (the pending outbox entry keeps that aggregate's story, and the
+  push pass re-detects it). An aggregate that could not be applied DOES: it is fetched again.
+- A device that did the initial upload has no cursor: its first pull reads everything back and
+  recognizes every version — a free end-to-end check of the upload.
+- The foreground tick is unchanged: it still fires only for eligible PUSH work. Remote changes are
+  picked up at launch, on return to the foreground, and by "Run sync now" — no polling, no realtime.
+
+### 16.6 Conflict behavior
+
+```text
+local clean   remote newer      → applied, acknowledged
+local dirty   remote unchanged  → left to the push pass (which ran just before)
+local dirty   remote newer      → CONFLICT { aggregate, operation, acknowledgedVersion, remoteVersion }
+                                  local rows untouched · outbox entry untouched (still pending, with the
+                                  push pass's `CONFLICT` + backoff) · remote untouched · the unseen version
+                                  is NOT acknowledged, so no later push can slip past it
+local DELETE  remote newer      → same: the remote row is neither tombstoned nor re-created locally
+local dirty   remote tombstone  → same: the local aggregate is NOT removed
+```
+
+The conflict appears in `pull.conflicts` (and, for the same aggregate, in the push pass's
+`conflicts`). Nothing resolves it yet: that is V1E (§9). Other aggregates of the same pull are
+unaffected.
+
+### 16.7 Tombstones
+
+A remote tombstone is applied with the LOCAL deletion semantics — permanent removal of the row, its
+children cascading — and guarded exactly like a user deletion (PERSISTENCE.md §7a, §7b):
+
+```text
+SERVICE / PRODUCT   removed; Appointment and Sale snapshots are untouched (no FK, by design)
+SALE                removed with its lines; NO stock is replayed — the resulting quantity travels with
+                    the PRODUCT aggregate the other device pushed
+APPOINTMENT         removed unless it holds a payment or a linked Sale → BLOCKED
+CLIENT              removed unless an Appointment or a Sale still references it → BLOCKED
+no local row        nothing to remove; the tombstone version is acknowledged
+local dirty         CONFLICT (§16.6), never removed
+```
+
+Tombstones are applied after the live aggregates and in reverse dependency order (SALE, APPOINTMENT,
+PRODUCT, SERVICE, CLIENT), so "Appointment deleted, then its Client deleted" on another device
+converges in ONE pull. `BLOCKED` writes nothing, does not acknowledge the version and holds the
+cursor: integrity wins over convergence, and the case (history a guard protects, deleted elsewhere)
+cannot be produced by devices running these same guards — it is a V1E matter if it ever appears.
+A removal never records an outbox entry: a pulled deletion is not echoed back as a DELETE push.
+
+### 16.8 No echo — and what the UI sees
+
+`sync_outbox` is written by the stores only, and `remote-apply.ts` never goes through them: after a
+restore or a pull the outbox holds exactly the user's own pending intents, and an idle follow-up run
+sends no push request (tested for restore, upsert and tombstone).
+
+The feature providers hydrate ONCE from the persisted snapshot (PERSISTENCE.md §6). A run that wrote
+operational rows (`didSyncRunChangeLocalData`: `RESTORED`, or a pull with `applied + deleted > 0`)
+is therefore followed by `PersistenceProvider.reloadSnapshot()` — the development reset's remount
+mechanism without touching a row — called by `CloudSyncRunner` and by nothing else. A push-only run
+never remounts anything, which is every run of a single-device Business once restored. Known
+limit: the remount resets navigation and any open draft; with two active devices it can interrupt
+the user. An in-place provider refresh is deliberately deferred (§15.8).
+
+### 16.9 Security review (V1D)
+
+Executed against all four migrations in PGlite with the V1A / V1C harness environment, 41 checks:
+
+```text
+function attributes                              SECURITY INVOKER, STABLE, search_path = '', EXECUTE authenticated only
+anon calls the function / the helper             NO  (42501, no EXECUTE)
+User A pulls Business B                          NO  (42501 — an explicit refusal, never an empty answer)
+authenticated without a uid                      NO  (42501)
+same aggregate id in two Businesses              each owner sees only its own row; nothing of B in A's answer
+empty Business                                   five empty arrays + pulled_at
+complete dataset pushed through the REAL push    every payload comes back identical (canonical compare):
+function                                         columns, cents (9550 / 99 / 13501), barcode zeroes, instants
+                                                 byte for byte, item order, the same phase id under two items,
+                                                 a 0-minute phase, payment, Sale lines; no image column;
+                                                 business_id not repeated
+versions                                         sync_version returned = the one the push acknowledged
+                                                 (child bumps included)
+incremental                                      nothing since the cursor → empty; a PHASE-only edit returns its
+                                                 SERVICE (and only it); a future cursor returns nothing
+tombstones                                       returned with deleted_at + new version, WITHOUT children;
+                                                 included in the complete dataset
+read-only                                        pulling never moves a sync_version
+owner hard DELETE of an aggregate                still NO (42501)
+```
+
+Application side: only the publishable client with the owner's session; errors reduced to stable
+codes; validation errors carry field paths, never values; nothing is logged; no email, user id or
+Business id exists anywhere in the restore / pull path (source-level test).
+
+### 16.10 Pilot restore readiness
+
+```text
+her remote Business holds her uploaded data (§15.7)
+→ fresh install / new phone: migrated, empty production seed
+→ sign in → the owned Business is resolved and the EMPTY local database is bound to it (AUTH.md §5)
+→ first run: local empty + remote populated → RESTORE_REQUIRED — nothing fetched, nothing written
+→ supervised step: approveInitialRestore(db, <her Business UUID>)     explicit (§11.2)
+→ next run: fetch → validate → ONE transaction → RESTORED; the screens re-hydrate from SQLite
+→ from then on: the app works from SQLite as on any device; pushes and pulls are automatic
+```
+
+The supervised step is the user's own confirmation: a release build offers the restore through the
+production prompt (§16.11), so a TestFlight build restores without any development tooling. The path
+is generic: it restores whichever Business the device is bound to, and contains no email, user id,
+Business id or pilot data.
+
+One trap is closed and one remains. Closed: a new phone that signed in BEFORE the old one uploaded
+stored `EMPTY`; it now reaches `RESTORE_REQUIRED` at its next run (§11.0). Remaining: if she creates a
+record on the new phone before restoring, the device is `RECONCILIATION_REQUIRED` (both sides
+populated) and nothing restores until that record is deleted — by design (never merge two unknown
+datasets). The prompt says so, and « Plus tard » is the only way to end up there.
+
+Product images do not come back (V1F): restored Products have no image; the prompt says that too.
+
+### 16.11 Production restore prompt (`src/features/sync/restore/CloudRestoreSheet.tsx`)
+
+The ONE user-facing sync surface of a release build, and it exists for ONE state: `RESTORE_REQUIRED`.
+It is mounted once, in the protected `(app)` layout above the screens, and renders nothing in every
+other state — no bootstrap, upload, reconciliation or debug control ships with it.
+
+```text
+signal      useCloudSyncControl().restoreRequired — the runner's last classification of the bound Business
+            (the stored decision at mount, then each run's BLOCKED / PUSHED / RESTORED result; a FAILED run —
+            a failed restore attempt included — changes nothing). Requires a live, bound session, like every run
+prompt      "Des données existent pour ce compte": what will be restored, for « <Business name> »; Product
+            photos are not part of it; adding data before restoring ends the offer. No aggregate value is shown
+Restaurer mes données   → the SAME sheet switches to its confirmation step naming the exact Business
+            (« Restaurer les données de « … » ? », « Annuler » returns to the explanation). A content step, not a
+            second native Modal: iOS refuses to present a Modal from inside the already presented sheet
+confirm     in one synchronous step: business_profile.id must still be the session's Business AND the stored
+            decision must still be RESTORE_REQUIRED → approveInitialRestore(db, id) (itself refusing a
+            populated or synchronized device) → ONE runNow() of the runner's own single-flight worker, which
+            performs the transactional restore (§16.4) and re-hydrates the app (§16.8) — the prompt disappears
+            with that remount, and ALREADY_SYNCED never shows it again
+Plus tard   (also backdrop / hardware back) hides the prompt for this session. Writes nothing, creates nothing:
+            the device stays RESTORE_REQUIRED (no push, no pull) and the prompt returns at the next launch
+failure     "La restauration n’a pas abouti. Aucune donnée n’a été modifiée sur cet appareil…" + « Réessayer »
+            (the same confirmation again; the approval was kept by restore.ts). Offline session: the primary
+            action is disabled with "Une connexion est nécessaire"
+refused     the re-check or the approval said no (state changed, a record appeared): "La situation a changé…",
+            nothing approved, « Fermer »
+```
+
+Unchanged by it: the worker still refuses any restore without the approval, the approval is still
+Business-scoped, `INITIAL_UPLOAD_REQUIRES_APPROVAL` still has no release-build entry point (a normal
+new account stays empty and local-only until the supervised approval), and the development control
+stays out of release bundles. Tests: `CloudRestoreSheet.test.tsx` (prompt only for
+`RESTORE_REQUIRED`; none for EMPTY / upload-required / reconciliation / synchronized / offline;
+nothing approved before the confirmation; « Plus tard » writes nothing; the confirmation re-check and
+the approval's own refusal; a failed restore leaving SQLite untouched with a working retry; success
+re-hydrating the screens with an empty outbox), `production-boundary.test.ts` (the prompt is the only
+production caller of `approveInitialRestore` and never references the development control).

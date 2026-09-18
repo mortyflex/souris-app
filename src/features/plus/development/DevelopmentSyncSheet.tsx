@@ -1,7 +1,8 @@
-// Souris — development sync control (Cloud Sync V1C, __DEV__ ONLY)
+// Souris — development sync control (Cloud Sync V1C / V1D, __DEV__ ONLY)
 //
-// A supervised test bench for the initial-upload approval and the push on a
-// real device or simulator. It is NOT product UI:
+// A supervised test bench for the initial-upload approval, the new-device
+// restore approval, and the push / pull on a real device or simulator. It is
+// NOT product UI:
 //
 //   * reachable only from the « Développement » section of Plus, which exists
 //     only under `__DEV__`; this module is `require`d inside a `__DEV__`
@@ -15,6 +16,11 @@
 //     exact Business name and id, and calls the existing
 //     `approveInitialUpload(db, thatId)`. Nothing approves on its own: not
 //     opening the sheet, not "Run sync now", not a failed attempt;
+//   * "Approve restore" is its mirror image for an EMPTY device: enabled ONLY
+//     when the stored state is RESTORE_REQUIRED, same second confirmation,
+//     calls `approveInitialRestore(db, thatId)`. Approving restores nothing by
+//     itself: the NEXT run ("Run sync now" included) performs the
+//     transactional restore, and a failed restore keeps the approval;
 //   * "Run sync now" triggers the runner's OWN single-flight worker, under the
 //     same live-session conditions as every automatic run;
 //   * it displays state codes and counts only, and logs nothing.
@@ -22,7 +28,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { approveInitialUpload } from '@/persistence/sync/bootstrap';
+import { approveInitialRestore, approveInitialUpload } from '@/persistence/sync/bootstrap';
 import { useCloudSyncControl } from '@/providers/CloudSyncRunner';
 import { usePersistence } from '@/providers/PersistenceProvider';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -33,11 +39,35 @@ import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
+  canApproveInitialRestore,
   canApproveInitialUpload,
   formatSyncRunResult,
   readDevelopmentSyncStatus,
+  readLastSyncResult,
+  rememberLastSyncResult,
   type DevelopmentSyncStatus,
 } from './sync-status';
+
+type ApprovalKind = 'UPLOAD' | 'RESTORE';
+
+const APPROVAL = {
+  UPLOAD: {
+    allowed: canApproveInitialUpload,
+    title: 'Approuver l’envoi initial ?',
+    action: 'Approve initial upload',
+    body: (name: string, id: string) =>
+      `TOUTES les données locales de cet appareil seront envoyées vers le Business « ${name} » (${id}). À faire uniquement lors d’une migration supervisée.`,
+    approved: 'APPROVAL · APPROVED · run sync to upload',
+  },
+  RESTORE: {
+    allowed: canApproveInitialRestore,
+    title: 'Approuver la restauration ?',
+    action: 'Approve restore',
+    body: (name: string, id: string) =>
+      `La base locale VIDE de cet appareil sera reconstruite à partir des données distantes du Business « ${name} » (${id}). Rien n’est restauré tant qu’une sync n’est pas lancée.`,
+    approved: 'RESTORE APPROVAL · APPROVED · run sync to restore',
+  },
+} as const;
 
 interface DevelopmentSyncSheetProps {
   readonly visible: boolean;
@@ -48,20 +78,29 @@ export function DevelopmentSyncSheet({ visible, onClose }: DevelopmentSyncSheetP
   const { database } = usePersistence();
   const { runNow } = useCloudSyncControl();
   const [status, setStatus] = useState<DevelopmentSyncStatus>(() => readDevelopmentSyncStatus(database));
-  const [lastResult, setLastResult] = useState<string>();
+  const [lastResult, setLastResult] = useState<string | undefined>(readLastSyncResult);
   const [running, setRunning] = useState(false);
-  /** The Business the second confirmation is currently asking about. */
-  const [confirming, setConfirming] = useState<DevelopmentSyncStatus['business']>();
+  /** What the second confirmation is currently asking about, and for which Business. */
+  const [confirming, setConfirming] = useState<{
+    readonly kind: ApprovalKind;
+    readonly business: NonNullable<DevelopmentSyncStatus['business']>;
+  }>();
 
   const refresh = useCallback(() => setStatus(readDevelopmentSyncStatus(database)), [database]);
 
   if (!__DEV__) return null;
 
+  // A restore or an applied pull remounts this sheet: the line outlives it.
+  const showResult = (line: string) => {
+    rememberLastSyncResult(line);
+    setLastResult(line);
+  };
+
   const runSyncNow = async () => {
     if (!__DEV__ || !runNow || running) return;
     setRunning(true);
     try {
-      setLastResult(formatSyncRunResult(await runNow()));
+      showResult(formatSyncRunResult(await runNow()));
     } finally {
       setRunning(false);
       refresh();
@@ -69,10 +108,12 @@ export function DevelopmentSyncSheet({ visible, onClose }: DevelopmentSyncSheetP
   };
 
   // First press: re-read the state and only ASK. Nothing is approved here.
-  const requestApproval = () => {
+  const requestApproval = (kind: ApprovalKind) => {
     const current = readDevelopmentSyncStatus(database);
     setStatus(current);
-    if (__DEV__ && canApproveInitialUpload(current)) setConfirming(current.business);
+    if (__DEV__ && current.business && APPROVAL[kind].allowed(current)) {
+      setConfirming({ kind, business: current.business });
+    }
   };
 
   // Second, explicit confirmation: approve exactly the Business that was shown.
@@ -80,20 +121,25 @@ export function DevelopmentSyncSheet({ visible, onClose }: DevelopmentSyncSheetP
     const target = confirming;
     setConfirming(undefined);
     if (!__DEV__ || !target) return;
+    const label = target.kind === 'UPLOAD' ? 'APPROVAL' : 'RESTORE APPROVAL';
     const current = readDevelopmentSyncStatus(database);
-    if (!canApproveInitialUpload(current) || current.business?.id !== target.id) {
-      setLastResult('APPROVAL · REFUSED · STATE_CHANGED');
+    if (!APPROVAL[target.kind].allowed(current) || current.business?.id !== target.business.id) {
+      showResult(`${label} · REFUSED · STATE_CHANGED`);
       setStatus(current);
       return;
     }
-    const result = approveInitialUpload(database, target.id);
-    setLastResult(
-      result.status === 'APPROVED' ? 'APPROVAL · APPROVED · run sync to upload' : `APPROVAL · REFUSED · ${result.reason}`,
+    const result =
+      target.kind === 'UPLOAD'
+        ? approveInitialUpload(database, target.business.id)
+        : approveInitialRestore(database, target.business.id);
+    showResult(
+      result.status === 'APPROVED' ? APPROVAL[target.kind].approved : `${label} · REFUSED · ${result.reason}`,
     );
     refresh();
   };
 
   const approvable = canApproveInitialUpload(status);
+  const restorable = canApproveInitialRestore(status);
 
   return (
     <BottomSheet
@@ -127,6 +173,22 @@ export function DevelopmentSyncSheet({ visible, onClose }: DevelopmentSyncSheetP
           value={status.approvalPending ? 'DONNÉE — en attente de la prochaine sync' : 'aucune en attente'}
         />
         <DetailRow
+          label="Restauration"
+          testID="development-sync-restore"
+          value={
+            status.restoreApprovalPending
+              ? 'APPROUVÉE — en attente de la prochaine sync'
+              : status.decision === 'RESTORE_REQUIRED'
+                ? 'REQUISE — base locale vide, Business distant peuplé'
+                : 'aucune en attente'
+          }
+        />
+        <DetailRow
+          label="Curseur pull"
+          testID="development-sync-pull-cursor"
+          value={status.pullCursor?.toISOString() ?? '—'}
+        />
+        <DetailRow
           label="Outbox"
           testID="development-sync-outbox"
           value={`${status.pendingOutboxCount} en attente · ${status.failedOutboxCount} en échec · ${status.acknowledgedCount} acquittés`}
@@ -144,9 +206,16 @@ export function DevelopmentSyncSheet({ visible, onClose }: DevelopmentSyncSheetP
         />
         <AppButton
           disabled={!approvable}
-          onPress={requestApproval}
+          onPress={() => requestApproval('UPLOAD')}
           testID="development-sync-approve"
           title="Approve initial upload"
+          variant="dangerSoft"
+        />
+        <AppButton
+          disabled={!restorable}
+          onPress={() => requestApproval('RESTORE')}
+          testID="development-sync-approve-restore"
+          title="Approve restore"
           variant="dangerSoft"
         />
         <AppButton onPress={refresh} testID="development-sync-refresh" title="Actualiser" variant="tertiary" />
@@ -155,18 +224,18 @@ export function DevelopmentSyncSheet({ visible, onClose }: DevelopmentSyncSheetP
       <ConfirmationDialog
         body={
           confirming
-            ? `TOUTES les données locales de cet appareil seront envoyées vers le Business « ${confirming.name} » (${confirming.id}). À faire uniquement lors d’une migration supervisée.`
+            ? APPROVAL[confirming.kind].body(confirming.business.name, confirming.business.id)
             : undefined
         }
         cancelLabel="Annuler"
         cancelTestID="development-sync-approve-cancel"
-        confirmLabel="Approve initial upload"
+        confirmLabel={confirming ? APPROVAL[confirming.kind].action : 'Approve'}
         confirmTestID="development-sync-approve-confirm"
         eyebrow="DÉVELOPPEMENT"
         onCancel={() => setConfirming(undefined)}
         onConfirm={confirmApproval}
         testID="development-sync-approve-dialog"
-        title="Approuver l’envoi initial ?"
+        title={confirming ? APPROVAL[confirming.kind].title : 'Approuver ?'}
         tone="destructive"
         visible={confirming !== undefined}
       />

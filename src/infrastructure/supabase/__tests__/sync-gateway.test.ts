@@ -87,6 +87,27 @@ describe('createSupabaseSyncGateway', () => {
     await expect(createSupabaseSyncGateway(bad.client).countBusinessAggregates(BUSINESS_ID)).rejects.toMatchObject({ code: 'UNKNOWN' });
   });
 
+  it('reads through the ONE pull rpc: NULL for the complete dataset, an ISO instant for an incremental read — and returns the answer unvalidated', async () => {
+    const answer = { pulled_at: '2026-09-18T09:00:00.000Z', clients: [], services: [], products: [], appointments: [], sales: [] };
+    const { client, rpc } = createClient({ data: answer, error: null });
+    const gateway = createSupabaseSyncGateway(client);
+
+    expect(await gateway.pullBusinessAggregates(BUSINESS_ID, undefined)).toBe(answer);
+    expect(rpc).toHaveBeenLastCalledWith('sync_pull_business_aggregates', { p_business_id: BUSINESS_ID, p_since: null });
+
+    await gateway.pullBusinessAggregates(BUSINESS_ID, new Date('2026-09-18T08:55:00.000Z'));
+    expect(rpc).toHaveBeenLastCalledWith('sync_pull_business_aggregates', {
+      p_business_id: BUSINESS_ID,
+      p_since: '2026-09-18T08:55:00.000Z',
+    });
+
+    // Not deployed yet (PGRST202), not the owner, offline: stable codes, no server message.
+    const missing = createClient({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    await expect(createSupabaseSyncGateway(missing.client).pullBusinessAggregates(BUSINESS_ID, undefined)).rejects.toMatchObject({ code: 'UNKNOWN', detail: 'PGRST202' });
+    const forbidden = createClient({ data: null, error: { code: '42501', message: 'sync: not the owner of this Business' } });
+    await expect(createSupabaseSyncGateway(forbidden.client).pullBusinessAggregates(BUSINESS_ID, undefined)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
   it('throws stable failures', async () => {
     const offline = createClient({ data: null, error: { code: '', message: 'TypeError: Network request failed' } });
     await expect(createSupabaseSyncGateway(offline.client).pushAggregate(request)).rejects.toMatchObject({ code: 'NETWORK' });

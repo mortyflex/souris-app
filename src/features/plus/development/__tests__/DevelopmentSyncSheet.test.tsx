@@ -8,18 +8,22 @@ import {
   createRemoteBusiness,
   REMOTE_BUSINESS_ID,
 } from '@/features/business/testing/fake-business-gateway';
-import { bootstrapPersistence } from '@/persistence/bootstrap';
+import { bootstrapPersistence, loadSnapshot } from '@/persistence/bootstrap';
 import type { SourisDatabase } from '@/persistence/database';
 import { readMetadata } from '@/persistence/metadata';
 import { bindLocalDatabaseToBusiness } from '@/persistence/stores/business-profile';
 import {
+  approveInitialRestore,
   approveInitialUpload,
+  readInitialRestoreApproval,
   readInitialUploadApproval,
+  readSyncBootstrapRecord,
   SYNC_INITIAL_UPLOAD_APPROVAL_KEY,
   writeSyncBootstrapRecord,
   type SyncBootstrapDecision,
 } from '@/persistence/sync/bootstrap';
 import { countSyncOutboxRows } from '@/persistence/sync/outbox';
+import { createSyncPushWorker } from '@/persistence/sync/push-worker';
 import { createFakeSyncRemote, type FakeSyncRemote } from '@/persistence/testing/fake-sync-remote';
 import { createTestSeed } from '@/persistence/testing/fixtures';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
@@ -27,14 +31,22 @@ import { CloudSyncRunner } from '@/providers/CloudSyncRunner';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 import { DevelopmentSyncSheet } from '../DevelopmentSyncSheet';
+import { rememberLastSyncResult } from '../sync-status';
 
 // The REAL approval, observable: the control must call exactly this function.
 jest.mock('@/persistence/sync/bootstrap', () => {
   const actual = jest.requireActual<typeof import('@/persistence/sync/bootstrap')>('@/persistence/sync/bootstrap');
-  return { ...actual, approveInitialUpload: jest.fn(actual.approveInitialUpload) };
+  return {
+    ...actual,
+    approveInitialUpload: jest.fn(actual.approveInitialUpload),
+    approveInitialRestore: jest.fn(actual.approveInitialRestore),
+  };
 });
 
 const approveSpy = jest.mocked(approveInitialUpload);
+const approveRestoreSpy = jest.mocked(approveInitialRestore);
+
+const emptySeed = () => createTestSeed({ clients: [], services: [], products: [], appointments: [] });
 
 function openDatabase({ bound }: { readonly bound: boolean }): SourisDatabase {
   const database = openTestDatabase();
@@ -84,6 +96,8 @@ const isDisabled = (view: View, testID: string) =>
 describe('DevelopmentSyncSheet', () => {
   beforeEach(() => {
     approveSpy.mockClear();
+    approveRestoreSpy.mockClear();
+    rememberLastSyncResult(undefined);
   });
 
   it('shows the bound Business, the bootstrap state and the outbox — and neither opening it nor running sync approves anything', async () => {
@@ -144,7 +158,8 @@ describe('DevelopmentSyncSheet', () => {
     await press(view, 'development-sync-run');
     await waitFor(() =>
       expect(text(view, 'development-sync-result')).toBe(
-        'PUSHED · INITIAL_UPLOAD · enqueued 6 · pushed 6 · failed 0 · conflicts 0',
+        // The pull that follows the upload reads the six aggregates back and recognizes every version.
+        'PUSHED · INITIAL_UPLOAD · enqueued 6 · pushed 6 · failed 0 · conflicts 0 · pull fetched 6 · applied 0 · deleted 0 · skipped 6 · pull failed 0 · pull conflicts 0 · cursor advanced',
       ),
     );
     expect(remote.list(REMOTE_BUSINESS_ID)).toHaveLength(6);
@@ -180,6 +195,91 @@ describe('DevelopmentSyncSheet', () => {
     expect(approveSpy).not.toHaveBeenCalled();
     // No runner in this tree: a run is not possible either.
     expect(isDisabled(view, 'development-sync-run')).toBe(true);
+  });
+
+  it('restore: shows RESTORE_REQUIRED, approves only after the second confirmation for the Business shown, and "Run sync now" rebuilds SQLite', async () => {
+    // Another device uploaded the Business…
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = openDatabase({ bound: true });
+    expect(approveInitialUpload(source, REMOTE_BUSINESS_ID).status).toBe('APPROVED');
+    await createSyncPushWorker({ database: source, gateway: remote }).run(REMOTE_BUSINESS_ID);
+    expect(remote.list(REMOTE_BUSINESS_ID)).toHaveLength(6);
+    approveSpy.mockClear();
+
+    // …and this one is a fresh install bound to it.
+    const database = openTestDatabase();
+    bootstrapPersistence(database, emptySeed);
+    bindLocalDatabaseToBusiness(database, createRemoteBusiness());
+    const view = await renderWithRunner(database, remote);
+    await waitFor(() => expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('RESTORE_REQUIRED'));
+    await press(view, 'development-sync-refresh');
+
+    expect(text(view, 'development-sync-state')).toBe('RESTORE_REQUIRED');
+    expect(text(view, 'development-sync-restore')).toContain('REQUISE');
+    expect(isDisabled(view, 'development-sync-approve')).toBe(true); // never an upload from an empty device
+    expect(isDisabled(view, 'development-sync-approve-restore')).toBe(false);
+
+    // Running sync without the approval restores nothing.
+    await press(view, 'development-sync-run');
+    await waitFor(() => expect(text(view, 'development-sync-result')).toBe('BLOCKED · RESTORE_REQUIRED'));
+    expect(loadSnapshot(database).clients).toEqual([]);
+    expect(remote.pulls).toEqual([]);
+
+    // First press only ASKS, naming the exact Business; cancelling approves nothing.
+    await press(view, 'development-sync-approve-restore');
+    const body = view.getByText(/sera reconstruite à partir des données distantes/).props.children as string;
+    expect(body).toContain('« Maison Léa »');
+    expect(body).toContain(`(${REMOTE_BUSINESS_ID})`);
+    await press(view, 'development-sync-approve-cancel');
+    expect(approveRestoreSpy).not.toHaveBeenCalled();
+    expect(readInitialRestoreApproval(database, REMOTE_BUSINESS_ID)).toBeUndefined();
+
+    await press(view, 'development-sync-approve-restore');
+    await press(view, 'development-sync-approve-confirm');
+    expect(approveRestoreSpy).toHaveBeenCalledTimes(1);
+    expect(approveRestoreSpy).toHaveBeenCalledWith(database, REMOTE_BUSINESS_ID);
+    expect(approveSpy).not.toHaveBeenCalled();
+    expect(text(view, 'development-sync-result')).toBe('RESTORE APPROVAL · APPROVED · run sync to restore');
+    expect(text(view, 'development-sync-restore')).toContain('APPROUVÉE');
+    expect(isDisabled(view, 'development-sync-approve-restore')).toBe(true);
+    // Approving restores nothing by itself.
+    expect(loadSnapshot(database).clients).toEqual([]);
+    expect(remote.pulls).toEqual([]);
+
+    await press(view, 'development-sync-run');
+    await waitFor(() => expect(loadSnapshot(database).clients).toHaveLength(1));
+    const restored = loadSnapshot(database);
+    expect([restored.services.length, restored.products.length, restored.appointments.length]).toEqual([2, 2, 1]);
+    expect(countSyncOutboxRows(database)).toBe(0);
+    expect(readInitialRestoreApproval(database, REMOTE_BUSINESS_ID)).toBeUndefined();
+
+    // The restore remounted the tree (this sheet included): the state and the result line survive it.
+    await waitFor(() => expect(text(view, 'development-sync-state')).toBe('ALREADY_SYNCED'));
+    expect(text(view, 'development-sync-result')).toBe(
+      'RESTORED · clients 1 · services 2 · products 2 · appointments 1 · sales 0 · tombstones 0',
+    );
+    expect(text(view, 'development-sync-outbox')).toBe('0 en attente · 0 en échec · 6 acquittés');
+    expect(text(view, 'development-sync-pull-cursor')).toMatch(/^2026-/);
+    expect(isDisabled(view, 'development-sync-approve-restore')).toBe(true);
+  });
+
+  it.each<SyncBootstrapDecision | undefined>([
+    undefined,
+    'EMPTY',
+    'INITIAL_UPLOAD_REQUIRES_APPROVAL',
+    'INITIAL_UPLOAD',
+    'ALREADY_SYNCED',
+    'RECONCILIATION_REQUIRED',
+  ])('keeps the restore approval disabled and inert in state %s', async (decision) => {
+    const database = openDatabase({ bound: true });
+    if (decision) {
+      writeSyncBootstrapRecord(database, { businessId: REMOTE_BUSINESS_ID, decision, decidedAt: new Date() });
+    }
+    const view = await renderAlone(database);
+    expect(isDisabled(view, 'development-sync-approve-restore')).toBe(true);
+    await press(view, 'development-sync-approve-restore');
+    expect(view.queryByTestId('development-sync-approve-confirm')).toBeNull();
+    expect(approveRestoreSpy).not.toHaveBeenCalled();
   });
 
   it('offers nothing on an unbound database', async () => {
@@ -224,6 +324,7 @@ describe('DevelopmentSyncSheet', () => {
       const view = await renderAlone(database);
       expect(view.queryByTestId('development-sync-sheet')).toBeNull();
       expect(view.queryByTestId('development-sync-approve')).toBeNull();
+      expect(view.queryByTestId('development-sync-approve-restore')).toBeNull();
       expect(view.queryByTestId('development-sync-run')).toBeNull();
     } finally {
       flags.__DEV__ = true;

@@ -420,6 +420,16 @@ Provider public APIs are unchanged except:
 Derived values (activity, totals, purchase history, Agenda layout, search, drafts, UI state) are
 never persisted; they are recomputed from the hydrated source entities.
 
+**Re-hydration (Cloud Sync V1D).** Providers hydrate once, and until V1D every operational write
+came from a provider, so memory and SQLite could not diverge. A new-device restore or an applied pull
+writes operational rows BELOW the providers (§7e). `PersistenceValue.reloadSnapshot()` closes that
+gap: it reloads the snapshot from the open database and bumps the provider generation, remounting
+the feature providers on the fresh state — the development reset's mechanism, without touching a
+row. Its ONLY caller is `CloudSyncRunner`, after a run for which `didSyncRunChangeLocalData` is true
+(`RESTORED`, or a pull that applied or removed at least one aggregate); a push-only run never
+remounts anything. A load failure lands in the same recoverable `failed` state as any bootstrap
+failure. Known limit: the remount resets navigation and open drafts (CLOUD_SYNC.md §16.8).
+
 ---
 
 ## 7. Mutation Discipline
@@ -619,6 +629,55 @@ between them, so no transaction is ever held open across a request and store mut
 freely with a run — which is exactly what the conditional settle is for. The initial enqueue is one
 `INSERT … SELECT` per aggregate table.
 
+### 7e. Restore and pull — the only writers of operational rows outside the stores (Cloud Sync V1D)
+
+Contract in CLOUD_SYNC.md §16. No schema change (still v8). Two modules write operational rows on
+behalf of the remote, both through `sync/remote-apply.ts` and NEVER through the stores — a store
+mutation records an outbox entry, and a change that came from the remote must not be pushed back:
+
+```text
+sync/remote-apply.ts   applyRemoteAggregate   parent row UPDATED in place (rowid / list order kept) or INSERTed;
+                                              child set REPLACED (DELETE + INSERT, cascade for appointment phases);
+                                              integer cents, ids, child ids, positions copied as received;
+                                              products.image_uri never written (NULL on insert, kept on update);
+                                              clients.birth_date never touched; business_id = the bound Business;
+                                              a row with that id under another Business id → refused;
+                                              an Appointment / Sale whose Client / Appointment is absent → refused
+                       applyRemoteTombstone   DELETE of the parent row (children cascade) under the SAME guards as a
+                                              user deletion (§7a, §7b): referenced Client / paid or Sale-linked
+                                              Appointment → BLOCKED, nothing written. No stock is replayed
+                       neither writes sync_outbox nor sync_state — the caller owns the transaction
+
+sync/restore.ts        restoreBusinessSnapshot — ONE transaction, preconditions re-read INSIDE it
+reads    business_profile.id · souris_metadata['sync_initial_restore_approval'] · sync_state (must be empty for
+         the Business) · the five aggregate tables (must ALL be empty)
+writes   every live remote aggregate (CLIENT → SERVICE → PRODUCT → APPOINTMENT → SALE, remote creation order)
+         sync_state ← one row per remote aggregate, tombstones included, with the REMOTE sync_version
+         sync_outbox ← DELETE WHERE business_id = ?        (leftover intents of an empty, never-synced device)
+         souris_metadata['sync_pull_cursor'] ← { businessId, pulledAt }   (server time)
+         souris_metadata['sync_bootstrap']   ← ALREADY_SYNCED
+         souris_metadata['sync_initial_restore_approval'] DELETED
+         any throw ⇒ full rollback: the database stays empty, RESTORE_REQUIRED, approval pending
+
+sync/pull-worker.ts    one transaction PER aggregate, decided and written in one synchronous turn
+reads    souris_metadata['sync_pull_cursor'] (since = cursor − 5 min) · sync_state.remote_version ·
+         sync_outbox (an entry = locally DIRTY ⇒ conflict, nothing written)
+writes   clean + live      applyRemoteAggregate + sync_state ← remote version
+         clean + tombstone applyRemoteTombstone + sync_state ← tombstone version   (BLOCKED ⇒ nothing)
+         souris_metadata['sync_pull_cursor'] ← pulledAt, only when no aggregate was left unapplied
+         NEVER sync_outbox
+```
+
+The remote answer is validated as a whole by `sync/remote-snapshot.ts` (pure, no database) before
+either module writes anything. `approveInitialRestore` (`sync/bootstrap.ts`) is the only writer of the
+restore approval: one transaction that checks the binding, refuses a synchronized device and refuses
+any populated database; its callers are the production restore prompt (`features/sync/restore`,
+CLOUD_SYNC.md §16.11) and the `__DEV__` development sync control, each behind a confirmation naming
+the Business.
+
+The first-run seed marker is untouched by a restore: a fresh install already ran its (empty)
+production seed, so a restored database is never re-seeded.
+
 ---
 
 ## 8. Sales Atomicity
@@ -714,10 +773,10 @@ Development builds show a `Développement › Réinitialiser les données locale
 
 ```text
 DELETE every operational table + sync_outbox + sync_state + remove seed_version + remove sync_bootstrap
-  + remove sync_initial_upload_approval
+  + remove sync_initial_upload_approval + remove sync_initial_restore_approval + remove sync_pull_cursor
   (one transaction; business_profile is KEPT — pending intents, acknowledged revisions, the
-   first-sync decision and any initial-upload approval describe rows the reset removes, so they go
-   with them. The next sync run classifies both sides again: development fixtures are a STOP
+   first-sync decision, the pull cursor and any initial-upload / initial-restore approval describe
+   rows the reset removes, so they go with them. The next sync run classifies both sides again: development fixtures are a STOP
    whether the remote Business is populated or empty — never an upload under a stale decision or
    a stale approval)
 → delete <documents>/products/                       (owned images only)
@@ -731,7 +790,9 @@ way to load the pilot data and fixtures.
 
 The same `Développement` section holds `Sync V1C (test)`, the development sync control
 (CLOUD_SYNC.md §15.9): it only reads the sync bookkeeping and calls the existing
-`approveInitialUpload` / push worker — no store, no schema and no reset behavior changed.
+`approveInitialUpload` / `approveInitialRestore` / sync worker — no store, no schema and no reset
+behavior changed. After a reset on a device whose Business is populated remotely, the reseeded
+fixtures make it `RECONCILIATION_REQUIRED`: a development reset is never followed by a restore.
 
 The schema is kept. Alternatives: uninstall the app, or delete `souris.db` from the app's SQLite
 directory with a device file browser.
@@ -789,7 +850,28 @@ the upload, offline, lost acknowledgement retried idempotently, bounded backoff 
 conflicts leaving the remote untouched, tombstone DELETE, never-remote DELETE, UPSERT of a vanished row, recreation
 after a tombstone; `sync-gateway.test.ts`: the Supabase adapter and its error mapping; `CloudSyncRunner.test.tsx`:
 live-bound-session gating, no upload before approval from launch / foreground / tick, offline / signed-out /
-unconfigured silence, foreground and tick triggers), the source-hygiene guards (no literal NUL
+unconfigured silence, foreground and tick triggers), the Cloud Sync V1D restore and pull (§7e —
+`sync-pull-restore.test.ts`, two real SQLite devices of one Business against the same in-memory remote:
+empty local + populated remote → RESTORE_REQUIRED with the dataset never fetched before the approval; a stored
+EMPTY discovering a Business populated meanwhile; the approval recording only, Business-scoped, surviving a
+restart, refused on a populated or synchronized device; a record created before the restore →
+RECONCILIATION_REQUIRED, never overwritten; the full restore of the five families with children, equal to
+the source device's snapshot and byte-equal at the SQL level (cents, child ids, positions, payments),
+archived Client, cancellation, checkout, standalone and Appointment-linked Sales, tombstone not resurrected,
+no image path; `sync_state` = the remote versions, empty outbox, ALREADY_SYNCED, cursor, consumed approval;
+no echo and pushes under the restored versions afterwards; leftover outbox intents dropped; a SQLite failure
+in the MIDDLE of the restore transaction, offline / undeployed function, eight invalid datasets and a record
+created during the fetch each leaving the database unchanged with the approval pending, then a successful
+retry after a restart; Business isolation (same id in two Businesses, FORBIDDEN for a non-owner, Business
+mismatch skipped); incremental pull applying remote revisions to clean aggregates in place, acknowledging the
+returned versions and creating no outbox entry; the cursor-minus-overlap read; a failed or invalid pull
+applying nothing without disturbing the push; a missing reference holding the cursor; remote newer + local
+dirty, a remote tombstone against a dirty aggregate and a local DELETE against a remote edit each leaving
+BOTH sides untouched; tombstones removing clean aggregates with their children, acknowledged without echo,
+guarded by the local deletion rules, and converging in one pull in reverse dependency order; the snapshot
+validator's normalization, payload-less tombstones and value-free errors), `CloudSyncRunner.test.tsx` again for
+no automatic restore from launch / foreground / run and the screens re-hydrating after a restore or an
+applied pull but never after a push-only run, the source-hygiene guards (no literal NUL
 byte in a store file; no store SQL statement naming the euro `price` / `unit_price` columns dropped by
 v8), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.
@@ -802,8 +884,9 @@ rollback / replacement / removal / external-asset safety, and the provider boots
 this local layer must keep true for the later phases:
 
 - SQLite stays the operational source of truth; screens never query Supabase for operational data.
-  The V1C push worker only READS operational rows (raw, §7d); the V1D pull will write them through
-  the existing stores;
+  The V1C push worker only READS operational rows (raw, §7d); the V1D restore and pull WRITE them —
+  raw as well, through `sync/remote-apply.ts` and deliberately NOT through the stores, whose outbox
+  marking would push every remote change straight back (§7e);
 - the remote schema mirrors this one table for table, with two boundary conversions owned by
   the sync layer: `clients` receives the bound Business id (the local table has none) and
   `products.image_uri` is never uploaded;
@@ -821,4 +904,8 @@ this local layer must keep true for the later phases:
   acknowledged remote version (§7c, CLOUD_SYNC.md §10);
 - V1C added the push worker (§7d, CLOUD_SYNC.md §15), their first runtime consumer: a one-way upload
   through one atomic, version-conditional remote function. It reads aggregates raw and writes only
-  sync bookkeeping; the stores, providers and screens are unchanged. Pull / restore is V1D.
+  sync bookkeeping; the stores, providers and screens are unchanged;
+- V1D added the read side (§7e, CLOUD_SYNC.md §16): an explicitly approved, single-transaction
+  new-device restore and an incremental pull that only ever writes locally CLEAN aggregates. The
+  stores and screens are unchanged; the persistence boundary gained `reloadSnapshot()` (§6) so the
+  providers re-hydrate after such a run. `products.image_uri` stays local-only in both directions.

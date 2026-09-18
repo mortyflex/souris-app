@@ -481,8 +481,11 @@ The domain stays independent from it: `src/persistence` depends on domain types 
 domain mapping happens exclusively inside the stores. Screens never see SQL or rows.
 
 Schema v3 adds the local account binding (`business_profile`, one row). Operational cloud sync is
-specified in `CLOUD_SYNC.md`: the local outbox (V1B) and the one-way push worker
-(`src/persistence/sync/`, V1C) exist; pull, restore and multi-device use remain deferred.
+specified in `CLOUD_SYNC.md`: the local outbox (V1B), the push worker (V1C) and the pull / restore
+side (V1D) live in `src/persistence/sync/`; SQLite stays the only thing screens read. The single
+sync surface a release build shows is the restore prompt (`src/features/sync/restore/`), offered
+only to an empty device whose Business already holds data; conflict resolution, Product image sync
+and any other sync UI remain deferred.
 
 ---
 

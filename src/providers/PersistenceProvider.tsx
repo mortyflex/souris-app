@@ -28,7 +28,7 @@ import {
 import { StyleSheet, View } from 'react-native';
 
 import { getProductImagesDirectoryUri } from '@/features/products/images/product-image-storage';
-import { bootstrapPersistence, type PersistedSnapshot } from '@/persistence/bootstrap';
+import { bootstrapPersistence, loadSnapshot, type PersistedSnapshot } from '@/persistence/bootstrap';
 import type { SourisDatabase } from '@/persistence/database';
 import { clearPersistedDataForDevelopment } from '@/persistence/development-reset';
 import type { LocalFiles } from '@/persistence/files/local-files';
@@ -50,6 +50,15 @@ export interface PersistenceValue {
    * providers. No-op in production builds.
    */
   readonly resetForDevelopment: () => void;
+  /**
+   * Re-hydrates the snapshot from SQLite and remounts the feature providers
+   * (same mechanism as the development reset, without touching any row). The
+   * ONLY caller is the cloud sync runner, after a run that wrote operational
+   * rows on behalf of the remote (a new-device restore, an applied pull):
+   * providers hydrate once, so they would otherwise keep showing — and keep
+   * editing from — the state that preceded it. A push-only run never calls it.
+   */
+  readonly reloadSnapshot: () => void;
 }
 
 type BootstrapState =
@@ -140,6 +149,20 @@ export function PersistenceProvider({
     bootstrap(() => createSeedRef.current(), { freshConnection: true });
   }, [bootstrap]);
 
+  const reloadSnapshot = useCallback(() => {
+    const database = databaseRef.current;
+    if (!database) return;
+    try {
+      const snapshot = loadSnapshot(database);
+      generation.current += 1;
+      setState({ status: 'ready', database, snapshot, generation: generation.current });
+    } catch (error) {
+      closeQuietly(databaseRef.current);
+      databaseRef.current = undefined;
+      setState({ status: 'failed', error });
+    }
+  }, []);
+
   const resetForDevelopment = useCallback(() => {
     const database = databaseRef.current;
     if (!__DEV__ || !database) return;
@@ -167,7 +190,13 @@ export function PersistenceProvider({
   return (
     <PersistenceContext.Provider
       key={state.generation}
-      value={{ database: state.database, files, snapshot: state.snapshot, resetForDevelopment }}
+      value={{
+        database: state.database,
+        files,
+        snapshot: state.snapshot,
+        resetForDevelopment,
+        reloadSnapshot,
+      }}
     >
       {children}
     </PersistenceContext.Provider>

@@ -1,8 +1,9 @@
-// Souris — remote sync boundary (Cloud Sync V1C)
+// Souris — remote sync boundary (Cloud Sync V1C push, V1D pull / restore)
 //
-// The ONLY shape in which operational data leaves the device. Production
-// binds it to the two Supabase RPCs of
-// supabase/migrations/20260917120000_create_sync_push_functions.sql
+// The ONLY shape in which operational data leaves or reaches the device.
+// Production binds it to the Supabase RPCs of
+// supabase/migrations/20260917120000_create_sync_push_functions.sql and
+// supabase/migrations/20260917200000_create_sync_pull_function.sql
 // (src/infrastructure/supabase/sync-gateway.ts); tests bind it to an
 // in-memory remote with the same semantics (testing/fake-sync-remote.ts).
 //
@@ -104,6 +105,37 @@ export type RemoteAggregatePayload =
   | RemoteProductPayload
   | RemoteSalePayload;
 
+/**
+ * One aggregate as the remote holds it (V1D). `payload` is the same shape a
+ * push sends — so a pulled aggregate and a pushed one compare field for field
+ * — with every instant normalized to the local ISO-8601 UTC form. A remote
+ * TOMBSTONE has no payload at all: whatever columns or children the remote
+ * still stores for it must never be read as live data (CLOUD_SYNC.md §8).
+ */
+export interface RemotePulledAggregate<Payload> {
+  readonly id: string;
+  /** Server-assigned `sync_version` of the row (>= 1). */
+  readonly syncVersion: number;
+  readonly payload: Payload | undefined;
+}
+
+/**
+ * A VALIDATED remote read of one Business (`parseRemoteBusinessSnapshot`):
+ * the complete dataset (restore) or the aggregates changed since an instant
+ * (incremental pull), tombstones included, each family in the remote
+ * creation order. One consistent remote snapshot: every aggregate comes with
+ * its complete ordered child set.
+ */
+export interface RemoteBusinessSnapshot {
+  /** Server time of the read; the next incremental pull starts from it (minus an overlap). */
+  readonly pulledAt: Date;
+  readonly clients: readonly RemotePulledAggregate<RemoteClientPayload>[];
+  readonly services: readonly RemotePulledAggregate<RemoteServicePayload>[];
+  readonly products: readonly RemotePulledAggregate<RemoteProductPayload>[];
+  readonly appointments: readonly RemotePulledAggregate<RemoteAppointmentPayload>[];
+  readonly sales: readonly RemotePulledAggregate<RemoteSalePayload>[];
+}
+
 export interface RemotePushRequest {
   /** The bound Business UUID. Every remote operation is scoped to it. */
   readonly businessId: string;
@@ -155,4 +187,12 @@ export interface SyncRemoteGateway {
   countBusinessAggregates(businessId: string): Promise<number>;
   /** Writes ONE aggregate atomically, conditionally on `expectedVersion`. Throws `SyncRemoteError`. */
   pushAggregate(request: RemotePushRequest): Promise<RemotePushResult>;
+  /**
+   * Reads the aggregates of the Business changed after `since` (undefined =
+   * the COMPLETE dataset), tombstones included, in ONE consistent remote
+   * snapshot. Returns the UNVALIDATED wire JSON: nothing of it may touch
+   * SQLite before `parseRemoteBusinessSnapshot` accepted the whole of it.
+   * Throws `SyncRemoteError`.
+   */
+  pullBusinessAggregates(businessId: string, since: Date | undefined): Promise<unknown>;
 }

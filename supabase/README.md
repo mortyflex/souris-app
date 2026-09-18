@@ -2,10 +2,12 @@
 
 Remote scope today: **Auth identity + `businesses`** (Account & Onboarding V1), the **operational
 schema** of Cloud Sync V1A (`clients`, `services`, `service_phases`, `appointments`,
-`appointment_items`, `appointment_phases`, `products`, `sales`, `sale_items`) and, since Cloud Sync
-V1C, the two **push functions** the mobile app uploads through (`sync_push_aggregate`,
-`sync_count_business_aggregates`). The app never writes an operational table directly and nothing is
-downloaded or restored yet. Contract: `docs/architecture/CLOUD_SYNC.md` (§15 for V1C).
+`appointment_items`, `appointment_phases`, `products`, `sales`, `sale_items`), since Cloud Sync
+V1C the two **push functions** the mobile app uploads through (`sync_push_aggregate`,
+`sync_count_business_aggregates`) and, since Cloud Sync V1D, the **pull function** it restores and
+downloads through (`sync_pull_business_aggregates`, plus its formatting helper `sync_instant_text`).
+The app never reads or writes an operational table directly. Contract:
+`docs/architecture/CLOUD_SYNC.md` (§15 for V1C, §16 for V1D).
 
 ## Applying the migrations
 
@@ -17,12 +19,17 @@ migrations/20260912120000_create_businesses.sql                 (already applied
 migrations/20260914120000_create_operational_sync_schema.sql    (Cloud Sync V1A)
 migrations/20260917120000_create_sync_push_functions.sql        (Cloud Sync V1C — must be applied BY HAND;
                                                                  nothing applies it automatically)
+migrations/20260917200000_create_sync_pull_function.sql         (Cloud Sync V1D — must be applied BY HAND,
+                                                                 after the V1C one)
 ```
 
 Check the dashboard (Database › Migrations, or the presence of the tables / functions) before
 running a file: this list does not track what the project already has. Until the V1C migration is
 applied the app keeps working locally; every sync run stops at its first request (`PGRST202`) and
-all pending data stays queued on the device.
+all pending data stays queued on the device. Until the V1D migration is applied the V1C push keeps
+working; the pull that follows it and any approved restore fail harmlessly (`PGRST202` → `UNKNOWN`):
+nothing is written locally, a restore approval stays pending, and both succeed at the first run after
+the migration is applied.
 
 with one of:
 
@@ -32,7 +39,8 @@ with one of:
 
 Each migration must run exactly once; re-running one fails on `create table` / `create function`
 (by design — nothing is dropped). The V1C migration only creates two functions and their grants: it
-touches no table, no row, no policy. The V1A migration requires `businesses` to exist and does not touch its rows; it only
+touches no table, no row, no policy. The V1D migration likewise only creates two read-only functions
+and their grants. The V1A migration requires `businesses` to exist and does not touch its rows; it only
 revokes the default `delete / truncate / references / trigger` privileges `authenticated` still
 held on `businesses`.
 
@@ -123,3 +131,33 @@ Behavior checks as the signed-in owner, with your Business id (use a throwaway a
 The same checks (45, including cross-Business refusals and child-set atomicity) were executed
 against the three migrations in an isolated in-process Postgres when this migration was written
 (`docs/architecture/CLOUD_SYNC.md` §15.6).
+
+## Verifying the pull function (Cloud Sync V1D)
+
+After applying `20260917200000_create_sync_pull_function.sql`, in the SQL Editor:
+
+```sql
+-- both functions: SECURITY INVOKER (prosecdef = false), STABLE (provolatile = 's'), search_path pinned,
+-- no anon execute
+select p.proname, p.prosecdef, p.provolatile, p.proconfig,
+       has_function_privilege('anon', p.oid, 'execute') as anon_exec,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and p.proname in ('sync_pull_business_aggregates', 'sync_instant_text');
+```
+
+Behavior checks as the signed-in owner, with your Business id:
+
+- `select public.sync_pull_business_aggregates('<business id>', null)` returns `pulled_at` and the five
+  families with every aggregate, tombstones included (`deleted_at` set, no children), each Service with
+  its `phases`, each Appointment with its `items` (and their `phases`), each Sale with its `items`;
+  instants look like `2026-09-11T09:15:00.000Z`; cents are integers; there is no image column;
+- the same call with another Business id fails with `42501` — never an empty answer;
+- with `p_since` = the `pulled_at` just returned, the answer is five empty arrays; after editing ONE
+  phase of a Service through `sync_push_aggregate`, the same call returns that Service only;
+- calling it changes no `sync_version` (it is read-only).
+
+The same checks (41, including cross-Business refusals, the round trip of every pushed payload and
+tombstones) were executed against the four migrations in an isolated in-process Postgres when this
+migration was written (`docs/architecture/CLOUD_SYNC.md` §16.9).

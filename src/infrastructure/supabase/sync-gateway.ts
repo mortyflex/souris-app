@@ -1,10 +1,17 @@
-// Souris — SyncRemoteGateway bound to the Supabase push functions
+// Souris — SyncRemoteGateway bound to the Supabase sync functions
 //
 // The whole operational write surface of the application is two RPCs
 // (supabase/migrations/20260917120000_create_sync_push_functions.sql). No
 // table is written directly: a parent row and its complete child set must
 // land in ONE transaction, together with the version comparison, and only a
 // database function can guarantee that.
+//
+// The whole operational READ surface is one RPC
+// (supabase/migrations/20260917200000_create_sync_pull_function.sql), for the
+// same reason turned around: parents and children read through separate table
+// calls are separate snapshots, and a push landing between them would hand the
+// device a Service with another revision's phases. Its answer is returned
+// UNVALIDATED — `parseRemoteBusinessSnapshot` is the gate before SQLite.
 //
 // Uses the ONE publishable-key client with the signed-in owner's session.
 // The functions are SECURITY INVOKER: owner-only RLS decides every row.
@@ -93,6 +100,15 @@ export function createSupabaseSyncGateway(client: SupabaseSyncApi): SyncRemoteGa
       });
       if (error) throw mapSyncPostgrestError(error);
       return toRemotePushResult(data);
+    },
+
+    async pullBusinessAggregates(businessId: string, since: Date | undefined): Promise<unknown> {
+      const { data, error } = await client.rpc('sync_pull_business_aggregates', {
+        p_business_id: businessId,
+        p_since: since === undefined ? null : since.toISOString(),
+      });
+      if (error) throw mapSyncPostgrestError(error);
+      return data;
     },
   };
 }

@@ -1,5 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react-native';
-import { AppState, type AppStateStatus } from 'react-native';
+import { useEffect } from 'react';
+import { AppState, Text, type AppStateStatus } from 'react-native';
 
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser } from '@/features/auth/testing/fake-auth-gateway';
@@ -10,19 +11,22 @@ import {
   createRemoteBusiness,
   REMOTE_BUSINESS_ID,
 } from '@/features/business/testing/fake-business-gateway';
-import { bootstrapPersistence } from '@/persistence/bootstrap';
+import { useClientSession, ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
+import { bootstrapPersistence, loadSnapshot } from '@/persistence/bootstrap';
 import type { SourisDatabase } from '@/persistence/database';
 import { bindLocalDatabaseToBusiness, readBusinessProfile } from '@/persistence/stores/business-profile';
 import { insertProduct } from '@/persistence/stores/products';
-import { approveInitialUpload } from '@/persistence/sync/bootstrap';
+import { updateClient } from '@/persistence/stores/clients';
+import { approveInitialRestore, approveInitialUpload, readSyncBootstrapRecord } from '@/persistence/sync/bootstrap';
 import { countSyncOutboxRows } from '@/persistence/sync/outbox';
+import { createSyncPushWorker } from '@/persistence/sync/push-worker';
 import type { SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
 import { createFakeSyncRemote } from '@/persistence/testing/fake-sync-remote';
-import { createTestSeed, productSerum } from '@/persistence/testing/fixtures';
+import { clientLea, createTestSeed, productSerum } from '@/persistence/testing/fixtures';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
-import { CloudSyncRunner, SYNC_FOREGROUND_TICK_MS } from '../CloudSyncRunner';
+import { CloudSyncRunner, SYNC_FOREGROUND_TICK_MS, useCloudSyncControl, type CloudSyncControl } from '../CloudSyncRunner';
 
 function openDatabase({
   bound,
@@ -69,6 +73,73 @@ async function renderRunner({ database, restore, sync }: Harness) {
 }
 
 const live: RestoredSession = { kind: 'authenticated', user: fakeUser };
+
+const emptySeed = () => createTestSeed({ clients: [], services: [], products: [], appointments: [] });
+
+/** Another device that already uploaded the Business to `remote`. */
+async function uploadFromAnotherDevice(remote: ReturnType<typeof createFakeSyncRemote>) {
+  const source = openDatabase({ bound: true, approved: true });
+  const worker = createSyncPushWorker({ database: source, gateway: remote });
+  await worker.run(REMOTE_BUSINESS_ID);
+  expect(remote.list(REMOTE_BUSINESS_ID)).toHaveLength(6);
+  return { source, run: () => worker.run(REMOTE_BUSINESS_ID) };
+}
+
+function openFreshBoundDevice(): SourisDatabase {
+  const database = openTestDatabase();
+  bootstrapPersistence(database, emptySeed);
+  bindLocalDatabaseToBusiness(database, createRemoteBusiness());
+  return database;
+}
+
+/** What a screen sees: the Client session, hydrated from the persisted snapshot. */
+function ClientNamesProbe({
+  onControl,
+  onMount,
+}: {
+  readonly onControl: (control: CloudSyncControl) => void;
+  readonly onMount: () => void;
+}) {
+  const { clients } = useClientSession();
+  const control = useCloudSyncControl();
+  useEffect(() => onControl(control), [control, onControl]);
+  useEffect(() => onMount(), [onMount]);
+  return <Text testID="client-names">{clients.map((client) => client.firstName).join(',')}</Text>;
+}
+
+async function renderApp(database: SourisDatabase, remote: SyncRemoteGateway) {
+  let control: CloudSyncControl = { runNow: undefined, restoreRequired: false };
+  let mountCount = 0;
+  const onControl = (next: CloudSyncControl) => {
+    control = next;
+  };
+  const onMount = () => {
+    mountCount += 1;
+  };
+  const auth = createFakeAuthGateway({ restore: async () => live });
+  const view = await render(
+    <TestPersistenceProvider createSeed={emptySeed} database={database}>
+      <AuthProvider gateway={auth}>
+        <BusinessSessionProvider gateway={createFakeBusinessGateway([createRemoteBusiness()])}>
+          <CloudSyncRunner gateway={remote}>
+            <ClientSessionProvider>
+              <ClientNamesProbe onControl={onControl} onMount={onMount} />
+            </ClientSessionProvider>
+          </CloudSyncRunner>
+        </BusinessSessionProvider>
+      </AuthProvider>
+    </TestPersistenceProvider>,
+  );
+  await act(async () => {});
+  return {
+    view,
+    mounts: () => mountCount,
+    runNow: () =>
+      act(async () => {
+        await control.runNow?.();
+      }),
+  };
+}
 
 describe('CloudSyncRunner', () => {
   afterEach(() => {
@@ -117,6 +188,66 @@ describe('CloudSyncRunner', () => {
     await waitFor(() => expect(remote.list(REMOTE_BUSINESS_ID)).toHaveLength(6));
     expect(remote.requests.every((request) => request.businessId === REMOTE_BUSINESS_ID)).toBe(true);
     await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+  });
+
+  it('never restores an empty device on its own — launch and foreground included; once approved, the next run rebuilds SQLite and the screens re-hydrate', async () => {
+    let onAppStateChange: ((state: AppStateStatus) => void) | undefined;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      onAppStateChange = listener;
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    await uploadFromAnotherDevice(remote);
+    remote.clearRequests();
+
+    const database = openFreshBoundDevice();
+    const { view, runNow } = await renderApp(database, remote);
+    await waitFor(() => expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('RESTORE_REQUIRED'));
+    await act(async () => onAppStateChange?.('active'));
+    await runNow();
+
+    expect(remote.pulls).toEqual([]); // the dataset was never fetched
+    expect(loadSnapshot(database).clients).toEqual([]);
+    expect(view.getByTestId('client-names').props.children).toBe('');
+
+    expect(approveInitialRestore(database, REMOTE_BUSINESS_ID).status).toBe('APPROVED');
+    await runNow();
+
+    await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa'));
+    expect(loadSnapshot(database).services).toHaveLength(2);
+    expect(countSyncOutboxRows(database)).toBe(0);
+    expect(remote.requests).toEqual([]); // restored data is never pushed back
+  });
+
+  it('re-hydrates the screens after a pull applied a remote change — and never remounts them for a push-only run', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const other = await uploadFromAnotherDevice(remote);
+    const database = openFreshBoundDevice();
+    // Approved before launch: the very first run restores.
+    expect(approveInitialRestore(database, REMOTE_BUSINESS_ID).status).toBe('APPROVED');
+    const { view, runNow, mounts } = await renderApp(database, remote);
+    await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa'));
+
+    // A run with nothing to pull, then a push-only run: the screens are left alone.
+    await runNow();
+    updateClient(database, { ...clientLea, phone: '07 00 00 00 00' });
+    await runNow();
+    await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    const mountedBefore = mounts();
+
+    // The other device first receives that phone number (editing a stale copy would be a real
+    // conflict), then renames the Client; this one pulls it and shows it.
+    expect(await other.run()).toMatchObject({ pull: { status: 'PULLED', applied: 1 } });
+    updateClient(other.source, { ...clientLea, phone: '07 00 00 00 00', firstName: 'Léa-Rose' });
+    expect(await other.run()).toMatchObject({ status: 'PUSHED', pushed: 1, conflicts: [] });
+    expect(view.getByTestId('client-names').props.children).toBe('Léa');
+    await runNow();
+    await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa-Rose'));
+    expect(mounts()).toBe(mountedBefore + 1);
+    expect(countSyncOutboxRows(database)).toBe(0); // no echo
+
+    await runNow();
+    expect(mounts()).toBe(mountedBefore + 1);
   });
 
   it('never runs on the offline session fallback: no valid token, no request', async () => {

@@ -6,23 +6,32 @@ outside the repository, what the build does and does NOT provide, and what to ve
 ## 1. Status of this build
 
 ```text
-SQLite            the operational storage: Clients, Services, Appointments, Products, Sales
-                  live on the device only
-Supabase          Auth identity + the `businesses` row, nothing else
-Cloud Sync        NOT ready: V1C (upload / push) and V1D (pull / new-device restore) are not
-                  implemented (docs/architecture/CLOUD_SYNC.md §1)
+SQLite            the operational storage: Clients, Services, Appointments, Products, Sales —
+                  the app reads and writes the device only
+Supabase          Auth identity + the `businesses` row + the operational mirror of a SYNCHRONIZED
+                  Business (Cloud Sync V1C push, V1D pull / restore — docs/architecture/CLOUD_SYNC.md)
+Cloud Sync        push + pull + new-device restore, once a Business is synchronized. Requires the
+                  V1C and V1D migrations on the project (§3)
 ```
 
 Consequences for the pilot:
 
-- there is **no cloud backup and no restore**. Deleting the app, losing the phone, or changing
-  phone loses the operational data;
-- a TestFlight update keeps the data (same bundle identifier, same SQLite file); an uninstall
-  does not;
-- the first TestFlight must be treated as **pilot testing, not as the sole production storage**.
-  Keep the existing agenda / client tool as the reference until V1C + V1D ship;
+- a **cloud backup and restore exist once a Business is synchronized**. Synchronization of data
+  that already existed on the device starts only after ONE supervised, explicit approval
+  (CLOUD_SYNC.md §11.1 — no release build gives it on its own); a brand-new empty account creates
+  its remote copy from its first records only after that same approval. Until it is given, the data
+  lives on the device only, exactly as before;
+- once synchronized: deleting the app, losing the phone or changing phone no longer loses the data.
+  After sign-in on the empty device, Souris shows "Des données existent pour ce compte" and
+  restores them on explicit confirmation (« Restaurer mes données », naming the Business). Nothing
+  restores by itself, and nothing should be created on the new device before restoring (a device
+  holding data is never merged with the remote copy — CLOUD_SYNC.md §16.11);
+- **Product images are NOT restored** (V1F): a restored Product has no photo until it is taken
+  again;
+- a TestFlight update keeps the data (same bundle identifier, same SQLite file);
 - a fresh install starts EMPTY (production first-run seed). The development seed (synthetic
-  address book, pilot catalogs, Agenda fixtures) is not part of release bundles.
+  address book, pilot catalogs, Agenda fixtures) and the development sync control are not part of
+  release bundles.
 
 ## 2. EAS configuration
 
@@ -66,7 +75,9 @@ Also confirm:
   the built-in mailer is rate-limited to a few emails per hour — enough for a pilot, configure
   custom SMTP before widening the test group;
 - Project Settings › API Keys: the app uses the publishable key only;
-- both `supabase/migrations` are applied and RLS is enabled on every table.
+- every file under `supabase/migrations` is applied, in order (`supabase/README.md`), and RLS is
+  enabled on every table. Without the V1C migration nothing syncs; without the V1D one the push
+  works but no restore or pull is possible.
 
 ## 4. Email confirmation flow
 
@@ -87,6 +98,11 @@ confirms the address; the browser simply cannot open Souris there.
       app killed);
 - [ ] sign-in, kill, relaunch offline → app usable;
 - [ ] Plus tab shows no "Développement" section;
+- [ ] new-device restore (a Business already synchronized): sign in on a fresh install → the
+      "Des données existent pour ce compte" sheet names the Business; « Plus tard » closes it and
+      creates nothing; « Restaurer mes données » → confirmation → data visible in every tab
+      (Products without photos); airplane mode during the restore → non-destructive message,
+      « Réessayer » succeeds once online;
 - [ ] barcode scan: camera permission prompt shows the French description; denial is recoverable;
 - [ ] product photo from camera and from the photo library;
 - [ ] safe areas, keyboard, sheets, and agenda gestures on the pilot iPhone.

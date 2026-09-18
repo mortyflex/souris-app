@@ -1,7 +1,7 @@
-// Souris — development sync control: what it shows (Cloud Sync V1C, __DEV__ only)
+// Souris — development sync control: what it shows (Cloud Sync V1C / V1D, __DEV__ only)
 //
 // Plain reads of the local sync bookkeeping for the supervised validation of
-// the initial-upload approval. Everything here is identifiers, counts and
+// the initial-upload approval, the new-device restore and the pull. Everything here is identifiers, counts and
 // state codes: no Client, Appointment or Sale value is ever read, shown or
 // logged.
 
@@ -9,12 +9,14 @@ import type { SourisDatabase } from '@/persistence/database';
 import { readBusinessProfile } from '@/persistence/stores/business-profile';
 import {
   isStoredPushDecisionCurrent,
+  readInitialRestoreApproval,
   readInitialUploadApproval,
   readSyncBootstrapRecord,
   type SyncBootstrapDecision,
 } from '@/persistence/sync/bootstrap';
 import { loadSyncOutbox } from '@/persistence/sync/outbox';
-import type { SyncRunResult } from '@/persistence/sync/push-worker';
+import { readSyncPullCursor } from '@/persistence/sync/pull-cursor';
+import type { SyncPullSummary, SyncRunResult } from '@/persistence/sync/push-worker';
 import { loadSyncState } from '@/persistence/sync/state';
 
 export interface DevelopmentSyncStatus {
@@ -30,6 +32,10 @@ export interface DevelopmentSyncStatus {
   readonly decisionStale: boolean;
   /** An approval was given and waits for the next run to consume it. */
   readonly approvalPending: boolean;
+  /** A restore approval was given; it stays until a restore actually commits (retry-safe). */
+  readonly restoreApprovalPending: boolean;
+  /** Server time of the last fully applied remote read; undefined until a restore or a first pull. */
+  readonly pullCursor: Date | undefined;
   readonly pendingOutboxCount: number;
   /** Pending entries whose last attempt failed (conflicts included). */
   readonly failedOutboxCount: number;
@@ -44,6 +50,8 @@ export function readDevelopmentSyncStatus(db: SourisDatabase): DevelopmentSyncSt
       decision: undefined,
       decisionStale: false,
       approvalPending: false,
+      restoreApprovalPending: false,
+      pullCursor: undefined,
       pendingOutboxCount: 0,
       failedOutboxCount: 0,
       acknowledgedCount: 0,
@@ -58,6 +66,8 @@ export function readDevelopmentSyncStatus(db: SourisDatabase): DevelopmentSyncSt
       (decision === 'EMPTY' || decision === 'ALREADY_SYNCED') &&
       !isStoredPushDecisionCurrent(db, profile.id, decision),
     approvalPending: readInitialUploadApproval(db, profile.id) !== undefined,
+    restoreApprovalPending: readInitialRestoreApproval(db, profile.id) !== undefined,
+    pullCursor: readSyncPullCursor(db, profile.id),
     pendingOutboxCount: outbox.length,
     failedOutboxCount: outbox.filter((entry) => entry.lastError !== undefined).length,
     acknowledgedCount: loadSyncState(db, profile.id).length,
@@ -77,6 +87,33 @@ export function canApproveInitialUpload(status: DevelopmentSyncStatus): boolean 
   );
 }
 
+/**
+ * The restore approval is offered ONLY for a bound Business whose stored state
+ * is exactly RESTORE_REQUIRED (local empty + remote populated, classified by a
+ * real run) and that has no restore approval waiting already.
+ */
+export function canApproveInitialRestore(status: DevelopmentSyncStatus): boolean {
+  return (
+    status.business !== undefined &&
+    status.decision === 'RESTORE_REQUIRED' &&
+    !status.restoreApprovalPending
+  );
+}
+
+function formatPull(pull: SyncPullSummary | undefined): readonly string[] {
+  if (!pull) return [];
+  if (pull.status === 'FAILED') return [`pull FAILED ${pull.reason}`];
+  return [
+    `pull fetched ${pull.fetched}`,
+    `applied ${pull.applied}`,
+    `deleted ${pull.deleted}`,
+    `skipped ${pull.skipped}`,
+    `pull failed ${pull.failed}`,
+    `pull conflicts ${pull.conflicts.length}`,
+    `cursor ${pull.cursorAdvanced ? 'advanced' : 'held'}`,
+  ];
+}
+
 /** One line for manual testing: state codes and counts only, never an aggregate id or value. */
 export function formatSyncRunResult(result: SyncRunResult): string {
   switch (result.status) {
@@ -86,6 +123,16 @@ export function formatSyncRunResult(result: SyncRunResult): string {
       return `BLOCKED · ${result.decision}`;
     case 'FAILED':
       return `FAILED · ${result.reason}`;
+    case 'RESTORED':
+      return [
+        'RESTORED',
+        `clients ${result.restored.clients}`,
+        `services ${result.restored.services}`,
+        `products ${result.restored.products}`,
+        `appointments ${result.restored.appointments}`,
+        `sales ${result.restored.sales}`,
+        `tombstones ${result.restored.tombstones}`,
+      ].join(' · ');
     case 'PUSHED':
       return [
         `PUSHED · ${result.bootstrap}`,
@@ -94,6 +141,21 @@ export function formatSyncRunResult(result: SyncRunResult): string {
         `failed ${result.failed}`,
         `conflicts ${result.conflicts.length}`,
         ...(result.stoppedBy ? [`stopped by ${result.stoppedBy}`] : []),
+        ...formatPull(result.pull),
       ].join(' · ');
   }
+}
+
+// A run that restored or pulled data remounts the whole tree under the
+// persistence boundary — this sheet included — so its component state is
+// gone by the time the tester reopens it. The last result line is therefore
+// kept here, in this `__DEV__`-only module, for the lifetime of the process.
+let lastResultLine: string | undefined;
+
+export function rememberLastSyncResult(line: string | undefined): void {
+  lastResultLine = line;
+}
+
+export function readLastSyncResult(): string | undefined {
+  return lastResultLine;
 }

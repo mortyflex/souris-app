@@ -13,11 +13,15 @@ SQLite     every operational record (Clients, Services, Appointments, Products, 
 
 Account & Onboarding V1 itself synchronizes nothing. Since Cloud Sync V1C
 (`docs/architecture/CLOUD_SYNC.md` §15) the operational data of a bound Business is UPLOADED
-(one-way push, owner-only RLS; data that existed before the first sync only after an explicit
-approval, CLOUD_SYNC.md §11.1) once the session is live — but nothing is downloaded or restored
-yet (V1D), so the remote copy cannot bring data back to a device. Until restore exists the product
-must still never claim a backup (no "sauvegardé", "synchronisé", "données sécurisées dans le
-cloud"); the UI copy is unchanged.
+(owner-only RLS; data that existed before the first sync only after an explicit approval,
+CLOUD_SYNC.md §11.1) once the session is live, and since Cloud Sync V1D (§16) it comes BACK: a
+synchronized Business is pulled incrementally, and an empty device bound to a populated Business
+(reinstall, new phone) is offered a restore — `CloudRestoreSheet`, explicit confirmation naming the
+Business, never automatic (CLOUD_SYNC.md §16.11). So a cloud backup / restore now exists, with two
+limits the copy must respect: it exists only ONCE a Business is synchronized (an account whose data
+was never approved for upload has no remote copy), and Product images are not restored until V1F.
+Wording that promises more ("toutes vos données sont sauvegardées") stays out; the account
+screens are unchanged.
 
 ---
 
@@ -190,7 +194,8 @@ network never destroys local access. When the network returns, supabase-js refre
 
 Signing out clears the Supabase session (supabase-js clears the local session even when the
 server call fails offline). Local SQLite data is untouched. Wording: "Les données restent
-enregistrées sur cet appareil." — never "sauvegardées" or "synchronisées". After sign-out the
+enregistrées sur cet appareil." — which is exactly what happens, whether or not the Business was
+synchronized (sign-out neither uploads nor removes anything). After sign-out the
 root gate returns to Welcome; the same owner signing back in reconnects immediately to the local
 binding; a different owner gets DEVICE_ACCOUNT_CONFLICT.
 

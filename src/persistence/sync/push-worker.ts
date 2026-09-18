@@ -1,9 +1,11 @@
-// Souris — sync push worker (Cloud Sync V1C)
+// Souris — sync worker (Cloud Sync V1C push, V1D restore + pull)
 //
-// Uploads local SQLite state to the remote, one aggregate at a time. It is
-// INVOKED explicitly (`run`) — no timer, no background task lives here — and
-// it never touches operational rows: SQLite stays the source of truth, the
-// worker only reads aggregates and writes the sync bookkeeping.
+// Uploads local SQLite state to the remote, one aggregate at a time, then
+// downloads what changed remotely. It is INVOKED explicitly (`run`) — no
+// timer, no background task lives here. The PUSH half never touches
+// operational rows; the only writers of operational rows on behalf of the
+// remote are restore.ts (an approved new-device restore) and pull-worker.ts
+// (clean aggregates only). SQLite stays the source of truth throughout.
 //
 //   run(businessId)
 //     1. the database must be bound to exactly this Business UUID
@@ -15,7 +17,15 @@
 //        exists for this exact Business (approveInitialUpload). An approved
 //        INITIAL_UPLOAD enqueues every existing aggregate, consumes the
 //        approval and stores the decision in ONE transaction, WITHOUT writing
-//        any acknowledged version
+//        any acknowledged version. "local empty + remote populated" is a STOP
+//        too (RESTORE_REQUIRED) until approveInitialRestore exists for this
+//        exact Business: the run then performs the transactional restore
+//        (restore.ts) and ends — RESTORED, or FAILED with SQLite unchanged and
+//        the approval kept for the next run.
+//        A stored EMPTY is ALWAYS classified again: "the remote was empty when
+//        we looked" says nothing about now, and a device that kept trusting it
+//        would never discover that its Business was populated meanwhile (from
+//        another device) and needs a restore
 //     3. for each eligible outbox entry, in dependency order:
 //          re-read the entry            (id, revision) observed NOW
 //          read the CURRENT aggregate   never an outbox snapshot; a missing
@@ -31,6 +41,11 @@
 //          failure  → the entry stays pending (attempt_count / last_error /
 //                     next_attempt_at); a rejection of this one aggregate moves
 //                     on to the next entry, anything else stops the run
+//     4. incremental pull (pull-worker.ts) — only for a Business that really
+//        synchronizes (ALREADY_SYNCED / INITIAL_UPLOAD) and only when the push
+//        pass was not stopped by a run-level failure. Push goes FIRST so that
+//        a push whose answer was lost is acknowledged before the pull looks at
+//        it (it would otherwise read as "remote newer + local dirty")
 //
 // Every step is idempotent: a push whose answer was lost is simply pushed
 // again, and the remote acknowledges an identical state without rewriting it.
@@ -38,13 +53,14 @@
 
 import { runInTransaction, type SourisDatabase } from '../database';
 
-import { readBoundBusinessId, type SyncAggregateRef, type SyncOperation } from './aggregate';
+import { readBoundBusinessId, type SyncConflict, type SyncOperation } from './aggregate';
 import { readAggregatePayload } from './aggregate-payload';
 import {
   classifySyncBootstrap,
   clearInitialUploadApproval,
   isLocalDatabasePopulated,
   isStoredPushDecisionCurrent,
+  readInitialRestoreApproval,
   readInitialUploadApproval,
   readSyncBootstrapRecord,
   writeSyncBootstrapRecord,
@@ -59,6 +75,7 @@ import {
   settleSyncOutboxEntry,
   type SyncOutboxEntry,
 } from './outbox';
+import { pullRemoteChanges, type SyncPullSummary } from './pull-worker';
 import {
   SyncRemoteError,
   type RemoteAggregatePayload,
@@ -66,6 +83,7 @@ import {
   type SyncRemoteFailureCode,
   type SyncRemoteGateway,
 } from './remote-gateway';
+import { restoreBusinessFromRemote, type RestoreCounts, type RestoreOutcome } from './restore';
 import {
   clearAcknowledgedRemoteVersion,
   hasAcknowledgedRemoteState,
@@ -73,23 +91,24 @@ import {
   writeAcknowledgedRemoteVersion,
 } from './state';
 
-export interface SyncConflict extends SyncAggregateRef {
-  readonly operation: SyncOperation;
-  /** The version this device had acknowledged (undefined = never). */
-  readonly acknowledgedVersion: number | undefined;
-  /** The version the remote reported (undefined = the remote holds no such row). */
-  readonly remoteVersion: number | undefined;
-}
+export type { SyncConflict } from './aggregate';
+export type { SyncPullSummary } from './pull-worker';
 
 export type SyncRunResult =
   | {
       readonly status: 'SKIPPED';
       readonly reason: 'NOT_BOUND' | 'BUSINESS_MISMATCH' | 'INVALID_BUSINESS_ID' | 'ALREADY_RUNNING';
     }
-  /** The first sync needs an explicit decision (upload approval / V1D restore / reconciliation). Nothing was pushed. */
+  /** The first sync needs an explicit decision (upload approval / restore approval / reconciliation). Nothing moved. */
   | { readonly status: 'BLOCKED'; readonly decision: SyncBootstrapStopDecision }
-  /** The run could not start (remote unreachable while deciding, or a local read failure). */
-  | { readonly status: 'FAILED'; readonly reason: SyncRemoteFailureCode | 'LOCAL' }
+  /**
+   * The run could not start (remote unreachable while deciding, a local read
+   * failure), or an approved restore failed — SQLite is then unchanged and the
+   * approval still pending (restore.ts).
+   */
+  | { readonly status: 'FAILED'; readonly reason: Extract<RestoreOutcome, { status: 'FAILED' }>['reason'] }
+  /** The approved new-device restore committed: SQLite was rebuilt from the remote Business. */
+  | { readonly status: 'RESTORED'; readonly restored: RestoreCounts }
   | {
       readonly status: 'PUSHED';
       readonly bootstrap: SyncBootstrapDecision;
@@ -104,7 +123,26 @@ export type SyncRunResult =
        * problem, and the remaining entries are not thrown at it.
        */
       readonly stoppedBy?: Exclude<SyncRemoteFailureCode, 'REJECTED'>;
+      /**
+       * The incremental pull that followed the push pass. Absent under EMPTY
+       * (the remote was just counted empty) and when the push pass was stopped.
+       */
+      readonly pull?: SyncPullSummary;
     };
+
+/**
+ * Whether the run wrote OPERATIONAL rows (a restore, or a pull that applied
+ * or removed something). The caller then re-hydrates whatever it keeps in
+ * memory from SQLite; a push-only run never needs it.
+ */
+export function didSyncRunChangeLocalData(result: SyncRunResult): boolean {
+  if (result.status === 'RESTORED') return true;
+  return (
+    result.status === 'PUSHED' &&
+    result.pull?.status === 'PULLED' &&
+    result.pull.applied + result.pull.deleted > 0
+  );
+}
 
 export interface SyncPushWorker {
   /** Never rejects. A second call while one is in flight returns SKIPPED / ALREADY_RUNNING. */
@@ -158,10 +196,16 @@ export function createSyncPushWorker({
     businessId: string,
   ): Promise<
     | { readonly decision: SyncBootstrapDecision; readonly enqueued: number }
-    | Extract<SyncRunResult, { status: 'BLOCKED' | 'FAILED' }>
+    | Extract<SyncRunResult, { status: 'BLOCKED' | 'FAILED' | 'RESTORED' }>
   > {
     const stored = readSyncBootstrapRecord(db, businessId);
-    if (stored && isStoredPushDecisionCurrent(db, businessId, stored.decision)) {
+    // EMPTY is asked again at every run (one count): the Business may have been
+    // populated from another device since, which makes this one RESTORE_REQUIRED.
+    if (
+      stored &&
+      stored.decision !== 'EMPTY' &&
+      isStoredPushDecisionCurrent(db, businessId, stored.decision)
+    ) {
       return { decision: stored.decision, enqueued: 0 };
     }
 
@@ -191,6 +235,11 @@ export function createSyncPushWorker({
       writeSyncBootstrapRecord(db, { businessId, decision, decidedAt });
     });
 
+    if (decision === 'RESTORE_REQUIRED' && readInitialRestoreApproval(db, businessId) !== undefined) {
+      // Explicitly approved for THIS Business. Success stores ALREADY_SYNCED in
+      // the restore transaction; failure changes nothing and keeps the approval.
+      return restoreBusinessFromRemote({ database: db, gateway, businessId, now });
+    }
     if (
       decision === 'INITIAL_UPLOAD_REQUIRES_APPROVAL' ||
       decision === 'RESTORE_REQUIRED' ||
@@ -308,11 +357,18 @@ export function createSyncPushWorker({
     if ('status' in bootstrap) return bootstrap;
 
     const summary = await pushEntries(businessId, bootstrap.decision);
+    // Pull only for a Business that really synchronizes, and not through a
+    // remote that just failed the push pass.
+    const pull =
+      bootstrap.decision !== 'EMPTY' && summary.stoppedBy === undefined
+        ? await pullRemoteChanges({ database: db, gateway, businessId, now })
+        : undefined;
     return {
       status: 'PUSHED',
       bootstrap: bootstrap.decision,
       initialUploadEnqueued: bootstrap.enqueued,
       ...summary,
+      ...(pull ? { pull } : {}),
     };
   }
 

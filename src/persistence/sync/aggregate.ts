@@ -25,6 +25,20 @@ export interface SyncAggregateRef {
 }
 
 /**
+ * A remote revision this device never acknowledged met a local change (push:
+ * the remote refused the write; pull: the aggregate has a pending outbox
+ * entry). Neither side was overwritten (CLOUD_SYNC.md §9).
+ */
+export interface SyncConflict extends SyncAggregateRef {
+  /** The pending local intent. */
+  readonly operation: SyncOperation;
+  /** The version this device had acknowledged (undefined = never). */
+  readonly acknowledgedVersion: number | undefined;
+  /** The version the remote reported (undefined = the remote holds no such row). */
+  readonly remoteVersion: number | undefined;
+}
+
+/**
  * The Business UUID this device is bound to (`business_profile.id`), or
  * undefined while the database is unbound. Every sync row is scoped to it:
  * an unbound database records no sync intent at all (PERSISTENCE.md §4b —

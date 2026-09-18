@@ -8,7 +8,8 @@
 //   local populated  remote empty   NOT approved    → INITIAL_UPLOAD_REQUIRES_APPROVAL  STOP — nothing enqueued,
 //                                                                                        nothing pushed
 //   local populated  remote empty   approved        → INITIAL_UPLOAD                    enqueue everything, push
-//   local empty      remote populated               → RESTORE_REQUIRED                  STOP — V1D restore
+//   local empty      remote populated               → RESTORE_REQUIRED                  STOP — until the restore is
+//                                                                                        explicitly approved (V1D)
 //   local populated  remote populated               → RECONCILIATION_REQUIRED           STOP — never local-wins
 //                                                                                        or remote-wins silently
 //
@@ -43,6 +44,14 @@
 // explicit run: the way out is an explicit action (the approval, a V1D
 // restore, an explicit reconciliation, or an explicit cleanup of a test
 // Business), after which the classification changes.
+//
+// Rebuilding an EMPTY device from a populated Business is never automatic
+// either (V1D): RESTORE_REQUIRED stays a STOP until `approveInitialRestore`
+// was called for that exact Business UUID. The approval is persisted and KEPT
+// until a restore actually commits (restore.ts clears it inside the restore
+// transaction), so a failed or interrupted restore is simply retried by the
+// next run. A restore never runs over local data: local populated + remote
+// populated stays RECONCILIATION_REQUIRED whatever was approved.
 //
 // "Local populated" means at least one operational aggregate row; the seed
 // marker, the account binding and the sync bookkeeping do not count.
@@ -278,6 +287,106 @@ export function approveInitialUpload(
     writeMetadata(
       db,
       SYNC_INITIAL_UPLOAD_APPROVAL_KEY,
+      JSON.stringify({ businessId, approvedAt: toSqlInstant(now) }),
+    );
+    result = { status: 'APPROVED', approval };
+  });
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Explicit initial-restore approval (Cloud Sync V1D)
+// ---------------------------------------------------------------------------
+
+/** `souris_metadata` key of the pending restore approval; cleared by the restore and by the development reset. */
+export const SYNC_INITIAL_RESTORE_APPROVAL_KEY = 'sync_initial_restore_approval';
+
+export interface InitialRestoreApproval {
+  readonly businessId: string;
+  readonly approvedAt: Date;
+}
+
+export type InitialRestoreApprovalResult =
+  | { readonly status: 'APPROVED'; readonly approval: InitialRestoreApproval }
+  | {
+      readonly status: 'REFUSED';
+      /**
+       * NOT_BOUND / BUSINESS_MISMATCH: the database is not bound to that exact
+       * Business. NOT_REQUIRED: the device already synchronizes (a current push
+       * decision or acknowledged state exists). LOCAL_NOT_EMPTY: the device
+       * holds operational data — a restore never runs over local data.
+       */
+      readonly reason: 'NOT_BOUND' | 'BUSINESS_MISMATCH' | 'NOT_REQUIRED' | 'LOCAL_NOT_EMPTY';
+    };
+
+/**
+ * The pending restore approval for THIS Business, or undefined. An approval
+ * recorded for another Business id, or an unreadable value, authorizes nothing.
+ */
+export function readInitialRestoreApproval(
+  db: SourisDatabase,
+  businessId: string,
+): InitialRestoreApproval | undefined {
+  const raw = readMetadata(db, SYNC_INITIAL_RESTORE_APPROVAL_KEY);
+  if (raw === undefined) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    const { businessId: storedId, approvedAt } = parsed as Record<string, unknown>;
+    if (storedId !== businessId || typeof approvedAt !== 'string') return undefined;
+    return { businessId, approvedAt: fromSqlInstant(approvedAt) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Consumes (or withdraws) the restore approval. Call inside the restore transaction. */
+export function clearInitialRestoreApproval(db: SourisDatabase): void {
+  deleteMetadata(db, SYNC_INITIAL_RESTORE_APPROVAL_KEY);
+}
+
+/**
+ * The ONE explicit gate of a new-device restore: authorizes rebuilding the
+ * EMPTY local database of this device from the remote data of `businessId`.
+ *
+ * It records the approval and nothing else — no request is made, no row is
+ * written. The next sync run classifies both sides again and restores only if
+ * the device is still "local empty + remote populated" for that same
+ * Business. The restore re-verifies every precondition inside its own
+ * transaction (restore.ts) and clears the approval only when it commits.
+ *
+ * Never called by the application on its own: its single caller is the
+ * `__DEV__` development sync control, behind a second confirmation.
+ */
+export function approveInitialRestore(
+  db: SourisDatabase,
+  businessId: string,
+  now: Date = new Date(),
+): InitialRestoreApprovalResult {
+  let result: InitialRestoreApprovalResult = { status: 'REFUSED', reason: 'NOT_BOUND' };
+  runInTransaction(db, () => {
+    const boundBusinessId = readBoundBusinessId(db);
+    if (boundBusinessId === undefined) return;
+    if (boundBusinessId !== businessId) {
+      result = { status: 'REFUSED', reason: 'BUSINESS_MISMATCH' };
+      return;
+    }
+    const stored = readSyncBootstrapRecord(db, businessId);
+    if (
+      hasAcknowledgedRemoteState(db, businessId) ||
+      (stored && isStoredPushDecisionCurrent(db, businessId, stored.decision))
+    ) {
+      result = { status: 'REFUSED', reason: 'NOT_REQUIRED' };
+      return;
+    }
+    if (isLocalDatabasePopulated(db)) {
+      result = { status: 'REFUSED', reason: 'LOCAL_NOT_EMPTY' };
+      return;
+    }
+    const approval: InitialRestoreApproval = { businessId, approvedAt: now };
+    writeMetadata(
+      db,
+      SYNC_INITIAL_RESTORE_APPROVAL_KEY,
       JSON.stringify({ businessId, approvedAt: toSqlInstant(now) }),
     );
     result = { status: 'APPROVED', approval };
