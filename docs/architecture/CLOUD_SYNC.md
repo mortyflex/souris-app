@@ -13,6 +13,7 @@ V1B    Local Outbox & Sync Metadata         done — local outbox + acknowledged
 V1C-0  Local Sync Prerequisites             done — UUID v4 top-level ids (§5) + integer-cents persistence (§3.1)
 V1C    Initial Upload + Incremental Push    done — bootstrap decision, push RPC, push worker, runner (§15)
 V1D    Pull + New Device Restore            done — read RPC, approved transactional restore, incremental pull (§16)
+V1D.1  Seamless Bootstrap                   done — automatic initial upload and new-device restore, first-sync gate (§17)
 V1E    Conflict / Retry Hardening
 V1F    Product Image Sync
 ```
@@ -31,8 +32,9 @@ PERSISTENCE.md §4).
 
 State after V1C: local data is UPLOADED. A bound device with a live session decides what its
 first sync is (§11) and pushes every pending outbox entry through ONE atomic, version-conditional Postgres function
-(§15). Uploading the EXISTING data of a device into an empty remote Business is never automatic:
-it waits for one explicit, Business-scoped approval (§11.1). The remote acknowledges with its
+(§15). At the worker level, uploading the EXISTING data of a device into an empty remote Business
+waits for one Business-scoped approval (§11.1) — given by hand in V1C, automatically by the runner
+since V1D.1 (§17). The remote acknowledges with its
 `sync_version`, stored in `sync_state`. It is a one-way
 push: nothing is pulled, restored or merged (V1D / V1E), no image is uploaded (V1F), and no
 SQLite schema change was needed (still v8). The UI is unchanged and must still not claim a
@@ -41,17 +43,29 @@ backup: until V1D a remote copy cannot bring data back to a device (`docs/archit
 (`supabase/README.md`); until it is, every run stops at its first request and nothing is lost.
 
 State after V1D: data comes BACK. An EMPTY device bound to a populated Business is
-`RESTORE_REQUIRED`; after one explicit, Business-scoped approval (§11.2) the next run downloads the
+`RESTORE_REQUIRED`; after one Business-scoped approval (§11.2) the next run downloads the
 complete Business through ONE consistent read function, validates all of it, and rebuilds SQLite in
 ONE local transaction (§16.4) — acknowledged versions, clean outbox, `ALREADY_SYNCED`. From then on
 every run pushes, then pulls what changed remotely (§16.5): a remote revision is applied only to a
 locally CLEAN aggregate; remote newer + local dirty is a reported conflict that overwrites neither
 side (§16.6); remote tombstones follow the local deletion rules (§16.7); nothing that came from the
-remote is ever pushed back. The restore has its production entry point — the restore prompt of
-§16.11, the only sync surface of a release build. Still no conflict RESOLUTION (V1E), no image sync
-(V1F), no SQLite schema change (still v8), no other sync UI. The remote migration
+remote is ever pushed back. (V1D shipped a production restore prompt; V1D.1 removed it, §17.) Still
+no conflict RESOLUTION (V1E), no image sync (V1F), no SQLite schema change (still v8). The remote migration
 `20260917200000_create_sync_pull_function.sql` must be applied by hand; until it is, restore and
 pull fail harmlessly (`UNKNOWN`) and the V1C push keeps working.
+
+State after V1D.1: the first sync is SEAMLESS — the user never sees, approves or triggers it (§17).
+A new account is `EMPTY`; its first record is uploaded on its own (the foreground tick notices the
+stale `EMPTY`); a new device or a reinstall is restored on its own after sign-in, with no prompt.
+The engine is unchanged: the worker still refuses both transitions without the Business-scoped
+approval, and the cloud sync runner — under a LIVE session bound to that Business, never offline or
+signed out — is what gives it, once, then runs the same worker again. Two populated sides stay
+`RECONCILIATION_REQUIRED`: never approved, never local-wins or remote-wins. An EMPTY device does
+not become operational before a run OF THE CURRENT SESSION established what its remote Business
+holds (the first-sync gate, §17.3) — a decision stored by an earlier launch is not enough: nothing
+can be created on top of data that has not arrived yet. A device that holds data is never held
+back. A release build contains no sync UI — only, for that empty device, « Récupération de vos
+données… » while it waits and a plain "Impossible de récupérer vos données / Réessayer" state. No schema change, no remote migration.
 
 ---
 
@@ -461,7 +475,7 @@ and no provider or screen touches the outbox.
 unbound (no `business_profile` row — a fresh install before Business setup, or a development
 database) the stores write NO outbox row at all: there is no Business to scope it to, and an
 unbound device cannot sync anyway (§3). Data that exists before binding is covered by the V1C
-bootstrap decision (§11: local populated / remote empty → explicitly approved initial upload of
+bootstrap decision (§11: local populated / remote empty → approved initial upload of
 every aggregate), not by the outbox. Binding itself records nothing. The device-account conflict protection
 (PERSISTENCE.md §4b, AUTH.md §6) is unchanged.
 
@@ -522,11 +536,13 @@ cursor (`sync_pull_cursor`, §16.5) and the restore approval (`sync_initial_rest
 
 ---
 
-## 11. Bootstrap / restore rules (bootstrap decision implemented in V1C; restore in V1D)
+## 11. Bootstrap / restore rules (bootstrap decision implemented in V1C; restore in V1D; automatic approvals in V1D.1)
 
 First sync of a bound Business, decided from the population of BOTH sides (tombstones count as
 remote rows). Source: `src/persistence/sync/bootstrap.ts` (`classifySyncBootstrap`, pure), driven
-by the push worker:
+by the push worker. This table is the WORKER's contract; "approved" means the approval of §11.1 /
+§11.2 is recorded for this Business — which, since V1D.1, the cloud sync runner does on its own the
+moment a run answers one of the two one-sided STOPs (§17). The user is never asked:
 
 ```text
 acknowledged state on the device          → ALREADY_SYNCED           push
@@ -546,8 +562,9 @@ local populated   remote populated        → RECONCILIATION_REQUIRED  STOP — 
 
 Classification is automatic and harmless: it reads one remote count and writes no operational or
 outbox row. The ONLY thing that makes data leave the device automatically is real acknowledged
-state (`ALREADY_SYNCED`: `sync_state` holds a server-returned version for this Business), which
-itself only ever comes from an explicitly approved initial upload.
+state (`ALREADY_SYNCED`: `sync_state` holds a server-returned version for this Business) or a
+recorded approval — and an approval is only ever recorded for the ONE-sided cases (one side empty),
+by the runner, under a live session bound to that exact Business (§17).
 
 ### 11.0 What a stored decision still licenses — EMPTY is not an acknowledgement
 
@@ -558,18 +575,18 @@ pending outbox proves nothing either: every local mutation of a bound device wri
 ```text
 isStoredPushDecisionCurrent(db, businessId, decision)       src/persistence/sync/bootstrap.ts — the ONE rule,
                                                              used by the worker, the periodic check and the approval
-INITIAL_UPLOAD   always            the explicit approval for this Business: an interrupted upload resumes
+INITIAL_UPLOAD   always            the recorded approval for this Business: an interrupted upload resumes
 ALREADY_SYNCED   only while sync_state really holds an acknowledged revision for this Business
 EMPTY            only while NO local aggregate AND NO outbox entry exists — and, since V1D, the WORKER
                  counts the remote again at every run even then (see below)
-STOP decisions   never             re-evaluated at every explicit run
+STOP decisions   never             re-evaluated at every run
 ```
 
 A stored decision that is no longer current is simply classified again at the next run, against the
 REAL remote. So `EMPTY` → the first Client / Service / Product → the next run finds `EMPTY` stale →
-local populated, remote empty, no acknowledged state → `INITIAL_UPLOAD_REQUIRES_APPROVAL` → STOP,
-the pending entries are NOT pushed (and if the remote was populated meanwhile:
-`RECONCILIATION_REQUIRED`).
+local populated, remote empty, no acknowledged state → `INITIAL_UPLOAD_REQUIRES_APPROVAL` → the
+runner approves and runs again → `INITIAL_UPLOAD` (§17). If the remote was populated meanwhile:
+`RECONCILIATION_REQUIRED`, which nothing approves.
 
 Since V1D a stored `EMPTY` is additionally re-counted by the worker at EVERY run (one
 `sync_count_business_aggregates` call, nothing else): "the remote was empty when we looked" says
@@ -577,13 +594,13 @@ nothing about now. A device that kept trusting it would never discover that its 
 populated meanwhile from another device — it would sit on an empty screen instead of reaching
 `RESTORE_REQUIRED`, and its first new record would turn it into `RECONCILIATION_REQUIRED`.
 `isStoredPushDecisionCurrent` is unchanged (an empty device with a stored `EMPTY` still has no initial
-upload to approve, and the foreground tick still never polls); only the worker's shortcut was
-removed. Under a fresh `EMPTY` the run may only settle deletions of
+upload to approve, and the foreground tick of an EMPTY, idle device still never polls); only the
+worker's shortcut was removed. Under a fresh `EMPTY` the run may only settle deletions of
 aggregates the remote never held (`ABSENT`, §15.5): the worker refuses any UPSERT under `EMPTY`,
 including an aggregate that appears while the run is in flight.
 
 Found in real E2E testing (2026-09-17): the first V1C build trusted a stored `EMPTY` as a durable
-push decision, so records created after it were uploaded without approval. Regression:
+push decision, so records created after it were uploaded without going through the initial-upload transition. Regression:
 `sync-push-worker.test.ts` › "EMPTY is not a synchronization acknowledgement".
 
 "Local populated" means at least one row in `clients`, `services`, `products`, `appointments` or
@@ -598,21 +615,23 @@ The decision is stored in `souris_metadata` under `sync_bootstrap` as
 - a stored push decision is trusted only while it is still current (§11.0); otherwise the run
   classifies again. `INITIAL_UPLOAD` is the durable one; `ALREADY_SYNCED` lasts as long as the
   acknowledged state it describes; `EMPTY` lasts only while the device stays empty;
-- a STOP decision is stored for diagnosis but RE-EVALUATED at the next explicit run, because the
-  way out is an explicit action (the initial-upload approval, a V1D restore, an explicit
-  reconciliation, an explicit cleanup of a test Business) after which the classification changes. While blocked, NOTHING is
-  pushed — including entries created meanwhile — and the periodic tick makes no request;
+- a STOP decision is stored for diagnosis but RE-EVALUATED at the next run. The two one-sided STOPs
+  are answered by the runner's automatic approval (§17); a stored one therefore means "the automatic
+  first sync did not complete" and the periodic tick retries it (`isSyncBootstrapPending`).
+  `RECONCILIATION_REQUIRED` has no automatic way out (an explicit reconciliation, or an explicit
+  cleanup of a test Business): while it stands NOTHING is pushed — including entries created
+  meanwhile — and the periodic tick makes no request;
 - a record written for another Business id is ignored, never inherited;
 - the development reset deletes the record with the sync tables (PERSISTENCE.md §10).
 
-### 11.1 Initial upload — explicit, one-time, Business-scoped approval
+### 11.1 Initial upload — one-time, Business-scoped approval (automatic since V1D.1)
 
-"Local populated + remote empty" is exactly what the pilot device looks like — and exactly what a
-development device full of fixtures bound to a fresh Business looks like. The device cannot tell
-them apart, so it never uploads existing data on its own. Without an approval the run returns
-`BLOCKED / INITIAL_UPLOAD_REQUIRES_APPROVAL`: no outbox entry is created for the existing
-aggregates, no push request is made, entries recorded by mutations meanwhile are not pushed either,
-and the foreground tick stays silent.
+"Local populated + remote empty" is a new account that just created its first record, or the pilot
+device. The WORKER never uploads existing data on its own: without an approval the run returns
+`BLOCKED / INITIAL_UPLOAD_REQUIRES_APPROVAL` — no outbox entry is created for the existing
+aggregates, no push request is made, entries recorded by mutations meanwhile are not pushed either.
+The approval is an internal safety primitive, not a user decision: the runner records it and runs
+the worker again (§17).
 
 ```ts
 approveInitialUpload(db, businessId, now?)   // src/persistence/sync/bootstrap.ts
@@ -620,9 +639,9 @@ approveInitialUpload(db, businessId, now?)   // src/persistence/sync/bootstrap.t
   → { status: 'REFUSED', reason: 'NOT_BOUND' | 'BUSINESS_MISMATCH' | 'NOT_REQUIRED' }
 ```
 
-- **Explicit.** No product code calls it and there is no production UI. Its single caller is the
-  DEVELOPMENT sync control (§15.9, `__DEV__` only, behind a second confirmation); the pilot
-  transfer invokes it during the supervised migration (§15.7).
+- **One caller.** `CloudSyncRunner`, after a run answered `INITIAL_UPLOAD_REQUIRES_APPROVAL` for the
+  Business of its live session (§17). No screen — product or development — can give it; a
+  source-level test locks that in.
 - **Exact Business.** It is refused unless the database is bound to that very UUID
   (`NOT_BOUND` / `BUSINESS_MISMATCH`), and refused as `NOT_REQUIRED` once a push decision is stored
   (sync is already running — there is no initial upload left to approve).
@@ -640,12 +659,12 @@ approveInitialUpload(db, businessId, now?)   // src/persistence/sync/bootstrap.t
 - **Cleared by the development reset** together with the decision (PERSISTENCE.md §10): reseeded
   fixtures are never covered by an approval given to the data they replaced.
 
-Known consequence — it applies to EVERY Business, not only to the pilot: a brand-new account is
-`EMPTY` until its owner creates her first record, and from that moment it is
-`INITIAL_UPLOAD_REQUIRES_APPROVAL` (§11.0). Nothing a release build contains can give the approval
-(§15.9), so until a user-facing approval entry point exists, no Business synchronizes on its own:
-data stays local-only until the supervised approval. That is the deliberate, conservative side of
-the rule; the approval entry point is future work (§15.8).
+Consequence for EVERY Business: a brand-new account is `EMPTY` until its owner creates her first
+record; from that moment the stored `EMPTY` is stale (§11.0), the next trigger — the foreground tick
+at the latest — classifies `INITIAL_UPLOAD_REQUIRES_APPROVAL`, and the runner turns it into
+`INITIAL_UPLOAD` within that same trigger. Known trade-off: a development device holding fixtures
+and bound to a fresh, EMPTY Business uploads them too — the device cannot tell them from real data.
+A Business that already holds data is never touched (`RECONCILIATION_REQUIRED`).
 
 **Enqueue.** In ONE SQLite transaction with the stored decision and the consumed approval,
 `enqueueInitialUpload` inserts an `UPSERT` outbox entry (revision 1) for every local aggregate of the bound Business that
@@ -656,19 +675,21 @@ one is acknowledged only when the server returns its version, and an interrupted
 resumes from the remaining entries.
 
 **This is not a seed.** Nothing is bundled, generated or hardcoded: the mechanism uploads whatever
-the bound device already holds, for whichever Business it is bound to — once approved for it. A normal new account has an
+the bound device already holds, for whichever Business it is bound to. A normal new account has an
 empty database (empty first-run seed) and classifies as `EMPTY`, which uploads nothing and licenses
 nothing (§11.0). There is no email, user id or
 Business id anywhere in the code path, `~/.souris-private-data` is never read, and the device-account
 binding rules are untouched: an existing Business is never rebound, and a populated remote Business
 (e.g. a test one) is a STOP, not a merge target. The pilot transfer is §15.7.
 
-### 11.2 Initial restore — explicit, Business-scoped approval (V1D)
+### 11.2 Initial restore — Business-scoped approval (V1D; automatic since V1D.1)
 
-"Local empty + remote populated" is a new phone — and also a development device after a wipe, or a
-device bound by mistake to a Business full of someone's test data. Rebuilding a database is not
-something the device decides alone: without an approval the run returns `BLOCKED / RESTORE_REQUIRED`
-and does NOT even fetch the dataset.
+"Local empty + remote populated" is a new phone or a reinstall — and also a development device after
+a wipe. The WORKER never rebuilds a database on its own: without an approval the run returns
+`BLOCKED / RESTORE_REQUIRED` and does NOT even fetch the dataset. As for the upload, the approval is
+an internal safety primitive that the runner records before running the worker again (§17). It is
+safe to give automatically because a restore only ever fills an EMPTY database with the data of the
+Business the signed-in owner is bound to: nothing local can be lost.
 
 ```ts
 approveInitialRestore(db, businessId, now?)   // src/persistence/sync/bootstrap.ts
@@ -676,9 +697,8 @@ approveInitialRestore(db, businessId, now?)   // src/persistence/sync/bootstrap.
   → { status: 'REFUSED', reason: 'NOT_BOUND' | 'BUSINESS_MISMATCH' | 'NOT_REQUIRED' | 'LOCAL_NOT_EMPTY' }
 ```
 
-- **Explicit.** Two callers only, both behind a confirmation naming the Business: the production
-  restore prompt (§16.11 — the ONLY sync surface of a release build) and the DEVELOPMENT sync
-  control (§15.9). A source-level test locks that in.
+- **One caller.** `CloudSyncRunner`, after a run answered `RESTORE_REQUIRED` for the Business of its
+  live session (§17). A source-level test locks that in.
 - **Exact Business.** Refused unless the database is bound to that very UUID; refused as
   `NOT_REQUIRED` once the device synchronizes (acknowledged state, or a current push decision);
   refused as `LOCAL_NOT_EMPTY` when any operational row exists — a restore NEVER runs over local data.
@@ -689,8 +709,8 @@ approveInitialRestore(db, businessId, now?)   // src/persistence/sync/bootstrap.
   meanwhile → `RECONCILIATION_REQUIRED`, whatever was approved.
 - **Retry-safe, not one-shot.** Unlike the upload approval (consumed by the enqueue it authorizes),
   the restore approval is cleared INSIDE the restore transaction, i.e. only when a restore commits.
-  A failed or interrupted restore leaves SQLite untouched and the approval pending: the next run —
-  after a restart too — simply tries again. There is no intermediate "restoring" state to repair.
+  A failed or interrupted restore leaves SQLite untouched and the approval pending: the next trigger
+  (launch, foreground, or the 2-minute tick) — after a restart too — simply tries again. There is no intermediate "restoring" state to repair.
 - **Cleared by the development reset** with the rest of the sync bookkeeping.
 
 The restore itself is §16.4. A device already bound to another account keeps the
@@ -752,17 +772,22 @@ money contract (euro numbers stay the domain / UI representation), no rewrite of
 no change to child id semantics. Only the two local prerequisites: UUID v4 top-level generators
 (one new dependency, `expo-crypto`) and SQLite schema v8 (integer cents).
 
-V1C: no automatic upload of pre-existing data (explicit approval only, §11.1), no approval UI, no
+V1C: no automatic upload of pre-existing data (approval by hand only — automatic since V1D.1, §17), no approval UI, no
 pull, no restore, no conflict resolution or conflict UI, no merge, no image sync, no
 background task, no batching, no SQLite schema change, no production seed, no pilot data in the
 repository, no automatic rebind of a Business, no `service_role` key, no user-visible sync status.
 
 V1D: no conflict resolution, no conflict records, no merge (a conflict is reported and both sides are
 left alone), no reconciliation of two populated datasets (`RECONCILIATION_REQUIRED` stays a STOP), no
-automatic restore, no sync UI beyond the RESTORE_REQUIRED prompt (§16.11), no image sync (`image_uri` stays
+automatic restore (V1D shipped a confirmation prompt; V1D.1 replaced it, §17), no image sync (`image_uri` stays
 local-only: absent after a restore, untouched by a pull), no pagination of the remote read, no
 realtime subscription, no background task, no SQLite schema change, no pilot data or identifier in
 the repository, no `service_role` key.
+
+V1D.1: no change to the push / pull / restore engine, to the outbox, `sync_state`, the cursor, the
+tombstones, the conflict detection or the backoff; no reconciliation of two populated datasets
+(`RECONCILIATION_REQUIRED` stays a STOP and is never approved); no sync UI of any kind, no
+user-visible sync status; no background task; no SQLite schema change; no remote migration.
 
 ### 14.1 `database-types.ts` is intentionally incomplete
 
@@ -869,7 +894,8 @@ guards      businessId is a UUID, the database is bound, and bound to THIS Busin
             (an unbound or development database never reaches the network)
 bootstrap   §11 — a stored decision is trusted only while current (§11.0: a stored EMPTY is stale as soon as
             anything exists locally → classified again); STOP decisions return BLOCKED (INITIAL_UPLOAD_REQUIRES_APPROVAL included: existing data
-            is never enqueued or pushed without the approval of §11.1); an unreachable remote returns FAILED
+            is never enqueued or pushed without the approval of §11.1 — the RUNNER gives it, §17, never the
+            worker); an unreachable remote returns FAILED
 entries     loadEligibleSyncOutbox: business_id = bound id, next_attempt_at NULL or <= now,
             ordered CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE then FIFO id (remote foreign keys)
 per entry   re-read it (id, revision) — it may have been coalesced or settled since the list
@@ -907,8 +933,10 @@ nothing, owns no state a screen reads). A run is allowed only while Supabase is 
 Auth session is `live` (not the offline fallback: there is no valid token) AND the Business session
 is `ready` (the device is bound). Triggers: those conditions becoming true (launch, sign-in, Business
 setup, reconnection), the app returning to the foreground, and a 2-minute foreground tick that first
-runs a LOCAL check (`hasEligiblePushWork`: push decision stored + an eligible entry) — an idle or
-blocked device makes no request at all. Runs are fire-and-forget: a screen never waits on one, a
+runs a LOCAL check (`isSyncRunDue`: a current push decision + an eligible entry, OR a first sync that
+a run can still settle — §17.2) — an idle device, or one waiting for a reconciliation, makes no
+request at all. Since V1D.1 a run that answers one of the two one-sided STOPs is followed, within the
+same trigger, by the automatic approval and ONE more run (§17.1). Runs are fire-and-forget: a screen never waits on one, a
 failure never surfaces as an error, and SQLite stays the source of truth whatever happens. There is
 no background task, no retry loop, and no network listener.
 
@@ -983,16 +1011,12 @@ aggregate) reaches HER Business through the generic mechanism above, not through
 
 ```text
 her device holds the data in SQLite, bound to HER Business UUID, remote Business EMPTY
-→ live session → INITIAL_UPLOAD_REQUIRES_APPROVAL (nothing moves)
-→ supervised step: approveInitialUpload(db, <her Business UUID>)            explicit, one-time (§11.1)
-→ next run → INITIAL_UPLOAD → every aggregate enqueued and pushed → acknowledged versions stored
+→ live session → INITIAL_UPLOAD_REQUIRES_APPROVAL → the runner approves for her Business (§17)
+→ same trigger, second run → INITIAL_UPLOAD → every aggregate enqueued and pushed → versions stored
 → from then on: automatic incremental pushes
 ```
 
-`approveInitialUpload` has no caller in a release build. A development build offers it through the
-development sync control (§15.9); HOW the supervised migration invokes it on her device (that
-development build, a one-off build, a future confirmation screen) is part of that explicit
-operation, not of V1C.
+Since V1D.1 nothing is supervised in that path: it is what every device does.
 
 What V1C deliberately does NOT do, and what remains an explicit, supervised one-time operation
 after V1C is validated: getting that data onto a device bound to her Business if it currently lives
@@ -1005,44 +1029,41 @@ existing synthetic fixtures).
 Legacy ids (`service-<slug>`, `client-<ms>-<n>`) are valid remote keys as they are (§5.2): nothing
 is rewritten for the upload.
 
-### 15.8 What V1E and later still have to build
+### 15.8 What later phases still have to build
 
-Done in V1D: pull cursor and incremental pull, new-device restore (`RESTORE_REQUIRED` exit) with its
-production prompt (§16.11). Still open: the explicit reconciliation entry point
-(`RECONCILIATION_REQUIRED` exit), a user-facing entry point for the initial-upload approval (§11.1 —
-development control only today), conflict records and resolution (§9), a user-visible pending / failed / conflict state,
+Done in V1D: pull cursor and incremental pull, new-device restore (`RESTORE_REQUIRED` exit). Done in
+V1D.1: both one-sided first syncs are automatic (§17). Still open: the explicit reconciliation entry
+point (`RECONCILIATION_REQUIRED` exit), conflict records and resolution (§9, V1E), a user-visible
+pending / failed / conflict state,
 batching of the initial upload and pagination of the restore read if their size ever matters, an
 in-place refresh of the screens after a pull (§16.8), and product image sync (V1F).
 
 ### 15.9 Development sync control (`__DEV__` only — not product UI)
 
 `Plus › Développement › Sync V1C (test)` opens `src/features/plus/development/DevelopmentSyncSheet.tsx`,
-a test bench for the supervised real-device / simulator validation of §11.1, §11.2, §15.3 and §16:
+a test bench for the real-device / simulator validation of §15.3, §16 and §17. Since V1D.1 it approves
+NOTHING (its two approval actions were removed with the manual bootstrap):
 
 ```text
 shows     the Business this DEVICE is bound to (business_profile name + id), the stored bootstrap state
-          (or "not classified yet"), whether an approval is waiting, outbox pending / failed counts,
-          acknowledged count, and the last action result as state codes + counts
-Run sync now            useCloudSyncControl().runNow — the runner's OWN single-flight worker, under the same
-                        live-session + bound-Business conditions as an automatic run (disabled otherwise)
-Approve initial upload  enabled ONLY when the stored state is INITIAL_UPLOAD_REQUIRES_APPROVAL with no approval
-                        waiting → second confirmation naming the exact Business name and id → state re-read →
-                        approveInitialUpload(db, thatId). Nothing approves implicitly: not opening the sheet,
-                        not running sync, not cancelling; approving uploads nothing by itself
-Restauration / Curseur  (V1D) whether a restore is REQUIRED or APPROVED-and-waiting, and the pull cursor
-Approve restore         (V1D) enabled ONLY when the stored state is RESTORE_REQUIRED with no restore approval
-                        waiting → the same second confirmation (exact Business name and id) → state re-read →
-                        approveInitialRestore(db, thatId). Approving restores nothing: the NEXT run does
-Run sync now (V1D)      also performs the approved restore, and the pull that follows every push. Its last
-                        result line (RESTORED · counts, or PUSHED · … · pull …) is kept at module level,
-                        because a restore remounts the tree — this sheet included (§16.8)
+          (or "not classified yet"), outbox pending / failed counts, acknowledged count, the pull cursor,
+          and the last action result as state codes + counts
+Approbation / Restauration
+          whether an approval recorded by the runner is still waiting — i.e. an automatic first sync
+          that did not complete (a failure) and that the next run retries
+Run sync now            useCloudSyncControl().runNow — the runner's OWN single-flight orchestration (automatic
+                        approval included), under the same live-session + bound-Business conditions as an
+                        automatic run (disabled otherwise). Its last result line (RESTORED · counts, or
+                        PUSHED · … · pull …) is kept at module level, because a restore remounts the tree —
+                        this sheet included (§16.8)
 ```
 
 Production boundary: the module is `require`d inside a `__DEV__` branch of `PlusScreen` (never a
 static import), so Metro drops it from release bundles; the section that opens it renders only under
 `__DEV__`; the component returns nothing and its handlers refuse to act outside `__DEV__`. A
-source-level test locks this in (single guarded `require`, no other reference, no other caller of
-`approveInitialUpload` or `approveInitialRestore`, the restore reachable from the sync worker only,
+source-level test locks this in (single guarded `require`, no other reference, the runner as the ONLY
+caller of `approveInitialUpload` and `approveInitialRestore`, no product screen reading
+`useCloudSyncControl`, the restore reachable from the sync worker only,
 no hardcoded id / email / privileged key in the control or in the sync layer, no logging). The runner's
 triggers and conditions are unchanged: `runNow` is one more explicit trigger of the same run. The
 row avoids the words the product must not display on Plus ("cloud", "sauvegardé", "synchronisé").
@@ -1151,7 +1172,7 @@ references (pull)                              an Appointment / Sale whose Clien
 ### 16.4 Restore flow
 
 ```text
-run → classification RESTORE_REQUIRED + approveInitialRestore for THIS Business   (§11.2) — else BLOCKED
+run → classification RESTORE_REQUIRED + approveInitialRestore for THIS Business   (§11.2, given by the runner — §17) — else BLOCKED
 1. fetch     pullBusinessAggregates(businessId, since = none)      the complete dataset, one snapshot
 2. validate  parseRemoteBusinessSnapshot + assertSnapshotReferences — BEFORE touching SQLite
 3. ONE SQLite transaction (restoreBusinessSnapshot):
@@ -1170,7 +1191,7 @@ run → classification RESTORE_REQUIRED + approveInitialRestore for THIS Busines
 
 Failure at ANY point — offline, function not deployed (`UNKNOWN`), not the owner (`FORBIDDEN`), invalid
 dataset, a SQLite error in the middle of the transaction — returns `FAILED` with SQLite exactly as it
-was: still empty, still `RESTORE_REQUIRED`, approval still pending. Retry is the next run; nothing
+was: still empty, still `RESTORE_REQUIRED`, approval still pending. Retry is the next trigger (the tick included, §17.2); nothing
 has to be repaired (verified by failing the transaction after four families were already written).
 
 Outbox: with empty tables and no acknowledged state, a pending entry can only describe an aggregate
@@ -1209,8 +1230,9 @@ cursor ← pulled_at ONLY when failed = 0
   push pass re-detects it). An aggregate that could not be applied DOES: it is fetched again.
 - A device that did the initial upload has no cursor: its first pull reads everything back and
   recognizes every version — a free end-to-end check of the upload.
-- The foreground tick is unchanged: it still fires only for eligible PUSH work. Remote changes are
-  picked up at launch, on return to the foreground, and by "Run sync now" — no polling, no realtime.
+- The foreground tick never fires to look for REMOTE changes: it fires for eligible push work or a
+  pending first sync (§17.2). Remote changes are picked up at launch, on return to the foreground,
+  and by whatever run the tick starts for its own reasons — no polling, no realtime.
 
 ### 16.6 Conflict behavior
 
@@ -1301,60 +1323,221 @@ Business id exists anywhere in the restore / pull path (source-level test).
 her remote Business holds her uploaded data (§15.7)
 → fresh install / new phone: migrated, empty production seed
 → sign in → the owned Business is resolved and the EMPTY local database is bound to it (AUTH.md §5)
-→ first run: local empty + remote populated → RESTORE_REQUIRED — nothing fetched, nothing written
-→ supervised step: approveInitialRestore(db, <her Business UUID>)     explicit (§11.2)
-→ next run: fetch → validate → ONE transaction → RESTORED; the screens re-hydrate from SQLite
+→ first run: local empty + remote populated → RESTORE_REQUIRED → the runner approves for her Business (§17)
+→ same trigger, second run: fetch → validate → ONE transaction → RESTORED; the screens re-hydrate from SQLite
 → from then on: the app works from SQLite as on any device; pushes and pulls are automatic
 ```
 
-The supervised step is the user's own confirmation: a release build offers the restore through the
-production prompt (§16.11), so a TestFlight build restores without any development tooling. The path
+No prompt, no supervised step: a TestFlight build restores on its own after sign-in. The path
 is generic: it restores whichever Business the device is bound to, and contains no email, user id,
 Business id or pilot data.
 
-One trap is closed and one remains. Closed: a new phone that signed in BEFORE the old one uploaded
-stored `EMPTY`; it now reaches `RESTORE_REQUIRED` at its next run (§11.0). Remaining: if she creates a
-record on the new phone before restoring, the device is `RECONCILIATION_REQUIRED` (both sides
-populated) and nothing restores until that record is deleted — by design (never merge two unknown
-datasets). The prompt says so, and « Plus tard » is the only way to end up there.
+Two traps are closed. A new phone that signed in BEFORE the old one uploaded stored `EMPTY`; it
+reaches `RESTORE_REQUIRED` at its next run (§11.0). And a record created on the new phone before the
+restore committed — which made the device `RECONCILIATION_REQUIRED` for good — is no longer
+possible: since V1D.1 the application does not open on an empty device until the restore committed
+or the remote was found empty IN THE CURRENT SESSION (§17.3), a failed first attempt included. A
+stored `EMPTY` from an earlier launch opens nothing, so an empty device relaunched offline after its
+Business was populated elsewhere cannot create a diverging record either.
 
-Product images do not come back (V1F): restored Products have no image; the prompt says that too.
+Product images do not come back (V1F): restored Products have no image.
 
-### 16.11 Production restore prompt (`src/features/sync/restore/CloudRestoreSheet.tsx`)
+### 16.11 Production restore prompt — REMOVED in V1D.1
 
-The ONE user-facing sync surface of a release build, and it exists for ONE state: `RESTORE_REQUIRED`.
-It is mounted once, in the protected `(app)` layout above the screens, and renders nothing in every
-other state — no bootstrap, upload, reconciliation or debug control ships with it.
+V1D shipped `src/features/sync/restore/CloudRestoreSheet.tsx`, a prompt that asked « Restaurer mes
+données » before calling `approveInitialRestore`. A user must never have to understand or operate
+synchronization: V1D.1 deleted the sheet, its tests, its mount in the `(app)` layout and the
+`restoreRequired` signal of `useCloudSyncControl`. The restore is automatic (§17).
+
+---
+
+## 17. Seamless bootstrap (V1D.1 — implemented)
 
 ```text
-signal      useCloudSyncControl().restoreRequired — the runner's last classification of the bound Business
-            (the stored decision at mount, then each run's BLOCKED / PUSHED / RESTORED result; a FAILED run —
-            a failed restore attempt included — changes nothing). Requires a live, bound session, like every run
-prompt      "Des données existent pour ce compte": what will be restored, for « <Business name> »; Product
-            photos are not part of it; adding data before restoring ends the offer. No aggregate value is shown
-Restaurer mes données   → the SAME sheet switches to its confirmation step naming the exact Business
-            (« Restaurer les données de « … » ? », « Annuler » returns to the explanation). A content step, not a
-            second native Modal: iOS refuses to present a Modal from inside the already presented sheet
-confirm     in one synchronous step: business_profile.id must still be the session's Business AND the stored
-            decision must still be RESTORE_REQUIRED → approveInitialRestore(db, id) (itself refusing a
-            populated or synchronized device) → ONE runNow() of the runner's own single-flight worker, which
-            performs the transactional restore (§16.4) and re-hydrates the app (§16.8) — the prompt disappears
-            with that remount, and ALREADY_SYNCED never shows it again
-Plus tard   (also backdrop / hardware back) hides the prompt for this session. Writes nothing, creates nothing:
-            the device stays RESTORE_REQUIRED (no push, no pull) and the prompt returns at the next launch
-failure     "La restauration n’a pas abouti. Aucune donnée n’a été modifiée sur cet appareil…" + « Réessayer »
-            (the same confirmation again; the approval was kept by restore.ts). Offline session: the primary
-            action is disabled with "Une connexion est nécessaire"
-refused     the re-check or the approval said no (state changed, a record appeared): "La situation a changé…",
-            nothing approved, « Fermer »
+src/providers/CloudSyncRunner.tsx          the bounded orchestration: run → automatic approval → ONE re-run
+src/persistence/sync/bootstrap.ts          + isSyncBootstrapPending (what the periodic check may settle)
+src/persistence/sync/push-worker.ts        + isSyncRunDue (THE periodic check). The run itself is unchanged
+src/providers/CloudSyncRunner.tsx          + the first-sync gate, session-scoped (§17.3)
+src/providers/root-route.ts, RootNavigator.tsx   the gate's routes: 'data-loading', 'data-unavailable'
+src/features/business/DataLoadingScreen.tsx      « Récupération de vos données… » + activity indicator (presentation only)
+src/features/business/DataUnavailableScreen.tsx  "Impossible de récupérer vos données" + « Réessayer » (presentation only)
+src/features/sync/restore/                 DELETED (restore prompt + tests)
+src/features/plus/development/             the development control lost its two approval actions (§15.9)
 ```
 
-Unchanged by it: the worker still refuses any restore without the approval, the approval is still
-Business-scoped, `INITIAL_UPLOAD_REQUIRES_APPROVAL` still has no release-build entry point (a normal
-new account stays empty and local-only until the supervised approval), and the development control
-stays out of release bundles. Tests: `CloudRestoreSheet.test.tsx` (prompt only for
-`RESTORE_REQUIRED`; none for EMPTY / upload-required / reconciliation / synchronized / offline;
-nothing approved before the confirmation; « Plus tard » writes nothing; the confirmation re-check and
-the approval's own refusal; a failed restore leaving SQLite untouched with a working retry; success
-re-hydrating the screens with an empty outbox), `production-boundary.test.ts` (the prompt is the only
-production caller of `approveInitialRestore` and never references the development control).
+Product rule: the user never sees, approves or triggers synchronization.
+
+```text
+new account            local empty + remote empty      → EMPTY — nothing moves
+first record created   local populated + remote empty  → initial upload, AUTOMATIC
+new device / reinstall local empty + remote populated  → restore, AUTOMATIC after sign-in, no prompt
+both sides populated                                   → RECONCILIATION_REQUIRED — BLOCKED, never approved
+empty device, remote state unknown                     → the application does not open yet (§17.3)
+once synchronized                                      → push then pull, exactly as in V1C / V1D
+```
+
+### 17.1 Orchestration — in the runner, bounded
+
+The worker is untouched: it still refuses both transitions without the Business-scoped approval
+(§11.1, §11.2), which keeps every safety property of V1C / V1D (exact Business, re-classification
+at upload / restore time, a populated other side never overridden, restore preconditions re-verified
+inside its transaction). What changed is WHO approves — `CloudSyncRunner`, nobody else:
+
+```text
+trigger → worker.run(businessId)
+  BLOCKED / INITIAL_UPLOAD_REQUIRES_APPROVAL → approveInitialUpload(db, businessId)  → worker.run(businessId)
+  BLOCKED / RESTORE_REQUIRED                 → approveInitialRestore(db, businessId) → worker.run(businessId)
+  BLOCKED / RECONCILIATION_REQUIRED          → nothing. Left blocked
+  anything else                              → nothing
+→ reloadSnapshot() when the final result wrote operational rows (RESTORED, or an applied pull — §16.8)
+```
+
+- **Bounded.** ONE approval and ONE re-run per trigger; whatever the second run answers is the
+  result. There is no loop to get stuck in: a second `BLOCKED` (the state changed between the two
+  runs) simply waits for the next trigger.
+- **Live, bound session only.** The orchestration exists only while the run conditions hold
+  (Supabase configured, Auth session `live`, Business `ready` — §15.3), for the Business id of that
+  session. Nothing is approved on the offline fallback or signed out: no run happens at all. If the
+  session ends while the first run is awaiting the network, the approval is NOT given (tested).
+- **The approvals still refuse.** A device not bound to that exact Business, a synchronized device, a
+  populated database (restore): `REFUSED` → no re-run.
+- **Single-flight.** The orchestration is single-flight like the worker, so overlapping triggers
+  (launch + foreground) cannot interleave an approval with someone else's run.
+- **Restore failure is non-destructive and retried.** `FAILED` leaves SQLite untouched and the
+  restore approval pending (§16.4); the next trigger's first run finds `RESTORE_REQUIRED` + the
+  approval and restores directly.
+
+### 17.2 The periodic check — `isSyncRunDue`
+
+Before V1D.1 the 2-minute foreground tick ran only for eligible PUSH work under a current push
+decision. A stale `EMPTY` is not one, so the first record of a new account was never sent until the
+app went to the background and came back. The tick now asks `isSyncRunDue` — local reads only:
+
+```text
+isSyncRunDue = isSyncBootstrapPending || hasEligiblePushWork
+
+isSyncBootstrapPending(db, businessId)                  src/persistence/sync/bootstrap.ts
+  never classified                     true    the launch run failed before deciding
+  EMPTY / ALREADY_SYNCED, stale        true    classify again — the first record after an EMPTY lands here
+  INITIAL_UPLOAD_REQUIRES_APPROVAL     true    the automatic first sync did not complete: retry
+  RESTORE_REQUIRED                     true    idem (a failed restore is retried without a foreground event)
+  RECONCILIATION_REQUIRED              false   no run resolves it: never polls
+  a current push decision              false   → hasEligiblePushWork decides (eligible entry, backoff respected)
+```
+
+An idle device, a device whose entries are all backing off, and a device waiting for a
+reconciliation still make no request from the tick. `hasEligiblePushWork` itself is unchanged.
+
+### 17.3 First-sync gate — an empty device waits for its data
+
+Without it, "restore failed (or not finished) + the user creates a record" produced
+`local populated + remote populated` = `RECONCILIATION_REQUIRED`, which nothing resolves
+automatically: a real product bug for anyone who signs in on a new phone with a poor connection.
+
+The rule is SESSION-scoped and lives in `CloudSyncRunner` (component state, never persisted):
+
+```text
+the device holds operational data    open    ALWAYS, at once, with no run: offline-first is untouched, whatever
+                                             the sync state is (RECONCILIATION_REQUIRED, unreachable remote,
+                                             offline session…)
+the device ALREADY synchronizes      open    ALWAYS, at once, with no run, offline included:
+                                             hasAcknowledgedRemoteState — sync_state holds a revision the SERVER
+                                             returned for this Business (§10.7), the one durable local proof.
+                                             Such a device may be empty because its deletions were synchronized
+                                             (tombstone versions stay in sync_state); whatever it creates is
+                                             classified ALREADY_SYNCED, so no divergence is possible
+Supabase not configured              open    nothing will ever synchronize (development / tests)
+any other EMPTY device               open    ONLY once a run of THIS session got past the first-sync decision:
+                                             PUSHED (under EMPTY the remote was counted empty in that very
+                                             run, §11.0) or RESTORED
+                                     closed  otherwise — whatever decision an EARLIER session stored. A stored
+                                             EMPTY, an INITIAL_UPLOAD interrupted before its first
+                                             acknowledgement, or a stored ALREADY_SYNCED without sync_state
+                                             rows prove nothing
+```
+
+A stored `EMPTY` keeps its meaning for the engine (§11.0) but never opens the gate of a new session:
+"the account was empty last time" says nothing about now. Found before E2E: device B stores `EMPTY`,
+another device populates the Business, B relaunches OFFLINE, creates a record → back online it is
+`local populated + remote populated` = `RECONCILIATION_REQUIRED`. B now shows the recoverable state
+instead, and restores on its own once online. Once open, the gate stays open for the session (the
+user emptying her data mid-session never closes the application under her).
+
+`useCloudSyncControl().firstSync` is read by the root navigator ONLY (`resolveRootRoute`, third
+argument):
+
+```text
+ready        → the app
+resolving    → 'data-loading': DataLoadingScreen — brand mark, « Récupération de vos données… », « Cela peut
+               prendre quelques instants. », an ActivityIndicator. No action, no percentage (the engine
+               measures no progress), one wording for the check and the restore (no extra machinery)
+unavailable  → 'data-unavailable': DataUnavailableScreen. The attempt ended without opening the gate (count
+               failed, restore failed, FORBIDDEN…), or no run is possible at all (offline session fallback)
+```
+
+- The protected `(app)` group is NOT MOUNTED in the last two states: no provider, no screen, no
+  sheet — so no Client, Service, Product, Appointment or Sale can be created, and the outbox stays
+  empty. It is a route-level state like the account conflict, not a sheet over the app.
+- The gate is decided again after every orchestration and opens in the same render as its result:
+  at once when the remote was counted empty; after a restore, with the usual `reloadSnapshot()`
+  remount (§16.8), which finds a populated device and lands directly in the app.
+- « Réessayer » is the SAME orchestration (`runNow`) — or, without a live session, the Auth
+  session retry, since no fetch is possible before that. Automatic retries: launch, return to the
+  foreground, and the tick — which always runs while the gate is closed, even when `isSyncRunDue`
+  is false (an empty device with a stored `EMPTY` has no pending work, yet it is waiting).
+  While an attempt is in flight the screen stays and the button reads « Nouvelle tentative… ».
+- It never asks whether to restore: the restore stays automatic (§17.1). `RECONCILIATION_REQUIRED`
+  is never resolved by it — and never blocks the application either, since that device holds data.
+- Wording: « Récupération de vos données… » while waiting; "Impossible de récupérer vos données" /
+  "Vérifiez votre connexion internet…" / « Réessayer » / « Se déconnecter » on failure. No sync,
+  bootstrap, outbox, cloud, remote or server vocabulary, no "%" (tested on both screens).
+
+### 17.4 Tests
+
+`CloudSyncRunner.test.tsx`: populated local + empty remote uploaded at launch with no manual
+approval, in exactly two runs; a new device restored at launch — SQLite rebuilt, providers
+re-hydrated, empty outbox, no push back; stale `EMPTY` — first aggregate uploaded by the tick alone,
+then plain incremental sync; `RECONCILIATION_REQUIRED` staying blocked through launch / foreground /
+tick with no approval recorded and both sides unchanged; a failed restore leaving SQLite
+untouched and being retried by the tick; no approval once the session ended mid-run; offline
+fallback / signed out / no gateway unchanged; the multi-device re-hydration test unchanged.
+`sync-bootstrap.test.ts` (`isSyncBootstrapPending`), `sync-push-worker.test.ts` (`isSyncRunDue`:
+stale EMPTY due, backoff and reconciliation not due), `production-boundary.test.ts` (the runner is
+the only caller of both approvals, never answers a reconciliation, no product screen reads sync
+state except the root navigator, `features/sync/` is gone), `DevelopmentSyncSheet.test.tsx` (status + run only). The
+worker-level suites of V1C / V1D are unchanged: the engine still blocks without an approval.
+First-sync gate (§17.3) — `first-sync-gate.test.tsx`, real runner + real root navigator: empty
+device whose first check fails → no application, empty SQLite and outbox, « Réessayer » → automatic
+restore → app open with the data, empty outbox, nothing pushed back; the restore itself failing →
+same state, never `RECONCILIATION_REQUIRED`, restored by the tick alone; empty account → gate opens,
+first record uploaded by the tick; the waiting state (indicator, plain wording, no button, no
+business route, no technical word) replaced at once by the app, by the recoverable state on failure,
+and still showing — app not mounted — while the restore fetch is in flight; a populated
+device never held back (unreachable remote, offline session, `RECONCILIATION_REQUIRED` left
+untouched); empty device on the offline session → no application, retry goes through the session;
+a stored `EMPTY` never opening a new session: (A) relaunch online after another device populated the
+Business → checked again → automatic restore; (B) relaunch offline → recoverable state, no business
+route, empty SQLite and outbox; (C) network back + « Réessayer » → restored, app open, empty outbox;
+account still empty → opens only after this session's own check; a failed re-check retried by the
+tick although nothing else is due; (D) a populated device usable offline; a synchronized device whose
+data was all deleted and the deletions acknowledged → open at once on an offline relaunch; only a
+stored `EMPTY`, an initial upload interrupted before any acknowledgement, or a decision without
+`sync_state` rows → no application offline; no Supabase → open.
+`root-route.test.ts` (the gate only ever replaces `app`).
+
+### 17.5 Real-device checklist
+
+```text
+[ ] new account → create a first Client → stay in the app ≤ ~2 min → the row exists remotely
+[ ] same, airplane mode while creating, then back online without leaving the app → uploaded by a later tick
+[ ] reinstall / second device → sign in → data appears in every tab with no prompt (Products without photos)
+[ ] airplane mode right after sign-in on a new device → "Impossible de récupérer vos données", NO tab bar,
+    nothing can be created; back online → « Réessayer » (or wait / return to the foreground) → data in every tab
+[ ] new account, online → « Récupération de vos données… » shows briefly, then the app opens
+[ ] empty account, kill the app, airplane mode, relaunch → "Impossible de récupérer vos données" (not the app)
+[ ] synchronized device: delete every record, wait for it to be sent, kill, airplane mode, relaunch → the app opens
+[ ] second device: large account on a slow network → the waiting state stays up, indicator animating, until the data is there
+[ ] device that already holds data, airplane mode, relaunch → the app opens and works as before
+[ ] device with local data signed into a Business that already holds data → nothing uploaded, nothing restored
+[ ] release build: no restore prompt, no sync control anywhere
+```

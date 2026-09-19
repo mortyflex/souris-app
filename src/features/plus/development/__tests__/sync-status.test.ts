@@ -5,7 +5,6 @@ import {
   approveInitialRestore,
   approveInitialUpload,
   writeSyncBootstrapRecord,
-  type SyncBootstrapDecision,
 } from '@/persistence/sync/bootstrap';
 import { writeSyncPullCursor } from '@/persistence/sync/pull-cursor';
 import { findSyncOutboxEntry, recordSyncOutboxFailure } from '@/persistence/sync/outbox';
@@ -19,13 +18,10 @@ import {
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 
 import {
-  canApproveInitialRestore,
-  canApproveInitialUpload,
   formatSyncRunResult,
   readDevelopmentSyncStatus,
   readLastSyncResult,
   rememberLastSyncResult,
-  type DevelopmentSyncStatus,
 } from '../sync-status';
 
 const NOW = new Date('2026-09-17T09:00:00.000Z');
@@ -53,8 +49,6 @@ describe('readDevelopmentSyncStatus', () => {
       failedOutboxCount: 0,
       acknowledgedCount: 0,
     });
-    expect(canApproveInitialUpload(status)).toBe(false);
-    expect(canApproveInitialRestore(status)).toBe(false);
   });
 
   it('reads the BOUND Business, the stored state, the pending approval and the outbox counts', () => {
@@ -78,53 +72,19 @@ describe('readDevelopmentSyncStatus', () => {
       failedOutboxCount: 1,
       acknowledgedCount: 0,
     });
-    expect(canApproveInitialUpload(blocked)).toBe(true);
 
     approveInitialUpload(db, REMOTE_BUSINESS_ID, NOW);
     const approved = readDevelopmentSyncStatus(db);
     expect(approved.approvalPending).toBe(true);
-    // Already approved: the action goes off again until the next run consumed it.
-    expect(canApproveInitialUpload(approved)).toBe(false);
   });
 });
 
 describe('stale stored decision', () => {
-  it('flags a stored EMPTY as stale once local data exists — and still offers no approval until a run re-classified', () => {
+  it('flags a stored EMPTY as stale once local data exists', () => {
     const db = openBoundDatabase();
     writeSyncBootstrapRecord(db, { businessId: REMOTE_BUSINESS_ID, decision: 'EMPTY', decidedAt: NOW });
     const status = readDevelopmentSyncStatus(db);
     expect(status).toMatchObject({ decision: 'EMPTY', decisionStale: true });
-    expect(canApproveInitialUpload(status)).toBe(false);
-  });
-});
-
-describe('canApproveInitialUpload', () => {
-  const base: DevelopmentSyncStatus = {
-    business: { id: REMOTE_BUSINESS_ID, name: 'Maison Léa' },
-    decision: 'INITIAL_UPLOAD_REQUIRES_APPROVAL',
-    decisionStale: false,
-    approvalPending: false,
-    restoreApprovalPending: false,
-    pullCursor: undefined,
-    pendingOutboxCount: 0,
-    failedOutboxCount: 0,
-    acknowledgedCount: 0,
-  };
-
-  it('is on only for INITIAL_UPLOAD_REQUIRES_APPROVAL on a bound Business', () => {
-    expect(canApproveInitialUpload(base)).toBe(true);
-    expect(canApproveInitialUpload({ ...base, business: undefined })).toBe(false);
-  });
-
-  it.each<SyncBootstrapDecision | undefined>([
-    undefined,
-    'EMPTY',
-    'INITIAL_UPLOAD',
-    'ALREADY_SYNCED',
-    'RESTORE_REQUIRED',
-    'RECONCILIATION_REQUIRED',
-  ])('is off for %s', (decision) => {
-    expect(canApproveInitialUpload({ ...base, decision })).toBe(false);
   });
 });
 
@@ -138,45 +98,19 @@ describe('restore state (Cloud Sync V1D)', () => {
     return db;
   }
 
-  it('offers the restore approval only for a stored RESTORE_REQUIRED, and reports the pending approval and the pull cursor', () => {
+  it('reports a stored RESTORE_REQUIRED, the pending restore approval and the pull cursor', () => {
     const db = openEmptyBoundDatabase();
-    expect(canApproveInitialRestore(readDevelopmentSyncStatus(db))).toBe(false); // not classified yet
 
     writeSyncBootstrapRecord(db, { businessId: REMOTE_BUSINESS_ID, decision: 'RESTORE_REQUIRED', decidedAt: NOW });
     const required = readDevelopmentSyncStatus(db);
     expect(required).toMatchObject({ decision: 'RESTORE_REQUIRED', restoreApprovalPending: false, pullCursor: undefined });
-    expect(canApproveInitialRestore(required)).toBe(true);
-    expect(canApproveInitialUpload(required)).toBe(false);
 
     expect(approveInitialRestore(db, REMOTE_BUSINESS_ID, NOW).status).toBe('APPROVED');
     const approved = readDevelopmentSyncStatus(db);
     expect(approved.restoreApprovalPending).toBe(true);
-    expect(canApproveInitialRestore(approved)).toBe(false); // never twice
 
     writeSyncPullCursor(db, REMOTE_BUSINESS_ID, NOW);
     expect(readDevelopmentSyncStatus(db).pullCursor).toEqual(NOW);
-  });
-
-  it.each<SyncBootstrapDecision | undefined>([
-    undefined,
-    'EMPTY',
-    'INITIAL_UPLOAD_REQUIRES_APPROVAL',
-    'INITIAL_UPLOAD',
-    'ALREADY_SYNCED',
-    'RECONCILIATION_REQUIRED',
-  ])('the restore approval is off for %s', (decision) => {
-    const status: DevelopmentSyncStatus = {
-      business: { id: REMOTE_BUSINESS_ID, name: 'Maison Léa' },
-      decision,
-      decisionStale: false,
-      approvalPending: false,
-      restoreApprovalPending: false,
-      pullCursor: undefined,
-      pendingOutboxCount: 0,
-      failedOutboxCount: 0,
-      acknowledgedCount: 0,
-    };
-    expect(canApproveInitialRestore(status)).toBe(false);
   });
 
   it('keeps the last result line across the remount a restore causes', () => {

@@ -1,7 +1,8 @@
-// Souris — development sync control: what it shows (Cloud Sync V1C / V1D, __DEV__ only)
+// Souris — development sync control: what it shows (Cloud Sync V1C–V1D.1, __DEV__ only)
 //
 // Plain reads of the local sync bookkeeping for the supervised validation of
-// the initial-upload approval, the new-device restore and the pull. Everything here is identifiers, counts and
+// the automatic first sync (initial upload / new-device restore), the push
+// and the pull. Everything here is identifiers, counts and
 // state codes: no Client, Appointment or Sale value is ever read, shown or
 // logged.
 
@@ -30,9 +31,9 @@ export interface DevelopmentSyncStatus {
    * worker decides on its own.
    */
   readonly decisionStale: boolean;
-  /** An approval was given and waits for the next run to consume it. */
+  /** The runner approved the initial upload and the run that consumes it has not completed yet. */
   readonly approvalPending: boolean;
-  /** A restore approval was given; it stays until a restore actually commits (retry-safe). */
+  /** The runner approved the restore; the approval stays until a restore actually commits (retry-safe). */
   readonly restoreApprovalPending: boolean;
   /** Server time of the last fully applied remote read; undefined until a restore or a first pull. */
   readonly pullCursor: Date | undefined;
@@ -72,32 +73,6 @@ export function readDevelopmentSyncStatus(db: SourisDatabase): DevelopmentSyncSt
     failedOutboxCount: outbox.filter((entry) => entry.lastError !== undefined).length,
     acknowledgedCount: loadSyncState(db, profile.id).length,
   };
-}
-
-/**
- * The approval action is offered ONLY for a bound Business whose stored
- * state is exactly INITIAL_UPLOAD_REQUIRES_APPROVAL and that has no approval
- * waiting already. Every other state — unclassified included — keeps it off.
- */
-export function canApproveInitialUpload(status: DevelopmentSyncStatus): boolean {
-  return (
-    status.business !== undefined &&
-    status.decision === 'INITIAL_UPLOAD_REQUIRES_APPROVAL' &&
-    !status.approvalPending
-  );
-}
-
-/**
- * The restore approval is offered ONLY for a bound Business whose stored state
- * is exactly RESTORE_REQUIRED (local empty + remote populated, classified by a
- * real run) and that has no restore approval waiting already.
- */
-export function canApproveInitialRestore(status: DevelopmentSyncStatus): boolean {
-  return (
-    status.business !== undefined &&
-    status.decision === 'RESTORE_REQUIRED' &&
-    !status.restoreApprovalPending
-  );
 }
 
 function formatPull(pull: SyncPullSummary | undefined): readonly string[] {

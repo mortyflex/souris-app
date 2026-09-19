@@ -17,10 +17,15 @@ import type { SourisDatabase } from '@/persistence/database';
 import { bindLocalDatabaseToBusiness, readBusinessProfile } from '@/persistence/stores/business-profile';
 import { insertProduct } from '@/persistence/stores/products';
 import { updateClient } from '@/persistence/stores/clients';
-import { approveInitialRestore, approveInitialUpload, readSyncBootstrapRecord } from '@/persistence/sync/bootstrap';
+import {
+  approveInitialUpload,
+  readInitialRestoreApproval,
+  readInitialUploadApproval,
+  readSyncBootstrapRecord,
+} from '@/persistence/sync/bootstrap';
 import { countSyncOutboxRows } from '@/persistence/sync/outbox';
 import { createSyncPushWorker } from '@/persistence/sync/push-worker';
-import type { SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
+import { SyncRemoteError, type SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
 import { createFakeSyncRemote } from '@/persistence/testing/fake-sync-remote';
 import { clientLea, createTestSeed, productSerum } from '@/persistence/testing/fixtures';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
@@ -28,20 +33,10 @@ import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProv
 
 import { CloudSyncRunner, SYNC_FOREGROUND_TICK_MS, useCloudSyncControl, type CloudSyncControl } from '../CloudSyncRunner';
 
-function openDatabase({
-  bound,
-  approved = false,
-}: {
-  readonly bound: boolean;
-  /** The explicit initial-upload approval of the supervised pilot transfer. */
-  readonly approved?: boolean;
-}): SourisDatabase {
+function openDatabase({ bound }: { readonly bound: boolean }): SourisDatabase {
   const database = openTestDatabase();
   bootstrapPersistence(database, createTestSeed);
   if (bound) bindLocalDatabaseToBusiness(database, createRemoteBusiness());
-  if (approved) {
-    expect(approveInitialUpload(database, REMOTE_BUSINESS_ID).status).toBe('APPROVED');
-  }
   return database;
 }
 
@@ -76,9 +71,10 @@ const live: RestoredSession = { kind: 'authenticated', user: fakeUser };
 
 const emptySeed = () => createTestSeed({ clients: [], services: [], products: [], appointments: [] });
 
-/** Another device that already uploaded the Business to `remote`. */
+/** Another device that already uploaded the Business to `remote` (bare worker: the approval is given by hand). */
 async function uploadFromAnotherDevice(remote: ReturnType<typeof createFakeSyncRemote>) {
-  const source = openDatabase({ bound: true, approved: true });
+  const source = openDatabase({ bound: true });
+  expect(approveInitialUpload(source, REMOTE_BUSINESS_ID).status).toBe('APPROVED');
   const worker = createSyncPushWorker({ database: source, gateway: remote });
   await worker.run(REMOTE_BUSINESS_ID);
   expect(remote.list(REMOTE_BUSINESS_ID)).toHaveLength(6);
@@ -108,7 +104,7 @@ function ClientNamesProbe({
 }
 
 async function renderApp(database: SourisDatabase, remote: SyncRemoteGateway) {
-  let control: CloudSyncControl = { runNow: undefined, restoreRequired: false };
+  let control: CloudSyncControl = { runNow: undefined, firstSync: { status: 'ready', retrying: false } };
   let mountCount = 0;
   const onControl = (next: CloudSyncControl) => {
     control = next;
@@ -141,46 +137,31 @@ async function renderApp(database: SourisDatabase, remote: SyncRemoteGateway) {
   };
 }
 
+/** The AppState listener and the 2-minute tick, captured so a test fires them by hand. */
+function captureTriggers() {
+  const triggers: { appState?: (state: AppStateStatus) => void; tick?: () => void } = {};
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+    triggers.appState = listener;
+    return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+  });
+  const realSetInterval = globalThis.setInterval;
+  jest.spyOn(globalThis, 'setInterval').mockImplementation(((handler: () => void, ms?: number) => {
+    if (ms === SYNC_FOREGROUND_TICK_MS) {
+      triggers.tick = handler;
+      return 0 as unknown as ReturnType<typeof setInterval>;
+    }
+    return realSetInterval(handler, ms);
+  }) as typeof setInterval);
+  return triggers;
+}
+
 describe('CloudSyncRunner', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('cannot upload existing local data before the explicit approval — launch, foreground and tick included', async () => {
-    let onAppStateChange: ((state: AppStateStatus) => void) | undefined;
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
-      onAppStateChange = listener;
-      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
-    });
-    let tick: (() => void) | undefined;
-    const realSetInterval = globalThis.setInterval;
-    jest.spyOn(globalThis, 'setInterval').mockImplementation(((handler: () => void, ms?: number) => {
-      if (ms === SYNC_FOREGROUND_TICK_MS) {
-        tick = handler;
-        return 0 as unknown as ReturnType<typeof setInterval>;
-      }
-      return realSetInterval(handler, ms);
-    }) as typeof setInterval);
-
+  it('uploads the existing local data of a fresh Business on its own at launch — no manual approval, one bounded re-run', async () => {
     const database = openDatabase({ bound: true });
-    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
-    await renderRunner({ database, restore: live, sync: remote });
-
-    // The run happened (it classified) and stopped there.
-    await waitFor(() => expect(remote.countCalls).toBe(1));
-    await act(async () => onAppStateChange?.('active'));
-    await waitFor(() => expect(remote.countCalls).toBe(2));
-    const classified = remote.countCalls;
-    await act(async () => tick?.());
-
-    expect(remote.countCalls).toBe(classified); // a blocked device never polls from the tick
-    expect(remote.requests).toEqual([]);
-    expect(remote.list(REMOTE_BUSINESS_ID)).toEqual([]);
-    expect(countSyncOutboxRows(database)).toBe(0);
-  });
-
-  it('uploads the existing local data once approved, with the live session bound to its Business', async () => {
-    const database = openDatabase({ bound: true, approved: true });
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
 
     await renderRunner({ database, restore: live, sync: remote });
@@ -188,43 +169,150 @@ describe('CloudSyncRunner', () => {
     await waitFor(() => expect(remote.list(REMOTE_BUSINESS_ID)).toHaveLength(6));
     expect(remote.requests.every((request) => request.businessId === REMOTE_BUSINESS_ID)).toBe(true);
     await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    // Classified (STOP), approved for this Business, classified again (INITIAL_UPLOAD): exactly two runs.
+    expect(remote.countCalls).toBe(2);
+    expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('INITIAL_UPLOAD');
+    expect(readInitialUploadApproval(database, REMOTE_BUSINESS_ID)).toBeUndefined(); // consumed
   });
 
-  it('never restores an empty device on its own — launch and foreground included; once approved, the next run rebuilds SQLite and the screens re-hydrate', async () => {
-    let onAppStateChange: ((state: AppStateStatus) => void) | undefined;
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
-      onAppStateChange = listener;
-      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
-    });
+  it('new device: restores the Business on its own at launch — SQLite rebuilt, screens re-hydrated, nothing echoed to the outbox', async () => {
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
     await uploadFromAnotherDevice(remote);
     remote.clearRequests();
 
     const database = openFreshBoundDevice();
-    const { view, runNow } = await renderApp(database, remote);
-    await waitFor(() => expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('RESTORE_REQUIRED'));
-    await act(async () => onAppStateChange?.('active'));
-    await runNow();
-
-    expect(remote.pulls).toEqual([]); // the dataset was never fetched
-    expect(loadSnapshot(database).clients).toEqual([]);
-    expect(view.getByTestId('client-names').props.children).toBe('');
-
-    expect(approveInitialRestore(database, REMOTE_BUSINESS_ID).status).toBe('APPROVED');
-    await runNow();
+    const { view } = await renderApp(database, remote);
 
     await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa'));
-    expect(loadSnapshot(database).services).toHaveLength(2);
+    const restored = loadSnapshot(database);
+    expect([restored.services.length, restored.products.length, restored.appointments.length]).toEqual([2, 2, 1]);
+    expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('ALREADY_SYNCED');
+    expect(readInitialRestoreApproval(database, REMOTE_BUSINESS_ID)).toBeUndefined(); // cleared by the restore
     expect(countSyncOutboxRows(database)).toBe(0);
     expect(remote.requests).toEqual([]); // restored data is never pushed back
+  });
+
+  it('stale EMPTY: the first aggregate created after an empty launch is uploaded by the foreground tick alone', async () => {
+    const triggers = captureTriggers();
+    const database = openFreshBoundDevice();
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    await renderRunner({ database, restore: live, sync: remote });
+    await waitFor(() => expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('EMPTY'));
+
+    // Nothing to do yet: the tick is a local check only.
+    const classified = remote.countCalls;
+    await act(async () => triggers.tick?.());
+    expect(remote.countCalls).toBe(classified);
+
+    // The user creates their first record. No foreground event, no runNow.
+    insertProduct(database, { ...productSerum, id: 'product-first', businessId: REMOTE_BUSINESS_ID });
+    await act(async () => triggers.tick?.());
+
+    await waitFor(() => expect(remote.find(REMOTE_BUSINESS_ID, 'PRODUCT', 'product-first')?.syncVersion).toBe(1));
+    await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('INITIAL_UPLOAD');
+
+    // From there on it is plain incremental sync.
+    insertProduct(database, { ...productSerum, id: 'product-second', businessId: REMOTE_BUSINESS_ID });
+    await act(async () => triggers.tick?.());
+    await waitFor(() => expect(remote.find(REMOTE_BUSINESS_ID, 'PRODUCT', 'product-second')?.syncVersion).toBe(1));
+  });
+
+  it('RECONCILIATION_REQUIRED stays blocked — launch, foreground and tick included; neither side is overwritten', async () => {
+    const triggers = captureTriggers();
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    await uploadFromAnotherDevice(remote);
+    remote.clearRequests();
+    const remoteBefore = remote.list(REMOTE_BUSINESS_ID);
+
+    // This device holds its own data for the same Business and never synchronized.
+    const database = openDatabase({ bound: true });
+    updateClient(database, { ...clientLea, firstName: 'Léa-locale' });
+    const localBefore = loadSnapshot(database);
+    const countsBefore = remote.countCalls;
+
+    await renderRunner({ database, restore: live, sync: remote });
+    await waitFor(() =>
+      expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('RECONCILIATION_REQUIRED'),
+    );
+    expect(remote.countCalls).toBe(countsBefore + 1); // one classification, no re-run
+
+    await act(async () => triggers.appState?.('active'));
+    await waitFor(() => expect(remote.countCalls).toBe(countsBefore + 2));
+    await act(async () => triggers.tick?.());
+    expect(remote.countCalls).toBe(countsBefore + 2); // no run resolves it: the tick never polls
+
+    expect(readInitialUploadApproval(database, REMOTE_BUSINESS_ID)).toBeUndefined();
+    expect(readInitialRestoreApproval(database, REMOTE_BUSINESS_ID)).toBeUndefined();
+    expect(remote.requests).toEqual([]);
+    expect(remote.pulls).toEqual([]);
+    expect(remote.list(REMOTE_BUSINESS_ID)).toEqual(remoteBefore);
+    expect(loadSnapshot(database)).toEqual(localBefore);
+  });
+
+  it('a failed restore changes nothing locally and is retried on its own by the next trigger', async () => {
+    const triggers = captureTriggers();
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    await uploadFromAnotherDevice(remote);
+    remote.clearRequests();
+    remote.beforePull(() => {
+      throw new SyncRemoteError('NETWORK');
+    });
+
+    const database = openFreshBoundDevice();
+    const { view } = await renderApp(database, remote);
+    await waitFor(() => expect(remote.pulls).toHaveLength(1));
+    await act(async () => {});
+
+    expect(loadSnapshot(database)).toEqual({ clients: [], services: [], products: [], appointments: [], sales: [] });
+    expect(view.getByTestId('client-names').props.children).toBe('');
+    expect(countSyncOutboxRows(database)).toBe(0);
+    expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('RESTORE_REQUIRED');
+    expect(readInitialRestoreApproval(database, REMOTE_BUSINESS_ID)).toBeDefined(); // kept for the retry
+
+    // The network is back: the slow tick alone finishes the job.
+    remote.beforePull(undefined);
+    await act(async () => triggers.tick?.());
+
+    await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa'));
+    expect(readInitialRestoreApproval(database, REMOTE_BUSINESS_ID)).toBeUndefined();
+    expect(countSyncOutboxRows(database)).toBe(0);
+    expect(remote.requests).toEqual([]);
+  });
+
+  it('approves nothing once the session ended while the classification was in flight', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slow: SyncRemoteGateway = {
+      countBusinessAggregates: async (businessId) => {
+        await gate;
+        return remote.countBusinessAggregates(businessId);
+      },
+      pushAggregate: (request) => remote.pushAggregate(request),
+      pullBusinessAggregates: (businessId, since) => remote.pullBusinessAggregates(businessId, since),
+    };
+    const database = openDatabase({ bound: true });
+    const view = await renderRunner({ database, restore: live, sync: slow });
+
+    await view.unmount();
+    await act(async () => release());
+    await waitFor(() =>
+      expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('INITIAL_UPLOAD_REQUIRES_APPROVAL'),
+    );
+    await act(async () => {});
+
+    expect(readInitialUploadApproval(database, REMOTE_BUSINESS_ID)).toBeUndefined();
+    expect(remote.countCalls).toBe(1);
+    expect(remote.requests).toEqual([]);
   });
 
   it('re-hydrates the screens after a pull applied a remote change — and never remounts them for a push-only run', async () => {
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
     const other = await uploadFromAnotherDevice(remote);
     const database = openFreshBoundDevice();
-    // Approved before launch: the very first run restores.
-    expect(approveInitialRestore(database, REMOTE_BUSINESS_ID).status).toBe('APPROVED');
     const { view, runNow, mounts } = await renderApp(database, remote);
     await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa'));
 
@@ -271,23 +359,9 @@ describe('CloudSyncRunner', () => {
     expect(view.toJSON()).toBeNull();
   });
 
-  it('runs again when the app returns to the foreground, and the slow tick only fires for eligible pending work', async () => {
-    let onAppStateChange: ((state: AppStateStatus) => void) | undefined;
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
-      onAppStateChange = listener;
-      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
-    });
-    let tick: (() => void) | undefined;
-    const realSetInterval = globalThis.setInterval;
-    jest.spyOn(globalThis, 'setInterval').mockImplementation(((handler: () => void, ms?: number) => {
-      if (ms === SYNC_FOREGROUND_TICK_MS) {
-        tick = handler;
-        return 0 as unknown as ReturnType<typeof setInterval>;
-      }
-      return realSetInterval(handler, ms);
-    }) as typeof setInterval);
-
-    const database = openDatabase({ bound: true, approved: true });
+  it('runs again when the app returns to the foreground, and the slow tick only fires when a run is due', async () => {
+    const triggers = captureTriggers();
+    const database = openDatabase({ bound: true });
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
     await renderRunner({ database, restore: live, sync: remote });
     await waitFor(() => expect(remote.list(REMOTE_BUSINESS_ID)).toHaveLength(6));
@@ -295,20 +369,20 @@ describe('CloudSyncRunner', () => {
     const settled = remote.requests.length;
 
     // Idle tick: a local check only — no request.
-    await act(async () => tick?.());
+    await act(async () => triggers.tick?.());
     expect(remote.requests).toHaveLength(settled);
 
     insertProduct(database, { ...productSerum, id: 'product-new', businessId: REMOTE_BUSINESS_ID });
-    await act(async () => tick?.());
+    await act(async () => triggers.tick?.());
     await waitFor(() => expect(remote.find(REMOTE_BUSINESS_ID, 'PRODUCT', 'product-new')?.syncVersion).toBe(1));
 
     // In the background the tick stays silent; returning to the foreground runs at once.
     insertProduct(database, { ...productSerum, id: 'product-later', businessId: REMOTE_BUSINESS_ID });
-    await act(async () => onAppStateChange?.('background'));
+    await act(async () => triggers.appState?.('background'));
     const beforeBackgroundTick = remote.requests.length;
-    await act(async () => tick?.());
+    await act(async () => triggers.tick?.());
     expect(remote.requests).toHaveLength(beforeBackgroundTick);
-    await act(async () => onAppStateChange?.('active'));
+    await act(async () => triggers.appState?.('active'));
     await waitFor(() => expect(remote.find(REMOTE_BUSINESS_ID, 'PRODUCT', 'product-later')?.syncVersion).toBe(1));
   });
 });

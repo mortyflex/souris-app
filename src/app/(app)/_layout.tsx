@@ -6,10 +6,6 @@
 // user is signed out, and every screen stamps new records with the bound
 // Business through CurrentBusinessProvider.
 //
-// The cloud restore prompt (Cloud Sync V1D) is mounted here, above the
-// screens: it appears only while the bound Business is RESTORE_REQUIRED and
-// restores nothing without the user's explicit confirmation.
-//
 // Every workflow route is a native form sheet configured ONCE in
 // src/providers/sheet-route-options.ts with the canonical Souris shell and an
 // explicit gesture policy (workflows with long scrolling bodies never dismiss
@@ -24,7 +20,6 @@ import { ClientSessionProvider } from '@/features/clients/session/ClientSessionP
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
-import { CloudRestoreSheet } from '@/features/sync/restore/CloudRestoreSheet';
 import { contentSheet, editorSheet, workflowSheet } from '@/providers/sheet-route-options';
 import { colors, semanticColors } from '@/shared/ui/theme';
 
@@ -64,7 +59,6 @@ export default function AppLayout() {
                   <Stack.Screen name="products/[productId]" options={editorSheet} />
                   <Stack.Screen name="sales/new" options={workflowSheet} />
                 </Stack>
-                <CloudRestoreSheet />
               </AppointmentSessionProvider>
             </SaleSessionProvider>
           </ProductCatalogProvider>

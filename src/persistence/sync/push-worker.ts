@@ -1,4 +1,4 @@
-// Souris — sync worker (Cloud Sync V1C push, V1D restore + pull)
+// Souris — sync worker (Cloud Sync V1C push, V1D restore + pull, V1D.1 seamless bootstrap)
 //
 // Uploads local SQLite state to the remote, one aggregate at a time, then
 // downloads what changed remotely. It is INVOKED explicitly (`run`) — no
@@ -13,8 +13,9 @@
 //        while it is still current: a stored EMPTY stops being one as soon as
 //        anything exists locally, and the run classifies again. STOP states
 //        push nothing, and
-//        "local populated + remote empty" IS a STOP until an explicit approval
-//        exists for this exact Business (approveInitialUpload). An approved
+//        "local populated + remote empty" IS a STOP until an approval exists
+//        for this exact Business (approveInitialUpload — given automatically
+//        by the cloud sync runner since V1D.1, never by this worker). An approved
 //        INITIAL_UPLOAD enqueues every existing aggregate, consumes the
 //        approval and stores the decision in ONE transaction, WITHOUT writing
 //        any acknowledged version. "local empty + remote populated" is a STOP
@@ -60,6 +61,7 @@ import {
   clearInitialUploadApproval,
   isLocalDatabasePopulated,
   isStoredPushDecisionCurrent,
+  isSyncBootstrapPending,
   readInitialRestoreApproval,
   readInitialUploadApproval,
   readSyncBootstrapRecord,
@@ -99,7 +101,7 @@ export type SyncRunResult =
       readonly status: 'SKIPPED';
       readonly reason: 'NOT_BOUND' | 'BUSINESS_MISMATCH' | 'INVALID_BUSINESS_ID' | 'ALREADY_RUNNING';
     }
-  /** The first sync needs an explicit decision (upload approval / restore approval / reconciliation). Nothing moved. */
+  /** The first sync needs an approval (upload / restore — the runner's, V1D.1) or a reconciliation. Nothing moved. */
   | { readonly status: 'BLOCKED'; readonly decision: SyncBootstrapStopDecision }
   /**
    * The run could not start (remote unreachable while deciding, a local read
@@ -174,14 +176,24 @@ function toFailure(error: unknown): { readonly code: SyncRemoteFailureCode; read
 }
 
 /**
- * Cheap LOCAL check for a periodic caller: true only when a stored decision
- * STILL licenses pushing (a stale EMPTY does not) AND an entry is eligible
- * now. No network, no write — an idle or blocked device never polls the remote.
+ * Cheap LOCAL check, the push half of `isSyncRunDue`: true only when a stored
+ * decision STILL licenses pushing (a stale EMPTY does not) AND an entry is
+ * eligible now. No network, no write.
  */
 export function hasEligiblePushWork(db: SourisDatabase, businessId: string, now: Date): boolean {
   const stored = readSyncBootstrapRecord(db, businessId);
   if (!stored || !isStoredPushDecisionCurrent(db, businessId, stored.decision)) return false;
   return loadEligibleSyncOutbox(db, businessId, now).length > 0;
+}
+
+/**
+ * THE periodic check: whether a run would do something useful right now —
+ * settle a first sync that is still pending (bootstrap.ts), or push an
+ * eligible entry. Local reads only. A device that is idle, backing off, or
+ * waiting for a reconciliation answers false and never polls the remote.
+ */
+export function isSyncRunDue(db: SourisDatabase, businessId: string, now: Date): boolean {
+  return isSyncBootstrapPending(db, businessId) || hasEligiblePushWork(db, businessId, now);
 }
 
 export function createSyncPushWorker({
@@ -236,7 +248,7 @@ export function createSyncPushWorker({
     });
 
     if (decision === 'RESTORE_REQUIRED' && readInitialRestoreApproval(db, businessId) !== undefined) {
-      // Explicitly approved for THIS Business. Success stores ALREADY_SYNCED in
+      // Approved for THIS Business. Success stores ALREADY_SYNCED in
       // the restore transaction; failure changes nothing and keeps the approval.
       return restoreBusinessFromRemote({ database: db, gateway, businessId, now });
     }
@@ -279,7 +291,7 @@ export function createSyncPushWorker({
       const operation: SyncOperation = payload === undefined ? 'DELETE' : 'UPSERT';
       // EMPTY never uploads data. It was decided with empty local tables, so an
       // aggregate that exists NOW was created during this very run: leave it
-      // pending — the next run finds EMPTY stale and asks for the approval.
+      // pending — the next run finds EMPTY stale and goes through the initial upload.
       if (decision === 'EMPTY' && operation === 'UPSERT') continue;
       const acknowledgedVersion = readAcknowledgedRemoteVersion(db, businessId, entry)?.remoteVersion;
 

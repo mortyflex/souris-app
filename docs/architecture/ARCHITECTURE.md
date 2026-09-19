@@ -482,10 +482,15 @@ domain mapping happens exclusively inside the stores. Screens never see SQL or r
 
 Schema v3 adds the local account binding (`business_profile`, one row). Operational cloud sync is
 specified in `CLOUD_SYNC.md`: the local outbox (V1B), the push worker (V1C) and the pull / restore
-side (V1D) live in `src/persistence/sync/`; SQLite stays the only thing screens read. The single
-sync surface a release build shows is the restore prompt (`src/features/sync/restore/`), offered
-only to an empty device whose Business already holds data; conflict resolution, Product image sync
-and any other sync UI remain deferred.
+side (V1D) live in `src/persistence/sync/`; SQLite stays the only thing screens read. Since V1D.1 the
+first sync is seamless: `src/providers/CloudSyncRunner.tsx` uploads the first data of an account
+and rebuilds a new device on its own, and a release build shows NO sync surface — the user
+never sees, approves or triggers synchronization. The root navigator only holds an EMPTY device
+back until its data is known in the current session (`data-loading` / `data-unavailable` routes,
+`CLOUD_SYNC.md` §17.3); a device that holds
+data always opens. Two populated sides stay blocked
+(`RECONCILIATION_REQUIRED`); conflict resolution, Product image sync and any sync UI remain
+deferred.
 
 ---
 

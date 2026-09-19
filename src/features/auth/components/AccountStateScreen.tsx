@@ -1,7 +1,8 @@
-// Souris — dedicated account state (conflict, unavailable)
+// Souris — dedicated account state (conflict, unavailable, waiting for data)
 //
 // One restrained explanatory surface: brand, title, short text, at most one
-// primary action and one secondary. Never a blank screen, never raw errors.
+// primary action and one secondary — or, for a waiting state, an activity
+// indicator and no action at all. Never a blank screen, never raw errors.
 
 import type { ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -14,13 +15,16 @@ import { gutter, semanticColors, spacing } from '@/shared/ui/theme';
 interface AccountStateScreenProps {
   readonly title: string;
   readonly message: string;
-  readonly actions: ReactNode;
+  /** Absent for a waiting state: nothing to press while Souris is working. */
+  readonly actions?: ReactNode;
+  /** Shown under the message (an activity indicator). */
+  readonly accessory?: ReactNode;
   readonly testID?: string;
 }
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
-export function AccountStateScreen({ title, message, actions, testID }: AccountStateScreenProps) {
+export function AccountStateScreen({ title, message, actions, accessory, testID }: AccountStateScreenProps) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']} testID={testID}>
       <View style={styles.content}>
@@ -31,8 +35,9 @@ export function AccountStateScreen({ title, message, actions, testID }: AccountS
         <AppText variant="body" style={styles.message}>
           {message}
         </AppText>
+        {accessory}
       </View>
-      <View style={styles.actions}>{actions}</View>
+      {actions !== undefined && <View style={styles.actions}>{actions}</View>}
     </SafeAreaView>
   );
 }

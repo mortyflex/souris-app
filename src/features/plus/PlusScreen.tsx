@@ -28,7 +28,7 @@ import { AccountSheet } from './components/AccountSheet';
 // Development sync control (Cloud Sync V1C test bench). Required inside a
 // `__DEV__` branch — never imported statically — so Metro drops the module
 // and everything only it pulls in from release bundles: a TestFlight / App
-// Store binary contains no approval control, reachable or not.
+// Store binary contains no sync control, reachable or not.
 const DevelopmentSyncSheet = __DEV__
   ? // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./development/DevelopmentSyncSheet') as typeof import('./development/DevelopmentSyncSheet'))

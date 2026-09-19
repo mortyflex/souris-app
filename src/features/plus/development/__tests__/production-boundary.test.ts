@@ -3,10 +3,11 @@
 // Jest always runs with `__DEV__ = true`, so the bundle boundary itself is
 // guarded at the source level (same approach as persistence/source-hygiene):
 // the control is loaded ONLY through a `require` inside a `__DEV__` branch —
-// which Metro folds away in release builds, dropping the module — and neither
-// the initial-upload approval has any other caller anywhere in application
-// code, nor the initial-restore approval (V1D) any caller beyond the
-// production restore prompt, which exists for RESTORE_REQUIRED only.
+// which Metro folds away in release builds, dropping the module. The two
+// first-sync approvals (initial upload, new-device restore) have exactly ONE
+// caller in application code since V1D.1: the cloud sync runner, which gives
+// them automatically under a live session. No screen — product or
+// development — can approve anything.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -53,28 +54,37 @@ describe('development sync control — production boundary', () => {
     expect(plus).toContain('{__DEV__ && <DevelopmentSection />}');
   });
 
-  it('approveInitialUpload has no caller in application code except the development control', () => {
-    const callers = files
-      .filter((file) => /\bapproveInitialUpload\s*\(/.test(file.source))
-      .map((file) => file.path);
-    expect(callers.sort()).toEqual([
-      'features/plus/development/DevelopmentSyncSheet.tsx',
-      'persistence/sync/bootstrap.ts', // the definition
-    ]);
+  it.each(['approveInitialUpload', 'approveInitialRestore'])(
+    '%s is called by the cloud sync runner only — never by a screen',
+    (approval) => {
+      const callers = files
+        .filter((file) => new RegExp(`\\b${approval}\\s*\\(`).test(file.source))
+        .map((file) => file.path);
+      expect(callers.sort()).toEqual([
+        'persistence/sync/bootstrap.ts', // the definition
+        'providers/CloudSyncRunner.tsx', // the automatic first sync (V1D.1)
+      ]);
+    },
+  );
+
+  it('the runner never answers RECONCILIATION_REQUIRED with an approval', () => {
+    const runner = files.find((file) => file.path === 'providers/CloudSyncRunner.tsx')!.source;
+    expect(runner).toMatch(/case 'RECONCILIATION_REQUIRED':\s*return false;/);
   });
 
-  it('approveInitialRestore is called only by the development control and the production restore prompt', () => {
-    const callers = files
-      .filter((file) => /\bapproveInitialRestore\s*\(/.test(file.source))
+  it('no product screen reads sync state: only the root navigator does, for the first-sync gate', () => {
+    expect(files.filter((file) => file.path.startsWith('features/sync/'))).toEqual([]);
+    const controlReaders = files
+      .filter((file) => /\buseCloudSyncControl\s*\(/.test(file.source))
       .map((file) => file.path);
-    expect(callers.sort()).toEqual([
+    expect(controlReaders.sort()).toEqual([
       'features/plus/development/DevelopmentSyncSheet.tsx',
-      'features/sync/restore/CloudRestoreSheet.tsx', // the production prompt (RESTORE_REQUIRED only)
-      'persistence/sync/bootstrap.ts', // the definition
+      'providers/CloudSyncRunner.tsx', // the definition
+      'providers/RootNavigator.tsx', // the first-sync gate of an empty device
     ]);
-    // The production prompt never reaches the development control or the upload approval.
-    const prompt = files.find((file) => file.path === 'features/sync/restore/CloudRestoreSheet.tsx')!.source;
-    expect(prompt).not.toMatch(/development|approveInitialUpload|__DEV__/);
+    // The state it shows is pure presentation: it knows nothing about the mechanism.
+    const screen = files.find((file) => file.path === 'features/business/DataUnavailableScreen.tsx')!.source;
+    expect(screen).not.toMatch(/persistence|providers\/|useCloudSyncControl/);
   });
 
   it('only the sync worker can restore, and only the cloud sync runner re-hydrates the UI after it', () => {
@@ -109,10 +119,8 @@ describe('development sync control — production boundary', () => {
     }
   });
 
-  it('the control and the restore prompt hardcode no account, no Business and no privileged key, and log nothing', () => {
-    for (const file of files.filter(
-      (entry) => entry.path.startsWith('features/plus/development/') || entry.path.startsWith('features/sync/'),
-    )) {
+  it('the control hardcodes no account, no Business and no privileged key, and logs nothing', () => {
+    for (const file of files.filter((entry) => entry.path.startsWith('features/plus/development/'))) {
       expect({ path: file.path, uuid: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(file.source) }).toEqual({ path: file.path, uuid: false });
       expect({ path: file.path, email: /[\w.+-]+@[\w-]+\.[a-z]{2,}/i.test(file.source) }).toEqual({ path: file.path, email: false });
       expect({ path: file.path, privileged: /service_role|SERVICE_ROLE|supabase/i.test(file.source) }).toEqual({ path: file.path, privileged: false });

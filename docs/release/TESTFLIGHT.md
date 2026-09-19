@@ -9,23 +9,26 @@ outside the repository, what the build does and does NOT provide, and what to ve
 SQLite            the operational storage: Clients, Services, Appointments, Products, Sales —
                   the app reads and writes the device only
 Supabase          Auth identity + the `businesses` row + the operational mirror of a SYNCHRONIZED
-                  Business (Cloud Sync V1C push, V1D pull / restore — docs/architecture/CLOUD_SYNC.md)
-Cloud Sync        push + pull + new-device restore, once a Business is synchronized. Requires the
+                  Business (Cloud Sync V1C push, V1D pull / restore, V1D.1 seamless bootstrap —
+                  docs/architecture/CLOUD_SYNC.md)
+Cloud Sync        automatic: first upload, push + pull, new-device restore. Requires the
                   V1C and V1D migrations on the project (§3)
 ```
 
 Consequences for the pilot:
 
-- a **cloud backup and restore exist once a Business is synchronized**. Synchronization of data
-  that already existed on the device starts only after ONE supervised, explicit approval
-  (CLOUD_SYNC.md §11.1 — no release build gives it on its own); a brand-new empty account creates
-  its remote copy from its first records only after that same approval. Until it is given, the data
-  lives on the device only, exactly as before;
-- once synchronized: deleting the app, losing the phone or changing phone no longer loses the data.
-  After sign-in on the empty device, Souris shows "Des données existent pour ce compte" and
-  restores them on explicit confirmation (« Restaurer mes données », naming the Business). Nothing
-  restores by itself, and nothing should be created on the new device before restoring (a device
-  holding data is never merged with the remote copy — CLOUD_SYNC.md §16.11);
+- a **cloud backup and restore exist, with nothing to do** (CLOUD_SYNC.md §17). A brand-new account
+  creates its remote copy from its first record, on its own, while the app is open and online
+  (within about two minutes); data that already existed on a device bound to an EMPTY Business is
+  uploaded the same way. There is no approval, no prompt and no sync screen;
+- deleting the app, losing the phone or changing phone no longer loses the data: after sign-in on
+  the empty device, Souris restores the Business by itself and the data appears in every tab.
+  Meanwhile Souris shows « Récupération de vos données… ». Offline or on a failing network — at
+  that moment or at ANY later launch of a device that holds no data and never synchronized — it does NOT open an
+  empty application: it
+  shows "Impossible de récupérer vos données" with « Réessayer » (and keeps retrying on its own),
+  so nothing can be created on top of data that has not arrived yet. A device that already holds
+  its data is never held back and keeps working offline;
 - **Product images are NOT restored** (V1F): a restored Product has no photo until it is taken
   again;
 - a TestFlight update keeps the data (same bundle identifier, same SQLite file);
@@ -98,11 +101,12 @@ confirms the address; the browser simply cannot open Souris there.
       app killed);
 - [ ] sign-in, kill, relaunch offline → app usable;
 - [ ] Plus tab shows no "Développement" section;
-- [ ] new-device restore (a Business already synchronized): sign in on a fresh install → the
-      "Des données existent pour ce compte" sheet names the Business; « Plus tard » closes it and
-      creates nothing; « Restaurer mes données » → confirmation → data visible in every tab
-      (Products without photos); airplane mode during the restore → non-destructive message,
-      « Réessayer » succeeds once online;
+- [ ] first upload: new account → create a first Client → keep the app open (≤ ~2 min) → the row
+      exists in Supabase, with no prompt and without leaving the app;
+- [ ] new-device restore (a Business already synchronized): sign in on a fresh install → NO prompt
+      → data visible in every tab (Products without photos); airplane mode right after sign-in →
+      "Impossible de récupérer vos données", no tab bar, nothing can be created; back online →
+      « Réessayer » → data visible;
 - [ ] barcode scan: camera permission prompt shows the French description; denial is recoverable;
 - [ ] product photo from camera and from the photo library;
 - [ ] safe areas, keyboard, sheets, and agenda gestures on the pilot iPhone.

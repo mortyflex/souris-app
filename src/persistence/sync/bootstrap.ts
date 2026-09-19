@@ -1,4 +1,4 @@
-// Souris — first sync of a bound Business (Cloud Sync V1C, CLOUD_SYNC.md §11)
+// Souris — first sync of a bound Business (Cloud Sync V1C–V1D.1, CLOUD_SYNC.md §11)
 //
 // Before anything is pushed, the device decides what the first sync of its
 // Business is, from the population of BOTH sides:
@@ -9,23 +9,25 @@
 //                                                                                        nothing pushed
 //   local populated  remote empty   approved        → INITIAL_UPLOAD                    enqueue everything, push
 //   local empty      remote populated               → RESTORE_REQUIRED                  STOP — until the restore is
-//                                                                                        explicitly approved (V1D)
+//                                                                                        approved (V1D)
 //   local populated  remote populated               → RECONCILIATION_REQUIRED           STOP — never local-wins
 //                                                                                        or remote-wins silently
 //
-// Uploading a device's EXISTING data into an empty Business is never
-// automatic: a development device full of fixtures bound to a fresh Business
-// looks exactly like the pilot device. It needs ONE explicit approval for
-// that exact Business UUID (`approveInitialUpload`), persisted locally,
-// consumed by the run that enqueues the aggregates, never valid for another
-// Business, and cleared by the development reset. Classification itself is
-// automatic and harmless: it reads one remote count and writes no data.
+// At THIS level, uploading a device's EXISTING data into an empty Business
+// always needs ONE approval for that exact Business UUID
+// (`approveInitialUpload`), persisted locally, consumed by the run that
+// enqueues the aggregates, never valid for another Business, and cleared by
+// the development reset. The approval is an internal safety primitive, not a
+// user decision: since V1D.1 its single caller is the cloud sync runner, which
+// gives it automatically — only under a LIVE session bound to that Business —
+// so the user never sees the first sync. Classification itself is harmless:
+// it reads one remote count and writes no data.
 //
 // The decision is stored in `souris_metadata`, but a stored decision is a
 // push licence ONLY while what justified it still holds
 // (`isStoredPushDecisionCurrent`):
 //
-//   INITIAL_UPLOAD   the explicit approval for this Business — durable: an
+//   INITIAL_UPLOAD   the recorded approval for this Business — durable: an
 //                    interrupted upload resumes without a second approval
 //   ALREADY_SYNCED   only while `sync_state` really holds an acknowledged
 //                    revision for this Business
@@ -35,18 +37,20 @@
 //                    never authorizes uploading data created afterwards. The
 //                    first local aggregate (or outbox entry) makes it stale:
 //                    the next run classifies again, and — with no acknowledged
-//                    state — lands on INITIAL_UPLOAD_REQUIRES_APPROVAL
+//                    state — lands on INITIAL_UPLOAD_REQUIRES_APPROVAL. The
+//                    periodic check sees that too (`isSyncBootstrapPending`),
+//                    so the first data of a new account leaves on its own
 //
-// Only actual acknowledged state, or the explicit approval, ever lets data
+// Only actual acknowledged state, or the recorded approval, ever lets data
 // leave the device. A pending outbox proves nothing about synchronization.
 //
-// A STOP decision is stored for diagnosis but RE-EVALUATED on the next
-// explicit run: the way out is an explicit action (the approval, a V1D
-// restore, an explicit reconciliation, or an explicit cleanup of a test
-// Business), after which the classification changes.
+// A STOP decision is stored for diagnosis but RE-EVALUATED on the next run.
+// The two one-sided STOPs are answered by the runner's automatic approval;
+// RECONCILIATION_REQUIRED is answered by nothing automatic — its way out is
+// an explicit reconciliation (or an explicit cleanup of a test Business).
 //
-// Rebuilding an EMPTY device from a populated Business is never automatic
-// either (V1D): RESTORE_REQUIRED stays a STOP until `approveInitialRestore`
+// Rebuilding an EMPTY device from a populated Business follows the same
+// pattern (V1D): RESTORE_REQUIRED stays a STOP until `approveInitialRestore`
 // was called for that exact Business UUID. The approval is persisted and KEPT
 // until a restore actually commits (restore.ts clears it inside the restore
 // transaction), so a failed or interrupted restore is simply retried by the
@@ -85,7 +89,7 @@ export interface SyncBootstrapFacts {
   readonly remoteAggregateCount: number;
   /** `sync_state` holds at least one acknowledged revision for the Business. */
   readonly hasAcknowledgedState: boolean;
-  /** An explicit, unconsumed initial-upload approval exists for THIS Business. */
+  /** An unconsumed initial-upload approval exists for THIS Business. */
   readonly initialUploadApproved: boolean;
 }
 
@@ -141,6 +145,26 @@ export function isStoredPushDecisionCurrent(
     default:
       return false;
   }
+}
+
+/**
+ * Cheap LOCAL check: the first sync of this Business is not settled yet AND a
+ * run can settle it without anyone's help — so a periodic caller should run.
+ *
+ *   never classified                    the launch run failed before deciding
+ *   EMPTY / ALREADY_SYNCED, stale       classify again (the first aggregate
+ *                                       created after an EMPTY lands here)
+ *   INITIAL_UPLOAD_REQUIRES_APPROVAL    the automatic upload or restore did not
+ *   RESTORE_REQUIRED                    complete (a failure): retry it
+ *
+ * RECONCILIATION_REQUIRED is NOT pending in that sense: no run resolves it, so
+ * a device in that state never polls the remote from a timer.
+ */
+export function isSyncBootstrapPending(db: SourisDatabase, businessId: string): boolean {
+  const stored = readSyncBootstrapRecord(db, businessId);
+  if (!stored) return true;
+  if (stored.decision === 'RECONCILIATION_REQUIRED') return false;
+  return !isStoredPushDecisionCurrent(db, businessId, stored.decision);
 }
 
 /** `souris_metadata` key of the stored decision; cleared by the development reset. */
@@ -253,7 +277,7 @@ export function clearInitialUploadApproval(db: SourisDatabase): void {
 }
 
 /**
- * The ONE explicit gate of an initial upload: authorizes uploading the
+ * The ONE gate of an initial upload: authorizes uploading the
  * existing local data of `businessId` into its EMPTY remote Business.
  *
  * It records the approval and nothing else — no aggregate is enqueued, no
@@ -262,8 +286,9 @@ export function clearInitialUploadApproval(db: SourisDatabase): void {
  * Business, enqueues every aggregate and consumes the approval in ONE
  * transaction. A populated remote stays a STOP whatever was approved.
  *
- * Never called by the application on its own: there is no UI yet, and the
- * pilot transfer invokes it during the supervised migration.
+ * An internal safety primitive, never a user action: its single caller is the
+ * cloud sync runner (V1D.1), after a run answered
+ * INITIAL_UPLOAD_REQUIRES_APPROVAL for the Business of its LIVE session.
  */
 export function approveInitialUpload(
   db: SourisDatabase,
@@ -346,7 +371,7 @@ export function clearInitialRestoreApproval(db: SourisDatabase): void {
 }
 
 /**
- * The ONE explicit gate of a new-device restore: authorizes rebuilding the
+ * The ONE gate of a new-device restore: authorizes rebuilding the
  * EMPTY local database of this device from the remote data of `businessId`.
  *
  * It records the approval and nothing else — no request is made, no row is
@@ -355,8 +380,9 @@ export function clearInitialRestoreApproval(db: SourisDatabase): void {
  * Business. The restore re-verifies every precondition inside its own
  * transaction (restore.ts) and clears the approval only when it commits.
  *
- * Never called by the application on its own: its single caller is the
- * `__DEV__` development sync control, behind a second confirmation.
+ * An internal safety primitive, never a user action: its single caller is the
+ * cloud sync runner (V1D.1), after a run answered RESTORE_REQUIRED for the
+ * Business of its LIVE session.
  */
 export function approveInitialRestore(
   db: SourisDatabase,

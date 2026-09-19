@@ -237,7 +237,7 @@ export function loadEligibleSyncOutbox(
  * `sync_state`: the aggregates are queued, not declared synchronized.
  * Business-scoped rows stamped with another id are NOT enqueued. Returns the
  * number of entries created. Called ONLY by the push worker, inside the
- * transaction that consumes the explicit approval (CLOUD_SYNC.md §11.1).
+ * transaction that consumes the approval (CLOUD_SYNC.md §11.1).
  */
 export function enqueueInitialUpload(db: SourisDatabase, businessId: string, now: Date): number {
   const instant = toSqlInstant(now);

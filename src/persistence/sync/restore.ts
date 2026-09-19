@@ -3,7 +3,8 @@
 // Rebuilds the EMPTY local database of a bound device from the remote data of
 // its Business. It runs only from the sync worker, only when the first-sync
 // classification is RESTORE_REQUIRED (local empty + remote populated) AND an
-// explicit `approveInitialRestore` exists for that exact Business.
+// `approveInitialRestore` exists for that exact Business (recorded by the
+// cloud sync runner since V1D.1 — CLOUD_SYNC.md §17).
 //
 //   1. fetch the COMPLETE remote dataset            one consistent remote snapshot
 //   2. validate ALL of it                           remote-snapshot.ts — before any write

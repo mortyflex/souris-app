@@ -13,13 +13,15 @@ SQLite     every operational record (Clients, Services, Appointments, Products, 
 
 Account & Onboarding V1 itself synchronizes nothing. Since Cloud Sync V1C
 (`docs/architecture/CLOUD_SYNC.md` §15) the operational data of a bound Business is UPLOADED
-(owner-only RLS; data that existed before the first sync only after an explicit approval,
-CLOUD_SYNC.md §11.1) once the session is live, and since Cloud Sync V1D (§16) it comes BACK: a
+(owner-only RLS) once the session is live, and since Cloud Sync V1D (§16) it comes BACK: a
 synchronized Business is pulled incrementally, and an empty device bound to a populated Business
-(reinstall, new phone) is offered a restore — `CloudRestoreSheet`, explicit confirmation naming the
-Business, never automatic (CLOUD_SYNC.md §16.11). So a cloud backup / restore now exists, with two
-limits the copy must respect: it exists only ONCE a Business is synchronized (an account whose data
-was never approved for upload has no remote copy), and Product images are not restored until V1F.
+(reinstall, new phone) is restored. Since Cloud Sync V1D.1 (§17) both first syncs are automatic — no
+approval, no prompt, no sync screen — and only under a LIVE session: nothing is uploaded or
+restored on the offline fallback or signed out. An EMPTY device opens the application only once
+its data is known IN THE CURRENT SESSION (restored, or the account found empty — CLOUD_SYNC.md §17.3); otherwise the root
+gate shows a recoverable "Impossible de récupérer vos données" state. So a cloud backup / restore now exists, with two
+limits the copy must respect: a device holding its own data is never merged with a populated remote
+Business (`RECONCILIATION_REQUIRED`), and Product images are not restored until V1F.
 Wording that promises more ("toutes vos données sont sauvegardées") stays out; the account
 screens are unchanged.
 
@@ -163,6 +165,12 @@ app                       (app): tabs + every existing sheet route, with the ope
                           providers and CurrentBusinessProvider (bound Business id)
 device-account-conflict   AccountConflictScreen
 auth-error / business-error  AccountUnavailableScreen ("Réessayer", optional "Se déconnecter")
+data-loading              DataLoadingScreen — an EMPTY device waiting for this session's check of its
+                          account, or for its restore (« Récupération de vos données… », no action)
+data-unavailable          DataUnavailableScreen — that check or restore failed, or is impossible offline
+                          ("Réessayer", "Se déconnecter"). CLOUD_SYNC.md §17.3. A device that holds
+                          data, or that already synchronizes (acknowledged state), never gets to
+                          either state
 ```
 
 Protected content never mounts while booting or signed out, so nothing flashes. The operational

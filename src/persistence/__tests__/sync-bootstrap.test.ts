@@ -9,6 +9,7 @@ import {
   isLocalDatabasePopulated,
   isPushEnabled,
   isStoredPushDecisionCurrent,
+  isSyncBootstrapPending,
   readSyncBootstrapRecord,
   SYNC_BOOTSTRAP_KEY,
   writeSyncBootstrapRecord,
@@ -135,6 +136,64 @@ describe('isStoredPushDecisionCurrent — what a STORED decision still licenses'
     for (const stop of ['INITIAL_UPLOAD_REQUIRES_APPROVAL', 'RESTORE_REQUIRED', 'RECONCILIATION_REQUIRED'] as const) {
       expect(isStoredPushDecisionCurrent(db, REMOTE_BUSINESS_ID, stop)).toBe(false);
     }
+  });
+});
+
+describe('isSyncBootstrapPending — what the periodic check may settle on its own (V1D.1)', () => {
+  const emptySeed = () => createTestSeed({ clients: [], services: [], products: [], appointments: [] });
+  const store = (db: ReturnType<typeof openTestDatabase>, decision: Parameters<typeof writeSyncBootstrapRecord>[1]['decision']) =>
+    writeSyncBootstrapRecord(db, { businessId: REMOTE_BUSINESS_ID, decision, decidedAt: NOW });
+
+  it('a Business that was never classified is pending', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, emptySeed);
+    bindLocalDatabaseToBusiness(db, remoteBusinessProfile);
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(true);
+  });
+
+  it('EMPTY is settled while nothing exists locally, and pending from the first aggregate on', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, emptySeed);
+    bindLocalDatabaseToBusiness(db, remoteBusinessProfile);
+    store(db, 'EMPTY');
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(false);
+
+    insertClient(db, clientLea);
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(true);
+  });
+
+  it('the one-sided STOPs are pending (the automatic first sync did not complete); a reconciliation never is', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+    bindLocalDatabaseToBusiness(db, remoteBusinessProfile);
+
+    store(db, 'INITIAL_UPLOAD_REQUIRES_APPROVAL');
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(true);
+    store(db, 'RESTORE_REQUIRED');
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(true);
+
+    store(db, 'RECONCILIATION_REQUIRED');
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(false);
+  });
+
+  it('a synchronizing Business is settled: INITIAL_UPLOAD always, ALREADY_SYNCED while acknowledged state exists', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+    bindLocalDatabaseToBusiness(db, remoteBusinessProfile);
+
+    store(db, 'INITIAL_UPLOAD');
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(false);
+
+    store(db, 'ALREADY_SYNCED');
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(true); // nothing acknowledged: classify again
+    writeAcknowledgedRemoteVersion(db, {
+      businessId: REMOTE_BUSINESS_ID,
+      aggregateType: 'CLIENT',
+      aggregateId: clientLea.id,
+      remoteVersion: 1,
+      lastSyncedAt: NOW,
+    });
+    expect(isSyncBootstrapPending(db, REMOTE_BUSINESS_ID)).toBe(false);
   });
 });
 

@@ -590,8 +590,9 @@ reads    business_profile.id                       the ONLY Business it may push
                                                     while no aggregate row and no outbox entry exists; ALREADY_SYNCED
                                                     only while sync_state has a row for the Business
          souris_metadata['sync_initial_upload_approval']
-                                                    explicit approval { businessId, approvedAt }; ignored unless it
-                                                    names the bound Business (CLOUD_SYNC.md §11.1)
+                                                    approval { businessId, approvedAt } recorded by the cloud sync
+                                                    runner (V1D.1); ignored unless it names the bound Business
+                                                    (CLOUD_SYNC.md §11.1, §17)
          sync_outbox (eligible entries)             business_id = bound id, next_attempt_at NULL or <= now,
                                                     ordered CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE, then id
          the CURRENT aggregate rows, raw            aggregate-payload.ts — integer cents copied as stored (no euro
@@ -615,14 +616,19 @@ writes   souris_metadata['sync_bootstrap']          every classification; ONE tr
 `sync_state` at every run (three indexed `SELECT 1 … LIMIT 1`) before trusting a stored decision;
 only real `sync_state` rows — written exclusively from server-returned versions — make pushes
 automatic. A device that stored `EMPTY` and then received its first records is classified again and
-stops at `INITIAL_UPLOAD_REQUIRES_APPROVAL`, its outbox entries untouched.
+answers `INITIAL_UPLOAD_REQUIRES_APPROVAL`, its outbox entries untouched — which the runner turns
+into the initial upload within the same trigger (below).
 
-Existing local data is never enqueued or pushed automatically: "local populated + remote empty"
+The WORKER never enqueues or pushes existing local data on its own: "local populated + remote empty"
 without that approval is a STOP that writes nothing but the diagnostic decision. The only writer of
 the approval is `approveInitialUpload(db, businessId)` (`sync/bootstrap.ts`) — one transaction that
 checks the binding (`business_profile.id` must be that exact UUID) and refuses when a push decision
-is already stored. No provider, store or product screen calls it; its single caller is the
-`__DEV__`-only development sync control (CLOUD_SYNC.md §15.9), behind a second confirmation.
+is already stored. No provider, store or screen calls it. Since Cloud Sync V1D.1 its single caller is
+`CloudSyncRunner`, which gives it automatically — under a live session bound to that Business — when
+a run answers `INITIAL_UPLOAD_REQUIRES_APPROVAL`, then runs the worker ONE more time
+(CLOUD_SYNC.md §17). The user is never asked. The 2-minute foreground tick asks `isSyncRunDue`
+(`isSyncBootstrapPending || hasEligiblePushWork`, local reads only), so the first record created
+after an `EMPTY` classification leaves without a background / foreground cycle.
 
 Every database call is synchronous and short (one aggregate at a time); the network awaits sit
 between them, so no transaction is ever held open across a request and store mutations interleave
@@ -671,9 +677,12 @@ writes   clean + live      applyRemoteAggregate + sync_state ← remote version
 The remote answer is validated as a whole by `sync/remote-snapshot.ts` (pure, no database) before
 either module writes anything. `approveInitialRestore` (`sync/bootstrap.ts`) is the only writer of the
 restore approval: one transaction that checks the binding, refuses a synchronized device and refuses
-any populated database; its callers are the production restore prompt (`features/sync/restore`,
-CLOUD_SYNC.md §16.11) and the `__DEV__` development sync control, each behind a confirmation naming
-the Business.
+any populated database. Since Cloud Sync V1D.1 its single caller is `CloudSyncRunner`, which gives it
+automatically when a run answers `RESTORE_REQUIRED` and runs the worker ONE more time (CLOUD_SYNC.md
+§17): a new device is rebuilt after sign-in with no prompt. A failed restore leaves the database
+empty and the approval pending; the next trigger — the tick included — retries it. Meanwhile the
+application is not mounted on that empty device (the session-scoped first-sync gate, CLOUD_SYNC.md §17.3), so no
+operational row and no outbox entry can appear before the restore.
 
 The first-run seed marker is untouched by a restore: a fresh install already ran its (empty)
 production seed, so a restored database is never re-seeded.
@@ -789,10 +798,11 @@ A fresh development install therefore starts empty like production; the reset is
 way to load the pilot data and fixtures.
 
 The same `Développement` section holds `Sync V1C (test)`, the development sync control
-(CLOUD_SYNC.md §15.9): it only reads the sync bookkeeping and calls the existing
-`approveInitialUpload` / `approveInitialRestore` / sync worker — no store, no schema and no reset
-behavior changed. After a reset on a device whose Business is populated remotely, the reseeded
-fixtures make it `RECONCILIATION_REQUIRED`: a development reset is never followed by a restore.
+(CLOUD_SYNC.md §15.9): it only reads the sync bookkeeping and triggers the runner's own run — it
+approves nothing since V1D.1. After a reset on a device whose Business is populated remotely, the
+reseeded fixtures make it `RECONCILIATION_REQUIRED`: a development reset is never followed by a
+restore. After a reset on a device whose Business is EMPTY remotely, the reseeded fixtures ARE
+uploaded automatically (V1D.1): use a throwaway account for development resets.
 
 The schema is kept. Alternatives: uninstall the app, or delete `souris.db` from the app's SQLite
 directory with a device file browser.
@@ -849,7 +859,7 @@ children + snapshots, exact cents and no image path, dependency order, version a
 the upload, offline, lost acknowledgement retried idempotently, bounded backoff with code-only errors, version
 conflicts leaving the remote untouched, tombstone DELETE, never-remote DELETE, UPSERT of a vanished row, recreation
 after a tombstone; `sync-gateway.test.ts`: the Supabase adapter and its error mapping; `CloudSyncRunner.test.tsx`:
-live-bound-session gating, no upload before approval from launch / foreground / tick, offline / signed-out /
+live-bound-session gating, offline / signed-out /
 unconfigured silence, foreground and tick triggers), the Cloud Sync V1D restore and pull (§7e —
 `sync-pull-restore.test.ts`, two real SQLite devices of one Business against the same in-memory remote:
 empty local + populated remote → RESTORE_REQUIRED with the dataset never fetched before the approval; a stored
@@ -870,8 +880,13 @@ dirty, a remote tombstone against a dirty aggregate and a local DELETE against a
 BOTH sides untouched; tombstones removing clean aggregates with their children, acknowledged without echo,
 guarded by the local deletion rules, and converging in one pull in reverse dependency order; the snapshot
 validator's normalization, payload-less tombstones and value-free errors), `CloudSyncRunner.test.tsx` again for
-no automatic restore from launch / foreground / run and the screens re-hydrating after a restore or an
-applied pull but never after a push-only run, the source-hygiene guards (no literal NUL
+the screens re-hydrating after a restore or an
+applied pull but never after a push-only run, the Cloud Sync V1D.1 seamless bootstrap (CLOUD_SYNC.md §17.4 —
+`CloudSyncRunner.test.tsx`: automatic initial upload at launch in exactly two runs, automatic new-device
+restore with re-hydrated providers and no echo, a stale EMPTY uploaded by the tick alone,
+RECONCILIATION_REQUIRED never approved and neither side touched, a failed restore retried by the tick,
+no approval once the session ended mid-run; `isSyncBootstrapPending` / `isSyncRunDue` at the
+persistence level), the source-hygiene guards (no literal NUL
 byte in a store file; no store SQL statement naming the euro `price` / `unit_price` columns dropped by
 v8), image promotion /
 rollback / replacement / removal / external-asset safety, and the provider bootstrap states.
@@ -905,7 +920,10 @@ this local layer must keep true for the later phases:
 - V1C added the push worker (§7d, CLOUD_SYNC.md §15), their first runtime consumer: a one-way upload
   through one atomic, version-conditional remote function. It reads aggregates raw and writes only
   sync bookkeeping; the stores, providers and screens are unchanged;
-- V1D added the read side (§7e, CLOUD_SYNC.md §16): an explicitly approved, single-transaction
+- V1D added the read side (§7e, CLOUD_SYNC.md §16): an approved, single-transaction
   new-device restore and an incremental pull that only ever writes locally CLEAN aggregates. The
   stores and screens are unchanged; the persistence boundary gained `reloadSnapshot()` (§6) so the
-  providers re-hydrate after such a run. `products.image_uri` stays local-only in both directions.
+  providers re-hydrate after such a run. `products.image_uri` stays local-only in both directions;
+- V1D.1 made the first sync seamless (CLOUD_SYNC.md §17): the runner gives both first-sync approvals
+  automatically and the periodic check notices a pending first sync. No schema change, no new
+  metadata key, no change to the worker's reads and writes above.

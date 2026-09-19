@@ -26,7 +26,7 @@ import {
   SYNC_INITIAL_UPLOAD_APPROVAL_KEY,
 } from '../sync/bootstrap';
 import { countSyncOutboxRows, findSyncOutboxEntry, loadSyncOutbox } from '../sync/outbox';
-import { createSyncPushWorker, hasEligiblePushWork, nextSyncAttemptAt } from '../sync/push-worker';
+import { createSyncPushWorker, hasEligiblePushWork, isSyncRunDue, nextSyncAttemptAt } from '../sync/push-worker';
 import {
   SyncRemoteError,
   type RemoteAppointmentPayload,
@@ -237,6 +237,7 @@ describe('bootstrap — first sync of a bound Business', () => {
     expect(remote.requests).toEqual([]);
     expect(pending(db)).toEqual([['CLIENT', 'client-lea', 'UPSERT', 1]]);
     expect(hasEligiblePushWork(db, REMOTE_BUSINESS_ID, NOW)).toBe(false);
+    expect(isSyncRunDue(db, REMOTE_BUSINESS_ID, NOW)).toBe(false); // no run resolves a reconciliation
   });
 
   it('local populated + remote populated without known sync state: STOP — explicit reconciliation, remote untouched', async () => {
@@ -492,7 +493,9 @@ describe('EMPTY is not a synchronization acknowledgement (E2E regression)', () =
     insertProduct(db, { ...productSerum, businessId: REMOTE_BUSINESS_ID });
     bootstrapPersistence(db, emptySeed);
     const { remote, run } = setup(db, first.remote);
+    // Nothing may be PUSHED under a stale EMPTY — but a run is due: the periodic check re-classifies (V1D.1).
     expect(hasEligiblePushWork(db, REMOTE_BUSINESS_ID, NOW)).toBe(false);
+    expect(isSyncRunDue(db, REMOTE_BUSINESS_ID, NOW)).toBe(true);
 
     // The stored decision still reads EMPTY, but it is stale: approving is allowed, pushing is not.
     expect(readSyncBootstrapRecord(db, REMOTE_BUSINESS_ID)?.decision).toBe('EMPTY');
@@ -821,9 +824,11 @@ describe('acknowledgement, revisions and retries', () => {
     expect(await run()).toMatchObject({ pushed: 0, failed: 0 });
     expect(remote.requests).toHaveLength(before);
     expect(hasEligiblePushWork(db, REMOTE_BUSINESS_ID, now())).toBe(false);
+    expect(isSyncRunDue(db, REMOTE_BUSINESS_ID, now())).toBe(false); // a backing-off device never polls
 
     advance(60_000);
     expect(hasEligiblePushWork(db, REMOTE_BUSINESS_ID, now())).toBe(true);
+    expect(isSyncRunDue(db, REMOTE_BUSINESS_ID, now())).toBe(true);
     expect(await run()).toMatchObject({ pushed: 1, failed: 0 });
 
     expect(nextSyncAttemptAt(NOW, 3).getTime() - NOW.getTime()).toBe(8 * 60_000);
