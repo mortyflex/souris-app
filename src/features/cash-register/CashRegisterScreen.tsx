@@ -28,6 +28,7 @@ import {
 } from '@/shared/icons/payment-method-icons';
 import { formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
+import { GlassIconButton, glassIconButtonSize, glassIcons } from '@/shared/ui/GlassIconButton';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import {
   foregroundSoft,
@@ -101,23 +102,15 @@ export function CashRegisterScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea} testID="cash-register-screen">
       <View style={styles.topBar}>
-        <Pressable
+        <GlassIconButton
           accessibilityLabel="Retour"
-          accessibilityRole="button"
-          hitSlop={spacing.sm}
+          icon={glassIcons.back}
           onPress={() => router.back()}
-          style={({ pressed }) => [styles.backButton, pressed && styles.pressedControl]}
-        >
-          <SymbolView
-            name={{ ios: 'chevron.left', android: 'arrow_back' }}
-            size={18}
-            tintColor={semanticColors.foreground}
-          />
-        </Pressable>
+        />
         <AppText variant="eyebrow" style={styles.eyebrow}>
           GESTION
         </AppText>
-        <View style={styles.backButton} />
+        <View style={styles.topBarSpacer} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -266,12 +259,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingVertical: spacing.sm,
   },
-  backButton: {
-    alignItems: 'center',
-    height: minimumTouchTarget,
-    justifyContent: 'center',
-    width: minimumTouchTarget,
-  },
+  // Mirrors the back button so the eyebrow stays centred.
+  topBarSpacer: { height: glassIconButtonSize, width: glassIconButtonSize },
   eyebrow: { color: semanticColors.accent },
   pressedControl: { opacity: interaction.pressedOpacity, transform: [{ scale: interaction.pressedScale }] },
   content: {

@@ -1,14 +1,14 @@
 // Souris — FloatingCreateButton
 //
 // The ONE floating creation action of screens whose primary action is
-// "add / create": a compact glossy-candy violet circle with a white plus,
-// fixed bottom-right above the tab bar / home indicator, with a light
-// lavender-tinted elevation. The candy finish is decoration only (`gloss.candy`:
-// violet fill deepening downward, a top sheen, a small elliptical specular
-// highlight and a moulded inner edge). Every gloss layer lives in ONE circular
-// clip the exact size of the button, so nothing is ever drawn outside the
-// circle; only the round shadow is. Size, hit target and behaviour are
-// untouched. Never part of the scrolling content — screens
+// "add / create": a compact light-glass circle with a violet plus, fixed
+// bottom-right above the tab bar / home indicator, with a soft neutral lift.
+// The material is the shared `GlassSurface` (DESIGN_OVERRIDES.md §21) — the
+// same one as the back button and the Agenda arrows — so the violet + is the
+// button's only accent. The whole finish lives in ONE circular clip the exact
+// size of the button, so nothing is ever drawn outside the circle; only the
+// round shadow is. Size, hit target and behaviour are untouched. Never part of
+// the scrolling content — screens
 // keep `bottomClearance` padding under their lists so the last row scrolls
 // above it.
 //
@@ -44,11 +44,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppText } from './AppText';
+import { GlassSurface } from './GlassSurface';
 import {
   duration,
   easing,
   floatingAction,
-  gloss,
   gutter,
   interaction,
   nativeShadows,
@@ -241,15 +241,12 @@ export function FloatingCreateButton({
             style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
             testID={testID}
           >
-            <View pointerEvents="none" style={styles.candy} testID={`${testID}-gloss`}>
-              <View style={styles.candySheen} />
-              <View style={styles.candySpecular} />
-            </View>
+            <GlassSurface floating shape={styles.circle} testID={`${testID}-gloss`} />
             <Animated.View style={{ transform: [{ rotate }] }}>
               <SymbolView
                 name={{ ios: 'plus', android: 'add' }}
                 size={24}
-                tintColor={semanticColors.surfaceElevated}
+                tintColor={semanticColors.accent}
                 weight="semibold"
               />
             </Animated.View>
@@ -261,13 +258,9 @@ export function FloatingCreateButton({
 }
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
-// Exactly half the button, so the circle, its gloss clip and its shadow share
+// Exactly half the button, so the circle, its glass clip and its shadow share
 // one outline.
 const buttonRadius = floatingAction.size / 2;
-// Specular ellipse: width, height and centre, proportional to the button.
-const specularDiameter = floatingAction.size * 0.62;
-const specularHeight = floatingAction.size * 0.26;
-const specularCenterY = floatingAction.size * 0.2;
 
 const styles = StyleSheet.create({
   anchor: {
@@ -278,39 +271,13 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    backgroundColor: semanticColors.accent,
     borderRadius: buttonRadius,
     height: floatingAction.size,
     justifyContent: 'center',
     width: floatingAction.size,
-    ...nativeShadows.floating,
+    ...nativeShadows.glassFloating,
   },
-  // Glossy candy finish: one circular clip, exactly the button's circle, holds
-  // every gloss layer. The flat accent above remains the fill wherever
-  // gradients are unavailable, and the button's round shadow stays outside.
-  candy: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: buttonRadius,
-    boxShadow: gloss.candy.innerLight,
-    experimental_backgroundImage: gloss.candy.fill,
-    overflow: 'hidden',
-  },
-  candySheen: {
-    ...StyleSheet.absoluteFill,
-    experimental_backgroundImage: gloss.candy.sheen,
-  },
-  // A circle squashed vertically is a true ellipse; it sits wholly inside the
-  // button's upper curve and ends above the glyph.
-  candySpecular: {
-    alignSelf: 'center',
-    borderRadius: specularDiameter / 2,
-    experimental_backgroundImage: gloss.candy.specular,
-    height: specularDiameter,
-    position: 'absolute',
-    top: specularCenterY - specularDiameter / 2,
-    transform: [{ scaleY: specularHeight / specularDiameter }],
-    width: specularDiameter,
-  },
+  circle: { borderRadius: buttonRadius },
   buttonPressed: {
     opacity: interaction.pressedOpacity,
     transform: [{ scale: interaction.pressedScale }],

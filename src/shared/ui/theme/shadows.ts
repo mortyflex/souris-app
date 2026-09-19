@@ -68,7 +68,12 @@ export const nativeShadows = {
   card: nativeShadow('0 1px 3px rgba(31, 28, 61, 0.10)', 1),
   raised: nativeShadow('0 4px 14px rgba(31, 28, 61, 0.10)', 2),
   lifted: nativeShadow('0 8px 20px rgba(31, 28, 61, 0.16)', 4),
-  floating: nativeShadow('0 5px 16px rgba(101, 65, 153, 0.18)', 4),
+  // Light glass controls (GlassSurface): a contact line plus a soft, short lift.
+  glass: nativeShadow('0 1px 2px rgba(31, 28, 61, 0.06), 0 3px 10px rgba(31, 28, 61, 0.08)', 2),
+  // Glass capsule (Jour / Semaine): quieter than a circle's, its footprint being wider.
+  glassCapsule: nativeShadow('0 1px 2px rgba(31, 28, 61, 0.04), 0 2px 8px rgba(31, 28, 61, 0.05)', 1),
+  // The floating + : the same glass, lifted a little further off the list.
+  glassFloating: nativeShadow('0 1px 3px rgba(31, 28, 61, 0.08), 0 6px 18px rgba(31, 28, 61, 0.12)', 4),
   // Upward lift that separates a bottom sheet from the dimmed page.
   sheet: nativeShadow('0 -6px 24px rgba(31, 28, 61, 0.12)', 8),
   footer: nativeShadow('0 -4px 14px rgba(31, 28, 61, 0.08)', 2),

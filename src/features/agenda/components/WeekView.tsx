@@ -1,13 +1,12 @@
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
+import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
 import { TabBarGlassScrollEdge } from '@/shared/ui/TabBarGlassScrollEdge';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import {
   bottomClearance,
   gutter,
-  interaction,
   semanticColors,
   spacing,
   touchTarget,
@@ -68,43 +67,19 @@ export function WeekView({
           { minHeight: minimumTouchTarget, paddingHorizontal: horizontalGutter },
         ]}
       >
-        <Pressable
-          accessibilityRole="button"
+        <GlassIconButton
           accessibilityLabel="Semaine précédente"
-          hitSlop={6}
+          icon={glassIcons.previous}
           onPress={() => onShiftWeek(-1)}
-          style={({ pressed }) => [
-            styles.weekControl,
-            { minHeight: minimumTouchTarget },
-            pressed && styles.pressedControl,
-          ]}
-        >
-          <SymbolView
-            name={{ ios: 'chevron.left', android: 'chevron_left' }}
-            size={16}
-            tintColor={semanticColors.foreground}
-          />
-        </Pressable>
+        />
         <AppText variant="control" style={styles.range}>
           {formatWeekRange(selectedDay)}
         </AppText>
-        <Pressable
-          accessibilityRole="button"
+        <GlassIconButton
           accessibilityLabel="Semaine suivante"
-          hitSlop={6}
+          icon={glassIcons.next}
           onPress={() => onShiftWeek(1)}
-          style={({ pressed }) => [
-            styles.weekControl,
-            { minHeight: minimumTouchTarget },
-            pressed && styles.pressedControl,
-          ]}
-        >
-          <SymbolView
-            name={{ ios: 'chevron.right', android: 'chevron_right' }}
-            size={16}
-            tintColor={semanticColors.foreground}
-          />
-        </Pressable>
+        />
       </View>
       <TabBarGlassScrollEdge>
         <ScrollView
@@ -140,11 +115,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  weekControl: { alignItems: 'center', justifyContent: 'center', minHeight: touchTarget.ios, width: 44 },
-  pressedControl: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
   },
   range: { color: semanticColors.foreground },
   scrollContent: { paddingTop: spacing.sm },

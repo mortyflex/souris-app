@@ -64,7 +64,7 @@ async function settleReveal() {
 describe('FloatingCreateButton', () => {
   beforeEach(() => selectionHaptic.mockClear());
 
-  it('keeps every gloss layer inside one circular clip the size of the button', async () => {
+  it('keeps the glass finish inside one circular clip the size of the button', async () => {
     const view = await render(
       <FloatingCreateButton accessibilityLabel="Ajouter une cliente" onPress={jest.fn()} testID="create" />,
     );
@@ -77,9 +77,9 @@ describe('FloatingCreateButton', () => {
 
     expect(button).toMatchObject({ borderRadius: radius, height: floatingAction.size, width: floatingAction.size });
     expect(clip).toMatchObject({ borderRadius: radius, bottom: 0, left: 0, overflow: 'hidden', right: 0, top: 0 });
-    // Decoration only: never a touch target, never a border that could box the circle.
+    // Decoration only: never a touch target; its contour is a hairline on the circle itself.
     expect(gloss.props.pointerEvents).toBe('none');
-    expect(clip.borderWidth).toBeUndefined();
+    expect(clip.borderWidth).toBe(StyleSheet.hairlineWidth);
   });
 
   it('starts hidden and unavailable, then reveals shortly after focus', async () => {

@@ -50,6 +50,7 @@ import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
   foregroundSoft,
@@ -171,19 +172,11 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={[styles.topBar, { paddingHorizontal: horizontalGutter }]}>
-        <Pressable
-          accessibilityRole="button"
+        <GlassIconButton
           accessibilityLabel="Retour"
-          hitSlop={spacing.sm}
+          icon={glassIcons.back}
           onPress={() => router.back()}
-          style={({ pressed }) => [styles.backButton, pressed && styles.pressedControl]}
-        >
-          <SymbolView
-            name={{ ios: 'chevron.left', android: 'arrow_back' }}
-            size={18}
-            tintColor={semanticColors.foreground}
-          />
-        </Pressable>
+        />
         <AppText variant="eyebrow" style={styles.topBarEyebrow}>
           CLIENTE
         </AppText>
@@ -538,17 +531,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: spacing.sm,
     paddingTop: spacing.sm,
-  },
-  backButton: {
-    alignItems: 'center',
-    borderRadius: radii.small,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  pressedControl: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
   },
   topBarEyebrow: { color: semanticColors.accent },
   modifyAction: { paddingHorizontal: spacing.md },

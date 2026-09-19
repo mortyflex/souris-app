@@ -641,8 +641,10 @@ is no longer reproduced natively.
 
 - **iOS**: UIKit's tab bar. On iOS 26, with a binary compiled by Xcode 26+, it is Apple's native
   Liquid Glass — the system material, sampling the page beneath it. Older iOS shows the standard
-  system tab bar. Souris never fakes the glass: no BlurView, no translucent view, no gradient, no
-  opaque forced background, no version-conditional custom bar.
+  system tab bar. Souris never fakes the glass **of the bar**: no BlurView, no translucent view, no
+  gradient, no opaque forced background, no version-conditional custom bar. (The small light-glass
+  controls of §21 are Souris-drawn surfaces that echo this material; they never replace or
+  imitate the bar itself.)
 - **Android**: native Material bottom navigation, with Material icons — not an imitation of
   Liquid Glass.
 - **Icons / labels**: system symbols, visible native labels, native selected state.
@@ -674,7 +676,7 @@ is no longer reproduced natively.
 
 ---
 
-## 19. Agenda Visual Language — Pastel Planning Cards, Gloss, Candy +
+## 19. Agenda Visual Language — Pastel Planning Cards, Gloss, Floating +
 
 This section supersedes the « calmer operational exception » wording of §10 for Agenda appointment
 cards, the flat violet circle of §17 and the « nothing else is restyled » wording of §18, for
@@ -698,15 +700,12 @@ presentation only. Occupancy, segments, statuses and navigation behave exactly a
 - **Gloss** (`src/shared/ui/theme/gloss.ts`): a light top-down white sheen, a one-pixel top
   highlight and the barely-there `nativeShadows.card` depth. No blur, no glassmorphism. The layers
   only lighten the fill, so dark text never loses contrast.
-- **Floating +**: same size, placement, hit target, reveal and behaviour (§17). Finish is a refined
-  glossy candy: Souris violet deepening to lavender 700, a top sheen that fades before the glyph,
-  a small **elliptical** specular highlight near the top, a moulded inner edge (inset light), the
-  existing round `nativeShadows.floating`. Every gloss layer lives in ONE circular clip
-  (`overflow: hidden`, radius = half the button): nothing but the round shadow is ever drawn
-  outside the circle. The highlight is a circle squashed into a true ellipse — a radius alone
-  only yields a rounded rectangle, which reads as a glass card laid on the button and is
-  forbidden. No border on the clip. The white + keeps ≥ 4.5:1. The button is shared, so Clientes,
-  Produits and Prestations carry the same finish.
+- **Floating +**: same size, placement, hit target, reveal and behaviour (§17). Its finish is no
+  longer the glossy candy violet circle first introduced here: it is the light-glass circle with a
+  violet plus described in §21 (`GlassSurface`), and the `gloss.candy` tokens are removed. What
+  remains from this section: the whole finish lives in ONE circular clip (radius = half the
+  button), nothing but the round shadow is ever drawn outside the circle, and the button is
+  shared, so Agenda, Clientes, Produits and Prestations carry the same finish.
 - **Bottom bar — iOS 18 and earlier**: NativeTabs asks UIKit for its thinner system material
   (`blurEffect="systemThinMaterial"`) so the page reads through the bar more. Still the system's
   own material — no BlurView, no custom bar.
@@ -799,3 +798,33 @@ scrim, motion, gestures and dismissal policies of §16 are unchanged.
   `inputAccessoryViewButtonLabel="OK"` (Checkout amounts). No English string in Souris-owned UI.
 - **Not part of the material** — main screens, cards, fields, the camera / scanner full-screen
   modals and the floating-create menu keep their own surfaces: not everything is glass.
+
+---
+
+## 21. Light Glass Controls — Back, Agenda Arrows, Floating +, Jour / Semaine
+
+Supersedes, for presentation only, the « glossy candy » floating + of §19, the bare chevrons of
+the pushed-screen top bars and of the Agenda week navigation, and the neutral Jour / Semaine
+switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unchanged.
+
+- **One material** — `GlassSurface` (`src/shared/ui/`, tokens `gloss.glass`): an almost-white,
+  barely see-through fill, a hairline navy-alpha contour that follows the control's own outline,
+  a soft reflection from the top edge and a moulded rim, clipped to the control's shape. Depth is
+  one short neutral shadow (`nativeShadows.glass`, `glassFloating` for the +). No halo, no thick
+  border, no heavy drop shadow, no decorative glassmorphism: the control reads nearly white on a
+  light page, with just enough depth to stand off it.
+- **No blur view, no version-gated API.** The material evokes the system Liquid Glass of the tab
+  bar (§18) but is drawn with plain layers, so it is identical on every supported iOS version and
+  stays a clean light surface on Android. The floating + uses the denser `fillFloating` so list
+  rows never ghost through it. The native tab bar itself is untouched.
+- **Glass icon button** — `GlassIconButton` (`src/shared/ui/`): a 44 pt circle, the glass
+  material, one thin navy glyph centred in it. Used by the back button of Fiche cliente,
+  Prestations & tarifs and Caisse (`glassIcons.back`) and by the Agenda previous / next arrows in
+  both Jour and Semaine (`glassIcons.previous` / `next`). Only the symbol changes.
+- **Floating +** — same size, placement, reveal, menu and hit target (§17). The circle is the
+  glass material; the plus keeps its symbol and becomes Souris violet — the button's only accent.
+- **Jour / Semaine** — a glass capsule (`radii.pill`), a touch lighter than the circles because it
+  covers more area (`fillCapsule`, `borderCapsule`, `nativeShadows.glassCapsule`). The selected view
+  lets the glass read through: a whisper of accent tint
+  with a hairline accent contour and a violet label, echoing the selected tab of the bar; the
+  other view is a plain `foregroundSoft` label on the glass. Never a large opaque slab.

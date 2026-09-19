@@ -20,14 +20,13 @@ import {
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { AppText } from '@/shared/ui/AppText';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
+import { GlassIconButton, glassIconButtonSize, glassIcons } from '@/shared/ui/GlassIconButton';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
   bottomClearance,
   foregroundSoft,
   gutter,
-  interaction,
   lavender,
-  radii,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
@@ -49,23 +48,15 @@ export function ServiceCatalogScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.topBar}>
-        <Pressable
-          accessibilityRole="button"
+        <GlassIconButton
           accessibilityLabel="Retour"
-          hitSlop={spacing.sm}
+          icon={glassIcons.back}
           onPress={() => router.back()}
-          style={({ pressed }) => [styles.backButton, pressed && styles.pressedControl]}
-        >
-          <SymbolView
-            name={{ ios: 'chevron.left', android: 'arrow_back' }}
-            size={18}
-            tintColor={semanticColors.foreground}
-          />
-        </Pressable>
+        />
         <AppText variant="eyebrow" style={styles.eyebrow}>
           GESTION
         </AppText>
-        <View style={styles.backButton} />
+        <View style={styles.topBarSpacer} />
       </View>
 
       <SectionList
@@ -166,17 +157,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingVertical: spacing.sm,
   },
-  backButton: {
-    alignItems: 'center',
-    borderRadius: radii.small,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  pressedControl: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
-  },
+  // Mirrors the back button so the eyebrow stays centred.
+  topBarSpacer: { height: glassIconButtonSize, width: glassIconButtonSize },
   eyebrow: { color: semanticColors.accent },
   content: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
   intro: {

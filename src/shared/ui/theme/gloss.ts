@@ -1,14 +1,11 @@
 // Souris design tokens — Gloss
 //
-// Source: docs/design/DESIGN_OVERRIDES.md §19
+// Source: docs/design/DESIGN_OVERRIDES.md §19, §20, §21
 //
-// The restrained polished finish shared by Agenda appointment cards and the
-// floating + : white light falling from the top edge, never blur, never glass
-// imitation. Every layer is a plain overlay drawn above a flat token fill, so
-// the surface stays correct wherever gradients are unavailable, and dark text
-// only ever gains contrast under it.
-
-import { colors, lavender } from './colors';
+// The restrained polished finishes of Souris: white light falling from the top
+// edge, never a blur view. Every layer is a plain overlay drawn above a flat
+// token fill, so the surface stays correct wherever gradients are unavailable,
+// and dark text only ever gains contrast under it.
 
 export const gloss = {
   card: {
@@ -29,21 +26,30 @@ export const gloss = {
     /** Bright top hairline following the surface's top corners — the only rim. */
     topLight: 'inset 0 1px 0 rgba(255, 255, 255, 0.96)',
   },
-  candy: {
-    /** Richer than a card: Souris violet deepening toward its lavender 700. */
-    fill: `linear-gradient(180deg, ${colors.accent} 0%, ${lavender.lav700} 100%)`,
-    /** Fades out before the glyph's centre so the white + keeps ≥ 4.5:1. */
-    sheen:
-      'linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.04) 42%, rgba(255, 255, 255, 0) 60%)',
+  // Light glass of the small floating controls — back button, Agenda previous /
+  // next, the floating + and the Jour / Semaine capsule (GlassSurface,
+  // DESIGN_OVERRIDES.md §21). Nearly white and only slightly see-through: it
+  // evokes the system Liquid Glass of the tab bar without a blur view, so it
+  // renders identically on every supported iOS version and on Android.
+  glass: {
+    /** Almost-white fill; the page tint barely reads through it. */
+    fill: 'rgba(255, 255, 255, 0.86)',
+    /** Floating over scrolling rows: denser, so content never ghosts through. */
+    fillFloating: 'rgba(255, 255, 255, 0.94)',
+    /** Hairline navy-alpha contour — the discreet grey ring of the references. */
+    border: 'rgba(25, 22, 63, 0.14)',
+    /** Soft reflection from the top edge, gone before the glyph's centre. */
+    sheen: 'linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%)',
+    /** Light caught under the top rim, a whisper of shade at the base. */
+    rim: 'inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 3px rgba(25, 22, 63, 0.05)',
+    /** Wide capsule (Jour / Semaine): lighter than a circle, so its larger area stays as quiet. */
+    fillCapsule: 'rgba(255, 255, 255, 0.74)',
+    borderCapsule: 'rgba(25, 22, 63, 0.10)',
     /**
-     * Curved specular highlight. Painted on a circle that the button squashes
-     * into a true ellipse — a radius alone can only make a rounded rectangle.
-     * It dissolves toward its lower edge so it never reads as a panel.
+     * Selected segment of a glass capsule: a whisper of accent that lets the
+     * glass read through, edged by an accent hairline — never a filled slab.
      */
-    specular:
-      'linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.16) 60%, rgba(255, 255, 255, 0) 100%)',
-    /** Moulded edge: light caught under the top rim, soft shade at the base. */
-    innerLight:
-      'inset 0 1px 1.5px rgba(255, 255, 255, 0.45), inset 0 -3px 5px rgba(25, 22, 63, 0.16)',
+    selectedFill: 'rgba(115, 84, 199, 0.06)',
+    selectedBorder: 'rgba(115, 84, 199, 0.26)',
   },
 } as const;

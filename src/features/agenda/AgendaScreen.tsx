@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SymbolView } from 'expo-symbols';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/shared/ui/AppText';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
+import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
 import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
 import {
   agenda,
@@ -141,35 +141,19 @@ export function AgendaScreen() {
       {mode === 'day' ? (
         <>
           <View style={[styles.dayNavigation, { paddingHorizontal: horizontalGutter }]}>
-            <Pressable
-              accessibilityRole="button"
+            <GlassIconButton
               accessibilityLabel="Semaine précédente"
-              hitSlop={6}
+              icon={glassIcons.previous}
               onPress={() => shiftSelectedWeek(-1)}
-              style={({ pressed }) => [styles.navControl, pressed && styles.pressedControl]}
-            >
-              <SymbolView
-                name={{ ios: 'chevron.left', android: 'chevron_left' }}
-                size={16}
-                tintColor={semanticColors.foreground}
-              />
-            </Pressable>
+            />
             <AppText variant="control" style={styles.weekRange}>
               {formatWeekRange(selectedDay)}
             </AppText>
-            <Pressable
-              accessibilityRole="button"
+            <GlassIconButton
               accessibilityLabel="Semaine suivante"
-              hitSlop={6}
+              icon={glassIcons.next}
               onPress={() => shiftSelectedWeek(1)}
-              style={({ pressed }) => [styles.navControl, pressed && styles.pressedControl]}
-            >
-              <SymbolView
-                name={{ ios: 'chevron.right', android: 'chevron_right' }}
-                size={16}
-                tintColor={semanticColors.foreground}
-              />
-            </Pressable>
+            />
           </View>
           {!isSameLocalDay(selectedDay, today) && (
             <View style={[styles.todayRow, { paddingHorizontal: horizontalGutter }]}>
@@ -265,12 +249,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: spacing.sm,
     paddingTop: spacing.xs,
-  },
-  navControl: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
   },
   pressedControl: {
     opacity: interaction.pressedOpacity,
