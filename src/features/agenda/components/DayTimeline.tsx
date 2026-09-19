@@ -33,7 +33,6 @@ interface DayTimelineProps {
   readonly appointments: readonly AppointmentSessionEntry[];
 }
 
-const quarterHeight = agenda.hourHeight / 4;
 const minuteHeight = agenda.hourHeight / 60;
 
 export function DayTimeline({ day, appointments }: DayTimelineProps) {
@@ -59,7 +58,8 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
     defaultEndHour: agenda.dayEndHour,
     defaultStartHour: agenda.dayStartHour,
   });
-  const quarterCount = (range.endMinutes - range.startMinutes) / 15;
+  // One marker per full hour. Blocks keep minute precision (minuteHeight).
+  const hourCount = (range.endMinutes - range.startMinutes) / 60;
   const timelineHeight = (range.endMinutes - range.startMinutes) * minuteHeight;
   const topOf = (date: Date) => (minutesFromDayMidnight(day, date) - range.startMinutes) * minuteHeight;
   const nowMinutes = minutesFromDayMidnight(day, now);
@@ -92,34 +92,24 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         // The native tab bar overlays the page: the system bottom inset keeps
-        // the last quarter-hour scrollable above it (bottomClearance then clears
+        // the last hour scrollable above it (bottomClearance then clears
         // the floating +).
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.canvas, { height: timelineHeight, width }]} testID="agenda-day-canvas">
-          {Array.from({ length: quarterCount + 1 }, (_, index) => {
-            const isFullHour = index % 4 === 0;
-            const minutes = range.startMinutes + index * 15;
+          {Array.from({ length: hourCount + 1 }, (_, index) => {
+            const minutes = range.startMinutes + index * 60;
             return (
               <View
                 key={minutes}
                 pointerEvents="none"
-                style={[styles.timeRow, { top: index * quarterHeight }]}
+                style={[styles.timeRow, { top: index * agenda.hourHeight }]}
               >
-                <AppText
-                  variant={isFullHour ? 'agendaHour' : 'agendaQuarter'}
-                  style={[styles.timeLabel, isFullHour ? styles.fullHourLabel : styles.quarterLabel]}
-                >
+                <AppText variant="agendaHour" style={styles.timeLabel}>
                   {formatTimelineClockLabel(minutes)}
                 </AppText>
-                <View
-                  style={[
-                    styles.gridLine,
-                    isFullHour ? styles.fullHourLine : styles.quarterLine,
-                    { right: horizontalGutter },
-                  ]}
-                />
+                <View style={[styles.gridLine, { right: horizontalGutter }]} />
               </View>
             );
           })}
@@ -199,16 +189,14 @@ const styles = StyleSheet.create({
   },
   canvas: { position: 'relative' },
   emptySlotSurface: { position: 'absolute', top: 0 },
-  timeRow: { height: quarterHeight, left: 0, position: 'absolute', right: 0 },
-  timeLabel: { left: 14, position: 'absolute', width: 48 },
-  fullHourLabel: { top: -8 },
-  quarterLabel: { top: -7 },
-  gridLine: { left: agenda.timelineGutter, position: 'absolute', top: 0 },
-  fullHourLine: { backgroundColor: semanticColors.borderSubtle, height: 1 },
-  quarterLine: {
+  timeRow: { height: agenda.hourHeight, left: 0, position: 'absolute', right: 0 },
+  timeLabel: { left: 14, position: 'absolute', top: -8, width: 48 },
+  gridLine: {
     backgroundColor: semanticColors.borderSubtle,
-    height: StyleSheet.hairlineWidth,
-    opacity: 0.38,
+    height: 1,
+    left: agenda.timelineGutter,
+    position: 'absolute',
+    top: 0,
   },
   nowLine: { height: 1.5, left: agenda.timelineGutter - 4, position: 'absolute' },
   nowDot: {

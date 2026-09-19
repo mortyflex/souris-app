@@ -14,14 +14,19 @@ jest.mock('expo-router', () => ({
 const day = new Date(2026, 7, 24);
 const minuteHeight = agenda.hourHeight / 60;
 
-function entry(id: string, hour: number, durationMinutes: number): AppointmentSessionEntry {
+function entry(
+  id: string,
+  hour: number,
+  durationMinutes: number,
+  minute = 0,
+): AppointmentSessionEntry {
   return {
     appointment: {
       id,
       businessId: 'fixture-business',
       clientId: 'client-agenda-sofia',
       staffMemberId: 'staff-amelie',
-      startAt: new Date(2026, 7, 24, hour, 0),
+      startAt: new Date(2026, 7, 24, hour, minute),
       status: 'SCHEDULED',
       items: [
         {
@@ -108,5 +113,35 @@ describe('DayTimeline visible range', () => {
     expect(view.getByText('01:00')).toBeTruthy();
     expect(view.queryByText('24:00')).toBeNull();
     expect(view.queryByText('25:00')).toBeNull();
+  });
+});
+
+describe('DayTimeline hourly grid', () => {
+  it('labels full hours only', async () => {
+    const view = await renderTimeline([entry('morning', 9, 60)]);
+
+    for (let hour = 8; hour <= 20; hour += 1) {
+      expect(view.getByText(`${hour.toString().padStart(2, '0')}:00`)).toBeTruthy();
+    }
+    expect(view.queryByText(/^\d{2}:(15|30|45)$/)).toBeNull();
+  });
+
+  it('keeps a 45-minute appointment 45 minutes tall', async () => {
+    const view = await renderTimeline([entry('short', 9, 45)]);
+
+    const geometry = segmentGeometry(view, 'short:short-phase');
+    expect(geometry.top).toBe(agenda.hourHeight);
+    expect(geometry.height).toBe(45 * minuteHeight);
+    expect(geometry.height).toBeLessThan(agenda.hourHeight);
+  });
+
+  it('renders an older 09:30 → 10:15 appointment at its real position', async () => {
+    const view = await renderTimeline([entry('legacy', 9, 45, 30)]);
+
+    const geometry = segmentGeometry(view, 'legacy:legacy-phase');
+    expect(geometry.top).toBe(90 * minuteHeight);
+    expect(geometry.top).toBeGreaterThan(agenda.hourHeight);
+    expect(geometry.top).toBeLessThan(2 * agenda.hourHeight);
+    expect(geometry.height).toBe(45 * minuteHeight);
   });
 });
