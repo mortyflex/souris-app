@@ -66,6 +66,14 @@ export const appointmentPastels = {
   lilac: { calm: '#FCF2FB', fill: '#F5CEF0', deep: '#793F75' }, // hue 330
 } as const;
 
+// Brand identity (assets/brand/logo-*.png) — the plum of the word "Souris".
+// Measured, not invented: the median opaque colour of the word in
+// logo-lockup.png. 12.1:1 on white. For brand-voiced text that sits with the
+// logo (the Welcome headline); everyday UI text stays `foreground`.
+export const brand = {
+  plum: '#5F1852',
+} as const;
+
 // Secondary readable foreground — readable secondary metadata text.
 // More legible than muted; reserved for text that is actually read.
 // oklch(0.42 0.055 285)
@@ -92,6 +100,7 @@ export const semanticColors = {
   borderLavender: lavender.lav200,
   accent: colors.accent,
   foreground: colors.foreground,
+  brandForeground: brand.plum,
   foregroundSoft,
   foregroundMuted: colors.muted,
 } as const;

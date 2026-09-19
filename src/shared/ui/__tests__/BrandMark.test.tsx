@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react-native';
-import { BrandComposition, BrandMark, brandAssets, type BrandMarkVariant } from '../BrandMark';
+import { BrandMark, brandAssets, type BrandMarkVariant } from '../BrandMark';
 
 // Jest turns every PNG into the same placeholder module, so the canonical
 // assets are named explicitly to verify which file each variant renders.
@@ -19,14 +19,15 @@ describe('BrandMark', () => {
 
   it.each<[BrandMarkVariant, number]>([
     ['mark', 200],
-    ['wordmark', 67],
-    ['lockup', 250],
+    ['wordmark', 100],
+    ['lockup', 100],
   ])('keeps the intrinsic aspect ratio of %s', async (variant, expectedHeight) => {
-    const view = await render(<BrandMark variant={variant} size={200} />);
+    const view = await render(<BrandMark variant={variant} size={300} />);
     const style = view.getByRole('image').props.style;
-    expect(style).toEqual([{ width: 200, height: expectedHeight }, undefined]);
+    expect(style).toEqual([{ width: 300, height: expectedHeight }, undefined]);
+    expect(view.getByRole('image').props.resizeMode).toBe('contain');
     expect(expectedHeight).toBe(
-      Math.round((200 * brandAssets[variant].height) / brandAssets[variant].width),
+      Math.round((300 * brandAssets[variant].height) / brandAssets[variant].width),
     );
   });
 
@@ -45,26 +46,5 @@ describe('BrandMark', () => {
     expect(image.props.accessible).toBe(false);
     expect(image.props.accessibilityElementsHidden).toBe(true);
     expect(image.props.importantForAccessibility).toBe('no-hide-descendants');
-  });
-});
-
-describe('BrandComposition', () => {
-  it('stacks the canonical mark above the canonical wordmark with one "Souris"', async () => {
-    const view = await render(<BrandComposition size={128} />);
-    const images = view.toJSON();
-    if (images === null || Array.isArray(images)) throw new Error('expected a host view');
-    const [mark, wordmark] = images.children as { props: Record<string, unknown> }[];
-    expect(mark.props.source).toBe('logo-mark.png');
-    expect(mark.props.accessible).toBe(false);
-    expect(wordmark.props.source).toBe('logo-wordmark.png');
-    expect(view.getAllByLabelText('Souris')).toHaveLength(1);
-    // Mark is half the wordmark width; wordmark overlaps the mark's padding by 18 % of the mark.
-    expect(mark.props.style).toEqual([{ width: 64, height: 64 }, undefined]);
-    expect(wordmark.props.style).toEqual([{ width: 128, height: 43 }, { marginTop: -12 }]);
-  });
-
-  it('is entirely hidden from assistive technology when decorative', async () => {
-    const view = await render(<BrandComposition size={128} decorative />);
-    expect(view.queryByLabelText('Souris')).toBeNull();
   });
 });

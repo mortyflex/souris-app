@@ -11,7 +11,7 @@ import { useServiceCatalog } from '@/features/services/session/ServiceCatalogPro
 import { usePersistence } from '@/providers/PersistenceProvider';
 import { cashRegisterIcon } from '@/shared/icons/payment-method-icons';
 import { AppText } from '@/shared/ui/AppText';
-import { BrandComposition } from '@/shared/ui/BrandMark';
+import { BrandMark } from '@/shared/ui/BrandMark';
 import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
 import { Screen } from '@/shared/ui/Screen';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
@@ -149,16 +149,15 @@ export function formatAppVersion(version: string | undefined): string | undefine
 }
 
 /**
- * Restrained Souris identity at the bottom of Plus: the canonical mark +
- * wordmark composition, then the installed version. The composition exposes
- * exactly one accessible "Souris".
+ * Restrained Souris identity at the bottom of Plus: the canonical wordmark,
+ * then the installed version. It exposes exactly one accessible "Souris".
  */
 function BrandSection({ version }: { readonly version: string | undefined }) {
   const versionLabel = formatAppVersion(version);
 
   return (
     <View style={styles.brandSection} testID="plus-brand">
-      <BrandComposition size={128} />
+      <BrandMark variant="wordmark" size={150} />
       {versionLabel && (
         <AppText variant="metadata" style={styles.brandVersion}>
           {versionLabel}

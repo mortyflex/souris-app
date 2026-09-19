@@ -28,7 +28,7 @@ export function AccountStateScreen({ title, message, actions, accessory, testID 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']} testID={testID}>
       <View style={styles.content}>
-        <BrandMark variant="mark" size={72} decorative />
+        <BrandMark variant="mark" size={126} decorative />
         <AppText variant="stateTitle" accessibilityRole="header" style={styles.title}>
           {title}
         </AppText>

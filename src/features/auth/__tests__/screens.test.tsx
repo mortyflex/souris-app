@@ -1,6 +1,6 @@
 // Souris — account screens (behavioral, no pixel tests)
 
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 
 import { AuthProvider } from '../session/AuthProvider';
 import { createFakeAuthGateway, fakeUser, type FakeAuthGateway } from '../testing/fake-auth-gateway';
@@ -18,6 +18,69 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+
+// The Welcome hero floats and reacts to touch with Reanimated; tests render it at
+// rest and observe which animations were started.
+let mockReducedMotion = false;
+const mockWithRepeat = jest.fn((value: unknown) => value);
+const mockSetFrameCallbackActive = jest.fn();
+
+jest.mock('react-native-reanimated', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
+  const AnimatedView = (props: { readonly children?: React.ReactNode }) =>
+    React.createElement(View, props);
+
+  return {
+    __esModule: true,
+    default: Object.assign(AnimatedView, {
+      View: AnimatedView,
+      createAnimatedComponent: (component: unknown) => component,
+    }),
+    Easing: { inOut: (fn: unknown) => fn, sin: (value: number) => value },
+    cancelAnimation: () => undefined,
+    // Runs the reaction on every render with the current shared values.
+    useAnimatedReaction: (
+      prepare: () => unknown,
+      react: (value: unknown, previous: unknown) => void,
+    ) => react(prepare(), null),
+    useAnimatedStyle: (style: () => object) => style(),
+    useEvent: () => () => undefined,
+    // The physics never runs under Jest: the frame callback starts stopped and stays so.
+    useFrameCallback: () => ({ setActive: mockSetFrameCallbackActive, isActive: false, callbackId: -1 }),
+    useReducedMotion: () => mockReducedMotion,
+    // Stable across renders, like the real hook.
+    useSharedValue: (initial: unknown) => {
+      const [shared] = React.useState(() => {
+        const holder = {
+          value: initial,
+          get: () => holder.value,
+          set: (next: unknown) => {
+            holder.value = next;
+          },
+        };
+        return holder;
+      });
+      return shared;
+    },
+    withRepeat: (value: unknown) => mockWithRepeat(value),
+    withSpring: (value: unknown) => value,
+    withTiming: (value: unknown) => value,
+  };
+});
+
+jest.mock('react-native-worklets', () => ({
+  scheduleOnRN: (fn: (...args: never[]) => void, ...args: never[]) => fn(...args),
+}));
+
+// Jest turns every PNG into the same placeholder module, so the approved
+// floating assets are named explicitly to verify that all six are rendered.
+jest.mock('../../../../assets/brand/welcome-floating/01-hairdryer.png', () => '01-hairdryer.png');
+jest.mock('../../../../assets/brand/welcome-floating/02-scissors.png', () => '02-scissors.png');
+jest.mock('../../../../assets/brand/welcome-floating/03-mirror.png', () => '03-mirror.png');
+jest.mock('../../../../assets/brand/welcome-floating/04-brush.png', () => '04-brush.png');
+jest.mock('../../../../assets/brand/welcome-floating/05-comb.png', () => '05-comb.png');
+jest.mock('../../../../assets/brand/welcome-floating/06-nail-polish.png', () => '06-nail-polish.png');
 
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
@@ -51,7 +114,13 @@ beforeEach(() => {
 });
 
 describe('WelcomeScreen', () => {
-  it('shows the brand composition once and routes to sign-up or sign-in', async () => {
+  beforeEach(() => {
+    mockReducedMotion = false;
+    mockWithRepeat.mockClear();
+    mockSetFrameCallbackActive.mockClear();
+  });
+
+  it('shows the brand lockup once and routes to sign-up or sign-in', async () => {
     const view = await render(<WelcomeScreen />);
 
     expect(view.getAllByLabelText('Souris')).toHaveLength(1);
@@ -62,6 +131,55 @@ describe('WelcomeScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/sign-up');
     await press(view.getByText('J’ai déjà un compte'));
     expect(mockPush).toHaveBeenCalledWith('/sign-in');
+  });
+
+  it('floats the six approved beauty assets around the logo as pure decoration', async () => {
+    const view = await render(<WelcomeScreen />);
+
+    const motifs = view.getByTestId('welcome-motifs', { includeHiddenElements: true });
+    expect(motifs.props.accessibilityElementsHidden).toBe(true);
+    expect(motifs.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(motifs.props.pointerEvents).toBe('none');
+
+    const images = view.container
+      .queryAll((node) => node.type === 'Image')
+      .filter((node) => String(node.props.source).includes('0'));
+    expect(images.map((image) => image.props.source).sort()).toEqual([
+      '01-hairdryer.png',
+      '02-scissors.png',
+      '03-mirror.png',
+      '04-brush.png',
+      '05-comb.png',
+      '06-nail-polish.png',
+    ]);
+    for (const image of images) {
+      expect(image.props.accessible).toBe(false);
+      expect(image.props.resizeMode).toBe('contain');
+    }
+    // The only accessible brand element is still the logo.
+    expect(view.getAllByLabelText('Souris')).toHaveLength(1);
+  });
+
+  it('drifts every object on its own loop, inside a hero that owns the touch field', async () => {
+    const view = await render(<WelcomeScreen />);
+
+    expect(mockWithRepeat).toHaveBeenCalledTimes(6);
+    // Nothing simulates until a finger comes down: no frame callback is started at rest.
+    expect(mockSetFrameCallbackActive).not.toHaveBeenCalledWith(true);
+    // Copy and actions live outside the interactive hero.
+    const hero = view.getByTestId('welcome-hero');
+    expect(within(hero).queryByText('Commencer')).toBeNull();
+    expect(within(hero).queryByRole('header')).toBeNull();
+  });
+
+  it('renders a still scene under reduced motion', async () => {
+    mockReducedMotion = true;
+    const view = await render(<WelcomeScreen />);
+
+    expect(mockWithRepeat).not.toHaveBeenCalled();
+    for (const kind of ['hairdryer', 'scissors', 'mirror', 'brush', 'comb', 'nailPolish']) {
+      expect(view.getByTestId(`welcome-motif-${kind}`, { includeHiddenElements: true })).toBeTruthy();
+    }
   });
 });
 

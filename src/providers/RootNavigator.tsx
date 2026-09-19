@@ -18,7 +18,7 @@ import { AccountUnavailableScreen } from '@/features/business/AccountUnavailable
 import { DataLoadingScreen } from '@/features/business/DataLoadingScreen';
 import { DataUnavailableScreen } from '@/features/business/DataUnavailableScreen';
 import { useBusinessSession } from '@/features/business/session/BusinessSessionProvider';
-import { BrandComposition } from '@/shared/ui/BrandMark';
+import { BrandMark } from '@/shared/ui/BrandMark';
 import { colors } from '@/shared/ui/theme';
 
 import { useCloudSyncControl } from './CloudSyncRunner';
@@ -66,11 +66,11 @@ export function RootNavigator() {
   }
 }
 
-/** Mirrors the iOS splash (mark above wordmark at 260 dp on white). */
+/** Mirrors the iOS splash (canonical lockup at 333 dp on white). */
 function BootSurface() {
   return (
     <View style={styles.boot} testID="boot-surface">
-      <BrandComposition size={260} decorative />
+      <BrandMark variant="lockup" size={333} decorative />
     </View>
   );
 }

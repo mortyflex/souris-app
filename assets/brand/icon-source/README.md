@@ -1,44 +1,40 @@
-# Souris app icon — Icon Composer layer sources
+# Souris app icon — Icon Composer document
 
-Canonical brand art stays `assets/brand/logo-mark.png`. These files are the layers of the Icon
-Composer document `assets/brand/Souris.icon` (iOS Liquid Glass app icon, `ios.icon` in `app.json`).
-They are derived outputs: regenerate them from the mark, never edit them by hand.
+The iOS app icon is the Icon Composer document `assets/brand/Souris.icon` (`ios.icon` in
+`app.json`). Direction: flat, crisp and quiet — the approved symbol on clean white, nothing else.
 
-Direction (V3): lavender document background + canonical navy mouse + pink nose. Three visual
-elements, nothing else. No glow, disc, plate, ring, halo or support artwork behind the mouse. The
-dimensional interest comes only from the mouse and nose materials.
-
-| Element (back → front) | File | Content |
+| Element | Source | Setting |
 | --- | --- | --- |
-| Background | *(none — document fill)* | `lavender.lav200` `#E1D6F9`. Apple: keep background colours out of the artwork and set them in Icon Composer. |
-| 02 Mouse | `02-mouse-mark.png` | The canonical navy strokes of `logo-mark.png`, pixels untouched, downsampled once. |
-| 03 Nose | `03-mouse-nose.png` | The canonical pink nose of `logo-mark.png`, same render, split by region. |
+| Background | *(document fill)* | Solid white `#FFFFFF` |
+| Mark | `assets/brand/logo-mark.png`, copied byte-identical to `Souris.icon/Assets/logo-mark.png` (1536 × 1024) | scale **1.05**, translation (**−15, −6**) pt: the artwork (ears, S, whiskers, calendar) spans ≈ 71 % of the canvas width and is centred on its own bounding box |
 
-Derivation (1024 × 1024 transparent canvas):
+Material: **glass off, shadow none, translucency off**. No glow, halo, relief, specular or 3D
+treatment; no dark specialization (the system's dark background applies and the purple artwork
+reads on it); mono / tinted are the system default from the layer alpha. Never resize, recolour or
+crop the PNG: sizing and position live in `Souris.icon/icon.json`.
 
-- the mark's artwork box (1254 px source: x 134–1118, y 298–962) is scaled so it spans **74 %** of
-  the canvas width (758 × 512 px) and is centred on its own box (scale 0.7693);
-- the nose layer is the source rectangle x 555–697, y 692–833 (nose box + 14 px margin, verified to
-  contain no navy pixel); the mouse layer is everything else. Nothing is redrawn or traced;
-- no shadow, highlight, gradient, glow, mask or rounded corner is baked into any layer.
+## Layer files in this folder (not used by the icon)
 
-Icon Composer settings (Style inspector, iOS / macOS shared):
+`01-ambient-glow.png`, `02-mouse-mark.png` and `03-calendar-accent.png` are the layered sources of
+an earlier, dimensional version of the icon. They are kept as supplied but are **not referenced by
+`Souris.icon`**: `02-mouse-mark.png` carries a soft dark halo and gloss baked into its pixels, which
+no Icon Composer setting can remove and which rendered blurry and swollen at Home Screen size. If a
+layered icon is wanted again, it needs a clean (halo-free) export of the symbol first.
 
-| Target | Setting |
-| --- | --- |
-| Document fill | Solid `#E1D6F9`. Dark: the file carries no document-level dark fill (Icon Composer 1.4 drops that key on save); set it in the GUI if a navy `#19163F` dark background is wanted, otherwise the system's default dark treatment applies |
-| 02 Mouse | group Shadow neutral 50 %; Translucency off (navy stays rich); Specular automatic; Dark variant fill solid `#E1D6F9` |
-| 03 Nose | group Shadow neutral 55 %; Translucency on 15 % (small glass bead); Specular automatic |
-| Mono / tinted | system default (silhouette from layer alpha), nothing customised |
+## Verification without opening the GUI (both tools ship with Xcode)
 
-Blur and refraction stay at their defaults. Never add a layer behind the mouse: if more separation
-is wanted, adjust the mouse shadow or specular, not the background.
+```bash
+ICTOOL="/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"
+"$ICTOOL" assets/brand/Souris.icon --export-image --output-file /tmp/souris-icon.png \
+  --platform iOS --rendition Default --width 1024 --height 1024 --scale 1   # also: Dark, TintedLight, ClearLight
+xcrun actool assets/brand/Souris.icon --compile /tmp/souris-icon-out --platform iphoneos \
+  --minimum-deployment-target 16.0 --app-icon Souris \
+  --output-partial-info-plist /tmp/souris-icon-out/partial.plist
+```
 
-Manual workflow when rebuilding the document from scratch: open Icon Composer (Xcode > Open
-Developer Tool), File > New, drag the two files from this folder into the sidebar (each becomes a
-group named after its file, back to front by number), apply the settings above, set the document
-platforms to iOS only, review Default / Dark / Mono at real Home Screen size, then Save As
-`Souris.icon` over `assets/brand/Souris.icon`.
+Before reopening the document in Icon Composer after it has been changed on disk, quit Icon
+Composer completely: it restores its autosaved window state on launch and will otherwise write the
+stale document back.
 
-Before reopening this file after it has been changed on disk, quit Icon Composer completely: it
-restores its autosaved window state on launch and will otherwise write the stale document back.
+The native `ios/` folder is generated: after changing the document, run a fresh prebuild / native
+build so `ios/Souris/Souris.icon` is refreshed.

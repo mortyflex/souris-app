@@ -267,44 +267,46 @@ sprite `build/souris-icons.svg`, index `build/icons.json`.
 
 ### Marque
 
-Trois assets canoniques, et seulement trois, dans `assets/brand/` (PNG sur fond transparent, tracés
-navy `--fg` et rose) :
+Trois assets canoniques, et seulement trois, dans `assets/brand/` (PNG colorés sur fond transparent,
+palette violet / prune, dessin et palette définitifs) :
 
 | Fichier | Rôle | Contextes approuvés |
 | --- | --- | --- |
-| `assets/brand/logo-mark.png` (1254 × 1254) | **MARK** — symbole canonique de l'app : oreilles, nez rose, sourire | icône d'application (source), symbole du splash, identité compacte |
-| `assets/brand/logo-wordmark.png` (2172 × 724) | **WORDMARK** — le nom « souris » canonique, sourire sous le mot, point du i rose | contextes où le nom est mis en avant |
-| mark + wordmark (composition, `BrandComposition`) | **COMPOSITION PRINCIPALE** produit : mark canonique au-dessus du wordmark | splash iOS (PNG dérivé), Plus, futur onboarding / auth |
-| `assets/brand/logo-lockup.png` (1122 × 1402) | **LOCKUP** — souris alternative détaillée + wordmark + baseline « GESTION DE RENDEZ-VOUS SALON » | asset de marque conservé ; **pas l'identité app par défaut** : sa baseline est spécifique aux salons de coiffure alors que Souris s'adresse à toutes les professions de la beauté, et sa souris diffère du mark de l'icône |
+| `assets/brand/logo-lockup.png` (2172 × 724) | **LOCKUP** — logo complet : oreilles, mot « Souris », moustaches, sourire / queue, calendrier | splash iOS, surface de démarrage, écran d'accueil (Welcome) |
+| `assets/brand/logo-mark.png` (1536 × 1024) | **MARK** — symbole compact : oreilles, S, moustaches, calendrier | usages réduits : écrans d'état de compte, splash Android |
+| `assets/brand/logo-wordmark.png` (2172 × 724) | **WORDMARK** — le mot « Souris » horizontal avec son calendrier | bloc identité de Plus, contextes où le nom est mis en avant |
 
 Règles :
 
-- ces fichiers sont l'identité approuvée : ne jamais redessiner la souris, générer un autre symbole,
-  un monogramme ou un wordmark, ni substituer un emoji ou un symbole système au logo ;
+- ces fichiers sont l'identité approuvée : ne jamais redessiner, recolorer ou recadrer le logo,
+  générer un autre symbole, un monogramme ou un wordmark, ni substituer un emoji ou un symbole
+  système au logo ;
 - le runtime rend la marque uniquement via `src/shared/ui/BrandMark.tsx` (`BrandMark` : `variant` =
-  `mark` / `wordmark` / `lockup`, `size` = largeur, ratio intrinsèque conservé, jamais d'étirement ;
-  `BrandComposition` : mark + wordmark, la composition produit) ;
-- le lockup reste disponible comme asset mais n'est utilisé nulle part dans l'app tant qu'il porte
-  la baseline salon ; l'icône et le splash montrent la MÊME souris (le mark canonique) ;
-- les logos apparaissent seulement aux moments de marque : icône, splash natif, bloc identité de Plus,
-  futur onboarding / auth. **Aucun logo ni en-tête « Souris » sur Agenda, Clientes, Produits, les
-  détails, les feuilles ou les formulaires** — les titres restent `Agenda`, `Clientes`, `Produits`,
-  `Plus` ;
+  `mark` / `wordmark` / `lockup`, `size` = largeur, ratio intrinsèque conservé, `contain`, jamais
+  d'étirement). Les PNG portent une marge transparente importante (dessin ≈ 56 % de la largeur du
+  lockup, 45 % du mark, 61 % du wordmark) : on dimensionne la boîte, pas le dessin ;
+- les logos apparaissent seulement aux moments de marque : icône, splash natif, surface de
+  démarrage, Welcome, écrans d'état de compte, bloc identité de Plus. **Aucun logo ni en-tête
+  « Souris » sur Agenda, Clientes, Produits, les détails, les feuilles ou les formulaires** — les
+  titres restent `Agenda`, `Clientes`, `Produits`, `Plus` ;
 - accessibilité : un seul élément annonce « Souris » ; un mark posé à côté d'un texte ou d'un
   wordmark lisible est décoratif ;
-- les PNG sont posés sur fond clair (blanc `--bg` ou lavande) ; jamais sur navy ou violet plein, où
-  les tracés navy disparaissent. Le splash utilise mark + wordmark sur blanc ; l'icône pose le mark sur
-  `--lav-200`. Détails d'implémentation : `DESIGN_OVERRIDES.md` §15.
-- **Icône d'application iOS — Liquid Glass** : `assets/brand/Souris.icon` (document Icon Composer,
-  `ios.icon`). Le mark canonique y est posé en calques, jamais aplati : fond lavande `--lav-200`
-  (fond du document), souris navy, nez rose — trois éléments, rien d'autre. Aucun médaillon, disque,
-  anneau, halo, lueur ni plaque derrière la souris. Le matériau (spéculaire, réfraction, ombre, relief)
-  est rendu dynamiquement par iOS ; aucun effet n'est cuit dans les calques et aucun coin arrondi n'est
-  dessiné. La souris doit paraître légèrement soulevée, jamais plastique ni 3D lourde. Pas de wordmark
-  dans l'icône. Apparence sombre : tracés lavande, nez rose, fond assombri par le système ; mono / teinté : rendu
-  système à partir de la silhouette. Le traitement verre est réservé à l'icône système : dans l'app,
-  `BrandMark` reste plat ; Android garde son icône adaptative plate ; le splash est inchangé. Calques
-  sources : `assets/brand/icon-source/`.
+- les PNG sont posés directement sur le fond clair de l'app (blanc `--bg`), sans plaque ni fond
+  crème ou teinté derrière eux ; il n'existe pas de variante blanche, et aucune ne doit être posée
+  sur fond clair. Détails d'implémentation : `DESIGN_OVERRIDES.md` §15.
+- **Icône d'application iOS — à plat** : `assets/brand/Souris.icon` (document Icon Composer,
+  `ios.icon`). Un seul calque : `logo-mark.png` copié à l'identique, centré, dessin ≈ 71 % de la
+  largeur, sur fond de document blanc. **Ni glass, ni ombre, ni halo, ni relief** : le symbole validé,
+  net et sobre. L'échelle et la position vivent dans `icon.json`. Pas de wordmark dans l'icône.
+  Apparence sombre : fond assombri par le système ; mono / teinté : rendu système à partir de la
+  silhouette. Les icônes Android / raster de `assets/images/` montrent encore l'ancienne identité
+  tant que des exports approuvés ne sont pas fournis. Les calques de `assets/brand/icon-source/`
+  sont conservés mais inutilisés (halo cuit dans les pixels, voir le README du dossier).
+- **Welcome** : le lockup occupe la zone de marque (dessin ≈ 265 dp sur un écran de 393 dp) ; six
+  objets beauté validés (`assets/brand/welcome-floating/` : sèche-cheveux, ciseaux, miroir, pinceau,
+  peigne, vernis) flottent lentement autour, s'écartent doucement du doigt et reviennent en ressort
+  souple ; scène immobile si « Réduire les animations » est actif. Ils accompagnent le logo, jamais
+  l'inverse, et ne recouvrent jamais le mot. Ces PNG ne sont ni redessinés ni recolorés.
 - **Ne pas multiplier les souris illustrées.**
 
 ---

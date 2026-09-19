@@ -4,39 +4,39 @@
 // the three canonical brand assets under assets/brand — never a redrawn
 // symbol, an emoji, or a platform icon:
 //
-//   mark      logo-mark.png      canonical symbol (app icon, splash, compact identity)
-//   wordmark  logo-wordmark.png  the canonical name
-//   lockup    logo-lockup.png    retained asset: alternate mouse + name + the
-//                                salon-specific baseline — not the default
-//                                cross-profession identity (DESIGN_OVERRIDES §15)
-//
-// `BrandComposition` stacks mark + wordmark: the primary product-facing
-// composition (Plus, future onboarding / auth; the iOS splash is a derived
-// PNG of the same arrangement).
+//   lockup    logo-lockup.png    full logo: ears + the name + whiskers +
+//                                smile/tail + calendar (boot surface, iOS
+//                                splash, welcome)
+//   mark      logo-mark.png      compact symbol for reduced uses
+//   wordmark  logo-wordmark.png  the horizontal Souris name
 //
 // `size` is the rendered width in dp; the height follows the PNG's intrinsic
 // aspect ratio so the artwork is never stretched. The canonical PNGs carry
-// transparent padding around the artwork; that padding is part of the asset.
+// transparent padding around the artwork; that padding is part of the asset
+// (the artwork spans roughly 56 % of the lockup width, 45 % of the mark and
+// 61 % of the wordmark), so callers size the box, not the artwork. The PNGs
+// are transparent and coloured: they sit directly on the light background,
+// with no plate behind them.
 //
 // Accessibility: the default announces "Souris" once. Pass `decorative` when
 // the mark sits next to visible Souris text (or another labelled brand
 // element) so VoiceOver never reads "Souris, Souris".
 
-import { Image, StyleSheet, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, type ImageStyle, type StyleProp } from 'react-native';
 
 export type BrandMarkVariant = 'mark' | 'wordmark' | 'lockup';
 
 interface BrandAsset {
   readonly source: number;
-  /** Intrinsic pixel size of the canonical PNG (verified by BrandMark.test). */
+  /** Intrinsic pixel size of the canonical PNG. */
   readonly width: number;
   readonly height: number;
 }
 
 export const brandAssets: Record<BrandMarkVariant, BrandAsset> = {
-  mark: { source: require('../../../assets/brand/logo-mark.png'), width: 1254, height: 1254 },
+  mark: { source: require('../../../assets/brand/logo-mark.png'), width: 1536, height: 1024 },
   wordmark: { source: require('../../../assets/brand/logo-wordmark.png'), width: 2172, height: 724 },
-  lockup: { source: require('../../../assets/brand/logo-lockup.png'), width: 1122, height: 1402 },
+  lockup: { source: require('../../../assets/brand/logo-lockup.png'), width: 2172, height: 724 },
 };
 
 export interface BrandMarkProps {
@@ -65,41 +65,3 @@ export function BrandMark({ variant, size, decorative = false, style }: BrandMar
     />
   );
 }
-
-export interface BrandCompositionProps {
-  /** Rendered width of the wordmark in dp; the mark is half as wide. */
-  readonly size: number;
-  /** Hide the whole composition when visible text already says "Souris". */
-  readonly decorative?: boolean;
-  readonly style?: StyleProp<ViewStyle>;
-}
-
-/**
- * Canonical mark above the canonical wordmark. The wordmark is pulled up into
- * the mark's transparent padding (18 % of the mark width) so the two artworks
- * sit at the rhythm of the original lockup without ever overlapping. The
- * wordmark carries the single accessible "Souris"; the mark is decorative.
- */
-export function BrandComposition({ size, decorative = false, style }: BrandCompositionProps) {
-  const markSize = Math.round(size / 2);
-  return (
-    <View
-      style={[styles.composition, style]}
-      accessibilityElementsHidden={decorative}
-      importantForAccessibility={decorative ? 'no-hide-descendants' : 'auto'}
-    >
-      <BrandMark variant="mark" size={markSize} decorative />
-      <BrandMark
-        variant="wordmark"
-        size={size}
-        decorative={decorative}
-        style={{ marginTop: -Math.round(markSize * 0.18) }}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  composition: { alignItems: 'center' },
-});
-

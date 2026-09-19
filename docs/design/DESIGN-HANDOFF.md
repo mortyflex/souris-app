@@ -101,33 +101,28 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - `logo-wordmark.png`
 
 ## Souris native brand integration (repository truth)
-The three logo PNGs above are the approved Souris identity. In the application repository they live
-**only** in `assets/brand/` (identical bytes to the export copies) and are never redrawn, regenerated,
-or replaced by generic icons:
+The three logo PNGs in `assets/brand/` are the approved Souris identity (final artwork and palette:
+coloured purple / plum artwork on a transparent background). They supersede the logo copies kept
+inside `reference-export/`, which document the earlier navy identity and are no longer the runtime
+truth. They are never redrawn, recoloured, cropped, regenerated, or replaced by generic icons:
 
 | Asset | Role | Runtime use |
 | --- | --- | --- |
-| `assets/brand/logo-mark.png` | MARK — canonical app symbol | app icon source, splash symbol, compact identity |
-| `assets/brand/logo-wordmark.png` | WORDMARK — canonical Souris name | name-forward contexts |
-| mark + wordmark (`BrandComposition`) | PRIMARY product-facing composition | iOS splash (derived PNG), Plus, future onboarding / auth |
-| `assets/brand/logo-lockup.png` | LOCKUP — alternate mouse + name + historical salon-specific baseline | retained asset only; NOT the default cross-profession app identity |
+| `assets/brand/logo-lockup.png` | LOCKUP — full logo: ears + the name + whiskers + smile/tail + calendar | iOS splash, boot surface, Welcome |
+| `assets/brand/logo-mark.png` | MARK — compact symbol for reduced uses | account state screens, Android splash |
+| `assets/brand/logo-wordmark.png` | WORDMARK — horizontal Souris name | Plus identity block, name-forward contexts |
 
 - iOS app icon: `assets/brand/Souris.icon` (Apple Icon Composer document, `ios.icon` in
-  `app.json`). Layered, never flattened: lavender `lav200` document fill, the canonical navy mouse,
-  the pink nose — three elements only, no medallion, disc, glow or plate behind the mouse; Liquid Glass
-  (specular, refraction, shadow, depth) is rendered
-  by the system, nothing is baked into the layers. No wordmark. Dark: lavender strokes on the
-  system's dark background treatment; mono/tinted: system rendering. Layer sources and Icon Composer settings:
-  `assets/brand/icon-source/README.md`. The glass treatment never replaces the flat mark in-app.
-- Derived runtime icons (`assets/images/icon.png` — fallback/metadata PNG, no longer the iOS icon —,
-  `android-icon-foreground.png`, `android-icon-monochrome.png`, `favicon.png`) are flattened/padded
-  renders of `logo-mark.png` on the approved `lav200` background; they are outputs, not sources.
-  Regenerate them from the mark, never edit them by hand. Android keeps its flat adaptive icon.
-- Splash: `app.json` → `expo-splash-screen` renders `assets/images/splash-ios.png` (iOS,
-  `imageWidth` 260 — a derived transparent PNG stacking `logo-mark.png` above `logo-wordmark.png`,
-  required because the native splash accepts a single image) and `logo-mark.png` (Android,
-  `imageWidth` 200, mark only because the Android 12+ splash mask would clip a wordmark) on white
-  `#FFFFFF`.
+  `app.json`). Flat by design: a single layer, `logo-mark.png` copied byte-identical, centred on a
+  white document fill; glass off, no shadow, no glow. No wordmark. Dark: system dark background;
+  mono/tinted: system rendering. Settings and verification: `assets/brand/icon-source/README.md`.
+- Derived runtime icons (`assets/images/icon.png` — fallback/metadata PNG, not the iOS icon —,
+  `android-icon-foreground.png`, `android-icon-monochrome.png`, `favicon.png`) still show the
+  PREVIOUS identity. They are outputs, not sources, and must be replaced by approved exports of the
+  new icon; do not improvise them.
+- Splash: `app.json` → `expo-splash-screen` renders the canonical `assets/brand/logo-lockup.png`
+  (iOS, `imageWidth` 333, no derived splash PNG) and `logo-mark.png` (Android, `imageWidth` 288,
+  mark only because the Android 12+ splash mask would clip the lockup) on white `#FFFFFF`.
 - In-app rendering goes through `src/shared/ui/BrandMark.tsx`; no other component loads the PNGs.
 - UI typeface: **Plus Jakarta Sans** (see `DESIGN_OVERRIDES.md` §12). Inter appears only inside the
   historical export files and must not be reintroduced. The wordmark is an image, never typeset.

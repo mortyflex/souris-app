@@ -389,49 +389,68 @@ The exported reference shows the logos only inside a web launcher and an onboard
 runtime integrates the SAME canonical assets (`assets/brand/logo-mark.png`, `logo-wordmark.png`,
 `logo-lockup.png` — transparent PNGs, never modified) at deliberate brand moments only:
 
-- **iOS app icon (Liquid Glass)** — `assets/brand/Souris.icon`, an Apple Icon Composer document
+- **iOS app icon (flat)** — `assets/brand/Souris.icon`, an Apple Icon Composer document
   referenced by `ios.icon`; Xcode compiles it and renders every size, appearance and pre-26 fallback
-  from it. Direction: lavender document background + canonical navy mouse + pink nose, three visual
-  elements and nothing else; no medallion, disc, ring, halo, glow or plate behind the mouse — the
-  depth comes only from the mouse and nose materials. Layers, back to front: document fill
-  `lavender.lav200` (`#E1D6F9`); group `02 Mouse` — the canonical navy strokes of `logo-mark.png`,
-  artwork at 74 % of the canvas width (up from 68 %, so the mark reads large and confident), shadow
-  50 %, translucency off so navy stays rich; group `03 Nose` — the canonical pink nose, shadow 55 %,
-  translucency 15 % (small glass bead, slightly more raised than the strokes). Specular, refraction
-  and blur stay at Icon Composer defaults. No highlight, shadow, blur, gradient or corner mask is
-  baked into the mouse or nose layers (`assets/brand/icon-source/`): the system material provides
-  the depth. Dark
-  appearance: strokes recoloured `#E1D6F9`, nose unchanged, background left to the system's dark
-  treatment (a navy `#19163F` dark fill can be set in the Icon Composer GUI; the file does not carry
-  a document-level dark fill). Mono / tinted:
-  system rendering from the layer silhouettes. No wordmark in the icon. The glass treatment belongs
-  to the system icon only; it does not replace the flat canonical mark used in-app.
-- **Fallback raster icon** — `assets/images/icon.png` (mark at 68 % on `#E1D6F9`) stays as the
-  top-level `icon` for Expo Go, web metadata and any tooling that needs a flat PNG. It is not the
-  iOS icon any more.
-- **Android icon** — unchanged, platform-appropriate, no glass imitation: adaptive icon with a
-  transparent foreground (artwork at 56 % of the canvas, inside the safe circle),
-  `backgroundColor` `#E1D6F9`, alpha-only monochrome layer from the same render. Light lavender is
-  used because the navy strokes would vanish on navy/violet.
+  from it. Direction: the approved symbol, flat and crisp on clean white — no glass, no shadow, no
+  glow, no relief. One layer: `logo-mark.png` copied byte-identical into the document (never
+  resized, recoloured or cropped), scale 1.05, translation (−15, −6) pt so the artwork spans ≈ 71 %
+  of the canvas width and is centred on its own bounding box; white `#FFFFFF` document fill; glass
+  off, shadow none, translucency off. Dark appearance: no specialization (system dark background).
+  Mono / tinted: system rendering from the layer alpha. No wordmark in the icon. The layered sources
+  in `assets/brand/icon-source/` are retained but unused: `02-mouse-mark.png` has a halo baked into
+  its pixels that rendered blurry at Home Screen size (see the README there).
+- **Fallback raster icon** — `assets/images/icon.png` stays as the top-level `icon` for Expo Go,
+  web metadata and any tooling that needs a flat PNG. It is not the iOS icon. **It still shows the
+  previous identity** (navy mouse on `#E1D6F9`) until an approved flat export of the new icon is
+  supplied; the same applies to `assets/images/favicon.png`.
+- **Android icon** — adaptive icon (`android-icon-foreground.png`, `android-icon-monochrome.png`,
+  `backgroundColor` `#E1D6F9`), platform-appropriate, no glass imitation. **These files still show
+  the previous identity** until approved Android exports of the new icon are supplied.
 - **Native splash** — `expo-splash-screen`: white `#FFFFFF` background (identical to the Agenda
-  first frame). iOS shows `assets/images/splash-ios.png` at `imageWidth` 260: a DERIVED transparent
-  PNG stacking `logo-mark.png` above `logo-wordmark.png` (mark half the wordmark width, wordmark
-  pulled 18 % of the mark width into the mark's padding), required because the native splash accepts
-  a single image; it is regenerated from the canonical PNGs, never edited. Android shows
-  `logo-mark.png` alone at `imageWidth` 200, because the Android 12+ system splash masks the image
-  to a circle that would clip a wordmark. Icon and splash therefore show the same canonical mouse.
-  No spinner, text, or animation beyond the short native fade (`duration.settle`).
+  first frame). iOS shows the canonical `assets/brand/logo-lockup.png` directly at `imageWidth`
+  333 (no derived splash PNG any more). Android shows `logo-mark.png` alone at `imageWidth` 288,
+  because the Android 12+ system splash masks the image to a circle that would clip the lockup; the
+  mark's artwork spans 45 % of its canvas, so it stays inside the safe circle. No spinner, text, or
+  animation beyond the short native fade (`duration.settle`).
 - **Bootstrap** — the splash stays visible until Plus Jakarta Sans and the SQLite bootstrap are both
-  settled and the router is committed; the root view shares the splash white so no intermediate
-  unbranded surface or flash exists.
-- **Plus** — a compact identity block at the bottom of the screen: `BrandComposition` (mark 64 dp
-  above wordmark 128 dp, the single accessible "Souris"), then `Version x.y.z` from the Expo
-  manifest in muted metadata. It never competes with the management rows.
-- **Future onboarding / auth** — reuse `<BrandComposition size={...} />`. No screen exists yet.
-- **Lockup** — `logo-lockup.png` is retained in `assets/brand/` but is not used by the app: its
-  baseline "GESTION DE RENDEZ-VOUS SALON" is hairdressing-specific while Souris serves every
-  appointment-based beauty profession, and its detailed mouse differs from the canonical mark used
-  by the icon. It may return only with an updated, profession-neutral asset.
+  settled and the router is committed; the root view shares the splash white and the boot surface
+  renders the same lockup at the same 333 dp, so no intermediate unbranded surface or flash exists.
+- **Welcome** — the lockup is the hero: box width 472 dp on the 393 dp reference screen (artwork
+  ≈ 265 dp), scaled with the screen width (capped at 430 dp); it stays the single accessible
+  "Souris". Around it, `WelcomeMotifs` floats the six approved PNGs of
+  `assets/brand/welcome-floating/` (hairdryer, scissors, mirror, brush, comb, nail polish) — drawn as
+  supplied with `contain`, no plate, no shadow, boxes of 58–90 dp (hairdryer largest, nail polish
+  smallest), staggered around the logo and never over the word. A short hero pulls the objects in
+  and shrinks them rather than the logo. Idle: each object drifts on its own 5.2–7.4 s sine loop
+  (±5–7 dp vertical, ±2–4 dp horizontal, ±2–3.5° tilt), fading out while the object is in flight.
+  Touch: the hero — and only the hero — owns a pan gesture, and every object is a small physical
+  body (`welcome-physics.ts`): a finger within 130 dp pushes it away and hands it a share of its
+  own velocity, so a slow finger nudges and a fast swipe throws (≈ 135–160 dp in free space). A thrown
+  object coasts on a light drag, bounces softly off the hero's edges (artwork radius included) and
+  off the logo (an ellipse), is reined in past 110 dp from rest, then drifts home on a pull that
+  firms up as it slows and settles without wobbling (≈ 4 s). It leans with its horizontal speed,
+  per object (scissors most, mirror and nail polish least), never spinning. One frame callback per
+  object, running only between the first touch and the return home; everything else stays on the
+  UI thread with no React render while the finger moves. Helpers called by a worklet are
+  module-level worklets, never functions declared inside a worklet (the React Compiler would hoist
+  them out as non-worklets — guarded by `worklet-closures.test.ts`); the physics rules are
+  unit-tested, the feel is validated by hand on simulator / device. The logo leans ≤ 2.5 dp. The
+  headline uses `semanticColors.brandForeground` (`brand.plum` `#5F1852`, the measured plum of the
+  word in `logo-lockup.png`, 12.1:1 on white); the subtitle keeps `foregroundSoft`. Reduce Motion:
+  still scene, touch field off. Decorative, pointer-transparent, hidden from assistive technology;
+  the hero clips its content so nothing draws over the copy or the buttons. The splash and boot
+  surface are unchanged (lockup at 333 dp).
+- **Account state screens** — `<BrandMark variant="mark" size={126} decorative />` (compact symbol
+  above the state title).
+- **Plus** — a compact identity block at the bottom of the screen:
+  `<BrandMark variant="wordmark" size={150} />` (the single accessible "Souris"), then
+  `Version x.y.z` from the Expo manifest in muted metadata. It never competes with the management
+  rows.
+- **Sizing** — the canonical PNGs carry generous transparent padding (artwork ≈ 56 % of the lockup
+  width, 45 % of the mark, 61 % of the wordmark). `size` is the rendered box width; the height
+  follows the intrinsic ratio (lockup and wordmark 3:1, mark 3:2) with `resizeMode="contain"`, so
+  nothing is ever stretched. The PNGs are transparent and coloured: they sit directly on the white
+  background with no cream or tinted plate behind them, and there is no white-on-light variant.
 - **Where logos do NOT appear** — Agenda, Clientes, Produits, Prestations, details, sheets, forms,
   headers. Titles stay `Agenda` / `Clientes` / `Produits` / `Plus`; never `Souris — Agenda`.
 - **Display name** — the installed app is named `Souris` (`expo.name`); `souris-app` remains only

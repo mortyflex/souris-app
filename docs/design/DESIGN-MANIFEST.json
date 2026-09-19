@@ -312,38 +312,34 @@
       "lockup": "assets/brand/logo-lockup.png"
     },
     "roles": {
-      "mark": "canonical app symbol — app icon source, splash symbol, compact brand contexts",
-      "wordmark": "canonical Souris wordmark — name-forward contexts",
-      "composition": "mark + wordmark stacked (BrandComposition) — primary product-facing composition: iOS splash (derived PNG), Plus, future onboarding/auth",
-      "lockup": "retained brand asset with the historical salon-specific baseline; not the default cross-profession app identity"
+      "lockup": "full logo (ears + the name + whiskers + smile/tail + calendar) — iOS splash, boot surface, Welcome",
+      "mark": "compact symbol for reduced uses — account state screens, Android splash",
+      "wordmark": "horizontal Souris wordmark — Plus identity block, name-forward contexts"
     },
     "appIcon": {
-      "source": "assets/brand/logo-mark.png",
       "ios": {
         "iconComposer": "assets/brand/Souris.icon",
         "configKey": "ios.icon",
-        "material": "Liquid Glass rendered by the system; no baked effects; no wordmark",
-        "direction": "lavender document background + canonical navy mouse + pink nose; three elements only, nothing behind the mouse",
+        "material": "flat: glass off, shadow none, translucency off; no wordmark",
+        "direction": "approved symbol (logo-mark.png, byte-identical copy) centred on a white document fill; nothing else",
         "layers": [
           {
             "group": "background",
             "kind": "document-fill",
-            "color": "#E1D6F9",
+            "color": "#FFFFFF",
             "dark": "system dark treatment (no document-level dark fill in file)"
           },
           {
-            "group": "02 Mouse",
-            "file": "assets/brand/icon-source/02-mouse-mark.png",
-            "artworkWidthFraction": 0.74,
+            "group": "Mark",
+            "file": "assets/brand/logo-mark.png",
+            "scale": 1.05,
+            "translationInPoints": [
+              -15,
+              -6
+            ],
+            "glass": false,
             "translucency": 0,
-            "shadow": 0.5,
-            "darkFill": "#E1D6F9"
-          },
-          {
-            "group": "03 Nose",
-            "file": "assets/brand/icon-source/03-mouse-nose.png",
-            "translucency": 0.15,
-            "shadow": 0.55
+            "shadow": 0
           }
         ],
         "appearances": [
@@ -352,7 +348,8 @@
           "mono",
           "tinted"
         ],
-        "sources": "assets/brand/icon-source/README.md"
+        "sources": "assets/brand/icon-source/README.md",
+        "unusedLayerSources": "assets/brand/icon-source/*.png (halo baked into 02-mouse-mark.png)"
       },
       "derived": {
         "iosFallback": "assets/images/icon.png",
@@ -360,31 +357,30 @@
         "androidMonochrome": "assets/images/android-icon-monochrome.png",
         "favicon": "assets/images/favicon.png"
       },
+      "derivedStatus": "previous identity — awaiting approved flat exports of the new icon",
       "backgroundColor": "#E1D6F9",
       "backgroundToken": "lavender.lav200"
     },
     "splash": {
       "backgroundColor": "#FFFFFF",
       "ios": {
-        "image": "assets/images/splash-ios.png",
-        "derivedFrom": [
-          "assets/brand/logo-mark.png",
-          "assets/brand/logo-wordmark.png"
-        ],
-        "imageWidth": 260
+        "image": "assets/brand/logo-lockup.png",
+        "imageWidth": 333
       },
       "android": {
         "image": "assets/brand/logo-mark.png",
-        "imageWidth": 200,
-        "note": "mark only: the Android 12+ splash mask would clip a wordmark"
+        "imageWidth": 288,
+        "note": "mark only: the Android 12+ splash mask would clip the lockup"
       }
     },
     "runtimeComponent": "src/shared/ui/BrandMark.tsx",
     "approvedContexts": [
       "app-icon",
       "native-splash",
-      "plus-identity",
-      "future-onboarding-auth"
+      "boot-surface",
+      "welcome",
+      "account-state",
+      "plus-identity"
     ],
     "forbiddenContexts": [
       "agenda",
@@ -396,17 +392,15 @@
       "headers"
     ],
     "rules": [
-      "Never redraw, regenerate, or replace the canonical assets.",
+      "Never redraw, recolour, crop, regenerate, or replace the canonical assets.",
       "Never typeset the wordmark with the UI font.",
-      "Exactly one accessible 'Souris' element per brand composition.",
-      "logo-lockup.png is not used as app-facing identity while it carries the salon-specific baseline."
+      "Exactly one accessible 'Souris' element per brand moment.",
+      "Transparent coloured PNGs sit directly on the light background: no cream or tinted plate, no white logo on light."
     ],
-    "primaryComposition": {
-      "component": "BrandComposition",
-      "assets": [
-        "assets/brand/logo-mark.png",
-        "assets/brand/logo-wordmark.png"
-      ]
+    "welcomeFloatingAssets": {
+      "folder": "assets/brand/welcome-floating/",
+      "component": "src/features/auth/components/WelcomeMotifs.tsx",
+      "note": "files 04–06 are named after the wrong object: 04-brush.png shows the comb, 05-comb.png the nail polish, 06-nail-polish.png the brush; the component maps them by content"
     }
   },
   "typography": {

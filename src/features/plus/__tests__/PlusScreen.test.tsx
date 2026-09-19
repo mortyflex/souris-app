@@ -59,7 +59,7 @@ describe('PlusScreen', () => {
     expect(view.getByText('Coiffure')).toBeTruthy();
 
     const brand = view.getByTestId('plus-brand');
-    // The wordmark is the single accessible "Souris" element; the mark is decorative.
+    // The wordmark is the single accessible "Souris" element.
     expect(view.getAllByLabelText('Souris')).toHaveLength(1);
     expect(brand).toBeTruthy();
     expect(view.getByText('Version 1.0.0')).toBeTruthy();
