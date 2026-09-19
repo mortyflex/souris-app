@@ -701,24 +701,51 @@ This section supersedes the « calmer operational exception » wording of §10 f
 cards, the flat violet circle of §17 and the « nothing else is restyled » wording of §18, for
 presentation only. Occupancy, segments, statuses and navigation behave exactly as before.
 
-- **Palette**: appointment cards use eight soft but visible pastel families — lavender, blush,
-  peach, mint, powder blue, butter, coral, lilac (`appointmentPastels` in
-  `src/shared/ui/theme/colors.ts`). Lavender, blush and peach reuse the approved steps; the new
-  families follow the same OKLCH recipe at their own hue. The family is derived deterministically
-  from the Appointment id (`src/features/agenda/appointment-palette.ts`): stable across renders,
-  shared by every segment and the Week row of one Appointment, never random. Washed-out grey is
-  never an active colour.
-- **Status**: scheduled / confirmed / in-progress keep the vivid `fill`; completed calms down to
-  the family's `calm` tone with soft text and no gloss; cancelled / no-show are desaturated
-  neutral (they do not occupy the operational Agenda today, §5).
-- **Text**: navy client name, family `deep` tone for the service line, `foregroundSoft` for phase
-  and reprise. Every pairing is ≥ 4.5:1 (navy ≥ 11:1) and covered by
-  `appointment-palette.test.ts`.
+- **Palette**: appointment cards use the fifteen approved families of the « Appointment Card
+  Color Palette » reference — mint, sage, aqua, sky blue, powder blue, soft indigo, lilac,
+  lavender, soft rose, coral, peach, apricot, sand, soft yellow, pistachio
+  (`appointmentPastels` in `src/shared/ui/theme/colors.ts`). Each family is four explicit tokens:
+  `background` (solid pastel fill), `accent` (solid left border), `title` (dark same-hue client
+  name) and `subtitle` (same-family secondary text). They are design-system constants: never
+  derived with HSL / OKLCH or any runtime colour maths. Washed-out grey is never an active colour.
+- **Flat fills only**: a card is a solid background, a solid accent border and solid text. No
+  linear or radial gradient, no translucent overlay, no sheen, no glossy tint, no colour
+  interpolation across the card.
+- **Assignment — colour identifies the client.** Appointment colour identifies the client within
+  the calendar. Appointments belonging to the same client share a colour family: main
+  appointment, reprise, every segment, large and compact card alike. The Day agenda resolves
+  visible client colour collisions across the available 15-family palette
+  (`resolveAgendaAppointmentPalettes` in `src/features/agenda/appointment-palette.ts`):
+  - the identity is the stable `clientId`, never the mutable name and never the Appointment id;
+  - each client prefers one family, `hash(clientId) % 15`, so it tends to keep its colour from
+    day to day;
+  - the clients visible on one day are visited in sorted-id order (never appointment order):
+    each preferred family goes to the first client asking for it, the others probe forward to
+    the next free family. The order of `appointmentPastels` is part of the design — neighbours
+    are deliberately contrasting, so a displaced client lands on a clearly different colour;
+  - up to 15 visible clients are therefore all different; beyond 15 every family is taken and
+    the remaining clients reuse their preferred family;
+  - an Appointment without a client id (not expected: `clientId` is required) falls back to its
+    own id as identity, so it still resolves to one valid, deterministic family;
+  - pure presentation logic: never random, nothing persisted, nothing synced. A client's colour
+    can differ between two days when another visible client claims its preferred family.
+  The Week list resolves the same per-day colours for its row markers, so a marker matches the
+  Day card; Week stays an editorial list without coloured cards.
+- **Status**: scheduled / confirmed / in-progress are written in their family; completed keeps
+  the family `background` and `accent` under soft text and loses the card shadow; cancelled /
+  no-show are desaturated neutral (they do not occupy the operational Agenda today, §5).
+- **Text**: a live card is written in its own family — client name in the family `title` tone,
+  service line, phase and reprise in the family `subtitle` tone. Hierarchy comes from weight and
+  lightness, never from a generic navy or grey. Completed, cancelled and no-show keep
+  `foregroundSoft`. `title` is ≥ 4.6:1 and `foregroundSoft` ≥ 7:1 on every background (covered by
+  `appointment-palette.test.ts`). The approved `subtitle` equals the `accent` and measures
+  2.1:1 (soft yellow) to 4.1:1 (soft indigo) on its background — below the 4.5:1 target for
+  small text. It is an accepted decision of the approved palette, to be re-checked on device.
 - **Shape**: `radii.small` (8), reduced on short blocks (a quarter of the height, minimum 3) so
   a quarter-hour card never reads as a pill.
-- **Gloss** (`src/shared/ui/theme/gloss.ts`): a light top-down white sheen, a one-pixel top
-  highlight and the barely-there `nativeShadows.card` depth. No blur, no glassmorphism. The layers
-  only lighten the fill, so dark text never loses contrast.
+- **Depth**: the barely-there `nativeShadows.card` under live cards, nothing else. The former
+  card sheen (a top-down white gradient plus a one-pixel highlight, `gloss.card`) is removed: it
+  read as a washed gradient across the pastel fill. No blur, no glassmorphism.
 - **Floating +**: same size, placement, hit target, reveal and behaviour (§17). Its finish is no
   longer the glossy candy violet circle first introduced here: it is the light-glass circle with a
   violet plus described in §21 (`GlassSurface`), and the `gloss.candy` tokens are removed. What

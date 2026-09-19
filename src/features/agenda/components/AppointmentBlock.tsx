@@ -1,11 +1,11 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 
 import { AppText } from "@/shared/ui/AppText";
 import {
   getAppointmentStatusLabel,
   isTerminalAppointmentStatus,
 } from "@/features/appointments/presentation";
-import { gloss, interaction, nativeShadows, radii } from "@/shared/ui/theme";
+import { interaction, nativeShadows, radii } from "@/shared/ui/theme";
 
 import {
   getAgendaAppointmentCardColors,
@@ -66,15 +66,10 @@ export function AppointmentBlock({
           borderLeftColor: cardColors.accent,
           borderRadius,
         },
-        cardColors.glossy && nativeShadows.card,
+        cardColors.elevated && nativeShadows.card,
         pressed && styles.pressed,
       ]}
     >
-      {cardColors.glossy && (
-        <View pointerEvents="none" style={styles.sheen} testID="appointment-block-gloss">
-          <View style={styles.sheenEdge} />
-        </View>
-      )}
       {content.mode === "lines" && (
         <>
           <AppText
@@ -148,13 +143,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 0,
   },
-  // Polished finish: a light vertical sheen under the text, closed by a
-  // one-pixel top highlight. Decorative only — never intercepts touches.
-  sheen: {
-    ...StyleSheet.absoluteFill,
-    experimental_backgroundImage: gloss.card.sheen,
-  },
-  sheenEdge: { backgroundColor: gloss.card.edge, height: 1 },
   clientName: { lineHeight: 16 },
   serviceName: { lineHeight: 15 },
   inlineState: { lineHeight: 15 },

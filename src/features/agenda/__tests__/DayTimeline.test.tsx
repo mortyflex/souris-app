@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { render, within } from '@testing-library/react-native';
 
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
@@ -143,5 +143,26 @@ describe('DayTimeline hourly grid', () => {
     expect(geometry.top).toBeGreaterThan(agenda.hourHeight);
     expect(geometry.top).toBeLessThan(2 * agenda.hourHeight);
     expect(geometry.height).toBe(45 * minuteHeight);
+  });
+});
+
+describe('DayTimeline client colours', () => {
+  function forClient(value: AppointmentSessionEntry, clientId: string): AppointmentSessionEntry {
+    return { appointment: { ...value.appointment, clientId } };
+  }
+
+  it('shares one colour per client and separates different clients', async () => {
+    const view = await renderTimeline([
+      forClient(entry('amel-morning', 9, 60), 'client-amel'),
+      forClient(entry('nora-morning', 10, 60), 'client-nora'),
+      forClient(entry('amel-afternoon', 15, 30), 'client-amel'),
+    ]);
+    const accentOf = (appointmentId: string) => {
+      const segment = view.getByTestId(new RegExp(`^agenda-segment-${appointmentId}`));
+      return flatStyle(within(segment).getByRole('button').props.style).borderLeftColor;
+    };
+
+    expect(accentOf('amel-afternoon')).toBe(accentOf('amel-morning'));
+    expect(accentOf('nora-morning')).not.toBe(accentOf('amel-morning'));
   });
 });

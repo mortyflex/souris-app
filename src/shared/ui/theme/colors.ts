@@ -48,22 +48,34 @@ export const peach = {
   peach700: '#955816', // oklch(0.52 0.11 62) — processing time accent / text
 } as const;
 
-// Agenda appointment pastels — the colourful planning-card families
-// (DESIGN_OVERRIDES.md §19). Lavender, blush and peach reuse the approved steps
-// above; the other families follow the same OKLCH recipe at their own hue,
-// chroma reduced only as far as the sRGB gamut requires:
-//   calm oklch(0.972 ~0.016 h) — completed card
-//   fill oklch(0.895 ~0.06 h)  — active card (butter sits lighter to stay yellow)
-//   deep oklch(0.46 ~0.11 h)   — identity edge and secondary text, ≥ 5:1 on fill
+// Agenda appointment pastels — the fifteen planning-card families
+// (DESIGN_OVERRIDES.md §19). A family identifies a client within the calendar.
+// These are explicit, approved design tokens ("Appointment Card Color Palette"
+// reference): never derived at runtime, never blended, always painted flat.
+//   background — solid pastel fill of the card
+//   accent     — solid left border, the strongest chromatic reference
+//   title      — client name, dark tone of the same hue (≥ 4.6:1 on background)
+//   subtitle   — service line, phase and reprise; the approved palette sets it
+//                to the accent (2.1–4.1:1 on background, see §19)
+// The ORDER is part of the design: a client whose preferred family is taken
+// probes forward through this list, so neighbours are deliberately contrasting
+// (the hue-ordered reference walked four steps at a time).
 export const appointmentPastels = {
-  lavender: { calm: lavender.lav050, fill: lavender.lav200, deep: lavender.lav700 },
-  blush: { calm: rose.rose050, fill: rose.rose200, deep: rose.rose700 },
-  peach: { calm: peach.peach050, fill: peach.peach200, deep: '#7F490C' }, // oklch(0.46 0.10 62)
-  mint: { calm: '#ECF9F3', fill: '#B7EAD2', deep: '#05684B' }, // hue 165
-  powderBlue: { calm: '#EEF7FE', fill: '#BCE2FE', deep: '#015E8C' }, // hue 240
-  butter: { calm: '#FDF8E2', fill: '#F6EBB1', deep: '#695700' }, // hue 98, fill oklch(0.935 0.075 98)
-  coral: { calm: '#FEF3F1', fill: '#FED0C8', deep: '#8B3C31' }, // hue 30
-  lilac: { calm: '#FCF2FB', fill: '#F5CEF0', deep: '#793F75' }, // hue 330
+  mint: { background: '#DDF5E7', accent: '#14875B', title: '#0C5B3D', subtitle: '#14875B' },
+  powderBlue: { background: '#E7EEFF', accent: '#5B72D6', title: '#394A99', subtitle: '#5B72D6' },
+  softRose: { background: '#FCE8F1', accent: '#D65C8B', title: '#963C61', subtitle: '#D65C8B' },
+  sand: { background: '#F4EBDD', accent: '#B48A55', title: '#7E5D38', subtitle: '#B48A55' },
+  sage: { background: '#E7F1DC', accent: '#6C9A47', title: '#476C2D', subtitle: '#6C9A47' },
+  softIndigo: { background: '#E9E9FF', accent: '#6565CF', title: '#41418E', subtitle: '#6565CF' },
+  coral: { background: '#FDE8E1', accent: '#E46F4F', title: '#9C3E29', subtitle: '#E46F4F' },
+  softYellow: { background: '#FFF6D6', accent: '#D0A526', title: '#8A6A09', subtitle: '#D0A526' },
+  aqua: { background: '#DFF4F1', accent: '#2B9D90', title: '#17665E', subtitle: '#2B9D90' },
+  lilac: { background: '#EEE7FF', accent: '#7B5BD6', title: '#513A99', subtitle: '#7B5BD6' },
+  peach: { background: '#FCEAD8', accent: '#D96A16', title: '#9B4209', subtitle: '#D96A16' },
+  pistachio: { background: '#EEF3D9', accent: '#8DAA35', title: '#5E7420', subtitle: '#8DAA35' },
+  skyBlue: { background: '#E2F1FF', accent: '#2785C7', title: '#155B8A', subtitle: '#2785C7' },
+  lavender: { background: '#F2E8FF', accent: '#9A5BC8', title: '#65378A', subtitle: '#9A5BC8' },
+  apricot: { background: '#FBE6CC', accent: '#C77717', title: '#8A4D0A', subtitle: '#C77717' },
 } as const;
 
 // Brand identity (assets/brand/logo-*.png) — the plum of the word "Souris".

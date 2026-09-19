@@ -10,6 +10,7 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
+import { resolveAgendaAppointmentPalettes } from '../appointment-palette';
 import { isSameLocalDay } from '../calendar/week';
 import { WeekAppointmentRow } from './WeekAppointmentRow';
 
@@ -34,6 +35,10 @@ export function WeekDaySection({
   const isToday = isSameLocalDay(day, today);
   const formattedWeekday = weekdayFormatter.format(day).replace(/\.$/, '');
   const weekday = `${formattedWeekday.charAt(0).toUpperCase()}${formattedWeekday.slice(1)}`;
+  // Same per-day client colours as the Day agenda, so a marker matches its card.
+  const paletteOf = resolveAgendaAppointmentPalettes(
+    appointments.map(({ appointment }) => appointment),
+  );
   const countLabel = appointments.length === 1 ? '1 rendez-vous' : `${appointments.length} rendez-vous`;
 
   return (
@@ -68,7 +73,11 @@ export function WeekDaySection({
       {appointments.length > 0 ? (
         <View style={styles.rows}>
           {appointments.map((value) => (
-            <WeekAppointmentRow key={value.appointment.id} value={value} />
+            <WeekAppointmentRow
+              key={value.appointment.id}
+              value={value}
+              palette={paletteOf(value.appointment)}
+            />
           ))}
         </View>
       ) : (

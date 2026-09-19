@@ -1,6 +1,6 @@
 // Souris design tokens — Gloss
 //
-// Source: docs/design/DESIGN_OVERRIDES.md §19, §20, §21
+// Source: docs/design/DESIGN_OVERRIDES.md §20, §21 (Agenda cards are flat: §19)
 //
 // The restrained polished finishes of Souris: white light falling from the top
 // edge, never a blur view. Every layer is a plain overlay drawn above a flat
@@ -8,13 +8,6 @@
 // and dark text only ever gains contrast under it.
 
 export const gloss = {
-  card: {
-    /** Very light vertical sheen over the pastel fill. */
-    sheen:
-      'linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.14) 42%, rgba(255, 255, 255, 0) 100%)',
-    /** One-pixel top highlight. */
-    edge: 'rgba(255, 255, 255, 0.85)',
-  },
   // Satin finish of sheets, drawers and dialogs (SurfaceGloss). Full-width light
   // from the top edge that dissolves to nothing — never a panel inside the
   // surface — and a rim that follows the surface's own corners.

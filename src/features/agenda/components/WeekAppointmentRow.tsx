@@ -11,19 +11,20 @@ import {
 } from '@/features/appointments/presentation';
 import { foregroundSoft, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
-import { getAgendaAppointmentPalette } from '../appointment-palette';
+import type { AgendaAppointmentPalette } from '../appointment-palette';
 import { getWeekAppointmentServiceSummary } from '../calendar/week-appointments';
 
 interface WeekAppointmentRowProps {
   readonly value: AppointmentSessionEntry;
+  /** Client colour resolved for the row's day, shared with the Day agenda. */
+  readonly palette: AgendaAppointmentPalette;
 }
 
-export function WeekAppointmentRow({ value }: WeekAppointmentRowProps) {
+export function WeekAppointmentRow({ value, palette }: WeekAppointmentRowProps) {
   const router = useRouter();
   const { getClientById } = useClientSession();
   const { appointment } = value;
   const clientDisplayName = getResolvedClientDisplayName(getClientById(appointment.clientId));
-  const palette = getAgendaAppointmentPalette(appointment.id);
   const startAt = appointment.startAt;
   const time = `${startAt.getHours().toString().padStart(2, '0')}:${startAt
     .getMinutes()

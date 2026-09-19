@@ -17,7 +17,7 @@ import { useClientSession } from '@/features/clients/session/ClientSessionProvid
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { agenda, bottomClearance, gutter, rose, semanticColors } from '@/shared/ui/theme';
 
-import { getAgendaAppointmentPalette } from '../appointment-palette';
+import { resolveAgendaAppointmentPalettes } from '../appointment-palette';
 import { buildAgendaStaffSegments } from '../layout/agenda-staff-segments';
 import { calculateDayIntervalLayout } from '../layout/day-layout';
 import {
@@ -40,11 +40,15 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
   const { getClientById } = useClientSession();
   const { width } = useWindowDimensions();
   const [now, setNow] = useState(() => new Date());
+  // Colour identifies the client: resolved once for the clients of this day.
+  const paletteOf = resolveAgendaAppointmentPalettes(
+    appointments.map(({ appointment }) => appointment),
+  );
   const visibleSegments = appointments.flatMap(({ appointment }) =>
     buildAgendaStaffSegments(appointment).map((segment) => ({
       ...segment,
       clientName: getResolvedClientDisplayName(getClientById(appointment.clientId)),
-      palette: getAgendaAppointmentPalette(segment.appointmentId),
+      palette: paletteOf(appointment),
     })),
   );
   const intervalLayouts = calculateDayIntervalLayout(visibleSegments);
