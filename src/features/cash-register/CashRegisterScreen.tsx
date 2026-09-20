@@ -126,20 +126,12 @@ export function CashRegisterScreen() {
         />
 
         <View style={styles.navigation}>
-          <Pressable
+          <GlassIconButton
             accessibilityLabel={period === 'day' ? 'Jour précédent' : 'Mois précédent'}
-            accessibilityRole="button"
-            hitSlop={6}
+            icon={glassIcons.previous}
             onPress={() => shift(-1)}
-            style={({ pressed }) => [styles.navControl, pressed && styles.pressedControl]}
             testID="cash-register-previous"
-          >
-            <SymbolView
-              name={{ ios: 'chevron.left', android: 'chevron_left' }}
-              size={16}
-              tintColor={semanticColors.foreground}
-            />
-          </Pressable>
+          />
           <View style={styles.periodCopy}>
             {period === 'day' ? (
               <Pressable
@@ -173,20 +165,12 @@ export function CashRegisterScreen() {
               </Pressable>
             )}
           </View>
-          <Pressable
+          <GlassIconButton
             accessibilityLabel={period === 'day' ? 'Jour suivant' : 'Mois suivant'}
-            accessibilityRole="button"
-            hitSlop={6}
+            icon={glassIcons.next}
             onPress={() => shift(1)}
-            style={({ pressed }) => [styles.navControl, pressed && styles.pressedControl]}
             testID="cash-register-next"
-          >
-            <SymbolView
-              name={{ ios: 'chevron.right', android: 'chevron_right' }}
-              size={16}
-              tintColor={semanticColors.foreground}
-            />
-          </Pressable>
+          />
         </View>
 
         <View style={styles.totalCard} testID="cash-register-total-card">
@@ -270,15 +254,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   navigation: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
-  navControl: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surface,
-    borderCurve: 'continuous',
-    borderRadius: radii.medium,
-    height: minimumTouchTarget,
-    justifyContent: 'center',
-    width: minimumTouchTarget,
-  },
   periodCopy: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 },
   periodAction: { justifyContent: 'center', minHeight: minimumTouchTarget, paddingHorizontal: spacing.sm },
   periodLabel: { color: semanticColors.foreground, textAlign: 'center' },

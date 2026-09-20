@@ -35,7 +35,7 @@ export const gloss = {
     sheen: 'linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%)',
     /** Light caught under the top rim, a whisper of shade at the base. */
     rim: 'inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 3px rgba(25, 22, 63, 0.05)',
-    /** Wide capsule (Jour / Semaine): lighter than a circle, so its larger area stays as quiet. */
+    /** Wide capsule (SegmentedControl — Jour / Semaine, Jour / Mois): lighter than a circle, so its larger area stays as quiet. */
     fillCapsule: 'rgba(255, 255, 255, 0.74)',
     borderCapsule: 'rgba(25, 22, 63, 0.10)',
     /**

@@ -866,11 +866,15 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
 - **Glass icon button** — `GlassIconButton` (`src/shared/ui/`): a 44 pt circle, the glass
   material, one thin navy glyph centred in it. Used by the back button of Fiche cliente,
   Prestations & tarifs and Caisse (`glassIcons.back`) and by the Agenda previous / next arrows in
-  both Jour and Semaine (`glassIcons.previous` / `next`). Only the symbol changes.
+  both Jour and Semaine and the Caisse previous / next arrows in both Jour and Mois
+  (`glassIcons.previous` / `next`). Only the symbol changes.
 - **Floating +** — same size, placement, reveal, menu and hit target (§17). The circle is the
   glass material; the plus keeps its symbol and becomes Souris violet — the button's only accent.
-- **Jour / Semaine** — a glass capsule (`radii.pill`), a touch lighter than the circles because it
-  covers more area (`fillCapsule`, `borderCapsule`, `nativeShadows.glassCapsule`). The selected view
-  lets the glass read through: a whisper of accent tint
-  with a hairline accent contour and a violet label, echoing the selected tab of the bar; the
-  other view is a plain `foregroundSoft` label on the glass. Never a large opaque slab.
+- **Segmented switches — Agenda Jour / Semaine, Caisse Jour / Mois** — ONE shared primitive,
+  `SegmentedControl` (`src/shared/ui/`): a glass capsule (`radii.pill`), a touch lighter than the
+  circles because it covers more area (`fillCapsule`, `borderCapsule`,
+  `nativeShadows.glassCapsule`). The selected option lets the glass read through: a whisper of
+  accent tint with a hairline accent contour and a violet label, echoing the selected tab of the
+  bar; the others are plain `foregroundSoft` labels on the glass. Never a large opaque slab.
+  The visible options are compact (36 pt iOS / 40 dp Android, 15 pt label); a vertical hit slop
+  restores the platform touch target.

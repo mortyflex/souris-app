@@ -1,5 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Pressable } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import {
   AppointmentSessionProvider,
@@ -11,6 +11,7 @@ import {
 } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { formatEuroCents } from '@/shared/lib/money';
+import { glassIconButtonSize } from '@/shared/ui/GlassIconButton';
 
 import { CashRegisterScreen } from '../CashRegisterScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -317,6 +318,38 @@ describe('CashRegisterScreen', () => {
 
     // The development seed holds previous-day fixtures already COMPLETED by reconciliation.
     expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: 'Aucun encaissement' });
+  });
+
+  it('navigates with the shared glass arrows, labelled for the mode, one period per press', async () => {
+    const view = await renderCashRegister();
+
+    for (const testID of ['cash-register-previous', 'cash-register-next']) {
+      const arrow = view.getByTestId(testID);
+      expect(arrow.props.accessibilityRole).toBe('button');
+      expect(StyleSheet.flatten(arrow.props.style)).toMatchObject({
+        borderRadius: glassIconButtonSize / 2,
+        height: glassIconButtonSize,
+        width: glassIconButtonSize,
+      });
+      expect(within(arrow).getByTestId('glass-surface', { includeHiddenElements: true })).toBeTruthy();
+    }
+    // Each arrow is the only button answering to its label: no wrapper doubles the interaction.
+    expect(view.getAllByRole('button', { name: 'Jour précédent' })).toHaveLength(1);
+    expect(view.getAllByRole('button', { name: 'Jour suivant' })).toHaveLength(1);
+
+    await press(view, 'cash-register-next');
+    expect(totals(view).period).toBe('Dimanche 30 août 2026');
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Mois'));
+    });
+
+    expect(view.queryByLabelText('Jour précédent')).toBeNull();
+    expect(view.getByTestId('cash-register-previous').props.accessibilityLabel).toBe('Mois précédent');
+    expect(view.getByTestId('cash-register-next').props.accessibilityLabel).toBe('Mois suivant');
+
+    await press(view, 'cash-register-previous');
+    expect(totals(view).period).toBe('Juillet 2026');
   });
 
   it('returns through the back control', async () => {

@@ -1,15 +1,24 @@
 // Souris — SegmentedControl
 //
-// The compact two-or-more option switcher (reference: the Agenda Jour /
-// Semaine switcher): a soft surface capsule with the selected option raised
-// on the strong lavender surface. Content-agnostic; labels stay feature-owned.
+// The ONE compact option switcher of Souris — Agenda Jour / Semaine, Caisse
+// Jour / Mois: a light-glass capsule (GlassSurface, DESIGN_OVERRIDES.md §21)
+// from the same family as the glass icon buttons and the native tab bar,
+// slightly lighter than the circles since it covers more area. The selected
+// option lets the glass read through: a whisper of accent, an accent hairline
+// and a violet label, like the bar's selected tab; the others stay plainly
+// readable navy-soft labels on the glass. Content-agnostic; labels stay
+// feature-owned.
+//
+// The visible capsule is deliberately lower than the platform touch target;
+// each option's vertical hitSlop gives the missing height back to the finger.
 
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppText } from './AppText';
-import { interaction, radii, semanticColors, spacing, touchTarget } from './theme';
+import { GlassSurface } from './GlassSurface';
+import { gloss, interaction, nativeShadows, radii, semanticColors, touchTarget } from './theme';
 
 export interface SegmentedControlOption<Value extends string> {
   readonly value: Value;
@@ -25,6 +34,13 @@ interface SegmentedControlProps<Value extends string> {
 
 const minimumTouchTarget = touchTarget[Platform.OS === 'android' ? 'android' : 'ios'];
 
+/** Vertical touch slop that restores the platform touch target around an option. */
+const optionTouchSlop = 4;
+/** Visible height of an option: 36 pt on iOS, 40 dp on Android. */
+export const segmentedControlOptionHeight = minimumTouchTarget - optionTouchSlop * 2;
+
+const optionHitSlop = { bottom: optionTouchSlop, top: optionTouchSlop } as const;
+
 export function SegmentedControl<Value extends string>({
   options,
   value,
@@ -33,6 +49,7 @@ export function SegmentedControl<Value extends string>({
 }: SegmentedControlProps<Value>) {
   return (
     <View accessibilityRole="tablist" style={styles.container} testID={testID}>
+      <GlassSurface shape={styles.capsule} testID={testID ? `${testID}-glass` : undefined} />
       {options.map((option) => {
         const selected = option.value === value;
         const select = () => {
@@ -44,6 +61,7 @@ export function SegmentedControl<Value extends string>({
             accessibilityLabel={option.label}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
+            hitSlop={optionHitSlop}
             key={option.value}
             onPress={select}
             style={({ pressed }) => [
@@ -52,7 +70,7 @@ export function SegmentedControl<Value extends string>({
               selected && styles.selectedOption,
             ]}
           >
-            <AppText variant="control" style={selected ? styles.selectedText : styles.unselectedText}>
+            <AppText variant="control" style={[styles.label, selected ? styles.selectedText : styles.unselectedText]}>
               {option.label}
             </AppText>
           </Pressable>
@@ -65,26 +83,38 @@ export function SegmentedControl<Value extends string>({
 const styles = StyleSheet.create({
   container: {
     alignSelf: 'flex-start',
-    backgroundColor: semanticColors.surface,
-    borderCurve: 'continuous',
-    borderRadius: radii.medium,
+    borderRadius: radii.pill,
     flexDirection: 'row',
-    padding: 2,
+    gap: 2,
+    padding: 3,
+    ...nativeShadows.glassCapsule,
+  },
+  // Same material as the glass circles, lightened for the capsule's wider area.
+  capsule: {
+    backgroundColor: gloss.glass.fillCapsule,
+    borderColor: gloss.glass.borderCapsule,
+    borderRadius: radii.pill,
   },
   option: {
     alignItems: 'center',
-    borderCurve: 'continuous',
-    borderRadius: radii.medium,
+    borderColor: 'transparent',
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: segmentedControlOptionHeight,
     justifyContent: 'center',
-    minHeight: minimumTouchTarget,
-    minWidth: 70,
-    paddingHorizontal: spacing.md,
+    minWidth: 64,
+    paddingHorizontal: 10,
   },
-  selectedOption: { backgroundColor: semanticColors.surfaceLavenderStrong },
+  selectedOption: {
+    backgroundColor: gloss.glass.selectedFill,
+    borderColor: gloss.glass.selectedBorder,
+  },
   pressedOption: {
     opacity: interaction.pressedOpacity,
     transform: [{ scale: interaction.pressedScale }],
   },
+  // The control role, one step smaller so the capsule stays light.
+  label: { fontSize: 15 },
   selectedText: { color: semanticColors.accent },
   unselectedText: { color: semanticColors.foregroundSoft },
 });
