@@ -555,9 +555,9 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
     « Aujourd'hui » (`chip` text) in `rose700`. Same row height, no animation, never on an archived
     row; the row label says « anniversaire aujourd'hui ».
   - *Reminder card* (`BirthdayNotice`, Client Profile and Appointment creation / editing): `lav050`
-    surface, 1 pt `lav200` border, large radius, a 36 pt `rose100` badge with the glyph, `lav700`
-    title, soft-foreground supporting text; the optional action is a white secondary button with a
-    `lav200` border. The copy is one accessible element; the action is a separate button. Never an
+    surface, no border, large radius, a 36 pt `rose100` badge with the glyph, `lav700`
+    title, soft-foreground supporting text; the optional action is a white secondary button, also
+    borderless. The copy is one accessible element; the action is a separate button. Never an
     alert, an error or a popup.
   - *Compact reminder* (`BirthdayNotice compact`, Cliente step of Appointment creation, under the
     context row): same card with `md` / `sm` padding, a 28 pt badge with a 14 pt glyph, the sentence

@@ -86,10 +86,8 @@ export function BirthdayNotice({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: semanticColors.surfaceLavender,
-    borderColor: semanticColors.borderLavender,
     borderCurve: 'continuous',
     borderRadius: radii.large,
-    borderWidth: 1,
     gap: spacing.md,
     padding: spacing.base,
   },
@@ -107,9 +105,5 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 2, minWidth: 0 },
   title: { color: lavender.lav700 },
   message: { color: foregroundSoft },
-  action: {
-    backgroundColor: semanticColors.surfaceElevated,
-    borderColor: semanticColors.borderLavender,
-    borderWidth: 1,
-  },
+  action: { backgroundColor: semanticColors.surfaceElevated },
 });
