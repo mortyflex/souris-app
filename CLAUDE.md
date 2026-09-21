@@ -775,21 +775,52 @@ It reads sale item snapshots, so later product edits or deletion do not change i
 
 Nothing is stored on the client.
 
+### Birthday experience
+
+ONE domain rule decides: `isClientBirthdayOnDate(client, date)`.
+
+`isClientBirthdayToday` delegates to it.
+
+Never duplicate the comparison in a screen.
+
+The compared date depends on the context:
+
+- Clientes directory and client profile: TODAY's local date;
+- appointment creation, editing and Details: the APPOINTMENT date.
+
+A `29 février` birthday is celebrated on the 28th in a year without a 29th.
+
+Implemented:
+
+- directory: a static `Aujourd'hui` badge on the row, spoken in its accessibility label;
+- profile: a `Joyeux anniversaire` reminder card;
+- profile: one short confetti burst and one haptic on EVERY profile entry (per mount), never on a rerender;
+- Reduce Motion: no confetti, the card stays;
+- appointment creation, client step: selecting a client whose birthday is the appointment date shows a compact reminder at once, with the same burst and one haptic per explicit selection;
+- the copy says `aujourd'hui` only when the appointment date is today, `ce jour-là` otherwise;
+- appointment creation and editing: a birthday reminder next to `Réduction`;
+- `Appliquer une réduction` only opens the existing generic discount editor;
+- appointment Details: a static birthday mention.
+
+The birthday never discounts anything by itself.
+
+Nothing is preselected.
+
+No discount origin, reason or birthday flag is stored.
+
+No celebration state is persisted or kept in a session.
+
+Archived clients are never celebrated.
+
 ### Not implemented yet
 
-Birthday celebration behavior is NOT implemented:
+- automatic birthday discounts;
+- birthday discount source or history;
+- advance birthday reminders and notifications;
+- marketing automation;
+- cash register changes tied to a birthday.
 
-- confetti;
-- animated banners;
-- birthday reminders;
-- birthday discounts;
-- appointment or cash register changes tied to a birthday.
-
-`isClientBirthdayToday` exists as a tested domain rule only.
-
-No screen consumes it.
-
-Do not build celebration behavior before its dedicated phase.
+Do not build these before their dedicated phase.
 
 ## Future
 
@@ -798,7 +829,7 @@ Client information created by Souris may later include:
 - technical formulas;
 - before/after photos;
 - Souris-derived visit frequency;
-- birthday celebration: confetti, banners, reminders, birthday discounts.
+- advance birthday reminders and automatic birthday discounts.
 
 These are future features.
 

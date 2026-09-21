@@ -114,12 +114,17 @@ function isLeapYear(year: number): boolean {
 }
 
 /**
- * True when `date` falls on the Client birthday. The comparison reads the
- * LOCAL calendar day of `date` (never UTC): a birthday is a civil day +
- * month, not an instant. A `29 février` birthday falls on the 28th in a
- * year without a 29th, so it is never skipped.
+ * THE birthday rule — every screen asks this one function. True when the
+ * LOCAL calendar day of `date` is the Client birthday. `date` is whatever
+ * day the caller cares about: today for the directory and the profile, the
+ * Appointment date for creation, editing and Details (a birthday Appointment
+ * booked weeks ahead matches too). Never UTC: a birthday is a civil day +
+ * month, not an instant, and the year of `date` only decides the leap rule.
+ *
+ * 29 février: celebrated on the 29th in a leap year and on the 28th in a
+ * year without a 29th, so it is never skipped. (Current product rule.)
  */
-export function isClientBirthdayToday(
+export function isClientBirthdayOnDate(
   client: { readonly birthday?: ClientBirthday },
   date: Date,
 ): boolean {
@@ -135,4 +140,12 @@ export function isClientBirthdayToday(
     day === 28 &&
     !isLeapYear(date.getFullYear())
   );
+}
+
+/** `isClientBirthdayOnDate` for the current instant: `now` is today's local date. */
+export function isClientBirthdayToday(
+  client: { readonly birthday?: ClientBirthday },
+  now: Date,
+): boolean {
+  return isClientBirthdayOnDate(client, now);
 }

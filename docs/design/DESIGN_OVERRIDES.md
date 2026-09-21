@@ -548,6 +548,29 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
   The row height is unchanged and a Client without a birthday renders nothing — no placeholder.
   The Client Profile repeats the SAME glyph (`shared/icons/birthday-icon.ts`, 16 pt, accent
   violet) before the « Anniversaire » value of the `Informations` surface.
+- **Birthday today** — the birthday identity is BLUSH on lavender: `rose100` fill with `rose700`
+  text / glyph (never `rose600`, which stays the error and destructive rose). Never emoji: the shared
+  cake glyph carries it.
+  - *Directory row*: the birthday slot becomes a static pill — `rose100`, 14 pt cake glyph and
+    « Aujourd'hui » (`chip` text) in `rose700`. Same row height, no animation, never on an archived
+    row; the row label says « anniversaire aujourd'hui ».
+  - *Reminder card* (`BirthdayNotice`, Client Profile and Appointment creation / editing): `lav050`
+    surface, 1 pt `lav200` border, large radius, a 36 pt `rose100` badge with the glyph, `lav700`
+    title, soft-foreground supporting text; the optional action is a white secondary button with a
+    `lav200` border. The copy is one accessible element; the action is a separate button. Never an
+    alert, an error or a popup.
+  - *Compact reminder* (`BirthdayNotice compact`, Cliente step of Appointment creation, under the
+    context row): same card with `md` / `sm` padding, a 28 pt badge with a 14 pt glyph, the sentence
+    as a `control` title and one supporting line; no action.
+  - *Confetti* (`BirthdayConfetti`, Client Profile and Appointment creation — the ONE implementation,
+    never a larger variant): 26 small paper pieces fan out from the top
+    of the screen, flutter down and fade in 2.2 s, then unmount. Palette: accent violet, lilac,
+    lavender, soft rose, `rose200`, `peach200`, one soft gold — no rainbow, no neon. One shared
+    value on the UI thread, pointer-transparent, hidden from assistive technology, skipped with
+    Reduce Motion, with one `success` haptic. Played once per profile entry (mount) and once per
+    explicit birthday-Client selection in creation — never on a re-render.
+  - *Appointment Details*: a static 14 pt glyph + « Anniversaire de la cliente » (`metadata`,
+    `rose700`) under the date line.
 - **Sale glyph on the Client Profile** — « Vendre un produit » carries the bag glyph of the
   « Revente » action of Appointment Details (`shared/icons/sale-icon.ts`: `bag.fill` /
   `shopping_bag`). `AppButton` takes an optional leading `icon`, 18 pt: accent violet on the

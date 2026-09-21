@@ -4,6 +4,7 @@ import {
   formatClientBirthday,
   formatClientBirthdayCompact,
   getBirthdayMonthLength,
+  isClientBirthdayOnDate,
   isClientBirthdayToday,
   isValidClientBirthday,
   parseBirthdayKey,
@@ -127,5 +128,79 @@ describe('isClientBirthdayToday', () => {
     // 2100 is not a leap year, 2000 was.
     expect(isClientBirthdayToday(leapDay, new Date(2100, 1, 28))).toBe(true);
     expect(isClientBirthdayToday(leapDay, new Date(2000, 1, 28))).toBe(false);
+  });
+});
+
+describe('isClientBirthdayOnDate — the one birthday rule', () => {
+  const september21 = { birthday: { month: 9, day: 21 } };
+
+  it('matches the same day and month', () => {
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 21, 14, 30))).toBe(true);
+  });
+
+  it('does not match another day of the same month', () => {
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 20, 14, 30))).toBe(false);
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 22, 14, 30))).toBe(false);
+  });
+
+  it('does not match the same day of another month', () => {
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 7, 21))).toBe(false);
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 9, 21))).toBe(false);
+  });
+
+  it('ignores the year: past, present and future dates all match', () => {
+    expect(isClientBirthdayOnDate(september21, new Date(1999, 8, 21))).toBe(true);
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 21))).toBe(true);
+    expect(isClientBirthdayOnDate(september21, new Date(2040, 8, 21))).toBe(true);
+  });
+
+  it('judges the GIVEN date, not the current one: a future birthday Appointment matches', () => {
+    jest.useFakeTimers();
+    try {
+      // Today is 10 September; the Appointment is booked for the 21st.
+      jest.setSystemTime(new Date(2026, 8, 10, 9, 0));
+      expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 21, 10, 0))).toBe(true);
+      expect(isClientBirthdayOnDate(september21, new Date())).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('is false without a birthday', () => {
+    expect(isClientBirthdayOnDate({}, new Date(2026, 8, 21))).toBe(false);
+  });
+
+  it('celebrates a 29 février on the 29th of a leap year only', () => {
+    const leapDay = { birthday: { month: 2, day: 29 } };
+    expect(isClientBirthdayOnDate(leapDay, new Date(2028, 1, 29))).toBe(true);
+    expect(isClientBirthdayOnDate(leapDay, new Date(2028, 1, 28))).toBe(false);
+    expect(isClientBirthdayOnDate(leapDay, new Date(2028, 2, 1))).toBe(false);
+  });
+
+  it('celebrates a 29 février on the 28th of a year without a 29th', () => {
+    const leapDay = { birthday: { month: 2, day: 29 } };
+    expect(isClientBirthdayOnDate(leapDay, new Date(2027, 1, 28))).toBe(true);
+    expect(isClientBirthdayOnDate(leapDay, new Date(2027, 1, 27))).toBe(false);
+    expect(isClientBirthdayOnDate(leapDay, new Date(2027, 2, 1))).toBe(false);
+    // Century rule: 2100 has no 29 février, 2000 had one.
+    expect(isClientBirthdayOnDate(leapDay, new Date(2100, 1, 28))).toBe(true);
+    expect(isClientBirthdayOnDate(leapDay, new Date(2000, 1, 28))).toBe(false);
+    // A 28 février birthday is untouched by the rule.
+    expect(isClientBirthdayOnDate({ birthday: { month: 2, day: 28 } }, new Date(2028, 1, 29))).toBe(false);
+  });
+
+  it('reads the LOCAL civil day at both edges of the day, never a UTC day', () => {
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 21, 0, 0, 0))).toBe(true);
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 21, 23, 59, 59))).toBe(true);
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 20, 23, 59, 59))).toBe(false);
+    expect(isClientBirthdayOnDate(september21, new Date(2026, 8, 22, 0, 0, 0))).toBe(false);
+  });
+
+  it('is what isClientBirthdayToday delegates to', () => {
+    for (const date of [new Date(2026, 8, 21), new Date(2026, 8, 22), new Date(2027, 1, 28)]) {
+      for (const client of [september21, { birthday: { month: 2, day: 29 } }, {}]) {
+        expect(isClientBirthdayToday(client, date)).toBe(isClientBirthdayOnDate(client, date));
+      }
+    }
   });
 });

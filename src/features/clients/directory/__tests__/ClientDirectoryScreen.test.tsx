@@ -81,7 +81,18 @@ function renderDirectory() {
 const initialClients = createInitialClients();
 
 describe('ClientDirectoryScreen', () => {
+  beforeAll(() => {
+    // The birthday-today state reads the local date. Léa's test birthday is
+    // 21 septembre: pin an ordinary day, the birthday tests move it themselves.
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
+    jest.setSystemTime(new Date(2026, 7, 26, 10, 0));
     mockPush.mockClear();
   });
 
@@ -290,6 +301,78 @@ describe('ClientDirectoryScreen', () => {
     expect(view.queryByText(/Allergie/)).toBeNull();
     expect(view.getByTestId('session-active-count').props.children).toBe(countBefore);
     expect(rowIds()).toEqual(orderBefore);
+  });
+
+  it('marks the row of a Client whose birthday is TODAY — badge, words and accessibility', async () => {
+    jest.setSystemTime(new Date(2026, 8, 21, 9, 0));
+    const view = await renderDirectory();
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
+    });
+
+    // The birthday slot turns into the « Aujourd'hui » badge: words, not colour alone.
+    const badge = view.getByTestId('client-row-birthday-today-client-agenda-lea');
+    expect(within(badge).getByText("Aujourd'hui")).toBeTruthy();
+    expect(view.queryByTestId('client-row-birthday-client-agenda-lea')).toBeNull();
+    expect(view.queryByText('21 sept.')).toBeNull();
+    // Existing row information is preserved; the birthday is spoken.
+    const row = view.getByTestId('client-row-client-agenda-lea');
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(row.props.accessibilityLabel).toBe(
+      "Ouvrir la fiche de Léa Martin, anniversaire aujourd'hui",
+    );
+    // Same row geometry as any other row.
+    expect(StyleSheet.flatten(row.props.style).minHeight).toBe(60);
+
+    // Every other row stays plain: no badge, no birthday words.
+    expect(view.getAllByTestId(/^client-row-birthday-today-/)).toHaveLength(1);
+    const otherRows = view
+      .getAllByTestId(/^client-row-(?!birthday-)/)
+      .filter((other) => other.props.testID !== 'client-row-client-agenda-lea');
+    expect(otherRows.length).toBeGreaterThan(0);
+    for (const other of otherRows) {
+      expect(other.props.accessibilityLabel).not.toMatch(/anniversaire/i);
+    }
+  });
+
+  it('keeps the normal compact date when the birthday is another day', async () => {
+    jest.setSystemTime(new Date(2026, 8, 22, 9, 0));
+    const view = await renderDirectory();
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
+    });
+
+    expect(view.queryAllByTestId(/^client-row-birthday-today-/)).toHaveLength(0);
+    expect(view.queryByText("Aujourd'hui")).toBeNull();
+    expect(
+      within(view.getByTestId('client-row-birthday-client-agenda-lea')).getByText('21 sept.'),
+    ).toBeTruthy();
+    expect(view.getByTestId('client-row-client-agenda-lea').props.accessibilityLabel).toBe(
+      'Ouvrir la fiche de Léa Martin, anniversaire le 21 septembre',
+    );
+  });
+
+  it('never celebrates an archived Client: her row keeps the secondary compact date', async () => {
+    jest.setSystemTime(new Date(2026, 8, 21, 9, 0));
+    const view = await renderDirectory();
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('archive-lea'));
+    });
+
+    expect(view.queryAllByTestId(/^client-row-birthday-today-/)).toHaveLength(0);
+    expect(view.getByTestId('client-row-birthday-client-agenda-lea')).toBeTruthy();
   });
 
   it('does not search notes or birthdays', async () => {

@@ -670,9 +670,24 @@ February offers 29 days), and the profile shows a friendly French day + month
 (e.g. `12 octobre`). The Clientes directory row shows a recorded birthday as
 a compact secondary `21 sept.` with a cake glyph, and nothing when there is
 none. The birthday is annual — it works from day + month alone, no birth year
-is ever needed. Birthday celebration (confetti, banners), reminders and
-birthday discounts are future features and are NOT implemented; age display
-is out of scope by design (`docs/domain/CLIENTS.md` §2).
+is ever needed. Age display is out of scope by design
+(`docs/domain/CLIENTS.md` §2).
+
+On her birthday (today's local date) the directory row carries a static
+« Aujourd'hui » badge, and her profile shows a « Joyeux anniversaire »
+reminder card with one short confetti burst and one haptic — every time the
+profile is entered, never on a re-render, and without confetti under Reduce
+Motion (the card stays). When an Appointment is created on the Client
+birthday (the APPOINTMENT date, even weeks ahead), choosing her on the
+Cliente step shows a compact reminder at once (« C'est l'anniversaire d'Amel
+ce jour-là. », « aujourd'hui » only when the Appointment is today) with the
+same short burst and one haptic, once per explicit selection. Then, in
+creation and editing, a reminder next to « Réduction » offers « Appliquer une
+réduction », which only opens the normal discount editor. A 29 février
+birthday is celebrated on the 28th in a year without a 29th.
+
+Still NOT implemented: automatic birthday discounts, a birthday discount
+source or history, advance birthday reminders and marketing automation.
 
 ### Notes
 
@@ -1003,7 +1018,8 @@ completed, cancelled or marked absent, then it is frozen with the rest of the ti
 counts the discounted amount.
 
 There is no discount reason, code, campaign or birthday field: a discount granted for any occasion is this
-same manual discount. Birthday celebration and automatic birthday discounts are NOT implemented.
+same manual discount. A birthday only SUGGESTS this manual discount (see « Birthday » above): nothing is
+preselected or applied, and automatic birthday discounts are NOT implemented.
 
 ### Future — managed discounts
 

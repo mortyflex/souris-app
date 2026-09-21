@@ -26,6 +26,7 @@ import {
   type AppointmentDiscount,
   type Service,
 } from '@/domain/appointments';
+import { isClientBirthdayOnDate } from '@/domain/clients';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
@@ -43,7 +44,7 @@ import { SheetScreen } from '@/shared/ui/SheetScreen';
 import { gutter, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { createNewAppointmentItemId } from '../creation/runtime-ids';
-import { AppointmentDiscountEditor } from '../editor/components/AppointmentDiscountEditor';
+import { AppointmentDiscountSection } from '../editor/components/AppointmentDiscountSection';
 import { ServiceSelectionGrid } from '../editor/components/ServiceSelectionGrid';
 import { SortableDraftList } from '../editor/components/SortableDraftList';
 import {
@@ -100,7 +101,8 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     draftClientId !== initialClientId ||
     !areAppointmentDiscountsEqual(draftDiscount, initialDiscount);
   const isTerminal = appointment ? isTerminalAppointmentStatus(appointment.status) : false;
-  const clientName = getResolvedClientDisplayName(getClientById(draftClientId));
+  const draftClient = getClientById(draftClientId);
+  const clientName = getResolvedClientDisplayName(draftClient);
 
   const requestDiscard = () => {
     setDiscardRequested(true);
@@ -267,7 +269,12 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           />
         </View>
 
-        <AppointmentDiscountEditor
+        <AppointmentDiscountSection
+          // The DRAFT date and the DRAFT Client decide, derived on every render:
+          // moving the Appointment or changing the Client updates it at once.
+          birthdayReminder={
+            draftClient !== undefined && isClientBirthdayOnDate(draftClient, draftStartAt)
+          }
           discount={draftDiscount}
           onChange={setDraftDiscount}
           servicesTotal={getAppointmentServicesTotal({ items: drafts, discount: draftDiscount })}

@@ -86,10 +86,16 @@ Rules (`src/domain/clients/birthday.ts`):
 - the birthday is ANNUAL: it recurs every year from day + month alone, so a
   Client whose birth year is unknown — every Client — is fully supported;
 - it is a civil calendar value, never an instant: it is never converted
-  through a `Date`, a timestamp or UTC, so no time zone can shift it.
-  `isClientBirthdayToday(client, date)` compares it with the LOCAL calendar
-  day of `date`; a `29 février` birthday falls on the 28th in a year without
-  a 29th.
+  through a `Date`, a timestamp or UTC, so no time zone can shift it;
+- ONE rule answers « is it her birthday? »:
+  `isClientBirthdayOnDate(client, date)`. It compares the birthday with the
+  LOCAL calendar day of `date` (never UTC); the year of `date` only decides
+  the leap rule. `isClientBirthdayToday(client, now)` delegates to it. Every
+  screen uses this rule and none re-implements the comparison;
+- **29 février.** A `29 février` birthday is celebrated on the 29th in a leap
+  year and on the **28th** in a year without a 29th, so it is never skipped.
+  This is the current product rule (kept as is; a « 1er mars » alternative
+  would be an explicit product decision).
 
 The value is either a complete day + month pair or absent — there is no
 partial-date model.
@@ -98,10 +104,59 @@ The directory row shows a recorded birthday as a compact secondary
 « 21 sept. » with a cake glyph; a Client without a birthday shows nothing —
 no placeholder, no taller row.
 
-Birthday CELEBRATION behavior — confetti, banners, reminders, birthday
-discounts, any Appointment or Cash Register change — is NOT implemented.
-`isClientBirthdayToday` exists as a tested domain rule only; no screen
-consumes it yet.
+#### Birthday experience
+
+Which date is compared depends on the screen:
+
+```text
+Clientes directory, Client Profile   → TODAY's local date
+Appointment creation / editing / Details → the APPOINTMENT date
+```
+
+An Appointment booked on 10 septembre for the 21 septembre birthday therefore
+gets the birthday suggestion, although today is not the birthday.
+
+Implemented (`src/features/clients/birthday`):
+
+- **birthday-at-a-glance** — on her birthday, the directory row replaces the
+  compact date with a static blush « Aujourd'hui » badge (cake glyph + word)
+  and its label says « anniversaire aujourd'hui ». Same row height, no
+  animation in the list;
+- **profile reminder** — a « Joyeux anniversaire » card near the top of the
+  profile (« C'est l'anniversaire de Léa aujourd'hui. » / « Vous pouvez lui
+  proposer une réduction sur son rendez-vous. »), always visible that day;
+- **short celebration** — one confetti burst (≈ 2.2 s, UI thread, decorative
+  and hidden from assistive technology) and ONE success haptic when the
+  profile opens. Played once per profile ENTRY (per mount of the screen):
+  leaving the profile and opening it again celebrates again, on purpose; a
+  re-render, a state update or a data refresh never replays it. No session or
+  stored state is involved. Reduce Motion skips the confetti and keeps the
+  card and the haptic;
+- **recognition at Client selection** — in Appointment creation, choosing a
+  Client whose birthday is the APPOINTMENT date shows a compact reminder on
+  the Cliente step at once and plays the same burst and haptic
+  (`docs/domain/APPOINTMENTS.md` §15.3). The copy says « aujourd'hui » only
+  when the Appointment date is today, « ce jour-là » otherwise;
+- **Appointment discount suggestion** — see
+  `docs/domain/APPOINTMENTS.md` §15.3: a reminder next to « Réduction » whose
+  action only opens the generic discount editor.
+
+`today` is refreshed at local midnight and when the app returns to the
+foreground (`useToday`), so a directory left open overnight stays right.
+
+An archived Client is never celebrated: her row keeps the secondary compact
+date and her profile shows no card, confetti or haptic.
+
+Nothing is persisted: no « confetti shown », no « dismissed », no discount
+origin. No migration, no sync change.
+
+Still NOT implemented:
+
+- automatic birthday discount (nothing is ever discounted without the
+  professional choosing it);
+- birthday promotion history / discount source or reason;
+- birthday reminders ahead of the day, notifications, marketing automation;
+- any Cash Register change tied to a birthday.
 
 ### notes
 
@@ -347,9 +402,10 @@ Deletion is offered only from an ARCHIVED Client — the deliberate path is
 ## 8. Future Client Capabilities
 
 Photos, technical formulas, and statistics are separate future features and
-remain outside the Client domain. Birthday celebration behavior (reminders,
-confetti, discounts) is a future feature built on the existing `birthday`
-field (§2).
+remain outside the Client domain. The birthday experience of §2 is
+implemented; advance birthday reminders, automatic birthday discounts and
+marketing automation remain future features built on the existing `birthday`
+field.
 
 Purchased-product history derives from the Sale domain through
 `sale.clientId` (`docs/domain/SALES.md`) — it is never stored on the Client,

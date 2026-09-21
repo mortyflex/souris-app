@@ -32,6 +32,10 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
 }));
 
+jest.mock('react-native-reanimated', () =>
+  jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'),
+);
+
 jest.mock('expo-router/react-navigation', () => ({
   usePreventRemove: jest.fn(),
 }));

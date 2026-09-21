@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import { useEffect, useState } from "react";
 import {
   Platform,
@@ -28,7 +29,7 @@ import {
   type AppointmentProductLine,
 } from "@/domain/appointments";
 import type { Sale } from "@/domain/sales";
-import { isClientArchived } from "@/domain/clients";
+import { isClientArchived, isClientBirthdayOnDate } from "@/domain/clients";
 import {
   AppointmentCheckoutSheet,
   type AppointmentCheckoutMode,
@@ -39,6 +40,7 @@ import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
+import { birthdayIcon } from "@/shared/icons/birthday-icon";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
@@ -196,6 +198,13 @@ export function AppointmentDetailsScreen({
   const isTerminal = isTerminalAppointmentStatus(appointment.status);
   const isException =
     appointment.status === "CANCELLED" || appointment.status === "NO_SHOW";
+  // The Appointment DATE decides (never today's date). A static, read-only
+  // mention: no confetti, no discount control here — « Modifier » owns the
+  // discount. A cancelled or missed visit is not a birthday visit.
+  const isBirthdayAppointment =
+    client !== undefined &&
+    !isException &&
+    isClientBirthdayOnDate(client, appointment.startAt);
   const canCheckout = canCheckoutAppointment(appointment, now);
   const canEditPayment = canEditAppointmentPayment(appointment);
   const canCancel = canCancelAppointment(appointment);
@@ -379,6 +388,19 @@ export function AppointmentDetailsScreen({
             <AppText variant="control" selectable style={styles.dateLine}>
               {formatAppointmentDate(appointment.startAt)}
             </AppText>
+            {isBirthdayAppointment && (
+              <View
+                accessible
+                accessibilityLabel="Anniversaire de la cliente"
+                style={styles.birthdayLine}
+                testID="appointment-birthday-indication"
+              >
+                <SymbolView name={birthdayIcon} size={14} tintColor={rose.rose700} />
+                <AppText variant="metadata" style={styles.birthdayText}>
+                  Anniversaire de la cliente
+                </AppText>
+              </View>
+            )}
             <View style={styles.metaBottomRow}>
               <AppText variant="control" selectable style={styles.timeLine}>
                 {formatAppointmentTime(appointment.startAt)} –{" "}
@@ -640,6 +662,13 @@ const styles = StyleSheet.create({
     padding: spacing.base,
   },
   dateLine: { color: semanticColors.foreground },
+  birthdayLine: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  birthdayText: { color: rose.rose700 },
   metaBottomRow: {
     alignItems: "center",
     flexDirection: "row",

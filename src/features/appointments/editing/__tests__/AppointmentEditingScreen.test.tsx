@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Alert, Pressable, Text } from 'react-native';
 
 import { createAppointmentItemSnapshot } from '@/domain/appointments';
@@ -127,7 +127,7 @@ jest.mock('react-native-safe-area-context', () => {
 function SessionProbe() {
   const { getAppointmentById, updateAppointment, addAppointment } = useAppointmentSession();
   const { getServiceById, setServiceActive } = useServiceCatalog();
-  const { archiveClient } = useClientSession();
+  const { archiveClient, updateClient } = useClientSession();
   const entry = getAppointmentById('agenda-sofia');
   const items = entry?.appointment.items ?? [];
   const catalogEntry = getAppointmentById('catalog-edit-appointment');
@@ -258,6 +258,22 @@ function SessionProbe() {
         }}
       />
       <Pressable testID="archive-lea" onPress={() => archiveClient('client-agenda-lea')} />
+      <Pressable
+        testID="give-sofia-appointment-day-birthday"
+        onPress={() => {
+          if (!entry) return;
+          // Sofia's birthday = the local day of HER Appointment (agenda-sofia).
+          updateClient({
+            id: 'client-agenda-sofia',
+            firstName: 'Sofia',
+            lastName: 'Petit',
+            birthday: {
+              month: entry.appointment.startAt.getMonth() + 1,
+              day: entry.appointment.startAt.getDate(),
+            },
+          });
+        }}
+      />
       <Pressable
         testID="deactivate-brushing"
         onPress={() => setServiceActive('service-brushing-brushing-1', false)}
@@ -1063,5 +1079,122 @@ describe('AppointmentEditingScreen', () => {
     });
 
     expect(view.getByTestId('session-catalog-edit-discount').props.children).toBe('null');
+  });
+
+  describe('birthday discount suggestion', () => {
+    async function renderBirthdayEditor() {
+      const view = await renderEditor();
+      await act(async () => {
+        fireEvent.press(view.getByTestId('give-sofia-appointment-day-birthday'));
+      });
+      return view;
+    }
+
+    it('suggests a discount when the Appointment date is the Client birthday', async () => {
+      const view = await renderEditor();
+      expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('give-sofia-appointment-day-birthday'));
+      });
+
+      expect(view.getByTestId('appointment-birthday-notice')).toBeTruthy();
+      expect(view.getByText('Anniversaire de la cliente')).toBeTruthy();
+      expect(view.getByRole('button', { name: 'Appliquer une réduction' })).toBeTruthy();
+      // The reminder alone never dirties the form.
+      expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
+    });
+
+    it('removes the suggestion at once when the Appointment moves to another day', async () => {
+      const view = await renderBirthdayEditor();
+      expect(view.getByTestId('appointment-birthday-notice')).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Changer la date'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('mock-date-picker'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-date'));
+      });
+
+      expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
+      expect(view.queryByText('Appliquer une réduction')).toBeNull();
+    });
+
+    it('removes the suggestion at once when another Client is chosen', async () => {
+      const view = await renderBirthdayEditor();
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Modifier la cliente'));
+      });
+      await act(async () => {
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa');
+      });
+      await act(async () => {
+        fireEvent.press(view.getByText('Léa Martin'));
+      });
+      await settleSheetTransition();
+
+      expect(view.getByText('Léa Martin')).toBeTruthy();
+      expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
+    });
+
+    it('« Appliquer une réduction » opens the existing editor without choosing or saving anything', async () => {
+      const view = await renderBirthdayEditor();
+      expect(view.queryByTestId('appointment-discount-presets')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('apply-birthday-discount'));
+      });
+
+      expect(view.getByTestId('appointment-discount-toggle').props.accessibilityState.expanded).toBe(true);
+      const presets = within(view.getByTestId('appointment-discount-presets')).getAllByRole('button');
+      expect(presets).toHaveLength(10);
+      for (const preset of presets) {
+        expect(preset.props.accessibilityState.selected).toBe(false);
+      }
+      expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
+      // Still nothing to save, nothing written.
+      expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
+      expect(view.getByTestId('session-discount').props.children).toBe('null');
+      expect(view.queryByTestId('apply-birthday-discount')).toBeNull();
+    });
+
+    it('states an existing discount instead of prompting, and saves a plain generic discount', async () => {
+      const view = await renderBirthdayEditor();
+      const itemsBefore = view.getByTestId('session-items').props.children;
+      await act(async () => {
+        fireEvent.press(view.getByTestId('apply-birthday-discount'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Réduction de 20 pour cent'));
+      });
+
+      expect(view.getByText('Une réduction est déjà appliquée à ce rendez-vous.')).toBeTruthy();
+      expect(view.queryByTestId('apply-birthday-discount')).toBeNull();
+      expect(view.queryByText(/réduction anniversaire appliquée/i)).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('save-appointment-edit'));
+      });
+
+      // Exactly the generic discount — no origin, reason or birthday marker — and untouched prices.
+      expect(view.getByTestId('session-discount').props.children).toBe('{"type":"PERCENT","percent":20}');
+      expect(view.getByTestId('session-items').props.children).toBe(itemsBefore);
+    });
+
+    it('offers no birthday discount action once the Appointment is completed', async () => {
+      const view = await renderBirthdayEditor();
+      await act(async () => {
+        fireEvent.press(view.getByTestId('complete-edited-appointment'));
+      });
+
+      expect(view.getByText('Modification indisponible')).toBeTruthy();
+      expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
+      expect(view.queryByText('Appliquer une réduction')).toBeNull();
+      expect(view.queryByTestId('appointment-discount')).toBeNull();
+    });
   });
 });

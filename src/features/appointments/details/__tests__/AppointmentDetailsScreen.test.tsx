@@ -164,6 +164,50 @@ function ClientLifecycleProbe() {
   );
 }
 
+/** Sets Sofia's birthday relative to the local day of HER Appointment (agenda-sofia). */
+function BirthdayProbe() {
+  const { updateClient } = useClientSession();
+  const { getAppointmentById, updateAppointment } = useAppointmentSession();
+  const entry = getAppointmentById("agenda-sofia");
+  const giveBirthday = (dayOffset: number) => {
+    if (!entry) return;
+    const day = new Date(entry.appointment.startAt);
+    day.setDate(day.getDate() + dayOffset);
+    updateClient({
+      id: "client-agenda-sofia",
+      firstName: "Sofia",
+      lastName: "Petit",
+      birthday: { month: day.getMonth() + 1, day: day.getDate() },
+    });
+  };
+  return (
+    <>
+      <Pressable testID="give-sofia-appointment-day-birthday" onPress={() => giveBirthday(0)} />
+      <Pressable testID="give-sofia-next-day-birthday" onPress={() => giveBirthday(1)} />
+      <Pressable
+        testID="complete-sofia-appointment"
+        onPress={() => {
+          if (!entry) return;
+          updateAppointment({ appointment: { ...entry.appointment, status: "COMPLETED" } });
+        }}
+      />
+      <Pressable
+        testID="cancel-sofia-appointment"
+        onPress={() => {
+          if (!entry) return;
+          updateAppointment({
+            appointment: {
+              ...entry.appointment,
+              status: "CANCELLED",
+              cancellation: { cancelledAt: new Date(), cancelledBy: "CLIENT" },
+            },
+          });
+        }}
+      />
+    </>
+  );
+}
+
 function AppointmentPresence({
   appointmentId,
 }: {
@@ -1842,6 +1886,64 @@ describe("AppointmentDetailsScreen", () => {
       await press(view, "clear-discount");
       expect(view.getByTestId("discount-refused").props.children).toBe("true");
       expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
+    });
+  });
+
+  describe("birthday indication", () => {
+    it("mentions the Client birthday, statically, when the Appointment date is her birthday", async () => {
+      const view = await renderDetails("agenda-sofia", <BirthdayProbe />);
+      expect(view.queryByTestId("appointment-birthday-indication")).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId("give-sofia-appointment-day-birthday"));
+      });
+
+      const indication = view.getByTestId("appointment-birthday-indication");
+      expect(indication.props.accessibilityLabel).toBe("Anniversaire de la cliente");
+      expect(within(indication).getByText("Anniversaire de la cliente")).toBeTruthy();
+      // Read-only: no celebration, no discount control — « Modifier » owns the discount.
+      expect(view.queryByTestId("birthday-confetti", { includeHiddenElements: true })).toBeNull();
+      expect(view.queryByTestId("appointment-discount")).toBeNull();
+      expect(view.queryByText("Appliquer une réduction")).toBeNull();
+      expect(view.getByTestId("modify-appointment")).toBeTruthy();
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+    });
+
+    it("shows nothing when the birthday is another day", async () => {
+      const view = await renderDetails("agenda-sofia", <BirthdayProbe />);
+      await act(async () => {
+        fireEvent.press(view.getByTestId("give-sofia-next-day-birthday"));
+      });
+
+      expect(view.queryByTestId("appointment-birthday-indication")).toBeNull();
+    });
+
+    it("keeps a completed birthday Appointment read-only: the mention, never a discount action", async () => {
+      const view = await renderDetails("agenda-sofia", <BirthdayProbe />);
+      await act(async () => {
+        fireEvent.press(view.getByTestId("give-sofia-appointment-day-birthday"));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId("complete-sofia-appointment"));
+      });
+
+      expect(view.getByTestId("appointment-birthday-indication")).toBeTruthy();
+      expect(view.queryByTestId("modify-appointment")).toBeNull();
+      expect(view.queryByTestId("appointment-discount")).toBeNull();
+      expect(view.queryByText("Appliquer une réduction")).toBeNull();
+    });
+
+    it("drops the mention on a cancelled Appointment", async () => {
+      const view = await renderDetails("agenda-sofia", <BirthdayProbe />);
+      await act(async () => {
+        fireEvent.press(view.getByTestId("give-sofia-appointment-day-birthday"));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId("cancel-sofia-appointment"));
+      });
+
+      expect(view.getByText("Annulé")).toBeTruthy();
+      expect(view.queryByTestId("appointment-birthday-indication")).toBeNull();
     });
   });
 });

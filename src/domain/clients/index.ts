@@ -15,6 +15,7 @@ export {
   formatClientBirthday,
   formatClientBirthdayCompact,
   getBirthdayMonthLength,
+  isClientBirthdayOnDate,
   isClientBirthdayToday,
   isValidClientBirthday,
   parseBirthdayKey,

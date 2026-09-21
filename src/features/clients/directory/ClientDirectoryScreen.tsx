@@ -6,8 +6,12 @@
 // light (initial avatar, strong name, soft phone) — no per-client cards, no
 // fake metrics. A recorded birthday shows as a compact trailing « 21 sept. »
 // with a cake glyph: secondary, never a placeholder when absent, and the row
-// keeps its height either way. Notes never appear in the list. The shared floating + opens the shared creation sheet, the
-// single way to add a Client. The header follows the Produits reference:
+// keeps its height either way. When TODAY is her birthday the same slot
+// becomes a static blush « Aujourd'hui » badge (cake glyph + word, never
+// colour alone, never animated: the list stays light to scroll), and the row
+// says so to assistive technology. Notes never appear in the list. The
+// shared floating + opens the shared creation sheet, the single way to add a
+// Client. The header follows the Produits reference:
 // large title, no eyebrow, search right below (MainScreenHeader).
 
 import { useMemo, useState } from 'react';
@@ -29,8 +33,11 @@ import {
   getClientDisplayName,
   getClientInitial,
   isClientArchived,
+  isClientBirthdayOnDate,
   type Client,
 } from '@/domain/clients';
+import { DIRECTORY_BIRTHDAY_TODAY_LABEL } from '@/features/clients/birthday/presentation';
+import { useToday } from '@/features/clients/birthday/use-today';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import {
@@ -49,6 +56,7 @@ import {
   gutter,
   interaction,
   radii,
+  rose,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
@@ -67,6 +75,7 @@ export function ClientDirectoryScreen() {
   const { clients, activeClients } = useClientSession();
   const [query, setQuery] = useState('');
   const [addClientVisible, setAddClientVisible] = useState(false);
+  const today = useToday();
 
   const sections: readonly SectionListData<Client, ClientDirectorySection>[] = useMemo(
     () => buildClientDirectorySections(clients, query),
@@ -133,7 +142,7 @@ export function ClientDirectoryScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <ClientRow client={item} onPress={() => openProfile(item.id)} />
+          <ClientRow client={item} onPress={() => openProfile(item.id)} today={today} />
         )}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -158,21 +167,30 @@ export function ClientDirectoryScreen() {
 interface ClientRowProps {
   readonly client: Client;
   readonly onPress: () => void;
+  /** Today's local date: decides the birthday-today state of the row. */
+  readonly today: Date;
 }
 
-function ClientRow({ client, onPress }: ClientRowProps) {
+function ClientRow({ client, onPress, today }: ClientRowProps) {
   const archived = isClientArchived(client);
   const metadata = archived
     ? [ARCHIVED_CLIENT_LABEL, client.phone].filter(Boolean).join(' · ')
     : client.phone;
   const birthday = client.birthday;
+  // An archived Client stays visually secondary: her row never celebrates.
+  const birthdayToday = !archived && isClientBirthdayOnDate(client, today);
+  const birthdayAccessibilityText = !birthday
+    ? ''
+    : birthdayToday
+      ? ", anniversaire aujourd'hui"
+      : `, anniversaire le ${formatClientBirthday(birthday)}`;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Ouvrir la fiche de ${getClientDisplayName(client)}${
         archived ? `, ${ARCHIVED_CLIENT_LABEL.toLowerCase()}` : ''
-      }${birthday ? `, anniversaire le ${formatClientBirthday(birthday)}` : ''}`}
+      }${birthdayAccessibilityText}`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressedRow]}
       testID={`client-row-${client.id}`}
@@ -196,7 +214,17 @@ function ClientRow({ client, onPress }: ClientRowProps) {
           </AppText>
         ) : null}
       </View>
-      {birthday ? (
+      {birthday && birthdayToday ? (
+        <View
+          style={[styles.birthday, styles.birthdayToday]}
+          testID={`client-row-birthday-today-${client.id}`}
+        >
+          <SymbolView name={birthdayIcon} size={14} tintColor={rose.rose700} />
+          <AppText variant="chip" style={styles.birthdayTodayText}>
+            {DIRECTORY_BIRTHDAY_TODAY_LABEL}
+          </AppText>
+        </View>
+      ) : birthday ? (
         <View style={styles.birthday} testID={`client-row-birthday-${client.id}`}>
           <SymbolView
             name={birthdayIcon}
@@ -263,6 +291,14 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
   birthdayText: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
+  // Same slot, same row height: a blush pill instead of the compact date.
+  birthdayToday: {
+    backgroundColor: rose.rose100,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  birthdayTodayText: { color: rose.rose700 },
   emptyState: { alignItems: 'center', padding: spacing.xl },
   emptyStateText: { color: foregroundSoft, marginTop: spacing.sm, textAlign: 'center' },
 });

@@ -1,11 +1,12 @@
 // Souris — Client Profile
 //
 // A full business record, intentionally light: identity + contact + notes +
-// next appointment + derived activity + Souris Appointment history +
-// Souris Product purchases. Nothing here is stored on the Client — activity
-// is derived from Appointment state and purchases from Sale snapshots
-// through clientId. Modifier opens the SAME Client form used for creation
-// (edit mode). No dashboard KPIs, no fake metrics, no edit/delete traps.
+// today's birthday reminder + next appointment + derived activity + Souris
+// Appointment history + Souris Product purchases. Nothing here is stored on
+// the Client — activity is derived from Appointment state and purchases from
+// Sale snapshots through clientId. Modifier opens the SAME Client form used
+// for creation (edit mode). No dashboard KPIs, no fake metrics, no
+// edit/delete traps.
 //
 // Lifecycle: an active Client carries a tertiary `Archiver la cliente`
 // management action; an archived Client shows a subtle `Archivée`
@@ -30,6 +31,15 @@ import type { Appointment } from '@/domain/appointments';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
+import { BirthdayConfetti } from '@/features/clients/birthday/BirthdayConfetti';
+import { BirthdayNotice } from '@/features/clients/birthday/BirthdayNotice';
+import {
+  PROFILE_BIRTHDAY_SUGGESTION,
+  PROFILE_BIRTHDAY_TITLE,
+  formatBirthdayMessage,
+  formatProfileBirthdayAccessibilityLabel,
+} from '@/features/clients/birthday/presentation';
+import { useBirthdayCelebration } from '@/features/clients/birthday/use-birthday-celebration';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import {
   formatAppointmentDate,
@@ -90,6 +100,9 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   const [deletionMode, setDeletionMode] = useState<ClientDeletionDialogMode>();
   const [deletedByCurrentScreen, setDeletedByCurrentScreen] = useState(false);
   const client = getClientById(clientId);
+  // Today's birthday: a static reminder card, plus ONE short celebration per
+  // entry into this screen (per mount — never per render).
+  const birthdayCelebration = useBirthdayCelebration(client);
 
   if (!client) {
     if (deletedByCurrentScreen) return null;
@@ -241,6 +254,17 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
             )}
           </View>
         </View>
+
+        {birthdayCelebration.isBirthday && (
+          <View style={styles.birthdaySection}>
+            <BirthdayNotice
+              accessibilityLabel={formatProfileBirthdayAccessibilityLabel(client)}
+              messages={[formatBirthdayMessage(client, 'TODAY'), PROFILE_BIRTHDAY_SUGGESTION]}
+              testID="client-birthday-notice"
+              title={PROFILE_BIRTHDAY_TITLE}
+            />
+          </View>
+        )}
 
         {activity.nextAppointment && (
           <View style={styles.nextSection}>
@@ -400,6 +424,10 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
           )}
         </View>
       </ScrollView>
+
+      {birthdayCelebration.confettiVisible && (
+        <BirthdayConfetti onFinished={birthdayCelebration.onConfettiFinished} />
+      )}
 
       <ClientFormSheet
         client={client}
@@ -582,6 +610,7 @@ const styles = StyleSheet.create({
   },
   archivedBadgeText: { color: foregroundSoft },
   sectionHeader: { marginBottom: spacing.sm },
+  birthdaySection: { marginBottom: spacing.xl },
   nextSection: { marginBottom: spacing.xl },
   nextRow: {
     alignItems: 'center',

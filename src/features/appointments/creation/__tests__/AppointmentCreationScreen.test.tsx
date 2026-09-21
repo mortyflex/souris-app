@@ -14,7 +14,7 @@
 // - a client can be created directly from the picker.
 
 import { formatEuros } from '@/shared/lib/money';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import type { Client } from '@/domain/clients';
@@ -33,6 +33,7 @@ import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 import { settleWheelOn, wheelRowKeys, wheelValue } from '@/shared/ui/testing/wheels';
 
 const mockBack = jest.fn();
+let mockReducedMotion = false;
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
 const mockSelectionHaptic = jest.spyOn(haptics, 'selection').mockImplementation();
 
@@ -70,7 +71,7 @@ jest.mock('react-native-reanimated', () => {
       };
     },
     useAnimatedStyle: (style: () => object) => style(),
-    useReducedMotion: () => false,
+    useReducedMotion: () => mockReducedMotion,
     useEvent: () => () => undefined,
     withTiming: (value: unknown) => value,
     FadeIn: createAnimationBuilder(),
@@ -113,7 +114,7 @@ const startAt = new Date(2026, 7, 25, 10, 15);
 type Rendered = Awaited<ReturnType<typeof renderCreation>>;
 
 function SessionProbe() {
-  const { clients, archiveClient } = useClientSession();
+  const { clients, archiveClient, updateClient } = useClientSession();
   const { appointments } = useAppointmentSession();
   const { getServiceById, setServiceActive } = useServiceCatalog();
   const newest = appointments[appointments.length - 1]?.appointment;
@@ -157,6 +158,29 @@ function SessionProbe() {
       </Text>
       <Pressable testID="archive-lea" onPress={() => archiveClient('client-agenda-lea')} />
       <Pressable
+        testID="give-lea-birthday"
+        onPress={() =>
+          updateClient({
+            id: 'client-agenda-lea',
+            firstName: 'Léa',
+            lastName: 'Martin',
+            // The day of `startAt` (25 août), never the day the suite runs.
+            birthday: { month: 8, day: 25 },
+          })
+        }
+      />
+      <Pressable
+        testID="give-sofia-birthday"
+        onPress={() =>
+          updateClient({
+            id: 'client-agenda-sofia',
+            firstName: 'Sofia',
+            lastName: 'Petit',
+            birthday: { month: 8, day: 25 },
+          })
+        }
+      />
+      <Pressable
         testID="deactivate-balayage"
         onPress={() => setServiceActive('technique-balayage-balayage-1', false)}
       />
@@ -170,13 +194,13 @@ function SessionProbe() {
 
 type TestDatabase = ReturnType<typeof openTestDatabase>;
 
-function creationTree(screenKey: number, database?: TestDatabase) {
+function creationTree(screenKey: number, database?: TestDatabase, appointmentStartAt: Date = startAt) {
   return (
     <TestPersistenceProvider database={database}>
       <ClientSessionProvider>
       <ServiceCatalogProvider>
         <AppointmentSessionProvider>
-          <AppointmentCreationScreen key={screenKey} startAt={startAt} />
+          <AppointmentCreationScreen key={screenKey} startAt={appointmentStartAt} />
           <SessionProbe />
         </AppointmentSessionProvider>
       </ServiceCatalogProvider>
@@ -215,6 +239,40 @@ async function selectClientBeyond60(view: Rendered) {
   await act(async () => {
     fireEvent.press(view.getByText('Continuer'));
   });
+}
+
+/** Taps a Client row of the Cliente step — the selection event itself, no « Continuer ». */
+async function tapClient(view: Rendered, fullName: string) {
+  await act(async () => {
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), fullName);
+  });
+  // The ROW: once chosen, the name is also written in the context row.
+  await act(async () => {
+    fireEvent.press(view.getByRole('button', { name: new RegExp(fullName) }));
+  });
+}
+
+async function selectClientByName(view: Rendered, fullName: string) {
+  await act(async () => {
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), fullName);
+  });
+  await act(async () => {
+    fireEvent.press(view.getByText(fullName));
+  });
+  await act(async () => {
+    fireEvent.press(view.getByText('Continuer'));
+  });
+}
+
+/** Léa (birthday 25 août) + Brushing 1 (20 €), up to the Résumé. */
+async function reachBirthdaySummary(view: Rendered) {
+  await act(async () => {
+    fireEvent.press(view.getByTestId('give-lea-birthday'));
+  });
+  await selectClientByName(view, 'Léa Martin');
+  await searchService(view, 'brushing 1');
+  await selectService(view, 'Brushing 1');
+  await continueToSummary(view);
 }
 
 async function searchService(view: Rendered, query: string) {
@@ -907,5 +965,303 @@ describe('AppointmentCreationScreen', () => {
 
     expect(view.queryByText('Léa Martin')).toBeNull();
     expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+  });
+
+  describe('birthday discount suggestion', () => {
+    it('suggests a discount when the APPOINTMENT date is the Client birthday, whatever today is', async () => {
+      // The suite never runs on 25 août 2026 at 10:15: the match comes from `startAt`.
+      const view = await renderCreation();
+      await reachBirthdaySummary(view);
+
+      const notice = view.getByTestId('appointment-birthday-notice');
+      expect(within(notice).getByText('Anniversaire de la cliente')).toBeTruthy();
+      expect(
+        within(notice).getByText('Vous pouvez appliquer une réduction anniversaire.'),
+      ).toBeTruthy();
+      expect(
+        view.getByLabelText(
+          'Anniversaire de la cliente. Vous pouvez appliquer une réduction anniversaire.',
+        ),
+      ).toBeTruthy();
+      expect(view.getByRole('button', { name: 'Appliquer une réduction' })).toBeTruthy();
+      // A suggestion only: nothing is discounted.
+      expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
+      expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(20));
+    });
+
+    it('shows no suggestion when the Appointment is another day', async () => {
+      const view = await render(creationTree(0, undefined, new Date(2026, 7, 26, 10, 15)));
+      await reachBirthdaySummary(view);
+
+      expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
+      expect(view.queryByText('Appliquer une réduction')).toBeNull();
+    });
+
+    it('removes the suggestion as soon as another Client is chosen, and brings it back with her', async () => {
+      const view = await renderCreation();
+      await reachBirthdaySummary(view);
+      expect(view.getByTestId('appointment-birthday-notice')).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('edit-client'));
+      });
+      await selectClientByName(view, 'Sofia Petit');
+      await continueToSummary(view);
+
+      expect(view.getByRole('header', { name: 'Sofia Petit' })).toBeTruthy();
+      expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('edit-client'));
+      });
+      await selectClientByName(view, 'Léa Martin');
+      await continueToSummary(view);
+
+      expect(view.getByTestId('appointment-birthday-notice')).toBeTruthy();
+    });
+
+    it('« Appliquer une réduction » opens the existing editor and selects nothing', async () => {
+      const view = await renderCreation();
+      await reachBirthdaySummary(view);
+      expect(view.queryByTestId('appointment-discount-presets')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('apply-birthday-discount'));
+      });
+
+      // The generic editor is open: % / € switch and the normal presets.
+      expect(view.getByTestId('appointment-discount-toggle').props.accessibilityState.expanded).toBe(true);
+      expect(view.getByTestId('appointment-discount-mode')).toBeTruthy();
+      const presets = within(view.getByTestId('appointment-discount-presets')).getAllByRole('button');
+      expect(presets).toHaveLength(10);
+      for (const preset of presets) {
+        expect(preset.props.accessibilityState.selected).toBe(false);
+      }
+      // No discount, no price change; the now-useless CTA is gone, the reminder stays.
+      expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
+      expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(20));
+      expect(view.queryByTestId('creation-discount-breakdown')).toBeNull();
+      expect(view.queryByTestId('apply-birthday-discount')).toBeNull();
+      expect(view.getByTestId('appointment-birthday-notice')).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(view.getByText('Créer le rendez-vous'));
+      });
+      expect(view.getByTestId('last-appointment-discount').props.children).toBe('null');
+    });
+
+    it('states an existing discount instead of prompting, persists a plain generic discount and prices it as usual', async () => {
+      const view = await renderCreation();
+      await reachBirthdaySummary(view);
+      await act(async () => {
+        fireEvent.press(view.getByTestId('apply-birthday-discount'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Réduction de 10 pour cent'));
+      });
+
+      const notice = view.getByTestId('appointment-birthday-notice');
+      expect(
+        within(notice).getByText('Une réduction est déjà appliquée à ce rendez-vous.'),
+      ).toBeTruthy();
+      expect(view.queryByText('Vous pouvez appliquer une réduction anniversaire.')).toBeNull();
+      expect(view.queryByTestId('apply-birthday-discount')).toBeNull();
+      // Never claims the generic discount is a « birthday discount ».
+      expect(view.queryByText(/réduction anniversaire appliquée/i)).toBeNull();
+      // Generic pricing, unchanged: 20 € − 10 % = 18 €.
+      expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(18));
+
+      await act(async () => {
+        fireEvent.press(view.getByText('Créer le rendez-vous'));
+      });
+      // Exactly the generic discount: no origin, reason or birthday marker.
+      expect(view.getByTestId('last-appointment-discount').props.children).toBe(
+        '{"type":"PERCENT","percent":10}',
+      );
+      expect(view.getByTestId('appointments-probe').props.children).toContain('Brushing 1:20:30');
+    });
+
+    it('shows no suggestion for a Client without a birthday', async () => {
+      const view = await renderCreation();
+      await selectClientByName(view, 'Sofia Petit');
+      await searchService(view, 'brushing 1');
+      await selectService(view, 'Brushing 1');
+      await continueToSummary(view);
+
+      expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
+    });
+  });
+
+  describe('birthday at Client selection', () => {
+    const hidden = { includeHiddenElements: true } as const;
+    const CONFETTI_MS = 2200;
+
+    beforeAll(() => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+    });
+
+    afterAll(() => {
+      jest.useRealTimers();
+    });
+
+    beforeEach(() => {
+      // Today is 10 août; the Appointment (`startAt`) is the 25th, Léa's birthday.
+      jest.setSystemTime(new Date(2026, 7, 10, 9, 0));
+      mockReducedMotion = false;
+    });
+
+    async function renderWithBirthdays() {
+      const view = await renderCreation();
+      await act(async () => {
+        fireEvent.press(view.getByTestId('give-lea-birthday'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('give-sofia-birthday'));
+      });
+      return view;
+    }
+
+    it('recognizes the birthday the moment the Client is tapped, from the APPOINTMENT date, without « aujourd\'hui »', async () => {
+      const view = await renderWithBirthdays();
+      expect(view.queryByTestId('client-selection-birthday-notice')).toBeNull();
+
+      await tapClient(view, 'Léa Martin');
+
+      // Still on the Cliente step: the selection succeeded and the reminder is there.
+      expect(view.getByRole('header', { name: 'Cliente' })).toBeTruthy();
+      expect(view.getByRole('button', { name: /Léa Martin/ }).props.accessibilityState.selected).toBe(true);
+      const notice = view.getByTestId('client-selection-birthday-notice');
+      expect(within(notice).getByText("C'est l'anniversaire de Léa ce jour-là.")).toBeTruthy();
+      expect(
+        within(notice).getByText('Vous pourrez lui proposer une réduction sur ce rendez-vous.'),
+      ).toBeTruthy();
+      expect(view.queryByText(/aujourd'hui/)).toBeNull();
+      expect(
+        view.getByLabelText(
+          "C'est l'anniversaire de Léa ce jour-là. Vous pourrez lui proposer une réduction sur ce rendez-vous.",
+        ),
+      ).toBeTruthy();
+      // Awareness only: no discount action on this step.
+      expect(view.queryByText('Appliquer une réduction')).toBeNull();
+
+      // Exactly one celebration for that explicit selection.
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+      expect(mockSelectionHaptic).not.toHaveBeenCalled();
+      expect(view.getAllByTestId('birthday-confetti', hidden)).toHaveLength(1);
+      // Decorative: invisible to accessibility-aware queries, pointer-transparent.
+      expect(view.queryByTestId('birthday-confetti')).toBeNull();
+      expect(view.getByTestId('birthday-confetti', hidden).props.pointerEvents).toBe('none');
+
+      // The burst ends by itself; the reminder stays.
+      await act(async () => {
+        jest.advanceTimersByTime(CONFETTI_MS);
+      });
+      expect(view.queryByTestId('birthday-confetti', hidden)).toBeNull();
+      expect(view.getByTestId('client-selection-birthday-notice')).toBeTruthy();
+    });
+
+    it('says « aujourd\'hui » when the birthday Appointment is today', async () => {
+      jest.setSystemTime(new Date(2026, 7, 25, 8, 0));
+      const view = await renderWithBirthdays();
+      await tapClient(view, 'Léa Martin');
+
+      expect(view.getByText("C'est l'anniversaire de Léa aujourd'hui.")).toBeTruthy();
+      expect(view.queryByText(/ce jour-là/)).toBeNull();
+    });
+
+    it('never replays on a re-render, a re-tap or a step round trip', async () => {
+      const view = await renderWithBirthdays();
+      await tapClient(view, 'Léa Martin');
+      await act(async () => {
+        jest.advanceTimersByTime(CONFETTI_MS);
+      });
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        view.rerender(creationTree(0));
+      });
+      await tapClient(view, 'Léa Martin');
+      await act(async () => {
+        fireEvent.press(view.getByText('Continuer'));
+      });
+      expect(view.queryByTestId('client-selection-birthday-notice')).toBeNull();
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Étape précédente'));
+      });
+
+      // Back on the Cliente step: the reminder is there, nothing replayed.
+      expect(view.getByTestId('client-selection-birthday-notice')).toBeTruthy();
+      expect(view.queryByTestId('birthday-confetti', hidden)).toBeNull();
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops the reminder for a Client without a matching birthday and celebrates again when she is chosen again', async () => {
+      const view = await renderCreation();
+      await act(async () => {
+        fireEvent.press(view.getByTestId('give-lea-birthday'));
+      });
+      await tapClient(view, 'Léa Martin');
+      expect(view.getByTestId('birthday-confetti', hidden)).toBeTruthy();
+
+      // Mid-burst change to Sofia (no birthday): nothing stale, not even the confetti.
+      await tapClient(view, 'Sofia Petit');
+      expect(view.queryByTestId('client-selection-birthday-notice')).toBeNull();
+      expect(view.queryByText(/anniversaire/i)).toBeNull();
+      expect(view.queryByTestId('birthday-confetti', hidden)).toBeNull();
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+
+      // A new explicit selection of Léa celebrates again.
+      await tapClient(view, 'Léa Martin');
+      expect(view.getByTestId('client-selection-birthday-notice')).toBeTruthy();
+      expect(view.getAllByTestId('birthday-confetti', hidden)).toHaveLength(1);
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(2);
+    });
+
+    it('moves from one birthday Client to another: the name updates and the new selection celebrates', async () => {
+      const view = await renderWithBirthdays();
+      await tapClient(view, 'Léa Martin');
+      await tapClient(view, 'Sofia Petit');
+
+      expect(view.getByText("C'est l'anniversaire de Sofia ce jour-là.")).toBeTruthy();
+      expect(view.queryByText(/anniversaire de Léa/)).toBeNull();
+      expect(view.getAllByTestId('birthday-confetti', hidden)).toHaveLength(1);
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows nothing when the Appointment is not on her birthday', async () => {
+      const view = await render(creationTree(0, undefined, new Date(2026, 7, 26, 10, 15)));
+      await act(async () => {
+        fireEvent.press(view.getByTestId('give-lea-birthday'));
+      });
+      await tapClient(view, 'Léa Martin');
+
+      expect(view.queryByTestId('client-selection-birthday-notice')).toBeNull();
+      expect(view.queryByTestId('birthday-confetti', hidden)).toBeNull();
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+    });
+
+    it('respects Reduce Motion: the reminder and the haptic, no confetti', async () => {
+      mockReducedMotion = true;
+      const view = await renderWithBirthdays();
+      await tapClient(view, 'Léa Martin');
+
+      expect(view.getByTestId('client-selection-birthday-notice')).toBeTruthy();
+      expect(view.queryByTestId('birthday-confetti', hidden)).toBeNull();
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the actionable reminder on the Résumé, which still only opens the discount editor', async () => {
+      const view = await renderWithBirthdays();
+      await reachBirthdaySummary(view);
+
+      expect(view.queryByTestId('client-selection-birthday-notice')).toBeNull();
+      expect(view.getByTestId('appointment-birthday-notice')).toBeTruthy();
+      await act(async () => {
+        fireEvent.press(view.getByTestId('apply-birthday-discount'));
+      });
+      expect(view.getByTestId('appointment-discount-presets')).toBeTruthy();
+      expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
+      expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(20));
+    });
   });
 });

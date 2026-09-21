@@ -6,6 +6,14 @@
 // step transition. The Agenda startAt is shown as appointment context on
 // every step and is never recalculated or replaced.
 //
+// Birthday: when the APPOINTMENT date (never today's date) is the birthday of
+// the Client just chosen, the Cliente step says so at once — a compact
+// reminder under the context row, plus one short confetti burst and one
+// success haptic. The celebration belongs to the SELECTION EVENT (a tap on a
+// different Client, or a Client created from the picker): a re-render or a
+// step change never replays it, choosing her again after another Client does.
+// The actionable reminder next to « Réduction » stays on the Résumé.
+//
 // Presented as a native form sheet in the canonical Souris shell
 // (SheetScreen + SheetHeader + SheetActionBar). The route disables
 // swipe-to-dismiss (`src/app/(app)/_layout.tsx`): scrolling the Client list
@@ -13,13 +21,21 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 
 import type { AppointmentDiscount, Service } from '@/domain/appointments';
-import { getClientDisplayName, type Client } from '@/domain/clients';
+import { getClientDisplayName, isClientBirthdayOnDate, type Client } from '@/domain/clients';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
+import { BirthdayConfetti } from '@/features/clients/birthday/BirthdayConfetti';
+import { BirthdayNotice } from '@/features/clients/birthday/BirthdayNotice';
+import {
+  SELECTION_BIRTHDAY_SUGGESTION,
+  formatBirthdayMessage,
+} from '@/features/clients/birthday/presentation';
+import { isSameLocalDay, useToday } from '@/features/clients/birthday/use-today';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { prepareClientDirectory } from '@/features/clients/directory/sort-clients';
 import { alertPersistenceFailure } from '@/providers/persistence-failure';
@@ -98,11 +114,25 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const [draftStartAt, setDraftStartAt] = useState<Date>(() =>
     stepStartAt(new Date(startAt), 0, startTimeBounds),
   );
+  // Incremented by each birthday selection: a new key restarts the burst.
+  const [birthdayBurst, setBirthdayBurst] = useState<number>();
+  const reducedMotion = useReducedMotion();
+  const today = useToday();
 
   const selectedClient = activeClients.find((client) => client.id === selectedClientId);
   const selectedClientName = selectedClient
     ? getClientDisplayName(selectedClient)
     : undefined;
+  // THE birthday truth of this draft, derived on every render: the chosen
+  // Client against the APPOINTMENT date. Never stale, never today's date.
+  const isBirthdayAppointment =
+    selectedClient !== undefined && isClientBirthdayOnDate(selectedClient, draftStartAt);
+  const birthdayMessage = selectedClient
+    ? formatBirthdayMessage(
+        selectedClient,
+        isSameLocalDay(draftStartAt, today) ? 'TODAY' : 'THAT_DAY',
+      )
+    : '';
 
   const summaryItems: readonly BuildAppointmentItemInput[] = selectedDrafts.map(
     (draft) => ({ service: toServiceSnapshotSource(draft) }),
@@ -208,8 +238,30 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
     router.back();
   };
 
-  const handleClientCreated = (client: Client) => {
+  // The ONE way a Client gets chosen. A NEW choice of a Client whose birthday
+  // is the Appointment date celebrates once: one success haptic (the row has
+  // no selection haptic of its own, so nothing doubles) and, unless motion is
+  // reduced, one burst. Re-tapping the chosen Client is not a new choice.
+  const selectClient = (client: Client) => {
+    if (client.id === selectedClientId) return;
     setSelectedClientId(client.id);
+    if (!isClientBirthdayOnDate(client, draftStartAt)) {
+      setBirthdayBurst(undefined);
+      return;
+    }
+    haptics.success();
+    if (!reducedMotion) setBirthdayBurst((current) => (current ?? 0) + 1);
+  };
+
+  const selectClientById = (clientId: string) => {
+    const client = activeClients.find((candidate) => candidate.id === clientId);
+    if (client) selectClient(client);
+  };
+
+  const endBirthdayBurst = useCallback(() => setBirthdayBurst(undefined), []);
+
+  const handleClientCreated = (client: Client) => {
+    selectClient(client);
     setAddClientVisible(false);
   };
 
@@ -239,6 +291,18 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         />
       )}
 
+      {step === 0 && isBirthdayAppointment && (
+        <View style={styles.birthdayNotice}>
+          <BirthdayNotice
+            accessibilityLabel={`${birthdayMessage} ${SELECTION_BIRTHDAY_SUGGESTION}`}
+            compact
+            messages={[SELECTION_BIRTHDAY_SUGGESTION]}
+            testID="client-selection-birthday-notice"
+            title={birthdayMessage}
+          />
+        </View>
+      )}
+
       {step === 0 && (
         <ClientPickerStep
           clients={visibleClients}
@@ -246,7 +310,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
           selectedClientId={selectedClientId}
           onChangeQuery={setClientQuery}
           onAddClientPress={() => setAddClientVisible(true)}
-          onSelectClient={setSelectedClientId}
+          onSelectClient={selectClientById}
         />
       )}
       {step === 1 && (
@@ -267,6 +331,9 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       {step === 2 && selectedClient && summary && (
         <SummaryStep
           clientName={getClientDisplayName(selectedClient)}
+          // The Appointment DATE decides, never today's date: derived on every
+          // render, so a changed Client or date can never leave a stale reminder.
+          birthdayReminder={isBirthdayAppointment}
           discount={draftDiscount}
           onDiscountChange={setDraftDiscount}
           entries={selectedDrafts.map((draft) => ({ draft }))}
@@ -333,6 +400,11 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         </View>
       </SheetActionBar>
 
+      {/* Same burst as the Client Profile; keyed so each selection restarts it. */}
+      {birthdayBurst !== undefined && (
+        <BirthdayConfetti key={birthdayBurst} onFinished={endBirthdayBurst} />
+      )}
+
       <ClientFormSheet
         mode="create"
         onClose={() => setAddClientVisible(false)}
@@ -345,6 +417,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
 
 const styles = StyleSheet.create({
   headerZone: { paddingHorizontal: horizontalGutter },
+  birthdayNotice: { paddingHorizontal: horizontalGutter, paddingTop: spacing.sm },
   footerButtons: { flexDirection: 'row', gap: spacing.sm },
   catalogScroll: { flex: 1 },
   catalogContent: {

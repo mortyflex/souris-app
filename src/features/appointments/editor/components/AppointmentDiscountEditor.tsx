@@ -16,6 +16,10 @@
 // removal, and the % / € switch (given by SegmentedControl itself, only when
 // the mode changes). Re-tapping the chosen preset is a no-op: no tick, no
 // `onChange`. The price-tag icon is decorative and hidden from accessibility.
+//
+// Disclosure: the block opens and closes itself. A parent that needs to open
+// it from outside (the birthday suggestion, AppointmentDiscountSection) passes
+// `expanded` + `onExpandedChange` and owns that one boolean instead.
 
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -58,6 +62,9 @@ interface AppointmentDiscountEditorProps {
   /** Gross, applied discount and net of the draft, from the domain. */
   readonly servicesTotal: AppointmentServicesTotal;
   readonly onChange: (discount: AppointmentDiscount | undefined) => void;
+  /** Controlled disclosure; leave both undefined for the self-managed block. */
+  readonly expanded?: boolean;
+  readonly onExpandedChange?: (expanded: boolean) => void;
 }
 
 const modeOptions: readonly SegmentedControlOption<AppointmentDiscountMode>[] = [
@@ -83,8 +90,11 @@ export function AppointmentDiscountEditor({
   discount,
   servicesTotal,
   onChange,
+  expanded: controlledExpanded,
+  onExpandedChange,
 }: AppointmentDiscountEditorProps) {
-  const [expanded, setExpanded] = useState(discount !== undefined);
+  const [ownExpanded, setOwnExpanded] = useState(discount !== undefined);
+  const expanded = controlledExpanded ?? ownExpanded;
   const [mode, setMode] = useState<AppointmentDiscountMode>(discount?.type ?? 'PERCENT');
   const summary = formatDiscountSummary(discount, servicesTotal.discountCents);
 
@@ -99,6 +109,11 @@ export function AppointmentDiscountEditor({
     onChange(undefined);
   };
 
+  const toggleExpanded = () => {
+    setOwnExpanded(!expanded);
+    onExpandedChange?.(!expanded);
+  };
+
   return (
     <View style={styles.container} testID="appointment-discount">
       <Pressable
@@ -109,7 +124,7 @@ export function AppointmentDiscountEditor({
         }
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        onPress={() => setExpanded((current) => !current)}
+        onPress={toggleExpanded}
         style={({ pressed }) => [styles.header, pressed && styles.pressed]}
         testID="appointment-discount-toggle"
       >

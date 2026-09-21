@@ -6,7 +6,9 @@
 //   2. Rendez-vous      → Changer l'horaire (inline ±5 minute control)
 //   3. Prestations      → stacked sortable accordion editor (snapshot-only
 //                          price and phase-duration adjustments)
-//   4. Total            → the optional « Réduction » control and the read-only
+//   4. Total            → the optional « Réduction » control (preceded by the
+//                          birthday suggestion when the Appointment date is
+//                          the Client birthday) and the read-only
 //                          final summary (Prestations / Réduction / Total when
 //                          a discount is set), CTA lives in the footer
 //
@@ -41,7 +43,7 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
-import { AppointmentDiscountEditor } from '../../editor/components/AppointmentDiscountEditor';
+import { AppointmentDiscountSection } from '../../editor/components/AppointmentDiscountSection';
 import { SortableDraftList, type SortableDraftEntry } from '../../editor/components/SortableDraftList';
 import type { StartTimeOfDay } from '../draft-start';
 import type { AppointmentCreationSummary } from '../presentation';
@@ -61,6 +63,8 @@ interface SummaryStepProps {
   readonly summary: AppointmentCreationSummary;
   readonly discount: AppointmentDiscount | undefined;
   readonly onDiscountChange: (discount: AppointmentDiscount | undefined) => void;
+  /** True when the Appointment date is the selected Client's birthday. */
+  readonly birthdayReminder: boolean;
   readonly entries: readonly SortableDraftEntry[];
   readonly expandedDraftId: string | null;
   readonly onToggleExpanded: (draftKey: string) => void;
@@ -85,6 +89,7 @@ export function SummaryStep({
   summary,
   discount,
   onDiscountChange,
+  birthdayReminder,
   entries,
   expandedDraftId,
   onToggleExpanded,
@@ -213,7 +218,8 @@ export function SummaryStep({
             />
           )}
         </View>
-        <AppointmentDiscountEditor
+        <AppointmentDiscountSection
+          birthdayReminder={birthdayReminder}
           discount={discount}
           onChange={onDiscountChange}
           servicesTotal={summary.servicesTotal}
