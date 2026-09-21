@@ -14,6 +14,7 @@ Services (with ordered phases)
 Appointments (with ordered item snapshots and ordered phases)
 Products (with a durable image file reference)
 Sales (with item snapshots)
+Calendar Blocks (personal unavailability — schema v11)
 ```
 
 Since Account & Onboarding V1 the database also holds the **local account binding** (schema v3,
@@ -60,6 +61,7 @@ schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v
                      v8 (price_cents / unit_price_cents replace the euro REAL price columns),
                      v9 (clients.notes),
                      v10 (appointments.discount_percent, appointments.discount_amount_cents),
+                     v11 (calendar_blocks; sync_outbox / sync_state rebuilt for the CALENDAR_BLOCK type),
                      SOURIS_TABLES, BUSINESS_SCOPED_TABLES, SYNC_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
@@ -82,7 +84,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
 Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
@@ -113,6 +115,8 @@ sales               id PK, business_id, client_id?, appointment_id? (v5), comple
                     paid_at? (v6), card_amount_cents? (v6, CHECK >= 0), cash_amount_cents? (v6, CHECK >= 0)
 sale_items          (sale_id FK→sales CASCADE, id) PK, position, product_id, product_name,
                     unit_price_cents (v8, CHECK >= 0), quantity (CHECK >= 1)
+calendar_blocks     id PK, business_id, staff_member_id, start_at, end_at (CHECK end_at > start_at),
+                    reason (CHECK non-blank)                                               (v11)
 business_profile    singleton PK (CHECK = 1), id, owner_user_id, owner_first_name,
                     owner_last_name?, name, activity_type, phone?, created_at, updated_at   (v3)
 sync_outbox         id PK AUTOINCREMENT, business_id, aggregate_type (CHECK vocabulary), aggregate_id,
@@ -131,7 +135,13 @@ aggregate identities and revisions only, never business data, are not part of th
 snapshot, and are never uploaded.
 
 Indexes: `appointments(start_at)`, `appointments(client_id)`, `sales(client_id)`,
-`sales(appointment_id)` (v5).
+`sales(appointment_id)` (v5), `calendar_blocks(start_at)` and
+`calendar_blocks(business_id, staff_member_id, start_at)` (v11).
+
+`calendar_blocks` deliberately has no client, price, payment, discount or status column: a Calendar
+Block is calendar availability only (`docs/domain/CALENDAR_BLOCKS.md`), and no financial or Client
+query ever reads this table. Like every aggregate it carries no sync column — revisions and deletions
+live in `sync_outbox` / `sync_state`, and a local deletion removes the row.
 
 ### Value representation
 
@@ -199,6 +209,49 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v11 — Calendar Blocks
+
+```text
+CREATE TABLE calendar_blocks (id TEXT PRIMARY KEY, business_id, staff_member_id, start_at, end_at,
+                              reason CHECK (length(trim(reason)) > 0), CHECK (end_at > start_at));
+CREATE INDEX idx_calendar_blocks_start_at …;  CREATE INDEX idx_calendar_blocks_business_staff_start_at …;
+
+sync_outbox, sync_state   REBUILT — aggregate_type CHECK gains 'CALENDAR_BLOCK'
+souris_metadata           DELETE key 'sync_pull_cursor'
+```
+
+Three things, in ONE transaction with the version bump:
+
+1. **A new, empty table.** Nothing is backfilled. Both CHECKs mirror the domain (`createCalendarBlock`);
+   the instants are fixed-width ISO-8601 UTC text, so `end_at > start_at` IS chronological order.
+2. **The two sync bookkeeping tables are rebuilt.** SQLite cannot alter a CHECK constraint, and the
+   `aggregate_type` vocabulary of both tables is CHECKed. The migration uses the documented SQLite copy
+   procedure — create `…_v11` with the new CHECK, `INSERT … SELECT` every row with every column
+   unchanged, `DROP` the old table, `RENAME` the new one. It is NOT a wipe: pending intents keep their
+   `id` (FIFO position), `revision`, `attempt_count`, `last_error` and `next_attempt_at`; every
+   acknowledged `remote_version` and `last_synced_at` is preserved; and the `AUTOINCREMENT` high-water
+   mark of `sync_outbox` is carried over through `sqlite_sequence`, so an outbox id is still never
+   handed out twice even when the highest ids were already settled. These tables hold bookkeeping only
+   — no operational row is read or written. This is the one non-`ALTER` migration of the project, and
+   the reason is structural, not a shortcut.
+3. **The pull cursor is cleared.** A build that predates Calendar Blocks ignores the `calendar_blocks`
+   family of a pull and still advances its cursor; blocks created on another device meanwhile would sit
+   BEFORE the cursor forever. Without a cursor the first run after the upgrade reads the complete
+   dataset once — known revisions are skipped at one comparison each — and those blocks arrive
+   (`CLOUD_SYNC.md` §20). No other metadata key is touched.
+
+An existing v10 database goes `v10 → v11` with every Client, Service, Appointment, item, phase,
+Product, Sale and the account binding byte-identical (`rowid` included), no wipe, no reseed
+(`seed_version` stays), and NOTHING written to the outbox (no aggregate changed). Re-running is a
+no-op. Covered by `calendar-blocks-migration.test.ts` — a genuine schema-v10 fixture on a bound device
+(paid history, a discount, a note, a FAILED outbox entry with its backoff, settled ids above the
+remaining one, acknowledged versions including a tombstone, a pull cursor, a bootstrap decision):
+version, untouched raw operational rows, identical expected totals and Cash Register, identical outbox
+and state rows, the sequence (`next id = 6`, never 5 again), a never-started sequence, the constraints
+and the unique key of both rebuilt tables, no `_v11` leftover, the cleared cursor (and only it),
+idempotence, and the table CHECKs. The remote counterpart is
+`supabase/migrations/20260923120000_create_calendar_blocks.sql`.
 
 ### Schema v10 — Appointment discount
 
@@ -525,6 +578,8 @@ Appointment reconciliation    every previous-day finalization in one transaction
 Product create/edit           row, after the durable image copy                  + PRODUCT UPSERT
 Product stock/activation      one column                                         + PRODUCT UPSERT
 Product deletion              DELETE                                             + PRODUCT DELETE
+Calendar Block create/edit    domain validation (§7f) + row                      + CALENDAR_BLOCK UPSERT
+Calendar Block deletion       DELETE (nothing references a block)                + CALENDAR_BLOCK DELETE
 Sale completion               stock revalidation + decrements + sale + items (§8) + SALE UPSERT
                                                                                   + PRODUCT UPSERT per decrement
 Sold-Product removal          re-verification + restoration + lines + empty Sales + PRODUCT UPSERT
@@ -603,6 +658,27 @@ tap time, never cached: once the last linked Sale has been emptied and removed b
 deletion (§8), an unpaid Appointment becomes deletable again while a paid one stays blocked.
 
 ---
+
+### 7f. Calendar Blocks
+
+`src/persistence/stores/calendar-blocks.ts` — `loadCalendarBlocks` (rowid order), `insertCalendarBlock`,
+`updateCalendarBlock` (interval + reason only: id, Business and staff member never change),
+`deleteCalendarBlock`. Every write goes through the domain `createCalendarBlock` BEFORE any SQL runs
+(end strictly after start, meaningful reason, normalized text — never an empty string), and the table
+CHECKs refuse it again. Each write marks the `CALENDAR_BLOCK` aggregate in the outbox inside its own
+transaction; a refused block or a missing row writes nothing.
+
+`calendar_blocks` is in `SOURIS_TABLES` (cleared by the development reset) and in
+`BUSINESS_SCOPED_TABLES` (its `business_id` follows the account binding, §4b). The hydrated snapshot
+gained `calendarBlocks`, read by `CalendarBlockSessionProvider` — a SEPARATE session from
+Appointments, which is what the Cash Register, the Client profile and every total read.
+
+The schedule-conflict rule (`docs/domain/CALENDAR_BLOCKS.md` §5) is a domain rule verified by that
+session before it writes; it is not re-derived in SQL (it needs the Appointment phase timelines, and
+the session is the single writer of a device). Covered by `calendar-blocks-store.test.ts`: round trip,
+restart, edit, deletion, the domain guard, coalesced outbox marking, binding, development reset, and
+isolation — every other table byte-identical, expected totals and Cash Register unchanged, no column
+a price / payment / client / status could live in.
 
 ### 7c. Sync outbox integration (Cloud Sync V1B)
 

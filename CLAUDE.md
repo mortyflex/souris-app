@@ -78,6 +78,7 @@ Do not introduce speculative product complexity.
 The product may progressively include:
 
 - appointments;
+- calendar blocks (personal unavailability);
 - clients;
 - services and techniques;
 - processing / unattended phases;
@@ -517,6 +518,81 @@ But overlap is currently NON-BLOCKING for professional scheduling.
 
 Do not reintroduce conflict blocking without an explicit product decision.
 
+## Calendar Blocks — the one explicit exception
+
+Personal unavailability is implemented as a dedicated entity, `CalendarBlock`.
+
+Reference: `docs/domain/CALENDAR_BLOCKS.md`.
+
+```text
+CalendarBlock
+├── id
+├── businessId
+├── staffMemberId
+├── startAt
+├── endAt
+└── reason
+```
+
+It always reads « Indisponible » in the product.
+
+It is calendar availability only.
+
+It is NOT an Appointment variant.
+
+Never give it, and never model it as:
+
+- a fake client;
+- a zero-price service or a fake appointment item;
+- a price, a discount or a payment;
+- an Appointment status.
+
+It lives in its own table, its own session and its own sync aggregate (`CALENDAR_BLOCK`).
+
+It never appears in the Cash Register, the Client profile, `Total dépensé`, the history or Sales.
+
+That isolation is structural: financial and client derivations take Appointments and Sales.
+
+Do not add a "skip blocks" filter to financial code; keep blocks out of those inputs.
+
+The explicit product decision (September 2026):
+
+- a Calendar Block may not overlap another Calendar Block of the same staff member;
+- a Calendar Block may not overlap a STAFF-REQUIRED interval of an Appointment of the same staff member;
+- a client Appointment may not be created or moved into a Calendar Block of its staff member;
+- that holds for EVERY change of an Appointment, the quick edits of Appointment Details included;
+- a change whose staff-required intervals are identical is never checked;
+- adjacent intervals are fine: ends are exclusive;
+- processing time (`requiresStaff = false`) never conflicts;
+- `CANCELLED` and `NO_SHOW` Appointments occupy nothing;
+- another staff member's schedule is never looked at.
+
+ONE domain rule decides: `findCalendarBlockConflict` / `findAppointmentCalendarBlockConflict`.
+
+Every change of an existing Appointment goes through `findAppointmentChangeCalendarBlockConflict`.
+
+Compute the candidate first; compare occupied intervals, never the start/end envelope.
+
+Never duplicate the comparison in a screen.
+
+Overlap between client Appointments stays NON-BLOCKING.
+
+The reason is plain text.
+
+The quick suggestions of the editor are a UX shortcut, never an enum.
+
+The staff identifier of Appointments and Calendar Blocks comes from ONE source:
+
+`src/features/appointments/current-staff-member.ts`.
+
+Not implemented yet:
+
+- recurring, all-day or multi-day blocks;
+- working hours, breaks as settings, time off;
+- an availability policy for online booking.
+
+Do not build these before their dedicated phase.
+
 ---
 
 # 17. Manual Scheduling vs Future Online Booking
@@ -884,6 +960,22 @@ Client notes are persisted locally (SQLite schema v9, `clients.notes`).
 Client notes are synced through the existing aggregate sync.
 
 There is no separate sync mechanism for them.
+
+Calendar Blocks are persisted locally (SQLite schema v11, `calendar_blocks`).
+
+They are synced through the existing aggregate sync as their own aggregate type, `CALENDAR_BLOCK`.
+
+Schema v11 also rebuilds `sync_outbox` and `sync_state`.
+
+SQLite cannot alter a CHECK, and their `aggregate_type` vocabulary is CHECKed.
+
+Every row, id and the AUTOINCREMENT sequence are carried over.
+
+That is the one non-`ALTER` migration of the project.
+
+Sync is per aggregate.
+
+A build that predates an aggregate type never names it, so it can never delete it.
 
 Real client data exists.
 

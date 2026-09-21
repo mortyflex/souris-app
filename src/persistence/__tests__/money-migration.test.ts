@@ -197,6 +197,7 @@ const expectedSnapshot = {
   products: [productElastic, productSample, productSerumLuxe],
   appointments: [{ ...appointmentPaid, payment: { paidAt, cardAmountCents: 3000, cashAmountCents: 349 } }],
   sales: [saleLinked, saleStandalone],
+  calendarBlocks: [],
 };
 
 describe('schema v8 migration on an existing v7 database', () => {
@@ -209,8 +210,8 @@ describe('schema v8 migration on an existing v7 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(10);
-    expect(CURRENT_SCHEMA_VERSION).toBe(10);
+    expect(readSchemaVersion(db)).toBe(11);
+    expect(CURRENT_SCHEMA_VERSION).toBe(11);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(readBusinessProfile(db)).toEqual(remoteBusinessProfile);
@@ -339,7 +340,7 @@ describe('schema v8 migration on an existing v7 database', () => {
     migrateDatabase(db);
     const before = loadSnapshot(db);
 
-    expect(migrateDatabase(db)).toBe(10);
+    expect(migrateDatabase(db)).toBe(11);
     expect(loadSnapshot(db)).toEqual(before);
     expect(db.getAllSync('SELECT price_cents FROM services ORDER BY rowid')).toEqual([{ price_cents: 1250 }, { price_cents: 99 }]);
   });

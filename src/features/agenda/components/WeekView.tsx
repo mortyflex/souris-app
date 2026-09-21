@@ -1,5 +1,6 @@
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
+import type { CalendarBlock } from '@/domain/calendar-blocks';
 import { AppText } from '@/shared/ui/AppText';
 import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
 import { TabBarGlassScrollEdge } from '@/shared/ui/TabBarGlassScrollEdge';
@@ -12,7 +13,10 @@ import {
   touchTarget,
 } from '@/shared/ui/theme';
 
-import { groupAppointmentsByLocalDay } from '../calendar/week-appointments';
+import {
+  getCalendarBlocksOfLocalDay,
+  groupAppointmentsByLocalDay,
+} from '../calendar/week-appointments';
 import { addLocalDays, getWeekDays, getStartOfWeek } from '../calendar/week';
 import { WeekDaySection } from './WeekDaySection';
 
@@ -20,6 +24,7 @@ interface WeekViewProps {
   readonly selectedDay: Date;
   readonly today: Date;
   readonly appointments: readonly AppointmentSessionEntry[];
+  readonly calendarBlocks?: readonly CalendarBlock[];
   readonly onSelectDay: (day: Date) => void;
   readonly onShiftWeek: (amount: number) => void;
 }
@@ -50,6 +55,7 @@ export function WeekView({
   selectedDay,
   today,
   appointments,
+  calendarBlocks = [],
   onSelectDay,
   onShiftWeek,
 }: WeekViewProps) {
@@ -95,6 +101,7 @@ export function WeekView({
             <WeekDaySection
               key={`${group.day.getFullYear()}-${group.day.getMonth()}-${group.day.getDate()}`}
               appointments={group.appointments}
+              calendarBlocks={getCalendarBlocksOfLocalDay(calendarBlocks, group.day)}
               day={group.day}
               selectedDay={selectedDay}
               today={today}

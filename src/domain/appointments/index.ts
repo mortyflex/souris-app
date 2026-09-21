@@ -27,6 +27,13 @@ export {
   getAppointmentEndAt,
 } from "./timeline";
 
+export type { StaffBusyInterval, StaffOccupancySource } from "./occupancy";
+export {
+  areStaffBusyIntervalsEqual,
+  doesAppointmentOccupySchedule,
+  getAppointmentStaffBusyIntervals,
+} from "./occupancy";
+
 export type {
   CreateAppointmentItemSnapshotInput,
   ServiceSnapshotSource,

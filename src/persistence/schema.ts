@@ -340,6 +340,106 @@ ALTER TABLE appointments ADD COLUMN discount_amount_cents INTEGER
   );
 `;
 
+/**
+ * Schema v11 — Calendar Blocks (personal unavailability).
+ *
+ * 1. `calendar_blocks` — a NEW table, created empty. A block is a staff
+ *    member + an interval + a reason (docs/domain/CALENDAR_BLOCKS.md): no
+ *    client, no price, no payment, no status. The two CHECKs mirror the
+ *    domain: a meaningful reason, an end strictly after the start (both are
+ *    fixed-width ISO-8601 UTC text, so text order IS chronological order). No
+ *    sync column: like every aggregate, revisions and deletions live in
+ *    `sync_outbox` / `sync_state`, and a local deletion removes the row.
+ *
+ * 2. The `aggregate_type` vocabulary of `sync_outbox` and `sync_state` gains
+ *    `CALENDAR_BLOCK`. SQLite cannot alter a CHECK, so both bookkeeping
+ *    tables are rebuilt with the documented copy procedure — new table, every
+ *    row copied with its columns unchanged, old table dropped, new one
+ *    renamed — inside this migration's transaction. NOTHING is lost: pending
+ *    intents keep their `id` (FIFO position), revision and retry state, the
+ *    AUTOINCREMENT sequence is carried over so an id is still never reused,
+ *    and every acknowledged remote version is preserved. No operational row
+ *    is read or written.
+ *
+ * 3. The pull cursor is cleared. A build that predates Calendar Blocks
+ *    ignores the `calendar_blocks` family of a pull and still advances its
+ *    cursor, so blocks created on another device meanwhile would sit BEFORE
+ *    the cursor forever. Without a cursor the next pull reads the complete
+ *    dataset once: known revisions are skipped one comparison each, and the
+ *    blocks this device never stored arrive (CLOUD_SYNC.md §20).
+ *
+ * No existing Client, Service, Appointment, Product or Sale row is touched;
+ * no wipe, no reseed; the migration records nothing in the outbox.
+ */
+const SYNC_AGGREGATE_TYPE_CHECK_V11 =
+  "aggregate_type IN ('CLIENT', 'SERVICE', 'APPOINTMENT', 'PRODUCT', 'SALE', 'CALENDAR_BLOCK')";
+
+const SCHEMA_V11 = `
+CREATE TABLE IF NOT EXISTS calendar_blocks (
+  id TEXT PRIMARY KEY NOT NULL,
+  business_id TEXT NOT NULL,
+  staff_member_id TEXT NOT NULL,
+  start_at TEXT NOT NULL,
+  end_at TEXT NOT NULL,
+  reason TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+  CHECK (end_at > start_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_blocks_start_at ON calendar_blocks(start_at);
+CREATE INDEX IF NOT EXISTS idx_calendar_blocks_business_staff_start_at
+  ON calendar_blocks(business_id, staff_member_id, start_at);
+
+CREATE TABLE sync_outbox_v11 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (${SYNC_AGGREGATE_TYPE_CHECK_V11}),
+  aggregate_id TEXT NOT NULL,
+  operation TEXT NOT NULL CHECK (operation IN ('UPSERT', 'DELETE')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  last_error TEXT,
+  next_attempt_at TEXT,
+  UNIQUE (business_id, aggregate_type, aggregate_id)
+);
+
+INSERT INTO sync_outbox_v11
+  (id, business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at,
+   attempt_count, last_error, next_attempt_at)
+SELECT id, business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at,
+       attempt_count, last_error, next_attempt_at
+FROM sync_outbox
+ORDER BY id;
+
+-- Carry the AUTOINCREMENT high-water mark over: it may be above MAX(id) when
+-- settled entries were deleted, and an id must never be handed out twice.
+DELETE FROM sqlite_sequence WHERE name = 'sync_outbox_v11';
+INSERT INTO sqlite_sequence (name, seq)
+SELECT 'sync_outbox_v11', seq FROM sqlite_sequence WHERE name = 'sync_outbox';
+
+DROP TABLE sync_outbox;
+ALTER TABLE sync_outbox_v11 RENAME TO sync_outbox;
+
+CREATE TABLE sync_state_v11 (
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (${SYNC_AGGREGATE_TYPE_CHECK_V11}),
+  aggregate_id TEXT NOT NULL,
+  remote_version INTEGER NOT NULL CHECK (remote_version >= 1),
+  last_synced_at TEXT NOT NULL,
+  PRIMARY KEY (business_id, aggregate_type, aggregate_id)
+);
+
+INSERT INTO sync_state_v11 (business_id, aggregate_type, aggregate_id, remote_version, last_synced_at)
+SELECT business_id, aggregate_type, aggregate_id, remote_version, last_synced_at
+FROM sync_state;
+
+DROP TABLE sync_state;
+ALTER TABLE sync_state_v11 RENAME TO sync_state;
+
+DELETE FROM souris_metadata WHERE key = 'sync_pull_cursor';
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -351,6 +451,7 @@ export const migrations: readonly Migration[] = [
   { version: 8, up: (db) => db.execSync(SCHEMA_V8) },
   { version: 9, up: (db) => db.execSync(SCHEMA_V9) },
   { version: 10, up: (db) => db.execSync(SCHEMA_V10) },
+  { version: 11, up: (db) => db.execSync(SCHEMA_V11) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;
@@ -361,6 +462,7 @@ export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version
  * binding survives a development data reset.
  */
 export const SOURIS_TABLES = [
+  'calendar_blocks',
   'sale_items',
   'sales',
   'appointment_phases',
@@ -373,7 +475,13 @@ export const SOURIS_TABLES = [
 ] as const;
 
 /** The tables whose rows carry a `business_id`; the ONLY columns account binding rewrites. */
-export const BUSINESS_SCOPED_TABLES = ['services', 'appointments', 'products', 'sales'] as const;
+export const BUSINESS_SCOPED_TABLES = [
+  'services',
+  'appointments',
+  'products',
+  'sales',
+  'calendar_blocks',
+] as const;
 
 /**
  * Local sync bookkeeping (schema v7). Not operational data: never part of

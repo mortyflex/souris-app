@@ -11,7 +11,8 @@
 //   3. ONE SQLite transaction:
 //        re-verify the preconditions                bound to this Business, still empty,
 //                                                   no acknowledged state, approval present
-//        write every live aggregate                 CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE
+//        write every live aggregate                 CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE,
+//                                                   CALENDAR_BLOCK
 //                                                   (children with their parent; tombstones skipped)
 //        sync_state ← each remote sync_version      tombstones included: they are known revisions
 //        sync_outbox emptied                        nothing restored is ever pushed back
@@ -66,6 +67,7 @@ export interface RestoreCounts {
   readonly products: number;
   readonly appointments: number;
   readonly sales: number;
+  readonly calendarBlocks: number;
   /** Remote tombstones: acknowledged, never written as rows. */
   readonly tombstones: number;
 }
@@ -76,6 +78,7 @@ const COUNT_KEY = {
   PRODUCT: 'products',
   APPOINTMENT: 'appointments',
   SALE: 'sales',
+  CALENDAR_BLOCK: 'calendarBlocks',
 } as const;
 
 /**
@@ -89,7 +92,15 @@ export function restoreBusinessSnapshot(
   snapshot: RemoteBusinessSnapshot,
   now: Date,
 ): RestoreCounts {
-  const counts = { clients: 0, services: 0, products: 0, appointments: 0, sales: 0, tombstones: 0 };
+  const counts = {
+    clients: 0,
+    services: 0,
+    products: 0,
+    appointments: 0,
+    sales: 0,
+    calendarBlocks: 0,
+    tombstones: 0,
+  };
   runInTransaction(db, () => {
     // Facts are read INSIDE the transaction: the fetch was awaited, and the
     // device may have changed meanwhile (a first record, a reset, a rebind).

@@ -103,12 +103,25 @@ export interface RemoteSalePayload {
   readonly items: readonly RemoteSaleItemPayload[];
 }
 
+/**
+ * A Calendar Block (personal unavailability): a staff member, an interval and
+ * a reason. No client, price, payment or status — there is nothing financial
+ * to carry (CLOUD_SYNC.md §20).
+ */
+export interface RemoteCalendarBlockPayload {
+  readonly staff_member_id: string;
+  readonly start_at: string;
+  readonly end_at: string;
+  readonly reason: string;
+}
+
 export type RemoteAggregatePayload =
   | RemoteClientPayload
   | RemoteServicePayload
   | RemoteAppointmentPayload
   | RemoteProductPayload
-  | RemoteSalePayload;
+  | RemoteSalePayload
+  | RemoteCalendarBlockPayload;
 
 /**
  * One aggregate as the remote holds it (V1D). `payload` is the same shape a
@@ -139,6 +152,8 @@ export interface RemoteBusinessSnapshot {
   readonly products: readonly RemotePulledAggregate<RemoteProductPayload>[];
   readonly appointments: readonly RemotePulledAggregate<RemoteAppointmentPayload>[];
   readonly sales: readonly RemotePulledAggregate<RemoteSalePayload>[];
+  /** Empty when the remote functions predate Calendar Blocks (no `calendar_blocks` key). */
+  readonly calendarBlocks: readonly RemotePulledAggregate<RemoteCalendarBlockPayload>[];
 }
 
 export interface RemotePushRequest {

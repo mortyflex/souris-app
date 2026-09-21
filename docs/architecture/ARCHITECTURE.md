@@ -122,6 +122,7 @@ Examples:
 
 ```text
 src/domain/appointments/
+src/domain/calendar-blocks/
 src/domain/clients/
 src/domain/products/
 src/domain/sales/
@@ -158,6 +159,7 @@ Examples may eventually include:
 
 ```text
 src/features/appointments/
+src/features/calendar-blocks/
 src/features/clients/
 src/features/products/
 src/features/sales/

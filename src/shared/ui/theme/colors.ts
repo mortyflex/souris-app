@@ -99,6 +99,19 @@ export const brand = {
   plum: '#5F1852',
 } as const;
 
+// Mauve — personal unavailability ONLY (Calendar Blocks, DESIGN_OVERRIDES.md
+// §24). Derived from oklch hue 326: between the structural lavender (300) and
+// the brand plum (336), and further from every client planning pastel than
+// those pastels are from one another. Never a client colour, never a status,
+// never a warning.
+export const mauve = {
+  mauve050: '#FBEFFB', // oklch(0.965 0.020 326) — form / details surface
+  mauve100: '#F2D8F2', // oklch(0.910 0.045 326) — Agenda block fill
+  mauve200: '#EAC4EA', // oklch(0.865 0.065 326) — selected reason chip, pressed fill
+  mauve600: '#823F84', // oklch(0.48 0.13 326) — accent: left border, icon, marker
+  mauve700: '#68376A', // oklch(0.42 0.10 326) — reason text (≥ 6.7:1 on mauve100)
+} as const;
+
 // Secondary readable foreground — readable secondary metadata text.
 // More legible than muted; reserved for text that is actually read.
 // oklch(0.42 0.055 285)
@@ -128,6 +141,20 @@ export const semanticColors = {
   brandForeground: brand.plum,
   foregroundSoft,
   foregroundMuted: colors.muted,
+} as const;
+
+// Calendar Block (personal unavailability) — ONE fixed family for every block
+// (DESIGN_OVERRIDES.md §24): same colour = "the professional is unavailable",
+// while the client pastels keep identifying clients. Painted flat, like the
+// planning cards. The title is the brand plum: 9.1:1 on the fill.
+export const calendarBlockColors = {
+  background: mauve.mauve100,
+  backgroundPressed: mauve.mauve200,
+  accent: mauve.mauve600,
+  title: brand.plum,
+  subtitle: mauve.mauve700,
+  /** Quiet surface of the editor context card and the details card. */
+  surface: mauve.mauve050,
 } as const;
 
 // Service picker cards — colour says WHAT the service is, never that it is

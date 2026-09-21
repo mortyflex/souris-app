@@ -38,6 +38,7 @@ import type { SyncAggregateRef } from './aggregate';
 import { LocalAggregateScopeError } from './aggregate-payload';
 import type {
   RemoteAppointmentPayload,
+  RemoteCalendarBlockPayload,
   RemoteClientPayload,
   RemotePhasePayload,
   RemoteProductPayload,
@@ -253,6 +254,35 @@ function applySale(db: SourisDatabase, businessId: string, ref: SyncAggregateRef
   }
 }
 
+function applyCalendarBlock(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+  calendarBlock: RemoteCalendarBlockPayload,
+): void {
+  const params = [
+    calendarBlock.staff_member_id,
+    calendarBlock.start_at,
+    calendarBlock.end_at,
+    calendarBlock.reason,
+  ];
+  if (
+    !updateScoped(
+      db,
+      businessId,
+      ref,
+      'calendar_blocks',
+      'staff_member_id = ?, start_at = ?, end_at = ?, reason = ?',
+      params,
+    )
+  ) {
+    db.runSync(
+      'INSERT INTO calendar_blocks (staff_member_id, start_at, end_at, reason, id, business_id) VALUES (?, ?, ?, ?, ?, ?)',
+      [...params, ref.aggregateId, businessId],
+    );
+  }
+}
+
 /**
  * Writes one LIVE remote aggregate (row + complete child set). Call inside
  * the caller's transaction. Throws for a tombstone (no payload), a missing
@@ -275,6 +305,8 @@ export function applyRemoteAggregate(db: SourisDatabase, businessId: string, ent
       return applyAppointment(db, businessId, ref, entry.aggregate.payload);
     case 'SALE':
       return applySale(db, businessId, ref, entry.aggregate.payload);
+    case 'CALENDAR_BLOCK':
+      return applyCalendarBlock(db, businessId, ref, entry.aggregate.payload);
   }
 }
 
@@ -292,6 +324,7 @@ const PARENT_TABLE = {
   PRODUCT: 'products',
   APPOINTMENT: 'appointments',
   SALE: 'sales',
+  CALENDAR_BLOCK: 'calendar_blocks',
 } as const;
 
 /**

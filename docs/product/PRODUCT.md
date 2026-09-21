@@ -108,6 +108,24 @@ It must allow the professional to understand:
 
 The professional may intentionally manage several clients at the same time.
 
+### Personal unavailability — « Indisponible »
+
+The professional can block a period of her day for something that is not a client — a break, travel,
+admin work, training, a medical appointment. It appears on the Agenda as **« Indisponible »** with its
+reason, in ONE dedicated mauve family that no client ever gets, at its exact start and duration, in
+the Day and the Week views. Tapping it opens a small dedicated sheet (reason, date, time — Modifier,
+Supprimer, Fermer), never Appointment Details.
+
+It is calendar availability only: no client, no service, no price. It never appears in the Cash
+Register, in a Client profile, in « Total dépensé », in the history or in Sales.
+
+It is also the one thing that blocks a save: a client Appointment cannot be created, moved or
+quick-edited from its Details (durations, order, removal) into the
+unavailability of the same professional (only the moments where the Appointment actually needs her
+count — processing time may cross a pause), and a block cannot cover an existing Appointment or
+another block. Adjacent slots are fine. Overlap between client Appointments stays allowed, as before.
+Reference: `docs/domain/CALENDAR_BLOCKS.md`.
+
 Overlapping appointments are therefore supported.
 
 The visual representation must remain readable when appointments overlap.
@@ -212,6 +230,19 @@ choose time
 → review
 → create
 ```
+
+The same entry point (the floating « + », or a tap on the timeline) also blocks personal time. The
+sheet opens on **« Cliente »** — the flow above, unchanged — next to **« Personnel »**:
+
+```text
+Personnel
+→ Début / Fin      (start inherited from the Agenda, end +30 min, 5-minute wheels, same day)
+→ Motif            (Pause · Personnel · Déplacement · Administratif · Formation · Autre → free text)
+→ Bloquer le créneau
+```
+
+One compact form, a few seconds, no Cliente / Prestations / Résumé to walk through. The quick reasons
+are shortcuts: the saved reason is plain text. Nothing of one mode ever reaches the other.
 
 An appointment may contain multiple services.
 

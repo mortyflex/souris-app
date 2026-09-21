@@ -4,6 +4,7 @@ import { StyleSheet } from 'react-native';
 import { semanticColors } from '@/shared/ui/theme';
 
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
+import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
@@ -56,7 +57,9 @@ function renderAgenda() {
     <TestPersistenceProvider>
       <ClientSessionProvider>
         <AppointmentSessionProvider>
-          <AgendaScreen />
+          <CalendarBlockSessionProvider>
+            <AgendaScreen />
+          </CalendarBlockSessionProvider>
         </AppointmentSessionProvider>
       </ClientSessionProvider>
     </TestPersistenceProvider>,

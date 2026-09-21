@@ -8,12 +8,13 @@
 // Wire shape (supabase/migrations/20260917200000_create_sync_pull_function.sql):
 //
 //   { pulled_at, clients: [...], services: [...], products: [...],
-//     appointments: [...], sales: [...] }
+//     appointments: [...], sales: [...], calendar_blocks?: [...] }
 //
 //   every aggregate   id, sync_version, deleted_at  + the push payload columns
 //   services          + phases[]
 //   appointments      + items[] each with phases[]
 //   sales             + items[]
+//   calendar_blocks   flat; the KEY is absent on a remote that predates them
 //
 // Rules enforced here mirror the remote CHECKs and the local schema: exact
 // non-negative integer cents, vocabularies, a payment is all three columns or
@@ -33,6 +34,7 @@ import type {
   RemoteAppointmentItemPayload,
   RemoteAppointmentPayload,
   RemoteBusinessSnapshot,
+  RemoteCalendarBlockPayload,
   RemoteClientPayload,
   RemotePhasePayload,
   RemoteProductPayload,
@@ -300,6 +302,23 @@ function parseSale(row: Json, field: string): RemoteSalePayload {
   };
 }
 
+/**
+ * A Calendar Block: the remote CHECKs again — an end strictly after the start
+ * and a meaningful reason — so a row the local table would refuse never
+ * reaches it.
+ */
+function parseCalendarBlock(row: Json, field: string): RemoteCalendarBlockPayload {
+  const startAt = instant(row, 'start_at', field);
+  const endAt = instant(row, 'end_at', field);
+  if (endAt <= startAt) fail(`${field}.end_at`);
+  return {
+    staff_member_id: nonEmptyText(row, 'staff_member_id', field),
+    start_at: startAt,
+    end_at: endAt,
+    reason: nonEmptyText(row, 'reason', field),
+  };
+}
+
 function parseFamily<Payload>(
   value: unknown,
   field: string,
@@ -327,6 +346,9 @@ export function parseRemoteBusinessSnapshot(data: unknown): RemoteBusinessSnapsh
     products: parseFamily(root.products, 'products', parseProduct),
     appointments: parseFamily(root.appointments, 'appointments', parseAppointment),
     sales: parseFamily(root.sales, 'sales', parseSale),
+    // Absent on a remote whose functions predate Calendar Blocks: no block,
+    // never a failure. Present but malformed is refused like any family.
+    calendarBlocks: parseFamily(root.calendar_blocks ?? [], 'calendar_blocks', parseCalendarBlock),
   };
 }
 
@@ -359,11 +381,16 @@ export type RemotePulledEntry =
   | { readonly aggregateType: 'SERVICE'; readonly aggregate: RemotePulledAggregate<RemoteServicePayload> }
   | { readonly aggregateType: 'PRODUCT'; readonly aggregate: RemotePulledAggregate<RemoteProductPayload> }
   | { readonly aggregateType: 'APPOINTMENT'; readonly aggregate: RemotePulledAggregate<RemoteAppointmentPayload> }
-  | { readonly aggregateType: 'SALE'; readonly aggregate: RemotePulledAggregate<RemoteSalePayload> };
+  | { readonly aggregateType: 'SALE'; readonly aggregate: RemotePulledAggregate<RemoteSalePayload> }
+  | {
+      readonly aggregateType: 'CALENDAR_BLOCK';
+      readonly aggregate: RemotePulledAggregate<RemoteCalendarBlockPayload>;
+    };
 
 /**
  * Every aggregate of the snapshot in DEPENDENCY order — CLIENT, SERVICE,
- * PRODUCT, APPOINTMENT, SALE — and, inside a family, in the remote creation
+ * PRODUCT, APPOINTMENT, SALE, then CALENDAR_BLOCK (it references nothing and
+ * nothing references it) — and, inside a family, in the remote creation
  * order. Writing in this order keeps every reference resolvable; removing in
  * the reverse order keeps the deletion guards satisfiable.
  */
@@ -377,5 +404,6 @@ export function listSnapshotEntries(snapshot: RemoteBusinessSnapshot): readonly 
     ...snapshot.products.map(tag('PRODUCT')),
     ...snapshot.appointments.map(tag('APPOINTMENT')),
     ...snapshot.sales.map(tag('SALE')),
+    ...snapshot.calendarBlocks.map(tag('CALENDAR_BLOCK')),
   ] as readonly RemotePulledEntry[];
 }

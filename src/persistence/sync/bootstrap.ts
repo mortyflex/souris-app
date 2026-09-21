@@ -115,7 +115,14 @@ export function isPushEnabled(decision: SyncBootstrapDecision): boolean {
   return decision === 'ALREADY_SYNCED' || decision === 'EMPTY' || decision === 'INITIAL_UPLOAD';
 }
 
-const AGGREGATE_TABLES = ['clients', 'services', 'products', 'appointments', 'sales'] as const;
+const AGGREGATE_TABLES = [
+  'clients',
+  'services',
+  'products',
+  'appointments',
+  'sales',
+  'calendar_blocks',
+] as const;
 
 export function isLocalDatabasePopulated(db: SourisDatabase): boolean {
   return AGGREGATE_TABLES.some(

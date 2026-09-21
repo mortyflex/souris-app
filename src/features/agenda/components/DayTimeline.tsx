@@ -10,6 +10,7 @@ import {
   type GestureResponderEvent,
 } from 'react-native';
 
+import type { CalendarBlock } from '@/domain/calendar-blocks';
 import { AppText } from '@/shared/ui/AppText';
 import { TabBarGlassScrollEdge } from '@/shared/ui/TabBarGlassScrollEdge';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
@@ -27,15 +28,21 @@ import {
 } from '../layout/day-range';
 import { startAtFromTimelinePosition } from '../interaction/timeline-position';
 import { AppointmentBlock } from './AppointmentBlock';
+import { CalendarBlockCard } from './CalendarBlockCard';
 
 interface DayTimelineProps {
   readonly day: Date;
   readonly appointments: readonly AppointmentSessionEntry[];
+  /** Personal unavailability of the selected day. */
+  readonly calendarBlocks?: readonly CalendarBlock[];
 }
+
+/** Layout id of a Calendar Block: never collides with an Appointment segment id. */
+const blockLayoutId = (calendarBlock: CalendarBlock) => `calendar-block:${calendarBlock.id}`;
 
 const minuteHeight = agenda.hourHeight / 60;
 
-export function DayTimeline({ day, appointments }: DayTimelineProps) {
+export function DayTimeline({ day, appointments, calendarBlocks = [] }: DayTimelineProps) {
   const router = useRouter();
   const { getClientById } = useClientSession();
   const { width } = useWindowDimensions();
@@ -51,14 +58,22 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
       palette: paletteOf(appointment),
     })),
   );
-  const intervalLayouts = calculateDayIntervalLayout(visibleSegments);
+  // ONE geometry for everything the day holds: Calendar Blocks go through the
+  // same interval layout, the same range and the same minute scale as the
+  // Appointment segments — exact start, exact duration, shared overlap columns.
+  const blockIntervals = calendarBlocks.map((calendarBlock) => ({
+    id: blockLayoutId(calendarBlock),
+    startAt: calendarBlock.startAt,
+    endAt: calendarBlock.endAt,
+  }));
+  const intervalLayouts = calculateDayIntervalLayout([...visibleSegments, ...blockIntervals]);
   const layoutById = new Map(intervalLayouts.map((layout) => [layout.id, layout]));
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
   // The canvas covers the normal operational day and grows only as far as
   // the latest visible block of the selected day requires (past 20:00, or
   // past midnight for a very late Appointment). Only the height changes:
   // the initial scroll position stays at the top of the day.
-  const range = calculateDayTimelineRange(day, visibleSegments, {
+  const range = calculateDayTimelineRange(day, [...visibleSegments, ...blockIntervals], {
     defaultEndHour: agenda.dayEndHour,
     defaultStartHour: agenda.dayStartHour,
   });
@@ -72,6 +87,23 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
   const nowTop = topOf(now);
   const eventLeft = agenda.timelineGutter;
   const eventWidth = Math.max(160, width - eventLeft - horizontalGutter);
+  /** Frame of one laid-out interval on the canvas. */
+  const frameOf = (interval: { readonly id: string; readonly startAt: Date; readonly endAt: Date }) => {
+    const layout = layoutById.get(interval.id);
+    if (!layout) return undefined;
+    const height = Math.max(
+      1,
+      ((interval.endAt.getTime() - interval.startAt.getTime()) / 60_000) * minuteHeight,
+    );
+    const columnWidth = eventWidth / layout.columnCount;
+    return {
+      height,
+      left: eventLeft + layout.column * columnWidth + 3,
+      position: 'absolute' as const,
+      top: topOf(interval.startAt),
+      width: columnWidth - 6,
+    };
+  };
 
   const openCreationAtPosition = (event: GestureResponderEvent) => {
     const startAt = startAtFromTimelinePosition(day, event.nativeEvent.locationY, {
@@ -127,29 +159,13 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
           />
 
           {visibleSegments.map((segment) => {
-            const layout = layoutById.get(segment.id);
-            if (!layout) return null;
-            const top = topOf(segment.startAt);
-            const height = Math.max(
-              1,
-              ((segment.endAt.getTime() - segment.startAt.getTime()) / 60_000) * minuteHeight,
-            );
-            const columnWidth = eventWidth / layout.columnCount;
+            const frame = frameOf(segment);
+            if (!frame) return null;
             return (
-              <View
-                key={segment.id}
-                testID={`agenda-segment-${segment.id}`}
-                style={{
-                  height,
-                  left: eventLeft + layout.column * columnWidth + 3,
-                  position: 'absolute',
-                  top,
-                  width: columnWidth - 6,
-                }}
-              >
+              <View key={segment.id} testID={`agenda-segment-${segment.id}`} style={frame}>
                 <AppointmentBlock
                   clientName={segment.clientName}
-                  height={height}
+                  height={frame.height}
                   onPress={() =>
                     router.push({
                       pathname: '/appointments/[appointmentId]',
@@ -158,6 +174,29 @@ export function DayTimeline({ day, appointments }: DayTimelineProps) {
                   }
                   palette={segment.palette}
                   segment={segment}
+                />
+              </View>
+            );
+          })}
+
+          {calendarBlocks.map((calendarBlock) => {
+            const frame = frameOf({ ...calendarBlock, id: blockLayoutId(calendarBlock) });
+            if (!frame) return null;
+            return (
+              <View
+                key={calendarBlock.id}
+                testID={`agenda-calendar-block-${calendarBlock.id}`}
+                style={frame}
+              >
+                <CalendarBlockCard
+                  calendarBlock={calendarBlock}
+                  height={frame.height}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/calendar-blocks/[calendarBlockId]',
+                      params: { calendarBlockId: calendarBlock.id },
+                    })
+                  }
                 />
               </View>
             );

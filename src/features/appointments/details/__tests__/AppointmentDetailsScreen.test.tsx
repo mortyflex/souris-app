@@ -17,6 +17,7 @@ import {
   AppointmentSessionProvider,
   useAppointmentSession,
 } from "@/features/appointments/session/AppointmentSessionProvider";
+import { CalendarBlockSessionProvider } from "@/features/calendar-blocks/session/CalendarBlockSessionProvider";
 import {
   ClientSessionProvider,
   useClientSession,
@@ -33,10 +34,12 @@ import {
   ServiceCatalogProvider,
   useServiceCatalog,
 } from "@/features/services/session/ServiceCatalogProvider";
+import type { AppointmentItem } from "@/domain/appointments";
 import { getCashRegisterDaySummary } from "@/domain/cash-register";
 import { getClientSales } from "@/features/sales/presentation";
 import { bootstrapPersistence } from "@/persistence/bootstrap";
 import { insertAppointment, loadAppointments } from "@/persistence/stores/appointments";
+import { insertCalendarBlock } from "@/persistence/stores/calendar-blocks";
 import { findProduct, setProductStock } from "@/persistence/stores/products";
 import { completeSale, loadSales } from "@/persistence/stores/sales";
 import { openTestDatabase } from "@/persistence/testing/node-sqlite-database";
@@ -521,11 +524,13 @@ function detailsTree(
           <SaleSessionProvider>
             <ServiceCatalogProvider>
               <AppointmentSessionProvider>
-                <AppointmentDetailsScreen appointmentId={appointmentId} />
-                <AppointmentPresence appointmentId={appointmentId} />
-                <SaleProbe />
-                <CatalogProbe />
-                {probes}
+                <CalendarBlockSessionProvider>
+                  <AppointmentDetailsScreen appointmentId={appointmentId} />
+                  <AppointmentPresence appointmentId={appointmentId} />
+                  <SaleProbe />
+                  <CatalogProbe />
+                  {probes}
+                </CalendarBlockSessionProvider>
               </AppointmentSessionProvider>
             </ServiceCatalogProvider>
           </SaleSessionProvider>
@@ -1944,6 +1949,244 @@ describe("AppointmentDetailsScreen", () => {
 
       expect(view.getByText("Annulé")).toBeTruthy();
       expect(view.queryByTestId("appointment-birthday-indication")).toBeNull();
+    });
+  });
+  // Quick edits change the schedule without « Modifier »: they go through THE
+  // same domain rule as the full editor (docs/domain/CALENDAR_BLOCKS.md §5).
+  describe("quick edits vs Calendar Blocks", () => {
+    const APPOINTMENT = "quick-edit-appointment";
+    const at = (hour: number, minute = 0) => new Date(2026, 7, 31, hour, minute);
+
+    // 10:00 Coupe 30 (staff) · Balayage: Application 45 (staff) + Pose 40
+    // (unattended) · Brushing 20 (staff)
+    //   busy 10:00–11:15 · FREE 11:15–11:55 · busy 11:55–12:15
+    const COUPE: AppointmentItem = {
+      id: "qe-coupe", serviceId: "service-cut", order: 0, serviceName: "Coupe", serviceType: "SERVICE", price: 30,
+      phases: [{ id: "qe-coupe-phase", name: "Coupe", durationMinutes: 30, requiresStaff: true }],
+    };
+    const BALAYAGE: AppointmentItem = {
+      id: "qe-balayage", serviceId: "service-highlights", order: 1, serviceName: "Balayage", serviceType: "TECHNIQUE", price: 50,
+      phases: [
+        { id: "qe-application", name: "Application", durationMinutes: 45, requiresStaff: true },
+        { id: "qe-pose", name: "Temps de pose", durationMinutes: 40, requiresStaff: false },
+      ],
+    };
+    const BRUSHING: AppointmentItem = {
+      id: "qe-brushing", serviceId: "service-brushing", order: 2, serviceName: "Brushing", serviceType: "SERVICE", price: 20,
+      phases: [{ id: "qe-brushing-phase", name: "Brushing", durationMinutes: 20, requiresStaff: true }],
+    };
+
+    function openDatabase(
+      block: { readonly startAt: Date; readonly endAt: Date; readonly staffMemberId?: string } | undefined,
+      items: readonly AppointmentItem[] = [COUPE, BALAYAGE, BRUSHING],
+    ) {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, () => createDevelopmentSeed(new Date()));
+      insertAppointment(db, {
+        id: APPOINTMENT,
+        businessId: "business-test",
+        clientId: "client-agenda-sofia",
+        staffMemberId: "staff-amelie",
+        startAt: at(10),
+        status: "SCHEDULED",
+        items,
+      });
+      if (block) {
+        insertCalendarBlock(db, {
+          id: "block-pause",
+          businessId: "business-test",
+          staffMemberId: block.staffMemberId ?? "staff-amelie",
+          startAt: block.startAt,
+          endAt: block.endAt,
+          reason: "Pause",
+        });
+      }
+      return db;
+    }
+
+    const stored = (db: ReturnType<typeof openTestDatabase>) =>
+      loadAppointments(db).find((appointment) => appointment.id === APPOINTMENT);
+    const storedDurations = (db: ReturnType<typeof openTestDatabase>) =>
+      (stored(db)?.items ?? [])
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((item) => `${item.id}:${item.phases.map((phase) => phase.durationMinutes).join("/")}`);
+
+    async function expand(view: Awaited<ReturnType<typeof render>>, serviceName: string) {
+      await act(async () => {
+        fireEvent.press(view.getByLabelText(new RegExp(`${serviceName}, commence à`)));
+      });
+    }
+
+    const MESSAGE = "Ce changement ferait empiéter le rendez-vous sur un créneau indisponible.";
+
+    it("rejects a duration extension into a block: inline feedback, nothing persisted, the draft kept", async () => {
+      const db = openDatabase({ startAt: at(12, 15), endAt: at(13) });
+      const before = storedDurations(db);
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+      await expand(view, "Brushing");
+
+      await stepPose(view, "qe-brushing-phase", 1); // 11:55–12:20 would cross 12:15
+      expect(view.queryByTestId("appointment-quick-edit-conflict")).toBeNull(); // a draft is not a change
+      await press(view, "save-service-timing-qe-brushing");
+
+      expect(view.getByText(MESSAGE)).toBeTruthy();
+      expect(view.getByText("Indisponible — Pause, 12:15–13:00")).toBeTruthy();
+      expect(view.getByTestId("appointment-quick-edit-conflict").props.accessibilityRole).toBe("alert");
+      // Nothing was written, clamped or moved: SQLite, the session and the block are as before.
+      expect(storedDurations(db)).toEqual(before);
+      expect(view.getByText("10:00 – 12:15")).toBeTruthy();
+      expect(view.getByTestId("service-meta-qe-brushing").props.children).toBe("20 min");
+      // The professional keeps her draft and can adjust it.
+      expect(phaseValue(view, "qe-brushing-phase")).toBe("25 min");
+      expect(view.getByTestId("save-service-timing-qe-brushing").props.accessibilityState.disabled).toBe(false);
+      expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+      expect(mockAlert).not.toHaveBeenCalled();
+    });
+
+    it("allows a reduction that does not conflict, and clears the earlier feedback", async () => {
+      const db = openDatabase({ startAt: at(12, 15), endAt: at(13) });
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+      await expand(view, "Brushing");
+      await stepPose(view, "qe-brushing-phase", 1);
+      await press(view, "save-service-timing-qe-brushing");
+      expect(view.getByText(MESSAGE)).toBeTruthy();
+
+      await stepPose(view, "qe-brushing-phase", -2); // 25 → 15 min
+      await press(view, "save-service-timing-qe-brushing");
+
+      expect(view.queryByTestId("appointment-quick-edit-conflict")).toBeNull();
+      expect(storedDurations(db)).toEqual(["qe-coupe:30", "qe-balayage:45/40", "qe-brushing:15"]);
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it("allows a schedule change that stays entirely outside the blocks — adjacency included", async () => {
+      const db = openDatabase({ startAt: at(12, 20), endAt: at(13) });
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+      await expand(view, "Brushing");
+
+      await stepPose(view, "qe-brushing-phase", 1); // ends 12:20, exactly when the block starts
+      await press(view, "save-service-timing-qe-brushing");
+
+      expect(view.queryByTestId("appointment-quick-edit-conflict")).toBeNull();
+      expect(storedDurations(db)[2]).toBe("qe-brushing:25");
+      expect(mockWarningHaptic).not.toHaveBeenCalled();
+    });
+
+    it("does not check an edit whose occupied intervals are identical, even over a pre-existing overlap", async () => {
+      // A block created on another device, right over the Coupe. The Pose is
+      // the LAST phase here: lengthening it moves no staff-required interval.
+      const db = openDatabase({ startAt: at(10), endAt: at(10, 20) }, [COUPE, BALAYAGE]);
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+      await expand(view, "Balayage");
+
+      await stepPose(view, "qe-pose", 2);
+      await press(view, "save-service-timing-qe-balayage");
+
+      expect(view.queryByTestId("appointment-quick-edit-conflict")).toBeNull();
+      expect(storedDurations(db)).toEqual(["qe-coupe:30", "qe-balayage:45/50"]);
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the processing-gap rule: a block inside the unattended phase is free, a staff phase reaching it is not", async () => {
+      const db = openDatabase({ startAt: at(11, 20), endAt: at(11, 50) }); // inside 11:15–11:55
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+      await expand(view, "Balayage");
+
+      // A longer Pose moves the Brushing to 12:00–12:20: the gap still covers the block.
+      await stepPose(view, "qe-pose", 1);
+      await press(view, "save-service-timing-qe-balayage");
+      expect(view.queryByTestId("appointment-quick-edit-conflict")).toBeNull();
+      expect(storedDurations(db)[1]).toBe("qe-balayage:45/45");
+
+      // A longer Application (→ 11:25) runs into it: judged on the interval, not the envelope.
+      await stepPose(view, "qe-application", 2);
+      await press(view, "save-service-timing-qe-balayage");
+      expect(view.getByText(MESSAGE)).toBeTruthy();
+      expect(view.getByText("Indisponible — Pause, 11:20–11:50")).toBeTruthy();
+      expect(storedDurations(db)[1]).toBe("qe-balayage:45/45");
+    });
+
+    it("rejects a reorder that moves a staff phase into the block, and keeps the stored order", async () => {
+      const db = openDatabase({ startAt: at(11, 20), endAt: at(11, 50) });
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+
+      // Balayage first → Coupe 11:25–11:55 lands in the block.
+      await act(async () => {
+        dragServiceRow("qe-balayage", -100);
+      });
+
+      expect(view.getByText(MESSAGE)).toBeTruthy();
+      expect(storedDurations(db).map((entry) => entry.split(":")[0])).toEqual(["qe-coupe", "qe-balayage", "qe-brushing"]);
+      expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects a removal that pulls a staff phase into the block, and keeps the Service", async () => {
+      const db = openDatabase({ startAt: at(11, 20), endAt: at(11, 50) });
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+
+      // Without the Coupe everything starts 30 min earlier: Brushing 11:25–11:45.
+      await press(view, "appointment-service-qe-coupe-swipe-full");
+
+      expect(view.getByText(MESSAGE)).toBeTruthy();
+      expect(stored(db)?.items).toHaveLength(3);
+      expect(view.getByTestId("service-section-qe-coupe")).toBeTruthy();
+    });
+
+    it("allows a removal that changes the schedule without reaching any block", async () => {
+      const db = openDatabase({ startAt: at(11, 20), endAt: at(11, 50) });
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+
+      await press(view, "appointment-service-qe-brushing-swipe-full");
+
+      expect(view.queryByTestId("appointment-quick-edit-conflict")).toBeNull();
+      expect(stored(db)?.items.map((item) => item.id)).toEqual(["qe-coupe", "qe-balayage"]);
+    });
+
+    it("ignores the block of another staff member", async () => {
+      const db = openDatabase({ startAt: at(12, 15), endAt: at(13), staffMemberId: "staff-other" });
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+      await expand(view, "Brushing");
+
+      await stepPose(view, "qe-brushing-phase", 3);
+      await press(view, "save-service-timing-qe-brushing");
+
+      expect(view.queryByTestId("appointment-quick-edit-conflict")).toBeNull();
+      expect(storedDurations(db)[2]).toBe("qe-brushing:35");
+    });
+
+    it("keeps Appointment-versus-Appointment overlap allowed", async () => {
+      const db = openDatabase(undefined);
+      insertAppointment(db, {
+        id: "next-client",
+        businessId: "business-test",
+        clientId: "client-agenda-lea",
+        staffMemberId: "staff-amelie",
+        startAt: at(12, 15),
+        status: "SCHEDULED",
+        items: [{ ...COUPE, id: "next-coupe" }],
+      });
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+      await expand(view, "Brushing");
+
+      await stepPose(view, "qe-brushing-phase", 4); // runs over the next client until 12:35
+      await press(view, "save-service-timing-qe-brushing");
+
+      expect(view.queryByTestId("appointment-quick-edit-conflict")).toBeNull();
+      expect(storedDurations(db)[2]).toBe("qe-brushing:40");
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves the status rules alone: a completed Appointment offers no quick edit to validate", async () => {
+      const db = openDatabase({ startAt: at(12, 15), endAt: at(13) });
+      jest.setSystemTime(new Date(2026, 8, 2, 9, 0)); // two days later: finalized by reconciliation
+      const view = await renderDetails(APPOINTMENT, undefined, db);
+
+      expect(stored(db)?.status).toBe("COMPLETED");
+      expect(view.queryByTestId("modify-appointment")).toBeNull();
+      expect(view.queryByTestId("appointment-service-qe-coupe-swipe-full")).toBeNull();
+      expect(view.queryByTestId("save-service-timing-qe-brushing")).toBeNull();
     });
   });
 });

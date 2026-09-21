@@ -264,7 +264,7 @@ describe('CloudSyncRunner', () => {
     await waitFor(() => expect(remote.pulls).toHaveLength(1));
     await act(async () => {});
 
-    expect(loadSnapshot(database)).toEqual({ clients: [], services: [], products: [], appointments: [], sales: [] });
+    expect(loadSnapshot(database)).toEqual({ clients: [], services: [], products: [], appointments: [], sales: [], calendarBlocks: [] });
     expect(view.getByTestId('client-names').props.children).toBe('');
     expect(countSyncOutboxRows(database)).toBe(0);
     expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('RESTORE_REQUIRED');

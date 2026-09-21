@@ -2,7 +2,8 @@
 
 Remote scope today: **Auth identity + `businesses`** (Account & Onboarding V1), the **operational
 schema** of Cloud Sync V1A (`clients`, `services`, `service_phases`, `appointments`,
-`appointment_items`, `appointment_phases`, `products`, `sales`, `sale_items`), since Cloud Sync
+`appointment_items`, `appointment_phases`, `products`, `sales`, `sale_items`, and `calendar_blocks`
+for personal unavailability — CLOUD_SYNC.md §20), since Cloud Sync
 V1C the two **push functions** the mobile app uploads through (`sync_push_aggregate`,
 `sync_count_business_aggregates`) and, since Cloud Sync V1D, the **pull function** it restores and
 downloads through (`sync_pull_business_aggregates`, plus its formatting helper `sync_instant_text`).
@@ -27,10 +28,19 @@ migrations/20260922120000_add_appointment_discount.sql          (Appointment dis
                                                                  notes one; replaces both sync RPCs in place,
                                                                  CLOUD_SYNC.md §19. Apply BEFORE shipping the
                                                                  build that writes discounts)
+migrations/20260923120000_create_calendar_blocks.sql            (Calendar Blocks — BY HAND, after the discount
+                                                                 one; creates ONE new table with its RLS, trigger
+                                                                 and grants, and replaces the three sync RPCs in
+                                                                 place, CLOUD_SYNC.md §20. Apply BEFORE shipping
+                                                                 the build that writes Calendar Blocks)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
-they rewrite no row.
+they rewrite no row. `create_calendar_blocks` is additive and safe to re-run as well (`create table if not
+exists`, `drop … if exists` on the NEW table's own trigger and policies only, `create or replace`): it touches
+no existing table, row, policy or grant. Until it is applied, a build that knows Calendar Blocks keeps
+working: a block push is refused (`22023`) and stays queued on the device, and every other aggregate
+syncs normally.
 
 Check the dashboard (Database › Migrations, or the presence of the tables / functions) before
 running a file: this list does not track what the project already has. Until the V1C migration is

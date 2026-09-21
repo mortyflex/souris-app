@@ -21,6 +21,7 @@ import type { Client } from '@/domain/clients';
 import { createInitialClients } from '@/features/clients/data/initial-clients';
 import { ClientSessionProvider, useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { haptics } from '@/shared/lib/haptics';
 
@@ -200,8 +201,10 @@ function creationTree(screenKey: number, database?: TestDatabase, appointmentSta
       <ClientSessionProvider>
       <ServiceCatalogProvider>
         <AppointmentSessionProvider>
-          <AppointmentCreationScreen key={screenKey} startAt={appointmentStartAt} />
-          <SessionProbe />
+          <CalendarBlockSessionProvider>
+            <AppointmentCreationScreen key={screenKey} startAt={appointmentStartAt} />
+            <SessionProbe />
+          </CalendarBlockSessionProvider>
         </AppointmentSessionProvider>
       </ServiceCatalogProvider>
       </ClientSessionProvider>

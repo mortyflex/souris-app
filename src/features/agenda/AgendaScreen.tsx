@@ -10,6 +10,7 @@ import { MainScreenHeader } from "@/shared/ui/MainScreenHeader";
 import { agenda, gutter, semanticColors, spacing } from "@/shared/ui/theme";
 
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
+import { useCalendarBlockSession } from "@/features/calendar-blocks/session/CalendarBlockSessionProvider";
 import {
   addLocalDays,
   followTodayChange,
@@ -23,6 +24,7 @@ import {
 } from "./components/AgendaViewSwitcher";
 import { DayTimeline } from "./components/DayTimeline";
 import { WeekView } from "./components/WeekView";
+import { getCalendarBlocksOfLocalDay } from "./calendar/week-appointments";
 import { getOperationalAgendaEntries } from "./operational-visibility";
 
 export function AgendaScreen() {
@@ -34,6 +36,7 @@ export function AgendaScreen() {
   const [mode, setMode] = useState<AgendaViewMode>("day");
   const [dayPickerVisible, setDayPickerVisible] = useState(false);
   const { appointments: allAppointments } = useAppointmentSession();
+  const { calendarBlocks } = useCalendarBlockSession();
   const operationalAppointments = getOperationalAgendaEntries(allAppointments);
   const previousTodayRef = useRef(today);
   const horizontalGutter =
@@ -130,11 +133,13 @@ export function AgendaScreen() {
           <DayTimeline
             day={selectedDay}
             appointments={selectedDayAppointments}
+            calendarBlocks={getCalendarBlocksOfLocalDay(calendarBlocks, selectedDay)}
           />
         </>
       ) : (
         <WeekView
           appointments={operationalAppointments}
+          calendarBlocks={calendarBlocks}
           selectedDay={selectedDay}
           today={today}
           onSelectDay={selectDay}

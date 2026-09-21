@@ -17,7 +17,8 @@
 // (supabase/migrations/20260917200000_create_sync_pull_function.sql):
 //
 //   * owner-only, like the push;
-//   * returns the WIRE JSON — `pulled_at` + the five families, each aggregate
+//   * returns the WIRE JSON — `pulled_at` + the six families (`calendar_blocks`
+//     since 20260923120000), each aggregate
 //     as `{ id, sync_version, deleted_at, …payload columns, children }`, in
 //     creation order, tombstones included — instants as ISO-8601 UTC text
 //     with milliseconds, the fixed form `sync_instant_text` produces;
@@ -124,7 +125,15 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
     return value === null ? null : new Date(value).toISOString();
   }
 
-  const INSTANT_COLUMNS = ['archived_at', 'start_at', 'cancelled_at', 'no_show_recorded_at', 'paid_at', 'completed_at'];
+  const INSTANT_COLUMNS = [
+    'archived_at',
+    'start_at',
+    'end_at',
+    'cancelled_at',
+    'no_show_recorded_at',
+    'paid_at',
+    'completed_at',
+  ];
 
   function toWireAggregate(key: string, row: FakeRemoteAggregate): Record<string, unknown> {
     const columns: Record<string, unknown> = { ...clone(row.payload) };
@@ -283,6 +292,7 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
         products: family('PRODUCT'),
         appointments: family('APPOINTMENT'),
         sales: family('SALE'),
+        calendar_blocks: family('CALENDAR_BLOCK'),
       };
     },
 

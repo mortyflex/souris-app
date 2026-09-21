@@ -794,6 +794,34 @@ overlap detection != scheduling permission
 
 Do not create a blocking scheduling rule from overlap detection unless the product rules explicitly change.
 
+## 18.1 The one explicit exception — Calendar Blocks
+
+The product rules changed explicitly once (September 2026), for ONE case: **personal unavailability**.
+A Calendar Block (`docs/domain/CALENDAR_BLOCKS.md`) is the professional declaring herself unavailable,
+which is different in kind from two clients sharing her time. So:
+
+```text
+Appointment  vs  Appointment       overlap allowed, NON-BLOCKING                       (§16–§17, unchanged)
+Appointment  vs  Calendar Block    same staff member + a STAFF-REQUIRED interval of the
+                                   Appointment intersects the block                     → the save is refused
+Calendar Block vs Calendar Block   same staff member + intersecting intervals           → the save is refused
+```
+
+The Appointment side of that rule is judged on the staff-required intervals of §19
+(`getAppointmentStaffBusyIntervals`, `src/domain/appointments/occupancy.ts`): consecutive
+`requiresStaff = true` phases merged across items, split by unattended phases, zero-duration phases
+ignored, ends exclusive. Processing time may therefore cross a block, and a block may be taken during
+processing time. `CANCELLED` and `NO_SHOW` Appointments occupy nothing
+(`doesAppointmentOccupySchedule`) — the same rule the Agenda uses to decide what reserves space.
+
+It applies when a client Appointment is CREATED (Résumé step) or CHANGED — through the full editor or
+through the quick edits of Appointment Details (phase durations, reorder, item removal). ONE rule
+decides every change, `findAppointmentChangeCalendarBlockConflict`: the candidate is computed first;
+when its staff-required intervals are identical to the current ones nothing is checked (a price, Client
+or discount edit is never held back, not even by a pre-existing overlap); otherwise the candidate is
+validated against the blocks of its staff member, and a refused change writes nothing. Nothing else
+about overlap changed.
+
 ---
 
 # 19. Staff Requirement Intersections

@@ -21,6 +21,7 @@ import type {
   RemoteAggregatePayload,
   RemoteAppointmentItemPayload,
   RemoteAppointmentPayload,
+  RemoteCalendarBlockPayload,
   RemoteClientPayload,
   RemotePhasePayload,
   RemoteProductPayload,
@@ -293,6 +294,31 @@ function readSale(
   };
 }
 
+function readCalendarBlock(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+): RemoteCalendarBlockPayload | undefined {
+  const row = db.getFirstSync<{
+    readonly business_id: string;
+    readonly staff_member_id: string;
+    readonly start_at: string;
+    readonly end_at: string;
+    readonly reason: string;
+  }>(
+    'SELECT business_id, staff_member_id, start_at, end_at, reason FROM calendar_blocks WHERE id = ?',
+    [ref.aggregateId],
+  );
+  assertScoped(row, businessId, ref);
+  if (!row) return undefined;
+  return {
+    staff_member_id: row.staff_member_id,
+    start_at: toInstant(row.start_at),
+    end_at: toInstant(row.end_at),
+    reason: row.reason,
+  };
+}
+
 /**
  * The complete current aggregate (row + whole ordered child set), or
  * undefined when the row no longer exists locally. Throws
@@ -315,5 +341,7 @@ export function readAggregatePayload(
       return readProduct(db, businessId, ref);
     case 'SALE':
       return readSale(db, businessId, ref);
+    case 'CALENDAR_BLOCK':
+      return readCalendarBlock(db, businessId, ref);
   }
 }

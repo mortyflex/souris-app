@@ -1,6 +1,6 @@
 // Souris — sync aggregate vocabulary (Cloud Sync V1B)
 //
-// The five aggregate boundaries of the remote contract
+// The six aggregate boundaries of the remote contract
 // (docs/architecture/CLOUD_SYNC.md §6). Children never sync on their own: a
 // phase, item, or sale line change marks its PARENT aggregate.
 //
@@ -8,11 +8,19 @@
 //   SERVICE       services      + service_phases
 //   APPOINTMENT   appointments  + appointment_items + appointment_phases
 //   PRODUCT       products
-//   SALE          sales         + sale_items
+//   SALE            sales         + sale_items
+//   CALENDAR_BLOCK  calendar_blocks               (CLOUD_SYNC.md §20)
 
 import type { SourisDatabase } from '../database';
 
-export const SYNC_AGGREGATE_TYPES = ['CLIENT', 'SERVICE', 'APPOINTMENT', 'PRODUCT', 'SALE'] as const;
+export const SYNC_AGGREGATE_TYPES = [
+  'CLIENT',
+  'SERVICE',
+  'APPOINTMENT',
+  'PRODUCT',
+  'SALE',
+  'CALENDAR_BLOCK',
+] as const;
 
 export type SyncAggregateType = (typeof SYNC_AGGREGATE_TYPES)[number];
 

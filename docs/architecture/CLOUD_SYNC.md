@@ -15,6 +15,8 @@ V1C    Initial Upload + Incremental Push    done — bootstrap decision, push RP
 V1D    Pull + New Device Restore            done — read RPC, approved transactional restore, incremental pull (§16)
 V1D.1  Seamless Bootstrap                   done — automatic initial upload and new-device restore, first-sync gate (§17)
        Client notes                         done — one additive nullable column carried by the CLIENT aggregate (§18)
+       Appointment discount                 done — two additive nullable columns carried by the APPOINTMENT aggregate (§19)
+       Calendar Blocks                      done — a NEW aggregate type, CALENDAR_BLOCK, through the same engine (§20)
 V1E    Conflict / Retry Hardening
 V1F    Product Image Sync
 ```
@@ -294,6 +296,7 @@ SERVICE       services      + service_phases
 APPOINTMENT   appointments  + appointment_items + appointment_phases
 PRODUCT       products
 SALE          sales         + sale_items
+CALENDAR_BLOCK calendar_blocks                                  (§20)
 ```
 
 These match the local transaction boundaries (PERSISTENCE.md §7): a Service edit already replaces
@@ -434,6 +437,9 @@ CREATE TABLE sync_state (
   PRIMARY KEY (business_id, aggregate_type, aggregate_id)
 );
 ```
+
+Since schema v11 the `aggregate_type` vocabulary of both tables also holds `'CALENDAR_BLOCK'` (§20;
+the tables were rebuilt with every row preserved, PERSISTENCE.md §4).
 
 No `sync_status` column exists on any business table. The outbox row carries the aggregate's
 identity only — never a payload: the worker reads the CURRENT local aggregate at push time. Both
@@ -1137,7 +1143,8 @@ would give up the single snapshot — and is listed in §15.8 for when a dataset
 returns a partial snapshot:
 
 ```text
-shape            pulled_at + the five families, each an array of objects
+shape            pulled_at + the five families, each an array of objects; `calendar_blocks` (§20) is
+                 optional — absent on a remote that predates it = no block
 identity         id non-empty, unique per family; sync_version a safe integer >= 1; deleted_at an instant or NULL
 money            every *_cents a non-negative safe INTEGER (a euro 0.99 is refused); quantity >= 1; stock >= 0
 vocabularies     service type, appointment status, cancelled_by
@@ -1652,3 +1659,92 @@ CONFLICT on a stale version, the three CHECKs, `anon` and non-owner refusals, to
 unchanged push regression checks. Local coverage: `sync-pull-restore.test.ts` (« Appointment discount »:
 create → cloud, edit → cloud, removal → cloud, cloud pull → local, fresh-device restore, NULL-only
 Appointments, rows without the keys, invalid remote values).
+
+---
+
+## 20. Calendar Blocks — a new aggregate type (schema v11)
+
+Personal unavailability (`docs/domain/CALENDAR_BLOCKS.md`) is the first NEW aggregate since V1A. It is
+synchronized by the existing engine — same outbox, same push RPC, same pull RPC, same restore, same
+conflict contract. There is no second sync mechanism.
+
+```text
+supabase/migrations/20260923120000_create_calendar_blocks.sql
+
+create table public.calendar_blocks (business_id, id) PK, staff_member_id, start_at, end_at, reason,
+                                    + sync metadata; CHECK end_at > start_at; CHECK non-blank reason
+indexes      (business_id, updated_at) · (business_id, staff_member_id, start_at)
+trigger      calendar_blocks_sync_before_write → the generic sync_aggregate_before_write (§7)
+RLS          owner select / insert / update — NO delete policy (tombstone only, §8)
+grants       revoke all from public, anon, authenticated; grant select, insert, update to authenticated
+create or replace function public.sync_count_business_aggregates(..)  also counts calendar_blocks
+create or replace function public.sync_push_aggregate(...)            accepts CALENDAR_BLOCK
+create or replace function public.sync_pull_business_aggregates(..)   a sixth family: calendar_blocks[]
+```
+
+- **What travels.** `RemoteCalendarBlockPayload`: `staff_member_id`, `start_at`, `end_at`, `reason`.
+  No client, price, payment, discount or status: there is nothing financial in the row, the payload,
+  the table or the pull.
+- **Non-destructive.** One new table. No existing table, row, column, id, tombstone, trigger, policy or
+  grant is touched, so no `updated_at` / `sync_version` moves and no device re-pulls anything because of
+  the migration. The three functions are replaced in place with identical signatures (EXECUTE grants,
+  revokes, comments, `SECURITY INVOKER`, `search_path = ''` preserved); every other aggregate branch is
+  byte-identical to §19 — the migration was generated from the §19 bodies and diffed.
+- **Local side.** `SYNC_AGGREGATE_TYPES` gains `CALENDAR_BLOCK`; SQLite schema v11 rebuilds the two
+  bookkeeping tables for it (PERSISTENCE.md §4). Push order: `CLIENT, SERVICE, PRODUCT, APPOINTMENT,
+  SALE, CALENDAR_BLOCK` — a block references nothing and nothing references it, so it goes last and its
+  tombstone is applied first in the reverse pass. `aggregate-payload.ts` reads it raw,
+  `remote-apply.ts` writes it in place (UPDATE, else INSERT), a remote tombstone removes the local row
+  with NO guard (nothing references a block), `enqueueInitialUpload` includes it, and
+  `isLocalDatabasePopulated` counts it (a device holding only blocks is populated: it uploads, it is
+  never restored over). The bootstrap count counts it remotely for the same reason.
+- **Validation.** `parseRemoteBusinessSnapshot` checks a live block like the remote CHECKs do — an end
+  strictly after the start, a non-blank reason, a non-empty staff member — before anything is written;
+  a tombstone carries no payload. `RestoreCounts` gained `calendarBlocks`.
+- **Tombstones.** A local deletion is `DELETE` locally + a `CALENDAR_BLOCK DELETE` outbox entry →
+  `deleted_at` remotely → pulled by the other devices, which remove their row. A deleted block cannot
+  reappear after a pull or a restore: a restore writes live aggregates only and acknowledges the
+  tombstone version. Created-and-deleted offline → `ABSENT`, no tombstone fabricated (§15.5).
+- **Conflicts.** The ordinary contract of §9 / §15.4 / §16.6 — remote newer + local dirty is a reported
+  conflict that overwrites neither side; a lost acknowledgement is retried idempotently. The
+  schedule-conflict RULE (a block may not overlap an Appointment's staff-required time) is a local
+  product rule and is NOT enforced by sync: two devices editing offline can produce an overlap, and both
+  records are then kept and drawn.
+
+### 20.1 Builds and remotes that predate Calendar Blocks
+
+The risk named when this was designed: "an old build pushes an aggregate payload without the blocks
+section, and the cloud reads that as zero blocks". It cannot happen here, by construction:
+
+- **Sync is PER AGGREGATE.** There is no dataset-level payload. An older build pushes the five families
+  it knows, one aggregate at a time, and never names a `CALENDAR_BLOCK`; it can therefore neither
+  overwrite nor tombstone one. The absence of a push is the absence of an opinion — never "delete them
+  all". Removing a block takes an explicit `CALENDAR_BLOCK DELETE` from a build that knows them.
+- **Its pull parser ignores the sixth key** (`parseRemoteBusinessSnapshot` reads named keys only), and
+  its local schema has no such table. Its count of the remote simply includes blocks.
+- **Upgrade gap, closed.** That older build still ADVANCES its pull cursor past the blocks it ignored.
+  Schema v11 therefore clears the cursor: the first run of the new build reads the complete dataset
+  once (acknowledged revisions are skipped) and stores the blocks created meanwhile.
+- **Older remote** (migration not applied yet). A pull answer without the `calendar_blocks` key parses
+  as "no block" — never a failure, and never a local deletion. A `CALENDAR_BLOCK` push is refused with
+  `22023` (`REJECTED`): the entry stays pending with a bounded backoff, the run continues with the
+  other aggregates, and the block leaves at the first run after the migration. Nothing is lost, but
+  until then it reaches neither the cloud nor another device —
+  **apply the migration BEFORE shipping the build.** It is applied by hand, like every Souris migration.
+
+Verified in the out-of-repo PGlite harness (§13 policy), 61 checks: the migration applied on a
+POPULATED database written by the §19 functions — every existing table byte-identical (rows, ids,
+`sync_version`, `created_at`, `updated_at`, tombstones), existing policies / grants / function ACLs
+unchanged, re-run harmless (three policies, one trigger), an incremental pull after it returns nothing,
+the five existing families of a full pull identical — then the table shape, RLS, grants and indexes;
+create, identical re-push, edit, stale-version CONFLICT, ack-without-row CONFLICT, exact round trip,
+incremental pull, `ABSENT`, stale DELETE, tombstone, retry, owner hard-delete refusal, recreate after a
+tombstone; the five CHECK / NOT NULL refusals leaving no row; server-owned metadata; `anon` and
+non-owner refusals on the RPCs AND the table, Business isolation, `business_id` pinned; an older build's
+CLIENT and APPOINTMENT pushes leaving every block (and the note and the discount) untouched; and the
+count for an empty Business and for one holding only a block. The V1C / V1D regression harnesses give
+the same results before and after the migration (push 44 / 44; pull 40 + its one by-design failure).
+Local coverage: `calendar-blocks-sync.test.ts` — create / edit / delete → cloud, offline coalescing,
+`ABSENT`, initial upload and push order, a blocks-only device, cloud pull → local for an insert, an
+edit and a tombstone with no echo, fresh-device restore, invalid remote blocks, the conflict contract,
+an older remote, an older build, and the upgrade gap.

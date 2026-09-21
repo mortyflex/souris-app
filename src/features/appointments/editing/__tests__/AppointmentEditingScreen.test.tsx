@@ -3,6 +3,7 @@ import { Alert, Pressable, Text } from 'react-native';
 
 import { createAppointmentItemSnapshot } from '@/domain/appointments';
 import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { ClientSessionProvider, useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { haptics } from '@/shared/lib/haptics';
@@ -297,8 +298,10 @@ function editorTree(appointmentId: string) {
       <ClientSessionProvider>
       <ServiceCatalogProvider>
         <AppointmentSessionProvider>
-          <AppointmentEditingScreen key={appointmentId} appointmentId={appointmentId} />
-          <SessionProbe />
+          <CalendarBlockSessionProvider>
+            <AppointmentEditingScreen key={appointmentId} appointmentId={appointmentId} />
+            <SessionProbe />
+          </CalendarBlockSessionProvider>
         </AppointmentSessionProvider>
       </ServiceCatalogProvider>
       </ClientSessionProvider>

@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import type { CalendarBlock } from '@/domain/calendar-blocks';
 import { AppText } from '@/shared/ui/AppText';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import {
@@ -12,11 +13,15 @@ import {
 
 import { resolveAgendaAppointmentPalettes } from '../appointment-palette';
 import { isSameLocalDay } from '../calendar/week';
+import { mergeWeekDayRows } from '../calendar/week-appointments';
 import { WeekAppointmentRow } from './WeekAppointmentRow';
+import { WeekCalendarBlockRow } from './WeekCalendarBlockRow';
 
 interface WeekDaySectionProps {
   readonly day: Date;
   readonly appointments: readonly AppointmentSessionEntry[];
+  /** Personal unavailability of that day. Never counted as a « rendez-vous ». */
+  readonly calendarBlocks?: readonly CalendarBlock[];
   readonly selectedDay: Date;
   readonly today: Date;
   readonly onSelectDay: (day: Date) => void;
@@ -27,6 +32,7 @@ const weekdayFormatter = new Intl.DateTimeFormat('fr-FR', { weekday: 'short' });
 export function WeekDaySection({
   day,
   appointments,
+  calendarBlocks = [],
   selectedDay,
   today,
   onSelectDay,
@@ -40,12 +46,25 @@ export function WeekDaySection({
     appointments.map(({ appointment }) => appointment),
   );
   const countLabel = appointments.length === 1 ? '1 rendez-vous' : `${appointments.length} rendez-vous`;
+  const rows = mergeWeekDayRows(appointments, calendarBlocks);
+  const blockLabel =
+    calendarBlocks.length === 0
+      ? undefined
+      : calendarBlocks.length === 1
+        ? '1 créneau indisponible'
+        : `${calendarBlocks.length} créneaux indisponibles`;
 
   return (
     <View style={styles.section}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${weekday} ${day.getDate()}, ${appointments.length > 0 ? countLabel : 'aucun rendez-vous'}`}
+        accessibilityLabel={[
+          `${weekday} ${day.getDate()}`,
+          appointments.length > 0 ? countLabel : 'aucun rendez-vous',
+          blockLabel,
+        ]
+          .filter(Boolean)
+          .join(', ')}
         accessibilityHint="Ouvre la vue Jour pour cette date"
         accessibilityState={{ selected }}
         onPress={() => onSelectDay(day)}
@@ -70,15 +89,19 @@ export function WeekDaySection({
           </AppText>
         )}
       </Pressable>
-      {appointments.length > 0 ? (
+      {rows.length > 0 ? (
         <View style={styles.rows}>
-          {appointments.map((value) => (
-            <WeekAppointmentRow
-              key={value.appointment.id}
-              value={value}
-              palette={paletteOf(value.appointment)}
-            />
-          ))}
+          {rows.map((row) =>
+            row.type === 'CALENDAR_BLOCK' ? (
+              <WeekCalendarBlockRow calendarBlock={row.calendarBlock} key={row.key} />
+            ) : (
+              <WeekAppointmentRow
+                key={row.key}
+                value={row.value}
+                palette={paletteOf(row.value.appointment)}
+              />
+            ),
+          )}
         </View>
       ) : (
         <AppText variant="metadata" style={styles.empty}>

@@ -14,6 +14,15 @@
 // step change never replays it, choosing her again after another Client does.
 // The actionable reminder next to « Réduction » stays on the Résumé.
 //
+// Type choice: the sheet opens on « Cliente » — the three-step flow above,
+// unchanged. « Personnel » replaces the WHOLE flow by ONE direct form that
+// blocks the slot as unavailable (a Calendar Block: no client, no service, no
+// price — docs/domain/CALENDAR_BLOCKS.md). The two drafts never meet: the
+// Personal form is mounted only in its mode, receives nothing from the client
+// draft but the Agenda start time, and writes through its own session. A
+// client Appointment that would run into a Calendar Block of the same staff
+// member is explained inline on the Résumé and cannot be created.
+//
 // Presented as a native form sheet in the canonical Souris shell
 // (SheetScreen + SheetHeader + SheetActionBar). The route disables
 // swipe-to-dismiss (`src/app/(app)/_layout.tsx`): scrolling the Client list
@@ -25,8 +34,22 @@ import { useReducedMotion } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 
 import type { AppointmentDiscount, Service } from '@/domain/appointments';
+import { findAppointmentCalendarBlockConflict } from '@/domain/calendar-blocks';
 import { getClientDisplayName, isClientBirthdayOnDate, type Client } from '@/domain/clients';
+import { currentStaffMemberId } from '@/features/appointments/current-staff-member';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { createInitialBlockTimes } from '@/features/calendar-blocks/editor/block-times';
+import {
+  CalendarBlockForm,
+  type CalendarBlockFormValues,
+} from '@/features/calendar-blocks/editor/CalendarBlockForm';
+import { ScheduleConflictNotice } from '@/features/calendar-blocks/editor/ScheduleConflictNotice';
+import {
+  CALENDAR_BLOCK_TITLE,
+  describeCalendarBlockInTheWay,
+} from '@/features/calendar-blocks/presentation';
+import { createCalendarBlockId } from '@/features/calendar-blocks/runtime-ids';
+import { useCalendarBlockSession } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { BirthdayConfetti } from '@/features/clients/birthday/BirthdayConfetti';
@@ -42,6 +65,7 @@ import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { SheetScreen } from '@/shared/ui/SheetScreen';
@@ -80,9 +104,14 @@ interface AppointmentCreationScreenProps {
   readonly startAt: Date;
 }
 
-// Single-professional V1: the staff identifier stays a stable placeholder
-// until staff members become a real concept.
-const staffMemberId = 'staff-amelie';
+/** What the sheet creates: a client Appointment, or personal unavailability. */
+type CreationMode = 'client' | 'personal';
+
+const MODE_OPTIONS: readonly SegmentedControlOption<CreationMode>[] = [
+  { value: 'client', label: 'Cliente', accessibilityLabel: 'Rendez-vous cliente' },
+  { value: 'personal', label: 'Personnel', accessibilityLabel: 'Rendez-vous personnel' },
+];
+
 /**
  * Valid manual start times begin at the operational Agenda day start and
  * stay on the selected local date: with 5-minute minutes the latest start is
@@ -102,6 +131,8 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const router = useRouter();
   const business = useCurrentBusiness();
   const { addAppointment } = useAppointmentSession();
+  const { addCalendarBlock, calendarBlocks } = useCalendarBlockSession();
+  const [mode, setMode] = useState<CreationMode>('client');
   const { activeClients } = useClientSession();
   const { activeServices } = useServiceCatalog();
   const [step, setStep] = useState<CreationStep>(0);
@@ -143,8 +174,25 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       ? getAppointmentCreationSummary(draftStartAt, summaryItems, draftDiscount)
       : undefined;
 
+  // The DRAFT schedule against the Calendar Blocks of the same staff member:
+  // only staff-required phases count, so processing time may cross a pause.
+  const blockInTheWay =
+    selectedDrafts.length > 0
+      ? findAppointmentCalendarBlockConflict(
+          {
+            staffMemberId: currentStaffMemberId,
+            startAt: draftStartAt,
+            status: 'SCHEDULED',
+            items: selectedDrafts.map((draft, order) => ({ order, phases: draft.phases })),
+          },
+          calendarBlocks,
+        )
+      : undefined;
+
   const canContinue =
-    step === 0 ? selectedClient !== undefined : selectedDrafts.length > 0;
+    step === 0
+      ? selectedClient !== undefined
+      : selectedDrafts.length > 0 && (step !== 2 || blockInTheWay === undefined);
 
   const visibleClients = useMemo(
     () => prepareClientDirectory(activeClients, clientQuery),
@@ -211,7 +259,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   };
 
   const create = () => {
-    if (!selectedClient || selectedDrafts.length === 0 || !summary) return;
+    if (!selectedClient || selectedDrafts.length === 0 || !summary || blockInTheWay) return;
 
     const appointmentId = createAppointmentId();
     // The final draft is the immediate source for the Appointment snapshot.
@@ -222,7 +270,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       discount: draftDiscount,
       itemIds: selectedDrafts.map((_, index) => createAppointmentItemId(appointmentId, index)),
       items: summaryItems,
-      staffMemberId,
+      staffMemberId: currentStaffMemberId,
       startAt: draftStartAt,
     });
 
@@ -230,6 +278,25 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
     // Official Service timing is edited from Prestations & tarifs alone.
     try {
       addAppointment({ appointment });
+    } catch {
+      alertPersistenceFailure();
+      return;
+    }
+    haptics.success();
+    router.back();
+  };
+
+  // Personal mode: a Calendar Block and NOTHING else — built from the form's own
+  // values, never from the client draft (no client, service, discount or price
+  // exists on the entity it could leak into).
+  const blockSlot = (values: CalendarBlockFormValues) => {
+    try {
+      addCalendarBlock({
+        id: createCalendarBlockId(),
+        businessId: business.id,
+        staffMemberId: currentStaffMemberId,
+        ...values,
+      });
     } catch {
       alertPersistenceFailure();
       return;
@@ -274,14 +341,34 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
             label: 'Annuler',
             onPress: () => router.back(),
           }}
-          eyebrow="NOUVEAU RENDEZ-VOUS"
-          title={stepLabels[step]}
+          eyebrow={mode === 'client' ? 'NOUVEAU RENDEZ-VOUS' : 'CRÉNEAU PERSONNEL'}
+          title={mode === 'client' ? stepLabels[step] : CALENDAR_BLOCK_TITLE}
+        />
+        <SegmentedControl
+          onChange={setMode}
+          options={MODE_OPTIONS}
+          testID="creation-mode"
+          value={mode}
         />
       </View>
 
-      <CreationStepper step={step} onStepPress={(target) => navigateToStep(target)} />
+      {mode === 'personal' && (
+        <CalendarBlockForm
+          fill
+          // The Agenda context: the time the sheet was opened with (or the one
+          // already chosen on the context row), then +30 minutes.
+          initialTimes={createInitialBlockTimes(draftStartAt)}
+          onSubmit={blockSlot}
+          staffMemberId={currentStaffMemberId}
+          submitLabel="Bloquer le créneau"
+        />
+      )}
 
-      {step !== 2 && (
+      {mode === 'client' && (
+        <CreationStepper step={step} onStepPress={(target) => navigateToStep(target)} />
+      )}
+
+      {mode === 'client' && step !== 2 && (
         <AppointmentContextRow
           startAt={draftStartAt}
           clientName={selectedClientName}
@@ -291,7 +378,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         />
       )}
 
-      {step === 0 && isBirthdayAppointment && (
+      {mode === 'client' && step === 0 && isBirthdayAppointment && (
         <View style={styles.birthdayNotice}>
           <BirthdayNotice
             accessibilityLabel={`${birthdayMessage} ${SELECTION_BIRTHDAY_SUGGESTION}`}
@@ -303,7 +390,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         </View>
       )}
 
-      {step === 0 && (
+      {mode === 'client' && step === 0 && (
         <ClientPickerStep
           clients={visibleClients}
           query={clientQuery}
@@ -313,7 +400,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
           onSelectClient={selectClientById}
         />
       )}
-      {step === 1 && (
+      {mode === 'client' && step === 1 && (
         <ScrollView
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
@@ -328,7 +415,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
           />
         </ScrollView>
       )}
-      {step === 2 && selectedClient && summary && (
+      {mode === 'client' && step === 2 && selectedClient && summary && (
         <SummaryStep
           clientName={getClientDisplayName(selectedClient)}
           // The Appointment DATE decides, never today's date: derived on every
@@ -360,48 +447,56 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         />
       )}
 
-      <SheetActionBar testID="appointment-creation-actions">
-        {step === 1 && (
-          <View style={styles.selectionFooter}>
-            <AppText variant="control" style={styles.selectionFooterCount} testID="selection-count">
-              {formatSelectionCountLabel(selectedDrafts.length)}
-            </AppText>
-            {/* WHICH services, not only how many. Two lines at most, so a long
-                selection never pushes the actions away; the count stays whole. */}
-            {selectedDrafts.length > 0 && (
-              <AppText
-                accessibilityLabel={selectedDrafts.map((draft) => draft.serviceName).join(', ')}
-                numberOfLines={2}
-                style={styles.selectionFooterNames}
-                testID="selection-names"
-                variant="metadata"
-              >
-                {formatSelectedServiceNames(selectedDrafts)}
-              </AppText>
-            )}
-          </View>
-        )}
-        <View style={styles.footerButtons}>
-          {step > 0 && (
-            <AppButton
-              accessibilityLabel="Étape précédente"
-              onPress={() => navigateToStep(step - 1)}
-              style={styles.secondaryButton}
-              title="Précédent"
-              variant="secondary"
+      {mode === 'client' && (
+        <SheetActionBar testID="appointment-creation-actions">
+          {step === 2 && blockInTheWay && (
+            <ScheduleConflictNotice
+              conflict={describeCalendarBlockInTheWay(blockInTheWay)}
+              testID="appointment-calendar-block-conflict"
             />
           )}
-          <AppButton
-            disabled={!canContinue}
-            onPress={step === 2 ? create : continueToNextStep}
-            style={styles.primaryButton}
-            title={step === 2 ? 'Créer le rendez-vous' : 'Continuer'}
-          />
-        </View>
-      </SheetActionBar>
+          {step === 1 && (
+            <View style={styles.selectionFooter}>
+              <AppText variant="control" style={styles.selectionFooterCount} testID="selection-count">
+                {formatSelectionCountLabel(selectedDrafts.length)}
+              </AppText>
+              {/* WHICH services, not only how many. Two lines at most, so a long
+                  selection never pushes the actions away; the count stays whole. */}
+              {selectedDrafts.length > 0 && (
+                <AppText
+                  accessibilityLabel={selectedDrafts.map((draft) => draft.serviceName).join(', ')}
+                  numberOfLines={2}
+                  style={styles.selectionFooterNames}
+                  testID="selection-names"
+                  variant="metadata"
+                >
+                  {formatSelectedServiceNames(selectedDrafts)}
+                </AppText>
+              )}
+            </View>
+          )}
+          <View style={styles.footerButtons}>
+            {step > 0 && (
+              <AppButton
+                accessibilityLabel="Étape précédente"
+                onPress={() => navigateToStep(step - 1)}
+                style={styles.secondaryButton}
+                title="Précédent"
+                variant="secondary"
+              />
+            )}
+            <AppButton
+              disabled={!canContinue}
+              onPress={step === 2 ? create : continueToNextStep}
+              style={styles.primaryButton}
+              title={step === 2 ? 'Créer le rendez-vous' : 'Continuer'}
+            />
+          </View>
+        </SheetActionBar>
+      )}
 
       {/* Same burst as the Client Profile; keyed so each selection restarts it. */}
-      {birthdayBurst !== undefined && (
+      {mode === 'client' && birthdayBurst !== undefined && (
         <BirthdayConfetti key={birthdayBurst} onFinished={endBirthdayBurst} />
       )}
 
@@ -416,7 +511,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
 }
 
 const styles = StyleSheet.create({
-  headerZone: { paddingHorizontal: horizontalGutter },
+  headerZone: { gap: spacing.xs, paddingHorizontal: horizontalGutter },
   birthdayNotice: { paddingHorizontal: horizontalGutter, paddingTop: spacing.sm },
   footerButtons: { flexDirection: 'row', gap: spacing.sm },
   catalogScroll: { flex: 1 },

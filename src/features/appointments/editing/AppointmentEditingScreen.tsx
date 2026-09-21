@@ -8,6 +8,12 @@
 // grid uses a separate pending-add selection. Editing an existing
 // Appointment never writes the catalog.
 //
+// Moving the Appointment (date, time, services or durations) into a Calendar
+// Block of its staff member is explained inline and cannot be saved. An edit
+// that leaves the schedule alone — a price, the Client, the discount — is never
+// held back by an overlap that already existed: what decides is whether the
+// staff-required intervals actually moved.
+//
 // Presented in the canonical Souris sheet shell; swipe-to-dismiss is off
 // (route options). A dirty draft is guarded against « Annuler » and the
 // hardware back by the shared Souris confirmation dialog.
@@ -26,8 +32,12 @@ import {
   type AppointmentDiscount,
   type Service,
 } from '@/domain/appointments';
+import { findAppointmentChangeCalendarBlockConflict } from '@/domain/calendar-blocks';
 import { isClientBirthdayOnDate } from '@/domain/clients';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { ScheduleConflictNotice } from '@/features/calendar-blocks/editor/ScheduleConflictNotice';
+import { describeCalendarBlockInTheWay } from '@/features/calendar-blocks/presentation';
+import { useCalendarBlockSession } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
@@ -71,6 +81,7 @@ const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios
 export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingScreenProps) {
   const router = useRouter();
   const { getAppointmentById, updateAppointment } = useAppointmentSession();
+  const { calendarBlocks } = useCalendarBlockSession();
   const { getClientById } = useClientSession();
   const { activeServices } = useServiceCatalog();
   const entry = getAppointmentById(appointmentId);
@@ -101,6 +112,22 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     draftClientId !== initialClientId ||
     !areAppointmentDiscountsEqual(draftDiscount, initialDiscount);
   const isTerminal = appointment ? isTerminalAppointmentStatus(appointment.status) : false;
+  // THE change rule (domain): the DRAFT is judged against the Calendar Blocks of
+  // the same staff member only when it moves a staff-required interval — the
+  // very rule the quick edits of Appointment Details go through.
+  const blockInTheWay =
+    appointment && draftStartAt
+      ? findAppointmentChangeCalendarBlockConflict(
+          appointment,
+          {
+            staffMemberId: appointment.staffMemberId,
+            startAt: draftStartAt,
+            status: appointment.status,
+            items: drafts.map((draft, order) => ({ order, phases: draft.phases })),
+          },
+          calendarBlocks,
+        )
+      : undefined;
   const draftClient = getClientById(draftClientId);
   const clientName = getResolvedClientDisplayName(draftClient);
 
@@ -184,7 +211,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   };
 
   const save = () => {
-    if (!isDirty || isTerminal) return;
+    if (!isDirty || isTerminal || blockInTheWay) return;
 
     // The discount goes through THE domain discount action, never a local rule.
     const updatedAppointment = setAppointmentDiscount(
@@ -289,6 +316,15 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
         </View>
       </ScrollView>
 
+      {blockInTheWay && (
+        <View style={styles.conflictZone}>
+          <ScheduleConflictNotice
+            conflict={describeCalendarBlockInTheWay(blockInTheWay)}
+            testID="appointment-calendar-block-conflict"
+          />
+        </View>
+      )}
+
       <SheetActionBar direction="row">
         <AppButton
           onPress={cancel}
@@ -297,7 +333,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           variant="secondary"
         />
         <AppButton
-          disabled={!isDirty}
+          disabled={!isDirty || blockInTheWay !== undefined}
           onPress={save}
           style={styles.primaryButton}
           testID="save-appointment-edit"
@@ -337,6 +373,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 
 const styles = StyleSheet.create({
   headerZone: { paddingHorizontal: horizontalGutter },
+  conflictZone: { paddingHorizontal: horizontalGutter, paddingTop: spacing.sm },
   editorContent: {
     gap: spacing.base,
     paddingBottom: spacing.xl,

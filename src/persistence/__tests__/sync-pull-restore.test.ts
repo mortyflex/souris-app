@@ -187,7 +187,7 @@ describe('bootstrap — an empty device bound to a populated Business', () => {
     }
     expect(readSyncBootstrapRecord(db, REMOTE_BUSINESS_ID)?.decision).toBe('RESTORE_REQUIRED');
     expect(remote.pulls).toEqual([]); // the dataset was never even fetched
-    expect(loadSnapshot(db)).toEqual({ clients: [], services: [], products: [], appointments: [], sales: [] });
+    expect(loadSnapshot(db)).toEqual({ clients: [], services: [], products: [], appointments: [], sales: [], calendarBlocks: [] });
     expect(loadSyncState(db, REMOTE_BUSINESS_ID)).toEqual([]);
     expect(countSyncOutboxRows(db)).toBe(0);
   });
@@ -264,7 +264,7 @@ describe('new-device restore', () => {
     const result = await run();
     expect(result).toEqual({
       status: 'RESTORED',
-      restored: { clients: 2, services: 2, products: 2, appointments: 2, sales: 2, tombstones: 1 },
+      restored: { clients: 2, services: 2, products: 2, appointments: 2, sales: 2, calendarBlocks: 0, tombstones: 1 },
     });
     expect(didSyncRunChangeLocalData(result)).toBe(true);
     expect(remote.pulls).toEqual([undefined]); // ONE read of the complete dataset
@@ -380,7 +380,7 @@ describe('new-device restore', () => {
 
 describe('restore failure — SQLite unchanged, approval kept, retry works', () => {
   const untouched = (db: SourisDatabase) => {
-    expect(loadSnapshot(db)).toEqual({ clients: [], services: [], products: [], appointments: [], sales: [] });
+    expect(loadSnapshot(db)).toEqual({ clients: [], services: [], products: [], appointments: [], sales: [], calendarBlocks: [] });
     expect(loadSyncState(db, REMOTE_BUSINESS_ID)).toEqual([]);
     expect(countSyncOutboxRows(db)).toBe(0);
     expect(readSyncPullCursor(db, REMOTE_BUSINESS_ID)).toBeUndefined();

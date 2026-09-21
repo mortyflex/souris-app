@@ -1024,3 +1024,87 @@ price, no badge on Agenda cards (their geometry and content are unchanged).
   with the negative amount in `lav700`. The Résumé step shows the same two lines (`Prestations`,
   `Réduction …`) above its total; the checkout sheet lists the line in its expectation block. None
   of these lines exists without a discount.
+
+---
+
+## 24. Calendar Blocks — « Indisponible »
+
+Personal unavailability (`docs/domain/CALENDAR_BLOCKS.md`) must be recognised instantly on the Agenda
+WITHOUT looking like a client Appointment, and must read as the same product: calm, premium, obvious,
+fast — never a technical admin form, never a grey disabled state.
+
+- **One dedicated family — mauve.** `mauve` in `theme/colors.ts`, derived like every Souris scale from
+  OKLCH, at hue 326: between the structural lavender (300) and the brand plum (336).
+
+  ```text
+  mauve050  #FBEFFB  oklch(0.965 0.020 326)   form / details / conflict surface
+  mauve100  #F2D8F2  oklch(0.910 0.045 326)   Agenda block fill, icon badge
+  mauve200  #EAC4EA  oklch(0.865 0.065 326)   pressed fill
+  mauve600  #823F84  oklch(0.48 0.13 326)     accent: left border, glyph, Week marker
+  mauve700  #68376A  oklch(0.42 0.10 326)     reason text
+  title     brand.plum #5F1852                « Indisponible »
+  ```
+
+  Screens use the SEMANTIC token `calendarBlockColors` (`background`, `backgroundPressed`, `accent`,
+  `title`, `subtitle`, `surface`), never the scale and never a HEX.
+- **Same colour = availability block.** Every block uses this one family whatever its reason; client
+  pastels (§19) keep identifying clients. The fill is further from every client pastel (ΔE_ok ≥ 0.037)
+  than those pastels are from one another (0.006–0.023), and no client palette can resolve to it
+  (tested). Contrast on the fill: title 9.1:1, reason 6.8:1, accent 5.3:1.
+- **Not a status, not a warning.** Flat solid fill like the planning cards — no gradient, no neon, no
+  red, no hatching, no opacity trick.
+- **Agenda Day card.** The Appointment card construction (flat fill, 3 pt solid left accent,
+  height-following radius, `cardPressedScale`), so it belongs to the same planning language:
+
+  ```text
+  ≥ 32 pt    [glyph] Indisponible     rowTitle, plum          two lines
+             Déplacement              metadata, mauve700
+  16–32 pt   Indisponible · Pause     chip + metadata         ONE line — 15 to 25 minute blocks
+  < 16 pt    colour only                                      never a squeezed or smaller font
+  ```
+
+  The densities are the Appointment card thresholds (`getAgendaSegmentDensity`). « Indisponible » is
+  the primary information, the reason secondary. No client, service, price or birthday line.
+- **Glyph.** `shared/icons/calendar-block-icon`: `calendar.badge.clock` / `event_busy`, 12 pt on the
+  card, 13 pt in the Week row, 16–18 pt in a 28 / 36 pt `mauve100` pill badge on sheets. Always
+  decorative and hidden from accessibility: recognition never depends on it, nor on colour — the word
+  « Indisponible » is always written, and the block is announced
+  « Indisponible, Déplacement, de 10 heures à 11 heures 30 ».
+- **Agenda Week row.** The Week Appointment row construction (3 × 26 marker, 54 pt time column, two
+  lines, 56 pt minimum): mauve marker, glyph + « Indisponible » in plum, then
+  « Déplacement · jusqu'à 11:30 » in `mauve700`. Pressed: `mauve050`. Blocks are never counted in
+  « n rendez-vous »; the day header says « 1 créneau indisponible » to assistive technologies.
+- **Creation — « Cliente | Personnel ».** The shared light-glass `SegmentedControl` (§21), directly
+  under the sheet header; no new switch style. Spoken « Rendez-vous cliente » / « Rendez-vous
+  personnel ». In « Personnel » the header reads `CRÉNEAU PERSONNEL` / « Indisponible » and the stepper,
+  the context row, every step and the step action bar are replaced by ONE form:
+  - a `mauve050` context card (`radii.large`): badge, « Indisponible », « Mardi 25 août »;
+  - **Début / Fin** — two neutral `surface` cards side by side (`radii.large`, 64 pt), `metadata` label
+    over a tabular `sectionTitle` time. Tapping one turns it `surfaceLavender` with a 1.5 pt accent
+    border and opens the shared `TimeWheelPicker` (5-minute step) right below, with the usual
+    « Terminer » text action; one picker at a time. An end that is not after the start borders the
+    « Fin » card in `rose200` and says so in `rose600` `metadata`;
+  - **Motif** — pill chips, 40 pt high with vertical hit slop up to the touch target, white on the
+    sheet with a `borderSubtle` hairline. Selected: `mauve100` fill, 1.5 pt `mauve600` border, plum
+    text, `accessibilityState.selected` (radio). « Autre » reveals the shared `TextField`
+    (« Précisez le motif »), focused only when the professional tapped it;
+  - the primary `AppButton` « Bloquer le créneau » in the shared `SheetActionBar`.
+- **Conflict notice.** `ScheduleConflictNotice` — `mauve050`, 28 pt badge, a plum `control` sentence and
+  a `mauve700` `metadata` line naming what is in the way. One accessible element, announced politely.
+  Calm but obvious; never a dialog, never red — nothing went wrong, the slot is taken. The save action
+  is disabled while it shows. Used by the block form AND by Appointment creation (above the Résumé
+  actions) and editing (above the action bar). Appointment Details shows the same notice under
+  « Prestations » when a quick edit (durations, reorder, removal) was refused — « Ce changement ferait
+  empiéter le rendez-vous sur un créneau indisponible. » / « Indisponible — Pause, 10:00–11:00 » — with
+  ONE `warning` haptic; it is replaced or cleared by the next quick edit. Nothing there is disabled in
+  advance: the steppers stay free, the refusal happens on « Enregistrer », the drop or the swipe.
+- **Details sheet.** The canonical content sheet (§16, §20): `SheetHeader` with the accent eyebrow
+  `CRÉNEAU PERSONNEL`, « Indisponible », and the worded « Fermer » — no X icon. A `mauve050` card: badge
+  + Motif, a hairline, then Date and Horaire lines. « Modifier » (secondary `AppButton`), then the
+  `rose600` text action « Supprimer », as in Appointment Details. Swipe-down and outside tap close it;
+  « Modifier » slides the form in as a second sheet (`contentKey`) and turns both off while a draft
+  exists. Deletion goes through the shared `ConfirmationDialog`.
+- **Haptics.** One interaction = one haptic: the `SegmentedControl`'s own selection tick on a mode
+  change; one `selection` per real chip change or opened time card (re-tapping the chosen chip does
+  nothing); `success` on a committed save; `warning` on a committed deletion, as for Appointments.
+- **Motion.** None of its own. Normal sheet transitions only; nothing to reduce.

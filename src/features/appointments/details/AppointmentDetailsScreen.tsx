@@ -22,12 +22,19 @@ import {
   getAppointmentProductLines,
   getOrderedItems,
   markAppointmentNoShow,
+  removeAppointmentItem as removeItemFromAppointment,
+  reorderAppointmentItemsByIds,
   shouldAutoCompleteAppointment,
+  updateAppointmentItemPhaseDurations,
   type Appointment,
   type AppointmentPaymentAmounts,
   type AppointmentPhaseDurationUpdate,
   type AppointmentProductLine,
 } from "@/domain/appointments";
+import {
+  findAppointmentChangeCalendarBlockConflict,
+  type CalendarBlock,
+} from "@/domain/calendar-blocks";
 import type { Sale } from "@/domain/sales";
 import { isClientArchived, isClientBirthdayOnDate } from "@/domain/clients";
 import {
@@ -36,6 +43,9 @@ import {
 } from "@/features/appointments/checkout/AppointmentCheckoutSheet";
 import { SortableRowList } from "@/features/appointments/editor/components/SortableRowList";
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
+import { ScheduleConflictNotice } from "@/features/calendar-blocks/editor/ScheduleConflictNotice";
+import { describeAppointmentChangeIntoCalendarBlock } from "@/features/calendar-blocks/presentation";
+import { useCalendarBlockSession } from "@/features/calendar-blocks/session/CalendarBlockSessionProvider";
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
@@ -118,6 +128,9 @@ export function AppointmentDetailsScreen({
   const [checkoutMode, setCheckoutMode] = useState<AppointmentCheckoutMode>();
   const [deletionMode, setDeletionMode] = useState<AppointmentDeletionDialogMode>();
   const [deletedByCurrentScreen, setDeletedByCurrentScreen] = useState(false);
+  // The Calendar Block the LAST quick edit would have run into (nothing was
+  // written). Replaced or cleared by the next quick edit.
+  const [refusedByBlock, setRefusedByBlock] = useState<CalendarBlock>();
   const horizontalGutter =
     Platform.OS === "android" ? gutter.android : gutter.ios;
   const {
@@ -131,6 +144,7 @@ export function AppointmentDetailsScreen({
     updateAppointmentItemTiming,
     updateAppointmentPayment,
   } = useAppointmentSession();
+  const { calendarBlocks } = useCalendarBlockSession();
   const { getClientById } = useClientSession();
   const { sales, deleteAppointmentProduct } = useSaleSession();
   const entry = getAppointmentById(appointmentId);
@@ -228,12 +242,41 @@ export function AppointmentDetailsScreen({
     }
   };
 
+  // Quick edits change the schedule without going through « Modifier », so they
+  // go through THE same domain rule: the candidate Appointment is computed
+  // first (by the very domain operations the session applies); when its
+  // staff-required intervals are those of the current Appointment nothing is
+  // checked, otherwise it is validated against the Calendar Blocks of its staff
+  // member. A refused edit writes NOTHING — no clamping, nothing moved — and is
+  // explained inline. Appointment-versus-Appointment overlap is never looked at.
+  const isFreeOfCalendarBlocks = (buildCandidate: () => Appointment): boolean => {
+    let candidate: Appointment;
+    try {
+      candidate = buildCandidate();
+    } catch {
+      // An invalid edit is the session's to refuse, exactly as before.
+      setRefusedByBlock(undefined);
+      return true;
+    }
+    const block = findAppointmentChangeCalendarBlockConflict(appointment, candidate, calendarBlocks);
+    setRefusedByBlock(block);
+    if (block) haptics.warning();
+    return block === undefined;
+  };
+
   // Appointment-specific timing: ONE atomic write of the item's phase
   // durations; the catalog Service is never involved.
   const saveServiceTiming = (
     appointmentItemId: string,
     updates: readonly AppointmentPhaseDurationUpdate[],
   ): boolean => {
+    if (
+      !isFreeOfCalendarBlocks(() =>
+        updateAppointmentItemPhaseDurations(appointment, appointmentItemId, updates),
+      )
+    ) {
+      return false;
+    }
     const succeeded = persist(() =>
       updateAppointmentItemTiming(appointment.id, appointmentItemId, updates),
     );
@@ -245,6 +288,9 @@ export function AppointmentDetailsScreen({
   // this Appointment's snapshot only. A refused write leaves the rows where
   // the session says they are and reports once.
   const removeService = (appointmentItemId: string): boolean => {
+    if (!isFreeOfCalendarBlocks(() => removeItemFromAppointment(appointment, appointmentItemId))) {
+      return false;
+    }
     const succeeded = persist(() => removeAppointmentItem(appointment.id, appointmentItemId));
     if (succeeded) haptics.destructive();
     return succeeded;
@@ -255,6 +301,9 @@ export function AppointmentDetailsScreen({
     const [moved] = orderedItemIds.splice(fromIndex, 1);
     if (moved === undefined) return false;
     orderedItemIds.splice(toIndex, 0, moved);
+    if (!isFreeOfCalendarBlocks(() => reorderAppointmentItemsByIds(appointment, orderedItemIds))) {
+      return false;
+    }
     return persist(() => reorderAppointmentItems(appointment.id, orderedItemIds));
   };
 
@@ -491,6 +540,15 @@ export function AppointmentDetailsScreen({
           sortable={canModify}
         />
 
+        {refusedByBlock && (
+          <View style={styles.conflictNotice}>
+            <ScheduleConflictNotice
+              conflict={describeAppointmentChangeIntoCalendarBlock(refusedByBlock)}
+              testID="appointment-quick-edit-conflict"
+            />
+          </View>
+        )}
+
         <AppointmentSummary summary={summary} />
 
         <AppointmentProductsSection
@@ -709,6 +767,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginBottom: spacing.sm,
   },
+  conflictNotice: { marginTop: spacing.sm },
   notes: {
     marginTop: spacing.xl,
   },

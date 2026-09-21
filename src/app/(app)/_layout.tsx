@@ -2,7 +2,7 @@
 //
 // Mounted only while the root gate resolves to `app` (signed in + bound
 // Business). It owns the operational session providers, so no Client,
-// Appointment, Service, Product, or Sale state exists in the tree while the
+// Appointment, Calendar Block, Service, Product, or Sale state exists in the tree while the
 // user is signed out, and every screen stamps new records with the bound
 // Business through CurrentBusinessProvider.
 //
@@ -14,6 +14,7 @@
 import { Stack } from 'expo-router';
 
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
+import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { useBusinessSession } from '@/features/business/session/BusinessSessionProvider';
 import { CurrentBusinessProvider } from '@/features/business/session/CurrentBusinessProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
@@ -40,25 +41,28 @@ export default function AppLayout() {
           <ProductCatalogProvider>
             <SaleSessionProvider>
               <AppointmentSessionProvider>
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: colors.background },
-                  }}>
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="appointments/[appointmentId]" options={contentSheet} />
-                  <Stack.Screen name="appointments/new" options={workflowSheet} />
-                  <Stack.Screen name="appointments/edit/[appointmentId]" options={workflowSheet} />
-                  <Stack.Screen name="clients/[clientId]" options={pushedScreen} />
-                  <Stack.Screen name="services/index" options={pushedScreen} />
-                  <Stack.Screen name="cash-register/index" options={pushedScreen} />
-                  <Stack.Screen name="services/new" options={editorSheet} />
-                  <Stack.Screen name="services/[serviceId]" options={editorSheet} />
-                  <Stack.Screen name="products/index" options={pushedScreen} />
-                  <Stack.Screen name="products/new" options={editorSheet} />
-                  <Stack.Screen name="products/[productId]" options={editorSheet} />
-                  <Stack.Screen name="sales/new" options={workflowSheet} />
-                </Stack>
+                <CalendarBlockSessionProvider>
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      contentStyle: { backgroundColor: colors.background },
+                    }}>
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="appointments/[appointmentId]" options={contentSheet} />
+                    <Stack.Screen name="appointments/new" options={workflowSheet} />
+                    <Stack.Screen name="appointments/edit/[appointmentId]" options={workflowSheet} />
+                    <Stack.Screen name="calendar-blocks/[calendarBlockId]" options={contentSheet} />
+                    <Stack.Screen name="clients/[clientId]" options={pushedScreen} />
+                    <Stack.Screen name="services/index" options={pushedScreen} />
+                    <Stack.Screen name="cash-register/index" options={pushedScreen} />
+                    <Stack.Screen name="services/new" options={editorSheet} />
+                    <Stack.Screen name="services/[serviceId]" options={editorSheet} />
+                    <Stack.Screen name="products/index" options={pushedScreen} />
+                    <Stack.Screen name="products/new" options={editorSheet} />
+                    <Stack.Screen name="products/[productId]" options={editorSheet} />
+                    <Stack.Screen name="sales/new" options={workflowSheet} />
+                  </Stack>
+                </CalendarBlockSessionProvider>
               </AppointmentSessionProvider>
             </SaleSessionProvider>
           </ProductCatalogProvider>
