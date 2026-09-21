@@ -353,6 +353,17 @@ describe('snapshot-based history summary', () => {
     expect(summary.totalSpent).toBe(80);
   });
 
+  it('counts a discounted completed appointment for its final amount, an undiscounted one unchanged', () => {
+    const discounted: Appointment = {
+      ...appointment('discounted', 'client-x', new Date(2026, 7, 20, 10), 'COMPLETED', 'Coloration', 100),
+      discount: { type: 'PERCENT', percent: 20 },
+    };
+    const plain = appointment('plain', 'client-x', new Date(2026, 7, 21, 10), 'COMPLETED', 'Coupe', 40);
+
+    expect(getClientActivitySummary([entry(discounted), entry(plain)], 'client-x', now).totalSpent).toBe(120);
+    expect(getClientActivitySummary([entry(plain)], 'client-x', now).totalSpent).toBe(40);
+  });
+
   it('summarizes multiple snapshot services without catalog access', () => {
     const value = appointment('a1', 'client-x', new Date(2026, 7, 24, 10), 'SCHEDULED', 'Coupe', 40);
     const extended: Appointment = {

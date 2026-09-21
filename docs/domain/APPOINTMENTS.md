@@ -36,6 +36,7 @@ Appointment
 ├── status
 ├── items[]
 ├── notes?
+├── discount?
 ├── cancellation?
 ├── noShow?
 └── payment?
@@ -627,6 +628,74 @@ The creation draft boundary:
 The ordering of the selected stack is the Appointment item order; reordering the draft therefore
 recalculates the complete timeline through the normal domain functions.
 
+# 15.3 Appointment Discount
+
+An Appointment may carry ONE optional discount. It applies to the WHOLE services total — never to an
+individual AppointmentItem, whose snapshot price is never modified to represent it.
+
+```text
+AppointmentDiscount
+├── { type: PERCENT, percent }        whole number of percent, 1–50
+└── { type: FIXED,   amountCents }    INTEGER CENTS, >= 1
+
+appointment.discount absent = no discount
+```
+
+What is stored is what the professional CHOSE, never a pre-computed total. Every amount is derived:
+
+```text
+gross     Σ AppointmentItem snapshot prices                      (integer cents)
+discount  PERCENT: gross × percent / 100, rounded HALF UP to the cent with integer arithmetic
+                   floor((grossCents × percent + 50) / 100)      12,50 € at 15 % = 187,5 c → 188 c
+          FIXED:   amountCents
+          then clamped to [0, gross]                             50 € off a 30 € Appointment → 30 €
+net       gross − discount                                        never negative
+```
+
+Examples: `100 € − 20 % = 80 €`; `100 € − 15 € = 85 €`; `30 € − 50 € = 0 €`.
+
+ONE authoritative derivation (`src/domain/appointments`):
+
+- `getAppointmentDiscountCents(grossCents, discount)` — the rounding and clamping rule above;
+- `getAppointmentServicesTotal(appointment)` → `{ grossCents, discountCents, netCents }`;
+- `getAppointmentExpectedTotal` (§25b) builds on it.
+
+The creation and editing drafts, Appointment Details, the checkout sheet and the Client `Total dépensé`
+metric all read these helpers. No screen computes a discount on its own, and no floating-point euro
+arithmetic is involved.
+
+**Scope: services only.** Products sold during the Appointment (« Revente ») are separate Sales with their
+own snapshots (`docs/domain/SALES.md`); the Appointment discount never reduces them.
+
+**One action.** `setAppointmentDiscount(appointment, discount | undefined)` is THE way a discount is added,
+changed or removed (`undefined`). The editor uses it; the session exposes it as
+`setAppointmentDiscount(appointmentId, discount)` (one transaction, state updated after the commit). Any
+later surface that proposes a discount must call the same action — it never implements pricing.
+
+**No origin, no reason.** The model is `type + value` only. There is no promotion engine, coupon, campaign
+or `birthdayDiscount` field: a discount offered because of a birthday is this same generic discount.
+Birthday celebration behavior is NOT implemented (`docs/domain/CLIENTS.md`).
+
+**Editing rule.** The discount follows the ONE editing eligibility rule (§29, `canEditAppointment`): it can
+be added, changed or removed while the Appointment is `SCHEDULED` / `CONFIRMED` / compatibility
+`IN_PROGRESS`. Once `COMPLETED`, `CANCELLED` or `NO_SHOW` it is frozen — the domain action returns the same
+Appointment, the store refuses the write (`AppointmentDiscountConflictError`), and « Modifier » is not
+offered. A checked-out Appointment keeps its discount, so its history still explains the amount. The only
+financial correction available after checkout remains « Modifier l’encaissement » (§25b).
+
+**History.** The discount is part of the Appointment's own state, like its item snapshots: a later catalog
+price change alters neither the gross, nor the discount, nor the net. The editor presets (5 → 50 % and
+5 → 50 €) are a UI convenience; the Appointment stores the chosen value, so changing the presets later
+never alters an existing Appointment. The domain accepts any valid value: a whole percentage from 1 to 50
+(`MAX_DISCOUNT_PERCENT`) or any positive integer cents. The maximum of 50 % is ONE rule, enforced identically by
+the domain, the SQLite CHECK, the Supabase CHECK and the sync / restore validation; the UI offers no free
+percentage input.
+
+**Where it shows.** Creation (Résumé step) and editing: a collapsed, secondary « Réduction » row.
+Appointment Details: `Prestations` (gross) → `Réduction -20 %  -20,00 €` → `Total à encaisser`; the
+discount line does not exist without a discount. Checkout sheet: the same line above « Total attendu ».
+Agenda cards never show discount pricing.
+
 ---
 
 # 16. Appointment Overlap
@@ -932,10 +1001,16 @@ feeds both the Appointment Details ticket (`Total à encaisser`) and the checkou
 two can never disagree:
 
 ```text
-servicesCents      = Σ AppointmentItem snapshot prices
+servicesCents      = Σ AppointmentItem snapshot prices                       (the GROSS services amount)
+discountCents      = what the Appointment discount takes off the services    (0 without a discount, §15.3)
 productsCents      = Σ SaleItem snapshot lines of every Sale where sale.appointmentId === appointment.id
-expectedTotalCents = servicesCents + productsCents
+expectedTotalCents = servicesCents − discountCents + productsCents
 ```
+
+Without a discount `discountCents = 0` and the expected total is exactly what it was before discounts
+existed. The checkout sheet prefills from this value, so a `100 €` Appointment with `20 %` is checked out —
+and lands in the Cash Register — as `80 €`. An Appointment checked out before it had a discount is never
+recalculated: the Cash Register follows its recorded payment alone.
 
 Integer cents, snapshots only: the current Service catalog and the current Product catalog are never consulted,
 so later catalog price changes leave historical tickets untouched. A Sale of the same Client without the
@@ -957,8 +1032,10 @@ checkout already recorded that money (services 75 € + linked products 20 € r
 115 €). Each payment is grouped by the device-local civil day or calendar month of its own `paidAt` — never
 from status alone, from the Client `Total dépensé` metric, or from Sale snapshot totals. Totals are never stored.
 
-Client activity keeps its existing semantics: `Total dépensé` remains the sum of AppointmentItem snapshot
-prices of `COMPLETED` Appointments, independent of any recorded payment.
+Client activity keeps its existing semantics: `Total dépensé` remains the services total of `COMPLETED`
+Appointments from their snapshots, independent of any recorded payment — NET of the Appointment discount
+(§15.3), so a `100 €` Appointment with `20 %` counts `80 €`. An Appointment without a discount counts
+exactly the sum of its item snapshot prices, as before.
 
 ---
 
@@ -1124,6 +1201,8 @@ overlap calculation without cancellation/no-show
 manual completion eligibility
 manual checkout (card / cash / mixed, invalid amounts, eligibility)
 payment correction (split changes, status and paidAt preserved)
+appointment discount (percentage half-up cent rounding, fixed clamping, never negative,
+  services only, terminal appointments frozen, snapshot prices untouched)
 automatic completion without payment
 cash register day / month derivation with local civil dates
 deletion guard (payment, linked Sale)

@@ -59,6 +59,7 @@ schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v
                      v6 (sales payment columns), v7 (sync_outbox, sync_state),
                      v8 (price_cents / unit_price_cents replace the euro REAL price columns),
                      v9 (clients.notes),
+                     v10 (appointments.discount_percent, appointments.discount_amount_cents),
                      SOURIS_TABLES, BUSINESS_SCOPED_TABLES, SYNC_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
@@ -81,7 +82,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
 Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
@@ -99,7 +100,9 @@ services            id PK, business_id, name, type, price_cents (v8, CHECK >= 0)
 service_phases      (service_id FK→services CASCADE, position) PK, id, name, duration_minutes, requires_staff
 appointments        id PK, business_id, client_id, staff_member_id, start_at, status, notes?,
                     cancelled_at?, cancelled_by?, cancellation_reason?, no_show_recorded_at?,
-                    paid_at? (v5), card_amount_cents? (v5, CHECK >= 0), cash_amount_cents? (v5, CHECK >= 0)
+                    paid_at? (v5), card_amount_cents? (v5, CHECK >= 0), cash_amount_cents? (v5, CHECK >= 0),
+                    discount_percent? (v10, CHECK 1–50), discount_amount_cents? (v10, CHECK >= 1,
+                    never together with discount_percent)
 appointment_items   (appointment_id FK→appointments CASCADE, id) PK, item_order, service_id,
                     service_option_id?, service_name, service_type, price_cents (v8, CHECK >= 0)
 appointment_phases  (appointment_id, appointment_item_id, position) PK
@@ -196,6 +199,41 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v10 — Appointment discount
+
+```text
+ALTER TABLE appointments ADD COLUMN discount_percent INTEGER
+  CHECK (discount_percent IS NULL OR discount_percent BETWEEN 1 AND 50);
+ALTER TABLE appointments ADD COLUMN discount_amount_cents INTEGER
+  CHECK (discount_amount_cents IS NULL OR (discount_amount_cents >= 1 AND discount_percent IS NULL));
+```
+
+Purely additive: two nullable integer columns, no default, no backfill. At most ONE is set — a whole
+percentage (1–50, the same bound as the domain, the Supabase CHECK and the sync validation), or a fixed amount in integer cents (`docs/domain/APPOINTMENTS.md` §15.3); both NULL is
+"no discount". An existing v9 database goes `v9 → v10` in one transaction; every Appointment keeps its
+row, `rowid` order, id, status, payment, items and phases byte for byte and simply has no discount —
+no wipe, no reseed (`seed_version` stays), no table recreated. The migration writes NOTHING to
+`sync_outbox` or `sync_state`: no Appointment changed, so nothing is re-pushed.
+
+No discounted total is stored. `appointment_items.price_cents` is never touched by a discount; gross,
+applied discount and net stay derived by the domain (`getAppointmentServicesTotal`), so existing
+Appointments keep exactly their financial results.
+
+The store maps the pair to `appointment.discount` (`PERCENT` / `FIXED` / absent) and refuses an
+invalid discount before any SQL runs. `insertAppointment` / `updateAppointment` write the pair with the
+rest of the row; `updateAppointmentDiscount` sets, changes or clears it in ONE transaction guarded by
+the stored status (`SCHEDULED` / `CONFIRMED` / `IN_PROGRESS`) — a terminal Appointment raises
+`AppointmentDiscountConflictError` and nothing is written. Every discount write marks the
+`APPOINTMENT` aggregate in the outbox inside the same transaction; there is no separate discount sync.
+
+Covered by `appointment-discount-migration.test.ts` — a genuine schema-v9 fixture (an upcoming and a
+paid Appointment with items and phases, an acknowledged `sync_state` row and a pending `sync_outbox`
+entry): version, untouched raw rows, untouched sync bookkeeping, untouched definitions of every other
+table, unchanged expected totals and Cash Register, the CHECKs — and by
+`appointment-discount-store.test.ts` (percentage, fixed, switch, clear, restart, outbox, terminal
+refusal, catalog price change). The remote counterpart is
+`supabase/migrations/20260922120000_add_appointment_discount.sql` (`CLOUD_SYNC.md` §19).
 
 ### Schema v9 — Client notes
 

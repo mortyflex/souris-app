@@ -60,6 +60,7 @@ describe('Appointment expected total', () => {
   it('adds service snapshot prices and every linked Sale snapshot as exact cents', () => {
     expect(getAppointmentExpectedTotal(appointment, sales)).toEqual({
       servicesCents: 8000,
+      discountCents: 0,
       productsCents: 3500,
       expectedTotalCents: 11500,
     });
@@ -72,6 +73,7 @@ describe('Appointment expected total', () => {
     ]);
     expect(getAppointmentExpectedTotal(appointment, [unrelatedForClient, standalone, otherAppointment])).toEqual({
       servicesCents: 8000,
+      discountCents: 0,
       productsCents: 0,
       expectedTotalCents: 8000,
     });
@@ -81,6 +83,7 @@ describe('Appointment expected total', () => {
     expect(getAppointmentExpectedTotal(appointment, []).expectedTotalCents).toBe(8000);
     expect(getAppointmentExpectedTotal({ ...appointment, items: [] }, [])).toEqual({
       servicesCents: 0,
+      discountCents: 0,
       productsCents: 0,
       expectedTotalCents: 0,
     });
@@ -94,7 +97,7 @@ describe('Appointment expected total', () => {
     );
 
     expect(before.expectedTotalCents - after.expectedTotalCents).toBe(1500);
-    expect(after).toEqual({ servicesCents: 8000, productsCents: 2000, expectedTotalCents: 10000 });
+    expect(after).toEqual({ servicesCents: 8000, discountCents: 0, productsCents: 2000, expectedTotalCents: 10000 });
   });
 
   it('reads snapshots only — catalog Product or Service price changes have no effect', () => {
@@ -124,6 +127,7 @@ describe('Appointment expected total', () => {
     expect(getSaleTotalCents(fractional)).toBe(87);
     expect(getAppointmentExpectedTotal(priced, [fractional])).toEqual({
       servicesCents: 7529,
+      discountCents: 0,
       productsCents: 87,
       expectedTotalCents: 7616,
     });

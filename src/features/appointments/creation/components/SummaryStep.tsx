@@ -6,7 +6,9 @@
 //   2. Rendez-vous      → Changer l'horaire (inline ±5 minute control)
 //   3. Prestations      → stacked sortable accordion editor (snapshot-only
 //                          price and phase-duration adjustments)
-//   4. Total            → read-only final summary, CTA lives in the footer
+//   4. Total            → the optional « Réduction » control and the read-only
+//                          final summary (Prestations / Réduction / Total when
+//                          a discount is set), CTA lives in the footer
 //
 // Every value comes from the draft snapshot (adjusted prices and durations
 // included), never from stale catalog defaults. No data point is repeated
@@ -21,7 +23,10 @@ import Animated, {
   useReducedMotion,
 } from 'react-native-reanimated';
 
+import type { AppointmentDiscount } from '@/domain/appointments';
+import { formatDiscountAmount, formatDiscountLabel } from '@/features/appointments/presentation';
 import { haptics } from '@/shared/lib/haptics';
+import { formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
@@ -36,6 +41,7 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
+import { AppointmentDiscountEditor } from '../../editor/components/AppointmentDiscountEditor';
 import { SortableDraftList, type SortableDraftEntry } from '../../editor/components/SortableDraftList';
 import type { StartTimeOfDay } from '../draft-start';
 import type { AppointmentCreationSummary } from '../presentation';
@@ -53,6 +59,8 @@ interface SummaryStepProps {
   readonly clientName: string;
   readonly startAt: Date;
   readonly summary: AppointmentCreationSummary;
+  readonly discount: AppointmentDiscount | undefined;
+  readonly onDiscountChange: (discount: AppointmentDiscount | undefined) => void;
   readonly entries: readonly SortableDraftEntry[];
   readonly expandedDraftId: string | null;
   readonly onToggleExpanded: (draftKey: string) => void;
@@ -75,6 +83,8 @@ export function SummaryStep({
   clientName,
   startAt,
   summary,
+  discount,
+  onDiscountChange,
   entries,
   expandedDraftId,
   onToggleExpanded,
@@ -203,6 +213,23 @@ export function SummaryStep({
             />
           )}
         </View>
+        <AppointmentDiscountEditor
+          discount={discount}
+          onChange={onDiscountChange}
+          servicesTotal={summary.servicesTotal}
+        />
+        {discount && (
+          <View style={styles.discountBreakdown} testID="creation-discount-breakdown">
+            <BreakdownRow
+              label="Prestations"
+              value={formatEuroCents(summary.servicesTotal.grossCents)}
+            />
+            <BreakdownRow
+              label={formatDiscountLabel(discount)}
+              value={formatDiscountAmount(summary.servicesTotal.discountCents)}
+            />
+          </View>
+        )}
         <View style={styles.finalSummary}>
           <View>
             <AppText variant="metadata" style={styles.finalLabel}>
@@ -216,8 +243,12 @@ export function SummaryStep({
             <AppText variant="metadata" style={styles.finalLabel}>
               Total
             </AppText>
-            <AppText variant="summaryValue" style={styles.totalValue}>
-              {formatCreationPrice(summary.totalPrice)}
+            <AppText
+              variant="summaryValue"
+              style={styles.totalValue}
+              testID="creation-total"
+            >
+              {formatCreationPrice(summary.servicesTotal.netCents / 100)}
             </AppText>
           </View>
         </View>
@@ -250,6 +281,20 @@ function BlockAction({
         {label}
       </AppText>
     </Pressable>
+  );
+}
+
+/** One restrained « label — amount » line of the discount breakdown. */
+function BreakdownRow({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <View style={styles.breakdownRow}>
+      <AppText variant="metadata" style={styles.timeLabel}>
+        {label}
+      </AppText>
+      <AppText variant="metadata" style={styles.timeValue}>
+        {value}
+      </AppText>
+    </View>
   );
 }
 
@@ -320,6 +365,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: spacing.base,
   },
+  discountBreakdown: { paddingHorizontal: spacing.base },
+  breakdownRow: { alignItems: 'center', flexDirection: 'row', minHeight: 28 },
   finalLabel: { color: foregroundSoft },
   finalValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
   priceColumn: { alignItems: 'flex-end' },

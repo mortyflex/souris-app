@@ -1,8 +1,11 @@
 import {
   getAppointmentEndAt,
+  getAppointmentServicesTotal,
   getElapsedDurationMinutes,
   getProcessingDurationMinutes,
   getStaffActiveDurationMinutes,
+  type AppointmentDiscount,
+  type AppointmentServicesTotal,
 } from '@/domain/appointments';
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
@@ -19,7 +22,10 @@ export interface AppointmentCreationSummary {
   readonly elapsedMinutes: number;
   readonly activeMinutes: number;
   readonly processingMinutes: number;
+  /** Gross services total in euros: the draft prices, before any discount. */
   readonly totalPrice: number;
+  /** Gross → discount → net in cents, from the ONE domain derivation. */
+  readonly servicesTotal: AppointmentServicesTotal;
 }
 
 /**
@@ -30,23 +36,27 @@ export interface AppointmentCreationSummary {
 export function getAppointmentCreationSummary(
   startAt: Date,
   items: readonly BuildAppointmentItemInput[],
+  discount?: AppointmentDiscount,
 ): AppointmentCreationSummary {
   const preview = buildAppointment({
     appointmentId: 'preview-appointment',
     businessId: 'preview-business',
     clientId: 'preview-client',
+    discount,
     itemIds: items.map((_, index) => `preview-item-${index}`),
     items,
     staffMemberId: 'preview-staff',
     startAt,
   });
+  const servicesTotal = getAppointmentServicesTotal(preview);
 
   return {
     activeMinutes: getStaffActiveDurationMinutes(preview),
     elapsedMinutes: getElapsedDurationMinutes(preview),
     endAt: getAppointmentEndAt(preview),
     processingMinutes: getProcessingDurationMinutes(preview),
-    totalPrice: preview.items.reduce((total, item) => total + item.price, 0),
+    servicesTotal,
+    totalPrice: servicesTotal.grossCents / 100,
   };
 }
 

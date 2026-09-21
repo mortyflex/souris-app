@@ -481,7 +481,7 @@ export function AppointmentDetailsScreen({
           onDeleteLine={deleteProductLine}
         />
 
-        <AppointmentTicketTotal expectedTotal={expectedTotal} />
+        <AppointmentTicketTotal discount={appointment.discount} expectedTotal={expectedTotal} />
 
         {appointment.notes && (
           <View style={styles.notes}>
@@ -576,6 +576,7 @@ export function AppointmentDetailsScreen({
       </ScrollView>
 
       <AppointmentCheckoutSheet
+        discount={appointment.discount}
         expectation={expectedTotal}
         initialAmounts={checkoutMode === "edit" ? appointment.payment : undefined}
         mode={checkoutMode ?? "checkout"}

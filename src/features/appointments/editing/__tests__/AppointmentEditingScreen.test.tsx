@@ -147,6 +147,10 @@ function SessionProbe() {
           )
           .join('|')}
       </Text>
+      <Text testID="session-discount">{JSON.stringify(entry?.appointment.discount ?? null)}</Text>
+      <Text testID="session-catalog-edit-discount">
+        {JSON.stringify(catalogEntry?.appointment.discount ?? null)}
+      </Text>
       <Text testID="session-start-at">{entry?.appointment.startAt.getTime() ?? ''}</Text>
       <Text testID="session-client-id">{entry?.appointment.clientId ?? ''}</Text>
       <Text testID="session-catalog-edit-items">
@@ -224,6 +228,31 @@ function SessionProbe() {
               startAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
               status: 'SCHEDULED',
               items: [itemA, itemB],
+            },
+          });
+        }}
+      />
+      <Pressable
+        testID="add-discounted-appointment"
+        onPress={() => {
+          if (!brushing) return;
+          addAppointment({
+            appointment: {
+              id: 'catalog-edit-appointment',
+              businessId: 'fixture-business',
+              clientId: 'client-agenda-sofia',
+              staffMemberId: 'staff-amelie',
+              startAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+              status: 'SCHEDULED',
+              items: [
+                createAppointmentItemSnapshot({
+                  id: 'catalog-edit-item',
+                  order: 0,
+                  service: brushing,
+                  price: 100,
+                }),
+              ],
+              discount: { type: 'PERCENT', percent: 20 },
             },
           });
         }}
@@ -959,5 +988,80 @@ describe('AppointmentEditingScreen', () => {
       'item-sofia:Balayage:95:sofia-application=35,sofia-processing=0,sofia-finish=30',
     );
     expect(view.getByTestId('catalog-brushing-1').props.children).toBe('20:30:true');
+  });
+
+  it('adds a discount as a draft: nothing is saved until « Enregistrer », then the Appointment carries it and its prices are untouched', async () => {
+    const view = await renderEditor();
+    const itemsBefore = view.getByTestId('session-items').props.children;
+
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
+    expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('appointment-discount-toggle'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduction de 20 pour cent'));
+    });
+
+    // Draft only: the session is unchanged, the form is dirty.
+    expect(view.getByTestId('session-discount').props.children).toBe('null');
+    expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('save-appointment-edit'));
+    });
+
+    expect(view.getByTestId('session-discount').props.children).toBe('{"type":"PERCENT","percent":20}');
+    expect(view.getByTestId('session-items').props.children).toBe(itemsBefore);
+    expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it('hydrates an existing discount, lets it change to a fixed amount, and saves the change', async () => {
+    const view = await renderEditor();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-discounted-appointment'));
+    });
+    await act(async () => {
+      view.rerender(editorTree('catalog-edit-appointment'));
+    });
+
+    // Opens expanded on the stored discount; an untouched form is not dirty.
+    expect(view.getByTestId('appointment-discount-preset-PERCENT-20').props.accessibilityState.selected).toBe(true);
+    expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduction en euros'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduction de 15 euros'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('save-appointment-edit'));
+    });
+
+    expect(view.getByTestId('session-catalog-edit-discount').props.children).toBe(
+      '{"type":"FIXED","amountCents":1500}',
+    );
+  });
+
+  it('removes an existing discount with « Aucune réduction » and saves the removal', async () => {
+    const view = await renderEditor();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-discounted-appointment'));
+    });
+    await act(async () => {
+      view.rerender(editorTree('catalog-edit-appointment'));
+    });
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Supprimer la réduction'));
+    });
+    expect(view.getByTestId('session-catalog-edit-discount').props.children).toBe('{"type":"PERCENT","percent":20}');
+    await act(async () => {
+      fireEvent.press(view.getByTestId('save-appointment-edit'));
+    });
+
+    expect(view.getByTestId('session-catalog-edit-discount').props.children).toBe('null');
   });
 });

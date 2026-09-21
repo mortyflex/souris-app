@@ -67,6 +67,10 @@ export interface RemoteAppointmentPayload {
   readonly paid_at: string | null;
   readonly card_amount_cents: number | null;
   readonly cash_amount_cents: number | null;
+  /** Whole percent 1–50, or null. At most one of the two discount fields is set. */
+  readonly discount_percent: number | null;
+  /** Fixed discount in integer cents (>= 1), or null. */
+  readonly discount_amount_cents: number | null;
   readonly items: readonly RemoteAppointmentItemPayload[];
 }
 

@@ -13,8 +13,9 @@
 //   service is deselected;
 // - a client can be created directly from the picker.
 
+import { formatEuros } from '@/shared/lib/money';
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Pressable, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import type { Client } from '@/domain/clients';
 import { createInitialClients } from '@/features/clients/data/initial-clients';
@@ -124,6 +125,7 @@ function SessionProbe() {
     <>
       <Text testID="new-client-id">{createdClient?.id ?? ''}</Text>
       <Text testID="last-appointment-client-id">{newest?.clientId ?? ''}</Text>
+      <Text testID="last-appointment-discount">{JSON.stringify(newest?.discount ?? null)}</Text>
       <Text testID="appointments-probe">
         {appointments
           .map(
@@ -623,6 +625,58 @@ describe('AppointmentCreationScreen', () => {
     expect(view.getByTestId('catalog-brushing-1').props.children).toBe(catalogBefore);
     const appointments = view.getByTestId('appointments-probe').props.children as string;
     expect(appointments).toContain('Brushing 1:25:35');
+  });
+
+  it('applies an optional discount from the Résumé: gross, discount and total are shown, the snapshot price is untouched', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+    await searchService(view, 'brushing 1');
+    await selectService(view, 'Brushing 1');
+    await continueToSummary(view);
+
+    // Secondary by default: one collapsed row, no breakdown, the plain total.
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
+    expect(view.queryByTestId('creation-discount-breakdown')).toBeNull();
+    expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(20));
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('appointment-discount-toggle'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduction de 50 pour cent'));
+    });
+
+    expect(view.getByTestId('creation-discount-breakdown')).toBeTruthy();
+    expect(view.getByText('Réduction -50 %')).toBeTruthy();
+    expect(view.getByText(`-${formatEuros(10)}`)).toBeTruthy();
+    expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(10));
+    // The amount to charge outweighs the two breakdown lines above it.
+    const total = StyleSheet.flatten(view.getByTestId('creation-total').props.style);
+    const discountLine = StyleSheet.flatten(view.getByText(`-${formatEuros(10)}`).props.style);
+    expect(total.fontSize).toBeGreaterThan(discountLine.fontSize as number);
+    expect(total.fontFamily).not.toBe(discountLine.fontFamily);
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    expect(view.getByTestId('last-appointment-discount').props.children).toBe('{"type":"PERCENT","percent":50}');
+    expect(view.getByTestId('appointments-probe').props.children).toContain('Brushing 1:20:30');
+    expect(view.getByTestId('catalog-brushing-1').props.children).toBe('20:service-brushing-brushing-1-phase=30');
+  });
+
+  it('creates an Appointment without a discount exactly as before', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+    await searchService(view, 'brushing 1');
+    await selectService(view, 'Brushing 1');
+    await continueToSummary(view);
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    expect(view.getByTestId('last-appointment-discount').props.children).toBe('null');
   });
 
   it('abandoning creation leaves the catalog unchanged', async () => {

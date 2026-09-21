@@ -1,6 +1,8 @@
 import {
   createAppointmentItemSnapshot,
+  setAppointmentDiscount,
   type Appointment,
+  type AppointmentDiscount,
   type ServiceSnapshotSource,
 } from '@/domain/appointments';
 
@@ -26,6 +28,8 @@ export interface BuildAppointmentInput {
   readonly startAt: Date;
   readonly items: readonly BuildAppointmentItemInput[];
   readonly itemIds: readonly string[];
+  /** Optional discount of the whole Appointment; item prices are untouched. */
+  readonly discount?: AppointmentDiscount;
 }
 
 /**
@@ -54,7 +58,7 @@ export function buildAppointment(input: BuildAppointmentInput): Appointment {
     }
   }
 
-  return {
+  const appointment: Appointment = {
     id: input.appointmentId,
     businessId: input.businessId,
     clientId: input.clientId,
@@ -71,4 +75,6 @@ export function buildAppointment(input: BuildAppointmentInput): Appointment {
       }),
     ),
   };
+  // THE domain discount action validates the discount (throws when invalid).
+  return setAppointmentDiscount(appointment, input.discount);
 }

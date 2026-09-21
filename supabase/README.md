@@ -21,7 +21,16 @@ migrations/20260917120000_create_sync_push_functions.sql        (Cloud Sync V1C 
                                                                  nothing applies it automatically)
 migrations/20260917200000_create_sync_pull_function.sql         (Cloud Sync V1D — must be applied BY HAND,
                                                                  after the V1C one)
+migrations/20260921120000_add_client_notes.sql                  (Client notes — BY HAND; replaces both sync
+                                                                 RPCs in place, CLOUD_SYNC.md §18)
+migrations/20260922120000_add_appointment_discount.sql          (Appointment discount — BY HAND, after the
+                                                                 notes one; replaces both sync RPCs in place,
+                                                                 CLOUD_SYNC.md §19. Apply BEFORE shipping the
+                                                                 build that writes discounts)
 ```
+
+The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
+they rewrite no row.
 
 Check the dashboard (Database › Migrations, or the presence of the tables / functions) before
 running a file: this list does not track what the project already has. Until the V1C migration is

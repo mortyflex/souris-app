@@ -25,6 +25,7 @@
 // Errors name the offending FIELD PATH, never a value: a remote row can hold
 // a client's name or phone number.
 
+import { MAX_DISCOUNT_PERCENT } from '@/domain/appointments';
 import { parseBirthdayKey } from '@/domain/clients';
 
 import type { SyncAggregateType } from './aggregate';
@@ -146,6 +147,28 @@ function payment(
   return { paid_at: paidAt, card_amount_cents: card, cash_amount_cents: cash };
 }
 
+/**
+ * The Appointment discount: a whole percent 1–50 OR fixed cents >= 1, never
+ * both (the remote CHECK). Missing keys — a row pulled through functions that
+ * predate the discount — read as "no discount".
+ */
+function discount(
+  row: Json,
+  field: string,
+): Pick<RemoteAppointmentPayload, 'discount_percent' | 'discount_amount_cents'> {
+  const percent =
+    row.discount_percent === null || row.discount_percent === undefined
+      ? null
+      : integer(row, 'discount_percent', field, 1);
+  const amountCents =
+    row.discount_amount_cents === null || row.discount_amount_cents === undefined
+      ? null
+      : integer(row, 'discount_amount_cents', field, 1);
+  if (percent !== null && percent > MAX_DISCOUNT_PERCENT) fail(`${field}.discount_percent`);
+  if (percent !== null && amountCents !== null) fail(`${field}.discount_amount_cents`);
+  return { discount_percent: percent, discount_amount_cents: amountCents };
+}
+
 /** Parses a child list and refuses a repeated id or position inside the parent. */
 function children<Child extends { readonly id: string }>(
   value: unknown,
@@ -247,6 +270,7 @@ function parseAppointment(row: Json, field: string): RemoteAppointmentPayload {
     cancellation_reason: reason,
     no_show_recorded_at: optionalInstant(row, 'no_show_recorded_at', field),
     ...payment(row, field),
+    ...discount(row, field),
     items: children(row.items, `${field}.items`, (item) => item.item_order, parseAppointmentItem),
   };
 }

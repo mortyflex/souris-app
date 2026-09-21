@@ -101,7 +101,8 @@ service_phases      (business_id, service_id, id) PK, position (unique per servi
                     name, duration_minutes >= 0, requires_staff
 appointments        (business_id, id) PK, client_id → clients, staff_member_id, start_at, status,
                     notes?, cancelled_at?, cancelled_by?, cancellation_reason?, no_show_recorded_at?,
-                    paid_at?, card_amount_cents?, cash_amount_cents?, + sync metadata
+                    paid_at?, card_amount_cents?, cash_amount_cents?,
+                    discount_percent?, discount_amount_cents? (§19), + sync metadata
 appointment_items   (business_id, appointment_id, id) PK, item_order (unique per appointment, deferrable),
                     service_id (NO FK), service_option_id?, service_name, service_type, price_cents
 appointment_phases  (business_id, appointment_id, appointment_item_id, id) PK, position (unique per item,
@@ -1590,3 +1591,64 @@ older-build payload preserving the note, CONFLICT on a stale version, `anon` and
 and the unchanged V1C push checks. Local coverage: `sync-pull-restore.test.ts` (« Client birthday +
 notes »: local create → cloud, local edit → cloud, cloud pull → local, fresh-device restore,
 clearing both values, NULL-only Clients).
+
+---
+
+## 19. Appointment discount — two additive APPOINTMENT columns (schema v10)
+
+The Appointment discount (`docs/domain/APPOINTMENTS.md` §15.3) adds TWO columns to the existing
+`APPOINTMENT` aggregate — no new aggregate type, no new sync mechanism, no new conflict rule:
+
+```text
+supabase/migrations/20260922120000_add_appointment_discount.sql
+
+alter table public.appointments add column if not exists discount_percent integer        1–50, nullable
+alter table public.appointments add column if not exists discount_amount_cents integer   >= 1, nullable
+constraint appointments_discount_check                                                   never both
+create or replace function public.sync_push_aggregate(...)          APPOINTMENT branch reads / writes them
+create or replace function public.sync_pull_business_aggregates(..) appointments[] objects carry them
+```
+
+- **What travels.** The professional's choice only — a whole percentage OR fixed integer cents. No
+  discounted total is stored or synced: gross → discount → net stays derived on every device from the
+  same item snapshots, so two devices can never disagree on an amount.
+- **Non-destructive.** No row is rewritten, so no `updated_at` / `sync_version` moves and no device
+  re-pulls anything because of the migration. No table is recreated; ids, tombstones, triggers, RLS
+  policies, grants, `appointment_items.price_cents` and the payment columns are untouched. The generic
+  `sync_aggregate_before_write` trigger already counts a discount edit as ONE meaningful revision and
+  an identical re-push as none.
+- **Functions replaced in place.** `create or replace` with identical signatures keeps the EXECUTE
+  grants, revokes, comments, `SECURITY INVOKER` and `search_path = ''`. The bodies are the §18 ones
+  with only the discount differences; every other aggregate is byte-identical.
+- **Payload.** `RemoteAppointmentPayload.discount_percent` / `.discount_amount_cents`
+  (`number | null`). A build that knows the discount ALWAYS sends BOTH keys — one value and one
+  `null`, or two `null`s — so removing a discount is explicit and follows the ordinary
+  `sync_version` conflict contract (§9). The pair is replaced together, so switching from a
+  percentage to a fixed amount never trips the one-of CHECK.
+- **Older app builds.** A build that predates the discount sends neither key. The push then keeps
+  the stored pair (`case when p_payload ? 'discount_percent' or p_payload ? 'discount_amount_cents'
+  …`), so an older device moving an Appointment never erases a discount set by a newer one. Such a
+  build ignores the two extra keys of the pull, and its local schema (≤ v9) has no such columns.
+  **Limit:** that older build does not know the discount, so if IT checks the Appointment out, its
+  sheet proposes the gross total. Ship the new build to every device before relying on discounts.
+- **Older remote.** A pulled Appointment row without the keys parses as "no discount" (§16.2) —
+  never a validation failure. An out-of-range value (a percentage outside 1–50, the domain's
+  `MAX_DISCOUNT_PERCENT`; cents below 1), or both values set, is refused by the snapshot validation
+  before any local write — pull and restore alike.
+- **Pull, restore, tombstones.** Unchanged: `remote-apply.ts` writes the two columns with the rest of
+  the row, so an incremental pull and a fresh-device restore carry the discount; a tombstone carries
+  no payload.
+- **Order of deployment: apply the migration BEFORE shipping the build that writes discounts.**
+  Against the previous functions, `jsonb_to_record` silently ignores the unknown keys: the push is
+  acknowledged while the discount never reaches the cloud, and a later restore would not contain it.
+  The migration is applied by hand, like every Souris migration.
+
+Verified in the out-of-repo PGlite harness (§13 policy): the migration applied on a POPULATED database
+written by the previous functions — existing Appointments and items byte-identical (ids, payment,
+`sync_version`, `created_at`, `updated_at`, `price_cents`), both columns NULL everywhere, re-run
+harmless, an incremental pull after it returns nothing — then create with a discount, add, identical
+re-push, switch percentage → fixed, the older-build payload preserving the discount, explicit removal,
+CONFLICT on a stale version, the three CHECKs, `anon` and non-owner refusals, tombstones, and the
+unchanged push regression checks. Local coverage: `sync-pull-restore.test.ts` (« Appointment discount »:
+create → cloud, edit → cloud, removal → cloud, cloud pull → local, fresh-device restore, NULL-only
+Appointments, rows without the keys, invalid remote values).

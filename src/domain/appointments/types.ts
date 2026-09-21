@@ -114,6 +114,22 @@ export interface AppointmentPayment {
   readonly cashAmountCents: number;
 }
 
+/**
+ * The optional discount of the WHOLE Appointment, stored as what the
+ * professional chose — never as a pre-computed total. Item snapshot prices
+ * are untouched; the applied cents are derived (`getAppointmentDiscountCents`).
+ *
+ * PERCENT — a whole number of percent (1–50).
+ * FIXED   — an amount in INTEGER CENTS; the applied amount never exceeds the
+ *           services total.
+ *
+ * No origin or reason is stored: a discount offered for a birthday is this
+ * same generic discount.
+ */
+export type AppointmentDiscount =
+  | { readonly type: "PERCENT"; readonly percent: number }
+  | { readonly type: "FIXED"; readonly amountCents: number };
+
 export interface Appointment {
   readonly id: string;
   readonly businessId: string;
@@ -123,6 +139,8 @@ export interface Appointment {
   readonly status: AppointmentStatus;
   readonly items: readonly AppointmentItem[];
   readonly notes?: string;
+  /** Absent = no discount. */
+  readonly discount?: AppointmentDiscount;
   readonly cancellation?: AppointmentCancellation;
   readonly noShow?: AppointmentNoShow;
   readonly payment?: AppointmentPayment;

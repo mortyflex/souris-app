@@ -68,8 +68,8 @@ describe('schema v5 migration on an existing v4 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(9);
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
+    expect(readSchemaVersion(db)).toBe(10);
+    expect(CURRENT_SCHEMA_VERSION).toBe(10);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(countRows(db, 'clients')).toBe(1);
@@ -111,7 +111,7 @@ describe('schema v5 migration on an existing v4 database', () => {
     const db = openSchemaV4Database();
     migrateDatabase(db);
 
-    expect(migrateDatabase(db)).toBe(9);
+    expect(migrateDatabase(db)).toBe(10);
     expect(readSeedVersion(db)).toBe(1);
     expect(countRows(db, 'appointments')).toBe(2);
     expect(countRows(db, 'sales')).toBe(1);

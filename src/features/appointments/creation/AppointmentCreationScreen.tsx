@@ -15,7 +15,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import type { Service } from '@/domain/appointments';
+import type { AppointmentDiscount, Service } from '@/domain/appointments';
 import { getClientDisplayName, type Client } from '@/domain/clients';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
@@ -94,6 +94,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const [addClientVisible, setAddClientVisible] = useState(false);
   const [selectedDrafts, setSelectedDrafts] = useState<readonly SelectedServiceDraft[]>([]);
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
+  const [draftDiscount, setDraftDiscount] = useState<AppointmentDiscount>();
   const [draftStartAt, setDraftStartAt] = useState<Date>(() =>
     stepStartAt(new Date(startAt), 0, startTimeBounds),
   );
@@ -109,7 +110,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
 
   const summary =
     selectedDrafts.length > 0
-      ? getAppointmentCreationSummary(draftStartAt, summaryItems)
+      ? getAppointmentCreationSummary(draftStartAt, summaryItems, draftDiscount)
       : undefined;
 
   const canContinue =
@@ -188,6 +189,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       appointmentId,
       businessId: business.id,
       clientId: selectedClient.id,
+      discount: draftDiscount,
       itemIds: selectedDrafts.map((_, index) => createAppointmentItemId(appointmentId, index)),
       items: summaryItems,
       staffMemberId,
@@ -265,6 +267,8 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
       {step === 2 && selectedClient && summary && (
         <SummaryStep
           clientName={getClientDisplayName(selectedClient)}
+          discount={draftDiscount}
+          onDiscountChange={setDraftDiscount}
           entries={selectedDrafts.map((draft) => ({ draft }))}
           expandedDraftId={expandedDraftId}
           startAt={draftStartAt}

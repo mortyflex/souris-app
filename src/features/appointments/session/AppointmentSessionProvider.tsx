@@ -15,9 +15,11 @@ import {
   checkoutAppointment as recordCheckout,
   removeAppointmentItem as dropItem,
   reorderAppointmentItemsByIds as arrangeItems,
+  setAppointmentDiscount as applyDiscount,
   updateAppointmentItemPhaseDurations as adjustItemPhaseDurations,
   updateAppointmentPayment as correctPayment,
   type Appointment,
+  type AppointmentDiscount,
   type AppointmentPaymentAmounts,
   type AppointmentPhaseDurationUpdate,
 } from '@/domain/appointments';
@@ -31,6 +33,7 @@ import {
   removeAppointmentItem as persistItemRemoval,
   reorderAppointmentItems as persistItemOrder,
   updateAppointment as persistAppointment,
+  updateAppointmentDiscount as persistDiscount,
   updateAppointmentItemPhaseDurations as persistItemPhaseDurations,
   updateAppointmentPayment as persistPaymentCorrection,
 } from '@/persistence/stores/appointments';
@@ -221,6 +224,23 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     replaceEntry(next);
   };
 
+  // Discount: the domain validates the discount and the editing rule, ONE
+  // transaction writes the two columns after re-verifying the stored status,
+  // and state changes only after the commit. Item snapshot prices are never
+  // touched; every total stays derived.
+  const setAppointmentDiscount = (
+    appointmentId: string,
+    discount: AppointmentDiscount | undefined,
+  ) => {
+    const appointment = requireAppointment(appointmentId, 'setAppointmentDiscount');
+    if (!canEditAppointment(appointment)) {
+      throw new Error(`setAppointmentDiscount: Appointment "${appointmentId}" is no longer editable`);
+    }
+    const next = applyDiscount(appointment, discount);
+    persistDiscount(database, appointmentId, discount);
+    replaceEntry(next);
+  };
+
   // Checkout: the domain decides eligibility and builds the next record; ONE
   // transaction then writes status + payment (re-verifying the stored row);
   // state reflects the record only after the commit.
@@ -269,6 +289,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
         updateAppointmentItemTiming,
         reorderAppointmentItems,
         removeAppointmentItem,
+        setAppointmentDiscount,
         checkoutAppointment,
         updateAppointmentPayment,
         getAppointmentDeletionEligibility,

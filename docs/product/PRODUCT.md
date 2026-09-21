@@ -467,7 +467,8 @@ Balayage                                 1 h 25
 ### Checkout (« Encaisser »)
 
 Tapping `Encaisser` opens the canonical Souris sheet `ENCAISSEMENT — Encaisser le rendez-vous` with the keyboard
-closed. It shows a compact expectation (`Prestations`, `Produits` when linked Sales exist, `Total attendu`) as a
+closed. It shows a compact expectation (`Prestations`, `Réduction` when the Appointment has a discount — §15,
+`Produits` when linked Sales exist, `Total attendu`) as a
 helper, then two payment rows — `Carte` and `Espèces` — with editable French decimal amounts (`75`, `75,50`)
 normalized to integer cents, a `Reste …` shortcut that fills the remaining expected amount with one explicit tap,
 `Total encaissé`, and a restrained `Écart : ±…` when the received total differs. Card only, cash only, or a mix
@@ -475,8 +476,8 @@ are all valid; a positive total is required unless the appointment costs nothing
 status and the payment in one transaction; the sheet closes and Details shows the `Encaissement` summary.
 `Modifier l’encaissement` reopens the same sheet prefilled to correct the split without creating a second record.
 
-`Total attendu` in the sheet and `TOTAL À ENCAISSER` in Details are the SAME derivation (service snapshots plus
-linked Product Sales, `docs/domain/APPOINTMENTS.md` §25b): for one Appointment they never disagree, before or
+`Total attendu` in the sheet and `TOTAL À ENCAISSER` in Details are the SAME derivation (service snapshots minus
+the Appointment discount, plus linked Product Sales, `docs/domain/APPOINTMENTS.md` §25b): for one Appointment they never disagree, before or
 after a Revente is added or deleted. When the received amount differs from the expected total — a discount, a tip,
 or a Revente deleted after checkout — the `Encaissement` summary shows a quiet `Écart : ±…` line; the recorded
 payment itself is never changed automatically.
@@ -607,7 +608,7 @@ is no Souris history.
 Activity rules are explicit: completed and no-show counts come from their status; `Annulations` counts only
 `CANCELLED` appointments whose recorded actor is `CLIENT`. A `BUSINESS` cancellation remains visible in history as
 `Annulé par le salon` but does not count against the Client. `Total dépensé` is the sum of AppointmentItem snapshot
-prices for COMPLETED appointments only. History rows open the existing Appointment Details. Permanently deleting an
+prices for COMPLETED appointments only, net of each Appointment's discount (§15). History rows open the existing Appointment Details. Permanently deleting an
 Appointment removes its history row and all derived count or spending contributions without mutating the Client.
 
 ### Client lifecycle — archive, reactivate, permanent deletion
@@ -971,6 +972,40 @@ for an existing service is explicitly overridden by `docs/design/DESIGN_OVERRIDE
 ---
 
 ## 15. Remises
+
+### Implemented — manual discount on an Appointment
+
+The professional can apply ONE optional discount to a whole Appointment, as a normal professional action:
+
+- a percentage — quick choices `5 10 15 20 25 30 35 40 45 50` (%); 50 % is the maximum Souris accepts;
+- or a fixed amount — quick choices `5 € 10 € 15 € 20 € 25 € 30 € 35 € 40 € 45 € 50 €`.
+
+It lives in a deliberately secondary, collapsed `Réduction` row of the Résumé step (creation) and of
+« Modifier le rendez-vous » (editing): open it, pick `%` or `€`, tap a value; `Aucune réduction` removes it.
+In editing it is part of the draft and is saved with « Enregistrer les modifications ».
+
+The ticket always reads **gross → discount → final**:
+
+```text
+Prestations        100,00 €
+Réduction -20 %    -20,00 €        (plain « Réduction » for a fixed amount)
+Total à encaisser   80,00 €
+```
+
+in Appointment Details and in the checkout sheet, whose `Total attendu` is therefore the discounted total — the
+amount that reaches the Caisse once the professional confirms it. Without a discount none of these lines exist
+and every screen is exactly as before. Agenda cards never show discount pricing.
+
+Rules (`docs/domain/APPOINTMENTS.md` §15.3): the service prices of the Appointment are never modified; a
+percentage is rounded to the cent; a fixed amount larger than the services brings the total to `0 €`, never
+below; Products sold during the Appointment are not discounted; the discount can change until the Appointment is
+completed, cancelled or marked absent, then it is frozen with the rest of the ticket. Client `Total dépensé`
+counts the discounted amount.
+
+There is no discount reason, code, campaign or birthday field: a discount granted for any occasion is this
+same manual discount. Birthday celebration and automatic birthday discounts are NOT implemented.
+
+### Future — managed discounts
 
 Simple discounts may eventually be managed under:
 

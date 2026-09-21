@@ -321,6 +321,25 @@ const SCHEMA_V9 = `
 ALTER TABLE clients ADD COLUMN notes TEXT;
 `;
 
+/**
+ * Schema v10 — Appointment discount. Two nullable integer columns, at most
+ * ONE of them set (the second CHECK): a whole percentage (1–50) or a fixed
+ * amount in integer cents. Both NULL means "no discount", which is what
+ * every existing Appointment keeps. Purely additive — no row rewritten, no
+ * wipe, no reseed, no item snapshot price, payment, id or sync bookkeeping
+ * touched (the migration marks nothing in the outbox: nothing changed for
+ * the remote). No discounted total is stored; it stays derived.
+ */
+const SCHEMA_V10 = `
+ALTER TABLE appointments ADD COLUMN discount_percent INTEGER
+  CHECK (discount_percent IS NULL OR discount_percent BETWEEN 1 AND 50);
+ALTER TABLE appointments ADD COLUMN discount_amount_cents INTEGER
+  CHECK (
+    discount_amount_cents IS NULL
+    OR (discount_amount_cents >= 1 AND discount_percent IS NULL)
+  );
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -331,6 +350,7 @@ export const migrations: readonly Migration[] = [
   { version: 7, up: (db) => db.execSync(SCHEMA_V7) },
   { version: 8, up: (db) => db.execSync(SCHEMA_V8) },
   { version: 9, up: (db) => db.execSync(SCHEMA_V9) },
+  { version: 10, up: (db) => db.execSync(SCHEMA_V10) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;

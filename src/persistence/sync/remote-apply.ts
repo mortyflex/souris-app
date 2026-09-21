@@ -170,6 +170,8 @@ function applyAppointment(
     appointment.paid_at,
     appointment.card_amount_cents,
     appointment.cash_amount_cents,
+    appointment.discount_percent,
+    appointment.discount_amount_cents,
   ];
   if (
     !updateScoped(
@@ -177,12 +179,12 @@ function applyAppointment(
       businessId,
       ref,
       'appointments',
-      'client_id = ?, staff_member_id = ?, start_at = ?, status = ?, notes = ?, cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?, no_show_recorded_at = ?, paid_at = ?, card_amount_cents = ?, cash_amount_cents = ?',
+      'client_id = ?, staff_member_id = ?, start_at = ?, status = ?, notes = ?, cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?, no_show_recorded_at = ?, paid_at = ?, card_amount_cents = ?, cash_amount_cents = ?, discount_percent = ?, discount_amount_cents = ?',
       params,
     )
   ) {
     db.runSync(
-      'INSERT INTO appointments (client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at, paid_at, card_amount_cents, cash_amount_cents, id, business_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO appointments (client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at, paid_at, card_amount_cents, cash_amount_cents, discount_percent, discount_amount_cents, id, business_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [...params, ref.aggregateId, businessId],
     );
   }

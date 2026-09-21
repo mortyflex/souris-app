@@ -65,8 +65,8 @@ describe('schema v9 migration on an existing v8 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(9);
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
+    expect(readSchemaVersion(db)).toBe(10);
+    expect(CURRENT_SCHEMA_VERSION).toBe(10);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
 
@@ -105,7 +105,7 @@ describe('schema v9 migration on an existing v8 database', () => {
     const db = openSchemaV8Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(9);
+    expect(migrateDatabase(db)).toBe(10);
     expect(countRows(db, 'clients')).toBe(3);
 
     const felix = loadClients(db).find((client) => client.id === 'client-felix');
@@ -122,17 +122,20 @@ describe('schema v9 migration on an existing v8 database', () => {
     expect(loadClients(db).find((client) => client.id === 'client-lea')?.birthday).toEqual({ month: 2, day: 29 });
   });
 
+  // `appointments` is left out as well: the bootstrap runs every later
+  // migration too, and schema v10 adds the discount columns to it (covered by
+  // appointment-discount-migration.test.ts).
   it('changes no other table definition', () => {
     const db = openSchemaV8Database();
     const tablesBefore = db.getAllSync<{ name: string; sql: string }>(
-      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name != 'clients' ORDER BY name",
+      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('clients', 'appointments') ORDER BY name",
     );
 
     bootstrapPersistence(db, createTestSeed);
 
     expect(
       db.getAllSync<{ name: string; sql: string }>(
-        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name != 'clients' ORDER BY name",
+        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('clients', 'appointments') ORDER BY name",
       ),
     ).toEqual(tablesBefore);
   });

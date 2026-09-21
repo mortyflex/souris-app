@@ -1,4 +1,9 @@
-import { checkoutAppointment, type Appointment } from '../../appointments';
+import {
+  checkoutAppointment,
+  getAppointmentExpectedTotal,
+  type Appointment,
+  type AppointmentItem,
+} from '../../appointments';
 import type { Sale } from '../../sales';
 import {
   EMPTY_CASH_REGISTER_SUMMARY,
@@ -200,5 +205,42 @@ describe('Cash Register derivation', () => {
 
     expect(getCashRegisterDaySummary(sources, new Date(2026, 8, 11)).checkoutCount).toBe(0);
     expect(getCashRegisterDaySummary(sources, new Date(2026, 8, 12)).totalCents).toBe(9000);
+  });
+
+  describe('Appointment discount', () => {
+    const day = new Date(2026, 8, 12, 10, 0);
+    const services = (price: number): AppointmentItem[] => [
+      { id: 'i0', serviceId: 'color', order: 0, serviceName: 'Coloration', serviceType: 'TECHNIQUE', price, phases: [] },
+    ];
+    /** Encaisser for exactly the expected total — what the checkout sheet prefills. */
+    const checkoutExpected = (booked: Appointment): Appointment =>
+      checkoutAppointment(
+        booked,
+        { cardAmountCents: getAppointmentExpectedTotal(booked, []).expectedTotalCents, cashAmountCents: 0 },
+        day,
+      );
+
+    it('a completed discounted Appointment contributes its FINAL discounted value', () => {
+      const discounted = checkoutExpected(
+        appointment('discounted', { items: services(100), discount: { type: 'PERCENT', percent: 20 } }),
+      );
+
+      expect(getCashRegisterDaySummary({ appointments: [discounted], ...noSales }, day)).toEqual({
+        totalCents: 8000,
+        cardCents: 8000,
+        cashCents: 0,
+        checkoutCount: 1,
+      });
+    });
+
+    it('an undiscounted Appointment contributes exactly its unchanged value', () => {
+      const plain = checkoutExpected(appointment('plain', { items: services(100) }));
+      const fixed = checkoutExpected(
+        appointment('fixed', { items: services(100), discount: { type: 'FIXED', amountCents: 1500 } }),
+      );
+
+      expect(getCashRegisterDaySummary({ appointments: [plain], ...noSales }, day).totalCents).toBe(10000);
+      expect(getCashRegisterDaySummary({ appointments: [plain, fixed], ...noSales }, day).totalCents).toBe(18500);
+    });
   });
 });

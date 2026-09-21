@@ -183,6 +183,7 @@ describe('monetary persistence', () => {
     );
     expect(getAppointmentExpectedTotal(snapshot.appointments[0]!, snapshot.sales)).toEqual({
       servicesCents: 1279,
+      discountCents: 0,
       productsCents: 2296,
       expectedTotalCents: 3575,
     });

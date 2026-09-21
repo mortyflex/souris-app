@@ -13,6 +13,7 @@ export type {
   AppointmentCancellation,
   AppointmentNoShow,
   AppointmentPayment,
+  AppointmentDiscount,
   Appointment,
 } from "./types";
 
@@ -82,10 +83,19 @@ export {
   updateAppointmentPayment,
 } from "./payment";
 
-export type { AppointmentExpectedTotal } from "./expected-total";
+export {
+  MAX_DISCOUNT_PERCENT,
+  areAppointmentDiscountsEqual,
+  getAppointmentDiscountCents,
+  isValidAppointmentDiscount,
+  setAppointmentDiscount,
+} from "./discount";
+
+export type { AppointmentExpectedTotal, AppointmentServicesTotal } from "./expected-total";
 export {
   getAppointmentExpectedTotal,
   getAppointmentLinkedSales,
+  getAppointmentServicesTotal,
   getSaleTotalCents,
 } from "./expected-total";
 

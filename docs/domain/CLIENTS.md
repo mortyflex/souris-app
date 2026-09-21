@@ -253,10 +253,14 @@ Annulations           → appointments with status CANCELLED
                         and cancellation.cancelledBy === CLIENT
 Absences              → appointments with status NO_SHOW
 Total dépensé         → sum of AppointmentItem snapshot prices for
-                        COMPLETED appointments only
+                        COMPLETED appointments only, net of each
+                        Appointment's discount
 ```
 
-`Total dépensé` uses AppointmentItem snapshot prices — never current catalog
+`Total dépensé` reads the ONE domain services total (`getAppointmentServicesTotal`,
+`docs/domain/APPOINTMENTS.md` §15.3): gross snapshot prices minus the Appointment
+discount. An Appointment without a discount counts exactly the sum of its item
+snapshot prices. It uses AppointmentItem snapshot prices — never current catalog
 prices — and excludes SCHEDULED, CONFIRMED, IN_PROGRESS, CANCELLED, and
 NO_SHOW appointments.
 

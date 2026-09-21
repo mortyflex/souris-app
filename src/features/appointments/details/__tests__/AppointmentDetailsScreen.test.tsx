@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   act,
   fireEvent,
@@ -5,7 +6,7 @@ import {
   userEvent,
   within,
 } from "@testing-library/react-native";
-import { Alert, Pressable, Text } from "react-native";
+import { Alert, Pressable, StyleSheet, Text } from "react-native";
 import { State, type PanGesture } from "react-native-gesture-handler";
 import {
   fireGestureHandler,
@@ -42,6 +43,7 @@ import { openTestDatabase } from "@/persistence/testing/node-sqlite-database";
 import { createDevelopmentSeed } from "@/providers/development-seed";
 import { haptics } from "@/shared/lib/haptics";
 import { formatEuroCents, formatEuros } from "@/shared/lib/money";
+import { getAppTextStyle } from "@/shared/ui/AppText";
 
 import { AppointmentDetailsScreen } from "../AppointmentDetailsScreen";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
@@ -275,6 +277,34 @@ function SaleProbe() {
           });
         }}
       />
+    </>
+  );
+}
+
+/**
+ * Drives THE session discount action on « agenda-sofia » (Balayage 95 €) the
+ * way any surface proposing a discount will, and reports a refused write.
+ */
+function DiscountProbe() {
+  const { getAppointmentById, setAppointmentDiscount } = useAppointmentSession();
+  const [refused, setRefused] = useState(false);
+  const apply = (discount: Parameters<typeof setAppointmentDiscount>[1]) => {
+    try {
+      setAppointmentDiscount("agenda-sofia", discount);
+    } catch {
+      setRefused(true);
+    }
+  };
+  return (
+    <>
+      <Text testID="discount-probe">
+        {JSON.stringify(getAppointmentById("agenda-sofia")?.appointment.discount ?? null)}
+      </Text>
+      <Text testID="discount-refused">{String(refused)}</Text>
+      <Pressable testID="apply-percent-discount" onPress={() => apply({ type: "PERCENT", percent: 20 })} />
+      <Pressable testID="apply-fixed-discount" onPress={() => apply({ type: "FIXED", amountCents: 1500 })} />
+      <Pressable testID="apply-oversized-discount" onPress={() => apply({ type: "FIXED", amountCents: 50000 })} />
+      <Pressable testID="clear-discount" onPress={() => apply(undefined)} />
     </>
   );
 }
@@ -1718,6 +1748,100 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.queryByTestId("service-timing-item-sofia")).toBeNull();
       expect(view.queryByTestId("save-service-timing-item-sofia")).toBeNull();
       expect(view.queryByLabelText(/de 5 minutes$/)).toBeNull();
+    });
+  });
+
+  describe("Appointment discount", () => {
+    it("shows no discount row and the unchanged total when the Appointment has no discount", async () => {
+      const view = await renderDetails("agenda-sofia", <DiscountProbe />);
+
+      expect(view.queryByTestId("appointment-discount-row")).toBeNull();
+      expect(view.queryByText(/Réduction/)).toBeNull();
+      expect(view.getByTestId("appointment-services-total").props.children).toBe(formatEuros(95));
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
+    });
+
+    it("shows gross, percentage discount and final total; the item snapshot price stays as booked", async () => {
+      const view = await renderDetails("agenda-sofia", <DiscountProbe />);
+      await press(view, "apply-percent-discount");
+
+      expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
+      // Prestations 95,00 € → Réduction -20 % -19,00 € → Total 76,00 €
+      expect(view.getByTestId("appointment-services-total").props.children).toBe(formatEuros(95));
+      const row = within(view.getByTestId("appointment-discount-row"));
+      expect(row.getByText("Réduction -20 %")).toBeTruthy();
+      expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(1900)}`);
+      expect(view.getByTestId("appointment-discount-row").props.accessibilityLabel).toBe(
+        `Réduction de 20 pour cent, -${formatEuroCents(1900)}`,
+      );
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(7600));
+
+      // The final amount carries the strongest monetary emphasis; the discount line stays quiet.
+      const total = StyleSheet.flatten(view.getByTestId("appointment-expected-total-value").props.style);
+      const discount = StyleSheet.flatten(view.getByTestId("appointment-discount-value").props.style);
+      expect(total).toMatchObject({ fontFamily: getAppTextStyle("summaryValue", "ios").fontFamily });
+      expect(discount).toMatchObject({ fontFamily: getAppTextStyle("metadata", "ios").fontFamily });
+      expect(total.fontSize).toBeGreaterThan(discount.fontSize as number);
+      expect(total.fontFamily).not.toBe(discount.fontFamily);
+    });
+
+    it("shows a fixed discount without a percentage, clamps an oversized one to the services, and removes the row when cleared", async () => {
+      const view = await renderDetails("agenda-sofia", <DiscountProbe />);
+
+      await press(view, "apply-fixed-discount");
+      expect(within(view.getByTestId("appointment-discount-row")).getByText("Réduction")).toBeTruthy();
+      expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(1500)}`);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(8000));
+
+      await press(view, "apply-oversized-discount");
+      expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(9500)}`);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(0));
+
+      await press(view, "clear-discount");
+      expect(view.getByTestId("discount-probe").props.children).toBe("null");
+      expect(view.queryByTestId("appointment-discount-row")).toBeNull();
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
+    });
+
+    it("discounts the services only: a Product sold during the Appointment keeps its price", async () => {
+      const db = openTestDatabase();
+      persistLinkedSales(db, [MASQUE_ID]);
+      const view = await renderDetails("agenda-sofia", <DiscountProbe />, db);
+      await press(view, "apply-percent-discount");
+
+      // 95 − 19 + 50
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(12600));
+    });
+
+    it("checks out the FINAL discounted total, then refuses any further discount change", async () => {
+      jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+      const view = await renderDetails("agenda-sofia", <DiscountProbe />);
+      await press(view, "apply-percent-discount");
+      await press(view, "checkout-appointment");
+
+      expect(view.getByTestId("checkout-services-total").props.children).toBe(formatEuroCents(9500));
+      expect(view.getByTestId("checkout-discount").props.children).toBe(formatEuroCents(-1900));
+      expect(within(view.getByTestId("checkout-expectation")).getByText("Réduction -20 %")).toBeTruthy();
+      expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(7600));
+      const expected = StyleSheet.flatten(view.getByTestId("checkout-expected-total").props.style);
+      const discountLine = StyleSheet.flatten(view.getByTestId("checkout-discount").props.style);
+      expect(expected.fontSize).toBeGreaterThan(discountLine.fontSize as number);
+      expect(expected.fontFamily).not.toBe(discountLine.fontFamily);
+
+      await typeAmount(view, "card", "76");
+      expect(view.queryByTestId("checkout-difference")).toBeNull();
+      await press(view, "confirm-checkout");
+      await settleSheetTransition();
+
+      expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("7600/0");
+      // History still explains the amount…
+      expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(1900)}`);
+
+      // …and can no longer be rewritten.
+      await press(view, "clear-discount");
+      expect(view.getByTestId("discount-refused").props.children).toBe("true");
+      expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
     });
   });
 });

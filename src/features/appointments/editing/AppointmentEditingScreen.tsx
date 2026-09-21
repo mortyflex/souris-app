@@ -18,8 +18,12 @@ import { usePreventRemove } from 'expo-router/react-navigation';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
+  areAppointmentDiscountsEqual,
   canRemoveAppointmentItem,
+  getAppointmentServicesTotal,
+  setAppointmentDiscount,
   updateAppointmentFromDrafts,
+  type AppointmentDiscount,
   type Service,
 } from '@/domain/appointments';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
@@ -39,6 +43,7 @@ import { SheetScreen } from '@/shared/ui/SheetScreen';
 import { gutter, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { createNewAppointmentItemId } from '../creation/runtime-ids';
+import { AppointmentDiscountEditor } from '../editor/components/AppointmentDiscountEditor';
 import { ServiceSelectionGrid } from '../editor/components/ServiceSelectionGrid';
 import { SortableDraftList } from '../editor/components/SortableDraftList';
 import {
@@ -79,6 +84,10 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   const [drafts, setDrafts] = useState<readonly SelectedServiceDraft[]>(initialDrafts);
   const [draftStartAt, setDraftStartAt] = useState<Date | undefined>(initialStartAt);
   const [draftClientId, setDraftClientId] = useState<string | undefined>(initialClientId);
+  const [initialDiscount] = useState<AppointmentDiscount | undefined>(() => appointment?.discount);
+  const [draftDiscount, setDraftDiscount] = useState<AppointmentDiscount | undefined>(
+    initialDiscount,
+  );
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
   const [clientPickerVisible, setClientPickerVisible] = useState(false);
   const [discardRequested, setDiscardRequested] = useState(false);
@@ -88,7 +97,8 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     (draftStartAt !== undefined &&
       initialStartAt !== undefined &&
       !isSameStartAt(draftStartAt, initialStartAt)) ||
-    draftClientId !== initialClientId;
+    draftClientId !== initialClientId ||
+    !areAppointmentDiscountsEqual(draftDiscount, initialDiscount);
   const isTerminal = appointment ? isTerminalAppointmentStatus(appointment.status) : false;
   const clientName = getResolvedClientDisplayName(getClientById(draftClientId));
 
@@ -174,9 +184,13 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   const save = () => {
     if (!isDirty || isTerminal) return;
 
-    const updatedAppointment = updateAppointmentFromDrafts(
-      appointment,
-      drafts.map((draft, index) => toAppointmentItemEditDraft(draft, index)),
+    // The discount goes through THE domain discount action, never a local rule.
+    const updatedAppointment = setAppointmentDiscount(
+      updateAppointmentFromDrafts(
+        appointment,
+        drafts.map((draft, index) => toAppointmentItemEditDraft(draft, index)),
+      ),
+      draftDiscount,
     );
     try {
       updateAppointment({
@@ -252,6 +266,12 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
             }
           />
         </View>
+
+        <AppointmentDiscountEditor
+          discount={draftDiscount}
+          onChange={setDraftDiscount}
+          servicesTotal={getAppointmentServicesTotal({ items: drafts, discount: draftDiscount })}
+        />
 
         <View style={styles.catalogSection}>
           <ServiceSelectionGrid

@@ -1,7 +1,7 @@
 import {
   calculateAppointmentTimeline,
+  getAppointmentServicesTotal,
   getElapsedDurationMinutes,
-  getOrderedItems,
   type Appointment,
   type AppointmentItem,
   type TimelineItem,
@@ -24,8 +24,8 @@ export interface AppointmentDetailService {
 }
 
 /**
- * The read-first banner of Appointment Details: total duration and snapshot
- * total only. Per-phase active / processing timing stays visible inside each
+ * The read-first banner of Appointment Details: total duration and the GROSS
+ * snapshot total of the services (before any discount) only. Per-phase active / processing timing stays visible inside each
  * service's phases; it is deliberately not repeated here.
  */
 export interface AppointmentDetailSummary {
@@ -57,6 +57,6 @@ export function getAppointmentDetailSummary(
 ): AppointmentDetailSummary {
   return {
     elapsedMinutes: getElapsedDurationMinutes(appointment),
-    totalPrice: getOrderedItems(appointment).reduce((total, item) => total + item.price, 0),
+    totalPrice: getAppointmentServicesTotal(appointment).grossCents / 100,
   };
 }

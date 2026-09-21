@@ -9,7 +9,13 @@ import type { Sale } from '@/domain/sales';
 import { bootstrapPersistence, loadSnapshot, type PersistedSnapshot } from '../bootstrap';
 import type { SourisDatabase } from '../database';
 import { clearPersistedDataForDevelopment } from '../development-reset';
-import { checkoutAppointment, deleteAppointment, insertAppointment, updateAppointment } from '../stores/appointments';
+import {
+  checkoutAppointment,
+  deleteAppointment,
+  insertAppointment,
+  updateAppointment,
+  updateAppointmentDiscount,
+} from '../stores/appointments';
 import { bindLocalDatabaseToBusiness } from '../stores/business-profile';
 import { archiveClient, deleteClientPermanently, insertClient, updateClient } from '../stores/clients';
 import { deleteProduct, insertProduct, setProductStock, updateProduct } from '../stores/products';
@@ -24,7 +30,12 @@ import {
 import { countSyncOutboxRows, loadSyncOutbox } from '../sync/outbox';
 import { PULL_OVERLAP_MS, readSyncPullCursor } from '../sync/pull-cursor';
 import { createSyncPushWorker, didSyncRunChangeLocalData } from '../sync/push-worker';
-import { SyncRemoteError, type RemoteClientPayload, type RemoteServicePayload } from '../sync/remote-gateway';
+import {
+  SyncRemoteError,
+  type RemoteAppointmentPayload,
+  type RemoteClientPayload,
+  type RemoteServicePayload,
+} from '../sync/remote-gateway';
 import { parseRemoteBusinessSnapshot, RemoteSnapshotInvalidError } from '../sync/remote-snapshot';
 import { loadSyncState, readAcknowledgedRemoteVersion } from '../sync/state';
 import { createFakeSyncRemote, type FakeSyncRemote } from '../testing/fake-sync-remote';
@@ -752,6 +763,101 @@ describe('Client birthday + notes — synced like every other Client property', 
   });
 });
 
+describe('Appointment discount — synced with the APPOINTMENT aggregate', () => {
+  const appointmentPayload = (remote: FakeSyncRemote, id: string) =>
+    remote.find(REMOTE_BUSINESS_ID, 'APPOINTMENT', id)?.payload as RemoteAppointmentPayload | undefined;
+  const upcoming: Appointment = {
+    ...appointmentCancelled,
+    id: 'appointment-upcoming',
+    businessId: REMOTE_BUSINESS_ID,
+    startAt: new Date('2026-09-25T08:00:00.000Z'),
+  };
+  const findAppointment = (db: SourisDatabase, id: string) =>
+    loadSnapshot(db).appointments.find((appointment) => appointment.id === id);
+
+  it('a percentage discount created with the Appointment reaches the cloud and restores identically', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = await openUploadedSource(remote);
+    const run = worker(source, remote);
+
+    insertAppointment(source, { ...upcoming, discount: { type: 'PERCENT', percent: 20 } });
+    expect(await run()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(appointmentPayload(remote, upcoming.id)).toMatchObject({
+      discount_percent: 20,
+      discount_amount_cents: null,
+    });
+
+    const { db: restored } = await restoreFreshDevice(remote);
+    expect(findAppointment(restored, upcoming.id)).toEqual(findAppointment(source, upcoming.id));
+    expect(findAppointment(restored, upcoming.id)?.discount).toEqual({ type: 'PERCENT', percent: 20 });
+    expect(loadSnapshot(restored).appointments).toEqual(loadSnapshot(source).appointments);
+  });
+
+  it('a fixed discount travels as exact integer cents and restores identically', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = await openUploadedSource(remote);
+    const run = worker(source, remote);
+
+    insertAppointment(source, upcoming);
+    updateAppointmentDiscount(source, upcoming.id, { type: 'FIXED', amountCents: 1500 });
+    expect(await run()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(appointmentPayload(remote, upcoming.id)).toMatchObject({
+      discount_percent: null,
+      discount_amount_cents: 1500,
+    });
+
+    const { db: restored } = await restoreFreshDevice(remote);
+    expect(findAppointment(restored, upcoming.id)?.discount).toEqual({ type: 'FIXED', amountCents: 1500 });
+    expect(
+      restored.getAllSync('SELECT discount_percent, discount_amount_cents FROM appointments WHERE id = ?', [upcoming.id]),
+    ).toEqual([{ discount_percent: null, discount_amount_cents: 1500 }]);
+  });
+
+  it('an edit and a removal on one device are pulled by the other; removal propagates as explicit NULLs', async () => {
+    const { remote, a, b, runA, runB } = await openTwoDevices();
+    insertAppointment(a, upcoming);
+    expect(await runA()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(await runB()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    const versionBefore = remote.find(REMOTE_BUSINESS_ID, 'APPOINTMENT', upcoming.id)?.syncVersion ?? 0;
+
+    updateAppointmentDiscount(b, upcoming.id, { type: 'PERCENT', percent: 10 });
+    expect(await runB()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(remote.find(REMOTE_BUSINESS_ID, 'APPOINTMENT', upcoming.id)?.syncVersion).toBe(versionBefore + 1);
+    expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    expect(findAppointment(a, upcoming.id)?.discount).toEqual({ type: 'PERCENT', percent: 10 });
+    expect(countSyncOutboxRows(a)).toBe(0);
+
+    // Device A switches to a fixed amount, then removes the discount.
+    updateAppointmentDiscount(a, upcoming.id, { type: 'FIXED', amountCents: 2500 });
+    expect(await runA()).toMatchObject({ pushed: 1, conflicts: [] });
+    updateAppointmentDiscount(a, upcoming.id, undefined);
+    expect(await runA()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(appointmentPayload(remote, upcoming.id)).toMatchObject({
+      discount_percent: null,
+      discount_amount_cents: null,
+    });
+
+    expect(await runB()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    const pulled = findAppointment(b, upcoming.id);
+    expect(pulled).toEqual(upcoming);
+    expect('discount' in pulled!).toBe(false);
+  });
+
+  it('an Appointment without a discount keeps syncing with explicit NULLs and restores without one', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = await openUploadedSource(remote);
+
+    expect(appointmentPayload(remote, appointmentLea.id)).toMatchObject({
+      discount_percent: null,
+      discount_amount_cents: null,
+    });
+    const { db: restored } = await restoreFreshDevice(remote);
+    const lea = findAppointment(restored, appointmentLea.id);
+    expect(lea).toEqual(findAppointment(source, appointmentLea.id));
+    expect('discount' in lea!).toBe(false);
+  });
+});
+
 describe('conflicts — remote newer + local dirty', () => {
   it('reports the conflict and overwrites NEITHER side: local edit kept and pending, remote revision kept, version not acknowledged', async () => {
     const { remote, a, b, runA, runB } = await openTwoDevices();
@@ -923,6 +1029,84 @@ describe('remote snapshot validation', () => {
       { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: '02-29', notes: null, archived_at: null },
       { first_name: 'Nour', last_name: null, phone: null, email: null, birthday: null, notes: 'Ligne 1\nLigne 2', archived_at: null },
     ]);
+  });
+
+  it('reads an Appointment row written before the discount columns existed: no key means no discount', () => {
+    const row = {
+      sync_version: 2,
+      deleted_at: null,
+      client_id: 'client-lea',
+      staff_member_id: 'staff-amelie',
+      start_at: '2026-09-25T08:00:00.000Z',
+      status: 'SCHEDULED',
+      items: [],
+    };
+    const snapshot = parseRemoteBusinessSnapshot({
+      ...base,
+      appointments: [
+        { ...row, id: 'old' },
+        { ...row, id: 'percent', discount_percent: 20, discount_amount_cents: null },
+        { ...row, id: 'fixed', discount_percent: null, discount_amount_cents: 1500 },
+      ],
+    });
+
+    expect(
+      snapshot.appointments.map(({ payload }) => [payload?.discount_percent, payload?.discount_amount_cents]),
+    ).toEqual([
+      [null, null],
+      [20, null],
+      [null, 1500],
+    ]);
+  });
+
+  it('accepts the two ends of the percentage range, 1 and 50', () => {
+    const row = {
+      sync_version: 1,
+      deleted_at: null,
+      client_id: 'client-lea',
+      staff_member_id: 'staff-amelie',
+      start_at: '2026-09-25T08:00:00.000Z',
+      status: 'SCHEDULED',
+      items: [],
+    };
+    const snapshot = parseRemoteBusinessSnapshot({
+      ...base,
+      appointments: [
+        { ...row, id: 'min', discount_percent: 1 },
+        { ...row, id: 'max', discount_percent: 50 },
+      ],
+    });
+    expect(snapshot.appointments.map(({ payload }) => payload?.discount_percent)).toEqual([1, 50]);
+  });
+
+  it.each([
+    ['discount_percent', { discount_percent: 0 }],
+    ['discount_percent', { discount_percent: 51 }],
+    ['discount_percent', { discount_percent: 100 }],
+    ['discount_percent', { discount_percent: 12.5 }],
+    ['discount_amount_cents', { discount_amount_cents: 0 }],
+    ['discount_amount_cents', { discount_amount_cents: -500 }],
+    ['discount_amount_cents', { discount_percent: 20, discount_amount_cents: 1500 }],
+  ])('refuses an invalid remote discount (%s)', (field, discount) => {
+    const attempt = () =>
+      parseRemoteBusinessSnapshot({
+        ...base,
+        appointments: [
+          {
+            id: 'a',
+            sync_version: 1,
+            deleted_at: null,
+            client_id: 'client-lea',
+            staff_member_id: 'staff-amelie',
+            start_at: '2026-09-25T08:00:00.000Z',
+            status: 'SCHEDULED',
+            items: [],
+            ...discount,
+          },
+        ],
+      });
+    expect(attempt).toThrow(RemoteSnapshotInvalidError);
+    expect(attempt).toThrow(field);
   });
 
   it('names the offending field, never a value', () => {

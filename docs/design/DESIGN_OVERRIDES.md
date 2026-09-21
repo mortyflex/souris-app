@@ -962,3 +962,42 @@ gestures, sheet sizing and card geometry are unchanged.
   anchor under the top bar, lowered to where the title starts, outside the scroll view — never
   clipped by it, and the content scrolls over it. Prestations section headers lose their
   (invisible, non-sticky) page-coloured fill so the glyph is not cut by a band.
+
+---
+
+## 23. Appointment Discount — « Réduction »
+
+A discount is a normal professional action, never an error or a warning: no rose, no strike-through
+price, no badge on Agenda cards (their geometry and content are unchanged).
+
+- **Secondary by default.** In the Résumé step and in « Modifier le rendez-vous », « Réduction » is
+  ONE collapsed row on the neutral `surface` (`radii.large`): a 16 pt accent price-tag glyph
+  (`shared/icons/discount-icon`: `tag` / `sell`, decorative, hidden from accessibility, row height
+  unchanged), the `control` title, a quiet `metadata`
+  value (« Aucune » in `foregroundSoft`; `-20 % · -20,00 €` or `-15,00 €` in `lav700` once set) and
+  the shared `DisclosureChevron`. It opens expanded only when the Appointment already has a discount.
+- **Open.** The shared `SegmentedControl` with two options, `%` and `€` (spoken « Réduction en
+  pourcentage » / « Réduction en euros »), then the ten presets as chips — five per row, 40 pt high
+  with vertical hit slop up to the platform touch target, `radii.medium`, white on the neutral
+  surface with a `borderSubtle` hairline. `%` chips show the bare number (the switch carries the
+  unit); `€` chips show `15 €`. Tabular figures throughout.
+- **Selected chip.** `lav100` fill, 1.5 pt `accent` border, `control` weight, `lav700` text, plus
+  `accessibilityState.selected` — and the chosen value is always written in the row header, so
+  selection never relies on colour alone. Each chip is spoken « Réduction de 20 pour cent » /
+  « Réduction de 15 euros ».
+- **Removal.** Once a discount is set, the footer shows `Total après réduction` and, under it, the
+  accent text action « Aucune réduction » (spoken « Supprimer la réduction »). Switching `%` ↔ `€` alone
+  changes nothing until a value is tapped.
+- **Final amount.** The label `Total après réduction` stays quiet `metadata`; only the AMOUNT is
+  stronger — `control` weight in `lav700`, tabular, right-aligned. Same hierarchy everywhere the
+  discounted total shows: `summaryValue` for « TOTAL À ENCAISSER » (Details) and « Total » (Résumé),
+  `control` for « Total attendu » (checkout), always above quiet `metadata` discount lines. The
+  discount never outweighs the amount to charge.
+- **Haptics.** ONE `haptics.selection()` per real change: a newly chosen preset, the removal, and
+  the `%` / `€` switch (given by `SegmentedControl` itself, only when the mode changes). Re-tapping
+  the selected preset or the current mode does nothing. No success / warning feedback here.
+- **Ticket.** Appointment Details keeps the « Prestations » banner as the GROSS amount and adds ONE
+  restrained `metadata` line above « TOTAL À ENCAISSER »: `Réduction -20 %` (or plain `Réduction`)
+  with the negative amount in `lav700`. The Résumé step shows the same two lines (`Prestations`,
+  `Réduction …`) above its total; the checkout sheet lists the line in its expectation block. None
+  of these lines exists without a discount.

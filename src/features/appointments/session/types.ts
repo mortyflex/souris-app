@@ -1,5 +1,6 @@
 import type {
   Appointment,
+  AppointmentDiscount,
   AppointmentPaymentAmounts,
   AppointmentPhaseDurationUpdate,
   AppointmentReferences,
@@ -62,6 +63,17 @@ export interface AppointmentSessionValue {
    * catalog are untouched. Throws — and changes nothing — otherwise.
    */
   readonly removeAppointmentItem: (appointmentId: string, appointmentItemId: string) => void;
+  /**
+   * THE discount action: sets, changes or removes (`undefined`) the discount
+   * of an editable Appointment in ONE transaction; state changes only after
+   * the commit. Any surface proposing a discount calls this — pricing stays
+   * in the domain. Throws when the Appointment is not editable, the discount
+   * is invalid, or the write fails — nothing changes then.
+   */
+  readonly setAppointmentDiscount: (
+    appointmentId: string,
+    discount: AppointmentDiscount | undefined,
+  ) => void;
   /**
    * Explicit checkout (« Encaisser »): ONE transaction writes COMPLETED and
    * the recorded card/cash cents together; state changes only after the

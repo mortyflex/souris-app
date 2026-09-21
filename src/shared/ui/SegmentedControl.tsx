@@ -23,6 +23,8 @@ import { gloss, interaction, nativeShadows, radii, semanticColors, touchTarget }
 export interface SegmentedControlOption<Value extends string> {
   readonly value: Value;
   readonly label: string;
+  /** Spoken label when the visible one is a bare symbol (`%`, `€`). */
+  readonly accessibilityLabel?: string;
 }
 
 interface SegmentedControlProps<Value extends string> {
@@ -58,7 +60,7 @@ export function SegmentedControl<Value extends string>({
         };
         return (
           <Pressable
-            accessibilityLabel={option.label}
+            accessibilityLabel={option.accessibilityLabel ?? option.label}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
             hitSlop={optionHitSlop}

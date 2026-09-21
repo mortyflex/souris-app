@@ -6,11 +6,13 @@
 
 import {
   getAppointmentEndAt,
+  getAppointmentServicesTotal,
   getOrderedItems,
   type Appointment,
   type AppointmentCancellationActor,
+  type AppointmentDiscount,
 } from '@/domain/appointments';
-import { formatEuros } from '@/shared/lib/money';
+import { formatEuroCents, formatEuros } from '@/shared/lib/money';
 
 const statusLabels = {
   SCHEDULED: 'Planifié',
@@ -86,7 +88,29 @@ export function formatAppointmentServiceSummary(appointment: Appointment): strin
   return `${names.slice(0, 2).join(' + ')} + ${remaining} autre${remaining > 1 ? 's' : ''}`;
 }
 
-/** Snapshot total of the appointment, without consulting the catalog. */
+/**
+ * Snapshot total of the appointment's services in euros, NET of its discount,
+ * without consulting the catalog. Without a discount this is exactly the sum
+ * of the item snapshot prices. Derived by the ONE domain helper.
+ */
 export function getAppointmentSnapshotTotal(appointment: Appointment): number {
-  return getOrderedItems(appointment).reduce((total, item) => total + item.price, 0);
+  return getAppointmentServicesTotal(appointment).netCents / 100;
+}
+
+/** `Réduction -20 %` for a percentage, plain `Réduction` for a fixed amount. */
+export function formatDiscountLabel(discount: AppointmentDiscount): string {
+  return discount.type === 'PERCENT' ? `Réduction -${discount.percent} %` : 'Réduction';
+}
+
+/** The applied discount as a negative amount: `-20,00 €`. */
+export function formatDiscountAmount(discountCents: number): string {
+  return `-${formatEuroCents(discountCents)}`;
+}
+
+/** Spoken form of a discount: `20 pour cent`, `15 euros`, `12,50 euros`. */
+export function formatDiscountSpokenValue(discount: AppointmentDiscount): string {
+  if (discount.type === 'PERCENT') return `${discount.percent} pour cent`;
+  const euros = discount.amountCents / 100;
+  const value = Number.isInteger(euros) ? `${euros}` : euros.toFixed(2).replace('.', ',');
+  return `${value} euro${euros >= 2 ? 's' : ''}`;
 }

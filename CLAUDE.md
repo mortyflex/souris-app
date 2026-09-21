@@ -757,6 +757,8 @@ The profile `Activité` section shows:
 
 Total spent is the sum of appointment item snapshot prices of `COMPLETED` appointments only.
 
+It is net of each appointment's discount (`docs/domain/APPOINTMENTS.md` §15.3).
+
 It never uses current catalog prices.
 
 It does not include product sales.
