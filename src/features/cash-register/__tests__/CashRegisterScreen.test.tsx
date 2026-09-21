@@ -179,6 +179,16 @@ describe('CashRegisterScreen', () => {
     expect(view.queryByText(/TVA|Bénéfice|Dépenses|chiffre d’affaires/i)).toBeNull();
   });
 
+  it('carries the decorative cash-register watermark, hidden from accessibility and touches', async () => {
+    const view = await renderCashRegister();
+
+    expect(view.queryByTestId('screen-watermark-cashRegister')).toBeNull();
+    const watermark = view.getByTestId('screen-watermark-cashRegister', { includeHiddenElements: true });
+    expect(watermark.props.pointerEvents).toBe('none');
+    expect(watermark.props.accessibilityElementsHidden).toBe(true);
+    expect(view.getByRole('header', { name: 'Caisse' })).toBeTruthy();
+  });
+
   it('aggregates Appointment checkouts and standalone Sale payments, never a linked Sale twice', async () => {
     const view = await renderCashRegister();
     await press(view, 'stock-products');
@@ -266,11 +276,11 @@ describe('CashRegisterScreen', () => {
 
     await press(view, 'cash-register-calendar');
     expect(view.getByTestId('cash-register-day-picker')).toBeTruthy();
-    // The picker opens straight on the wheel: no heading, no eyebrow.
+    // Headed by the violet « CAISSE DU » eyebrow alone: no « Choisir un jour » title.
+    expect(view.getByRole('header', { name: 'CAISSE DU' }).props.testID).toBe(
+      'cash-register-day-picker-heading',
+    );
     expect(view.queryByText('Choisir un jour')).toBeNull();
-    expect(view.queryByText('CAISSE')).toBeNull();
-    // Screen readers still get the sheet's purpose, without any visible text.
-    expect(view.getByRole('header', { name: 'Choisir une date' })).toBeTruthy();
     expect(view.queryByText('Choisir une date')).toBeNull();
     mockPickerDate = new Date(2026, 7, 3, 23, 59);
     await press(view, 'mock-date-picker');

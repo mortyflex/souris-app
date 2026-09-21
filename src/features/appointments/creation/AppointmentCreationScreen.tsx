@@ -29,7 +29,7 @@ import { AppText } from '@/shared/ui/AppText';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { SheetScreen } from '@/shared/ui/SheetScreen';
-import { agenda, gutter, lavender, spacing } from '@/shared/ui/theme';
+import { agenda, foregroundSoft, gutter, lavender, spacing } from '@/shared/ui/theme';
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
 import { AppointmentContextRow } from './components/AppointmentContextRow';
@@ -57,7 +57,7 @@ import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessP
 
 import { createAppointmentId, createAppointmentItemId } from './runtime-ids';
 import { getAppointmentCreationSummary } from './presentation';
-import { formatSelectionCountLabel } from '../editor/presentation';
+import { formatSelectedServiceNames, formatSelectionCountLabel } from '../editor/presentation';
 import { canNavigateTo, stepLabels, type CreationStep } from './steps';
 
 interface AppointmentCreationScreenProps {
@@ -291,9 +291,24 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
 
       <SheetActionBar testID="appointment-creation-actions">
         {step === 1 && (
-          <AppText variant="control" style={styles.selectionFooterCount} testID="selection-count">
-            {formatSelectionCountLabel(selectedDrafts.length)}
-          </AppText>
+          <View style={styles.selectionFooter}>
+            <AppText variant="control" style={styles.selectionFooterCount} testID="selection-count">
+              {formatSelectionCountLabel(selectedDrafts.length)}
+            </AppText>
+            {/* WHICH services, not only how many. Two lines at most, so a long
+                selection never pushes the actions away; the count stays whole. */}
+            {selectedDrafts.length > 0 && (
+              <AppText
+                accessibilityLabel={selectedDrafts.map((draft) => draft.serviceName).join(', ')}
+                numberOfLines={2}
+                style={styles.selectionFooterNames}
+                testID="selection-names"
+                variant="metadata"
+              >
+                {formatSelectedServiceNames(selectedDrafts)}
+              </AppText>
+            )}
+          </View>
         )}
         <View style={styles.footerButtons}>
           {step > 0 && (
@@ -332,6 +347,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
     paddingHorizontal: horizontalGutter,
   },
+  selectionFooter: { gap: spacing.xs },
+  selectionFooterNames: { color: foregroundSoft },
   selectionFooterCount: {
     color: lavender.lav700,
     fontVariant: ['tabular-nums'],

@@ -2,7 +2,12 @@ import { render } from '@testing-library/react-native';
 
 import { StyleSheet } from 'react-native';
 
-import { ScreenWatermarkIcon, screenWatermarkOptics, screenWatermarkSymbols } from '../ScreenWatermarkIcon';
+import {
+  PushedScreenWatermark,
+  ScreenWatermarkIcon,
+  screenWatermarkOptics,
+  screenWatermarkSymbols,
+} from '../ScreenWatermarkIcon';
 import { watermark } from '../theme';
 
 const mockSymbolView = jest.fn((_props: unknown) => null);
@@ -18,6 +23,8 @@ describe('ScreenWatermarkIcon', () => {
     ['clients', { ios: 'person.2', android: 'group' }],
     ['products', { ios: 'shippingbox', android: 'inventory_2' }],
     ['settings', { ios: 'gearshape', android: 'settings' }],
+    ['cashRegister', { ios: 'banknote', android: 'payments' }],
+    ['services', { ios: 'scissors', android: 'content_cut' }],
   ] as const)('maps %s to its canonical semantic symbol', async (kind, name) => {
     const view = await render(<ScreenWatermarkIcon kind={kind} />);
 
@@ -62,5 +69,15 @@ describe('ScreenWatermarkIcon', () => {
     // Same right-edge relationship and opacity as every other screen.
     expect(style.right).toBe(-watermark.size * watermark.cropRight);
     expect(style.opacity).toBe(watermark.opacity);
+  });
+
+  it('anchors a pushed screen watermark in a full-width block that takes no room', async () => {
+    const view = await render(<PushedScreenWatermark kind="services" titleOffset={16} />);
+
+    const icon = view.getByTestId('screen-watermark-services', { includeHiddenElements: true });
+    const anchor = icon.parent!;
+    expect(StyleSheet.flatten(anchor.props.style)).toMatchObject({ height: 0, top: 16 });
+    expect(anchor.props.pointerEvents).toBe('none');
+    expect(icon.props.accessibilityElementsHidden).toBe(true);
   });
 });

@@ -2,8 +2,10 @@
 //
 // Shared by NEW Appointment Creation and existing Appointment Editing: a
 // compact wrapping two-column grid grouped by Services / Techniques, with
-// search filtering both sections. Selection state is surface-based; no
-// decorative borders.
+// search filtering both sections. Card colour states the service TYPE (mint =
+// simple SERVICE, lavender = any other type — `service-card-palette.ts`,
+// DESIGN_OVERRIDES.md §22); selection intensifies surface and border inside
+// that family and adds the check badge.
 //
 // This is an embeddable content block: it renders every row without its own
 // scroll container, so callers can place it inside their own scroll
@@ -20,7 +22,6 @@ import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
   foregroundSoft,
   interaction,
-  lavender,
   peach,
   radii,
   semanticColors,
@@ -37,6 +38,7 @@ import {
   getServiceDurationMinutes,
   getServiceProcessingMinutes,
 } from '../presentation';
+import { getServiceCardPalette } from '../service-card-palette';
 
 interface ServiceSelectionGridProps {
   /** Selectable catalog (active Services supplied by the parent use case). */
@@ -127,6 +129,7 @@ interface ServiceSelectionCardProps {
 function ServiceSelectionCard({ service, selected, onPress }: ServiceSelectionCardProps) {
   const duration = getServiceDurationMinutes(service);
   const processing = getServiceProcessingMinutes(service);
+  const palette = getServiceCardPalette(service.type, selected);
 
   return (
     <Pressable
@@ -136,12 +139,13 @@ function ServiceSelectionCard({ service, selected, onPress }: ServiceSelectionCa
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
-        selected ? styles.cardSelected : styles.cardIdle,
+        { backgroundColor: palette.background, borderColor: palette.border },
         pressed && styles.cardPressed,
       ]}
+      testID={`service-card-${service.id}`}
     >
       {selected && (
-        <View style={styles.checkBadge}>
+        <View style={[styles.checkBadge, { backgroundColor: palette.accent }]}>
           <SymbolView
             name={{ ios: 'checkmark', android: 'check' }}
             size={11}
@@ -150,10 +154,10 @@ function ServiceSelectionCard({ service, selected, onPress }: ServiceSelectionCa
         </View>
       )}
       <View style={styles.cardCopy}>
-        <AppText variant="rowTitle" numberOfLines={1} style={styles.cardName}>
+        <AppText variant="rowTitle" numberOfLines={1} style={{ color: palette.title }}>
           {service.name}
         </AppText>
-        <AppText variant="metadata" numberOfLines={1} style={styles.cardDuration}>
+        <AppText variant="metadata" numberOfLines={1} style={[styles.cardDuration, { color: palette.subtitle }]}>
           {formatCreationDuration(duration)}
         </AppText>
         {processing > 0 && (
@@ -168,6 +172,10 @@ function ServiceSelectionCard({ service, selected, onPress }: ServiceSelectionCa
     </Pressable>
   );
 }
+
+// The category border sits INSIDE the card box: padding and badge offsets give
+// it back, so the content keeps the exact position it had without a border.
+const cardBorderWidth = 1.5;
 
 const styles = StyleSheet.create({
   container: { backgroundColor: semanticColors.surfaceElevated },
@@ -189,32 +197,29 @@ const styles = StyleSheet.create({
   card: {
     borderCurve: 'continuous',
     borderRadius: radii.large,
+    borderWidth: cardBorderWidth,
     flex: 1,
     gap: 4,
     justifyContent: 'space-between',
     minHeight: 96,
-    padding: spacing.md,
+    padding: spacing.md - cardBorderWidth,
   },
-  cardIdle: { backgroundColor: semanticColors.surfaceLavender },
-  cardSelected: { backgroundColor: semanticColors.surfaceLavenderStrong },
   cardPressed: {
     opacity: interaction.pressedOpacity,
     transform: [{ scale: interaction.cardPressedScale }],
   },
   checkBadge: {
     alignItems: 'center',
-    backgroundColor: semanticColors.accent,
     borderRadius: radii.pill,
     height: 20,
     justifyContent: 'center',
     position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
+    right: spacing.sm - cardBorderWidth,
+    top: spacing.sm - cardBorderWidth,
     width: 20,
   },
   cardCopy: { gap: 2, paddingRight: spacing.sm },
-  cardName: { color: lavender.lav700 },
-  cardDuration: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
+  cardDuration: { fontVariant: ['tabular-nums'] },
   cardProcessing: { color: peach.peach700, fontVariant: ['tabular-nums'] },
   cardPrice: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   emptyState: { alignItems: 'center', padding: spacing.xl },

@@ -4,9 +4,10 @@
 // DateNavigator (Agenda Jour, Caisse Jour). It reuses the canonical Souris
 // date picker pattern (Appointment editing): the native wheel inside the
 // shared BottomSheet on iOS, the native dialog on Android. No new picker.
-// The sheet carries no VISIBLE heading: the wheel and its two actions say it
-// all. Screen readers still land on a « Choisir une date » header first, an
-// accessibility-only element that draws nothing and takes no room.
+// The sheet is headed by ONE violet uppercase eyebrow that the wheel completes
+// (« AGENDA DU », « CAISSE DU » + the date) — the eyebrow of every Souris sheet
+// header, without a « Choisir un jour » title under it. It is the sheet's
+// accessibility header, read right before the date.
 // The caller owns the selected day; cancelling never changes it.
 
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
@@ -14,11 +15,14 @@ import { useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { AppButton } from './AppButton';
+import { AppText } from './AppText';
 import { BottomSheet } from './BottomSheet';
 import { semanticColors, spacing } from './theme';
 
 interface DayPickerSheetProps {
   readonly visible: boolean;
+  /** Uppercase context shown above the wheel: « AGENDA DU », « CAISSE DU ». */
+  readonly eyebrow: string;
   readonly day: Date;
   readonly onClose: () => void;
   /** Receives the chosen day at local midnight. */
@@ -32,6 +36,7 @@ function startOfLocalDay(date: Date): Date {
 
 export function DayPickerSheet({
   visible,
+  eyebrow,
   day,
   onClose,
   onSelect,
@@ -72,13 +77,14 @@ export function DayPickerSheet({
       testID={testID}
       visible={visible}
     >
-      <View
-        accessible
-        accessibilityLabel="Choisir une date"
+      <AppText
         accessibilityRole="header"
-        style={styles.screenReaderHeading}
+        style={styles.eyebrow}
         testID={`${testID}-heading`}
-      />
+        variant="eyebrow"
+      >
+        {eyebrow}
+      </AppText>
       <DateTimePicker
         accentColor={semanticColors.accent}
         display="spinner"
@@ -96,8 +102,8 @@ export function DayPickerSheet({
 }
 
 const styles = StyleSheet.create({
-  // Out of the layout flow and empty: focusable by VoiceOver, invisible on screen.
-  screenReaderHeading: { height: 1, left: 0, position: 'absolute', top: 0, width: 1 },
+  // Same colour and rhythm as the SheetHeader eyebrow.
+  eyebrow: { color: semanticColors.accent, paddingBottom: spacing.sm, paddingTop: spacing.md },
   footer: { flexDirection: 'row', gap: spacing.sm, paddingBottom: spacing.base, paddingTop: spacing.sm },
   secondary: { flex: 1 },
   primary: { flex: 1 },

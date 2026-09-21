@@ -227,9 +227,11 @@ async function clearServiceSearch(view: Rendered) {
   });
 }
 
+// Presses the catalog CARD (labelled « name, duration, price »): a selected
+// name is also written in the footer reminder.
 async function selectService(view: Rendered, name: string) {
   await act(async () => {
-    fireEvent.press(view.getByText(name));
+    fireEvent.press(view.getByRole('button', { name: new RegExp(`^${name}, `) }));
   });
 }
 
@@ -359,6 +361,35 @@ describe('AppointmentCreationScreen', () => {
     // No sticky selected-stack editor on the selection step.
     expect(view.queryByLabelText('Développer Balayage 1')).toBeNull();
     expect(view.queryByLabelText('Prix de Balayage 1')).toBeNull();
+  });
+
+  it('reminds WHICH services are selected under the count, names only, updated at once', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+
+    // Nothing selected: the count alone, exactly as before.
+    expect(view.getByTestId('selection-count').props.children).toBe('0 prestation sélectionnée');
+    expect(view.queryByTestId('selection-names')).toBeNull();
+
+    await selectService(view, 'Balayage 1');
+    expect(view.getByTestId('selection-count').props.children).toBe('1 prestation sélectionnée');
+    expect(view.getByTestId('selection-names').props.children).toBe('Balayage 1');
+
+    await selectService(view, 'Brushing 1');
+    expect(view.getByTestId('selection-count').props.children).toBe('2 prestations sélectionnées');
+    const names = view.getByTestId('selection-names');
+    expect(names.props.children).toBe('Balayage 1 · Brushing 1');
+    // A reminder, not a second summary: no duration, no price, bounded height.
+    expect(names.props.children).not.toMatch(/\d+\s?(min|h\b)|€/);
+    expect(names.props.numberOfLines).toBe(2);
+
+    // Deselecting removes the name immediately: no stale label.
+    await selectService(view, 'Balayage 1');
+    expect(view.getByTestId('selection-count').props.children).toBe('1 prestation sélectionnée');
+    expect(view.getByTestId('selection-names').props.children).toBe('Brushing 1');
+
+    await selectService(view, 'Brushing 1');
+    expect(view.queryByTestId('selection-names')).toBeNull();
   });
 
   it('search filters both sections, hides empty ones, and preserves selections', async () => {

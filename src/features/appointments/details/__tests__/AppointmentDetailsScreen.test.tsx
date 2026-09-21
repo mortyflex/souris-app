@@ -577,6 +577,39 @@ describe("AppointmentDetailsScreen", () => {
     });
   });
 
+  it("offers the visible « Fermer » text action of every sheet in the identity header", async () => {
+    const view = await renderDetails();
+
+    const header = within(view.getByTestId("appointment-identity-header"));
+    const close = header.getByRole("button", { name: "Fermer" });
+    expect(close.props.testID).toBe("close-appointment-details");
+    // A worded action, not an icon-only control.
+    expect(header.getByText("Fermer")).toBeTruthy();
+    expect(
+      within(close).queryByTestId("glass-surface", { includeHiddenElements: true }),
+    ).toBeNull();
+
+    await press(view, "close-appointment-details");
+
+    // The same single way out as the swipe and the outside tap; a plain
+    // dismissal carries no haptic.
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockWarningHaptic).not.toHaveBeenCalled();
+    expect(mockSuccessHaptic).not.toHaveBeenCalled();
+    expect(mockSelectionHaptic).not.toHaveBeenCalled();
+  });
+
+  it("keeps the outside-tap dismissal next to « Fermer »", async () => {
+    const view = await renderDetails();
+
+    const scrim = view.getByTestId("sheet-screen-scrim");
+    expect(scrim.props.accessibilityState?.disabled).not.toBe(true);
+
+    await press(view, "sheet-screen-scrim");
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
   it("offers cancellation for a future appointment and records its actor and reason", async () => {
     const user = userEvent.setup({
       advanceTimers: (delay) => jest.advanceTimersByTime(delay),

@@ -362,6 +362,18 @@ export function AppointmentDetailsScreen({
                 {clientDisplayName}
               </AppText>
             </View>
+            {/* The « Fermer » text action of every Souris sheet (SheetHeader's
+                tertiary AppButton). The very same way out as the swipe and the
+                outside tap: SheetScreen plays the close transition, then the
+                route leaves. */}
+            <AppButton
+              accessibilityLabel="Fermer"
+              onPress={() => router.back()}
+              style={styles.closeAction}
+              testID="close-appointment-details"
+              title="Fermer"
+              variant="tertiary"
+            />
           </View>
           <View style={styles.metaSurface}>
             <AppText variant="control" selectable style={styles.dateLine}>
@@ -617,6 +629,7 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
     minWidth: 0,
   },
+  closeAction: { alignSelf: "center", paddingHorizontal: spacing.md },
   identityEyebrow: { color: rose.rose600 },
   clientName: { color: semanticColors.foreground },
   metaSurface: {

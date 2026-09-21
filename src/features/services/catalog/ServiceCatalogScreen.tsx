@@ -21,6 +21,7 @@ import { useServiceCatalog } from '@/features/services/session/ServiceCatalogPro
 import { AppText } from '@/shared/ui/AppText';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
 import { GlassIconButton, glassIconButtonSize, glassIcons } from '@/shared/ui/GlassIconButton';
+import { PushedScreenWatermark } from '@/shared/ui/ScreenWatermarkIcon';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
   bottomClearance,
@@ -58,6 +59,7 @@ export function ServiceCatalogScreen() {
         </AppText>
         <View style={styles.topBarSpacer} />
       </View>
+      <PushedScreenWatermark kind="services" titleOffset={spacing.base} />
 
       <SectionList
         sections={sections}
@@ -165,8 +167,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
+  // No fill of its own (headers are not sticky): the watermark reads through.
   sectionHeaderBlock: {
-    backgroundColor: semanticColors.screenWarm,
     gap: spacing.sm,
     paddingBottom: spacing.sm,
     paddingHorizontal: horizontalGutter,

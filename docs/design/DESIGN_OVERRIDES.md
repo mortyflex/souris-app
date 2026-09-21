@@ -874,12 +874,14 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
   ONE `sectionTitle` line without the year and with an abbreviated month — « Mercredi 16 sept. »
   (`formatNavigatorDate`, the single formatter of both screens). When the width measured between
   the controls is genuinely too narrow, the weekday shortens (« Mer. 16 sept. »): the date never
-  wraps and never drops to a metadata size. It replaces the Agenda seven-day strip, which is gone
+  wraps and is never scaled down — no `adjustsFontSizeToFit`; full and compact share the same
+  `sectionTitle` size, and text growth is capped (`navigatorDateMaxFontScale`) instead. It replaces the Agenda seven-day strip, which is gone
   from the Day view. Under it, one quiet violet `metadata` line: « Aujourd’hui » as plain text on today,
   « Revenir à aujourd’hui » as the way back elsewhere. The calendar opens `DayPickerSheet`
   (`src/shared/ui/`): the canonical date picker of Appointment editing — native wheel in the
-  shared BottomSheet on iOS, native dialog on Android. The sheet has no heading: the wheel and
-  its « Annuler » / « Confirmer » actions only. Agenda Semaine and Caisse Mois keep their
+  shared BottomSheet on iOS, native dialog on Android. The sheet is headed by ONE violet uppercase
+  eyebrow that the wheel completes — « AGENDA DU », « CAISSE DU » — with no « Choisir un jour »
+  title under it; then the wheel and its « Annuler » / « Confirmer » actions. Agenda Semaine and Caisse Mois keep their
   own previous / next rows.
 - **Day timeline top inset** — hour labels are centred on their grid line, so the first one
   (« 08:00 ») rises above the canvas. The scroll content starts `agenda.timelineTopInset` lower so
@@ -895,3 +897,52 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
   bar; the others are plain `foregroundSoft` labels on the glass. Never a large opaque slab.
   The visible options are compact (36 pt iOS / 40 dp Android, 15 pt label); a vertical hit slop
   restores the platform touch target.
+
+---
+
+## 22. Appointment UX Polish — Explicit Sheet Close, Service Type Colours, Selected Names
+
+Three independent presentation decisions. Data, editing, deletion, pricing, navigation, sheet
+gestures, sheet sizing and card geometry are unchanged.
+
+- **Appointment details — explicit « Fermer ».** The swipe on the grabber and the outside tap stay
+  exactly as they are (§16); they are joined by the visible « Fermer » text action of every Souris
+  sheet — the tertiary `AppButton` that `SheetHeader` uses (§16) — at the right of the identity
+  header. Never an icon-only ✕: sheets say « Fermer » / « Annuler » in words. It is the SAME way
+  out as the gestures: one `router.back()`, which `SheetScreen` holds while the close transition
+  plays. No haptic, no state reset of its own.
+- **Service picker cards — colour is the service TYPE.** Supersedes the « borderless, stronger
+  lavender surface, no outline » wording of §7 for the shared `ServiceSelectionGrid` (Appointment
+  creation and editing). `serviceCardColors` (tokens) resolved by
+  `features/appointments/editor/service-card-palette.ts` from the Service `type` field — never
+  from its name:
+  - `SERVICE` (simple) → **mint**: `mint050` surface, `mint200` border, `mint700` name, `mint650`
+    duration. A category colour, never a success / validation colour.
+  - every other type (`TECHNIQUE`) → the existing **lavender**: `lav050` surface, `lav200` border,
+    `lav700` name, `foregroundSoft` duration.
+  - **Selected** stays inside the family: stronger surface (`mint100` / `lav100`), stronger border
+    (`mint600` / `accent`), check badge in that same strong tone. Green never means « selected ».
+  - The `mint` scale mirrors the lavender OKLCH lightness steps at hue 160; its 600 / 700 sit on
+    the approved mint planning-card accent / title (§19). Price stays navy and « dont X de pose »
+    stays peach on both families. The 1.5 pt border lives inside the card box and the padding
+    gives it back, so content position and card size are unchanged.
+  - Prestations & tarifs, the Résumé accordion cards and Appointment details keep their lavender
+    language: they do not compare types side by side.
+- **Selection footer names the services.** Completes §7: under the violet count line of the
+  creation footer, ONE quiet `metadata` line in `foregroundSoft` lists the selected Service names
+  in selection order — « Balayage 3 · Coupe brushing · Reprise ». Names only (no duration, no
+  price, no type colour), two lines at most with an ellipsis beyond, hidden while nothing is
+  selected; the count always stays whole. Appointment Editing needs no such line: its selected
+  Services are the named stack above the grid.
+- **Clientes count.** `MainScreenHeader` takes an optional `count`: the number of ACTIVE Clients
+  (the session's `activeClients`, never the search results) sits beside the untouched « Clientes »
+  title as white `chip` figures in a small soft-violet pill (`appointmentPastels.lilac.accent` —
+  the lightest approved violet that keeps white readable, 4.9:1; same geometry as the
+  `SectionHeader` count chip).
+- **Watermarks on Caisse and Prestations & tarifs.** The §16 main-screen watermark (same size,
+  opacity, right crop and rise) also identifies the two pushed management screens, with the
+  symbols of their Plus rows (`banknote` / `payments`, `scissors` / `content_cut`). Their title
+  scrolls with the content, so the icon lives in `PushedScreenWatermark`: a full-width zero-height
+  anchor under the top bar, lowered to where the title starts, outside the scroll view — never
+  clipped by it, and the content scrolls over it. Prestations section headers lose their
+  (invisible, non-sticky) page-coloured fill so the glyph is not cut by a band.

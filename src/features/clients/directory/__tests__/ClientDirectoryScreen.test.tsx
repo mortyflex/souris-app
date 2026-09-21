@@ -1,5 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Pressable } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { createInitialClients } from '../../data/initial-clients';
 import { prepareClientDirectory } from '../sort-clients';
@@ -8,6 +8,7 @@ import { ClientSessionProvider, useClientSession } from '../../session/ClientSes
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleFloatingReveal } from '@/shared/ui/testing/sheet-transitions';
 import { screenWatermarkOptics } from '@/shared/ui/ScreenWatermarkIcon';
+import { appointmentPastels, colors, radii } from '@/shared/ui/theme';
 
 const mockPush = jest.fn();
 
@@ -44,9 +45,10 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 function LifecycleProbe() {
-  const { archiveClient, restoreClient } = useClientSession();
+  const { activeClients, archiveClient, restoreClient } = useClientSession();
   return (
     <>
+      <Text testID="session-active-count">{activeClients.length}</Text>
       <Pressable testID="archive-lea" onPress={() => archiveClient('client-agenda-lea')} />
       <Pressable testID="restore-lea" onPress={() => restoreClient('client-agenda-lea')} />
     </>
@@ -83,6 +85,55 @@ describe('ClientDirectoryScreen', () => {
     const create = view.getByTestId('add-client-directory');
     expect(create.props.accessibilityRole).toBe('button');
     expect(create.props.accessibilityLabel).toBe('Ajouter une cliente');
+  });
+
+  it('shows the total of ACTIVE clients in a pill next to the title, derived from the session and deaf to search', async () => {
+    const view = await renderDirectory();
+    // The session's own active collection is the one source of the total.
+    const total = Number(view.getByTestId('session-active-count').props.children);
+    expect(total).toBeGreaterThan(1);
+    const count = () => view.getByTestId('clients-header-count');
+
+    // Beside the untouched « Clientes » title: white figures in a soft-violet pill.
+    const title = view.getByRole('header', { name: 'Clientes' });
+    const pill = count().parent!;
+    expect(pill.parent).toBe(title.parent);
+    expect(count().props.children).toBe(total);
+    expect(count().props.accessibilityLabel).toBe(`${total} clientes actives`);
+    expect(StyleSheet.flatten(count().props.style)).toMatchObject({ color: colors.background });
+    expect(StyleSheet.flatten(pill.props.style)).toMatchObject({
+      backgroundColor: appointmentPastels.lilac.accent,
+      borderRadius: radii.pill,
+    });
+    expect(StyleSheet.flatten(count().props.style).fontSize).toBeLessThan(
+      StyleSheet.flatten(title.props.style).fontSize,
+    );
+
+    // Search narrows the list, never the total.
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'lea');
+    });
+    expect(count().props.children).toBe(total);
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), '');
+    });
+
+    // An archived Client stays listed (Archivées) but leaves the total; restoring brings her back.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('archive-lea'));
+    });
+    expect(count().props.children).toBe(total - 1);
+    // She is still on the screen, under Archivées (searched: the long list is virtualized).
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa Martin');
+    });
+    expect(view.getByTestId('client-group-archived')).toBeTruthy();
+    expect(count().props.children).toBe(total - 1);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('restore-lea'));
+    });
+    expect(count().props.children).toBe(total);
   });
 
   it('lets the list scroll above the native tab bar through the system content inset', async () => {

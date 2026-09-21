@@ -109,11 +109,7 @@ export function AgendaScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <MainScreenHeader
-        style={styles.header}
-        title="Agenda"
-        watermark="agenda"
-      >
+      <MainScreenHeader style={styles.header} title="Agenda" watermark="agenda">
         <AgendaViewSwitcher mode={mode} onChange={setMode} />
       </MainScreenHeader>
       {mode === "day" ? (
@@ -147,6 +143,7 @@ export function AgendaScreen() {
       )}
       <DayPickerSheet
         day={selectedDay}
+        eyebrow="AGENDA DU"
         onClose={() => setDayPickerVisible(false)}
         onSelect={(day) => {
           setSelectedDay(day);

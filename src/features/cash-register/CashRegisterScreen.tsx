@@ -8,30 +8,41 @@
 // Appointment checkout already recorded that money. Nothing is stored,
 // cached or charted.
 
-import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { useState } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   getCashRegisterDaySummary,
   getCashRegisterMonthSummary,
   type CashRegisterSummary,
-} from '@/domain/cash-register';
-import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
-import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
+} from "@/domain/cash-register";
+import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
+import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import {
   paymentMethodIcons,
   paymentMethodLabels,
   type PaymentMethod,
-} from '@/shared/icons/payment-method-icons';
-import { formatEuroCents } from '@/shared/lib/money';
-import { AppText } from '@/shared/ui/AppText';
-import { DateNavigator } from '@/shared/ui/DateNavigator';
-import { DayPickerSheet } from '@/shared/ui/DayPickerSheet';
-import { GlassIconButton, glassIconButtonSize, glassIcons } from '@/shared/ui/GlassIconButton';
-import { SegmentedControl } from '@/shared/ui/SegmentedControl';
+} from "@/shared/icons/payment-method-icons";
+import { formatEuroCents } from "@/shared/lib/money";
+import { AppText } from "@/shared/ui/AppText";
+import { DateNavigator } from "@/shared/ui/DateNavigator";
+import { DayPickerSheet } from "@/shared/ui/DayPickerSheet";
+import {
+  GlassIconButton,
+  glassIconButtonSize,
+  glassIcons,
+} from "@/shared/ui/GlassIconButton";
+import { PushedScreenWatermark } from "@/shared/ui/ScreenWatermarkIcon";
+import { SegmentedControl } from "@/shared/ui/SegmentedControl";
 import {
   foregroundSoft,
   gutter,
@@ -40,7 +51,7 @@ import {
   radii,
   semanticColors,
   spacing,
-} from '@/shared/ui/theme';
+} from "@/shared/ui/theme";
 
 import {
   formatCashRegisterCaption,
@@ -53,38 +64,54 @@ import {
   startOfLocalDay,
   startOfLocalMonth,
   type CashRegisterPeriod,
-} from './presentation';
+} from "./presentation";
 
-const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
+const horizontalGutter =
+  Platform.OS === "android" ? gutter.android : gutter.ios;
 
 const PERIOD_OPTIONS = [
-  { value: 'day', label: 'Jour' },
-  { value: 'month', label: 'Mois' },
+  { value: "day", label: "Jour" },
+  { value: "month", label: "Mois" },
 ] as const;
 
 export function CashRegisterScreen() {
   const router = useRouter();
   const { appointments } = useAppointmentSession();
   const { sales } = useSaleSession();
-  const [period, setPeriod] = useState<CashRegisterPeriod>('day');
-  const [selectedDay, setSelectedDay] = useState(() => startOfLocalDay(new Date()));
-  const [selectedMonth, setSelectedMonth] = useState(() => startOfLocalMonth(new Date()));
+  const [period, setPeriod] = useState<CashRegisterPeriod>("day");
+  const [selectedDay, setSelectedDay] = useState(() =>
+    startOfLocalDay(new Date()),
+  );
+  const [selectedMonth, setSelectedMonth] = useState(() =>
+    startOfLocalMonth(new Date()),
+  );
   const [dayPickerVisible, setDayPickerVisible] = useState(false);
 
   const now = new Date();
-  const sources = { appointments: appointments.map(({ appointment }) => appointment), sales };
+  const sources = {
+    appointments: appointments.map(({ appointment }) => appointment),
+    sales,
+  };
   const summary: CashRegisterSummary =
-    period === 'day'
+    period === "day"
       ? getCashRegisterDaySummary(sources, selectedDay)
       : getCashRegisterMonthSummary(sources, selectedMonth);
   const isCurrentPeriod =
-    period === 'day' ? isSameLocalDay(selectedDay, now) : isSameLocalMonth(selectedMonth, now);
+    period === "day"
+      ? isSameLocalDay(selectedDay, now)
+      : isSameLocalMonth(selectedMonth, now);
 
-  const shiftDay = (amount: number) => setSelectedDay((current) => shiftLocalDay(current, amount));
-  const shiftMonth = (amount: number) => setSelectedMonth((current) => shiftLocalMonth(current, amount));
+  const shiftDay = (amount: number) =>
+    setSelectedDay((current) => shiftLocalDay(current, amount));
+  const shiftMonth = (amount: number) =>
+    setSelectedMonth((current) => shiftLocalMonth(current, amount));
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea} testID="cash-register-screen">
+    <SafeAreaView
+      edges={["top"]}
+      style={styles.safeArea}
+      testID="cash-register-screen"
+    >
       <View style={styles.topBar}>
         <GlassIconButton
           accessibilityLabel="Retour"
@@ -96,8 +123,12 @@ export function CashRegisterScreen() {
         </AppText>
         <View style={styles.topBarSpacer} />
       </View>
+      <PushedScreenWatermark kind="cashRegister" titleOffset={spacing.sm} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <AppText accessibilityRole="header" variant="screenTitle">
           Caisse
         </AppText>
@@ -109,7 +140,7 @@ export function CashRegisterScreen() {
           value={period}
         />
 
-        {period === 'day' ? (
+        {period === "day" ? (
           // The SAME selected day drives the summary above: arrows and
           // calendar are two ways to reach one state.
           <DateNavigator
@@ -130,18 +161,31 @@ export function CashRegisterScreen() {
               testID="cash-register-previous"
             />
             <View style={styles.periodCopy}>
-              <AppText variant="control" numberOfLines={1} style={styles.periodLabel} testID="cash-register-period-label">
+              <AppText
+                variant="control"
+                numberOfLines={1}
+                style={styles.periodLabel}
+                testID="cash-register-period-label"
+              >
                 {formatCashRegisterMonth(selectedMonth)}
               </AppText>
               {!isCurrentPeriod && (
                 <Pressable
                   accessibilityLabel="Ce mois-ci"
                   accessibilityRole="button"
-                  onPress={() => setSelectedMonth(startOfLocalMonth(new Date()))}
-                  style={({ pressed }) => [styles.currentShortcut, pressed && styles.pressedControl]}
+                  onPress={() =>
+                    setSelectedMonth(startOfLocalMonth(new Date()))
+                  }
+                  style={({ pressed }) => [
+                    styles.currentShortcut,
+                    pressed && styles.pressedControl,
+                  ]}
                   testID="cash-register-current"
                 >
-                  <AppText variant="metadata" style={styles.currentShortcutText}>
+                  <AppText
+                    variant="metadata"
+                    style={styles.currentShortcutText}
+                  >
                     Ce mois-ci
                   </AppText>
                 </Pressable>
@@ -166,10 +210,18 @@ export function CashRegisterScreen() {
           >
             {formatEuroCents(summary.totalCents)}
           </AppText>
-          <AppText variant="control" style={styles.totalCaption} testID="cash-register-caption">
+          <AppText
+            variant="control"
+            style={styles.totalCaption}
+            testID="cash-register-caption"
+          >
             {formatCashRegisterCaption(period, isCurrentPeriod)}
           </AppText>
-          <AppText variant="metadata" style={styles.checkoutCount} testID="cash-register-count">
+          <AppText
+            variant="metadata"
+            style={styles.checkoutCount}
+            testID="cash-register-count"
+          >
             {formatCheckoutCount(summary.checkoutCount)}
           </AppText>
         </View>
@@ -182,6 +234,7 @@ export function CashRegisterScreen() {
 
       <DayPickerSheet
         day={selectedDay}
+        eyebrow="CAISSE DU"
         onClose={() => setDayPickerVisible(false)}
         onSelect={(day) => {
           setSelectedDay(day);
@@ -194,7 +247,13 @@ export function CashRegisterScreen() {
   );
 }
 
-function MethodCard({ method, cents }: { readonly method: PaymentMethod; readonly cents: number }) {
+function MethodCard({
+  method,
+  cents,
+}: {
+  readonly method: PaymentMethod;
+  readonly cents: number;
+}) {
   const label = paymentMethodLabels[method];
   return (
     <View
@@ -204,7 +263,11 @@ function MethodCard({ method, cents }: { readonly method: PaymentMethod; readonl
       testID={`cash-register-${method.toLowerCase()}`}
     >
       <View style={styles.methodIcon}>
-        <SymbolView name={paymentMethodIcons[method]} size={18} tintColor={semanticColors.accent} />
+        <SymbolView
+          name={paymentMethodIcons[method]}
+          size={18}
+          tintColor={semanticColors.accent}
+        />
       </View>
       <AppText variant="metadata" style={styles.methodLabel}>
         {label}
@@ -219,42 +282,48 @@ function MethodCard({ method, cents }: { readonly method: PaymentMethod; readonl
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
   topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingHorizontal: horizontalGutter,
     paddingVertical: spacing.sm,
   },
   // Mirrors the back button so the eyebrow stays centred.
   topBarSpacer: { height: glassIconButtonSize, width: glassIconButtonSize },
   eyebrow: { color: semanticColors.accent },
-  pressedControl: { opacity: interaction.pressedOpacity, transform: [{ scale: interaction.pressedScale }] },
+  pressedControl: {
+    opacity: interaction.pressedOpacity,
+    transform: [{ scale: interaction.pressedScale }],
+  },
   content: {
     gap: spacing.lg,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing["3xl"],
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
   },
-  navigation: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
-  periodCopy: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 },
-  periodLabel: { color: semanticColors.foreground, textAlign: 'center' },
+  navigation: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
+  periodCopy: { alignItems: "center", flex: 1, gap: 2, minWidth: 0 },
+  periodLabel: { color: semanticColors.foreground, textAlign: "center" },
   currentShortcut: { paddingHorizontal: spacing.sm, paddingVertical: 2 },
   currentShortcutText: { color: semanticColors.accent },
   totalCard: {
     backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.large,
     gap: spacing.xs,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
   },
-  totalValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  totalValue: {
+    color: semanticColors.foreground,
+    fontVariant: ["tabular-nums"],
+  },
   totalCaption: { color: lavender.lav700 },
   checkoutCount: { color: foregroundSoft },
-  methods: { flexDirection: 'row', gap: spacing.sm },
+  methods: { flexDirection: "row", gap: spacing.sm },
   methodCard: {
     backgroundColor: semanticColors.surface,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.large,
     flex: 1,
     gap: spacing.xs,
@@ -262,15 +331,18 @@ const styles = StyleSheet.create({
     padding: spacing.base,
   },
   methodIcon: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.medium,
     height: 36,
-    justifyContent: 'center',
+    justifyContent: "center",
     marginBottom: spacing.xs,
     width: 36,
   },
   methodLabel: { color: foregroundSoft },
-  methodValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  methodValue: {
+    color: semanticColors.foreground,
+    fontVariant: ["tabular-nums"],
+  },
 });

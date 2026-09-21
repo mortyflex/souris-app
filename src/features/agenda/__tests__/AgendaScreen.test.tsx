@@ -1,6 +1,8 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
+import { semanticColors } from '@/shared/ui/theme';
+
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -167,13 +169,11 @@ describe('AgendaScreen — day navigation', () => {
 
     await press(view, 'agenda-date-calendar');
     expect(view.getByTestId('agenda-day-picker')).toBeTruthy();
-    // The picker opens straight on the wheel: no heading, no eyebrow.
+    // Headed by the violet « AGENDA DU » eyebrow alone: no « Choisir un jour » title.
+    const heading = view.getByRole('header', { name: 'AGENDA DU' });
+    expect(heading.props.testID).toBe('agenda-day-picker-heading');
+    expect(StyleSheet.flatten(heading.props.style)).toMatchObject({ color: semanticColors.accent });
     expect(view.queryByText('Choisir un jour')).toBeNull();
-    expect(view.queryByText('AGENDA')).toBeNull();
-    // Screen readers still get the sheet's purpose, from an element that draws nothing.
-    const heading = view.getByRole('header', { name: 'Choisir une date' });
-    expect(heading.props.children).toBeUndefined();
-    expect(StyleSheet.flatten(heading.props.style)).toMatchObject({ position: 'absolute', height: 1, width: 1 });
     expect(view.queryByText('Choisir une date')).toBeNull();
     mockPickerDate = new Date(2026, 8, 17, 23, 59);
     await press(view, 'mock-date-picker');

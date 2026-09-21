@@ -78,6 +78,16 @@ describe('ServiceCatalogScreen', () => {
     expect(view.queryByText(/Technique · \d+ phases/)).toBeNull();
   });
 
+  it('carries the decorative services watermark, hidden from accessibility and touches', async () => {
+    const view = await renderCatalog();
+
+    expect(view.queryByTestId('screen-watermark-services')).toBeNull();
+    const watermark = view.getByTestId('screen-watermark-services', { includeHiddenElements: true });
+    expect(watermark.props.pointerEvents).toBe('none');
+    expect(watermark.props.accessibilityElementsHidden).toBe(true);
+    expect(view.getByRole('header', { name: 'Prestations & tarifs' })).toBeTruthy();
+  });
+
   it('opens the existing Service editor with only its stable id', async () => {
     const view = await renderCatalog();
 

@@ -48,6 +48,19 @@ export const peach = {
   peach700: '#955816', // oklch(0.52 0.11 62) — processing time accent / text
 } as const;
 
+// Mint — the SIMPLE-service category in the Appointment service picker
+// (DESIGN_OVERRIDES.md §22). A category colour, NOT a success / validation
+// colour. Same OKLCH lightness steps as the lavender scale at hue 160; 600 / 700
+// sit on the approved mint planning-card accent and title.
+export const mint = {
+  mint050: '#EAFBF1', // oklch(0.972 0.022 160) — simple-service card
+  mint100: '#D7F6E4', // oklch(0.945 0.040 160) — selected simple-service card
+  mint200: '#BAEACE', // oklch(0.895 0.062 160) — simple-service card border
+  mint600: '#118659', // oklch(0.55 0.12 160) — selected border, check badge
+  mint650: '#236647', // oklch(0.46 0.085 160) — supporting text on mint (≥ 5.9:1 on mint100)
+  mint700: '#0C5C3C', // oklch(0.42 0.09 160) — title on mint (≥ 6.9:1 on mint100)
+} as const;
+
 // Agenda appointment pastels — the fifteen planning-card families
 // (DESIGN_OVERRIDES.md §19). A family identifies a client within the calendar.
 // These are explicit, approved design tokens ("Appointment Card Color Palette"
@@ -115,6 +128,29 @@ export const semanticColors = {
   brandForeground: brand.plum,
   foregroundSoft,
   foregroundMuted: colors.muted,
+} as const;
+
+// Service picker cards — colour says WHAT the service is, never that it is
+// selected (DESIGN_OVERRIDES.md §22): mint = simple SERVICE, lavender = every
+// other service type. Selection stays inside the family: stronger surface,
+// stronger border, accent check badge.
+export const serviceCardColors = {
+  simple: {
+    background: mint.mint050,
+    border: mint.mint200,
+    title: mint.mint700,
+    subtitle: mint.mint650,
+    selectedBackground: mint.mint100,
+    selectedBorder: mint.mint600,
+  },
+  other: {
+    background: lavender.lav050,
+    border: lavender.lav200,
+    title: lavender.lav700,
+    subtitle: foregroundSoft,
+    selectedBackground: lavender.lav100,
+    selectedBorder: colors.accent,
+  },
 } as const;
 
 // Overlay material — the satin surface of sheets, drawers and confirmation

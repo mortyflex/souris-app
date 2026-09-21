@@ -20,6 +20,12 @@
 // header composition instead of hiding behind the search field. The shared
 // anchor (top and right offsets from the base size) never changes per screen.
 //
+// Pushed management screens (Caisse, Prestations & tarifs) have no
+// MainScreenHeader: their title scrolls with the content. They host the icon
+// in `PushedScreenWatermark`, a full-width zero-height anchor laid right under
+// the top bar and lowered to where the title starts — outside the scroll view,
+// so the glyph is never clipped by it and the content scrolls over it.
+//
 // Decoration only: absolutely positioned (no layout impact), pointer-
 // transparent, hidden from accessibility, and drawn UNDER the screen content
 // so titles and actions always stay on top. One opacity for every main screen
@@ -30,7 +36,13 @@ import { StyleSheet, View } from 'react-native';
 
 import { semanticColors, watermark } from './theme';
 
-export type ScreenWatermarkKind = 'agenda' | 'clients' | 'products' | 'settings';
+export type ScreenWatermarkKind =
+  | 'agenda'
+  | 'clients'
+  | 'products'
+  | 'settings'
+  | 'cashRegister'
+  | 'services';
 
 /** Canonical semantic mapping (SF Symbol / Material symbol). */
 export const screenWatermarkSymbols: Record<ScreenWatermarkKind, SymbolViewProps['name']> = {
@@ -38,6 +50,9 @@ export const screenWatermarkSymbols: Record<ScreenWatermarkKind, SymbolViewProps
   clients: { ios: 'person.2', android: 'group' },
   products: { ios: 'shippingbox', android: 'inventory_2' },
   settings: { ios: 'gearshape', android: 'settings' },
+  // Same symbols as their rows on the Plus screen.
+  cashRegister: { ios: 'banknote', android: 'payments' },
+  services: { ios: 'scissors', android: 'content_cut' },
 };
 
 interface WatermarkOptics {
@@ -55,6 +70,8 @@ export const screenWatermarkOptics: Record<ScreenWatermarkKind, WatermarkOptics>
   clients: { scale: 1.16, rise: 0.16 },
   products: { scale: 1, rise: 0 },
   settings: { scale: 1, rise: 0 },
+  cashRegister: { scale: 1, rise: 0 },
+  services: { scale: 1, rise: 0 },
 };
 
 interface ScreenWatermarkIconProps {
@@ -82,7 +99,24 @@ export function ScreenWatermarkIcon({ kind }: ScreenWatermarkIconProps) {
   );
 }
 
+interface PushedScreenWatermarkProps {
+  readonly kind: ScreenWatermarkKind;
+  /** Distance from the top bar to the top of the screen title. */
+  readonly titleOffset: number;
+}
+
+/** The watermark anchor of a pushed screen; render it between the top bar and the scroll view. */
+export function PushedScreenWatermark({ kind, titleOffset }: PushedScreenWatermarkProps) {
+  return (
+    <View collapsable={false} pointerEvents="none" style={[styles.pushedAnchor, { top: titleOffset }]}>
+      <ScreenWatermarkIcon kind={kind} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  // Full width, no height: it takes no room and never moves the content.
+  pushedAnchor: { height: 0, zIndex: 0 },
   anchor: {
     opacity: watermark.opacity,
     position: 'absolute',

@@ -53,7 +53,7 @@ export const dialog = {
 // device edge — so the safe area never changes where it sits on the page.
 export const watermark = {
   size: 255,
-  opacity: 0.05,
+  opacity: 0.09,
   /** Fraction of the glyph that leaves the page through the right edge. */
   cropRight: 0.28,
   /** Fraction of the glyph that rises above the title block. */

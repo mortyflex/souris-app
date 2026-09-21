@@ -9,7 +9,8 @@
 // the shared glass controls (GlassIconButton): previous day, choose a date,
 // next day. No year, an abbreviated month; when the space between the controls
 // is genuinely too narrow the weekday shortens (« Mer. 16 sept. ») — the text
-// never wraps and never shrinks into metadata.
+// never wraps and is NEVER scaled down: full and compact share the very same
+// `sectionTitle` size. Width problems are solved by the wording, not the font.
 // Presentation only — the caller owns the selected day and what each control
 // does. « Aujourd’hui » is a quiet violet indication shown only on today;
 // elsewhere the same line offers the way back when the caller provides one.
@@ -61,11 +62,19 @@ export function formatNavigatorDate(date: Date, format: NavigatorDateFormat = 'f
 const DATE_GLYPH_RATIO = 0.52;
 
 /**
+ * The date follows the reader's text size up to this multiplier and stops
+ * there: beyond it even « Mer. 16 sept. » would no longer fit between the
+ * controls of a 375 pt phone. Growth is capped — the date is never shrunk.
+ */
+export const navigatorDateMaxFontScale = 1.4;
+
+/**
  * Whether the full date fits the width left between the controls. Pure and
  * deterministic: same width, same text scale, same answer.
  */
 export function navigatorDateFits(text: string, availableWidth: number, fontScale: number): boolean {
-  return text.length * typography.sectionTitle.fontSize * DATE_GLYPH_RATIO * fontScale <= availableWidth;
+  const appliedScale = Math.min(fontScale, navigatorDateMaxFontScale);
+  return text.length * typography.sectionTitle.fontSize * DATE_GLYPH_RATIO * appliedScale <= availableWidth;
 }
 
 export function DateNavigator({
@@ -97,9 +106,9 @@ export function DateNavigator({
         {/* Read aloud in full whatever the visible format. */}
         <AppText
           accessibilityLabel={fullDate}
-          // Last resort under very large accessibility text: a slight fit, never an ellipsis.
-          adjustsFontSizeToFit
-          minimumFontScale={0.85}
+          // No `adjustsFontSizeToFit`: it shrank a date that fitted (see
+          // DESIGN_OVERRIDES.md §21). The size is fixed; only growth is capped.
+          maxFontSizeMultiplier={navigatorDateMaxFontScale}
           numberOfLines={1}
           style={styles.date}
           testID={`${testID}-date`}
@@ -147,7 +156,9 @@ export function DateNavigator({
 const styles = StyleSheet.create({
   navigator: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
   copy: { alignItems: 'center', flex: 1, minWidth: 0 },
-  date: { color: semanticColors.foreground, textAlign: 'center' },
+  // Stretched to the measured width between the controls: the text is centred
+  // inside a definite box instead of being sized by its own content.
+  date: { alignSelf: 'stretch', color: semanticColors.foreground, textAlign: 'center' },
   secondary: { color: semanticColors.accent, textAlign: 'center' },
   pressed: { opacity: interaction.pressedOpacity },
 });

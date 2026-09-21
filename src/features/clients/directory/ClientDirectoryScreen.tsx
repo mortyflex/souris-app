@@ -49,9 +49,16 @@ import {
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
+function formatActiveClientCountLabel(count: number): string {
+  const plural = count > 1 ? 's' : '';
+  return `${count} cliente${plural} active${plural}`;
+}
+
 export function ClientDirectoryScreen() {
   const router = useRouter();
-  const { clients } = useClientSession();
+  // `activeClients` is derived by the session from the same `clients`: the
+  // header total can never drift from the list, and search never touches it.
+  const { clients, activeClients } = useClientSession();
   const [query, setQuery] = useState('');
   const [addClientVisible, setAddClientVisible] = useState(false);
 
@@ -69,7 +76,13 @@ export function ClientDirectoryScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <MainScreenHeader title="Clientes" watermark="clients" />
+      <MainScreenHeader
+        count={activeClients.length}
+        countAccessibilityLabel={formatActiveClientCountLabel(activeClients.length)}
+        testID="clients-header"
+        title="Clientes"
+        watermark="clients"
+      />
 
       <View style={styles.searchWrap}>
         <SearchField

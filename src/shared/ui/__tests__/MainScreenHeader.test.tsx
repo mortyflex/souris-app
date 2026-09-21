@@ -27,4 +27,24 @@ describe('MainScreenHeader', () => {
     expect(view.getByText('13 septembre')).toBeTruthy();
     expect(view.getByText('Switcher')).toBeTruthy();
   });
+
+  it('shows an optional quiet count beside the title, and nothing when none is given', async () => {
+    const view = await render(
+      <MainScreenHeader
+        count={622}
+        countAccessibilityLabel="622 clientes actives"
+        testID="clients-header"
+        title="Clientes"
+      />,
+    );
+
+    // The title keeps its own name and role; the count is a separate plain text.
+    expect(view.getByRole('header', { name: 'Clientes' })).toBeTruthy();
+    const count = view.getByTestId('clients-header-count');
+    expect(count.props.children).toBe(622);
+    expect(count.props.accessibilityLabel).toBe('622 clientes actives');
+
+    await view.rerender(<MainScreenHeader testID="clients-header" title="Clientes" />);
+    expect(view.queryByTestId('clients-header-count')).toBeNull();
+  });
 });
