@@ -28,6 +28,8 @@ import {
 } from '@/shared/icons/payment-method-icons';
 import { formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
+import { DateNavigator } from '@/shared/ui/DateNavigator';
+import { DayPickerSheet } from '@/shared/ui/DayPickerSheet';
 import { GlassIconButton, glassIconButtonSize, glassIcons } from '@/shared/ui/GlassIconButton';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import {
@@ -38,13 +40,10 @@ import {
   radii,
   semanticColors,
   spacing,
-  touchTarget,
 } from '@/shared/ui/theme';
 
-import { CashRegisterDayPicker } from './components/CashRegisterDayPicker';
 import {
   formatCashRegisterCaption,
-  formatCashRegisterDay,
   formatCashRegisterMonth,
   formatCheckoutCount,
   isSameLocalDay,
@@ -78,26 +77,11 @@ export function CashRegisterScreen() {
     period === 'day'
       ? getCashRegisterDaySummary(sources, selectedDay)
       : getCashRegisterMonthSummary(sources, selectedMonth);
-  const periodLabel =
-    period === 'day' ? formatCashRegisterDay(selectedDay) : formatCashRegisterMonth(selectedMonth);
   const isCurrentPeriod =
     period === 'day' ? isSameLocalDay(selectedDay, now) : isSameLocalMonth(selectedMonth, now);
 
-  const shift = (amount: number) => {
-    if (period === 'day') {
-      setSelectedDay((current) => shiftLocalDay(current, amount));
-    } else {
-      setSelectedMonth((current) => shiftLocalMonth(current, amount));
-    }
-  };
-
-  const goToCurrent = () => {
-    if (period === 'day') {
-      setSelectedDay(startOfLocalDay(new Date()));
-    } else {
-      setSelectedMonth(startOfLocalMonth(new Date()));
-    }
-  };
+  const shiftDay = (amount: number) => setSelectedDay((current) => shiftLocalDay(current, amount));
+  const shiftMonth = (amount: number) => setSelectedMonth((current) => shiftLocalMonth(current, amount));
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea} testID="cash-register-screen">
@@ -125,53 +109,52 @@ export function CashRegisterScreen() {
           value={period}
         />
 
-        <View style={styles.navigation}>
-          <GlassIconButton
-            accessibilityLabel={period === 'day' ? 'Jour précédent' : 'Mois précédent'}
-            icon={glassIcons.previous}
-            onPress={() => shift(-1)}
-            testID="cash-register-previous"
+        {period === 'day' ? (
+          // The SAME selected day drives the summary above: arrows and
+          // calendar are two ways to reach one state.
+          <DateNavigator
+            date={selectedDay}
+            isToday={isCurrentPeriod}
+            onGoToToday={() => setSelectedDay(startOfLocalDay(new Date()))}
+            onNext={() => shiftDay(1)}
+            onOpenCalendar={() => setDayPickerVisible(true)}
+            onPrevious={() => shiftDay(-1)}
+            testID="cash-register"
           />
-          <View style={styles.periodCopy}>
-            {period === 'day' ? (
-              <Pressable
-                accessibilityHint="Choisir un autre jour"
-                accessibilityLabel={periodLabel}
-                accessibilityRole="button"
-                onPress={() => setDayPickerVisible(true)}
-                style={({ pressed }) => [styles.periodAction, pressed && styles.pressedControl]}
-                testID="cash-register-pick-day"
-              >
-                <AppText variant="control" numberOfLines={1} style={styles.periodLabel} testID="cash-register-period-label">
-                  {periodLabel}
-                </AppText>
-              </Pressable>
-            ) : (
+        ) : (
+          <View style={styles.navigation}>
+            <GlassIconButton
+              accessibilityLabel="Mois précédent"
+              icon={glassIcons.previous}
+              onPress={() => shiftMonth(-1)}
+              testID="cash-register-previous"
+            />
+            <View style={styles.periodCopy}>
               <AppText variant="control" numberOfLines={1} style={styles.periodLabel} testID="cash-register-period-label">
-                {periodLabel}
+                {formatCashRegisterMonth(selectedMonth)}
               </AppText>
-            )}
-            {!isCurrentPeriod && (
-              <Pressable
-                accessibilityLabel={period === 'day' ? "Aujourd'hui" : 'Ce mois-ci'}
-                accessibilityRole="button"
-                onPress={goToCurrent}
-                style={({ pressed }) => [styles.currentShortcut, pressed && styles.pressedControl]}
-                testID="cash-register-current"
-              >
-                <AppText variant="metadata" style={styles.currentShortcutText}>
-                  {period === 'day' ? 'Aujourd’hui' : 'Ce mois-ci'}
-                </AppText>
-              </Pressable>
-            )}
+              {!isCurrentPeriod && (
+                <Pressable
+                  accessibilityLabel="Ce mois-ci"
+                  accessibilityRole="button"
+                  onPress={() => setSelectedMonth(startOfLocalMonth(new Date()))}
+                  style={({ pressed }) => [styles.currentShortcut, pressed && styles.pressedControl]}
+                  testID="cash-register-current"
+                >
+                  <AppText variant="metadata" style={styles.currentShortcutText}>
+                    Ce mois-ci
+                  </AppText>
+                </Pressable>
+              )}
+            </View>
+            <GlassIconButton
+              accessibilityLabel="Mois suivant"
+              icon={glassIcons.next}
+              onPress={() => shiftMonth(1)}
+              testID="cash-register-next"
+            />
           </View>
-          <GlassIconButton
-            accessibilityLabel={period === 'day' ? 'Jour suivant' : 'Mois suivant'}
-            icon={glassIcons.next}
-            onPress={() => shift(1)}
-            testID="cash-register-next"
-          />
-        </View>
+        )}
 
         <View style={styles.totalCard} testID="cash-register-total-card">
           <AppText
@@ -197,13 +180,14 @@ export function CashRegisterScreen() {
         </View>
       </ScrollView>
 
-      <CashRegisterDayPicker
+      <DayPickerSheet
         day={selectedDay}
         onClose={() => setDayPickerVisible(false)}
         onSelect={(day) => {
           setSelectedDay(day);
           setDayPickerVisible(false);
         }}
+        testID="cash-register-day-picker"
         visible={dayPickerVisible}
       />
     </SafeAreaView>
@@ -232,8 +216,6 @@ function MethodCard({ method, cents }: { readonly method: PaymentMethod; readonl
   );
 }
 
-const minimumTouchTarget = touchTarget[Platform.OS === 'android' ? 'android' : 'ios'];
-
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
   topBar: {
@@ -255,7 +237,6 @@ const styles = StyleSheet.create({
   },
   navigation: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
   periodCopy: { alignItems: 'center', flex: 1, gap: 2, minWidth: 0 },
-  periodAction: { justifyContent: 'center', minHeight: minimumTouchTarget, paddingHorizontal: spacing.sm },
   periodLabel: { color: semanticColors.foreground, textAlign: 'center' },
   currentShortcut: { paddingHorizontal: spacing.sm, paddingVertical: 2 },
   currentShortcutText: { color: semanticColors.accent },

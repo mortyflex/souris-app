@@ -38,18 +38,6 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-/** `Samedi 12 septembre 2026` */
-export function formatCashRegisterDay(date: Date): string {
-  return capitalize(
-    new Intl.DateTimeFormat('fr-FR', {
-      day: 'numeric',
-      month: 'long',
-      weekday: 'long',
-      year: 'numeric',
-    }).format(date),
-  );
-}
-
 /** `Septembre 2026` */
 export function formatCashRegisterMonth(date: Date): string {
   return capitalize(new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(date));

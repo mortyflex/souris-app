@@ -12,6 +12,9 @@
 export const agenda = {
   hourHeight: 68,
   timelineGutter: 62,
+  // Hour labels are centred on their grid line, so the first one rises above
+  // the canvas: the scroll content starts this far down to show it whole.
+  timelineTopInset: 12,
   dayStartHour: 8,
   dayEndHour: 20,
 } as const;

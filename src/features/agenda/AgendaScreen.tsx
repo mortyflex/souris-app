@@ -1,63 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Platform, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AppText } from '@/shared/ui/AppText';
-import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
-import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
-import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
-import {
-  agenda,
-  foregroundSoft,
-  gutter,
-  interaction,
-  radii,
-  semanticColors,
-  spacing,
-} from '@/shared/ui/theme';
+import { DateNavigator } from "@/shared/ui/DateNavigator";
+import { DayPickerSheet } from "@/shared/ui/DayPickerSheet";
+import { FloatingCreateButton } from "@/shared/ui/FloatingCreateButton";
+import { MainScreenHeader } from "@/shared/ui/MainScreenHeader";
+import { agenda, gutter, semanticColors, spacing } from "@/shared/ui/theme";
 
-import { AgendaViewSwitcher, type AgendaViewMode } from './components/AgendaViewSwitcher';
-import { DayTimeline } from './components/DayTimeline';
-import { WeekView } from './components/WeekView';
+import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
 import {
   addLocalDays,
   followTodayChange,
-  getStartOfWeek,
-  getWeekDays,
   isSameLocalDay,
   shiftWeek,
   startOfLocalDay,
-} from './calendar/week';
-import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
-import { getOperationalAgendaEntries } from './operational-visibility';
-
-const dayNames = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
-const monthFormatter = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
-const yearFormatter = new Intl.DateTimeFormat('fr-FR', { year: 'numeric' });
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(date);
-}
-
-function formatWeekRange(date: Date): string {
-  const start = getStartOfWeek(date);
-  const end = addLocalDays(start, 6);
-  const startMonth = monthFormatter.format(start).replace(/\.$/, '');
-  const endMonth = monthFormatter.format(end).replace(/\.$/, '');
-  const startYear = yearFormatter.format(start);
-  const endYear = yearFormatter.format(end);
-  const startDay = start.getDate();
-  const endDay = end.getDate();
-
-  if (startYear !== endYear) {
-    return `${startDay} ${startMonth} ${startYear} – ${endDay} ${endMonth} ${endYear}`;
-  }
-  if (startMonth !== endMonth) {
-    return `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
-  }
-  return `${startDay} – ${endDay} ${endMonth}`;
-}
+} from "./calendar/week";
+import {
+  AgendaViewSwitcher,
+  type AgendaViewMode,
+} from "./components/AgendaViewSwitcher";
+import { DayTimeline } from "./components/DayTimeline";
+import { WeekView } from "./components/WeekView";
+import { getOperationalAgendaEntries } from "./operational-visibility";
 
 export function AgendaScreen() {
   const router = useRouter();
@@ -65,18 +31,22 @@ export function AgendaScreen() {
   // on return from background, and on a rollover check, never frozen at mount.
   const [today, setToday] = useState<Date>(() => startOfLocalDay(new Date()));
   const [selectedDay, setSelectedDay] = useState<Date>(today);
-  const [mode, setMode] = useState<AgendaViewMode>('day');
+  const [mode, setMode] = useState<AgendaViewMode>("day");
+  const [dayPickerVisible, setDayPickerVisible] = useState(false);
   const { appointments: allAppointments } = useAppointmentSession();
   const operationalAppointments = getOperationalAgendaEntries(allAppointments);
   const previousTodayRef = useRef(today);
-  const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
-  const selectedDayAppointments = operationalAppointments.filter(({ appointment }) =>
-    isSameLocalDay(appointment.startAt, selectedDay),
+  const horizontalGutter =
+    Platform.OS === "android" ? gutter.android : gutter.ios;
+  const selectedDayAppointments = operationalAppointments.filter(
+    ({ appointment }) => isSameLocalDay(appointment.startAt, selectedDay),
   );
 
   const refreshToday = useCallback(() => {
     const current = startOfLocalDay(new Date());
-    setToday((previous) => (isSameLocalDay(previous, current) ? previous : current));
+    setToday((previous) =>
+      isSameLocalDay(previous, current) ? previous : current,
+    );
   }, []);
 
   useFocusEffect(
@@ -86,8 +56,8 @@ export function AgendaScreen() {
   );
 
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
         refreshToday();
       }
     });
@@ -102,12 +72,18 @@ export function AgendaScreen() {
     const previousToday = previousTodayRef.current;
     if (isSameLocalDay(previousToday, today)) return;
     previousTodayRef.current = today;
-    setSelectedDay((selected) => followTodayChange(selected, previousToday, today));
+    setSelectedDay((selected) =>
+      followTodayChange(selected, previousToday, today),
+    );
   }, [today]);
 
   const selectDay = (day: Date) => {
     setSelectedDay(startOfLocalDay(day));
-    setMode('day');
+    setMode("day");
+  };
+
+  const shiftSelectedDay = (amount: number) => {
+    setSelectedDay(addLocalDays(selectedDay, amount));
   };
 
   const shiftSelectedWeek = (amount: number) => {
@@ -125,70 +101,40 @@ export function AgendaScreen() {
   const createAppointment = () => {
     const startAt = new Date(selectedDay);
     startAt.setHours(agenda.dayStartHour, 0, 0, 0);
-    router.push({ pathname: '/appointments/new', params: { startAt: startAt.toISOString() } });
+    router.push({
+      pathname: "/appointments/new",
+      params: { startAt: startAt.toISOString() },
+    });
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <MainScreenHeader
-        eyebrow={mode === 'day' ? formatDate(selectedDay) : 'Vue semaine'}
         style={styles.header}
-        title={mode === 'day' && isSameLocalDay(selectedDay, today) ? "Aujourd'hui" : 'Agenda'}
+        title="Agenda"
         watermark="agenda"
       >
         <AgendaViewSwitcher mode={mode} onChange={setMode} />
       </MainScreenHeader>
-      {mode === 'day' ? (
+      {mode === "day" ? (
         <>
-          <View style={[styles.dayNavigation, { paddingHorizontal: horizontalGutter }]}>
-            <GlassIconButton
-              accessibilityLabel="Semaine précédente"
-              icon={glassIcons.previous}
-              onPress={() => shiftSelectedWeek(-1)}
-            />
-            <AppText variant="control" style={styles.weekRange}>
-              {formatWeekRange(selectedDay)}
-            </AppText>
-            <GlassIconButton
-              accessibilityLabel="Semaine suivante"
-              icon={glassIcons.next}
-              onPress={() => shiftSelectedWeek(1)}
-            />
-          </View>
-          {!isSameLocalDay(selectedDay, today) && (
-            <View style={[styles.todayRow, { paddingHorizontal: horizontalGutter }]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Aujourd'hui"
-                onPress={goToToday}
-                style={({ pressed }) => [styles.todayButton, pressed && styles.pressedControl]}
-              >
-                <AppText variant="metadata" style={styles.todayText}>
-                  Aujourd&apos;hui
-                </AppText>
-              </Pressable>
-            </View>
-          )}
-          <View style={[styles.dayStrip, { paddingHorizontal: horizontalGutter }]}>
-            {getWeekDays(selectedDay).map((day, index) => {
-              const selected = isSameLocalDay(day, selectedDay);
-              const hasAppointments = operationalAppointments.some(({ appointment }) =>
-                isSameLocalDay(appointment.startAt, day),
-              );
-              return (
-                <View key={`${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`}>
-                  <AgendaDayButton
-                    day={day}
-                    dayName={dayNames[index]}
-                    hasAppointments={hasAppointments}
-                    selected={selected}
-                    onPress={selectDay}
-                  />
-                </View>
-              );
-            })}
-          </View>
-          <DayTimeline day={selectedDay} appointments={selectedDayAppointments} />
+          <DateNavigator
+            date={selectedDay}
+            isToday={isSameLocalDay(selectedDay, today)}
+            onGoToToday={goToToday}
+            onNext={() => shiftSelectedDay(1)}
+            onOpenCalendar={() => setDayPickerVisible(true)}
+            onPrevious={() => shiftSelectedDay(-1)}
+            style={[
+              styles.dayNavigation,
+              { paddingHorizontal: horizontalGutter },
+            ]}
+            testID="agenda-date"
+          />
+          <DayTimeline
+            day={selectedDay}
+            appointments={selectedDayAppointments}
+          />
         </>
       ) : (
         <WeekView
@@ -199,6 +145,16 @@ export function AgendaScreen() {
           onShiftWeek={shiftSelectedWeek}
         />
       )}
+      <DayPickerSheet
+        day={selectedDay}
+        onClose={() => setDayPickerVisible(false)}
+        onSelect={(day) => {
+          setSelectedDay(day);
+          setDayPickerVisible(false);
+        }}
+        testID="agenda-day-picker"
+        visible={dayPickerVisible}
+      />
       <FloatingCreateButton
         accessibilityLabel="Nouveau rendez-vous"
         onPress={createAppointment}
@@ -208,86 +164,13 @@ export function AgendaScreen() {
   );
 }
 
-interface AgendaDayButtonProps {
-  readonly day: Date;
-  readonly dayName: string;
-  readonly hasAppointments: boolean;
-  readonly selected: boolean;
-  readonly onPress: (day: Date) => void;
-}
-
-function AgendaDayButton({ day, dayName, hasAppointments, selected, onPress }: AgendaDayButtonProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${dayName} ${day.getDate()}`}
-      onPress={() => onPress(day)}
-      style={({ pressed }) => [
-        styles.dayCell,
-        selected && styles.selectedDayCell,
-        pressed && styles.pressedDayCell,
-      ]}
-    >
-      <AppText variant="metadata" style={[styles.dayName, selected && styles.selectedText]}>
-        {dayName}
-      </AppText>
-      <AppText variant="rowTitle" style={[styles.dayNumber, selected && styles.selectedText]}>
-        {day.getDate()}
-      </AppText>
-      <View style={[styles.loadDot, hasAppointments && styles.activeLoadDot]} />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
   header: { paddingBottom: spacing.md },
   dayNavigation: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    borderBottomColor: semanticColors.borderSubtle,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingBottom: spacing.sm,
     paddingTop: spacing.xs,
   },
-  pressedControl: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
-  },
-  weekRange: { color: semanticColors.foreground, flex: 1, textAlign: 'center' },
-  todayRow: {
-    alignItems: 'flex-end',
-    paddingBottom: spacing.xs,
-  },
-  todayButton: {
-    borderRadius: radii.small,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  todayText: { color: semanticColors.accent },
-  dayStrip: {
-    borderBottomColor: semanticColors.borderSubtle,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: spacing.sm,
-  },
-  dayCell: {
-    alignItems: 'center',
-    borderRadius: radii.large,
-    minHeight: 58,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    width: 44,
-  },
-  selectedDayCell: { backgroundColor: semanticColors.surfaceLavenderStrong },
-  pressedDayCell: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
-  },
-  dayName: { color: foregroundSoft, fontSize: 10, lineHeight: 14, textTransform: 'capitalize' },
-  dayNumber: { fontSize: 15, lineHeight: 20 },
-  selectedText: { color: semanticColors.accent },
-  loadDot: { backgroundColor: semanticColors.borderSubtle, borderRadius: 2.5, height: 5, marginTop: 3, width: 5 },
-  activeLoadDot: { backgroundColor: semanticColors.accent },
 });

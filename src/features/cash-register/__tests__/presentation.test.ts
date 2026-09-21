@@ -1,5 +1,4 @@
 import {
-  formatCashRegisterDay,
   formatCashRegisterMonth,
   formatCheckoutCount,
   isSameLocalDay,
@@ -11,8 +10,8 @@ import {
 } from '../presentation';
 
 describe('Cash Register presentation', () => {
-  it('formats the selected local day and month in French', () => {
-    expect(formatCashRegisterDay(new Date(2026, 8, 12, 15, 30))).toBe('Samedi 12 septembre 2026');
+  // The selected DAY is formatted by the shared DateNavigator (see its test).
+  it('formats the selected calendar month in French', () => {
     expect(formatCashRegisterMonth(new Date(2026, 8, 12))).toBe('Septembre 2026');
   });
 

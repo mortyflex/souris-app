@@ -18,6 +18,7 @@ export const glassIcons = {
   back: { ios: 'chevron.left', android: 'arrow_back' },
   previous: { ios: 'chevron.left', android: 'chevron_left' },
   next: { ios: 'chevron.right', android: 'chevron_right' },
+  calendar: { ios: 'calendar', android: 'calendar_month' },
 } as const satisfies Record<string, SymbolViewProps['name']>;
 
 interface GlassIconButtonProps {

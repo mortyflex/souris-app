@@ -117,6 +117,18 @@ describe('DayTimeline visible range', () => {
 });
 
 describe('DayTimeline hourly grid', () => {
+  it('starts the scroll content below a top inset so the first hour label is shown whole', async () => {
+    const view = await renderTimeline([entry('opening', 8, 30)]);
+
+    expect(view.getByText('08:00')).toBeTruthy();
+    const scroll = view.container.queryAll((node) => node.type === 'RCTScrollView')[0]!;
+    expect(flatStyle(scroll.props.contentContainerStyle).paddingTop).toBe(agenda.timelineTopInset);
+    // The label rises above its grid line by less than the inset.
+    expect(agenda.timelineTopInset).toBeGreaterThanOrEqual(8);
+    // The inset moves the whole canvas: inside it, 08:00 is still y = 0.
+    expect(segmentGeometry(view, 'opening:opening-phase').top).toBe(0);
+  });
+
   it('labels full hours only', async () => {
     const view = await renderTimeline([entry('morning', 9, 60)]);
 

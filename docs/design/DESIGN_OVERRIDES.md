@@ -562,9 +562,9 @@ Produits                                  [watermark, cropped by the right edge]
 ```
 
 - one large screen title on the platform gutter, `spacing.md` below the top safe area;
-  Produits and Clientes carry NO uppercase eyebrow — the title is never repeated. Agenda keeps
-  its contextual eyebrow (the selected date / « Vue semaine ») above « Aujourd'hui » /
-  « Agenda » because it is information, not a duplicate; Plus keeps its approved content;
+  Produits and Clientes carry NO uppercase eyebrow — the title is never repeated. Agenda carries
+  none either: the Jour / Semaine switch already says which view this is, and the selected date
+  belongs to the day navigator (§21); Plus keeps its approved content;
 - optional trailing content inside the gutter (Agenda's view switcher);
 - the decorative watermark is anchored to the TITLE BLOCK — a full-width, unpadded view — so
   its right crop and its vertical relationship to the title are identical on every screen and
@@ -868,6 +868,23 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
   Prestations & tarifs and Caisse (`glassIcons.back`) and by the Agenda previous / next arrows in
   both Jour and Semaine and the Caisse previous / next arrows in both Jour and Mois
   (`glassIcons.previous` / `next`). Only the symbol changes.
+- **Day navigator** — `DateNavigator` (`src/shared/ui/`): the ONE single-day navigation, shared
+  by Agenda Jour and Caisse Jour. Previous day, ONE selected date, choose a date
+  (`glassIcons.calendar`), next day — the three controls are `GlassIconButton`s. The date is
+  ONE `sectionTitle` line without the year and with an abbreviated month — « Mercredi 16 sept. »
+  (`formatNavigatorDate`, the single formatter of both screens). When the width measured between
+  the controls is genuinely too narrow, the weekday shortens (« Mer. 16 sept. »): the date never
+  wraps and never drops to a metadata size. It replaces the Agenda seven-day strip, which is gone
+  from the Day view. Under it, one quiet violet `metadata` line: « Aujourd’hui » as plain text on today,
+  « Revenir à aujourd’hui » as the way back elsewhere. The calendar opens `DayPickerSheet`
+  (`src/shared/ui/`): the canonical date picker of Appointment editing — native wheel in the
+  shared BottomSheet on iOS, native dialog on Android. The sheet has no heading: the wheel and
+  its « Annuler » / « Confirmer » actions only. Agenda Semaine and Caisse Mois keep their
+  own previous / next rows.
+- **Day timeline top inset** — hour labels are centred on their grid line, so the first one
+  (« 08:00 ») rises above the canvas. The scroll content starts `agenda.timelineTopInset` lower so
+  it is shown whole; the inset moves the WHOLE canvas, so labels, grid lines, blocks, the
+  tap-to-create surface and the now line keep their exact relationship.
 - **Floating +** — same size, placement, reveal, menu and hit target (§17). The circle is the
   glass material; the plus keeps its symbol and becomes Souris violet — the button's only accent.
 - **Segmented switches — Agenda Jour / Semaine, Caisse Jour / Mois** — ONE shared primitive,

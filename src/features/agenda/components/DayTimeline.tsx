@@ -189,6 +189,9 @@ function isSameDay(a: Date, b: Date): boolean {
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
+    // The canvas keeps y = 0 at the start of the day; the inset moves the WHOLE
+    // canvas (labels, grid, blocks, tap surface, now line), never one layer.
+    paddingTop: agenda.timelineTopInset,
     paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'],
   },
   canvas: { position: 'relative' },

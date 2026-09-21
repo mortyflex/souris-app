@@ -11,6 +11,7 @@ import {
 } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { formatEuroCents } from '@/shared/lib/money';
+import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { glassIconButtonSize } from '@/shared/ui/GlassIconButton';
 
 import { CashRegisterScreen } from '../CashRegisterScreen';
@@ -122,6 +123,13 @@ async function press(view: Awaited<ReturnType<typeof render>>, testID: string) {
   });
 }
 
+/** Day mode reads the shared DateNavigator's date; Month mode keeps its own label. */
+function periodLabel(view: Awaited<ReturnType<typeof render>>): string {
+  const day = view.queryByTestId('cash-register-date');
+  if (day) return day.props.children as string;
+  return view.getByTestId('cash-register-period-label').props.children as string;
+}
+
 function totals(view: Awaited<ReturnType<typeof render>>) {
   return {
     total: view.getByTestId('cash-register-total').props.children as string,
@@ -129,7 +137,7 @@ function totals(view: Awaited<ReturnType<typeof render>>) {
     cash: within(view.getByTestId('cash-register-cash')).getAllByText(/€/)[0]!.props.children as string,
     count: view.getByTestId('cash-register-count').props.children as string,
     caption: view.getByTestId('cash-register-caption').props.children as string,
-    period: view.getByTestId('cash-register-period-label').props.children as string,
+    period: periodLabel(view),
   };
 }
 
@@ -161,9 +169,12 @@ describe('CashRegisterScreen', () => {
       cash: formatEuroCents(0),
       count: 'Aucun encaissement',
       caption: 'encaissé aujourd’hui',
-      period: 'Samedi 29 août 2026',
+      period: 'Samedi 29 août',
     });
-    expect(view.queryByTestId('cash-register-current')).toBeNull();
+    // The shared formatter, the same one Agenda Jour shows.
+    expect(periodLabel(view)).toBe(formatNavigatorDate(new Date(2026, 7, 29)));
+    expect(view.getByTestId('cash-register-today')).toBeTruthy();
+    expect(view.queryByTestId('cash-register-go-to-today')).toBeNull();
     expect(view.queryByTestId(/chart/)).toBeNull();
     expect(view.queryByText(/TVA|Bénéfice|Dépenses|chiffre d’affaires/i)).toBeNull();
   });
@@ -221,7 +232,7 @@ describe('CashRegisterScreen', () => {
     await press(view, 'checkout-elodie');
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
 
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), period: 'Samedi 29 août 2026' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), period: 'Samedi 29 août' });
 
     await press(view, 'cash-register-previous');
     expect(totals(view)).toMatchObject({
@@ -230,18 +241,19 @@ describe('CashRegisterScreen', () => {
       cash: formatEuroCents(4000),
       count: '1 encaissement',
       caption: 'encaissé ce jour',
-      period: 'Vendredi 28 août 2026',
+      period: 'Vendredi 28 août',
     });
-    expect(view.getByTestId('cash-register-current')).toBeTruthy();
+    expect(view.queryByTestId('cash-register-today')).toBeNull();
+    expect(view.getByTestId('cash-register-go-to-today')).toBeTruthy();
 
     await press(view, 'cash-register-previous');
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Jeudi 27 août 2026' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Jeudi 27 août' });
 
-    await press(view, 'cash-register-current');
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), period: 'Samedi 29 août 2026' });
+    await press(view, 'cash-register-go-to-today');
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), period: 'Samedi 29 août' });
 
     await press(view, 'cash-register-next');
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Dimanche 30 août 2026' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Dimanche 30 août' });
   });
 
   it('jumps directly to a historical day through the canonical date picker', async () => {
@@ -250,24 +262,44 @@ describe('CashRegisterScreen', () => {
     jest.setSystemTime(new Date(2026, 7, 3, 11, 0));
     await press(view, 'sell-standalone-mixed');
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Samedi 29 août 2026' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Samedi 29 août' });
 
-    await press(view, 'cash-register-pick-day');
+    await press(view, 'cash-register-calendar');
     expect(view.getByTestId('cash-register-day-picker')).toBeTruthy();
+    // The picker opens straight on the wheel: no heading, no eyebrow.
+    expect(view.queryByText('Choisir un jour')).toBeNull();
+    expect(view.queryByText('CAISSE')).toBeNull();
+    // Screen readers still get the sheet's purpose, without any visible text.
+    expect(view.getByRole('header', { name: 'Choisir une date' })).toBeTruthy();
+    expect(view.queryByText('Choisir une date')).toBeNull();
     mockPickerDate = new Date(2026, 7, 3, 23, 59);
     await press(view, 'mock-date-picker');
-    await press(view, 'confirm-cash-register-day');
+    await press(view, 'cash-register-day-picker-confirm');
 
     expect(totals(view)).toMatchObject({
       total: formatEuroCents(5000),
       card: formatEuroCents(1000),
       cash: formatEuroCents(4000),
-      period: 'Lundi 3 août 2026',
+      period: 'Lundi 3 août',
       caption: 'encaissé ce jour',
     });
 
-    await press(view, 'cash-register-current');
-    expect(totals(view)).toMatchObject({ period: 'Samedi 29 août 2026', caption: 'encaissé aujourd’hui' });
+    await press(view, 'cash-register-go-to-today');
+    expect(totals(view)).toMatchObject({ period: 'Samedi 29 août', caption: 'encaissé aujourd’hui' });
+  });
+
+  it('leaves the selected day and its totals unchanged when the date picker is cancelled', async () => {
+    const view = await renderCashRegister();
+    await press(view, 'checkout-sofia');
+
+    await press(view, 'cash-register-calendar');
+    mockPickerDate = new Date(2026, 7, 3);
+    await press(view, 'mock-date-picker');
+    await act(async () => {
+      fireEvent.press(view.getAllByText('Annuler')[0]!);
+    });
+
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), period: 'Samedi 29 août' });
   });
 
   it('sums the calendar month from both sources in Month mode and navigates by month', async () => {
@@ -285,7 +317,9 @@ describe('CashRegisterScreen', () => {
     });
 
     expect(view.getByLabelText('Mois').props.accessibilityState.selected).toBe(true);
-    expect(view.queryByTestId('cash-register-pick-day')).toBeNull();
+    // Month mode keeps its own navigation: no shared day navigator, no calendar.
+    expect(view.queryByTestId('cash-register-date')).toBeNull();
+    expect(view.queryByTestId('cash-register-calendar')).toBeNull();
     expect(totals(view)).toMatchObject({
       total: formatEuroCents(18500),
       card: formatEuroCents(14500),
@@ -320,10 +354,13 @@ describe('CashRegisterScreen', () => {
     expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: 'Aucun encaissement' });
   });
 
-  it('navigates with the shared glass arrows, labelled for the mode, one period per press', async () => {
+  it('navigates with the shared glass controls, labelled for the mode, one period per press', async () => {
     const view = await renderCashRegister();
 
-    for (const testID of ['cash-register-previous', 'cash-register-next']) {
+    // Day mode renders through the shared DateNavigator, calendar included.
+    expect(view.getByRole('button', { name: 'Choisir une date' })).toBe(view.getByTestId('cash-register-calendar'));
+
+    for (const testID of ['cash-register-previous', 'cash-register-calendar', 'cash-register-next']) {
       const arrow = view.getByTestId(testID);
       expect(arrow.props.accessibilityRole).toBe('button');
       expect(StyleSheet.flatten(arrow.props.style)).toMatchObject({
@@ -338,7 +375,7 @@ describe('CashRegisterScreen', () => {
     expect(view.getAllByRole('button', { name: 'Jour suivant' })).toHaveLength(1);
 
     await press(view, 'cash-register-next');
-    expect(totals(view).period).toBe('Dimanche 30 août 2026');
+    expect(totals(view).period).toBe('Dimanche 30 août');
 
     await act(async () => {
       fireEvent.press(view.getByLabelText('Mois'));

@@ -1013,7 +1013,7 @@ Current implementation: the `Gestion` section holds `Prestations & tarifs` and `
 
 ```text
 Jour | Mois                              (segmented control; Jour is the default)
-‹  Samedi 12 septembre 2026  ›           (previous / next day; « Aujourd’hui » shortcut when elsewhere)
+‹  Samedi 12 sept.  ▦  ›                 (shared day navigator: previous day, choose a date, next day)
 
 1 240,00 €                               (large, navy)
 encaissé aujourd’hui                     (« encaissé ce jour » / « encaissé ce mois-ci » / « encaissé ce mois »)
@@ -1024,7 +1024,8 @@ encaissé aujourd’hui                     (« encaissé ce jour » / « encais
 
 - `Jour` sums the payments whose `paidAt` falls on the selected device-local civil day; `Mois` sums the
   selected calendar month (never a rolling 30-day window); previous / next navigate freely into history, and
-  tapping the displayed day opens the canonical Souris date picker to jump to any historical day;
+  the calendar control of the shared day navigator (the same one as Agenda Jour) opens the canonical
+  Souris date picker to jump to any day; « Aujourd’hui » marks today, « Revenir à aujourd’hui » leads back;
 - the amounts derive ONLY from money explicitly recorded: appointment checkouts (`appointment.payment`) and
   standalone Product Sale payments (`sale.payment`). Automatically completed appointments, cancellations,
   no-shows and Sales without payment contribute nothing; a Sale sold during an appointment is already inside

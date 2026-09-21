@@ -1,28 +1,42 @@
-// Souris — Caisse day picker
+// Souris — DayPickerSheet
 //
-// Direct selection of a historical day, reusing the canonical Souris date
-// picker pattern (Appointment editing): the native wheel inside the shared
-// BottomSheet on iOS, the native dialog on Android. No new picker.
+// Direct selection of one local day: the calendar button of the shared
+// DateNavigator (Agenda Jour, Caisse Jour). It reuses the canonical Souris
+// date picker pattern (Appointment editing): the native wheel inside the
+// shared BottomSheet on iOS, the native dialog on Android. No new picker.
+// The sheet carries no VISIBLE heading: the wheel and its two actions say it
+// all. Screen readers still land on a « Choisir une date » header first, an
+// accessibility-only element that draws nothing and takes no room.
+// The caller owns the selected day; cancelling never changes it.
 
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
-import { AppButton } from '@/shared/ui/AppButton';
-import { BottomSheet } from '@/shared/ui/BottomSheet';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
-import { semanticColors, spacing } from '@/shared/ui/theme';
+import { AppButton } from './AppButton';
+import { BottomSheet } from './BottomSheet';
+import { semanticColors, spacing } from './theme';
 
-import { startOfLocalDay } from '../presentation';
-
-interface CashRegisterDayPickerProps {
+interface DayPickerSheetProps {
   readonly visible: boolean;
   readonly day: Date;
   readonly onClose: () => void;
+  /** Receives the chosen day at local midnight. */
   readonly onSelect: (day: Date) => void;
+  readonly testID?: string;
 }
 
-export function CashRegisterDayPicker({ visible, day, onClose, onSelect }: CashRegisterDayPickerProps) {
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+export function DayPickerSheet({
+  visible,
+  day,
+  onClose,
+  onSelect,
+  testID = 'day-picker',
+}: DayPickerSheetProps) {
   const [draftDay, setDraftDay] = useState(day);
   // Every presentation starts from the currently selected day (derived
   // during render, not in an effect).
@@ -54,13 +68,17 @@ export function CashRegisterDayPicker({ visible, day, onClose, onSelect }: CashR
   return (
     <BottomSheet
       backdropLabel="Annuler la sélection de date"
-      header={
-        <SheetHeader action={{ label: 'Annuler', onPress: onClose }} eyebrow="CAISSE" title="Choisir un jour" />
-      }
       onClose={onClose}
-      testID="cash-register-day-picker"
+      testID={testID}
       visible={visible}
     >
+      <View
+        accessible
+        accessibilityLabel="Choisir une date"
+        accessibilityRole="header"
+        style={styles.screenReaderHeading}
+        testID={`${testID}-heading`}
+      />
       <DateTimePicker
         accentColor={semanticColors.accent}
         display="spinner"
@@ -71,13 +89,15 @@ export function CashRegisterDayPicker({ visible, day, onClose, onSelect }: CashR
       />
       <View style={styles.footer}>
         <AppButton onPress={onClose} style={styles.secondary} title="Annuler" variant="secondary" />
-        <AppButton onPress={confirm} style={styles.primary} testID="confirm-cash-register-day" title="Confirmer" />
+        <AppButton onPress={confirm} style={styles.primary} testID={`${testID}-confirm`} title="Confirmer" />
       </View>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  // Out of the layout flow and empty: focusable by VoiceOver, invisible on screen.
+  screenReaderHeading: { height: 1, left: 0, position: 'absolute', top: 0, width: 1 },
   footer: { flexDirection: 'row', gap: spacing.sm, paddingBottom: spacing.base, paddingTop: spacing.sm },
   secondary: { flex: 1 },
   primary: { flex: 1 },
