@@ -3,9 +3,9 @@
 // The ONE Client form, shared by the Clientes directory, the Appointment
 // Creation picker (create mode), and the Client Profile (edit mode).
 //
-// Prénom required; Nom / Téléphone / Email / Anniversaire optional. The
-// birthday is a day + month chosen inline with the shared selector — no
-// year, no keyboard. The sheet is the canonical Souris drawer: it opens in
+// Prénom required; Nom / Téléphone / Email / Anniversaire / Notes optional.
+// The birthday is a day + month chosen inline with the shared selector — no
+// year, no keyboard. Notes is a quiet multiline field at the end of the form. The sheet is the canonical Souris drawer: it opens in
 // its resting position with the keyboard CLOSED (no autofocus), the fields
 // scroll under a fixed header, the action bar stays reachable above the
 // keyboard, and pan-to-dismiss is off so scrolling the form never abandons
@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import type { Client } from '@/domain/clients';
+import { CLIENT_NOTES_MAX_LENGTH, type Client } from '@/domain/clients';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
@@ -163,6 +163,16 @@ export function ClientFormSheet({
         <BirthdayField
           onChange={(birthday) => updateField('birthday', birthday)}
           value={values.birthday}
+        />
+        <TextField
+          accessibilityLabel="Notes"
+          label="Notes"
+          maxLength={CLIENT_NOTES_MAX_LENGTH}
+          multiline
+          onChangeText={(text) => updateField('notes', text)}
+          placeholder="Allergies, préférences, informations utiles…"
+          testID="client-notes-input"
+          value={values.notes}
         />
       </View>
     </BottomSheet>

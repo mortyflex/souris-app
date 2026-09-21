@@ -81,14 +81,22 @@ function updateScoped(
 }
 
 function applyClient(db: SourisDatabase, id: string, client: RemoteClientPayload): void {
-  const params = [client.first_name, client.last_name, client.phone, client.email, client.birthday, client.archived_at];
+  const params = [
+    client.first_name,
+    client.last_name,
+    client.phone,
+    client.email,
+    client.birthday,
+    client.notes,
+    client.archived_at,
+  ];
   const updated = db.runSync(
-    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ?, archived_at = ? WHERE id = ?',
+    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ?, notes = ?, archived_at = ? WHERE id = ?',
     [...params, id],
   ).changes;
   if (updated === 1) return;
   db.runSync(
-    'INSERT INTO clients (first_name, last_name, phone, email, birthday, archived_at, id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO clients (first_name, last_name, phone, email, birthday, notes, archived_at, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [...params, id],
   );
 }

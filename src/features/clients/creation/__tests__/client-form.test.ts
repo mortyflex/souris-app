@@ -27,6 +27,7 @@ describe('Client form', () => {
       phone: '',
       email: ' ',
       birthday: undefined,
+      notes: '  \n ',
     });
 
     expect(result).toEqual({ id: 'c1', firstName: 'Léa' });
@@ -39,6 +40,7 @@ describe('Client form', () => {
       phone: ' 06 12 34 56 78 ',
       email: ' lea@example.com ',
       birthday: { month: 10, day: 12 },
+      notes: '',
     });
 
     expect(result).toEqual({
@@ -77,6 +79,7 @@ describe('Client form', () => {
       phone: '06 12 34 56 78',
       email: 'lea@example.com',
       birthday: { month: 10, day: 12 },
+      notes: '',
     });
   });
 
@@ -89,6 +92,36 @@ describe('Client form', () => {
       phone: '',
       email: '',
       birthday: undefined,
+      notes: '',
+    });
+  });
+
+  describe('notes', () => {
+    const NOTE = 'Allergie au PPD.\n\nPréfère le matin';
+
+    it('keeps a multiline note, trimmed at the edges only', () => {
+      const result = buildClientFromForm('c1', {
+        ...EMPTY_CLIENT_FORM,
+        firstName: 'Léa',
+        notes: `  ${NOTE}\n `,
+      });
+
+      expect(result.notes).toBe(NOTE);
+    });
+
+    it('builds a client without the key when the note is blank (clearing)', () => {
+      const result = buildClientFromForm('c1', { ...EMPTY_CLIENT_FORM, firstName: 'Léa', notes: ' \n ' });
+
+      expect('notes' in result).toBe(false);
+    });
+
+    it('never makes the form invalid: notes are optional and unbounded by validation', () => {
+      expect(isValidClientForm({ ...EMPTY_CLIENT_FORM, firstName: 'Léa' })).toBe(true);
+      expect(isValidClientForm({ ...EMPTY_CLIENT_FORM, firstName: 'Léa', notes: NOTE })).toBe(true);
+    });
+
+    it('hydrates an existing note unchanged, line breaks included', () => {
+      expect(toClientFormValues({ id: 'c1', firstName: 'Léa', notes: NOTE }).notes).toBe(NOTE);
     });
   });
 

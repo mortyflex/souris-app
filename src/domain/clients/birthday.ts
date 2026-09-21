@@ -32,6 +32,22 @@ export const BIRTHDAY_MONTH_NAMES = [
   'décembre',
 ] as const;
 
+/** Standard French abbreviations for compact list display (« 21 sept. »). */
+const BIRTHDAY_MONTH_SHORT_NAMES = [
+  'janv.',
+  'févr.',
+  'mars',
+  'avr.',
+  'mai',
+  'juin',
+  'juil.',
+  'août',
+  'sept.',
+  'oct.',
+  'nov.',
+  'déc.',
+] as const;
+
 const MONTH_LENGTHS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
 
 const BIRTHDAY_KEY_PATTERN = /^(\d{2})-(\d{2})$/;
@@ -84,4 +100,39 @@ export function formatClientBirthday(value: ClientBirthday): string {
   const monthName = BIRTHDAY_MONTH_NAMES[value.month - 1] ?? '';
   const day = value.day === 1 ? '1er' : String(value.day);
   return `${day} ${monthName}`.trim();
+}
+
+/** `{ month: 9, day: 21 }` → `"21 sept."` — the compact directory-row form. */
+export function formatClientBirthdayCompact(value: ClientBirthday): string {
+  const monthName = BIRTHDAY_MONTH_SHORT_NAMES[value.month - 1] ?? '';
+  const day = value.day === 1 ? '1er' : String(value.day);
+  return `${day} ${monthName}`.trim();
+}
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+/**
+ * True when `date` falls on the Client birthday. The comparison reads the
+ * LOCAL calendar day of `date` (never UTC): a birthday is a civil day +
+ * month, not an instant. A `29 février` birthday falls on the 28th in a
+ * year without a 29th, so it is never skipped.
+ */
+export function isClientBirthdayToday(
+  client: { readonly birthday?: ClientBirthday },
+  date: Date,
+): boolean {
+  const birthday = client.birthday;
+  if (birthday === undefined) return false;
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  if (birthday.month === month && birthday.day === day) return true;
+  return (
+    birthday.month === 2 &&
+    birthday.day === 29 &&
+    month === 2 &&
+    day === 28 &&
+    !isLeapYear(date.getFullYear())
+  );
 }

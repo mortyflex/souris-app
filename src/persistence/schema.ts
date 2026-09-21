@@ -311,6 +311,16 @@ UPDATE sale_items SET unit_price_cents = CAST(ROUND(unit_price * 100) AS INTEGER
 ALTER TABLE sale_items DROP COLUMN unit_price;
 `;
 
+/**
+ * Schema v9 — Client notes. One nullable free-text column: NULL means "no
+ * note", which is what every existing Client keeps. Purely additive — no
+ * row rewritten, no wipe, no reseed, no id or sync bookkeeping touched (the
+ * migration marks nothing in the outbox: nothing changed for the remote).
+ */
+const SCHEMA_V9 = `
+ALTER TABLE clients ADD COLUMN notes TEXT;
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -320,6 +330,7 @@ export const migrations: readonly Migration[] = [
   { version: 6, up: (db) => db.execSync(SCHEMA_V6) },
   { version: 7, up: (db) => db.execSync(SCHEMA_V7) },
   { version: 8, up: (db) => db.execSync(SCHEMA_V8) },
+  { version: 9, up: (db) => db.execSync(SCHEMA_V9) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;

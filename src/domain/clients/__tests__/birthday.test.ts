@@ -2,7 +2,9 @@ import {
   birthdayFromCivilDate,
   formatBirthdayKey,
   formatClientBirthday,
+  formatClientBirthdayCompact,
   getBirthdayMonthLength,
+  isClientBirthdayToday,
   isValidClientBirthday,
   parseBirthdayKey,
 } from '../birthday';
@@ -75,5 +77,55 @@ describe('formatClientBirthday', () => {
 
   it('uses the French ordinal for the first day', () => {
     expect(formatClientBirthday({ month: 1, day: 1 })).toBe('1er janvier');
+  });
+});
+
+describe('formatClientBirthdayCompact', () => {
+  it('renders the compact French directory form without a year', () => {
+    expect(formatClientBirthdayCompact({ month: 9, day: 21 })).toBe('21 sept.');
+    expect(formatClientBirthdayCompact({ month: 2, day: 29 })).toBe('29 févr.');
+    expect(formatClientBirthdayCompact({ month: 5, day: 3 })).toBe('3 mai');
+    expect(formatClientBirthdayCompact({ month: 1, day: 1 })).toBe('1er janv.');
+  });
+});
+
+describe('isClientBirthdayToday', () => {
+  const september21 = { birthday: { month: 9, day: 21 } };
+
+  it('matches on day + month whatever the year — no birth year is needed', () => {
+    expect(isClientBirthdayToday(september21, new Date(2026, 8, 21, 9, 0))).toBe(true);
+    expect(isClientBirthdayToday(september21, new Date(2031, 8, 21, 9, 0))).toBe(true);
+    expect(isClientBirthdayToday(september21, new Date(2026, 8, 22, 9, 0))).toBe(false);
+    expect(isClientBirthdayToday(september21, new Date(2026, 9, 21, 9, 0))).toBe(false);
+  });
+
+  it('is false for a Client without a birthday', () => {
+    expect(isClientBirthdayToday({}, new Date(2026, 8, 21))).toBe(false);
+  });
+
+  it('reads the LOCAL calendar day: the first and last minute of the day both match', () => {
+    // A UTC conversion would move one of these two instants to a neighbouring
+    // day in any zone that is not UTC; the local civil day must win in all of them.
+    expect(isClientBirthdayToday(september21, new Date(2026, 8, 21, 0, 0, 0))).toBe(true);
+    expect(isClientBirthdayToday(september21, new Date(2026, 8, 21, 23, 59, 59))).toBe(true);
+    expect(isClientBirthdayToday(september21, new Date(2026, 8, 20, 23, 59, 59))).toBe(false);
+    expect(isClientBirthdayToday(september21, new Date(2026, 8, 22, 0, 0, 0))).toBe(false);
+  });
+
+  it('never turns the stored value into an instant: the key round trip is zone-free', () => {
+    const newYearsEve = { month: 12, day: 31 };
+    expect(parseBirthdayKey(formatBirthdayKey(newYearsEve))).toEqual(newYearsEve);
+    expect(parseBirthdayKey(formatBirthdayKey({ month: 1, day: 1 }))).toEqual({ month: 1, day: 1 });
+  });
+
+  it('celebrates a 29 février on the 29th in a leap year and on the 28th otherwise', () => {
+    const leapDay = { birthday: { month: 2, day: 29 } };
+    expect(isClientBirthdayToday(leapDay, new Date(2028, 1, 29))).toBe(true);
+    expect(isClientBirthdayToday(leapDay, new Date(2028, 1, 28))).toBe(false);
+    expect(isClientBirthdayToday(leapDay, new Date(2027, 1, 28))).toBe(true);
+    expect(isClientBirthdayToday(leapDay, new Date(2027, 2, 1))).toBe(false);
+    // 2100 is not a leap year, 2000 was.
+    expect(isClientBirthdayToday(leapDay, new Date(2100, 1, 28))).toBe(true);
+    expect(isClientBirthdayToday(leapDay, new Date(2000, 1, 28))).toBe(false);
   });
 });

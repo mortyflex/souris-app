@@ -83,8 +83,9 @@ function readClient(db: SourisDatabase, id: string): RemoteClientPayload | undef
     readonly phone: string | null;
     readonly email: string | null;
     readonly birthday: string | null;
+    readonly notes: string | null;
     readonly archived_at: string | null;
-  }>('SELECT first_name, last_name, phone, email, birthday, archived_at FROM clients WHERE id = ?', [id]);
+  }>('SELECT first_name, last_name, phone, email, birthday, notes, archived_at FROM clients WHERE id = ?', [id]);
   if (!row) return undefined;
   return {
     first_name: row.first_name,
@@ -92,6 +93,7 @@ function readClient(db: SourisDatabase, id: string): RemoteClientPayload | undef
     phone: row.phone,
     email: row.email,
     birthday: row.birthday,
+    notes: row.notes,
     archived_at: toOptionalInstant(row.archived_at),
   };
 }

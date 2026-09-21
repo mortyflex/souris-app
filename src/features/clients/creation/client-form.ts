@@ -5,8 +5,15 @@
 // canonical Client. Email validation stays basic UX-level: non-empty
 // emails must look like "something@something.something". The birthday is a
 // day + month pair chosen with the selector, or nothing — never a year.
+// Notes are free multiline text: trimmed at the edges, line breaks kept, a
+// blank note becomes undefined (normalizeClientNotes).
 
-import { isValidClientBirthday, type Client, type ClientBirthday } from '@/domain/clients';
+import {
+  isValidClientBirthday,
+  normalizeClientNotes,
+  type Client,
+  type ClientBirthday,
+} from '@/domain/clients';
 
 export interface ClientFormValues {
   readonly firstName: string;
@@ -14,6 +21,7 @@ export interface ClientFormValues {
   readonly phone: string;
   readonly email: string;
   readonly birthday: ClientBirthday | undefined;
+  readonly notes: string;
 }
 
 export const EMPTY_CLIENT_FORM: ClientFormValues = {
@@ -22,6 +30,7 @@ export const EMPTY_CLIENT_FORM: ClientFormValues = {
   phone: '',
   email: '',
   birthday: undefined,
+  notes: '',
 };
 
 /** Hydrates the shared form with an existing Client (edit mode). */
@@ -32,6 +41,7 @@ export function toClientFormValues(client: Client): ClientFormValues {
     phone: client.phone ?? '',
     email: client.email ?? '',
     birthday: client.birthday,
+    notes: client.notes ?? '',
   };
 }
 
@@ -61,6 +71,7 @@ export function buildClientFromForm(
   id: string,
   values: ClientFormValues,
 ): Client {
+  const notes = normalizeClientNotes(values.notes);
   return {
     id,
     firstName: values.firstName.trim(),
@@ -68,5 +79,6 @@ export function buildClientFromForm(
     phone: values.phone.trim() || undefined,
     email: values.email.trim() || undefined,
     ...(values.birthday !== undefined ? { birthday: values.birthday } : {}),
+    ...(notes !== undefined ? { notes } : {}),
   };
 }

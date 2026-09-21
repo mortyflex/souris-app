@@ -4,7 +4,9 @@
 // session source, grouped into Actives / Archivées (archived Clients stay
 // discoverable, visually secondary, never error-like). Rows stay clean and
 // light (initial avatar, strong name, soft phone) — no per-client cards, no
-// fake metrics. The shared floating + opens the shared creation sheet, the
+// fake metrics. A recorded birthday shows as a compact trailing « 21 sept. »
+// with a cake glyph: secondary, never a placeholder when absent, and the row
+// keeps its height either way. Notes never appear in the list. The shared floating + opens the shared creation sheet, the
 // single way to add a Client. The header follows the Produits reference:
 // large title, no eyebrow, search right below (MainScreenHeader).
 
@@ -19,8 +21,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 
 import {
+  formatClientBirthday,
+  formatClientBirthdayCompact,
   getClientDisplayName,
   getClientInitial,
   isClientArchived,
@@ -33,6 +38,7 @@ import {
   type ClientDirectorySection,
 } from '@/features/clients/directory/directory-sections';
 import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
+import { birthdayIcon } from '@/shared/icons/birthday-icon';
 import { AppText } from '@/shared/ui/AppText';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
 import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
@@ -159,13 +165,14 @@ function ClientRow({ client, onPress }: ClientRowProps) {
   const metadata = archived
     ? [ARCHIVED_CLIENT_LABEL, client.phone].filter(Boolean).join(' · ')
     : client.phone;
+  const birthday = client.birthday;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Ouvrir la fiche de ${getClientDisplayName(client)}${
         archived ? `, ${ARCHIVED_CLIENT_LABEL.toLowerCase()}` : ''
-      }`}
+      }${birthday ? `, anniversaire le ${formatClientBirthday(birthday)}` : ''}`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressedRow]}
       testID={`client-row-${client.id}`}
@@ -189,6 +196,18 @@ function ClientRow({ client, onPress }: ClientRowProps) {
           </AppText>
         ) : null}
       </View>
+      {birthday ? (
+        <View style={styles.birthday} testID={`client-row-birthday-${client.id}`}>
+          <SymbolView
+            name={birthdayIcon}
+            size={14}
+            tintColor={archived ? foregroundSoft : semanticColors.accent}
+          />
+          <AppText variant="metadata" style={styles.birthdayText}>
+            {formatClientBirthdayCompact(birthday)}
+          </AppText>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -237,6 +256,13 @@ const styles = StyleSheet.create({
   clientName: { color: semanticColors.foreground },
   archivedClientName: { color: foregroundSoft },
   phoneLine: { color: foregroundSoft },
+  birthday: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginLeft: spacing.sm,
+  },
+  birthdayText: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   emptyState: { alignItems: 'center', padding: spacing.xl },
   emptyStateText: { color: foregroundSoft, marginTop: spacing.sm, textAlign: 'center' },
 });

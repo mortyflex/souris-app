@@ -23,6 +23,7 @@ export interface RemoteClientPayload {
   readonly phone: string | null;
   readonly email: string | null;
   readonly birthday: string | null;
+  readonly notes: string | null;
   readonly archived_at: string | null;
 }
 

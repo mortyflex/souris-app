@@ -55,8 +55,8 @@ describe('schema v4 migration on an existing v3 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(8);
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+    expect(readSchemaVersion(db)).toBe(9);
+    expect(CURRENT_SCHEMA_VERSION).toBe(9);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(countRows(db, 'clients')).toBe(4);
@@ -100,7 +100,7 @@ describe('schema v4 migration on an existing v3 database', () => {
     const db = openSchemaV3Database();
     migrateDatabase(db);
 
-    expect(migrateDatabase(db)).toBe(8);
+    expect(migrateDatabase(db)).toBe(9);
     const felix = loadClients(db).find((client) => client.id === 'client-felix');
     expect(felix).toBeDefined();
     updateClient(db, { ...felix!, birthday: { month: 7, day: 21 } });

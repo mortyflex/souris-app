@@ -36,10 +36,13 @@ jest.mock('expo-router/react-navigation', () => ({
   usePreventRemove: jest.fn(),
 }));
 
+// Inspectable stand-in: each glyph renders as a View tagged with its iOS name.
 jest.mock('expo-symbols', () => {
   const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
   return {
-    SymbolView: () => React.createElement(React.Fragment, null),
+    SymbolView: ({ name }: { readonly name: string | { readonly ios?: string } }) =>
+      React.createElement(View, { testID: `symbol-${typeof name === 'string' ? name : name.ios}` }),
   };
 });
 
@@ -164,6 +167,16 @@ function SessionProbe() {
             lastName: 'Rouge',
             phone: '06 11 22 33 44',
             birthday: { month: 10, day: 12 },
+          })
+        }
+      />
+      <Pressable
+        testID="add-notes-client"
+        onPress={() =>
+          addClient({
+            id: 'client-notes',
+            firstName: 'Nour',
+            notes: 'Allergie au PPD.\n\nPréfère le matin\n— cuir chevelu sensible',
           })
         }
       />
@@ -352,6 +365,71 @@ describe('ClientProfileScreen', () => {
     expect(view.getByText('12 octobre')).toBeTruthy();
     expect(view.queryByText(/1994/)).toBeNull();
     expect(view.getByText('Anniversaire')).toBeTruthy();
+    // The same cake glyph as the directory row marks the birthday.
+    expect(view.getAllByTestId('symbol-birthday.cake')).toHaveLength(1);
+  });
+
+  it('marks Vendre un produit with the Revente bag glyph, and shows no cake without a birthday', async () => {
+    const view = await renderProfile('client-agenda-lea');
+
+    expect(within(view.getByTestId('sell-product')).getByTestId('symbol-bag.fill')).toBeTruthy();
+    expect(within(view.getByTestId('sell-product')).getByText('Vendre un produit')).toBeTruthy();
+    expect(view.queryByTestId('symbol-birthday.cake')).toBeNull();
+  });
+
+  it('shows the Notes section with every line break preserved', async () => {
+    const view = await renderProfile('client-notes');
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-notes-client'));
+    });
+
+    const section = view.getByTestId('client-notes-section');
+    expect(within(section).getByText('Notes')).toBeTruthy();
+    const notes = view.getByTestId('client-notes');
+    expect(notes.props.children).toBe('Allergie au PPD.\n\nPréfère le matin\n— cuir chevelu sensible');
+    // Never truncated: the professional must be able to read the whole note.
+    expect(notes.props.numberOfLines).toBeUndefined();
+  });
+
+  it('renders no Notes section — no empty card, no placeholder — for a Client without notes', async () => {
+    const view = await renderProfile('client-agenda-lea');
+
+    expect(view.getByText('Léa Martin')).toBeTruthy();
+    expect(view.queryByTestId('client-notes-section')).toBeNull();
+    expect(view.queryByText('Notes')).toBeNull();
+  });
+
+  it('edits the notes from the profile: pre-filled, saved, shown, then cleared', async () => {
+    const view = await renderProfile('client-notes');
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-notes-client'));
+    });
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('edit-client'));
+    });
+    expect(view.getByTestId('client-notes-input').props.value).toBe(
+      'Allergie au PPD.\n\nPréfère le matin\n— cuir chevelu sensible',
+    );
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId('client-notes-input'), 'Allergie au PPD.\nCafé sans sucre');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Enregistrer les modifications'));
+    });
+    expect(view.getByTestId('client-notes').props.children).toBe('Allergie au PPD.\nCafé sans sucre');
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('edit-client'));
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId('client-notes-input'), '');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Enregistrer les modifications'));
+    });
+    expect(view.queryByTestId('client-notes-section')).toBeNull();
   });
 
   it('keeps the profile structure stable at zero: Activité with four zeros and the empty Rendez-vous state', async () => {

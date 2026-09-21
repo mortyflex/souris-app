@@ -6,9 +6,9 @@
 // No React, React Native, Expo, or persistence imports.
 //
 // Relationships from other domains (e.g. Appointments) use clientId only.
-// Commercial history, notes, formulas, photos, statistics, and product
-// purchases are separate future concerns and are intentionally absent from
-// the canonical model. Activity statistics are always DERIVED from Souris
+// Commercial history, formulas, photos, statistics, and product purchases
+// are separate future concerns and are intentionally absent from the
+// canonical model. Activity statistics are always DERIVED from Souris
 // Appointment state — never stored on the Client.
 
 import type { ClientBirthday } from './birthday';
@@ -24,6 +24,11 @@ export interface Client {
    * asks for, or invents a birth year. Optional.
    */
   readonly birthday?: ClientBirthday;
+  /**
+   * Free-text professional note written in Souris (see notes.ts): trimmed,
+   * line breaks preserved, absent when blank. Never imported from legacy data.
+   */
+  readonly notes?: string;
   /**
    * Lifecycle marker. Absent for an active Client; the exact instant of the
    * archive otherwise. Archiving never deletes anything and never touches

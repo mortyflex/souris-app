@@ -186,6 +186,8 @@ function parseClient(row: Json, field: string): RemoteClientPayload {
     phone: optionalText(row, 'phone', field),
     email: optionalText(row, 'email', field),
     birthday,
+    // Absent on a remote that predates the column: no note, never a failure.
+    notes: optionalText(row, 'notes', field),
     archived_at: optionalInstant(row, 'archived_at', field),
   };
 }

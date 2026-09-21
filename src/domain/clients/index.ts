@@ -13,8 +13,11 @@ export {
   birthdayFromCivilDate,
   formatBirthdayKey,
   formatClientBirthday,
+  formatClientBirthdayCompact,
   getBirthdayMonthLength,
+  isClientBirthdayToday,
   isValidClientBirthday,
   parseBirthdayKey,
   type ClientBirthday,
 } from './birthday';
+export { CLIENT_NOTES_MAX_LENGTH, normalizeClientNotes } from './notes';

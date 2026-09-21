@@ -1,6 +1,6 @@
 // Souris — Client Profile
 //
-// A full business record, intentionally light: identity + contact +
+// A full business record, intentionally light: identity + contact + notes +
 // next appointment + derived activity + Souris Appointment history +
 // Souris Product purchases. Nothing here is stored on the Client — activity
 // is derived from Appointment state and purchases from Sale snapshots
@@ -47,6 +47,9 @@ import { getClientSales } from '@/features/sales/presentation';
 import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { ClientDeleteConflictError } from '@/persistence/stores/clients';
 import { alertPersistenceFailure } from '@/providers/persistence-failure';
+import { birthdayIcon } from '@/shared/icons/birthday-icon';
+import type { PlatformSymbolName } from '@/shared/icons/payment-method-icons';
+import { saleIcon } from '@/shared/icons/sale-icon';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -228,6 +231,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
             ) : (
               <AppButton
                 accessibilityLabel="Vendre un produit"
+                icon={saleIcon}
                 onPress={openSale}
                 style={styles.clientAction}
                 testID="sell-product"
@@ -286,9 +290,21 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
               <InfoRow label="Téléphone" value={client.phone} />
               <InfoRow label="Email" value={client.email} />
               <InfoRow
+                icon={birthdayIcon}
                 label="Anniversaire"
                 value={client.birthday ? formatClientBirthday(client.birthday) : undefined}
               />
+            </View>
+          </View>
+        )}
+
+        {client.notes !== undefined && (
+          <View style={styles.infoSection} testID="client-notes-section">
+            <SectionHeader style={styles.sectionHeader} title="Notes" />
+            <View style={styles.notesSurface}>
+              <AppText variant="body" selectable style={styles.notesText} testID="client-notes">
+                {client.notes}
+              </AppText>
             </View>
           </View>
         )}
@@ -422,7 +438,14 @@ function Metric({
   );
 }
 
-function InfoRow({ label, value }: { readonly label: string; readonly value?: string }) {
+interface InfoRowProps {
+  readonly label: string;
+  readonly value?: string;
+  /** Optional glyph shown before the value (the birthday cake of the directory row). */
+  readonly icon?: PlatformSymbolName;
+}
+
+function InfoRow({ label, value, icon }: InfoRowProps) {
   if (!value) return null;
 
   return (
@@ -430,6 +453,7 @@ function InfoRow({ label, value }: { readonly label: string; readonly value?: st
       <AppText variant="metadata" style={styles.infoLabel}>
         {label}
       </AppText>
+      {icon !== undefined && <SymbolView name={icon} size={16} tintColor={semanticColors.accent} />}
       <AppText variant="control" numberOfLines={1} selectable style={styles.infoValue}>
         {value}
       </AppText>
@@ -602,6 +626,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.xs,
   },
+  notesSurface: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
+    padding: spacing.base,
+  },
+  notesText: { color: semanticColors.foreground },
   infoRow: {
     alignItems: 'center',
     flexDirection: 'row',

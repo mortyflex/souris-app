@@ -6,6 +6,9 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+
+import type { PlatformSymbolName } from '@/shared/icons/payment-method-icons';
 
 import { AppText } from './AppText';
 import {
@@ -23,6 +26,12 @@ type AppButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'danger' | 'dange
 interface AppButtonProps extends Omit<PressableProps, 'children' | 'style'> {
   readonly title: string;
   readonly variant?: AppButtonVariant;
+  /**
+   * Optional leading glyph (decorative: the title names the action). Tinted
+   * like the title, except on the lavender `secondary` fill where it takes the
+   * accent violet of the « Revente » action.
+   */
+  readonly icon?: PlatformSymbolName;
   readonly style?: StyleProp<ViewStyle>;
 }
 
@@ -31,11 +40,15 @@ const minimumHeight = touchTarget[Platform.OS === 'android' ? 'android' : 'ios']
 export function AppButton({
   title,
   variant = 'primary',
+  icon,
   disabled,
   accessibilityState,
   style,
   ...rest
 }: AppButtonProps) {
+  const textStyle = disabled ? styles.disabledText : textStyles[variant];
+  const iconTint = !disabled && variant === 'secondary' ? semanticColors.accent : textStyle.color;
+
   return (
     <Pressable
       {...rest}
@@ -44,27 +57,15 @@ export function AppButton({
       disabled={disabled}
       style={({ pressed }) => [
         styles.base,
+        icon !== undefined && styles.withIcon,
         variants[variant],
         disabled && styles.disabled,
         pressed && !disabled && pressedVariants[variant],
         style,
       ]}
     >
-      <AppText
-        variant="control"
-        style={[
-          variant === 'primary'
-            ? styles.primaryText
-            : variant === 'danger'
-              ? styles.dangerText
-              : variant === 'dangerSoft'
-                ? styles.dangerSoftText
-              : variant === 'tertiary'
-                ? styles.tertiaryText
-                : styles.secondaryText,
-          disabled && styles.disabledText,
-        ]}
-      >
+      {icon !== undefined && <SymbolView name={icon} size={18} tintColor={iconTint} />}
+      <AppText variant="control" style={textStyle}>
         {title}
       </AppText>
     </Pressable>
@@ -80,17 +81,21 @@ const styles = StyleSheet.create({
     minHeight: minimumHeight,
     paddingHorizontal: spacing.base,
   },
+  withIcon: { flexDirection: 'row', gap: spacing.sm },
   disabled: {
     backgroundColor: semanticColors.surface,
     borderColor: semanticColors.borderSubtle,
   },
   disabledText: { color: semanticColors.foregroundMuted },
+});
+
+const textStyles = StyleSheet.create({
+  primary: { color: semanticColors.surfaceElevated },
+  secondary: { color: semanticColors.foreground },
+  tertiary: { color: semanticColors.accent },
   // Deeper rose on the rose fill: clearly destructive, readable (≥ 6:1), never neon.
-  dangerText: { color: rose.rose700 },
-  dangerSoftText: { color: rose.rose600 },
-  primaryText: { color: semanticColors.surfaceElevated },
-  secondaryText: { color: semanticColors.foreground },
-  tertiaryText: { color: semanticColors.accent },
+  danger: { color: rose.rose700 },
+  dangerSoft: { color: rose.rose600 },
 });
 
 const variants = StyleSheet.create({

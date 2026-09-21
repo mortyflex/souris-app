@@ -58,6 +58,7 @@ schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v
                      v4 (clients.birthday), v5 (sales.appointment_id, appointment checkout columns),
                      v6 (sales payment columns), v7 (sync_outbox, sync_state),
                      v8 (price_cents / unit_price_cents replace the euro REAL price columns),
+                     v9 (clients.notes),
                      SOURIS_TABLES, BUSINESS_SCOPED_TABLES, SYNC_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
@@ -80,7 +81,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
 Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
@@ -93,7 +94,7 @@ their parent id and are unique inside that parent only (CLOUD_SYNC.md §5).
 souris_metadata     key PK, value                                   seed marker and future flags
 
 clients             id PK, first_name, last_name?, phone?, email?, birth_date? (legacy, ≤ v3),
-                    archived_at? (v2), birthday? (v4, MM-DD)
+                    archived_at? (v2), birthday? (v4, MM-DD), notes? (v9)
 services            id PK, business_id, name, type, price_cents (v8, CHECK >= 0), active
 service_phases      (service_id FK→services CASCADE, position) PK, id, name, duration_minutes, requires_staff
 appointments        id PK, business_id, client_id, staff_member_id, start_at, status, notes?,
@@ -195,6 +196,26 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v9 — Client notes
+
+```text
+ALTER TABLE clients ADD COLUMN notes TEXT;
+```
+
+Purely additive: one nullable column, no default, no backfill. An existing v8 database goes
+`v8 → v9` in one transaction; every Client keeps its row, `rowid` order, id, birthday and
+lifecycle byte for byte and simply has `notes = NULL` ("no note") — no wipe, no reseed
+(`seed_version` stays), no table recreated. The migration writes NOTHING to `sync_outbox` or
+`sync_state`: no Client changed, so nothing is re-pushed. The store keeps the normalized domain
+text (`normalizeClientNotes`: edges trimmed, internal line breaks preserved) and never stores a
+blank note — whitespace resolves to NULL, and clearing a note writes NULL. Covered by
+`client-notes-migration.test.ts`, which builds a genuine schema-v8 fixture (Clients with and
+without birthday, an archived Client, an acknowledged `sync_state` row and a pending
+`sync_outbox` entry), migrates, and asserts version, untouched raw rows, untouched sync
+bookkeeping, untouched definitions of every other table, and hydrated Clients without any
+invented `notes` key. The remote counterpart is
+`supabase/migrations/20260921120000_add_client_notes.sql` (`CLOUD_SYNC.md` §18).
 
 ### Schema v8 — monetary values as integer cents (Cloud Sync V1C-0)
 

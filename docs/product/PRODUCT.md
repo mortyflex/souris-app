@@ -543,6 +543,7 @@ lastName?
 phone?
 email?
 birthday?    { month, day } — day + month only, never a year
+notes?       free-text professional note written in Souris
 ```
 
 A Client selected during Appointment creation is the SAME Client later used
@@ -591,6 +592,8 @@ The Client Profile is a full business screen containing:
 
 - identity (name, subtle initial);
 - contact information (phone, email, birthday) — only existing fields;
+- the `Notes` section when the Client has a note (line breaks preserved) —
+  absent otherwise, never an empty card;
 - the next upcoming Appointment when one exists;
 - derived activity: Rendez-vous réalisés, Total dépensé, Absences,
   Annulations — always derived from Souris Appointment state, never stored;
@@ -663,8 +666,22 @@ timestamp and never a year: Souris only needs it to recognize an upcoming
 birthday, offer a birthday promotion and show it. The Client form asks for the
 day and the month with an inline selector (no keyboard, no year wheel;
 February offers 29 days), and the profile shows a friendly French day + month
-(e.g. `12 octobre`). Birthday promotions and reminders are future features;
-age display is out of scope by design (`docs/domain/CLIENTS.md` §2).
+(e.g. `12 octobre`). The Clientes directory row shows a recorded birthday as
+a compact secondary `21 sept.` with a cake glyph, and nothing when there is
+none. The birthday is annual — it works from day + month alone, no birth year
+is ever needed. Birthday celebration (confetti, banners), reminders and
+birthday discounts are future features and are NOT implemented; age display
+is out of scope by design (`docs/domain/CLIENTS.md` §2).
+
+### Notes
+
+`notes` is one optional free-text field per Client for useful professional
+information: allergies, product sensitivities, preferences, practical
+context. The shared Client form (creation and editing) offers it as a quiet
+multiline `Notes` field (placeholder `Allergies, préférences, informations
+utiles…`); the Client Profile shows it in a `Notes` section. It is never
+shown in the directory list, never searchable, never categorized, and never
+imported from a legacy address book (`docs/domain/CLIENTS.md` §2).
 
 ### Purchased products
 

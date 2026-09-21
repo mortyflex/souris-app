@@ -10,6 +10,7 @@ import { SymbolView } from 'expo-symbols';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { paymentMethodIcons } from '@/shared/icons/payment-method-icons';
+import { saleIcon } from '@/shared/icons/sale-icon';
 import { AppText } from '@/shared/ui/AppText';
 import { interaction, lavender, radii, semanticColors, spacing, touchTarget } from '@/shared/ui/theme';
 
@@ -39,7 +40,7 @@ export function AppointmentPrimaryActions({
           testID="sell-product"
         >
           <SymbolView
-            name={{ ios: 'bag.fill', android: 'shopping_bag' }}
+            name={saleIcon}
             size={18}
             tintColor={semanticColors.accent}
           />

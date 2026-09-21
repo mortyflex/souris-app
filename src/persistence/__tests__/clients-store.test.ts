@@ -1,7 +1,7 @@
 import type { Client } from '@/domain/clients';
 
 import { bootstrapPersistence, loadSnapshot } from '../bootstrap';
-import { insertClient, loadClients, updateClient } from '../stores/clients';
+import { archiveClient, insertClient, loadClients, restoreClient, updateClient } from '../stores/clients';
 import { clientLea, createTestSeed } from '../testing/fixtures';
 import { openTestDatabase } from '../testing/node-sqlite-database';
 
@@ -45,6 +45,60 @@ describe('Client store', () => {
     expect(stored?.birthday).toBe('02-29');
     expect(stored?.birth_date).toBeNull();
     expect(loadClients(db)[0]?.birthday).toEqual({ month: 2, day: 29 });
+  });
+
+  it('stores a multiline note exactly and restores it across a restart', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, () => createTestSeed({ clients: [] }));
+    const notes = 'Allergie au PPD.\n\nPréfère le matin\n— cuir chevelu sensible';
+
+    insertClient(db, { id: 'client-new', firstName: 'Nadia', notes });
+
+    expect(
+      db.getFirstSync<{ notes: string | null }>("SELECT notes FROM clients WHERE id = 'client-new'")?.notes,
+    ).toBe(notes);
+    expect(loadSnapshot(db).clients).toEqual([{ id: 'client-new', firstName: 'Nadia', notes }]);
+  });
+
+  it('adds, edits and clears a note through identity edits without touching the birthday', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+
+    updateClient(db, { ...clientLea, notes: 'Peau réactive' });
+    expect(loadClients(db)[0]).toEqual({ ...clientLea, notes: 'Peau réactive' });
+
+    updateClient(db, { ...clientLea, notes: 'Peau réactive\nÉviter l’ammoniaque' });
+    expect(loadClients(db)[0]?.notes).toBe('Peau réactive\nÉviter l’ammoniaque');
+
+    updateClient(db, clientLea);
+    expect(loadClients(db)[0]).toEqual(clientLea);
+    expect('notes' in loadClients(db)[0]!).toBe(false);
+    expect(
+      db.getFirstSync<{ notes: string | null }>("SELECT notes FROM clients WHERE id = 'client-lea'")?.notes,
+    ).toBeNull();
+  });
+
+  it('never stores a blank note: whitespace resolves to NULL', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, () => createTestSeed({ clients: [] }));
+
+    insertClient(db, { id: 'client-new', firstName: 'Nadia', notes: '  \n ' });
+
+    expect(
+      db.getFirstSync<{ notes: string | null }>("SELECT notes FROM clients WHERE id = 'client-new'")?.notes,
+    ).toBeNull();
+    expect(loadClients(db)).toEqual([{ id: 'client-new', firstName: 'Nadia' }]);
+  });
+
+  it('keeps the note through archive and restore', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+    updateClient(db, { ...clientLea, notes: 'Peau réactive' });
+
+    archiveClient(db, clientLea.id, new Date('2026-09-21T10:00:00.000Z'));
+    expect(loadClients(db)[0]?.notes).toBe('Peau réactive');
+    restoreClient(db, clientLea.id);
+    expect(loadClients(db)[0]).toEqual({ ...clientLea, notes: 'Peau réactive' });
   });
 
   it('clears the birthday when an edit removes it', () => {

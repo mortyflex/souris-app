@@ -33,6 +33,13 @@ interface TextFieldProps {
   /** `submit` keeps the keyboard up so the next field can take focus. */
   readonly submitBehavior?: TextInputProps['submitBehavior'];
   readonly editable?: boolean;
+  /**
+   * Free multiline text (notes): Return inserts a line break, the field grows
+   * with its content instead of scrolling inside the form, and autocorrect is
+   * on because it is prose rather than an identifier.
+   */
+  readonly multiline?: boolean;
+  readonly maxLength?: number;
   readonly inputRef?: Ref<TextInput>;
   readonly testID?: string;
 }
@@ -56,6 +63,8 @@ export function TextField({
   onSubmitEditing,
   submitBehavior,
   editable = true,
+  multiline = false,
+  maxLength,
   inputRef,
   testID,
 }: TextFieldProps) {
@@ -69,6 +78,7 @@ export function TextField({
       <View
         style={[
           styles.inputShell,
+          multiline && styles.inputShellMultiline,
           focused && styles.inputFocused,
           error && styles.inputInvalid,
         ]}
@@ -77,10 +87,12 @@ export function TextField({
           accessibilityLabel={accessibilityLabel}
           autoCapitalize={autoCapitalize}
           autoComplete={autoComplete}
-          autoCorrect={false}
+          autoCorrect={multiline}
           autoFocus={autoFocus}
           editable={editable}
           keyboardType={keyboardType}
+          maxLength={maxLength}
+          multiline={multiline}
           onBlur={() => setFocused(false)}
           onChangeText={onChangeText}
           onFocus={() => setFocused(true)}
@@ -89,10 +101,12 @@ export function TextField({
           placeholderTextColor={semanticColors.foregroundMuted}
           ref={inputRef}
           returnKeyType={returnKeyType}
+          scrollEnabled={!multiline}
           secureTextEntry={secureTextEntry}
-          style={styles.input}
+          style={[styles.input, multiline && styles.inputMultiline]}
           submitBehavior={submitBehavior}
           testID={testID}
+          textAlignVertical={multiline ? 'top' : undefined}
           textContentType={textContentType}
           value={value}
         />
@@ -126,6 +140,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: spacing.md,
   },
+  inputShellMultiline: { alignItems: 'flex-start' },
   inputFocused: {
     backgroundColor: semanticColors.surfaceElevated,
     borderColor: semanticColors.accent,
@@ -141,6 +156,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 42,
     paddingVertical: 0,
+  },
+  inputMultiline: {
+    lineHeight: 22,
+    minHeight: 96,
+    paddingVertical: spacing.md,
   },
   suffix: { color: semanticColors.foregroundSoft, marginLeft: spacing.sm },
   error: { color: rose.rose600 },

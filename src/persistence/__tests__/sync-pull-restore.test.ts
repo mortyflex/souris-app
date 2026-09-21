@@ -504,11 +504,11 @@ describe('Business isolation', () => {
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID, OTHER_BUSINESS_ID]);
     await openUploadedSource(remote);
     remote.writeFromElsewhere(OTHER_BUSINESS_ID, 'CLIENT', 'client-other-salon', {
-      first_name: 'Autre', last_name: 'Salon', phone: null, email: null, birthday: null, archived_at: null,
+      first_name: 'Autre', last_name: 'Salon', phone: null, email: null, birthday: null, notes: null, archived_at: null,
     });
     // The SAME id exists in both Businesses with different content.
     remote.writeFromElsewhere(OTHER_BUSINESS_ID, 'CLIENT', clientLea.id, {
-      first_name: 'Homonyme', last_name: null, phone: null, email: null, birthday: null, archived_at: null,
+      first_name: 'Homonyme', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null,
     });
 
     const { db } = await restoreFreshDevice(remote);
@@ -642,7 +642,7 @@ describe('incremental pull', () => {
 
     // Only what changes afterwards comes back.
     remote.advanceClock(PULL_OVERLAP_MS * 3);
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-later', { first_name: 'Plus tard', last_name: null, phone: null, email: null, birthday: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-later', { first_name: 'Plus tard', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null });
     expect(await runB()).toMatchObject({ pull: { status: 'PULLED', fetched: 1, applied: 1 } });
   });
 
@@ -682,8 +682,73 @@ describe('incremental pull', () => {
     expect(readAcknowledgedRemoteVersion(a, REMOTE_BUSINESS_ID, { aggregateType: 'APPOINTMENT', aggregateId: 'appointment-orphan' })).toBeUndefined();
 
     // Once the Client exists remotely too, the same pull window brings both.
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-nowhere', { first_name: 'Enfin', last_name: null, phone: null, email: null, birthday: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-nowhere', { first_name: 'Enfin', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null });
     expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 2, failed: 0, cursorAdvanced: true } });
+  });
+});
+
+describe('Client birthday + notes — synced like every other Client property', () => {
+  const NOTES = 'Allergie au PPD.\n\nPréfère le matin\n— cuir chevelu sensible';
+  const clientPayload = (remote: FakeSyncRemote, id: string) =>
+    remote.find(REMOTE_BUSINESS_ID, 'CLIENT', id)?.payload as RemoteClientPayload | undefined;
+
+  it('local create and local edit reach the cloud, then restore identically on a fresh device', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = await openUploadedSource(remote);
+    const run = worker(source, remote);
+
+    insertClient(source, { id: 'client-nour', firstName: 'Nour', birthday: { month: 9, day: 21 }, notes: NOTES });
+    expect(await run()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(clientPayload(remote, 'client-nour')).toMatchObject({ birthday: '09-21', notes: NOTES });
+
+    updateClient(source, { ...clientLea, birthday: { month: 7, day: 3 }, notes: 'Peau réactive' });
+    expect(await run()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(clientPayload(remote, clientLea.id)).toMatchObject({ birthday: '07-03', notes: 'Peau réactive' });
+
+    const { db: restored } = await restoreFreshDevice(remote);
+    expect(loadSnapshot(restored).clients).toEqual(loadSnapshot(source).clients);
+    expect(loadSnapshot(restored).clients.find((client) => client.id === 'client-nour')).toEqual({
+      id: 'client-nour',
+      firstName: 'Nour',
+      birthday: { month: 9, day: 21 },
+      notes: NOTES,
+    });
+  });
+
+  it('an edit on one device is pulled by the other; clearing both values propagates as absent, not as empty text', async () => {
+    const { remote, a, b, runA, runB } = await openTwoDevices();
+
+    updateClient(b, { ...clientLea, notes: NOTES });
+    expect(await runB()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    expect(loadSnapshot(a).clients.find((client) => client.id === clientLea.id)).toEqual({ ...clientLea, notes: NOTES });
+    expect(countSyncOutboxRows(a)).toBe(0);
+
+    // Device A clears the birthday AND the note.
+    const { birthday: _birthday, ...leaWithoutBirthday } = clientLea;
+    updateClient(a, leaWithoutBirthday);
+    expect(await runA()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(clientPayload(remote, clientLea.id)).toMatchObject({ birthday: null, notes: null });
+
+    expect(await runB()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    const pulled = loadSnapshot(b).clients.find((client) => client.id === clientLea.id);
+    expect(pulled).toEqual(leaWithoutBirthday);
+    expect('birthday' in pulled!).toBe(false);
+    expect('notes' in pulled!).toBe(false);
+    expect(b.getAllSync('SELECT birthday, notes FROM clients WHERE id = ?', [clientLea.id])).toEqual([
+      { birthday: null, notes: null },
+    ]);
+  });
+
+  it('a Client without birthday or notes keeps syncing with explicit NULLs — the pre-existing shape', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = await openUploadedSource(remote);
+
+    expect(clientPayload(remote, clientZoe.id)).toMatchObject({ birthday: null, notes: null });
+    const { db: restored } = await restoreFreshDevice(remote);
+    const zoe = loadSnapshot(restored).clients.find((client) => client.id === clientZoe.id);
+    expect(zoe).toEqual(loadSnapshot(source).clients.find((client) => client.id === clientZoe.id));
+    expect('notes' in zoe!).toBe(false);
   });
 });
 
@@ -782,7 +847,7 @@ describe('remote tombstones', () => {
 
   it('a tombstone of an aggregate this device never held is simply acknowledged', async () => {
     const { remote, a, runA } = await openTwoDevices();
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief', { first_name: 'Bref', last_name: null, phone: null, email: null, birthday: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief', { first_name: 'Bref', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null });
     const version = remote.tombstoneFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief');
 
     expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 0, deleted: 0, skipped: expect.any(Number), failed: 0 } });
@@ -833,7 +898,7 @@ describe('remote snapshot validation', () => {
     expect(snapshot.clients[0]).toEqual({
       id: 'c',
       syncVersion: 3,
-      payload: { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: null, archived_at: '2026-09-13T08:00:00.500Z' },
+      payload: { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: '2026-09-13T08:00:00.500Z' },
     });
   });
 
@@ -843,6 +908,21 @@ describe('remote snapshot validation', () => {
       services: [{ id: 's', sync_version: 9, deleted_at: '2026-09-18T08:00:00.000Z', name: 42, phases: 'garbage' }],
     });
     expect(snapshot.services).toEqual([{ id: 's', syncVersion: 9, payload: undefined }]);
+  });
+
+  it('reads a Client row written before the notes column existed: no key means no note', () => {
+    const snapshot = parseRemoteBusinessSnapshot({
+      ...base,
+      clients: [
+        { id: 'old', sync_version: 3, deleted_at: null, first_name: 'Léa', birthday: '02-29' },
+        { id: 'new', sync_version: 1, deleted_at: null, first_name: 'Nour', birthday: null, notes: 'Ligne 1\nLigne 2' },
+      ],
+    });
+
+    expect(snapshot.clients.map((client) => client.payload)).toEqual([
+      { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: '02-29', notes: null, archived_at: null },
+      { first_name: 'Nour', last_name: null, phone: null, email: null, birthday: null, notes: 'Ligne 1\nLigne 2', archived_at: null },
+    ]);
   });
 
   it('names the offending field, never a value', () => {
@@ -864,6 +944,7 @@ describe('remote snapshot validation', () => {
     ['a paid Appointment-linked Sale', { sales: [{ id: 's', sync_version: 1, deleted_at: null, client_id: null, appointment_id: 'a', completed_at: '2026-09-18T09:00:00.000Z', paid_at: '2026-09-18T09:00:00.000Z', card_amount_cents: 1, cash_amount_cents: 0, items: [] }] }],
     ['a zero quantity', { sales: [{ id: 's', sync_version: 1, deleted_at: null, client_id: null, appointment_id: null, completed_at: '2026-09-18T09:00:00.000Z', items: [{ id: 'i', position: 0, product_id: 'p', product_name: 'P', unit_price_cents: 1, quantity: 0 }] }] }],
     ['negative stock', { products: [{ id: 'p', sync_version: 1, deleted_at: null, name: 'P', price_cents: 1, stock_quantity: -1, active: true }] }],
+    ['a note that is not text', { clients: [{ id: 'c', sync_version: 1, deleted_at: null, first_name: 'L', notes: 42 }] }],
     ['an unreadable birthday', { clients: [{ id: 'c', sync_version: 1, deleted_at: null, first_name: 'L', birthday: '13-40' }] }],
     ['an invalid instant', { clients: [{ id: 'c', sync_version: 1, deleted_at: null, first_name: 'L', archived_at: 'yesterday' }] }],
     ['a missing family', { sales: undefined }],

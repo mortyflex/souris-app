@@ -43,6 +43,7 @@ lastName?   string
 phone?      string
 email?      string
 birthday?   { month, day }   day + month only, never a year
+notes?      string           free-text professional note written in Souris
 archivedAt? Date             lifecycle marker, absent while active
 ```
 
@@ -79,21 +80,58 @@ Rules (`src/domain/clients/birthday.ts`):
   through `birthdayFromCivilDate`, which keeps day + month and discards the
   year without validating it — a recorded `1990-02-29` still yields
   `{ month: 2, day: 29 }`;
-- presentation is French, day first (`formatClientBirthday`: « 1er janvier »).
+- presentation is French, day first, through ONE shared formatter pair:
+  `formatClientBirthday` (« 1er janvier », profile and form) and
+  `formatClientBirthdayCompact` (« 21 sept. », directory row);
+- the birthday is ANNUAL: it recurs every year from day + month alone, so a
+  Client whose birth year is unknown — every Client — is fully supported;
+- it is a civil calendar value, never an instant: it is never converted
+  through a `Date`, a timestamp or UTC, so no time zone can shift it.
+  `isClientBirthdayToday(client, date)` compares it with the LOCAL calendar
+  day of `date`; a `29 février` birthday falls on the 28th in a year without
+  a 29th.
 
 The value is either a complete day + month pair or absent — there is no
 partial-date model.
 
-Future birthday features (promotions, reminders) will consume this field;
-they are NOT implemented now.
+The directory row shows a recorded birthday as a compact secondary
+« 21 sept. » with a cake glyph; a Client without a birthday shows nothing —
+no placeholder, no taller row.
+
+Birthday CELEBRATION behavior — confetti, banners, reminders, birthday
+discounts, any Appointment or Cash Register change — is NOT implemented.
+`isClientBirthdayToday` exists as a tested domain rule only; no screen
+consumes it yet.
+
+### notes
+
+One optional free-text note per Client, written in Souris by the
+professional: allergies, product sensitivities, preferences, useful context,
+practical information. Rules (`src/domain/clients/notes.ts`):
+
+- plain text only — no categories, no medical model, no structured fields;
+- `normalizeClientNotes` trims the edges and preserves every internal line
+  break; a blank or whitespace-only note is NO note (`undefined` in the
+  domain, `NULL` in SQLite and in the cloud) — there is no empty-string note;
+- the form bounds the input at `CLIENT_NOTES_MAX_LENGTH` (2000 characters,
+  several paragraphs). It is an input bound only: validation never rejects a
+  Client because of its note, and no database CHECK depends on it;
+- notes are read on the Client Profile (`Notes` section, line breaks
+  preserved, absent when there is no note) and edited in the shared Client
+  form. They never appear in the directory rows and are NOT searchable:
+  search still matches names and phone only;
+- notes are Souris-created data. The legacy `notes` / `importedVisitNotes`
+  fields are still never imported (§3);
+- notes and birthday never influence the active-Client count, archiving,
+  ordering, or search results.
 
 Activity statistics (appointment counts, total spent, upcoming appointments)
 are never stored on the Client. They are always DERIVED from Souris
 Appointment state through `clientId`.
 
 Purchased products are derived from Sales through `clientId` and never
-stored on the Client. Future fields (notes, formulas, photos, visit
-frequency) are separate future features and must not be added speculatively.
+stored on the Client. Future fields (formulas, photos, visit frequency) are
+separate future features and must not be added speculatively.
 
 ---
 
@@ -304,8 +342,10 @@ Deletion is offered only from an ARCHIVED Client — the deliberate path is
 
 ## 8. Future Client Capabilities
 
-Notes, photos, technical formulas, and statistics are separate future
-features and remain outside the Client domain.
+Photos, technical formulas, and statistics are separate future features and
+remain outside the Client domain. Birthday celebration behavior (reminders,
+confetti, discounts) is a future feature built on the existing `birthday`
+field (§2).
 
 Purchased-product history derives from the Sale domain through
 `sale.clientId` (`docs/domain/SALES.md`) — it is never stored on the Client,

@@ -542,6 +542,22 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
   names, February offers 29, a shorter month resolves the day to its last valid one). No year
   column, no typing, no nested overlay; « Effacer » removes it. See §17 and
   `docs/domain/CLIENTS.md` §2.
+- **Directory birthday** — a Client row of the Clientes directory shows a recorded birthday as a
+  trailing, secondary « 21 sept. » (`metadata` text, soft foreground) preceded by a 14 pt cake
+  glyph (`birthday.cake` / `cake`) in the accent violet (soft foreground on an archived row), announced in the row label (« anniversaire le 21 septembre »).
+  The row height is unchanged and a Client without a birthday renders nothing — no placeholder.
+  The Client Profile repeats the SAME glyph (`shared/icons/birthday-icon.ts`, 16 pt, accent
+  violet) before the « Anniversaire » value of the `Informations` surface.
+- **Sale glyph on the Client Profile** — « Vendre un produit » carries the bag glyph of the
+  « Revente » action of Appointment Details (`shared/icons/sale-icon.ts`: `bag.fill` /
+  `shopping_bag`). `AppButton` takes an optional leading `icon`, 18 pt: accent violet on the
+  lavender `secondary` fill (as on « Revente »), otherwise tinted like its title (disabled
+  included); a button without an icon is unchanged.
+- **Client notes** — `TextField` gains a `multiline` mode (same label, shell, focus and colours;
+  96 pt minimum, grows with its content instead of scrolling inside the form, Return inserts a
+  line break, autocorrect on). The Client form ends with a quiet optional `Notes` field; the
+  Client Profile shows a `Notes` section (elevated surface, `body` text, selectable, line breaks
+  preserved, never truncated) only when a note exists. Notes never appear in directory rows.
 - **Stock stepper** (`StockStepper`) — Product stock is chosen with a `[−] n [+]` control
   (0–30, hold to repeat) instead of a text field. A legacy quantity above 30 is shown exactly and
   can only be lowered one unit at a time; saving unrelated fields never clamps it.

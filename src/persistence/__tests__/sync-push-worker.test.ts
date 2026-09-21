@@ -224,7 +224,7 @@ describe('bootstrap — first sync of a bound Business', () => {
     const db = openEmptyBoundDatabase();
     const { remote, run } = setup(db);
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-remote', {
-      first_name: 'Zoé', last_name: null, phone: null, email: null, birthday: null, archived_at: null,
+      first_name: 'Zoé', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null,
     });
 
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'RESTORE_REQUIRED' });
@@ -244,7 +244,7 @@ describe('bootstrap — first sync of a bound Business', () => {
     const db = openPopulatedBoundDatabase();
     const { remote, run } = setup(db);
     const version = remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id, {
-      first_name: 'Test', last_name: null, phone: null, email: null, birthday: null, archived_at: null,
+      first_name: 'Test', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null,
     });
 
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'RECONCILIATION_REQUIRED' });
@@ -859,7 +859,7 @@ describe('conflicts — a changed remote aggregate is never overwritten', () => 
     await run();
 
     const elsewhere: RemoteClientPayload = {
-      first_name: 'Léa', last_name: 'Martin-Durand', phone: null, email: null, birthday: '02-29', archived_at: null,
+      first_name: 'Léa', last_name: 'Martin-Durand', phone: null, email: null, birthday: '02-29', notes: null, archived_at: null,
     };
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id, elsewhere);
     updateClient(db, { ...clientLea, phone: '07 11 11 11 11' });

@@ -14,6 +14,7 @@ V1C-0  Local Sync Prerequisites             done — UUID v4 top-level ids (§5)
 V1C    Initial Upload + Incremental Push    done — bootstrap decision, push RPC, push worker, runner (§15)
 V1D    Pull + New Device Restore            done — read RPC, approved transactional restore, incremental pull (§16)
 V1D.1  Seamless Bootstrap                   done — automatic initial upload and new-device restore, first-sync gate (§17)
+       Client notes                         done — one additive nullable column carried by the CLIENT aggregate (§18)
 V1E    Conflict / Retry Hardening
 V1F    Product Image Sync
 ```
@@ -94,7 +95,7 @@ duplicated). Column names follow SQLite; types are the Postgres-native equivalen
 
 ```text
 clients             (business_id, id) PK, first_name, last_name?, phone?, email?, birthday? (MM-DD),
-                    archived_at?, + sync metadata
+                    notes? (§18), archived_at?, + sync metadata
 services            (business_id, id) PK, name, type SERVICE|TECHNIQUE, price_cents, active, + sync metadata
 service_phases      (business_id, service_id, id) PK, position (unique per service, deferrable),
                     name, duration_minutes >= 0, requires_staff
@@ -1143,6 +1144,7 @@ lifecycle        cancelled_at + cancelled_by together; reason only when cancelle
 payment          paid_at + card + cash: all three or none; never on an Appointment-linked Sale
 children         ids and positions / item_order unique inside their parent; returned sorted
 client birthday  must be readable by the local mapper (`parseBirthdayKey`)
+client notes     text or NULL; a row without the key (remote older than §18) reads as no note
 tombstones       identity + version only; NO payload — columns and children are never read as live data
 errors           name the FIELD PATH (`clients[].last_name`), never a value (a row can hold a name or a phone)
 ```
@@ -1541,3 +1543,50 @@ stored `EMPTY`, an initial upload interrupted before any acknowledgement, or a d
 [ ] device with local data signed into a Business that already holds data → nothing uploaded, nothing restored
 [ ] release build: no restore prompt, no sync control anywhere
 ```
+
+## 18. Client notes — an additive CLIENT column (schema v9)
+
+The Client birthday (`clients.birthday`, `MM-DD`) has been part of the remote schema and of both
+RPCs since V1A / V1C. Client notes (`docs/domain/CLIENTS.md` §2) add ONE column to the same
+aggregate — no new aggregate type, no new sync mechanism, no new conflict rule:
+
+```text
+supabase/migrations/20260921120000_add_client_notes.sql
+
+alter table public.clients add column if not exists notes text;     nullable, no default, no CHECK
+create or replace function public.sync_push_aggregate(...)          CLIENT branch reads / writes notes
+create or replace function public.sync_pull_business_aggregates(..) clients[] objects carry notes
+```
+
+- **Non-destructive.** No row is rewritten, so no `updated_at` / `sync_version` moves and no device
+  re-pulls anything because of the migration. No table is recreated; ids, tombstones, triggers, RLS
+  policies and grants are untouched. The table-level grants and owner-only policies already cover
+  the new column; the generic `sync_aggregate_before_write` trigger (`new is distinct from old`)
+  already counts a note edit as a meaningful revision, and an identical re-push as none.
+- **Functions replaced in place.** Both RPCs list the Client columns explicitly, so they must be
+  redefined. `create or replace` with identical signatures keeps their EXECUTE grants, revokes,
+  comments, `SECURITY INVOKER` and `search_path = ''`. Their bodies are the V1C / V1D ones with only
+  the `notes` differences; every other aggregate is byte-identical.
+- **Payload.** `RemoteClientPayload.notes: string | null` — the normalized local text, or `null`.
+  A build that knows the field ALWAYS sends the key, so clearing a note is an explicit `null` and
+  follows the ordinary `sync_version` conflict contract (§9).
+- **Older app builds.** A build that predates the field sends a CLIENT payload without a `notes`
+  key. The push keeps the stored note in that case
+  (`notes = case when p_payload ? 'notes' then excluded.notes else clients.notes end`), so an older
+  device editing a phone number never erases a note written by a newer one. Such a build ignores
+  the extra `notes` key of the pull, and its local schema (≤ v8) has no such column.
+- **Older remote.** A pulled Client row without a `notes` key parses as "no note" (§16.2) — never
+  a validation failure.
+- **Order of deployment: apply the migration BEFORE shipping the build that writes notes.** Against
+  the previous functions, `jsonb_to_record` silently ignores the unknown `notes` key: the push is
+  acknowledged while the note never reaches the cloud, and a later restore would not contain it.
+  The migration is applied by hand, like every Souris migration.
+
+Verified in the out-of-repo PGlite harness (§13 policy): the migration applied on a POPULATED
+database written by the previous functions — existing rows byte-identical (ids, `sync_version`,
+`created_at`, `updated_at`), `notes` NULL everywhere, re-run harmless, an incremental pull after it
+returns nothing — then create / edit / clear of notes and birthday, multiline round trip, the
+older-build payload preserving the note, CONFLICT on a stale version, `anon` and non-owner refusals,
+and the unchanged V1C push checks. Local coverage: `sync-pull-restore.test.ts` (« Client birthday +
+notes »: local create → cloud, local edit → cloud, cloud pull → local, fresh-device restore,
+clearing both values, NULL-only Clients).

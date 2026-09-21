@@ -45,12 +45,24 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 function LifecycleProbe() {
-  const { activeClients, archiveClient, restoreClient } = useClientSession();
+  const { activeClients, archiveClient, restoreClient, updateClient } = useClientSession();
   return (
     <>
       <Text testID="session-active-count">{activeClients.length}</Text>
       <Pressable testID="archive-lea" onPress={() => archiveClient('client-agenda-lea')} />
       <Pressable testID="restore-lea" onPress={() => restoreClient('client-agenda-lea')} />
+      <Pressable
+        testID="give-lea-birthday-and-notes"
+        onPress={() =>
+          updateClient({
+            id: 'client-agenda-lea',
+            firstName: 'Léa',
+            lastName: 'Martin',
+            birthday: { month: 9, day: 21 },
+            notes: 'Allergie au PPD',
+          })
+        }
+      />
     </>
   );
 }
@@ -244,6 +256,57 @@ describe('ClientDirectoryScreen', () => {
     });
 
     expect(view.getByText('Zélie Deville')).toBeTruthy();
+  });
+
+  it('shows a compact birthday on the row when one exists — and nothing at all otherwise', async () => {
+    const view = await renderDirectory();
+    const rowIds = () =>
+      view.getAllByTestId(/^client-row-(?!birthday-)/).map((row) => row.props.testID as string);
+    // The directory is virtualized: narrow it so the rows under test are mounted.
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
+    });
+
+    // No Client of the seed has a birthday: no birthday UI, no placeholder.
+    expect(view.queryAllByTestId(/^client-row-birthday-/)).toHaveLength(0);
+    expect(view.queryByText(/anniversaire/i)).toBeNull();
+    const countBefore = view.getByTestId('session-active-count').props.children;
+    const orderBefore = rowIds();
+    expect(orderBefore).toContain('client-row-client-agenda-lea');
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
+    });
+
+    const badge = view.getByTestId('client-row-birthday-client-agenda-lea');
+    expect(within(badge).getByText('21 sept.')).toBeTruthy();
+    expect(view.queryByText(/2026|septembre 20/)).toBeNull();
+    expect(view.getAllByTestId(/^client-row-birthday-/)).toHaveLength(1);
+    expect(view.getByTestId('client-row-client-agenda-lea').props.accessibilityLabel).toBe(
+      'Ouvrir la fiche de Léa Martin, anniversaire le 21 septembre',
+    );
+
+    // Notes never reach the directory, and neither field moves the count or the order.
+    expect(view.queryByText(/Allergie/)).toBeNull();
+    expect(view.getByTestId('session-active-count').props.children).toBe(countBefore);
+    expect(rowIds()).toEqual(orderBefore);
+  });
+
+  it('does not search notes or birthdays', async () => {
+    const view = await renderDirectory();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
+    });
+
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'allergie');
+    });
+    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'sept');
+    });
+    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
   });
 
   it('lists every Client under Actives without an Archivées group when nothing is archived', async () => {

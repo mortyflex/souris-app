@@ -37,6 +37,7 @@ const editableClient: Client = {
   firstName: 'Léa',
   lastName: 'Martin',
   birthday: { month: 10, day: 12 },
+  notes: 'Allergie au PPD.\nPréfère le matin',
 };
 
 function SessionProbe() {
@@ -44,9 +45,13 @@ function SessionProbe() {
   const client = getClientById('client-agenda-lea');
 
   return (
-    <Text testID="session-birthday">
-      {client?.birthday ? `${client.birthday.month}-${client.birthday.day}` : ''}
-    </Text>
+    <>
+      <Text testID="session-birthday">
+        {client?.birthday ? `${client.birthday.month}-${client.birthday.day}` : ''}
+      </Text>
+      <Text testID="session-notes">{client?.notes ?? ''}</Text>
+      <Text testID="session-has-notes">{String(client !== undefined && 'notes' in client)}</Text>
+    </>
   );
 }
 
@@ -269,6 +274,74 @@ describe('ClientFormSheet', () => {
     await press(reopened, 'birthday-field');
     expect(wheelValue(reopened, 'birthday-wheel-day')).toBe('12');
     expect(wheelValue(reopened, 'birthday-wheel-month')).toBe('octobre');
+  });
+
+  it('offers Notes as an optional multiline field with the existing form styling', async () => {
+    const view = await renderSheet('create');
+
+    const notes = view.getByTestId('client-notes-input');
+    expect(view.getByText('Notes')).toBeTruthy();
+    expect(notes.props.multiline).toBe(true);
+    expect(notes.props.accessibilityLabel).toBe('Notes');
+    expect(notes.props.placeholder).toBe('Allergies, préférences, informations utiles…');
+    expect(notes.props.value).toBe('');
+    expect(notes.props.autoFocus).toBe(false);
+    // Generous bound only — never a tiny limit.
+    expect(notes.props.maxLength).toBeGreaterThanOrEqual(2000);
+    // Notes are optional: a first name alone is enough to submit.
+    await act(async () => fireEvent.changeText(view.getByLabelText('Prénom'), 'Nour'));
+    expect(view.getByTestId('submit-client').props.accessibilityState).toMatchObject({ disabled: false });
+  });
+
+  it('creates a Client with a birthday and multiline notes, trimmed at the edges only', async () => {
+    const submitted = jest.fn();
+    const view = await renderSheet('create', submitted);
+
+    await act(async () => fireEvent.changeText(view.getByLabelText('Prénom'), 'Nour'));
+    await press(view, 'birthday-field');
+    await settleWheel(view, 'birthday-wheel-month', 8);
+    await settleWheel(view, 'birthday-wheel-day', 20);
+    await act(async () =>
+      fireEvent.changeText(view.getByTestId('client-notes-input'), '  Peau réactive\n\nÉviter l’ammoniaque \n'),
+    );
+    await press(view, 'submit-client');
+
+    expect(submitted).toHaveBeenCalledTimes(1);
+    expect(submitted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        firstName: 'Nour',
+        birthday: { month: 9, day: 21 },
+        notes: 'Peau réactive\n\nÉviter l’ammoniaque',
+      }),
+    );
+  });
+
+  it('pre-fills birthday and notes in edit mode and saves the edited note', async () => {
+    const submitted = jest.fn();
+    const view = await renderSheet('edit', submitted);
+
+    expect(view.getByText('12 octobre')).toBeTruthy();
+    expect(view.getByTestId('client-notes-input').props.value).toBe('Allergie au PPD.\nPréfère le matin');
+
+    await act(async () =>
+      fireEvent.changeText(view.getByTestId('client-notes-input'), 'Allergie au PPD.\nPréfère le matin\nCafé sans sucre'),
+    );
+    await press(view, 'submit-client');
+
+    expect(view.getByTestId('session-notes').props.children).toBe('Allergie au PPD.\nPréfère le matin\nCafé sans sucre');
+    expect(view.getByTestId('session-birthday').props.children).toBe('10-12');
+  });
+
+  it('clears the notes when the field is emptied: the saved Client has no notes key', async () => {
+    const submitted = jest.fn();
+    const view = await renderSheet('edit', submitted);
+
+    await act(async () => fireEvent.changeText(view.getByTestId('client-notes-input'), '   \n'));
+    await press(view, 'submit-client');
+
+    expect(view.getByTestId('session-has-notes').props.children).toBe('false');
+    expect('notes' in submitted.mock.calls[0][0]).toBe(false);
+    expect(submitted).toHaveBeenCalledWith(expect.objectContaining({ birthday: { month: 10, day: 12 } }));
   });
 
   it('keeps create and edit behavior otherwise unchanged: first name required, edit keeps the id', async () => {

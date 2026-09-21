@@ -695,18 +695,108 @@ Never invent missing client information.
 
 ---
 
-# 21. Future Client Capabilities
+# 21. Client Data: Implemented and Future Capabilities
+
+## Implemented
+
+Two optional pieces of Souris-created client information are stored on the client: birthday and notes.
+
+They are persisted locally and synced (see §23).
+
+The client profile also shows information DERIVED through `clientId`, never stored on the client.
+
+Reference: `docs/domain/CLIENTS.md`.
+
+### Birthday
+
+```text
+birthday?: { month, day }
+```
+
+- domain value: `{ month, day }`;
+- persistence and sync key: civil `MM-DD` text;
+- annual semantics: it recurs every year from day + month alone;
+- a year is never required, asked for, stored, or invented;
+- it is a calendar value, never an instant: never convert it through a `Date`, a timestamp, or UTC;
+- client creation and editing support it, including clearing it;
+- the client profile displays it;
+- the client directory displays a compact birthday (`21 sept.`) when present, and nothing when absent.
+
+### Notes
+
+```text
+notes?: string
+```
+
+- one optional free-text note per client;
+- nullable: a blank note is no note (`undefined` in the domain, `NULL` in storage);
+- trimmed at the edges, internal line breaks preserved;
+- no categories and no medical model;
+- never imported from legacy data (§20 still applies);
+- client creation and editing support Notes;
+- the client profile displays Notes when present;
+- notes never appear in the client directory and are not searchable.
+
+### Appointment history (derived)
+
+The client profile lists the client's Souris appointments: `appointment.clientId === client.id`.
+
+- grouped as upcoming (`À venir`) and history (`Historique`), plus the next appointment when one exists;
+- cancelled and no-show appointments stay in the history;
+- only permanent appointment deletion removes a row;
+- legacy visits are never imported (§20 still applies).
+
+### Spending and activity (derived)
+
+The profile `Activité` section shows:
+
+- completed appointments;
+- total spent;
+- no-shows;
+- cancellations made by the client.
+
+Total spent is the sum of appointment item snapshot prices of `COMPLETED` appointments only.
+
+It never uses current catalog prices.
+
+It does not include product sales.
+
+The section stays visible at zero.
+
+None of these values is stored on the client.
+
+### Purchased products (derived)
+
+The profile `Produits achetés` section lists the client's sales: `sale.clientId === client.id`.
+
+It reads sale item snapshots, so later product edits or deletion do not change it.
+
+Nothing is stored on the client.
+
+### Not implemented yet
+
+Birthday celebration behavior is NOT implemented:
+
+- confetti;
+- animated banners;
+- birthday reminders;
+- birthday discounts;
+- appointment or cash register changes tied to a birthday.
+
+`isClientBirthdayToday` exists as a tested domain rule only.
+
+No screen consumes it.
+
+Do not build celebration behavior before its dedicated phase.
+
+## Future
 
 Client information created by Souris may later include:
 
-- `birthDate?`;
-- Souris-created notes;
-- Souris appointment history;
 - technical formulas;
 - before/after photos;
-- purchased products;
-- Souris-derived spending;
-- Souris-derived visit frequency.
+- Souris-derived visit frequency;
+- birthday celebration: confetti, banners, reminders, birthday discounts.
 
 These are future features.
 
@@ -740,19 +830,56 @@ Do not design stock or sales architecture speculatively.
 
 # 23. Persistence
 
-Persistence will be introduced deliberately in a dedicated phase.
+Persistence is implemented.
+
+- local: SQLite (`src/persistence`), forward-only migrations — `docs/architecture/PERSISTENCE.md`;
+- cloud: Supabase, through the existing aggregate sync — `docs/architecture/CLOUD_SYNC.md`.
+
+SQLite is the operational database.
+
+The cloud is a synced copy of it.
+
+Client data currently persisted and synced through the `CLIENT` aggregate:
+
+- identity and contact fields;
+- `archived_at`;
+- `birthday` — `MM-DD` text, nullable;
+- `notes` — free text, nullable.
+
+Client notes are persisted locally (SQLite schema v9, `clients.notes`).
+
+Client notes are synced through the existing aggregate sync.
+
+There is no separate sync mechanism for them.
+
+Real client data exists.
+
+Every schema change, local or remote, must be:
+
+- additive;
+- nullable;
+- backward compatible;
+- non-destructive;
+- a normal forward migration.
+
+Never edit an applied migration.
+
+Never wipe, reset, or reseed a database to change its schema.
+
+Supabase migrations are applied by hand.
+
+Never apply them automatically.
 
 Do not add:
 
-- Supabase;
+- another persistence technology;
 - AsyncStorage persistence;
-- database abstractions;
-- sync engines;
-- offline persistence architecture;
+- new database abstractions;
+- a second sync engine;
 
 before explicitly requested.
 
-The domain must remain independent from whichever persistence technology is later chosen.
+The domain must remain independent from the persistence technology.
 
 ---
 
