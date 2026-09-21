@@ -112,6 +112,18 @@ export const mauve = {
   mauve700: '#68376A', // oklch(0.42 0.10 326) — reason text (≥ 6.7:1 on mauve100)
 } as const;
 
+// Receipt paper — the « Résumé du jour » ticket ONLY (DESIGN_OVERRIDES.md §25).
+// A warm near-white derived from oklch hue 80, flat: no grain, no texture, no
+// gradient. Navy text keeps its full contrast on it (foreground 16.6:1).
+// Dashes and the printer groove are alpha variants of the canonical navy.
+export const receiptPaper = {
+  surface: '#FEFBF7', // oklch(0.99 0.006 80)
+  /** Dashed tear lines between the receipt sections. */
+  separator: 'rgba(25, 22, 63, 0.20)',
+  /** The groove of the printer capsule the paper comes out of. */
+  slot: 'rgba(25, 22, 63, 0.24)',
+} as const;
+
 // Secondary readable foreground — readable secondary metadata text.
 // More legible than muted; reserved for text that is actually read.
 // oklch(0.42 0.055 285)

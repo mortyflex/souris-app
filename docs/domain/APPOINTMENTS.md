@@ -1088,6 +1088,34 @@ Appointments from their snapshots, independent of any recorded payment — NET o
 (§15.3), so a `100 €` Appointment with `20 %` counts `80 €`. An Appointment without a discount counts
 exactly the sum of its item snapshot prices, as before.
 
+## 25c. Day Summary (« Résumé du jour »)
+
+`getAppointmentDaySummary({ appointments, sales }, day)` (`src/domain/appointments/day-summary.ts`) derives
+what ONE device-local civil day of Appointments represents. Pure, derived on demand, never stored. The
+Agenda opens it for the day it is showing, which is not necessarily today.
+
+Counted Appointments: those that START on the day AND occupy the schedule (`doesAppointmentOccupySchedule`,
+the Agenda's own rule). `CANCELLED` and `NO_SHOW` are left out. Calendar Blocks are never an input (§18.1).
+
+| Value | Derivation |
+| --- | --- |
+| `potentialRevenueCents` — « CA potentiel » | Σ `getAppointmentExpectedTotal(...).expectedTotalCents`: services net of the discount (§15.3) + Sales sold during the Appointment — exactly the « Total à encaisser » of Details |
+| `collectedCents` — « Déjà encaissé » | Σ recorded checkouts (card + cash) of the counted Appointments, whatever the day they were recorded |
+| `remainingToCollectCents` — « Reste à encaisser » | Σ expected totals of the counted Appointments WITHOUT a recorded checkout |
+| `totalDurationMinutes` — « Temps total » | Σ `getElapsedDurationMinutes`: booked time, processing included; overlapping Appointments both count |
+| `averageBasketCents` — « Panier moyen » | `potentialRevenueCents` / counted Appointments, rounded to the cent; `0` on an empty day |
+| `rows` | chronological (ties by id): the Appointment, its expected total, whether a checkout is recorded |
+
+A checkout settles its Appointment even when the amount received differs from the expected total (tip,
+adjustment): `collected + remaining` may therefore differ from the potential revenue. An Appointment
+completed automatically without checkout still counts as remaining — its checkout can be recorded afterwards.
+
+Souris has NO deposit: money is recorded at checkout only. Nothing here invents an advance payment, and
+the product never says « acompte ».
+
+This is NOT the Cash Register. The Caisse groups money by `paidAt` and also counts standalone Sales; the
+day summary follows the Appointments of a day. The two legitimately differ.
+
 ---
 
 # 26. Cancellation

@@ -629,14 +629,16 @@ Produits                                  [watermark, cropped by the right edge]
   focus it fades and rises `floatingAction.revealRise` into place over `duration.state` — no
   bounce, no overshoot. Losing focus hides it at once, closes any menu and resets the reveal.
   Reduced motion shows it immediately.
-- A single flow opens directly: Clientes → the shared Client form; Agenda → Appointment
-  creation on the selected day; Prestations & tarifs → Service creation.
+- A single flow opens directly: Clientes → the shared Client form; Prestations & tarifs →
+  Service creation.
 - Several flows expand into a compact menu anchored above the button (fade + rise + light
   scale, `duration.disclosure`; reduced motion renders the end state): right-aligned pills with
   the label and a lavender icon disc, a transparent outside-tap layer, the plus rotating to a
   cross while open. Choosing an option closes the menu first, then runs the flow; leaving the
   screen closes it. No scrim, no drawer, no native action sheet. Produits: « Nouvelle vente »
-  (`bag`) and « Ajouter un produit » (`shippingbox`).
+  (`bag`) and « Ajouter un produit » (`shippingbox`). Agenda: « Nouveau rendez-vous »
+  (`calendar.badge.plus` — Appointment creation on the selected day, unchanged) and « Résumé du
+  jour » (`shared/icons/day-summary-icon`, §25).
 
 ### Short sheets are content-fit
 
@@ -1108,3 +1110,62 @@ fast — never a technical admin form, never a grey disabled state.
   change; one `selection` per real chip change or opened time card (re-tapping the chosen chip does
   nothing); `success` on a committed save; `warning` on a committed deletion, as for Appointments.
 - **Motion.** None of its own. Normal sheet transitions only; nothing to reduce.
+
+## 25. Daily Summary — « Résumé du jour » Receipt Printer
+
+The second action of the Agenda + menu (§17) prints the summary of the day THE AGENDA IS SHOWING —
+not necessarily today — as a receipt. A small signature moment: premium and playful, never
+cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
+
+- **Presentation** (`features/agenda/day-summary/ReceiptPrinter.tsx`). Its own transparent Modal, not
+  the bottom sheet: the Agenda dims under the ONE `scrim`, a printer capsule lands under the top safe
+  area, the paper feeds DOWN out of it and settles, a worded « Fermer » capsule waits under the paper.
+- **Printer capsule.** App-owned — never the real Dynamic Island, which it simply sits below on the
+  devices that have one; identical everywhere else. The shared light glass (`GlassSurface` floating,
+  `nativeShadows.glassFloating`, §21): a 32 pt pill, 10 pt wider than the paper on each side, a navy-alpha
+  groove (`receiptPaper.slot`) in its lower half and one 5 pt `mint600` status light. No plastic, no
+  illustration, no glyph. Decorative: hidden from accessibility, no touches. Geometry: `receiptPrinter`
+  in `theme/layout.ts`; the insets come from the launch window metrics, as for sheets (§16).
+- **Motion** (`receiptPrint` in `theme/motion.ts`, Reanimated on the UI thread). Capsule fade + 8 pt
+  drop (160 ms) → 120 ms → the paper travels out of the groove in 1000 ms (`cubic-bezier(.42, 0, .3, 1)`:
+  soft start, even travel, gentle arrival) → one 5 pt give and back (110 + 200 ms). Readable in about a
+  second. The paper is laid out at rest inside a clip whose top edge is the middle of the groove and
+  is translated by its own measured height: it only ever exists below the slot. The paper is the
+  object — no line animates on its own. Closing: paper, capsule and scrim fade together in 220 ms, the
+  paper sinking 8 pt; the Modal unmounts afterwards.
+- **Haptic.** ONE `haptics.print()` (light impact) when the paper starts feeding. Nothing during the
+  travel, nothing on close, no sound.
+- **Reduced motion.** No travel, no settle, no drop: the receipt is in place at once and the
+  presentation fades. The haptic stays. Everything remains available.
+- **Paper** (`DaySummaryReceipt.tsx`). `receiptPaper.surface` `#FEFBF7` — oklch(0.99 0.006 80), a warm
+  near-white, FLAT: no grain, no texture, no gradient, no serif, no handwriting. Contrast on it:
+  foreground 16.6:1, plum 11.7:1, foregroundSoft 8.3:1, mint700 7.8:1, accent 5.3:1. Square corners with
+  torn top and bottom edges: a row of 45° paper-coloured squares clipped to their outer half, tiling
+  the width exactly (`receiptPrinter.toothWidth`). `nativeShadows.lifted`. Width: the window minus
+  26 pt on each side, 372 pt at most. Dashed tear lines (`receiptPaper.separator`) between sections.
+- **Hierarchy**, top to bottom, Plus Jakarta Sans only:
+
+  ```text
+  header     40 pt lavender100 disc + glyph · « Résumé du jour » sheetTitle (the header) ·
+             « Lundi 21 septembre » control, plum · « 7 rendez-vous » metadata        centred
+  list       09:00 chip, tabular │ services rowTitle + client metadata │ amount control, tabular
+             a mint600 check before the amount of a checked-out Appointment
+  total      lavender050 panel, radii.large: « CA POTENTIEL » eyebrow, accent ·
+             the amount in `display` 34 / 700, plum, tabular — THE strongest value
+  breakdown  Déjà encaissé (value mint700) · Reste à encaisser · Temps total · Panier moyen
+             body label, foregroundSoft ↔ control value, tabular
+  footer     the Souris wordmark, 84 pt, decorative
+  ```
+
+  On a long day only the LIST scrolls; the header and the totals never leave the paper, whose height
+  is bounded by the capsule above and « Fermer » below.
+- **Empty day.** The same paper: « Aucun rendez-vous » in the header, « Cette journée est libre » /
+  « Aucun rendez-vous prévu. » in place of the list, every figure at zero. Never an error, never a
+  refusal to open.
+- **Dismissal.** The worded « Fermer » — a 48 pt light-glass capsule, accent `control` label, centred
+  above the home indicator; never an X. Also: a tap on the dimmed page (« Fermer le résumé du jour »),
+  the hardware back button, the accessibility escape gesture.
+- **Accessibility.** The Modal is `accessibilityViewIsModal`. Each row is ONE element —
+  « 09:00, Coloration, Léa Martin, 95,00 €, encaissé » — as are the total and each breakdown line.
+  « encaissé » is never colour alone: a check glyph and the spoken word.
+- **Wording.** Souris has no deposit: the line reads « Déjà encaissé », never « Acomptes ».

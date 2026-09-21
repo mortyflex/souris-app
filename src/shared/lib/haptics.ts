@@ -24,6 +24,10 @@ export const haptics = {
   destructive() {
     trigger(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
   },
+  /** The receipt printer starts feeding paper (« Résumé du jour »): one soft tick. */
+  print() {
+    trigger(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+  },
   success() {
     trigger(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
   },

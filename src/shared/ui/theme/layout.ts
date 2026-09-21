@@ -60,6 +60,37 @@ export const watermark = {
   cropTop: 0.15,
 } as const;
 
+// « Résumé du jour » receipt printer (DESIGN_OVERRIDES.md §25): an app-owned
+// light-glass capsule under the top safe area, and the paper that feeds out of
+// its groove. On an iPhone with a Dynamic Island the capsule sits right below
+// it; nothing depends on the island being there.
+export const receiptPrinter = {
+  /** Gap between the top safe-area edge and the capsule. */
+  topGap: 6,
+  capsuleHeight: 32,
+  /** The capsule overhangs the paper by this much on each side. */
+  capsuleOverhang: 10,
+  /** The groove sits in the lower half of the capsule, the status light above it. */
+  grooveTop: 17,
+  grooveHeight: 6,
+  /** Groove inset from the capsule ends; the paper is narrower than the groove. */
+  grooveInset: 7,
+  /** Status light at the right end of the capsule. */
+  lightSize: 5,
+  /** Paper width: the window minus this margin on each side, up to `paperMaxWidth`. */
+  paperWindowMargin: 26,
+  paperMaxWidth: 372,
+  /** Resting gap between the capsule and the top edge of the paper. */
+  restGap: 12,
+  /** Width and height of one tooth of the torn paper edges. */
+  toothWidth: 10,
+  /** How far the paper gives past its rest when it settles (pt). */
+  settleTravel: 5,
+  /** Height of the « Fermer » capsule under the paper, and the gaps around it. */
+  closeHeight: 48,
+  closeGap: 16,
+} as const;
+
 // Shared floating create action (+): one size and one bottom-right inset for
 // every screen whose primary action is "add / create".
 export const floatingAction = {

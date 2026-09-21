@@ -21,6 +21,7 @@ export {
   calendarBlockColors,
   serviceCardColors,
   overlayMaterial,
+  receiptPaper,
   foregroundSoft,
   scrim,
   semanticColors,
@@ -50,7 +51,7 @@ export {
   tabIos,
   tabAndroid,
 } from './typography';
-export { duration, easing, interaction } from './motion';
-export { agenda, dialog, floatingAction, sheet, touchTarget, watermark } from './layout';
+export { duration, easing, interaction, receiptPrint } from './motion';
+export { agenda, dialog, floatingAction, receiptPrinter, sheet, touchTarget, watermark } from './layout';
 export { nativeShadows, shadows } from './shadows';
 export { gloss } from './gloss';

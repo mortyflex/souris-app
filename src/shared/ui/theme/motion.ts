@@ -16,6 +16,23 @@ export const duration = {
   panel: 280,
 } as const;
 
+// « Résumé du jour » receipt printer (DESIGN_OVERRIDES.md §25). The capsule
+// lands first, the paper then feeds out in about a second and settles
+// with one tiny give. Reduced motion skips the travel entirely.
+export const receiptPrint = {
+  /** The printer capsule fades and drops into place. */
+  capsule: 160,
+  /** Wait between the capsule landing and the first millimetre of paper. */
+  feedDelay: 120,
+  /** The paper travels out of the slot. */
+  feed: 1000,
+  /** The paper gives a few points past its rest, then comes back. */
+  settleOut: 110,
+  settleBack: 200,
+  /** Closing: paper, capsule and scrim leave together. */
+  dismiss: 220,
+} as const;
+
 export const interaction = {
   pressedOpacity: 0.76,
   pressedScale: 0.985,

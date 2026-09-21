@@ -106,6 +106,13 @@ export {
   getSaleTotalCents,
 } from "./expected-total";
 
+export type {
+  AppointmentDaySummary,
+  AppointmentDaySummaryRow,
+  AppointmentDaySummarySources,
+} from "./day-summary";
+export { getAppointmentDaySummary } from "./day-summary";
+
 export type { AppointmentProductIdentity, AppointmentProductLine } from "./linked-products";
 export {
   getAppointmentProductKey,

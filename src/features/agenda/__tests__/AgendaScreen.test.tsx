@@ -1,12 +1,16 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
-import { semanticColors } from '@/shared/ui/theme';
+import { receiptPrint, semanticColors } from '@/shared/ui/theme';
 
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
+import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
+import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { haptics } from '@/shared/lib/haptics';
+import { formatEuroCents } from '@/shared/lib/money';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { settleFloatingReveal, settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
@@ -23,6 +27,11 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+
+// The « Résumé du jour » receipt printer: nothing animates under test.
+jest.mock('react-native-reanimated', () =>
+  jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'),
+);
 
 // The canonical date picker is native; the mock exposes its value change so a
 // test can pick any day.
@@ -57,9 +66,13 @@ function renderAgenda() {
     <TestPersistenceProvider>
       <ClientSessionProvider>
         <AppointmentSessionProvider>
-          <CalendarBlockSessionProvider>
-            <AgendaScreen />
-          </CalendarBlockSessionProvider>
+          <ProductCatalogProvider>
+            <SaleSessionProvider>
+              <CalendarBlockSessionProvider>
+                <AgendaScreen />
+              </CalendarBlockSessionProvider>
+            </SaleSessionProvider>
+          </ProductCatalogProvider>
         </AppointmentSessionProvider>
       </ClientSessionProvider>
     </TestPersistenceProvider>,
@@ -93,11 +106,26 @@ describe('AgendaScreen', () => {
     expect(timelines[0].props.contentInsetAdjustmentBehavior).toBe('automatic');
   });
 
-  it('opens the existing Appointment creation flow from the floating +', async () => {
+  it('offers « Nouveau rendez-vous » and « Résumé du jour » from the floating +', async () => {
     const view = await renderAgenda();
     await settleFloatingReveal();
 
-    await act(async () => fireEvent.press(view.getByTestId('agenda-create-appointment')));
+    expect(view.queryByTestId('agenda-create-menu')).toBeNull();
+    await act(async () => fireEvent.press(view.getByTestId('agenda-create')));
+
+    const options = view.getAllByRole('menuitem');
+    expect(options.map((option) => option.props.accessibilityLabel)).toEqual([
+      'Nouveau rendez-vous',
+      'Résumé du jour',
+    ]);
+  });
+
+  it('opens the existing Appointment creation flow from the + menu', async () => {
+    const view = await renderAgenda();
+    await settleFloatingReveal();
+
+    await act(async () => fireEvent.press(view.getByTestId('agenda-create')));
+    await act(async () => fireEvent.press(view.getByTestId('agenda-new-appointment')));
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     const [destination] = mockPush.mock.calls[0] as [{ pathname: string; params: { startAt: string } }];
@@ -196,6 +224,80 @@ describe('AgendaScreen — day navigation', () => {
     await settleSheetTransition();
 
     expect(selectedDate(view)).toBe('Jeudi 17 sept.');
+  });
+
+  const openDaySummary = async (view: AgendaView) => {
+    await settleFloatingReveal();
+    await press(view, 'agenda-create');
+    await press(view, 'agenda-day-summary');
+  };
+
+  it('prints the summary of today from the + menu, with every figure of the day', async () => {
+    const print = jest.spyOn(haptics, 'print');
+    const view = await renderAgenda();
+    expect(view.queryByTestId('day-summary-receipt')).toBeNull();
+
+    await openDaySummary(view);
+
+    expect(view.getByRole('header', { name: 'Résumé du jour' })).toBeTruthy();
+    expect(view.getByTestId('day-summary-date').props.children).toBe('Mercredi 16 septembre');
+    expect(view.getByTestId('day-summary-count').props.children).toBe('5 rendez-vous');
+    // Two techniques at 95 € and three services at 42 €, nothing checked out yet.
+    expect(view.getByLabelText(`CA potentiel, ${formatEuroCents(31600)}`)).toBeTruthy();
+    expect(view.getByLabelText(`Déjà encaissé, ${formatEuroCents(0)}`)).toBeTruthy();
+    expect(view.getByLabelText(`Reste à encaisser, ${formatEuroCents(31600)}`)).toBeTruthy();
+    expect(view.getByLabelText('Temps total, 5 h 15 min')).toBeTruthy();
+    expect(view.getByLabelText(`Panier moyen, ${formatEuroCents(6320)}`)).toBeTruthy();
+    expect(
+      view.getByLabelText(`09:00, Coloration, Léa Martin, ${formatEuroCents(9500)}`),
+    ).toBeTruthy();
+
+    // ONE haptic, when the paper — once laid out — starts feeding.
+    expect(print).not.toHaveBeenCalled();
+    for (const height of [520, 524]) {
+      await act(async () =>
+        fireEvent(view.getByTestId('day-summary-paper'), 'layout', {
+          nativeEvent: { layout: { height, width: 340, x: 0, y: 0 } },
+        }),
+      );
+    }
+    expect(print).toHaveBeenCalledTimes(1);
+    print.mockRestore();
+  });
+
+  it('summarises the day the Agenda is showing, and closes through « Fermer »', async () => {
+    const view = await renderAgenda();
+    await press(view, 'agenda-date-next');
+
+    await openDaySummary(view);
+    expect(view.getByTestId('day-summary-date').props.children).toBe('Jeudi 17 septembre');
+    expect(view.getByLabelText(/^\d{2}:\d{2}, .*Anaïs/)).toBeTruthy();
+
+    await press(view, 'day-summary-close');
+    await act(async () => {
+      jest.advanceTimersByTime(receiptPrint.dismiss);
+    });
+    expect(view.queryByTestId('day-summary-receipt')).toBeNull();
+    // The Agenda is untouched underneath.
+    expect(selectedDate(view)).toBe('Jeudi 17 sept.');
+  });
+
+  it('still prints a neutral summary on a free day', async () => {
+    const view = await renderAgenda();
+    await press(view, 'agenda-date-calendar');
+    mockPickerDate = new Date(2026, 10, 3);
+    await press(view, 'mock-date-picker');
+    await press(view, 'agenda-day-picker-confirm');
+    await settleSheetTransition();
+
+    await openDaySummary(view);
+
+    expect(view.getByTestId('day-summary-date').props.children).toBe('Mardi 3 novembre');
+    expect(view.getByTestId('day-summary-count').props.children).toBe('Aucun rendez-vous');
+    expect(view.getByText('Cette journée est libre')).toBeTruthy();
+    expect(view.queryByTestId('day-summary-list')).toBeNull();
+    expect(view.getByLabelText(`CA potentiel, ${formatEuroCents(0)}`)).toBeTruthy();
+    expect(view.getByLabelText('Temps total, 0 min')).toBeTruthy();
   });
 
   it('keeps Week mode on its own week navigation and opens a tapped day in Day mode', async () => {

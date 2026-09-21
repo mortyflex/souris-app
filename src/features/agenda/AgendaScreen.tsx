@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Platform, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { daySummaryIcon } from "@/shared/icons/day-summary-icon";
 import { DateNavigator } from "@/shared/ui/DateNavigator";
 import { DayPickerSheet } from "@/shared/ui/DayPickerSheet";
 import { FloatingCreateButton } from "@/shared/ui/FloatingCreateButton";
@@ -23,6 +24,7 @@ import {
   type AgendaViewMode,
 } from "./components/AgendaViewSwitcher";
 import { DayTimeline } from "./components/DayTimeline";
+import { DaySummaryTicket } from "./day-summary/DaySummaryTicket";
 import { WeekView } from "./components/WeekView";
 import { getCalendarBlocksOfLocalDay } from "./calendar/week-appointments";
 import { getOperationalAgendaEntries } from "./operational-visibility";
@@ -35,6 +37,8 @@ export function AgendaScreen() {
   const [selectedDay, setSelectedDay] = useState<Date>(today);
   const [mode, setMode] = useState<AgendaViewMode>("day");
   const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [daySummaryVisible, setDaySummaryVisible] = useState(false);
   const { appointments: allAppointments } = useAppointmentSession();
   const { calendarBlocks } = useCalendarBlockSession();
   const operationalAppointments = getOperationalAgendaEntries(allAppointments);
@@ -158,9 +162,29 @@ export function AgendaScreen() {
         visible={dayPickerVisible}
       />
       <FloatingCreateButton
-        accessibilityLabel="Nouveau rendez-vous"
-        onPress={createAppointment}
-        testID="agenda-create-appointment"
+        accessibilityLabel="Actions de l'agenda"
+        actions={[
+          {
+            icon: { ios: "calendar.badge.plus", android: "event" },
+            label: "Nouveau rendez-vous",
+            onPress: createAppointment,
+            testID: "agenda-new-appointment",
+          },
+          {
+            icon: daySummaryIcon,
+            label: "Résumé du jour",
+            onPress: () => setDaySummaryVisible(true),
+            testID: "agenda-day-summary",
+          },
+        ]}
+        menuOpen={createMenuOpen}
+        onMenuOpenChange={setCreateMenuOpen}
+        testID="agenda-create"
+      />
+      <DaySummaryTicket
+        day={selectedDay}
+        onClose={() => setDaySummaryVisible(false)}
+        visible={daySummaryVisible}
       />
     </SafeAreaView>
   );
