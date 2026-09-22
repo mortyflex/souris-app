@@ -44,13 +44,22 @@ import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
 import { BarcodeScannerModal } from "@/shared/ui/BarcodeScannerModal";
 import { ConfirmationDialog } from "@/shared/ui/ConfirmationDialog";
-import { GlassIconButton, glassIcons } from "@/shared/ui/GlassIconButton";
+import {
+  DetailActionsSheet,
+  type DetailAction,
+} from "@/shared/ui/DetailActionsSheet";
+import { DetailSheetHeader } from "@/shared/ui/DetailSheetHeader";
+import {
+  GROUPED_READ_ROW_SEPARATOR_INSET,
+  GroupedReadRow,
+} from "@/shared/ui/GroupedReadRow";
 import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetActionBar } from "@/shared/ui/SheetActionBar";
 import { SheetEditingHeader } from "@/shared/ui/SheetEditingHeader";
 import { SheetHeader } from "@/shared/ui/SheetHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
+import { StatePill, statePillTones } from "@/shared/ui/StatePill";
 import { TextField } from "@/shared/ui/TextField";
 import {
   foregroundSoft,
@@ -61,12 +70,7 @@ import {
   spacing,
 } from "@/shared/ui/theme";
 
-import { ProductStatePill } from "../components/ProductStatePill";
 import { useProductCatalog } from "../session/ProductCatalogProvider";
-import {
-  ProductActionsSheet,
-  type ProductSecondaryAction,
-} from "./components/ProductActionsSheet";
 import { ProductPhotoField } from "./components/ProductPhotoField";
 import { StockStepper } from "./components/StockStepper";
 import {
@@ -87,6 +91,35 @@ interface ProductEditorScreenProps {
 }
 
 type ProductConfirmation = "deactivate" | "delete";
+type ProductSecondaryAction = "toggle-active" | "delete";
+
+function productActionGroups(
+  active: boolean,
+): readonly (readonly DetailAction<ProductSecondaryAction>[])[] {
+  return [
+    [
+      {
+        key: "toggle-active",
+        label: active ? "Désactiver le produit" : "Réactiver le produit",
+        icon: active
+          ? { ios: "eye.slash", android: "visibility_off" }
+          : { ios: "eye", android: "visibility" },
+        tone: "normal",
+        testID: "toggle-product-active",
+      },
+    ],
+    [
+      {
+        key: "delete",
+        label: "Supprimer le produit",
+        icon: { ios: "trash", android: "delete" },
+        tone: "destructive",
+        testID: "open-product-deletion",
+        accessibilityHint: "Supprime le produit du catalogue",
+      },
+    ],
+  ];
+}
 
 const horizontalGutter =
   Platform.OS === "android" ? gutter.android : gutter.ios;
@@ -283,33 +316,16 @@ export function ProductEditorScreen({
       {mode === "existing" && !editing && product ? (
         // Detail sheet: name + « ••• » + ×, like Appointment Details. The
         // creation / editing header (« Annuler » + title) stays for the form.
-        <View
-          style={[styles.headerZone, styles.detailHeader]}
-          testID="product-detail-header"
-        >
-          <AppText
-            accessibilityRole="header"
-            numberOfLines={2}
-            selectable
-            style={styles.detailTitle}
-            variant="sheetTitle"
-          >
-            {product.name}
-          </AppText>
-          <View style={styles.headerActions}>
-            <GlassIconButton
-              accessibilityLabel="Actions du produit"
-              icon={glassIcons.more}
-              onPress={() => setMenuVisible(true)}
-              testID="open-product-actions"
-            />
-            <GlassIconButton
-              accessibilityLabel="Fermer"
-              icon={glassIcons.close}
-              onPress={() => router.back()}
-              testID="close-product-details"
-            />
-          </View>
+        <View style={styles.headerZone}>
+          <DetailSheetHeader
+            actionsAccessibilityLabel="Actions du produit"
+            actionsTestID="open-product-actions"
+            closeTestID="close-product-details"
+            onClose={() => router.back()}
+            onOpenActions={() => setMenuVisible(true)}
+            testID="product-detail-header"
+            title={product.name}
+          />
         </View>
       ) : mode === "existing" ? (
         // Editing sheet: the canonical « Annuler » + title header, the ONE
@@ -371,15 +387,16 @@ export function ProductEditorScreen({
       )}
 
       {mode === "existing" && product && (
-        <ProductActionsSheet
-          active={product.active}
+        <DetailActionsSheet
+          groups={productActionGroups(product.active)}
           onClose={() => setMenuVisible(false)}
           onDismissed={runSecondaryAction}
           onSelect={(action) => {
             setPendingAction(action);
             setMenuVisible(false);
           }}
-          productName={product.name}
+          testID="product-actions-sheet"
+          title={product.name}
           visible={menuVisible}
         />
       )}
@@ -599,13 +616,15 @@ function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
           >
             {price}
           </AppText>
-          <ProductStatePill
+          <StatePill
             accessibilityLabel={
               product.active ? "Produit actif" : "Produit inactif"
             }
             label={product.active ? "Actif" : "Inactif"}
+            colors={
+              product.active ? statePillTones.positive : statePillTones.neutral
+            }
             testID="product-status-pill"
-            tone={product.active ? "positive" : "neutral"}
           />
         </View>
       </View>
@@ -616,8 +635,10 @@ function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
           <GroupedSurface testID="product-information">
             {informationRows.map((row, index) => (
               <View key={row.label}>
-                {index > 0 && <GroupedSeparator inset={spacing.base} />}
-                <ReadRow label={row.label} value={row.value} />
+                {index > 0 && (
+                  <GroupedSeparator inset={GROUPED_READ_ROW_SEPARATOR_INSET} />
+                )}
+                <GroupedReadRow label={row.label} value={row.value} />
               </View>
             ))}
           </GroupedSurface>
@@ -642,11 +663,13 @@ function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
             <AppText variant="rowTitle" style={styles.stockTitle}>
               Stock
             </AppText>
-            <ProductStatePill
+            <StatePill
               accessibilityLabel={soldOut ? "Stock épuisé" : "En stock"}
               label={soldOut ? "Stock épuisé" : "En stock"}
+              colors={
+                soldOut ? statePillTones.exception : statePillTones.positive
+              }
               testID="product-stock-state"
-              tone={soldOut ? "exception" : "positive"}
             />
           </View>
           <StockStepper
@@ -658,30 +681,6 @@ function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
         </GroupedSurface>
       </View>
     </ScrollView>
-  );
-}
-
-function ReadRow({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <View style={styles.readRow}>
-      <AppText variant="body" style={styles.readLabel}>
-        {label}
-      </AppText>
-      <AppText
-        variant="control"
-        numberOfLines={2}
-        selectable
-        style={styles.readValue}
-      >
-        {value}
-      </AppText>
-    </View>
   );
 }
 
@@ -708,15 +707,6 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.surfaceLavenderStrong,
     opacity: interaction.pressedOpacity,
   },
-  detailHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.xs,
-  },
-  detailTitle: { color: semanticColors.foreground, flex: 1, minWidth: 0 },
-  headerActions: { flexDirection: "row", gap: spacing.sm },
   readContent: {
     gap: spacing.lg,
     paddingBottom: spacing.lg,
@@ -735,16 +725,6 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   section: { gap: spacing.sm },
-  readRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.md,
-    minHeight: 50,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-  },
-  readLabel: { color: foregroundSoft, width: 112 },
-  readValue: { color: semanticColors.foreground, flex: 1 },
   stockSurface: { gap: spacing.md, padding: spacing.base },
   stockHeader: { alignItems: "center", flexDirection: "row", gap: spacing.md },
   stockIcon: {

@@ -1,7 +1,28 @@
+// Souris — Prestation editor screen (create + details + edit)
+//
+// Modes:
+// - create: type chooser, then the shared Prestation form;
+// - existing read mode (Prestation Details): the detail-sheet header (name +
+//   « ••• » + ×), price + Active/Inactive + the Service / Technique category,
+//   ONE grouped Informations surface (Durée, Temps de pose only when there is
+//   one), the ordered phases of a Technique, and the sticky « Modifier la
+//   prestation ». Désactiver / Réactiver and Supprimer live in « ••• »;
+// - existing edit mode: the SAME form hydrated with current values.
+//
+// Durations come from the catalogue presentation helpers; the details never
+// compute timing of their own. Deactivation and deletion keep the shared
+// Souris confirmation dialog; each runs once the « ••• » drawer is gone.
+
 import { useRouter } from "expo-router";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import { useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 
 import type { Service, ServiceType } from "@/domain/appointments";
 import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
@@ -12,23 +33,35 @@ import {
   getServiceProcessingMinutes,
 } from "@/features/services/presentation";
 import { useServiceCatalog } from "@/features/services/session/ServiceCatalogProvider";
+import { PrestationIcon } from "@/features/services/components/PrestationIcon";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
 import { ConfirmationDialog } from "@/shared/ui/ConfirmationDialog";
+import {
+  DetailActionsSheet,
+  type DetailAction,
+} from "@/shared/ui/DetailActionsSheet";
+import { DetailSheetHeader } from "@/shared/ui/DetailSheetHeader";
+import {
+  GROUPED_READ_ROW_SEPARATOR_INSET,
+  GroupedReadRow,
+} from "@/shared/ui/GroupedReadRow";
+import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetActionBar } from "@/shared/ui/SheetActionBar";
 import { SheetHeader } from "@/shared/ui/SheetHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
+import { StatePill, statePillTones } from "@/shared/ui/StatePill";
 import {
   foregroundSoft,
   gutter,
   interaction,
   peach,
   radii,
-  rose,
   semanticColors,
+  serviceCategoryColors,
   spacing,
 } from "@/shared/ui/theme";
 
@@ -51,6 +84,40 @@ import {
 export type ServiceEditorMode = "create" | "existing";
 
 type ServiceConfirmation = "deactivate" | "delete";
+type ServiceSecondaryAction = "toggle-active" | "delete";
+
+const serviceCategoryLabels: Record<ServiceType, string> = {
+  SERVICE: "Service",
+  TECHNIQUE: "Technique",
+};
+
+function serviceActionGroups(
+  active: boolean,
+): readonly (readonly DetailAction<ServiceSecondaryAction>[])[] {
+  return [
+    [
+      {
+        key: "toggle-active",
+        label: active ? "Désactiver la prestation" : "Réactiver la prestation",
+        icon: active
+          ? { ios: "eye.slash", android: "visibility_off" }
+          : { ios: "eye", android: "visibility" },
+        tone: "normal",
+        testID: "toggle-service-active",
+      },
+    ],
+    [
+      {
+        key: "delete",
+        label: "Supprimer la prestation",
+        icon: { ios: "trash", android: "delete" },
+        tone: "destructive",
+        testID: "open-service-deletion",
+        accessibilityHint: "Supprime la prestation du catalogue",
+      },
+    ],
+  ];
+}
 
 interface ServiceEditorScreenProps {
   readonly mode: ServiceEditorMode;
@@ -84,6 +151,8 @@ export function ServiceEditorScreen({
   const [attempted, setAttempted] = useState(false);
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<ServiceConfirmation>();
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<ServiceSecondaryAction>();
 
   if (mode === "existing" && !service) {
     return (
@@ -209,6 +278,22 @@ export function ServiceEditorScreen({
     commitActiveState(false);
   };
 
+  // Runs once the « ••• » drawer is gone, so no dialog races its closing.
+  const runSecondaryAction = () => {
+    const action = pendingAction;
+    setPendingAction(undefined);
+    if (action === "toggle-active") changeActiveState();
+    if (action === "delete") setConfirmation("delete");
+  };
+
+  const startEditing = () => {
+    if (!service) return;
+    setValues(toServiceFormValues(service));
+    setAttempted(false);
+    setExpandedPhaseId(null);
+    setEditing(true);
+  };
+
   const confirmDelete = () => {
     if (!service) return;
     setConfirmation(undefined);
@@ -235,118 +320,120 @@ export function ServiceEditorScreen({
       keyboardAvoiding
       testID="service-sheet"
     >
-      <View style={styles.headerZone}>
-        <SheetHeader
-          action={{ label: closeLabel, onPress: close }}
-          divider
-          eyebrow={mode === "create" ? "NOUVELLE PRESTATION" : "PRESTATION"}
-          title={title}
-          titleNumberOfLines={1}
-        />
-      </View>
-
-        {mode === "create" && !values ? (
-          <ServiceKindPicker onSelect={chooseType} />
-        ) : editing && values && validation ? (
-          <ServiceForm
-            attempted={attempted}
-            expandedPhaseId={expandedPhaseId}
-            validation={validation}
-            values={values}
-            onAddPhase={addPhase}
-            onChangeName={(name) => updateField("name", name)}
-            onChangePrice={(price) => updateField("price", price)}
-            onChangeSimpleDuration={(duration) =>
-              updateField("simpleDurationMinutes", duration)
-            }
-            onChangePhase={(phaseId, update) =>
-              setValues((current) =>
-                current
-                  ? updateServicePhase(current, phaseId, update)
-                  : current,
-              )
-            }
-            onChangeRequiresStaff={(phaseId, requiresStaff) =>
-              setValues((current) =>
-                current
-                  ? setPhaseRequiresStaff(current, phaseId, requiresStaff)
-                  : current,
-              )
-            }
-            onRemovePhase={removePhase}
-            onReorderPhases={(fromIndex, toIndex) =>
-              setValues((current) =>
-                current
-                  ? reorderServicePhases(current, fromIndex, toIndex)
-                  : current,
-              )
-            }
-            onToggleExpanded={setExpandedPhaseId}
+      {mode === "existing" && !editing && service ? (
+        // Detail sheet: name + « ••• » + ×, like Product Details.
+        <View style={styles.headerZone}>
+          <DetailSheetHeader
+            actionsAccessibilityLabel="Actions de la prestation"
+            actionsTestID="open-service-actions"
+            closeTestID="close-service-details"
+            onClose={() => router.back()}
+            onOpenActions={() => setMenuVisible(true)}
+            testID="service-detail-header"
+            title={service.name}
           />
-        ) : service ? (
-          <ServiceReadView service={service} />
-        ) : null}
+        </View>
+      ) : (
+        <View style={styles.headerZone}>
+          <SheetHeader
+            action={{ label: closeLabel, onPress: close }}
+            divider
+            eyebrow={mode === "create" ? "NOUVELLE PRESTATION" : "PRESTATION"}
+            title={title}
+            titleNumberOfLines={1}
+          />
+        </View>
+      )}
 
-        {values && editing && (
-          <SheetActionBar direction="row">
-            {mode === "existing" && (
-              <AppButton
-                onPress={close}
-                style={styles.secondaryButton}
-                title="Annuler"
-                variant="secondary"
-              />
-            )}
+      {mode === "create" && !values ? (
+        <ServiceKindPicker onSelect={chooseType} />
+      ) : editing && values && validation ? (
+        <ServiceForm
+          attempted={attempted}
+          expandedPhaseId={expandedPhaseId}
+          validation={validation}
+          values={values}
+          onAddPhase={addPhase}
+          onChangeName={(name) => updateField("name", name)}
+          onChangePrice={(price) => updateField("price", price)}
+          onChangeSimpleDuration={(duration) =>
+            updateField("simpleDurationMinutes", duration)
+          }
+          onChangePhase={(phaseId, update) =>
+            setValues((current) =>
+              current ? updateServicePhase(current, phaseId, update) : current,
+            )
+          }
+          onChangeRequiresStaff={(phaseId, requiresStaff) =>
+            setValues((current) =>
+              current
+                ? setPhaseRequiresStaff(current, phaseId, requiresStaff)
+                : current,
+            )
+          }
+          onRemovePhase={removePhase}
+          onReorderPhases={(fromIndex, toIndex) =>
+            setValues((current) =>
+              current
+                ? reorderServicePhases(current, fromIndex, toIndex)
+                : current,
+            )
+          }
+          onToggleExpanded={setExpandedPhaseId}
+        />
+      ) : service ? (
+        <ServiceReadView service={service} />
+      ) : null}
+
+      {values && editing && (
+        <SheetActionBar direction="row">
+          {mode === "existing" && (
             <AppButton
-              disabled={!validation?.valid}
-              onPress={save}
-              style={styles.primaryButton}
-              testID="save-service"
-              title={
-                mode === "create"
-                  ? "Ajouter la prestation"
-                  : "Enregistrer les modifications"
-              }
+              onPress={close}
+              style={styles.secondaryButton}
+              title="Annuler"
+              variant="secondary"
             />
-          </SheetActionBar>
-        )}
+          )}
+          <AppButton
+            disabled={!validation?.valid}
+            onPress={save}
+            style={styles.primaryButton}
+            testID="save-service"
+            title={
+              mode === "create"
+                ? "Ajouter la prestation"
+                : "Enregistrer les modifications"
+            }
+          />
+        </SheetActionBar>
+      )}
 
-        {mode === "existing" && !editing && service && (
-          <SheetActionBar testID="service-read-actions">
-            <View style={styles.readFooterRow}>
-              <AppButton
-                onPress={changeActiveState}
-                style={styles.secondaryButton}
-                title={service.active ? "Désactiver" : "Réactiver"}
-                variant="secondary"
-              />
-              <AppButton
-                onPress={() => {
-                  setValues(toServiceFormValues(service));
-                  setAttempted(false);
-                  setExpandedPhaseId(null);
-                  setEditing(true);
-                }}
-                style={styles.primaryButton}
-                testID="edit-service"
-                title="Modifier"
-              />
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Supprimer cette prestation"
-              onPress={() => setConfirmation("delete")}
-              style={({ pressed }) => [
-                styles.deleteAction,
-                pressed && styles.deleteActionPressed,
-              ]}
-            >
-              <AppText variant="control" style={styles.deleteText}>
-                Supprimer
-              </AppText>
-            </Pressable>
-          </SheetActionBar>
-        )}
+      {mode === "existing" && !editing && service && (
+        // Outside the scroll: always visible; SheetScreen clears the home indicator.
+        <SheetActionBar testID="service-read-actions">
+          <AppButton
+            onPress={startEditing}
+            testID="edit-service"
+            title="Modifier la prestation"
+          />
+        </SheetActionBar>
+      )}
+
+      {mode === "existing" && service && (
+        <DetailActionsSheet
+          groups={serviceActionGroups(service.active)}
+          onClose={() => setMenuVisible(false)}
+          onDismissed={runSecondaryAction}
+          onSelect={(action) => {
+            setPendingAction(action);
+            setMenuVisible(false);
+          }}
+          testID="service-actions-sheet"
+          title={service.name}
+          visible={menuVisible}
+        />
+      )}
 
       <ConfirmationDialog
         body="La prestation ne sera plus proposée lors de la création d’un rendez-vous."
@@ -588,91 +675,139 @@ function ServiceForm({
 function ServiceReadView({ service }: { readonly service: Service }) {
   const duration = getServiceDurationMinutes(service);
   const processing = getServiceProcessingMinutes(service);
+  const price = formatServicePrice(service.price);
+  const category = serviceCategoryColors[service.type];
+  const categoryLabel = serviceCategoryLabels[service.type];
 
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.readContent}
       style={styles.scroll}
+      testID="service-read-view"
     >
-      <View style={styles.statusLine}>
-        <View
-          style={[styles.statusDot, !service.active && styles.inactiveDot]}
-        />
-        <AppText variant="metadata" style={styles.statusText}>
-          {service.active ? "Active" : "Inactive"}
-        </AppText>
+      {/* Identity: the decorative family pictogram, then price and pills. */}
+      <View style={styles.identity} testID="service-identity">
+        <PrestationIcon prestation={service} testID="service-family-icon" />
+        <View style={styles.summary} testID="service-summary">
+          <AppText
+            accessibilityLabel={`Prix, ${price}`}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            numberOfLines={1}
+            selectable
+            style={styles.priceValue}
+            testID="service-price"
+            variant="summaryValue"
+          >
+            {price}
+          </AppText>
+          <View style={styles.summaryPills}>
+            <StatePill
+              accessibilityLabel={
+                service.active ? "Prestation active" : "Prestation inactive"
+              }
+              colors={
+                service.active
+                  ? statePillTones.positive
+                  : statePillTones.neutral
+              }
+              label={service.active ? "Active" : "Inactive"}
+              testID="service-status-pill"
+            />
+            {/* The category keeps its own validated colours, never the status ones. */}
+            <StatePill
+              accessibilityLabel={`Catégorie, ${categoryLabel}`}
+              colors={{
+                fill: category.tint,
+                dot: category.accent,
+                text: category.strong,
+              }}
+              label={categoryLabel}
+              testID="service-category-pill"
+            />
+          </View>
+        </View>
       </View>
-      <View style={styles.summarySurface}>
-        <ReadMetric label="Prix" value={formatServicePrice(service.price)} />
-        <ReadMetric label="Durée" value={formatServiceDuration(duration)} />
-        {processing > 0 && (
-          <ReadMetric
-            label="Temps de pose"
-            processing
-            value={formatServiceDuration(processing)}
+
+      <View style={styles.readSection}>
+        <SectionHeader title="Informations" />
+        <GroupedSurface testID="service-information">
+          <GroupedReadRow
+            label="Durée"
+            testID="service-duration"
+            value={formatServiceDuration(duration)}
           />
-        )}
+          {processing > 0 && (
+            <>
+              <GroupedSeparator inset={GROUPED_READ_ROW_SEPARATOR_INSET} />
+              <GroupedReadRow
+                label="Temps de pose"
+                testID="service-processing"
+                value={formatServiceDuration(processing)}
+              />
+            </>
+          )}
+        </GroupedSurface>
       </View>
 
       {service.type === "TECHNIQUE" && (
-        <View style={styles.readPhases}>
+        <View style={styles.readSection}>
           <SectionHeader count={service.phases.length} title="Phases" />
-          {service.phases.map((phase, index) => (
-            <View
-              key={phase.id}
-              style={[
-                styles.readPhase,
-                phase.requiresStaff
-                  ? styles.readActivePhase
-                  : styles.readProcessingPhase,
-              ]}
-            >
-              <View style={styles.readPhaseIndex}>
-                <AppText variant="chip">{index + 1}</AppText>
-              </View>
-              <View style={styles.readPhaseCopy}>
-                <AppText variant="control">{phase.name}</AppText>
-                {phase.requiresStaff && (
-                  <AppText variant="metadata" style={styles.activeLabel}>
-                    Temps actif
-                  </AppText>
+          <GroupedSurface testID="service-phases">
+            {service.phases.map((phase, index) => (
+              <View key={phase.id}>
+                {index > 0 && (
+                  <GroupedSeparator inset={PHASE_SEPARATOR_INSET} />
                 )}
+                <View style={styles.readPhase}>
+                  <View
+                    style={[
+                      styles.readPhaseIndex,
+                      !phase.requiresStaff && styles.readProcessingIndex,
+                    ]}
+                  >
+                    <AppText
+                      variant="chip"
+                      style={
+                        phase.requiresStaff
+                          ? styles.activeLabel
+                          : styles.processingLabel
+                      }
+                    >
+                      {index + 1}
+                    </AppText>
+                  </View>
+                  <View style={styles.readPhaseCopy}>
+                    <AppText variant="control" numberOfLines={2}>
+                      {phase.name}
+                    </AppText>
+                    <AppText
+                      variant="metadata"
+                      style={
+                        phase.requiresStaff
+                          ? styles.activeLabel
+                          : styles.processingLabel
+                      }
+                    >
+                      {phase.requiresStaff ? "Temps actif" : "Temps de pose"}
+                    </AppText>
+                  </View>
+                  <AppText variant="control" style={styles.phaseDuration}>
+                    {formatServiceDuration(phase.durationMinutes)}
+                  </AppText>
+                </View>
               </View>
-              <AppText variant="control" style={styles.phaseDuration}>
-                {formatServiceDuration(phase.durationMinutes)}
-              </AppText>
-            </View>
-          ))}
+            ))}
+          </GroupedSurface>
         </View>
       )}
     </ScrollView>
   );
 }
 
-function ReadMetric({
-  label,
-  value,
-  processing = false,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly processing?: boolean;
-}) {
-  return (
-    <View style={[styles.readMetric, processing && styles.processingMetric]}>
-      <AppText
-        variant="summaryValue"
-        style={processing && styles.processingLabel}
-      >
-        {value}
-      </AppText>
-      <AppText variant="metadata" style={processing && styles.processingLabel}>
-        {label}
-      </AppText>
-    </View>
-  );
-}
+const PHASE_INDEX_SIZE = 28;
+const PHASE_SEPARATOR_INSET = spacing.base + PHASE_INDEX_SIZE + spacing.md;
 
 const styles = StyleSheet.create({
   headerZone: { paddingHorizontal: horizontalGutter },
@@ -729,70 +864,39 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: spacing.lg,
     paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.base,
+    paddingTop: spacing.sm,
   },
-  statusLine: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
-  statusDot: {
-    backgroundColor: semanticColors.accent,
-    borderRadius: radii.pill,
-    height: 8,
-    width: 8,
+  identity: { alignItems: "center", flexDirection: "row", gap: spacing.base },
+  summary: { flex: 1, gap: spacing.sm, minWidth: 0 },
+  priceValue: {
+    color: semanticColors.foreground,
+    fontVariant: ["tabular-nums"],
   },
-  inactiveDot: { backgroundColor: semanticColors.foregroundMuted },
-  statusText: { color: semanticColors.foregroundSoft },
-  summarySurface: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: "continuous",
-    borderRadius: radii.large,
-    flexDirection: "row",
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  readMetric: { flex: 1, gap: 2 },
-  processingMetric: {
-    backgroundColor: semanticColors.surfacePeachStrong,
-    borderCurve: "continuous",
-    borderRadius: radii.medium,
-    padding: spacing.sm,
-  },
-  readPhases: { gap: spacing.sm },
+  summaryPills: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  readSection: { gap: spacing.sm },
   readPhase: {
     alignItems: "center",
-    borderCurve: "continuous",
-    borderRadius: radii.medium,
     flexDirection: "row",
-    gap: spacing.sm,
-    minHeight: 64,
-    padding: spacing.md,
+    gap: spacing.md,
+    minHeight: 60,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
   },
-  readActivePhase: { backgroundColor: semanticColors.surfaceLavender },
-  readProcessingPhase: { backgroundColor: semanticColors.surfacePeach },
   readPhaseIndex: {
     alignItems: "center",
-    backgroundColor: semanticColors.surfaceElevated,
+    backgroundColor: semanticColors.surfaceLavender,
     borderRadius: radii.pill,
-    height: 28,
+    height: PHASE_INDEX_SIZE,
     justifyContent: "center",
-    width: 28,
+    width: PHASE_INDEX_SIZE,
   },
+  readProcessingIndex: { backgroundColor: semanticColors.surfacePeach },
   readPhaseCopy: { flex: 1, gap: 2, minWidth: 0 },
   activeLabel: { color: semanticColors.accent },
   processingLabel: { color: peach.peach700 },
   phaseDuration: { fontVariant: ["tabular-nums"] },
   secondaryButton: { flex: 1 },
   primaryButton: { flex: 1.4 },
-  readFooterRow: { flexDirection: "row", gap: spacing.sm },
-  deleteAction: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: spacing.base,
-  },
-  deleteActionPressed: {
-    backgroundColor: semanticColors.surfaceRose,
-    borderRadius: radii.small,
-  },
-  deleteText: { color: rose.rose600 },
   notFound: {
     alignItems: "center",
     gap: spacing.md,

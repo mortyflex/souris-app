@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from "@testing-library/react-native";
+import { act, fireEvent, render, within } from "@testing-library/react-native";
 import { Alert, StyleSheet, Text } from "react-native";
 
 import {
@@ -7,6 +7,8 @@ import {
 } from "../../session/ServiceCatalogProvider";
 import { ServiceEditorScreen } from "../ServiceEditorScreen";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
+import { serviceCategoryColors } from "@/shared/ui/theme";
+import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 
 const mockBack = jest.fn();
 
@@ -16,7 +18,9 @@ jest.mock("expo-router", () => ({
 }));
 
 // SheetScreen (content fit) holds the route's removal while the sheet slides down.
-jest.mock("expo-router/react-navigation", () => ({ usePreventRemove: jest.fn() }));
+jest.mock("expo-router/react-navigation", () => ({
+  usePreventRemove: jest.fn(),
+}));
 
 jest.mock("react-native-reanimated", () => {
   const React = jest.requireActual("react") as typeof import("react");
@@ -54,6 +58,35 @@ jest.mock("react-native-worklets", () => ({
 }));
 
 jest.mock("expo-symbols", () => ({ SymbolView: () => null }));
+
+// Mirrors the iOS Modal contract (onDismiss once `visible` has dropped) so the
+// « ••• » drawer → confirmation hand-off can be verified.
+jest.mock("react-native/Libraries/Modal/Modal", () => {
+  const React = jest.requireActual("react") as typeof import("react");
+  const { View } = jest.requireActual(
+    "react-native",
+  ) as typeof import("react-native");
+
+  interface MockModalProps {
+    readonly visible?: boolean;
+    readonly onDismiss?: () => void;
+    readonly children?: React.ReactNode;
+  }
+
+  class MockModal extends React.Component<MockModalProps> {
+    componentDidUpdate(previous: MockModalProps) {
+      if (previous.visible && !this.props.visible) this.props.onDismiss?.();
+    }
+
+    render() {
+      return this.props.visible
+        ? React.createElement(View, null, this.props.children)
+        : null;
+    }
+  }
+
+  return { __esModule: true, default: MockModal };
+});
 
 jest.mock("react-native-safe-area-context", () => {
   const React = jest.requireActual("react") as typeof import("react");
@@ -99,12 +132,27 @@ function CatalogProbe() {
   );
 }
 
+/** Opens « ••• », picks an action, and lets the drawer close so the action runs. */
+async function openServiceAction(
+  view: Awaited<ReturnType<typeof render>>,
+  testID: "toggle-service-active" | "open-service-deletion",
+) {
+  await act(async () => {
+    fireEvent.press(view.getByTestId("open-service-actions"));
+  });
+  await settleSheetTransition();
+  await act(async () => {
+    fireEvent.press(view.getByTestId(testID));
+  });
+  await settleSheetTransition();
+}
+
 function renderEditor(screen: React.ReactNode) {
   return render(
     <TestPersistenceProvider>
       <ServiceCatalogProvider>
-      {screen}
-      <CatalogProbe />
+        {screen}
+        <CatalogProbe />
       </ServiceCatalogProvider>
     </TestPersistenceProvider>,
   );
@@ -119,16 +167,24 @@ describe("ServiceEditorScreen", () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
     expect(view.getByText("NOUVELLE PRESTATION")).toBeTruthy();
-    expect(view.getByRole("header", { name: "Ajouter une prestation" })).toBeTruthy();
+    expect(
+      view.getByRole("header", { name: "Ajouter une prestation" }),
+    ).toBeTruthy();
     expect(view.getByLabelText("Annuler")).toBeTruthy();
     // The type chooser is content-fit: never a fixed full-height sheet.
     // Sized by its content, capped at the canonical detent.
-    expect(StyleSheet.flatten(view.getByTestId("service-sheet").props.style).flex).toBeUndefined();
-    const surfaceStyle = StyleSheet.flatten(view.getByTestId("sheet-screen-surface").props.style);
+    expect(
+      StyleSheet.flatten(view.getByTestId("service-sheet").props.style).flex,
+    ).toBeUndefined();
+    const surfaceStyle = StyleSheet.flatten(
+      view.getByTestId("sheet-screen-surface").props.style,
+    );
     expect(surfaceStyle.flex).toBeUndefined();
     expect(surfaceStyle.maxHeight).toBeGreaterThan(0);
     expect(view.getByText("Type de prestation")).toBeTruthy();
-    expect(view.getByText("Choisissez la structure qui correspond au déroulé réel.")).toBeTruthy();
+    expect(
+      view.getByText("Choisissez la structure qui correspond au déroulé réel."),
+    ).toBeTruthy();
     expect(view.getByText("Prestation technique")).toBeTruthy();
     await act(async () => {
       fireEvent.press(view.getByLabelText("Annuler"));
@@ -137,8 +193,12 @@ describe("ServiceEditorScreen", () => {
     await act(async () => {
       fireEvent.press(view.getByText("Prestation simple"));
     });
-    expect(view.getByLabelText("Nom de la prestation").props.autoFocus).toBeFalsy();
-    expect(view.getByLabelText("Prix de la prestation").props.autoFocus).toBeFalsy();
+    expect(
+      view.getByLabelText("Nom de la prestation").props.autoFocus,
+    ).toBeFalsy();
+    expect(
+      view.getByLabelText("Prix de la prestation").props.autoFocus,
+    ).toBeFalsy();
   });
 
   it("creates a simple Service from the professional-facing fields", async () => {
@@ -227,6 +287,119 @@ describe("ServiceEditorScreen", () => {
     expect(stored).toContain(",Application,30,true|");
     expect(stored).toContain(",Temps de pose,45,false|");
     expect(stored).toContain(",Finition,30,true");
+  });
+
+  it("shows a simple Service in the detail-sheet family: header, summary, Durée only", async () => {
+    const view = await renderEditor(
+      <ServiceEditorScreen
+        mode="existing"
+        serviceId="service-brushing-brushing-1"
+      />,
+    );
+
+    // Header: the name, « ••• » and ×; no eyebrow, no textual « Fermer ».
+    expect(view.getByRole("header", { name: "Brushing 1" })).toBeTruthy();
+    expect(view.queryByText("PRESTATION")).toBeNull();
+    expect(view.queryByText("Fermer")).toBeNull();
+    expect(view.getByLabelText("Actions de la prestation")).toBeTruthy();
+    expect(
+      view.getByTestId("close-service-details").props.accessibilityLabel,
+    ).toBe("Fermer");
+
+    // Summary: price, status and the written category.
+    const summary = within(view.getByTestId("service-summary"));
+    expect(summary.getByText("20,00 €")).toBeTruthy();
+    expect(summary.getByLabelText("Prestation active")).toBeTruthy();
+    expect(summary.getByText("Active")).toBeTruthy();
+    expect(summary.getByLabelText("Catégorie, Service")).toBeTruthy();
+    expect(
+      StyleSheet.flatten(
+        view.getByTestId("service-category-pill-dot").props.style,
+      ).backgroundColor,
+    ).toBe(serviceCategoryColors.SERVICE.accent);
+    // Decorative family pictogram on the Service whisper, hidden from VoiceOver
+    // (absent from the default, accessibility-filtered queries).
+    expect(view.queryByTestId("service-family-icon")).toBeNull();
+    const icon = view.getByTestId("service-family-icon", {
+      includeHiddenElements: true,
+    });
+    expect(StyleSheet.flatten(icon.props.style).backgroundColor).toBe(
+      serviceCategoryColors.SERVICE.tint,
+    );
+    expect(icon.props.accessibilityElementsHidden).toBe(true);
+    expect(icon.props.importantForAccessibility).toBe("no-hide-descendants");
+
+    // Informations: Durée only — no zero « Temps de pose » row, no old card.
+    const information = within(view.getByTestId("service-information"));
+    expect(information.getByText("Durée")).toBeTruthy();
+    expect(information.getByText("30 min")).toBeTruthy();
+    expect(view.queryByTestId("service-processing")).toBeNull();
+    expect(view.queryByText("Temps de pose")).toBeNull();
+    expect(view.queryByText("Prix")).toBeNull();
+    expect(view.queryByTestId("service-phases")).toBeNull();
+
+    // ONE permanent action; management lives in « ••• ».
+    expect(view.queryByText("Désactiver")).toBeNull();
+    expect(view.queryByText("Supprimer")).toBeNull();
+    expect(
+      within(view.getByTestId("service-read-actions")).getByText(
+        "Modifier la prestation",
+      ),
+    ).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByTestId("open-service-actions"));
+    });
+    await settleSheetTransition();
+    const menu = within(view.getByTestId("service-actions-sheet"));
+    expect(menu.getByText("Désactiver la prestation")).toBeTruthy();
+    expect(menu.getByText("Supprimer la prestation")).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByLabelText("Fermer les actions"));
+    });
+    await settleSheetTransition();
+
+    // « Modifier la prestation » opens the existing edit form.
+    await act(async () => {
+      fireEvent.press(view.getByTestId("edit-service"));
+    });
+    expect(view.getByLabelText("Prix de la prestation").props.value).toBe(
+      "20,00",
+    );
+  });
+
+  it("shows a Technique with its category colour, Temps de pose and ordered phases", async () => {
+    const view = await renderEditor(
+      <ServiceEditorScreen
+        mode="existing"
+        serviceId="technique-balayage-balayage-1"
+      />,
+    );
+
+    expect(view.getByRole("header", { name: "Balayage 1" })).toBeTruthy();
+    expect(view.getByLabelText("Catégorie, Technique")).toBeTruthy();
+    expect(
+      StyleSheet.flatten(
+        view.getByTestId("service-category-pill-dot").props.style,
+      ).backgroundColor,
+    ).toBe(serviceCategoryColors.TECHNIQUE.accent);
+    // Status and category never share colours.
+    expect(
+      StyleSheet.flatten(
+        view.getByTestId("service-status-pill-dot").props.style,
+      ).backgroundColor,
+    ).not.toBe(serviceCategoryColors.TECHNIQUE.accent);
+    expect(
+      StyleSheet.flatten(
+        view.getByTestId("service-family-icon", { includeHiddenElements: true })
+          .props.style,
+      ).backgroundColor,
+    ).toBe(serviceCategoryColors.TECHNIQUE.tint);
+
+    const information = within(view.getByTestId("service-information"));
+    expect(information.getByText("Durée")).toBeTruthy();
+    expect(information.getByText("Temps de pose")).toBeTruthy();
+    expect(view.getByTestId("service-processing")).toBeTruthy();
+    expect(view.getByTestId("service-phases")).toBeTruthy();
   });
 
   it("keeps read-only Service details concise for active and processing phases", async () => {
@@ -466,9 +639,7 @@ describe("ServiceEditorScreen", () => {
       />,
     );
 
-    await act(async () => {
-      fireEvent.press(view.getByLabelText("Supprimer cette prestation"));
-    });
+    await openServiceAction(view, "open-service-deletion");
     expect(alertSpy).not.toHaveBeenCalled();
     expect(view.getByTestId("service-deletion-dialog")).toBeTruthy();
     expect(view.getByText("Supprimer cette prestation ?")).toBeTruthy();
@@ -485,9 +656,7 @@ describe("ServiceEditorScreen", () => {
     );
 
     // Confirming removes the catalog record and closes the sheet.
-    await act(async () => {
-      fireEvent.press(view.getByLabelText("Supprimer cette prestation"));
-    });
+    await openServiceAction(view, "open-service-deletion");
     await act(async () => {
       fireEvent.press(view.getByTestId("confirm-service-deletion"));
     });
@@ -507,9 +676,7 @@ describe("ServiceEditorScreen", () => {
       />,
     );
 
-    await act(async () => {
-      fireEvent.press(view.getByText("Désactiver"));
-    });
+    await openServiceAction(view, "toggle-service-active");
     expect(alertSpy).not.toHaveBeenCalled();
     expect(view.getByTestId("service-deactivation-dialog")).toBeTruthy();
     await act(async () => {
@@ -520,8 +687,14 @@ describe("ServiceEditorScreen", () => {
     expect(view.getByTestId("brushing-active").props.children).toBe("false");
 
     await act(async () => {
-      fireEvent.press(view.getByText("Réactiver"));
+      fireEvent.press(view.getByTestId("open-service-actions"));
     });
+    await settleSheetTransition();
+    expect(view.getByText("Réactiver la prestation")).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByTestId("toggle-service-active"));
+    });
+    await settleSheetTransition();
 
     expect(mockBack).toHaveBeenCalledTimes(2);
     expect(view.getByTestId("brushing-active").props.children).toBe("true");
@@ -538,7 +711,8 @@ describe("ServiceEditorScreen", () => {
 
     // Reading may be dismissed by a swipe or an outside tap; a draft may not.
     const outsideTapAllowed = () =>
-      view.getByTestId("sheet-screen-scrim").props.accessibilityState?.disabled !== true;
+      view.getByTestId("sheet-screen-scrim").props.accessibilityState
+        ?.disabled !== true;
     expect(outsideTapAllowed()).toBe(true);
 
     await act(async () => {
