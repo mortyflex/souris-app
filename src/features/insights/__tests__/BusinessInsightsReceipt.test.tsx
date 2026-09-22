@@ -177,6 +177,30 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
     selection.mockRestore();
   });
 
+  it('reports each settled category once, so « Partager » follows the screen', async () => {
+    const onCategoryChange = jest.fn();
+    const view = await render(
+      <BusinessInsightsReceipt
+        maxHeight={900}
+        model={model}
+        nextLabel="Mois suivant"
+        onCategoryChange={onCategoryChange}
+        onNext={jest.fn()}
+        onPeriodKindChange={jest.fn()}
+        onPrevious={jest.fn()}
+        periodKind="MONTH"
+        periodLabel="Septembre 2026"
+        previousLabel="Mois précédent"
+        width={WIDTH}
+      />,
+    );
+
+    await swipeTo(view, 1);
+    await swipeTo(view, 1);
+    await act(async () => fireEvent.press(view.getByTestId('business-insights-page-indicator-loyalClients')));
+    expect(onCategoryChange.mock.calls).toEqual([['products'], ['loyalClients']]);
+  });
+
   it('moves between categories from the page indicator and the adjustable actions', async () => {
     const view = await renderReceipt();
 

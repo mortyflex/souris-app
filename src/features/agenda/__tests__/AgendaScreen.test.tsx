@@ -14,6 +14,8 @@ import { formatEuroCents } from '@/shared/lib/money';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { settleFloatingReveal, settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
+import { INSIGHTS_SAVED_NOTICE_DURATION } from '@/features/insights/BusinessInsightsTicket';
+
 import { AgendaScreen } from '../AgendaScreen';
 
 const mockPush = jest.fn();
@@ -27,6 +29,23 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+
+// Native image capture and share sheet: observed, never real.
+jest.mock('react-native-view-shot', () => ({ captureRef: jest.fn(), releaseCapture: jest.fn() }));
+jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
+jest.mock('expo-media-library', () => ({ requestPermissionsAsync: jest.fn(), Asset: { create: jest.fn() } }));
+const mockMediaLibrary = jest.requireMock('expo-media-library') as {
+  readonly requestPermissionsAsync: jest.Mock;
+  readonly Asset: { readonly create: jest.Mock };
+};
+const mockViewShot = jest.requireMock('react-native-view-shot') as {
+  readonly captureRef: jest.Mock;
+  readonly releaseCapture: jest.Mock;
+};
+const mockSharing = jest.requireMock('expo-sharing') as {
+  readonly isAvailableAsync: jest.Mock;
+  readonly shareAsync: jest.Mock;
+};
 
 // The « Résumé du jour » receipt printer: nothing animates under test.
 jest.mock('react-native-reanimated', () =>
@@ -378,8 +397,9 @@ describe('AgendaScreen — day navigation', () => {
       'Top prestations, 1 sur 4',
     );
     expect(view.getByLabelText(/^Première place, .+, \d+ prestations?$/)).toBeTruthy();
-    // No ranking is interactive, nothing is shared yet, and there is no « moins ».
-    expect(view.queryByText(/Partager/)).toBeNull();
+    // No ranking is interactive, « Partager » sits next to « Fermer », and there is no « moins ».
+    expect(view.getByRole('button', { name: 'Partager' })).toBeTruthy();
+    expect(view.getByTestId('business-insights-close')).toBeTruthy();
     expect(view.queryByText(/dépensent le moins/)).toBeNull();
 
     expect(print).not.toHaveBeenCalled();
@@ -485,6 +505,339 @@ describe('AgendaScreen — day navigation', () => {
       jest.advanceTimersByTime(receiptPrint.dismiss);
     });
     expect(view.queryByTestId('business-insights-receipt')).toBeNull();
+  });
+
+  describe('sharing « Tops & tendances »', () => {
+    const shareCard = (view: AgendaView) =>
+      within(view.getByTestId('business-insights-share-card', { includeHiddenElements: true }));
+    const shareCardText = (view: AgendaView, testID: string) =>
+      view.getByTestId(`business-insights-share-card-${testID}`, { includeHiddenElements: true }).props
+        .children as string;
+    const shareButton = (view: AgendaView) => view.getByTestId('business-insights-share');
+    // The card is mounted off screen and hidden from assistive technology.
+    const HIDDEN = { includeHiddenElements: true } as const;
+
+    beforeEach(() => {
+      mockViewShot.captureRef.mockReset().mockResolvedValue('/tmp/ReactNative/insights.png');
+      mockViewShot.releaseCapture.mockReset();
+      mockSharing.isAvailableAsync.mockReset().mockResolvedValue(true);
+      mockSharing.shareAsync.mockReset().mockResolvedValue(undefined);
+      mockMediaLibrary.requestPermissionsAsync.mockReset().mockResolvedValue({ granted: true, status: 'granted' });
+      mockMediaLibrary.Asset.create.mockReset().mockResolvedValue({ id: 'asset-1' });
+    });
+
+    const noticeText = (view: AgendaView) =>
+      view.queryByTestId('business-insights-notice')?.props.children as string | undefined;
+    const capturedFrameIDs = () =>
+      mockViewShot.captureRef.mock.calls.map(
+        ([target]) => (target as { current: { props: { testID?: string } } }).current.props.testID,
+      );
+
+    it('is offered by « Tops & tendances » only, never by « Résumé du jour »', async () => {
+      const view = await renderAgenda();
+      await openDaySummary(view);
+      // The same icon-only close button as « Tops & tendances », alone.
+      expect(view.getByTestId('day-summary-close').props.accessibilityLabel).toBe('Fermer');
+      expect(view.queryByText('Fermer')).toBeNull();
+      expect(view.queryByTestId('business-insights-save')).toBeNull();
+      expect(view.queryByLabelText(/^(Enregistrer|Partager)/)).toBeNull();
+      expect(view.queryByText('Partager')).toBeNull();
+      expect(view.queryByTestId('day-summary-offstage', { includeHiddenElements: true })).toBeNull();
+      await press(view, 'day-summary-close');
+      await act(async () => {
+        jest.advanceTimersByTime(receiptPrint.dismiss);
+      });
+
+      await openInsights(view);
+      const button = shareButton(view);
+      expect(button.props.accessibilityLabel).toBe('Partager');
+      expect(button.props.accessibilityRole).toBe('button');
+      // Icon-only: the label is spoken, not written.
+      expect(within(button).queryByText('Partager')).toBeNull();
+    });
+
+    it('shares the browsed period and the settled category, as one image, without closing the ticket', async () => {
+      const action = jest.spyOn(haptics, 'action');
+      const view = await renderAgenda();
+      await openInsights(view);
+      await press(view, 'business-insights-period-year');
+      await act(async () =>
+        fireEvent(view.getByTestId('business-insights-rankings'), 'momentumScrollEnd', {
+          nativeEvent: { contentOffset: { x: 10_000, y: 0 } },
+        }),
+      );
+      await press(view, 'business-insights-page-indicator-products');
+      expect(periodLabel(view)).toBe('2026');
+
+      // The public card follows the screen — not the Agenda month.
+      expect(shareCardText(view, 'period')).toBe('2026');
+      expect(shareCard(view).getByText('Top produits', HIDDEN)).toBeTruthy();
+      // The ticket shows its turnover; the public card frosts it: no amount is ever rendered.
+      const cash = (view.getByTestId('business-insights-cash').props.accessibilityLabel as string).replace(
+        'Encaissé, ',
+        '',
+      );
+      expect(shareCard(view).queryByText(cash, HIDDEN)).toBeNull();
+      expect(
+        within(view.getByTestId('business-insights-share-card-cash', { includeHiddenElements: true })).getByText(
+          '€',
+          HIDDEN,
+        ),
+      ).toBeTruthy();
+
+      await press(view, 'business-insights-share');
+
+      expect(action).toHaveBeenCalledTimes(1);
+      expect(mockViewShot.captureRef).toHaveBeenCalledTimes(1);
+      const [target, options] = mockViewShot.captureRef.mock.calls[0] as [
+        { current: unknown },
+        Record<string, unknown>,
+      ];
+      // The dedicated export frame is captured, never the receipt or the screen.
+      expect((target.current as { props: { testID?: string } }).props.testID).toBe('business-insights-share-frame');
+      expect(options).toMatchObject({ format: 'png', result: 'tmpfile' });
+      expect(mockSharing.shareAsync).toHaveBeenCalledWith(
+        'file:///tmp/ReactNative/insights.png',
+        expect.objectContaining({ mimeType: 'image/png' }),
+      );
+      // The temporary image is released once the sheet is dismissed.
+      expect(mockViewShot.releaseCapture).toHaveBeenCalledWith('/tmp/ReactNative/insights.png');
+
+      // Dismissing the share sheet leaves the ticket open, where it was.
+      expect(view.getByTestId('business-insights-receipt')).toBeTruthy();
+      expect(periodLabel(view)).toBe('2026');
+      expect(view.getByTestId('business-insights-pagination').props.accessibilityLabel).toBe(
+        'Top produits, 2 sur 4',
+      );
+      expect(shareButton(view).props.accessibilityState).toMatchObject({ busy: false, disabled: false });
+
+      // The carousel keeps working after a share.
+      await act(async () =>
+        fireEvent(view.getByTestId('business-insights-rankings'), 'momentumScrollEnd', {
+          nativeEvent: { contentOffset: { x: 0, y: 0 } },
+        }),
+      );
+      expect(view.getByTestId('business-insights-pagination').props.accessibilityLabel).toBe(
+        'Top prestations, 1 sur 4',
+      );
+      expect(shareCard(view).getByText('Top prestations', HIDDEN)).toBeTruthy();
+      action.mockRestore();
+    });
+
+    it('prepares ONE image from a double tap, busy until the sheet is gone', async () => {
+      let finishCapture: (uri: string) => void = () => undefined;
+      mockViewShot.captureRef.mockReturnValue(
+        new Promise<string>((resolve) => {
+          finishCapture = resolve;
+        }),
+      );
+      const action = jest.spyOn(haptics, 'action');
+      const view = await renderAgenda();
+      await openInsights(view);
+
+      await press(view, 'business-insights-share');
+      expect(shareButton(view).props.accessibilityState).toMatchObject({ busy: true, disabled: true });
+      // The second tap lands on the busy capsule: ignored.
+      await press(view, 'business-insights-share');
+
+      await act(async () => {
+        finishCapture('/tmp/ReactNative/once.png');
+      });
+      expect(mockViewShot.captureRef).toHaveBeenCalledTimes(1);
+      expect(mockSharing.shareAsync).toHaveBeenCalledTimes(1);
+      expect(action).toHaveBeenCalledTimes(1);
+      expect(shareButton(view).props.accessibilityState).toMatchObject({ busy: false });
+      action.mockRestore();
+    });
+
+    it('offers Fermer, Enregistrer and Partager as labelled icon buttons, in that order', async () => {
+      const view = await renderAgenda();
+      await openInsights(view);
+      const actions = ['business-insights-close', 'business-insights-save', 'business-insights-share'].map(
+        (testID) => view.getByTestId(testID).props.accessibilityLabel as string,
+      );
+      expect(actions).toEqual(['Fermer', 'Enregistrer l’image', 'Partager']);
+      for (const testID of ['business-insights-close', 'business-insights-save', 'business-insights-share']) {
+        expect(view.getByTestId(testID).props.accessibilityRole).toBe('button');
+      }
+      // Icon-only buttons: no visible words in the action row.
+      expect(view.queryByText(/^(Fermer|Enregistrer|Partager)$/)).toBeNull();
+
+      // « Fermer » still closes the ticket.
+      await press(view, 'business-insights-close');
+      await act(async () => {
+        jest.advanceTimersByTime(receiptPrint.dismiss);
+      });
+      expect(view.queryByTestId('business-insights-receipt')).toBeNull();
+    });
+
+    it('saves the SAME card to Photos, confirms it once with one success haptic, and keeps the ticket as it was', async () => {
+      const success = jest.spyOn(haptics, 'success');
+      const view = await renderAgenda();
+      await openInsights(view);
+      await press(view, 'business-insights-period-year');
+      await press(view, 'business-insights-page-indicator-products');
+
+      await press(view, 'business-insights-save');
+
+      expect(mockMediaLibrary.requestPermissionsAsync).toHaveBeenCalledWith(true, ['photo']);
+      expect(mockMediaLibrary.Asset.create).toHaveBeenCalledTimes(1);
+      expect(mockMediaLibrary.Asset.create).toHaveBeenCalledWith('file:///tmp/ReactNative/insights.png');
+      expect(mockViewShot.releaseCapture).toHaveBeenCalledWith('/tmp/ReactNative/insights.png');
+      expect(mockSharing.shareAsync).not.toHaveBeenCalled();
+      expect(noticeText(view)).toBe('Image enregistrée dans Photos');
+      expect(success).toHaveBeenCalledTimes(1);
+      // Same period, same category, still open.
+      expect(periodLabel(view)).toBe('2026');
+      expect(view.getByTestId('business-insights-pagination').props.accessibilityLabel).toBe('Top produits, 2 sur 4');
+
+      // Save and share capture the very same export frame.
+      await press(view, 'business-insights-share');
+      expect(capturedFrameIDs()).toEqual(['business-insights-share-frame', 'business-insights-share-frame']);
+      // Sharing never claims a save, and clears the previous confirmation.
+      expect(noticeText(view)).toBeUndefined();
+      expect(success).toHaveBeenCalledTimes(1);
+      success.mockRestore();
+    });
+
+    it('lets the save confirmation go away on its own', async () => {
+      const view = await renderAgenda();
+      await openInsights(view);
+      await press(view, 'business-insights-save');
+      expect(noticeText(view)).toBe('Image enregistrée dans Photos');
+
+      await act(async () => {
+        jest.advanceTimersByTime(INSIGHTS_SAVED_NOTICE_DURATION);
+      });
+      expect(noticeText(view)).toBeUndefined();
+      expect(view.getByTestId('business-insights-receipt')).toBeTruthy();
+    });
+
+    it('never confirms a save when the share sheet closes', async () => {
+      const success = jest.spyOn(haptics, 'success');
+      const view = await renderAgenda();
+      await openInsights(view);
+      await press(view, 'business-insights-share');
+
+      expect(mockSharing.shareAsync).toHaveBeenCalledTimes(1);
+      expect(noticeText(view)).toBeUndefined();
+      expect(view.queryByText('Image enregistrée dans Photos')).toBeNull();
+      expect(mockMediaLibrary.Asset.create).not.toHaveBeenCalled();
+      expect(success).not.toHaveBeenCalled();
+      success.mockRestore();
+    });
+
+    it('saves ONE image from a double tap, and holds Partager while saving', async () => {
+      let finishSave: () => void = () => undefined;
+      mockMediaLibrary.Asset.create.mockReturnValue(
+        new Promise((resolve) => {
+          finishSave = () => resolve({ id: 'asset-1' });
+        }),
+      );
+      const success = jest.spyOn(haptics, 'success');
+      const view = await renderAgenda();
+      await openInsights(view);
+
+      await press(view, 'business-insights-save');
+      expect(view.getByTestId('business-insights-save').props.accessibilityState).toMatchObject({
+        busy: true,
+        disabled: true,
+      });
+      expect(view.getByTestId('business-insights-share').props.accessibilityState).toMatchObject({ disabled: true });
+      await press(view, 'business-insights-save');
+      await press(view, 'business-insights-share');
+
+      await act(async () => {
+        finishSave();
+      });
+      expect(mockViewShot.captureRef).toHaveBeenCalledTimes(1);
+      expect(mockMediaLibrary.Asset.create).toHaveBeenCalledTimes(1);
+      expect(mockSharing.shareAsync).not.toHaveBeenCalled();
+      expect(success).toHaveBeenCalledTimes(1);
+      expect(view.getByTestId('business-insights-save').props.accessibilityState).toMatchObject({ busy: false });
+      success.mockRestore();
+    });
+
+    it('explains a declined Photos permission inline, without capturing or confirming anything', async () => {
+      mockMediaLibrary.requestPermissionsAsync.mockResolvedValue({ granted: false, status: 'denied' });
+      const view = await renderAgenda();
+      await openInsights(view);
+
+      await press(view, 'business-insights-save');
+
+      expect(noticeText(view)).toBe(
+        'Souris n’a pas accès à Photos. Autorisez-le dans Réglages pour enregistrer l’image.',
+      );
+      expect(mockViewShot.captureRef).not.toHaveBeenCalled();
+      expect(mockMediaLibrary.Asset.create).not.toHaveBeenCalled();
+      expect(view.getByTestId('business-insights-receipt')).toBeTruthy();
+    });
+
+    it('shows a retryable error when the image cannot be saved', async () => {
+      mockMediaLibrary.Asset.create.mockRejectedValueOnce(new Error('library failed'));
+      const success = jest.spyOn(haptics, 'success');
+      const view = await renderAgenda();
+      await openInsights(view);
+
+      await press(view, 'business-insights-save');
+      expect(noticeText(view)).toBe('Impossible d’enregistrer l’image.');
+      expect(success).not.toHaveBeenCalled();
+      expect(view.getByTestId('business-insights-receipt')).toBeTruthy();
+
+      await press(view, 'business-insights-save');
+      expect(noticeText(view)).toBe('Image enregistrée dans Photos');
+      expect(success).toHaveBeenCalledTimes(1);
+      success.mockRestore();
+    });
+
+    it('shows a retryable message when the image cannot be prepared, and keeps the ticket open', async () => {
+      mockViewShot.captureRef.mockRejectedValueOnce(new Error('capture failed'));
+      const view = await renderAgenda();
+      await openInsights(view);
+
+      await press(view, 'business-insights-share');
+
+      expect(view.getByTestId('business-insights-notice').props.children).toBe(
+        'Impossible de préparer le partage.',
+      );
+      expect(mockSharing.shareAsync).not.toHaveBeenCalled();
+      expect(view.getByTestId('business-insights-receipt')).toBeTruthy();
+
+      // Retry succeeds and clears the message.
+      await press(view, 'business-insights-share');
+      expect(mockSharing.shareAsync).toHaveBeenCalledTimes(1);
+      expect(view.queryByTestId('business-insights-notice')).toBeNull();
+      expect(view.getByTestId('business-insights-receipt')).toBeTruthy();
+    });
+
+    it('shares the client podiums of the ticket: same people as « Prénom N. », same order, « rdv »', async () => {
+      const view = await renderAgenda();
+      await openInsights(view);
+      const placesOf = (root: ReturnType<AgendaView['getByTestId']>) =>
+        within(root)
+          .queryAllByLabelText(/^(Première|Deuxième|Troisième) place, /, HIDDEN)
+          .map((node) => (node.props.accessibilityLabel as string).split(', '));
+      const cardPlaces = () =>
+        placesOf(view.getByTestId('business-insights-share-card-highlight', { includeHiddenElements: true }));
+
+      // Loyalty: identical places — same names, same visit counts.
+      await press(view, 'business-insights-page-indicator-loyalClients');
+      const loyal = placesOf(view.getByTestId('business-insights-podium-loyalClients'));
+      expect(loyal.length).toBeGreaterThan(0);
+      expect(cardPlaces()).toEqual(loyal);
+      // Visits read « rdv » on both podiums, never a truncated « rendez-v… ».
+      expect(within(view.getByTestId('business-insights-podium-loyalClients')).getAllByText(/^\d+ rdv$/).length).toBe(
+        loyal.length,
+      );
+      expect(shareCard(view).getAllByText(/^\d+ rdv$/, HIDDEN).length).toBe(loyal.length);
+
+      // Spending: same people in the same order; the amount is written compactly.
+      await press(view, 'business-insights-page-indicator-spendingClients');
+      const spending = placesOf(view.getByTestId('business-insights-podium-spendingClients'));
+      expect(cardPlaces().map(([place, name]) => [place, name])).toEqual(
+        spending.map(([place, name]) => [place, name]),
+      );
+    });
   });
 
   it('keeps Week mode on its own week navigation and opens a tapped day in Day mode', async () => {

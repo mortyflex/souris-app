@@ -28,6 +28,10 @@ export const haptics = {
   print() {
     trigger(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
   },
+  /** An explicit secondary action starts (« Partager »): one light tick, once per press. */
+  action() {
+    trigger(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+  },
   success() {
     trigger(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
   },

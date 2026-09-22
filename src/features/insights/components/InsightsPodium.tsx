@@ -21,9 +21,14 @@
 // place is ONE accessible element carrying its spoken label.
 //
 // Self-contained and carousel-agnostic: it receives an already-worded
-// category (`InsightsRankingSection`) and renders it on the receipt paper.
-// A future share card can render it on its own, without the in-app carousel
-// or a capture of the private receipt. Computes nothing.
+// category (`InsightsRankingSection`) and renders it on paper — the receipt
+// page, or the share card (`BusinessInsightsShareCard`), which renders it on
+// its own, without the carousel or a capture of the private receipt. It sizes
+// itself from its container's width. Computes nothing.
+//
+// Share-card options: `allowFontScaling={false}` keeps an exported bitmap independent from the
+// device text size; `layout="story"` gives the metrics the room they need on
+// the narrower card (below).
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -40,8 +45,19 @@ import {
 
 import type { InsightsRankingRow, InsightsRankingSection } from '../insights-receipt';
 
+/**
+ * `receipt` — #1 36 %, #2 / #3 32 % of the page (the in-app ticket).
+ * `story`   — the share card: #1 40 %, #2 / #3 30 %, and each metric uses
+ *             its whole column. A metric is never truncated: at worst it wraps
+ *             onto a second line, never shrinks.
+ */
+export type InsightsPodiumLayout = 'receipt' | 'story';
+
 interface InsightsPodiumProps {
   readonly section: InsightsRankingSection;
+  readonly layout?: InsightsPodiumLayout;
+  /** `false` for an exported image: the layout never follows the device text size. */
+  readonly allowFontScaling?: boolean;
   readonly testID?: string;
 }
 
@@ -54,18 +70,30 @@ const GEOMETRY = {
   3: { disc: 38, tailWidth: 10, tailHeight: 14, plinth: 32 },
 } as const;
 
-export function InsightsPodium({ section, testID }: InsightsPodiumProps) {
+export function InsightsPodium({
+  section,
+  layout = 'receipt',
+  allowFontScaling = true,
+  testID,
+}: InsightsPodiumProps) {
   const [first, second, third] = section.rows;
+  const story = layout === 'story';
+  const slot = { allowFontScaling, story, testID };
 
   return (
     <View style={styles.root} testID={testID}>
-      <AppText accessibilityRole="header" style={styles.title} variant="eyebrow">
+      <AppText
+        accessibilityRole="header"
+        allowFontScaling={allowFontScaling}
+        style={styles.title}
+        variant="eyebrow"
+      >
         {section.title}
       </AppText>
 
       {first === undefined ? (
         <View accessible style={styles.empty} testID={testID ? `${testID}-empty` : undefined}>
-          <AppText variant="metadata" style={styles.emptyText}>
+          <AppText allowFontScaling={allowFontScaling} variant="metadata" style={styles.emptyText}>
             {section.emptyMessage}
           </AppText>
         </View>
@@ -74,9 +102,13 @@ export function InsightsPodium({ section, testID }: InsightsPodiumProps) {
         // centred — always the tallest place, it gives the stage its height —
         // and #2 / #3 stand on the same floor, left and right.
         <View style={styles.stage}>
-          <PodiumSlot row={first} style={styles.center} testID={testID} />
-          {second && <PodiumSlot row={second} style={[styles.side, styles.left]} testID={testID} />}
-          {third && <PodiumSlot row={third} style={[styles.side, styles.right]} testID={testID} />}
+          <PodiumSlot {...slot} row={first} style={[styles.center, story && styles.storyCenter]} />
+          {second && (
+            <PodiumSlot {...slot} row={second} style={[styles.side, story && styles.storySide, styles.left]} />
+          )}
+          {third && (
+            <PodiumSlot {...slot} row={third} style={[styles.side, story && styles.storySide, styles.right]} />
+          )}
         </View>
       )}
     </View>
@@ -87,10 +119,14 @@ export function InsightsPodium({ section, testID }: InsightsPodiumProps) {
 function PodiumSlot({
   row,
   style,
+  allowFontScaling,
+  story,
   testID,
 }: {
   readonly row: InsightsRankingRow;
   readonly style: StyleProp<ViewStyle>;
+  readonly allowFontScaling: boolean;
+  readonly story: boolean;
   readonly testID?: string;
 }) {
   const winner = row.rank === 1;
@@ -103,8 +139,9 @@ function PodiumSlot({
       style={style}
       testID={testID ? `${testID}-place-${row.rank}` : undefined}
     >
-      <Medal rank={row.rank} />
+      <Medal allowFontScaling={allowFontScaling} rank={row.rank} />
       <AppText
+        allowFontScaling={allowFontScaling}
         numberOfLines={2}
         style={[styles.label, winner && styles.labelWinner]}
         variant="rowTitle"
@@ -112,8 +149,9 @@ function PodiumSlot({
         {row.label}
       </AppText>
       <AppText
-        numberOfLines={1}
-        style={[styles.value, winner && styles.valueWinner]}
+        allowFontScaling={allowFontScaling}
+        numberOfLines={story ? 2 : 1}
+        style={[styles.value, story && styles.storyValue, winner && styles.valueWinner]}
         variant={winner ? 'control' : 'metadata'}
       >
         {row.value}
@@ -126,6 +164,7 @@ function PodiumSlot({
         testID={testID ? `${testID}-plinth-${row.rank}` : undefined}
       >
         <AppText
+          allowFontScaling={allowFontScaling}
           style={[styles.plinthNumber, { color: plinth.number }]}
           variant={winner ? 'sectionTitle' : 'control'}
         >
@@ -140,7 +179,13 @@ function PodiumSlot({
  * A medal of Views: two ribbon tails (each notched at its end) hanging behind
  * a flat metal disc with a darker rim, a lighter inset ring and the digit.
  */
-function Medal({ rank }: { readonly rank: 1 | 2 | 3 }) {
+function Medal({
+  rank,
+  allowFontScaling,
+}: {
+  readonly rank: 1 | 2 | 3;
+  readonly allowFontScaling: boolean;
+}) {
   const medal = MEDALS[rank];
   const { disc, tailWidth, tailHeight } = GEOMETRY[rank];
   const tailTop = disc * 0.62;
@@ -185,6 +230,7 @@ function Medal({ rank }: { readonly rank: 1 | 2 | 3 }) {
       >
         <View style={[styles.discInset, { borderColor: medal.inset, margin: inset }]} />
         <AppText
+          allowFontScaling={allowFontScaling}
           style={[styles.medalDigit, { color: medal.text }]}
           variant={rank === 1 ? 'sectionTitle' : 'control'}
         >
@@ -206,6 +252,8 @@ const styles = StyleSheet.create({
   stage: { alignItems: 'center' },
   center: { alignItems: 'center', width: '36%' },
   side: { alignItems: 'center', bottom: 0, position: 'absolute', width: '32%' },
+  storyCenter: { width: '40%' },
+  storySide: { width: '30%' },
   left: { left: 0 },
   right: { right: 0 },
   label: {
@@ -216,6 +264,7 @@ const styles = StyleSheet.create({
   },
   labelWinner: { fontFamily: fontFamilies['700'] },
   value: { fontVariant: ['tabular-nums'], paddingHorizontal: spacing.xs, textAlign: 'center' },
+  storyValue: { paddingHorizontal: 0 },
   valueWinner: { color: semanticColors.brandForeground },
   plinth: {
     alignItems: 'center',

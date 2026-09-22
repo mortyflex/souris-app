@@ -10,7 +10,7 @@
 // its capsule and « Fermer »): the caller lets one part of its content scroll.
 
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { nativeShadows, receiptPaper, receiptPrinter, spacing } from './theme';
 
@@ -35,10 +35,13 @@ export function ReceiptPaper({ width, maxHeight, children, testID }: ReceiptPape
   );
 }
 
-/** A dashed tear line. Drawn as a clipped dashed box: a one-sided dashed border is not portable. */
-export function ReceiptTearLine() {
+/**
+ * A dashed tear line. Drawn as a clipped dashed box: a one-sided dashed border is not portable.
+ * `style` may tighten its vertical margins on a denser receipt.
+ */
+export function ReceiptTearLine({ style }: { readonly style?: StyleProp<ViewStyle> } = {}) {
   return (
-    <View style={styles.tearLine}>
+    <View style={[styles.tearLine, style]}>
       <View style={styles.tearLineDashes} />
     </View>
   );

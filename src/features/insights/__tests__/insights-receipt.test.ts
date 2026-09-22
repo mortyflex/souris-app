@@ -124,6 +124,8 @@ describe('buildInsightsReceipt', () => {
       'Première place, Amel B., 7 rendez-vous',
       'Deuxième place, Nadia F., 1 rendez-vous',
     ]);
+    // Written short, so it never truncates to « rendez-v… »; still spoken in full.
+    expect(loyal!.rows.map((row) => row.value)).toEqual(['7 rdv', '1 rdv']);
   });
 
   it('always keeps the four categories, never padded, each with its own empty message', () => {

@@ -5,14 +5,23 @@
 // this file only words them. No React: the receipt component renders the
 // model as is and computes nothing.
 //
-// This model is the PRIVATE, internal ticket: it names clients. A future
-// shareable card must build its own sanitized model from `BusinessInsights`,
-// never from this one or from a capture of the receipt.
+// The four ranking categories are worded ONCE (`buildInsightsRankingSections`):
+// the ticket and the share card (`insights-share-card.ts`) show the same
+// places, people, metrics and order. Only the presentation differs:
+//
+//   ticket  the in-app ticket: `Amel B.`, `195,00 €`
+//   public  the shared image: `Amel B.`, `195 €` — first name and last-name
+//           initial only (never a full last name), compact amounts, rows keyed
+//           by place so not even a client id reaches the public model
+//
+// Visit counts read `3 rdv` on both (spoken « 3 rendez-vous »): never a
+// truncated « rendez-v… ». The share card is its own composition, never a
+// capture of the receipt.
 
 import type { Client } from '@/domain/clients';
 import type { BusinessInsights, InsightsPeriod, InsightsPeriodKind } from '@/domain/insights';
 import { UNKNOWN_CLIENT_LABEL } from '@/features/clients/presentation';
-import { formatEuroCents } from '@/shared/lib/money';
+import { formatCompactEuroCents, formatEuroCents } from '@/shared/lib/money';
 
 export interface InsightsRankingRow {
   readonly key: string;
@@ -107,7 +116,10 @@ export function formatInsightsClientName(client: Pick<Client, 'firstName' | 'las
   return initial ? `${firstName} ${initial}.` : firstName;
 }
 
-function plural(count: number, singular: string, pluralForm: string): string {
+/** Where the rankings are shown: the in-app ticket, or the public shared image. */
+export type InsightsRankingAudience = 'ticket' | 'public';
+
+export function plural(count: number, singular: string, pluralForm: string): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
@@ -118,23 +130,30 @@ export function formatCompletedAppointments(count: number): string {
 
 const PLACES = ['Première place', 'Deuxième place', 'Troisième place'] as const;
 
-function row(key: string, index: number, label: string, value: string): InsightsRankingRow {
+/** `spokenValue` when the visible metric is abbreviated (`3 rdv` → « 3 rendez-vous »). */
+function row(key: string, index: number, label: string, value: string, spokenValue = value): InsightsRankingRow {
   return {
     key,
     rank: (index + 1) as 1 | 2 | 3,
     label,
     value,
-    accessibilityLabel: `${PLACES[index] ?? `${index + 1}e place`}, ${label}, ${value}`,
+    accessibilityLabel: `${PLACES[index] ?? `${index + 1}e place`}, ${label}, ${spokenValue}`,
   };
 }
 
-export function buildInsightsReceipt(
+/** The four ranking categories, in carousel order — shared by the ticket and the share card. */
+export function buildInsightsRankingSections(
   insights: BusinessInsights,
   getClient: (clientId: string) => Client | undefined,
-): InsightsReceiptModel {
+  audience: InsightsRankingAudience = 'ticket',
+): readonly InsightsRankingSection[] {
+  const isPublic = audience === 'public';
   const clientName = (clientId: string) => formatInsightsClientName(getClient(clientId));
+  const spending = isPublic ? formatCompactEuroCents : formatEuroCents;
+  // A public row is keyed by its place: not even the client id reaches a public card.
+  const clientKey = (clientId: string, index: number) => (isPublic ? `place-${index + 1}` : clientId);
 
-  const sections: readonly InsightsRankingSection[] = [
+  return [
     {
       key: 'services',
       title: 'Top prestations',
@@ -155,7 +174,7 @@ export function buildInsightsReceipt(
       key: 'spendingClients',
       title: 'Clientes qui dépensent le plus',
       rows: insights.topSpendingClients.map((client, index) =>
-        row(client.clientId, index, clientName(client.clientId), formatEuroCents(client.spendingCents)),
+        row(clientKey(client.clientId, index), index, clientName(client.clientId), spending(client.spendingCents)),
       ),
       emptyMessage: 'Aucune dépense sur cette période',
     },
@@ -164,16 +183,23 @@ export function buildInsightsReceipt(
       title: 'Clientes les plus fidèles',
       rows: insights.topLoyalClients.map((client, index) =>
         row(
-          client.clientId,
+          clientKey(client.clientId, index),
           index,
           clientName(client.clientId),
+          `${client.completedAppointmentCount} rdv`,
           plural(client.completedAppointmentCount, 'rendez-vous', 'rendez-vous'),
         ),
       ),
       emptyMessage: 'Aucun rendez-vous réalisé sur cette période',
     },
   ];
+}
 
+export function buildInsightsReceipt(
+  insights: BusinessInsights,
+  getClient: (clientId: string) => Client | undefined,
+): InsightsReceiptModel {
+  const sections = buildInsightsRankingSections(insights, getClient);
   const conflicts = insights.financialConflictCount;
   return {
     isEmpty: insights.isEmpty,

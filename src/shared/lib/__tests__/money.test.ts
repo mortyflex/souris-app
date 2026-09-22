@@ -1,6 +1,7 @@
 import {
   eurosToCents,
   formatCentsAsInput,
+  formatCompactEuroCents,
   formatEuroCents,
   formatEuros,
   formatSignedEuroCents,
@@ -21,6 +22,14 @@ describe('money helpers', () => {
     expect(plain(formatEuroCents(0))).toBe('0,00 €');
     expect(plain(formatEuroCents(-500))).toBe('-5,00 €');
     expect(() => formatEuroCents(12.5)).toThrow(RangeError);
+  });
+
+  it('drops the cents of a compact amount only when there are none — never rounds', () => {
+    expect(plain(formatCompactEuroCents(19500))).toBe('195 €');
+    expect(plain(formatCompactEuroCents(124000))).toBe('1 240 €');
+    expect(plain(formatCompactEuroCents(12345))).toBe('123,45 €');
+    expect(plain(formatCompactEuroCents(9950))).toBe('99,50 €');
+    expect(plain(formatCompactEuroCents(0))).toBe('0 €');
   });
 
   it('formats a signed difference without alarm', () => {

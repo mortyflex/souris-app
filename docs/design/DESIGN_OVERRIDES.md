@@ -1124,7 +1124,7 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
 
 - **Presentation** (`shared/ui/ReceiptPrinter.tsx`, shared with §34). Its own transparent Modal, not
   the bottom sheet: the Agenda dims under the ONE `scrim`, a printer capsule lands under the top safe
-  area, the paper feeds DOWN out of it and settles, a worded « Fermer » capsule waits under the paper.
+  area, the paper feeds DOWN out of it and settles, a close button waits under the paper.
 - **Printer capsule.** App-owned — never the real Dynamic Island, which it simply sits below on the
   devices that have one; identical everywhere else. The shared light glass (`GlassSurface` floating,
   `nativeShadows.glassFloating`, §21): a 32 pt pill, 10 pt wider than the paper on each side, a navy-alpha
@@ -1167,9 +1167,12 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
 - **Empty day.** The same paper: « Aucun rendez-vous » in the header, « Cette journée est libre » /
   « Aucun rendez-vous prévu. » in place of the list, every figure at zero. Never an error, never a
   refusal to open.
-- **Dismissal.** The worded « Fermer » — a 48 pt light-glass capsule, accent `control` label, centred
-  above the home indicator; never an X. Also: a tap on the dimmed page (« Fermer le résumé du jour »),
-  the hardware back button, the accessibility escape gesture.
+- **Dismissal.** An icon-only close button (`GlassIconButton`: 44 pt floating light-glass circle,
+  accent `xmark` / `close` glyph), spoken « Fermer », centred above the home indicator — the SAME
+  button, in the same row, as the « Tops & tendances » actions (§34). Also: a tap on the dimmed page
+  (« Fermer le résumé du jour »), the hardware back button, the accessibility escape gesture.
+  Supersedes, for the two receipts only, the worded « Fermer » of §22 (« never an icon-only ✕ »):
+  sheets keep their words.
 - **Accessibility.** The Modal is `accessibilityViewIsModal`. Each row is ONE element —
   « 09:00, Coloration, Léa Martin, 95,00 €, encaissé » — as are the total and each breakdown line.
   « encaissé » is never colour alone: a check glyph and the spoken word.
@@ -1454,8 +1457,15 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
               Top prestations → Top produits → Clientes qui dépensent le plus → Clientes les plus
               fidèles, each an `InsightsPodium`
   pagination  four short pills, lav200; the current one a 16 pt accent pill
-  footer      the Souris wordmark, 76 pt, decorative, `spacing.lg` above it, clear of the torn edge
+  footer      the Souris wordmark, 76 pt, decorative, `spacing.md` above it, clear of the torn edge
   ```
+
+- **Fit.** The whole paper is visible at once on a standard 6.1" iPhone (844 / 852 pt), even with
+  two-line podium names: the section gaps are compact — controls `spacing.sm` under the header,
+  summary rows `spacing.xs` apart, the tear line `spacing.md` above and below, pagination
+  `spacing.md` under the podium, wordmark `spacing.md` under the pagination, no extra padding under
+  it beyond the paper's own. Text sizes, podium, medals and wordmark size are unchanged. Only
+  larger text sizes or a small phone (iPhone SE) fall back to the quiet vertical scroll.
 
 - **Podium** (`features/insights/components/InsightsPodium.tsx`), the visual signature of the
   receipt. The category eyebrow (accent, centred) belongs to the page, so a page stands on its own.
@@ -1505,8 +1515,82 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
   relies on medal colour, height or side. Only the settled page is exposed. The pagination is ONE
   adjustable element (« Top prestations, 1 sur 4 ») whose increment / decrement move between
   categories. The category title is a header. The period options are tabs with their selected state.
-- **Privacy.** This internal ticket names clients as `Prénom N.`. It has no share or export action. A
-  future social card is a separate, sanitized representation.
+- **Clients.** This private ticket names clients as `Prénom N.` and writes visits `3 rdv` (spoken
+  « 3 rendez-vous »), so a metric never truncates to « rendez-v… ». It is never captured:
+  « Enregistrer » and « Partager » export the dedicated card of §35 (`Prénom N.`, turnover frosted).
+- **Actions.** Three icon-only buttons on one centred row, 24 pt apart (`ReceiptPrinter` `actions`):
+  the shared `GlassIconButton` — 44 pt circle, floating light glass and its soft shadow, accent
+  glyph, no border, no gradient.
+
+  | Action | SF Symbol (iOS) | Material (Android) | Spoken |
+  | --- | --- | --- | --- |
+  | Fermer | `xmark` | `close` | « Fermer » |
+  | Enregistrer | `photo.badge.arrow.down` (SF Symbols 4, iOS 16) | `download` | « Enregistrer l’image » |
+  | Partager | `square.and.arrow.up` | `share` | « Partager » |
+
+  Never a floppy disk. A busy button shows a small accent spinner in place of its glyph (the circle
+  never changes) and is `busy` / `disabled`; while one works, the others ignore presses. The labels
+  are spoken, never written. « Résumé du jour » uses the SAME close button, alone, centred (§25).
 - **Not here.** No place is tappable, there is no reward, discount or offer action, and there is no
-  « dépensent le moins » ranking. The podium receives already-worded data, so a future share card can
-  reuse it without the carousel or a capture of this private receipt.
+  « dépensent le moins » ranking. The podium receives already-worded data, so the share card reuses
+  it without the carousel or a capture of this private receipt.
+
+## 35. Tops & tendances — Share Card
+
+« Enregistrer » and « Partager » (§34) export `BusinessInsightsShareCard`: a DEDICATED visual, not a
+screenshot.
+Data: `docs/domain/INSIGHTS.md` §7.
+
+- **Format.** 9:16 story. Laid out once at 360 × 640 dp, every text `allowFontScaling={false}`,
+  exported at 1080 × 1920 px PNG through `ImageExportFrame` (content scaled from the top-left corner
+  to the exact pixel size). The image is the same on every device and never includes the printer,
+  the dimmed Agenda, the carousel or the actions.
+- **Surface.** Flat warm receipt paper (`receiptPaper.surface`) FULL-BLEED across the whole
+  1080 × 1920 image — painted by the card and under it by `ImageExportFrame`, so no pixel is
+  transparent. The content is never a rounded card floating on another ground. No gradient, no
+  shadow, no texture.
+- **Hierarchy**, top to bottom, inside generous margins (52 pt top, 48 pt bottom, 24 pt sides) that
+  keep text clear of the areas social apps cover or crop:
+
+  ```text
+  brand       logo-mark, 56 pt, decorative — restrained
+  kicker      « TOPS & TENDANCES » eyebrow, accent
+  period      « Septembre 2026 » screenTitle, plum, one line
+  summary     lavender050 panel, radii.large: « ENCAISSÉ SUR LA PÉRIODE » eyebrow accent over a
+              frosted private amount · « 28 rendez-vous » ↔ « Panier moyen » + a small frosted
+              private amount, on one line. The receipt keeps « ENCAISSÉ », its amounts and
+              « rendez-vous réalisés ».
+  tear line   the receipt's dashed `ReceiptTearLine`
+  highlight   centred in the remaining height, raised by a 24 pt bottom padding so the podium
+              stays close to the summary (below)
+  footer      « Créé avec » metadata + logo-wordmark 64 pt, 85 % opacity
+  ```
+
+- **Highlight.**
+  - Every category — Top prestations, Top produits, Clientes qui dépensent le plus, Clientes les
+    plus fidèles — the SAME `InsightsPodium` and the same places, metrics and order as the receipt.
+    Clients read `Prénom N.` (never a full last name) in the podium's own name style; metrics stay
+    clear: `195 €`, `3 rdv`. Medals, gold /
+    silver / bronze, lilac plinths, #1 centred, names on 2 lines then ellipsis, never shrunk — in
+    its `story` layout: #1 on 40 % of the width, #2 / #3 on 30 % (the plinths still touch), and
+    each metric uses its whole column. Measured in Plus Jakarta Sans, `312 prestations` fits #1 and
+    `18 prestations` fits #2 / #3 on one line. A metric is NEVER truncated: at worst it wraps onto a
+    second line; it never shrinks. The receipt keeps its 36 / 32 % layout.
+  - Empty category: its quiet centred message. Empty period: « Une période toute calme ✨ »
+    (`sectionTitle`, foregroundSoft), no podium.
+- **Private amounts.** « Encaissé » and « Panier moyen » are frosted, never printed: a `lav100`
+  pill (`radii.pill`, no border, no gradient) holding soft `lav200` digit-shaped marks and an
+  accent `€` at 80 % opacity — four 18 × 14 pt marks in a 40 pt pill for « Encaissé », three
+  9 × 7 pt marks in a 20 pt pill for « Panier moyen ». The shape never depends on the value and no
+  digit is rendered, so the image can reveal nothing, not even a blurred number (a native blur would
+  not survive the capture anyway). The label above or beside it stays readable.
+- **Brand.** The professional's result, powered by Souris: a small mark at the top, « Créé avec »
+  + wordmark at the bottom. No slogan, no call to action, no app-store badge.
+- **Interaction.** « Partager »: one light haptic (`haptics.action`), none while preparing, then the
+  platform share sheet; nothing is confirmed when it closes. « Enregistrer »: no tap haptic; once
+  Photos has the image, ONE success haptic (`haptics.success`) and « Image enregistrée dans Photos »
+  on a glass pill above the actions (`ReceiptPrinter` `actionNotice`, polite live region), gone after
+  2.6 s — never a modal alert. Errors use the same pill and stay until the next action: « Impossible
+  de préparer le partage. », « Impossible d’enregistrer l’image. », or the Photos permission line.
+  The ticket always stays open, on the same period and category. The icon buttons add no haptic of
+  their own.

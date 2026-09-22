@@ -228,6 +228,17 @@ module optionally and always returns the original URI on Android, unsupported iO
 or timeout. Product components contain no platform branches or Vision implementation details. A
 development build is required for this enhancement; it adds no persistence or backend boundary.
 
+Image sharing and saving are one generic boundary, `src/shared/lib/share-image.ts`: it captures ONE
+mounted view (`react-native-view-shot`) into a temporary PNG, then either hands it to the platform
+share sheet (`shareViewAsImage`, `expo-sharing`, outgoing only — no share-into extension, no config
+plugin) or adds it to Photos (`saveViewToPhotos`, `expo-media-library` `Asset.create`, after an
+add-only permission on iOS / images-only on Android; its config plugin carries the French
+`NSPhotoLibraryAddUsageDescription`). Either way the file is released as soon as the operation is
+over. Only the save path can confirm an outcome: the share sheet reports none. The captured view is a `shared/ui/ImageExportFrame`, which lays its
+content out at a fixed logical size and scales it to an exact pixel size, so an export never depends
+on the device. Features build the view; the boundary knows nothing about them. Both are native
+modules: a new development build is required.
+
 ---
 
 # 8. Shared Icons

@@ -21,8 +21,17 @@
 // Reduced motion: no travel and no settle — the receipt is in place at once
 // and the whole presentation simply fades. Everything stays available.
 //
-// Dismissal: the worded « Fermer » capsule under the paper, a tap on the dimmed
-// page, the hardware back button, the accessibility escape gesture.
+// Dismissal: the « Fermer » close button under the paper (spoken « Fermer »),
+// a tap on the dimmed page, the hardware back button, the accessibility escape
+// gesture.
+//
+// The actions under the paper are ONE centred row of the same compact icon
+// buttons for every receipt (`GlassIconButton`, floating glass, accent
+// glyphs), each with its spoken label: « Fermer » (close glyph) alone for
+// « Résumé du jour », followed by the receipt's own `actions` for « Tops &
+// tendances » (« Enregistrer », « Partager »). Optional too: a short notice
+// line above them, and an `offstage` slot rendered outside the screen for
+// content that must be mounted but never seen (an image export surface).
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
@@ -44,13 +53,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
 
+import type { PlatformSymbolName } from '@/shared/icons/payment-method-icons';
 import { haptics } from '@/shared/lib/haptics';
 
 import { AppText } from './AppText';
+import { GlassIconButton, glassIcons } from './GlassIconButton';
 import { GlassSurface } from './GlassSurface';
 import {
   easing,
-  interaction,
   mint,
   nativeShadows,
   radii,
@@ -67,12 +77,30 @@ export interface ReceiptPaperFrame {
   readonly maxHeight: number;
 }
 
+/** An icon button after « Fermer ». Icon-only: its label is spoken, never shown. */
+export interface ReceiptPrinterAction {
+  readonly icon: PlatformSymbolName;
+  readonly accessibilityLabel: string;
+  readonly onPress: () => void;
+  /** Working: a small spinner in place of the glyph, and the button ignores presses. */
+  readonly busy?: boolean;
+  /** Ignores presses (another action is working). */
+  readonly disabled?: boolean;
+  readonly testID?: string;
+}
+
 interface ReceiptPrinterProps {
   readonly visible: boolean;
   /** Every dismissal request: « Fermer », dimmed page, hardware back, escape. */
   readonly onClose: () => void;
   readonly backdropLabel: string;
   readonly renderReceipt: (frame: ReceiptPaperFrame) => ReactNode;
+  /** Capsules after « Fermer », in order. */
+  readonly actions?: readonly ReceiptPrinterAction[];
+  /** One short line above the actions (a confirmation, or an error to retry). */
+  readonly actionNotice?: string;
+  /** Mounted outside the screen while the receipt is presented: never seen, never announced. */
+  readonly offstage?: ReactNode;
   readonly testID?: string;
 }
 
@@ -95,12 +123,17 @@ const slotLine = capsuleTop + receiptPrinter.grooveTop + receiptPrinter.grooveHe
 const restOffset = capsuleTop + receiptPrinter.capsuleHeight + receiptPrinter.restGap - slotLine;
 const closeAreaHeight =
   bottomInset + receiptPrinter.closeGap * 2 + receiptPrinter.closeHeight;
+/** Room taken above the actions by a notice line. */
+const NOTICE_ROOM = 44;
 
 export function ReceiptPrinter({
   visible,
   onClose,
   backdropLabel,
   renderReceipt,
+  actions = [],
+  actionNotice,
+  offstage,
   testID = 'receipt-printer',
 }: ReceiptPrinterProps) {
   const reducedMotion = useReducedMotion();
@@ -177,7 +210,8 @@ export function ReceiptPrinter({
     receiptPrinter.paperMaxWidth,
   );
   const capsuleWidth = paperWidth + receiptPrinter.capsuleOverhang * 2;
-  const maxHeight = Math.max(windowHeight - slotLine - restOffset - closeAreaHeight, 0);
+  const actionsHeight = closeAreaHeight + (actionNotice !== undefined ? NOTICE_ROOM : 0);
+  const maxHeight = Math.max(windowHeight - slotLine - restOffset - actionsHeight, 0);
 
   // Nothing is mounted — and the receipt is not even built — while closed.
   if (!presented) return null;
@@ -232,19 +266,56 @@ export function ReceiptPrinter({
           pointerEvents="box-none"
           style={[styles.closeArea, { bottom: bottomInset + receiptPrinter.closeGap }, fadeStyle]}
         >
-          <Pressable
-            accessibilityLabel="Fermer"
-            accessibilityRole="button"
-            onPress={onClose}
-            style={({ pressed }) => [styles.close, pressed && styles.closePressed]}
-            testID={`${testID}-close`}
-          >
-            <GlassSurface floating shape={styles.capsuleShape} testID={`${testID}-close-glass`} />
-            <AppText variant="control" style={styles.closeLabel}>
-              Fermer
-            </AppText>
-          </Pressable>
+          {actionNotice !== undefined && (
+            <View style={styles.notice}>
+              <GlassSurface floating shape={styles.capsuleShape} />
+              <AppText
+                accessibilityLiveRegion="polite"
+                accessibilityRole="alert"
+                style={styles.noticeText}
+                testID={`${testID}-notice`}
+                variant="metadata"
+              >
+                {actionNotice}
+              </AppText>
+            </View>
+          )}
+          <View style={styles.actions}>
+            <GlassIconButton
+              accessibilityLabel="Fermer"
+              floating
+              icon={glassIcons.close}
+              onPress={onClose}
+              testID={`${testID}-close`}
+              tintColor={semanticColors.accent}
+            />
+            {actions.map((action) => (
+              <GlassIconButton
+                accessibilityLabel={action.accessibilityLabel}
+                busy={action.busy}
+                disabled={action.disabled}
+                floating
+                icon={action.icon}
+                key={action.accessibilityLabel}
+                onPress={action.onPress}
+                testID={action.testID}
+                tintColor={semanticColors.accent}
+              />
+            ))}
+          </View>
         </Animated.View>
+
+        {offstage !== undefined && (
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            pointerEvents="none"
+            style={[styles.offstage, { left: windowWidth * 2 }]}
+            testID={`${testID}-offstage`}
+          >
+            {offstage}
+          </View>
+        )}
       </View>
     </Modal>
   );
@@ -282,18 +353,16 @@ const styles = StyleSheet.create({
     width: receiptPrinter.lightSize,
   },
   closeArea: { alignItems: 'center', left: 0, position: 'absolute', right: 0 },
-  close: {
-    alignItems: 'center',
+  // 44 pt circles, evenly apart: compact under the paper, never a toolbar.
+  actions: { flexDirection: 'row', gap: 24 },
+  notice: {
     borderRadius: radii.pill,
-    height: receiptPrinter.closeHeight,
-    justifyContent: 'center',
-    minWidth: 148,
-    paddingHorizontal: 28,
-    ...nativeShadows.glassFloating,
+    marginBottom: 12,
+    marginHorizontal: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
   },
-  closePressed: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
-  },
-  closeLabel: { color: semanticColors.accent },
+  noticeText: { color: semanticColors.foreground, textAlign: 'center' },
+  // Outside the window, to the right: laid out and drawn, never on screen.
+  offstage: { position: 'absolute', top: 0 },
 });

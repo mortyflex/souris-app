@@ -62,7 +62,15 @@
           "microphonePermission": false
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Souris accède à votre photothèque pour ajouter une photo à un produit.",
+          "savePhotosPermission": "Souris enregistre dans Photos les images que vous créez, comme vos Tops & tendances.",
+          "granularPermissions": ["photo"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

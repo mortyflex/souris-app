@@ -26,6 +26,22 @@ export function formatEuroCents(cents: number): string {
   return euroFormatter.format(cents / 100);
 }
 
+const wholeEuroFormatter = new Intl.NumberFormat('fr-FR', {
+  currency: 'EUR',
+  maximumFractionDigits: 0,
+  minimumFractionDigits: 0,
+  style: 'currency',
+});
+
+/**
+ * `195 €` from 19500, `123,45 €` from 12345: the cents are shown only when
+ * there are some. Still exact — never rounded. For compact displays.
+ */
+export function formatCompactEuroCents(cents: number): string {
+  if (cents % 100 !== 0) return formatEuroCents(cents);
+  return wholeEuroFormatter.format(cents / 100);
+}
+
 /** Snapshot euro numbers → exact integer cents (domain-owned rule, re-exported for screens). */
 export { eurosToCents } from '@/domain/appointments';
 

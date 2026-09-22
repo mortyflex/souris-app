@@ -16,11 +16,16 @@
 //
 // Horizontal paging is THE interaction. Nothing scrolls vertically while the
 // content fits; only an unusually tall layout (the largest text sizes on a
-// small phone) falls back to a quiet vertical scroll.
+// small phone) falls back to a quiet vertical scroll. The gaps between the
+// sections are deliberately compact so that the whole paper — two-line podium
+// names, pagination, wordmark and torn edge included — fits at once on a
+// standard 6.1" iPhone.
 //
 // It renders the receipt model as is and computes nothing. The carousel page
 // is local presentation state: it survives period changes and is forgotten
-// when the ticket closes. A settled page change gives ONE selection haptic.
+// when the ticket closes. A settled page change gives ONE selection haptic and
+// is reported (`onCategoryChange`), so « Partager » shares the category on
+// screen.
 
 import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
@@ -51,7 +56,7 @@ import {
 } from '@/shared/ui/theme';
 
 import { InsightsPodium } from './components/InsightsPodium';
-import type { InsightsReceiptModel } from './insights-receipt';
+import type { InsightsRankingKey, InsightsReceiptModel } from './insights-receipt';
 
 // « Sem. » keeps the four options readable in the paper width; it is spoken
 // in full.
@@ -81,6 +86,8 @@ interface BusinessInsightsReceiptProps {
   readonly onPeriodKindChange: (kind: InsightsPeriodKind) => void;
   readonly onPrevious: () => void;
   readonly onNext: () => void;
+  /** The settled carousel category, after each real change. */
+  readonly onCategoryChange?: (category: InsightsRankingKey) => void;
 }
 
 export function BusinessInsightsReceipt({
@@ -94,6 +101,7 @@ export function BusinessInsightsReceipt({
   onPeriodKindChange,
   onPrevious,
   onNext,
+  onCategoryChange,
 }: BusinessInsightsReceiptProps) {
   const reduceMotion = useReduceMotion();
   const carousel = useRef<ScrollView>(null);
@@ -106,6 +114,8 @@ export function BusinessInsightsReceipt({
     if (clamped === page) return;
     haptics.selection();
     setPage(clamped);
+    const settled = model.sections[clamped];
+    if (settled) onCategoryChange?.(settled.key);
   };
 
   // A swipe settles here once, after the snap — never while the finger moves.
@@ -213,7 +223,7 @@ export function BusinessInsightsReceipt({
           )}
         </View>
 
-        <ReceiptTearLine />
+        <ReceiptTearLine style={styles.tearLine} />
 
         <ScrollView
           decelerationRate="fast"
@@ -274,7 +284,8 @@ export function BusinessInsightsReceipt({
 
 const styles = StyleSheet.create({
   scroll: { flexGrow: 0, flexShrink: 1 },
-  content: { paddingBottom: spacing.sm },
+  // The paper's own bottom padding keeps the wordmark clear of the torn edge.
+  content: { paddingBottom: 0 },
   header: { alignItems: 'center', gap: 2 },
   badge: {
     alignItems: 'center',
@@ -285,10 +296,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     width: 36,
   },
-  controls: { gap: spacing.xs, marginTop: spacing.md },
+  controls: { gap: spacing.xs, marginTop: spacing.sm },
   // On paper the navigator is only its controls and copy: no second surface.
   navigator: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 0, paddingVertical: 0 },
-  summary: { gap: spacing.sm, marginTop: spacing.sm },
+  summary: { gap: spacing.xs, marginTop: spacing.sm },
   total: {
     alignItems: 'center',
     backgroundColor: lavender.lav050,
@@ -316,10 +327,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     flexDirection: 'row',
     gap: spacing.xs,
-    marginTop: spacing.base,
+    marginTop: spacing.md,
   },
   pill: { backgroundColor: lavender.lav200, borderRadius: radii.pill, height: 5, width: 5 },
   pillActive: { backgroundColor: semanticColors.accent, width: 16 },
-  // Breathing room between the wordmark and the torn edge below.
-  brand: { alignSelf: 'center', marginTop: spacing.lg, opacity: 0.85 },
+  tearLine: { marginVertical: spacing.md },
+  // The wordmark PNG carries its own transparent padding: a short margin
+  // already reads as breathing room under the pagination.
+  brand: { alignSelf: 'center', marginTop: spacing.md, opacity: 0.85 },
 });

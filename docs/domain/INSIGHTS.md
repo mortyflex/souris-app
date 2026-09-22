@@ -105,8 +105,9 @@ Product was renamed within the period, the row shows the snapshot of its most re
 period. Renaming today never rewrites what an older period calls it. Name comparison uses the French
 collator.
 
-Clients are shown compactly as `Prénom N.`. The internal receipt is private. A future shareable card must
-be built from `BusinessInsights` as its own sanitized model, never by capturing this receipt.
+Clients are shown compactly as `Prénom N.` on the private ticket. Visit counts are written `3 rdv`
+(spoken « 3 rendez-vous »), never a truncated « rendez-v… ». The shareable card (§7) shows the same
+rankings, built from `BusinessInsights` as its own public model, never by capturing this receipt.
 
 There is deliberately no « Clientes qui dépensent le moins » ranking.
 
@@ -133,9 +134,83 @@ shows how many conflicts the period contains in one quiet sentence.
 
 ---
 
-## 7. Not implemented
+## 7. Sharing — the share card
 
-- sharing or exporting the receipt (the social card is a separate, later feature);
+« Enregistrer » and « Partager », next to « Fermer » on « Tops & tendances » only (never on « Résumé
+du jour »), save or share a DEDICATED social card as an image — the same card and the same export for
+both. The receipt and the card are two compositions of the same
+insights, with the SAME rankings:
+
+| | In-app receipt | Share card |
+| --- | --- | --- |
+| Model | `buildInsightsReceipt` | `buildInsightsShareCard` (`insights-share-card.ts`) |
+| Rankings | `buildInsightsRankingSections` | the same `buildInsightsRankingSections`, category on screen |
+| Clients | `Amel B.`, `195,00 €`, `3 rdv` | `Amel B.`, `195 €`, `3 rdv` |
+| Encaissé · Panier moyen | amounts | frosted: label readable, NO amount in the model or the image |
+| Conflicts | one informational sentence | never mentioned |
+| Shown | in app | exported PNG, native share sheet |
+
+Pipeline: `getBusinessInsights` (computed once by the ticket) → `buildInsightsShareCard` (words it,
+with the ranking sections shared with the receipt) → `BusinessInsightsShareCard` (renders it). The
+card component takes no storage, session or analytics input and knows nothing of the carousel. The
+receipt is never captured.
+
+**Client privacy (public card).** A client is shown as the readable first name and the initial of
+the last name: `Amel B.`, or `Amel` without a last name — never a full last name. No client id
+enters the public model (public rows are keyed by place). Metrics stay visible: spending as a
+compact amount (`195 €`, `123,45 €` — cents only when there are some, never rounded) and visits as
+`3 rdv`. Same places, same people, same order as the ticket: only the presentation differs
+(`buildInsightsRankingSections(…, 'public')`).
+
+**Turnover privacy (public card).** « Encaissé » and « Panier moyen » stay in the ticket. The public
+model carries neither amount, so no exported image can reveal them; the card shows each label over
+a frosted placeholder (DESIGN_OVERRIDES.md §35). The completed count (« 28 rendez-vous ») stays readable.
+
+**What is shared.** Exactly what is on screen: the browsed period (its receipt label) and the SETTLED
+carousel category. Browsing back to the Agenda month never happens on export. The one
+figure printed is the receipt's completed count from the same `BusinessInsights`, worded short:
+« 28 rendez-vous » (« 28 rendez-vous réalisés » in the ticket).
+
+| Category on screen | Share card |
+| --- | --- |
+| Top prestations | the podium: service snapshot names, ranks, `N prestations` |
+| Top produits | the podium: product snapshot names, ranks, `1 unité` / `N unités` |
+| Clientes qui dépensent le plus | the podium: `Prénom N.`, ranks, spending (`195 €`) |
+| Clientes les plus fidèles | the podium: `Prénom N.`, ranks, visits (`3 rdv`) |
+
+Every podium has the ticket's places, metrics and order; services and products are identical to it. An empty category
+shows its quiet message and no podium. An empty period shows its zero figures and « Une période toute calme ✨ »
+instead of any category; no ranking is invented. Financial conflicts are already outside the
+activity figures; the card says nothing about them.
+
+**Image.** A 9:16 story, laid out at 360 × 640 dp with every text at a fixed size, exported at
+1080 × 1920 px PNG through `ImageExportFrame` — whatever the phone, its density or its text size.
+The card is mounted off screen while the ticket is open; it is not UI and is hidden from assistive
+technology.
+
+**Partager.** One light haptic, a busy « Partager » (spinner, every action ignored: one image per
+share), capture, native share sheet. The sheet reports no outcome, so nothing is confirmed when it
+closes — not even after « Enregistrer l’image » inside it. Dismissing or cancelling it leaves the
+ticket open where it was. A failure shows « Impossible de préparer le partage. »; « Partager » retries.
+
+**Enregistrer.** The only flow that confirms a save. It asks for the minimum permission (add-only on
+iOS, images only on Android), captures the same card and adds it to Photos. Once Photos has it: one
+success haptic and « Image enregistrée dans Photos » above the actions, which goes away on its own
+after 2.6 s. A declined permission shows « Souris n’a pas accès à Photos. Autorisez-le dans Réglages
+pour enregistrer l’image. » (no automatic redirection to Settings); any other failure « Impossible
+d’enregistrer l’image. ». Busy like « Partager », one save per press.
+
+Neither action closes the ticket or moves its period or category. The temporary PNG is released as
+soon as the share or the save is over. A notice belongs to one opening.
+
+**Nothing is persisted.** No analytics, share state or image is stored; no schema, migration or sync
+change.
+
+---
+
+## 8. Not implemented
+
+- sharing a capture of the receipt itself (only the dedicated card is shared);
 - actions from the rankings (open a profile, reward, discount, offer);
 - « Clientes à relancer »;
 - revenue per service;
