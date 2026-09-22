@@ -1,12 +1,13 @@
 // Souris — Client Profile
 //
-// A full business record, intentionally light: identity + contact + notes +
-// today's birthday reminder + next appointment + derived activity + Souris
-// Appointment history + Souris Product purchases. Nothing here is stored on
-// the Client — activity is derived from Appointment state and purchases from
-// Sale snapshots through clientId. Modifier opens the SAME Client form used
-// for creation (edit mode). No dashboard KPIs, no fake metrics, no
-// edit/delete traps.
+// A compact client dashboard: identity + `Vendre un produit` + today's
+// birthday reminder + next appointment + derived activity + ONE switchable
+// history preview (Rendez-vous | Produits achetés, 3 records at most, the
+// complete histories on their own pushed screens) + contact + notes. Nothing
+// here is stored on the Client — activity is derived from Appointment state
+// and purchases from Sale snapshots through clientId. Modifier opens the SAME
+// Client form used for creation (edit mode). No dashboard KPIs, no fake
+// metrics, no edit/delete traps.
 //
 // Lifecycle: an active Client carries a tertiary `Archiver la cliente`
 // management action; an archived Client shows a subtle `Archivée`
@@ -45,14 +46,9 @@ import {
   formatAppointmentDate,
   formatAppointmentServiceSummary,
   formatAppointmentTime,
-  formatCancellationActorLabel,
   formatPrice,
   getAppointmentEnd,
-  getAppointmentSnapshotTotal,
-  getAppointmentStatusLabel,
-  isTerminalAppointmentStatus,
 } from '@/features/appointments/presentation';
-import { ClientPurchaseCard } from '@/features/sales/history/ClientPurchaseCard';
 import { getClientSales } from '@/features/sales/presentation';
 import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { ClientDeleteConflictError } from '@/persistence/stores/clients';
@@ -64,6 +60,7 @@ import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
+import { GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
   foregroundSoft,
@@ -77,7 +74,15 @@ import {
 } from '@/shared/ui/theme';
 
 import { ClientDeletionDialog, type ClientDeletionDialogMode } from './components/ClientDeletionDialog';
-import { getClientActivitySummary } from './presentation';
+import { ClientHistorySection } from './components/ClientHistorySection';
+import { getClientActivitySummary, getClientAppointmentTimeline } from './presentation';
+
+const metricIcons = {
+  completed: { ios: 'calendar', android: 'calendar_today' },
+  spent: { ios: 'creditcard', android: 'credit_card' },
+  noShow: { ios: 'person.fill.xmark', android: 'person_off' },
+  cancelled: { ios: 'xmark.circle', android: 'cancel' },
+} as const satisfies Record<string, PlatformSymbolName>;
 
 interface ClientProfileScreenProps {
   readonly clientId?: string;
@@ -185,6 +190,14 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     });
   };
 
+  const openAppointmentHistory = () => {
+    router.push({ pathname: '/clients/appointments/[clientId]', params: { clientId: client.id } });
+  };
+
+  const openPurchaseHistory = () => {
+    router.push({ pathname: '/clients/purchases/[clientId]', params: { clientId: client.id } });
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={[styles.topBar, { paddingHorizontal: horizontalGutter }]}>
@@ -193,8 +206,13 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
           icon={glassIcons.back}
           onPress={() => router.back()}
         />
-        <AppText variant="eyebrow" style={styles.topBarEyebrow}>
-          CLIENTE
+        <AppText
+          accessibilityRole="header"
+          pointerEvents="none"
+          variant="control"
+          style={styles.topBarTitle}
+        >
+          Cliente
         </AppText>
         <AppButton
           accessibilityLabel="Modifier la cliente"
@@ -278,14 +296,17 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
 
         <View style={styles.activitySection}>
           <SectionHeader style={styles.sectionHeader} title="Activité" />
-          <View style={styles.metricsSurface}>
+          <GroupedSurface>
             <View style={styles.metricsRow}>
               <Metric
+                icon={metricIcons.completed}
                 label="Rendez-vous réalisés"
                 testID="metric-completed"
                 value={String(activity.completedAppointmentCount)}
               />
+              <View style={styles.metricsColumnDivider} />
               <Metric
+                icon={metricIcons.spent}
                 label="Total dépensé"
                 testID="metric-spent"
                 value={formatPrice(activity.totalSpent)}
@@ -294,17 +315,30 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
             <View style={styles.metricsDivider} />
             <View style={styles.metricsRow}>
               <Metric
+                icon={metricIcons.noShow}
                 label="Absences"
                 testID="metric-noshow"
                 value={String(activity.noShowAppointmentCount)}
               />
+              <View style={styles.metricsColumnDivider} />
               <Metric
+                icon={metricIcons.cancelled}
                 label="Annulations"
                 testID="metric-cancelled"
                 value={String(activity.cancelledAppointmentCount)}
               />
             </View>
-          </View>
+          </GroupedSurface>
+        </View>
+
+        <View style={styles.historySection}>
+          <ClientHistorySection
+            appointments={getClientAppointmentTimeline(activity)}
+            onOpenAppointment={openAppointment}
+            onOpenAppointmentHistory={openAppointmentHistory}
+            onOpenPurchaseHistory={openPurchaseHistory}
+            purchases={purchases}
+          />
         </View>
 
         {hasContactInfo && (
@@ -332,69 +366,6 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
             </View>
           </View>
         )}
-
-        <View style={styles.appointmentsSection}>
-          <SectionHeader
-            count={activity.appointmentCount}
-            style={styles.sectionHeader}
-            title="Rendez-vous"
-          />
-          {activity.appointmentCount === 0 ? (
-            <AppText variant="metadata" style={styles.emptyHistory}>
-              Aucun rendez-vous enregistré.
-            </AppText>
-          ) : (
-            <View style={styles.appointmentGroups}>
-              {activity.upcomingAppointments.length > 0 && (
-                <View style={styles.appointmentGroup}>
-                  <AppText variant="eyebrow" style={styles.groupLabel}>
-                    À VENIR
-                  </AppText>
-                  {activity.upcomingAppointments.map(({ appointment }) => (
-                    <AppointmentRow
-                      key={appointment.id}
-                      appointment={appointment}
-                      onPress={() => openAppointment(appointment.id)}
-                    />
-                  ))}
-                </View>
-              )}
-              {activity.historicalAppointments.length > 0 && (
-                <View style={styles.appointmentGroup}>
-                  <AppText variant="eyebrow" style={styles.groupLabel}>
-                    HISTORIQUE
-                  </AppText>
-                  {activity.historicalAppointments.map(({ appointment }) => (
-                    <AppointmentRow
-                      key={appointment.id}
-                      appointment={appointment}
-                      onPress={() => openAppointment(appointment.id)}
-                    />
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.purchasesSection}>
-          <SectionHeader
-            count={purchases.length}
-            style={styles.sectionHeader}
-            title="Produits achetés"
-          />
-          {purchases.length === 0 ? (
-            <AppText variant="metadata" style={styles.emptyHistory}>
-              Aucun achat enregistré.
-            </AppText>
-          ) : (
-            <View style={styles.purchases} testID="client-purchases">
-              {purchases.map((sale) => (
-                <ClientPurchaseCard key={sale.id} sale={sale} />
-              ))}
-            </View>
-          )}
-        </View>
 
         <View style={styles.managementSection} testID="client-management">
           {archived ? (
@@ -446,22 +417,35 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
 }
 
 function Metric({
+  icon,
   label,
   value,
   testID,
 }: {
+  readonly icon: PlatformSymbolName;
   readonly label: string;
   readonly value: string;
   readonly testID: string;
 }) {
   return (
-    <View style={styles.metric}>
-      <AppText variant="summaryValue" style={styles.metricValue} testID={testID}>
-        {value}
-      </AppText>
-      <AppText variant="metadata" style={styles.metricLabel}>
-        {label}
-      </AppText>
+    <View accessible accessibilityLabel={`${label}, ${value}`} style={styles.metric}>
+      <View style={styles.metricIcon}>
+        <SymbolView name={icon} size={16} tintColor={semanticColors.accent} />
+      </View>
+      <View style={styles.metricCopy}>
+        <AppText
+          adjustsFontSizeToFit
+          numberOfLines={1}
+          variant="summaryValue"
+          style={styles.metricValue}
+          testID={testID}
+        >
+          {value}
+        </AppText>
+        <AppText variant="metadata" numberOfLines={2} style={styles.metricLabel}>
+          {label}
+        </AppText>
+      </View>
     </View>
   );
 }
@@ -521,62 +505,11 @@ function NextAppointmentRow({ appointment, onPress }: NextAppointmentRowProps) {
   );
 }
 
-interface AppointmentRowProps {
-  readonly appointment: Appointment;
-  readonly onPress: () => void;
-}
-
-function AppointmentRow({ appointment, onPress }: AppointmentRowProps) {
-  const statusLabel =
-    appointment.status === 'CANCELLED' && appointment.cancellation
-      ? formatCancellationActorLabel(appointment.cancellation.cancelledBy)
-      : isTerminalAppointmentStatus(appointment.status)
-        ? getAppointmentStatusLabel(appointment.status)
-        : undefined;
-  const isException = appointment.status === 'CANCELLED' || appointment.status === 'NO_SHOW';
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={[
-        `Rendez-vous du ${formatAppointmentDate(appointment.startAt)} à ${formatAppointmentTime(appointment.startAt)}`,
-        formatAppointmentServiceSummary(appointment),
-        statusLabel,
-      ]
-        .filter(Boolean)
-        .join(', ')}
-      onPress={onPress}
-      style={({ pressed }) => [styles.appointmentRow, pressed && styles.appointmentRowPressed]}
-    >
-      <View style={styles.appointmentCopy}>
-        <AppText variant="rowTitle" numberOfLines={1} style={styles.appointmentTitle}>
-          {formatAppointmentServiceSummary(appointment)}
-        </AppText>
-        <View style={styles.appointmentMetaRow}>
-          <AppText variant="metadata" style={styles.appointmentMeta}>
-            {`${formatAppointmentDate(appointment.startAt)} · ${formatAppointmentTime(appointment.startAt)}`}
-          </AppText>
-          {statusLabel && (
-            <AppText
-              variant="metadata"
-              style={isException ? styles.exceptionStatus : styles.completedStatus}
-            >
-              {` · ${statusLabel}`}
-            </AppText>
-          )}
-        </View>
-      </View>
-      <AppText variant="metadata" style={styles.appointmentPrice}>
-        {formatPrice(getAppointmentSnapshotTotal(appointment))}
-      </AppText>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
   topBar: {
     alignItems: 'center',
+    minHeight: 60,
     borderBottomColor: semanticColors.borderSubtle,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
@@ -584,7 +517,15 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     paddingTop: spacing.sm,
   },
-  topBarEyebrow: { color: semanticColors.accent },
+  // Centred on the whole bar whatever the width of « Modifier ».
+  topBarTitle: {
+    color: semanticColors.foreground,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    textAlign: 'center',
+    zIndex: -1,
+  },
   modifyAction: { paddingHorizontal: spacing.md },
   content: { paddingBottom: spacing['3xl'], paddingTop: spacing.base },
   identity: { gap: spacing.sm, marginBottom: spacing.xl },
@@ -631,22 +572,38 @@ const styles = StyleSheet.create({
   nextTimeLine: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   nextSummary: { color: foregroundSoft },
   activitySection: { marginBottom: spacing.xl },
-  metricsSurface: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-  },
   metricsRow: { flexDirection: 'row' },
   metricsDivider: {
     backgroundColor: semanticColors.borderSubtle,
     height: StyleSheet.hairlineWidth,
-    marginVertical: spacing.md,
+    marginHorizontal: spacing.base,
   },
-  metric: { flex: 1, gap: spacing.xs },
+  metricsColumnDivider: {
+    backgroundColor: semanticColors.borderSubtle,
+    marginVertical: spacing.md,
+    width: StyleSheet.hairlineWidth,
+  },
+  metric: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minWidth: 0,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  metricIcon: {
+    alignItems: 'center',
+    backgroundColor: semanticColors.surfaceLavender,
+    borderRadius: radii.pill,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  metricCopy: { flex: 1, gap: 2, minWidth: 0 },
   metricValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   metricLabel: { color: foregroundSoft },
+  historySection: { marginBottom: spacing.xl },
   infoSection: { marginBottom: spacing.xl },
   infoSurface: {
     backgroundColor: semanticColors.surfaceElevated,
@@ -670,9 +627,6 @@ const styles = StyleSheet.create({
   },
   infoLabel: { color: foregroundSoft, width: 128 },
   infoValue: { color: semanticColors.foreground, flex: 1, fontVariant: ['tabular-nums'] },
-  appointmentsSection: { marginBottom: spacing.xl },
-  purchasesSection: {},
-  purchases: { gap: spacing.sm },
   managementSection: { alignItems: 'center', marginTop: spacing['2xl'] },
   textAction: {
     alignItems: 'center',
@@ -686,36 +640,6 @@ const styles = StyleSheet.create({
   },
   managementText: { color: foregroundSoft },
   destructiveText: { color: rose.rose600 },
-  appointmentGroups: { gap: spacing.md },
-  appointmentGroup: { gap: spacing.xs },
-  groupLabel: { color: foregroundSoft, marginBottom: spacing.xs },
-  appointmentRow: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    flexDirection: 'row',
-    minHeight: 60,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-  },
-  appointmentRowPressed: {
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    transform: [{ scale: interaction.cardPressedScale }],
-  },
-  appointmentCopy: { flex: 1, gap: 2, minWidth: 0 },
-  appointmentTitle: { color: semanticColors.foreground },
-  appointmentMetaRow: { flexDirection: 'row' },
-  appointmentMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  completedStatus: { color: foregroundSoft },
-  exceptionStatus: { color: rose.rose600 },
-  appointmentPrice: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
-  emptyHistory: {
-    backgroundColor: semanticColors.surface,
-    borderRadius: radii.large,
-    color: foregroundSoft,
-    padding: spacing.base,
-  },
   notFound: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
   notFoundText: { color: foregroundSoft, marginTop: spacing.sm, textAlign: 'center' },
 });

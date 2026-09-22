@@ -1271,3 +1271,33 @@ The creation sheet speaks the §27 language. Flow, steps, rules and data are unc
   Technique » with the selected state.
 - **Footers.** Creation keeps the count + names line above « Précédent | Continuer »; editing
   keeps its §27 footer.
+
+## 29. Client Profile — Compact Dashboard and Client Histories
+
+The profile is a dashboard; the histories are exhaustive pushed screens. Data, rules and
+lifecycle are unchanged.
+
+- **Header.** Glass back, a centred « Cliente » title, « Modifier » trailing.
+- **Activité.** One `GroupedSurface`, a 2 × 2 grid split by hairlines. Each metric: a small
+  accent glyph in a `surfaceLavender` circle, the value in navy `summaryValue`, the label in
+  `metadata`. Numbers are never violet.
+- **History area.** Right under Activité, a full-width `SegmentedControl` « Rendez-vous [n] |
+  Produits achetés [n] » (default Rendez-vous, plain local state). Options may carry a count
+  pill: `surfaceLavenderStrong` + accent text, accent + white on the selected option, `999+`
+  beyond 999, spoken « Rendez-vous, 20 ». The segment replaces ONLY the preview below it.
+- **Preview.** At most three rows (`CLIENT_HISTORY_PREVIEW_LIMIT`) in one `GroupedSurface`
+  with inset hairlines: appointments upcoming-nearest-first then newest past; Sales newest
+  first. Beyond three, a trailing accent « Voir les 20 rendez-vous › » / « Voir les 8 achats › »
+  pushes the complete history — never an inline expansion. Empty: one compact line
+  (« Aucun rendez-vous enregistré. » / « Aucun achat enregistré. »).
+- **Rows.** Appointment: date (`Mar. 22 sept.`, year only outside the current one) over time,
+  prestation summary (+ status in rose for cancellations / no-shows), amount, muted chevron;
+  the whole row opens Appointment Details. Sale: product summary, `date · ×1` or
+  `date · 3 produits`, total; read-only (no Sale detail exists).
+- **Complete histories.** Pushed full screens (`clients/appointments/[clientId]`,
+  `clients/purchases/[clientId]`): centred title with the client's name under it, a
+  virtualized list whose rows carry the grouped surface slice by slice. Appointments filter
+  « Tous | À venir | Passés » from the existing upcoming / history split; a multi-product Sale
+  lists each line.
+- **Order.** Identity, `Vendre un produit`, birthday, next appointment, Activité, history,
+  Informations, Notes, then the tertiary archive action.

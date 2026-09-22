@@ -4,6 +4,8 @@ import {
   describeSaleCompletionIssue,
   formatSaleDate,
   formatSaleQuantity,
+  formatSaleQuantitySummary,
+  formatSaleSummary,
   formatSaleUnitCount,
   getClientSales,
 } from '../presentation';
@@ -61,5 +63,31 @@ describe('Sale presentation', () => {
     expect(
       describeSaleCompletionIssue({ kind: 'INVALID_QUANTITY', productId: 'p', quantity: 0 }, () => 'Soin'),
     ).toBe('Soin : quantité invalide.');
+  });
+});
+
+describe('Sale history summary', () => {
+  function item(productName: string, quantity: number) {
+    return { id: productName, productId: productName, productName, unitPrice: 10, quantity };
+  }
+
+  it('names the products of a Sale from its snapshots, compacting beyond two', () => {
+    expect(formatSaleSummary({ items: [item('Shampooing', 1)] })).toBe('Shampooing');
+    expect(formatSaleSummary({ items: [item('Shampooing', 1), item('Soin', 2)] })).toBe(
+      'Shampooing + Soin',
+    );
+    expect(
+      formatSaleSummary({ items: [item('A', 1), item('B', 1), item('C', 1), item('D', 1)] }),
+    ).toBe('A + B + 2 autres');
+    expect(formatSaleSummary({ items: [item('A', 1), item('B', 1), item('C', 1)] })).toBe(
+      'A + B + 1 autre',
+    );
+  });
+
+  it('shows the quantity of a single line, the unit count of several lines', () => {
+    expect(formatSaleQuantitySummary({ items: [item('Soin', 2)] })).toBe('×2');
+    expect(formatSaleQuantitySummary({ items: [item('Shampooing', 1), item('Soin', 2)] })).toBe(
+      '3 produits',
+    );
   });
 });

@@ -53,6 +53,8 @@ export default function AppLayout() {
                     <Stack.Screen name="appointments/edit/[appointmentId]" options={workflowSheet} />
                     <Stack.Screen name="calendar-blocks/[calendarBlockId]" options={contentSheet} />
                     <Stack.Screen name="clients/[clientId]" options={pushedScreen} />
+                    <Stack.Screen name="clients/appointments/[clientId]" options={pushedScreen} />
+                    <Stack.Screen name="clients/purchases/[clientId]" options={pushedScreen} />
                     <Stack.Screen name="services/index" options={pushedScreen} />
                     <Stack.Screen name="cash-register/index" options={pushedScreen} />
                     <Stack.Screen name="services/new" options={editorSheet} />

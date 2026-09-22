@@ -294,7 +294,9 @@ The Client Profile `Produits achetés` section derives from the Sale session:
 sale.clientId === client.id
 ```
 
-sorted newest first, rendered exclusively from snapshots. It exposes its own per-sale total. It
+sorted newest first, rendered exclusively from snapshots. It exposes its own per-sale total.
+The profile previews the three newest Sales; the complete list is the pushed
+client purchase history, read from the same derivation. It
 does NOT change the Appointment-derived `Total dépensé` metric, which stays the sum of
 AppointmentItem snapshot prices for COMPLETED appointments only.
 

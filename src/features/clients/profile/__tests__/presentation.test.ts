@@ -14,10 +14,15 @@ import {
 } from '@/features/appointments/presentation';
 
 import {
+  CLIENT_HISTORY_PREVIEW_LIMIT,
+  formatClientHistoryDate,
   getClientActivitySummary,
+  getClientAppointmentTimeline,
   getClientAppointments,
+  getClientHistoryPreview,
   getHistoricalClientAppointments,
   getUpcomingClientAppointments,
+  hasMoreClientHistory,
 } from '../presentation';
 
 function appointment(
@@ -397,5 +402,49 @@ describe('isTerminalAppointmentStatus', () => {
     expect(isTerminalAppointmentStatus('COMPLETED')).toBe(true);
     expect(isTerminalAppointmentStatus('SCHEDULED')).toBe(false);
     expect(isTerminalAppointmentStatus('IN_PROGRESS')).toBe(false);
+  });
+});
+
+describe('client history preview', () => {
+  const now = new Date(2026, 8, 22, 12);
+  const entries = [
+    entry(appointment('past-old', 'client-a', new Date(2026, 8, 1, 10), 'COMPLETED')),
+    entry(appointment('future-far', 'client-a', new Date(2026, 9, 20, 10))),
+    entry(appointment('past-new', 'client-a', new Date(2026, 8, 15, 10), 'NO_SHOW')),
+    entry(appointment('future-near', 'client-a', new Date(2026, 8, 25, 10))),
+    entry(appointment('other', 'client-b', new Date(2026, 8, 24, 10))),
+  ];
+
+  it('reads upcoming appointments nearest first, then history newest first', () => {
+    const timeline = getClientAppointmentTimeline(getClientActivitySummary(entries, 'client-a', now));
+
+    expect(timeline.map(({ appointment: value }) => value.id)).toEqual([
+      'future-near',
+      'future-far',
+      'past-new',
+      'past-old',
+    ]);
+  });
+
+  it('keeps the profile preview at three records whatever the history size', () => {
+    const history = Array.from({ length: 200 }, (_, index) => index);
+
+    expect(CLIENT_HISTORY_PREVIEW_LIMIT).toBe(3);
+    expect(getClientHistoryPreview(history)).toEqual([0, 1, 2]);
+    expect(getClientHistoryPreview([0, 1])).toEqual([0, 1]);
+    expect(getClientHistoryPreview([])).toEqual([]);
+    expect(history).toHaveLength(200);
+  });
+
+  it('offers the complete history only beyond the preview', () => {
+    expect(hasMoreClientHistory(0)).toBe(false);
+    expect(hasMoreClientHistory(3)).toBe(false);
+    expect(hasMoreClientHistory(4)).toBe(true);
+    expect(hasMoreClientHistory(200)).toBe(true);
+  });
+
+  it('formats a compact history date, with the year only outside the current one', () => {
+    expect(formatClientHistoryDate(new Date(2026, 8, 22, 9), now)).toBe('Mar. 22 sept.');
+    expect(formatClientHistoryDate(new Date(2025, 8, 14, 9), now)).toBe('Dim. 14 sept. 2025');
   });
 });

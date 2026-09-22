@@ -1,7 +1,11 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
-import { SegmentedControl, segmentedControlOptionHeight } from '../SegmentedControl';
+import {
+  SegmentedControl,
+  formatSegmentCount,
+  segmentedControlOptionHeight,
+} from '../SegmentedControl';
 import { gloss, radii, touchTarget } from '../theme';
 
 const OPTIONS = [
@@ -76,5 +80,24 @@ describe('SegmentedControl', () => {
     });
     expect(StyleSheet.flatten(unselected.props.style).backgroundColor).toBeUndefined();
     expect(StyleSheet.flatten(view.getByText('Techniques').props.style).color).toBe('#FFFFFF');
+  });
+  it('shows an optional count pill after the label, spoken with it and capped at 999+', async () => {
+    const counted = [
+      { value: 'appointments', label: 'Rendez-vous', count: 20, testID: 'tab-a' },
+      { value: 'purchases', label: 'Produits achetés', count: 1234, testID: 'tab-p' },
+    ] as const;
+    const view = await render(
+      <SegmentedControl onChange={jest.fn()} options={counted} stretch value="appointments" />,
+    );
+
+    expect(view.getByTestId('tab-a').props.accessibilityLabel).toBe('Rendez-vous, 20');
+    expect(view.getByTestId('tab-a').props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByTestId('tab-a-count').props.children).toBe('20');
+    expect(view.getByTestId('tab-p').props.accessibilityLabel).toBe('Produits achetés, 1234');
+    expect(view.getByTestId('tab-p-count').props.children).toBe('999+');
+    // The cap starts only beyond 999.
+    expect(formatSegmentCount(0)).toBe('0');
+    expect(formatSegmentCount(999)).toBe('999');
+    expect(formatSegmentCount(1000)).toBe('999+');
   });
 });

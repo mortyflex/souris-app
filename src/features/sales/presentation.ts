@@ -6,7 +6,7 @@
 // so historical purchases stay stable after catalog edits. The Appointment
 // Product rows themselves are a domain derivation (`getAppointmentProductLines`).
 
-import type { Sale, SaleCompletionIssue } from '@/domain/sales';
+import { getSaleUnitCount, type Sale, type SaleCompletionIssue } from '@/domain/sales';
 
 /** Completed Sales attached to one Client, newest first. Never mutates the source. */
 export function getClientSales(sales: readonly Sale[], clientId: string): readonly Sale[] {
@@ -64,4 +64,21 @@ export function describeSaleCompletionIssue(
     case 'LINKED_SALE_PAYMENT':
       return 'Une vente liée à un rendez-vous est encaissée avec le rendez-vous.';
   }
+}
+
+/**
+ * Concise product summary of one Sale, from its snapshots: `Shampooing`,
+ * `Shampooing + Soin`, `Shampooing + Soin + 2 autres`.
+ */
+export function formatSaleSummary(sale: Pick<Sale, 'items'>): string {
+  const names = sale.items.map((item) => item.productName.trim()).filter((name) => name.length > 0);
+  if (names.length <= 2) return names.join(' + ');
+  const remaining = names.length - 2;
+  return `${names.slice(0, 2).join(' + ')} + ${remaining} autre${remaining > 1 ? 's' : ''}`;
+}
+
+/** `×2` for a single-line Sale, `3 produits` across several lines. */
+export function formatSaleQuantitySummary(sale: Pick<Sale, 'items'>): string {
+  if (sale.items.length === 1) return formatSaleQuantity(sale.items[0].quantity);
+  return formatSaleUnitCount(getSaleUnitCount(sale));
 }

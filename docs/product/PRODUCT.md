@@ -735,9 +735,14 @@ imported from a legacy address book (`docs/domain/CLIENTS.md` §2).
 The `Produits achetés` section of the Client Profile derives from the Sale
 session through `sale.clientId` (Sales V1, §12). The profile identity block
 carries the `Vendre un produit` action, which opens the Sale flow with this
-Client preselected. The section lists completed Product purchases newest first, rendered from Sale snapshots (`productName`,
-`quantity`, `unitPrice`) with a per-sale total, and shows a restrained empty
-state otherwise. It is never stored on the Client, and it does not change the
+Client preselected. Completed Product purchases are listed newest first, one
+row per Sale, rendered from Sale snapshots (`productName`, `quantity`,
+`unitPrice`) with a per-sale total, and a restrained empty state otherwise.
+The profile shares ONE history area between `Rendez-vous` and `Produits
+achetés` (a segmented control with both counts) and previews at most three
+records of the selected history; `Voir les N rendez-vous` / `Voir les N
+achats` push the complete history screens, where a multi-product Sale lists
+every line. It is never stored on the Client, and it does not change the
 Appointment-derived `Total dépensé` metric.
 
 ### Legacy import

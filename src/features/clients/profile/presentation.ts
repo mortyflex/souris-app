@@ -131,3 +131,47 @@ export function getClientActivitySummary(
     nextAppointment: upcomingAppointments[0],
   };
 }
+
+/**
+ * The profile shows at most this many records per history; the complete
+ * history lives on its own pushed screen, so the profile height never
+ * depends on the size of the history.
+ */
+export const CLIENT_HISTORY_PREVIEW_LIMIT = 3;
+
+/** `Tous | À venir | Passés` of the complete appointment history. */
+export type ClientAppointmentFilter = 'ALL' | 'UPCOMING' | 'PAST';
+
+/**
+ * Every appointment of the client in reading order: upcoming (nearest
+ * first), then history (newest first). The profile preview is its head.
+ */
+export function getClientAppointmentTimeline(
+  activity: Pick<ClientActivitySummary, 'upcomingAppointments' | 'historicalAppointments'>,
+): readonly AppointmentSessionEntry[] {
+  return [...activity.upcomingAppointments, ...activity.historicalAppointments];
+}
+
+/** The head of a history shown on the profile. Never mutates the source. */
+export function getClientHistoryPreview<Item>(history: readonly Item[]): readonly Item[] {
+  return history.slice(0, CLIENT_HISTORY_PREVIEW_LIMIT);
+}
+
+/** True when the profile preview does not already show the whole history. */
+export function hasMoreClientHistory(count: number): boolean {
+  return count > CLIENT_HISTORY_PREVIEW_LIMIT;
+}
+
+/**
+ * Compact history date: `Mar. 22 sept.`; the year is added only outside the
+ * current one (`Lun. 14 sept. 2025`).
+ */
+export function formatClientHistoryDate(date: Date, now: Date = new Date()): string {
+  const value = new Intl.DateTimeFormat('fr-FR', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  }).format(date);
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}

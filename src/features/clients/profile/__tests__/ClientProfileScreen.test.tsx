@@ -137,6 +137,19 @@ const care: Product = {
   active: true,
 };
 
+const LONG_HISTORY_CLIENT_ID = createInitialClients()[1].id;
+
+/** Five past appointments of one client, 1st → 5th July 2026 at 10:00. */
+const longHistoryAppointments: readonly Appointment[] = [1, 2, 3, 4, 5].map((day) => ({
+  id: `long-${day}`,
+  businessId: 'fixture-business',
+  clientId: LONG_HISTORY_CLIENT_ID,
+  staffMemberId: 'staff-amelie',
+  startAt: new Date(2026, 6, day, 10),
+  status: 'COMPLETED',
+  items: [{ ...cancelledItem, id: `long-item-${day}`, serviceName: `Brushing ${day}` }],
+}));
+
 function saleDraft(id: string, day: number, lines: SaleDraft['lines'], clientId?: string): SaleDraft {
   return {
     id,
@@ -195,6 +208,22 @@ function SessionProbe() {
       <Pressable
         testID="add-future-appointment"
         onPress={() => addAppointment({ appointment: futureAppointment })}
+      />
+      <Pressable
+        testID="add-long-history"
+        onPress={() => {
+          for (const appointment of longHistoryAppointments) addAppointment({ appointment });
+          for (const day of [1, 2, 3, 4, 5]) {
+            completeSale(
+              saleDraft(
+                `sale-long-${day}`,
+                day,
+                [{ id: `sale-long-${day}-item`, productId: 'product-shampoo', quantity: 1 }],
+                LONG_HISTORY_CLIENT_ID,
+              ),
+            );
+          }
+        }}
       />
       <Pressable
         testID="seed-products"
@@ -286,6 +315,12 @@ function renderProfile(clientId: string, saleClientId?: string) {
 }
 
 const initialClients = createInitialClients();
+
+async function showPurchases(view: Awaited<ReturnType<typeof render>>) {
+  await act(async () => {
+    fireEvent.press(view.getByTestId('client-history-tab-purchases'));
+  });
+}
 
 async function seedSales(view: Awaited<ReturnType<typeof render>>) {
   for (const step of ['seed-products', 'sell-lea-1', 'sell-lea-2', 'sell-sofia', 'sell-walk-in']) {
@@ -448,8 +483,14 @@ describe('ClientProfileScreen', () => {
     expect(view.getByTestId('metric-noshow').props.children).toBe('0');
     expect(view.getByTestId('metric-cancelled').props.children).toBe('0');
     expect(view.getByText('Aucun rendez-vous enregistré.')).toBeTruthy();
-    expect(view.getByText('Produits achetés')).toBeTruthy();
+    expect(view.getByTestId('client-history-tab-appointments-count').props.children).toBe('0');
+    expect(view.getByTestId('client-history-tab-purchases-count').props.children).toBe('0');
+    expect(view.queryByTestId('open-client-appointment-history')).toBeNull();
+
+    await showPurchases(view);
     expect(view.getByText('Aucun achat enregistré.')).toBeTruthy();
+    expect(view.queryByText('Aucun rendez-vous enregistré.')).toBeNull();
+    expect(view.queryByTestId('open-client-purchase-history')).toBeNull();
     expect(view.queryByText(/0 visite|panier moyen/)).toBeNull();
   });
 
@@ -457,22 +498,24 @@ describe('ClientProfileScreen', () => {
     const view = await renderProfile('client-agenda-lea');
 
     await seedSales(view);
+    expect(view.getByTestId('client-history-tab-purchases-count').props.children).toBe('2');
+    await showPurchases(view);
 
-    const purchases = view.getByTestId('client-purchases');
-    expect(purchases.props.children).toHaveLength(2);
-    expect(view.getByTestId('client-sale-sale-lea-2')).toBeTruthy();
-    expect(view.getByTestId('client-sale-sale-lea-1')).toBeTruthy();
+    const purchases = within(view.getByTestId('client-purchases'));
+    expect(purchases.getByTestId('client-sale-sale-lea-2')).toBeTruthy();
+    expect(purchases.getByTestId('client-sale-sale-lea-1')).toBeTruthy();
     expect(view.queryByTestId('client-sale-sale-sofia')).toBeNull();
     expect(view.queryByTestId('client-sale-sale-walk-in')).toBeNull();
 
     const newest = within(view.getByTestId('client-sale-sale-lea-2'));
-    expect(newest.getByText('11 sept. 2026')).toBeTruthy();
-    expect(newest.getByText('Shampooing')).toBeTruthy();
-    expect(newest.getByText('×1')).toBeTruthy();
-    expect(newest.getByText('Soin')).toBeTruthy();
-    expect(newest.getByText('×2')).toBeTruthy();
-    expect(newest.getByText(formatPrice(36))).toBeTruthy();
+    expect(newest.getByText('Shampooing + Soin')).toBeTruthy();
+    expect(newest.getByText('11 sept. 2026 · 3 produits')).toBeTruthy();
     expect(newest.getByText(formatPrice(56))).toBeTruthy();
+    const oldest = within(view.getByTestId('client-sale-sale-lea-1'));
+    expect(oldest.getByText('Shampooing')).toBeTruthy();
+    expect(oldest.getByText('1 sept. 2026 · ×1')).toBeTruthy();
+    // All two purchases are already visible: no « Voir les … ».
+    expect(view.queryByTestId('open-client-purchase-history')).toBeNull();
 
     // Product purchases never redefine the Appointment-derived KPI.
     expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(0));
@@ -485,10 +528,10 @@ describe('ClientProfileScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByTestId('rewrite-catalog'));
     });
+    await showPurchases(view);
 
     const newest = within(view.getByTestId('client-sale-sale-lea-2'));
-    expect(newest.getByText('Shampooing')).toBeTruthy();
-    expect(newest.getByText('Soin')).toBeTruthy();
+    expect(newest.getByText('Shampooing + Soin')).toBeTruthy();
     expect(newest.getByText(formatPrice(56))).toBeTruthy();
     expect(view.queryByText('Nouveau nom')).toBeNull();
   });
@@ -511,6 +554,7 @@ describe('ClientProfileScreen', () => {
     const view = await renderProfile('client-agenda-camille', 'client-agenda-camille');
 
     expect(within(view.getByTestId('sale-client')).getByText('Camille Durand')).toBeTruthy();
+    await showPurchases(view);
     expect(view.getByText('Aucun achat enregistré.')).toBeTruthy();
 
     await act(async () => fireEvent.press(view.getByTestId('stock-masque-2')));
@@ -529,8 +573,8 @@ describe('ClientProfileScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
     const purchases = within(view.getByTestId('client-purchases'));
     expect(purchases.getByText('Masque réparateur 5 min')).toBeTruthy();
-    // Line total and Sale total are both 50 € for a single-unit Sale.
-    expect(purchases.getAllByText(formatPrice(50))).toHaveLength(2);
+    expect(purchases.getByText(formatPrice(50))).toBeTruthy();
+    expect(view.getByTestId('client-history-tab-purchases-count').props.children).toBe('1');
     expect(view.queryByText('Aucun achat enregistré.')).toBeNull();
   });
 
@@ -538,6 +582,7 @@ describe('ClientProfileScreen', () => {
     const view = await renderProfile('client-agenda-camille');
 
     await seedSales(view);
+    await showPurchases(view);
 
     expect(view.getByText('Aucun achat enregistré.')).toBeTruthy();
     expect(view.queryByTestId('client-purchases')).toBeNull();
@@ -645,6 +690,7 @@ describe('ClientProfileScreen', () => {
       expect(view.getByText('Supprimer définitivement')).toBeTruthy();
       // History and metrics are untouched.
       expect(view.getByText('Coloration')).toBeTruthy();
+      await showPurchases(view);
       expect(view.getByTestId('client-sale-sale-lea-2')).toBeTruthy();
       expect(view.getByTestId('client-sale-sale-lea-1')).toBeTruthy();
       expect(view.getByTestId('metric-completed').props.children).toBe('0');
@@ -766,6 +812,7 @@ describe('ClientProfileScreen', () => {
       await act(async () => {
         fireEvent.press(view.getByTestId('sell-first-legacy'));
       });
+      await showPurchases(view);
       expect(view.getByTestId('client-sale-sale-legacy')).toBeTruthy();
 
       await act(async () => {
@@ -779,6 +826,103 @@ describe('ClientProfileScreen', () => {
       expect(view.queryByTestId('confirm-client-deletion')).toBeNull();
       expect(view.getByTestId('client-sale-sale-legacy')).toBeTruthy();
       expect(Number(view.getByTestId('session-client-count').props.children)).toBe(total);
+    });
+  });
+  describe('history preview', () => {
+    async function renderLongHistory() {
+      const view = await renderProfile(LONG_HISTORY_CLIENT_ID);
+      await act(async () => {
+        fireEvent.press(view.getByTestId('seed-products'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('add-long-history'));
+      });
+      return view;
+    }
+
+    it('defaults to Rendez-vous and previews only the 3 most recent of 5 appointments', async () => {
+      const view = await renderLongHistory();
+
+      const appointmentsTab = view.getByTestId('client-history-tab-appointments');
+      expect(appointmentsTab.props.accessibilityState).toEqual({ selected: true });
+      expect(appointmentsTab.props.accessibilityLabel).toBe('Rendez-vous, 5');
+      expect(view.getByTestId('client-history-tab-purchases').props.accessibilityLabel).toBe(
+        'Produits achetés, 5',
+      );
+      const preview = within(view.getByTestId('client-appointments-preview'));
+      expect(preview.getByText('Brushing 5')).toBeTruthy();
+      expect(preview.getByText('Brushing 4')).toBeTruthy();
+      expect(preview.getByText('Brushing 3')).toBeTruthy();
+      expect(view.queryByText('Brushing 2')).toBeNull();
+      expect(view.queryByText('Brushing 1')).toBeNull();
+      expect(view.queryByTestId('client-purchases')).toBeNull();
+      // Total dépensé still covers the whole history, not the preview.
+      expect(view.getByTestId('metric-completed').props.children).toBe('5');
+      expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(5 * 42));
+    });
+
+    it('opens the existing Appointment Details from a preview row', async () => {
+      const view = await renderLongHistory();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('client-appointment-long-5'));
+      });
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/appointments/[appointmentId]',
+        params: { appointmentId: 'long-5' },
+      });
+    });
+
+    it('pushes the complete appointment history instead of expanding it inline', async () => {
+      const view = await renderLongHistory();
+
+      const link = view.getByTestId('open-client-appointment-history');
+      expect(link.props.accessibilityLabel).toBe('Voir les 5 rendez-vous');
+      await act(async () => {
+        fireEvent.press(link);
+      });
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/clients/appointments/[clientId]',
+        params: { clientId: LONG_HISTORY_CLIENT_ID },
+      });
+      expect(view.queryByText('Brushing 1')).toBeNull();
+    });
+
+    it('switches the same area to the 3 newest purchases and pushes the complete purchase history', async () => {
+      const view = await renderLongHistory();
+
+      await showPurchases(view);
+
+      expect(view.getByTestId('client-history-tab-purchases').props.accessibilityState).toEqual({
+        selected: true,
+      });
+      expect(view.queryByTestId('client-appointments-preview')).toBeNull();
+      const purchases = within(view.getByTestId('client-purchases'));
+      expect(purchases.getByTestId('client-sale-sale-long-5')).toBeTruthy();
+      expect(purchases.getByTestId('client-sale-sale-long-4')).toBeTruthy();
+      expect(purchases.getByTestId('client-sale-sale-long-3')).toBeTruthy();
+      expect(view.queryByTestId('client-sale-sale-long-2')).toBeNull();
+
+      const link = view.getByTestId('open-client-purchase-history');
+      expect(link.props.accessibilityLabel).toBe('Voir les 5 achats');
+      await act(async () => {
+        fireEvent.press(link);
+      });
+
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/clients/purchases/[clientId]',
+        params: { clientId: LONG_HISTORY_CLIENT_ID },
+      });
+      expect(view.queryByTestId('client-sale-sale-long-1')).toBeNull();
+    });
+
+    it('hides « Voir les … » while every appointment is already visible', async () => {
+      const view = await renderProfile('client-agenda-lea');
+
+      expect(view.getByText('Coloration')).toBeTruthy();
+      expect(view.queryByTestId('open-client-appointment-history')).toBeNull();
     });
   });
 });
