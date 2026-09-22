@@ -6,6 +6,7 @@
 // so no chevron and no button role. Heure is the only action: the whole row
 // gives one selection haptic and opens the shared start-time wheels inline.
 // No Cliente row: the Client is chosen in the search + list right below.
+// The Résumé reuses the same group and passes `endAt` to show the range.
 
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -30,6 +31,8 @@ import { StartTimePicker } from './StartTimePicker';
 
 interface AppointmentScheduleSectionProps {
   readonly startAt: Date;
+  /** Résumé only: the Heure row then reads the whole range `11:00 – 11:45`. */
+  readonly endAt?: Date;
   /** Called with the time of day chosen on the wheels. */
   readonly onStartTimeChange: (time: StartTimeOfDay) => void;
   /** Hours offered by the wheels, both inclusive. */
@@ -42,11 +45,14 @@ const timeIcon: SymbolViewProps['name'] = { ios: 'clock', android: 'schedule' };
 
 export function AppointmentScheduleSection({
   startAt,
+  endAt,
   onStartTimeChange,
   minHour,
   maxHour,
 }: AppointmentScheduleSectionProps) {
   const [editingTime, setEditingTime] = useState(false);
+  const startLabel = formatCreationTime(startAt);
+  const endLabel = endAt ? formatCreationTime(endAt) : undefined;
 
   return (
     <View style={styles.section}>
@@ -64,6 +70,7 @@ export function AppointmentScheduleSection({
         <GroupedSeparator inset={GROUPED_DATA_ROW_SEPARATOR_INSET} />
         <GroupedDataRow
           accessibilityHint="Changer l'heure"
+          accessibilityValueLabel={endLabel ? `${startLabel} à ${endLabel}` : undefined}
           expanded={editingTime}
           icon={timeIcon}
           label="Heure"
@@ -72,7 +79,7 @@ export function AppointmentScheduleSection({
             setEditingTime((current) => !current);
           }}
           testID="time-modifier"
-          value={formatCreationTime(startAt)}
+          value={endLabel ? `${startLabel} – ${endLabel}` : startLabel}
         />
         {editingTime && (
           <View style={styles.timePicker}>

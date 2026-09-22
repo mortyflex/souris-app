@@ -1,41 +1,13 @@
 // Souris — Appointment service-selection sections
 //
-// Pure presentation helpers for the shared compact grouped picker. Groups
+// Pure presentation helpers for the shared prestation catalogue. Categories
 // are derived from Service.type only; legacy categories never reappear.
 
 import type { Service, ServiceType } from '@/domain/appointments';
 
 import { filterCatalogServices } from './filter-services';
 
-export type SelectionSectionTitle = 'Services' | 'Techniques';
-
-export interface ServiceSelectionSection {
-  readonly title: SelectionSectionTitle;
-  readonly data: readonly Service[];
-}
-
 export type ServiceGridRow = readonly [Service, Service | undefined];
-
-/**
- * Splits active Services into SERVICE / TECHNIQUE sections, optionally
- * filtered by the search query. Source order is preserved inside every
- * section and empty sections are omitted. The source array is never mutated.
- */
-export function buildServiceSelectionSections(
-  services: readonly Service[],
-  query = '',
-): readonly ServiceSelectionSection[] {
-  const sections: ServiceSelectionSection[] = [];
-  const simples = filterServicesOfType(services, 'SERVICE', query);
-  const techniques = filterServicesOfType(services, 'TECHNIQUE', query);
-  if (simples.length > 0) {
-    sections.push({ title: 'Services', data: simples });
-  }
-  if (techniques.length > 0) {
-    sections.push({ title: 'Techniques', data: techniques });
-  }
-  return sections;
-}
 
 /**
  * The Services of ONE type (the Services / Techniques segment of « Modifier
@@ -53,7 +25,7 @@ export function filterServicesOfType(
 }
 
 /**
- * Packs a section into two-column rows for the wrapping grid.
+ * Packs a category into two-column rows for the card grid.
  */
 export function toServiceGridRows(
   services: readonly Service[],

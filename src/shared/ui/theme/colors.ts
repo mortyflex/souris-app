@@ -181,37 +181,15 @@ export const calendarBlockColors = {
   surface: mauve.mauve050,
 } as const;
 
-// Service picker cards — colour says WHAT the service is, never that it is
-// selected (DESIGN_OVERRIDES.md §22): mint = simple SERVICE, lavender = every
-// other service type. Selection stays inside the family: stronger surface,
-// stronger border, accent check badge.
-export const serviceCardColors = {
-  simple: {
-    background: mint.mint050,
-    border: mint.mint200,
-    title: mint.mint700,
-    subtitle: mint.mint650,
-    selectedBackground: mint.mint100,
-    selectedBorder: mint.mint600,
-  },
-  other: {
-    background: lavender.lav050,
-    border: lavender.lav200,
-    title: lavender.lav700,
-    subtitle: foregroundSoft,
-    selectedBackground: lavender.lav100,
-    selectedBorder: colors.accent,
-  },
-} as const;
-
-// Prestation categories of « Modifier le rendez-vous » (DESIGN_OVERRIDES.md
-// §27) — keyed by the domain `ServiceType`. SERVICE keeps the Souris violet,
+// Prestation categories of the shared catalogue and « Modifier le
+// rendez-vous » (DESIGN_OVERRIDES.md §27, §28) — keyed by the domain
+// `ServiceType`. SERVICE keeps the Souris violet,
 // TECHNIQUE the complementary azure. Colour is never the only cue: the
 // segment label, the list context and the spoken category go with it.
 //   accent — small graphics: leading dot, selection check, hairline
 //   strong — a filled surface carrying white text (≥ 4.5:1)
-//   tint   — the whisper behind a selected row
-//   border — the hairline of a selected row
+//   tint   — the whisper behind a selected card
+//   border — the hairline of an idle card
 // The primary action stays `semanticColors.accent` whatever the category.
 export const serviceCategoryColors = {
   SERVICE: {

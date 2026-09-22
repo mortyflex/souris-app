@@ -318,6 +318,10 @@ function backgroundOf(element: { readonly props: { readonly style?: unknown } })
   return StyleSheet.flatten(element.props.style as StyleProp<ViewStyle>)?.backgroundColor;
 }
 
+function borderOf(element: { readonly props: { readonly style?: unknown } }) {
+  return StyleSheet.flatten(element.props.style as StyleProp<ViewStyle>)?.borderColor;
+}
+
 describe('AppointmentEditingScreen', () => {
   beforeAll(() => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
@@ -435,7 +439,7 @@ describe('AppointmentEditingScreen', () => {
 
     // A second tap on an already-added catalog Service creates no duplicate.
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Coupe Brushing 1, 50 min, 40,00 €'));
+      fireEvent.press(view.getByLabelText(/^Coupe Brushing 1, 50 min, .*, Service$/));
     });
     expect(view.getAllByLabelText(/^Développer Coupe Brushing 1$/)).toHaveLength(1);
   });
@@ -1274,14 +1278,20 @@ describe('AppointmentEditingScreen', () => {
     it('selects a Technique with the azure check and a Service with the violet one', async () => {
       const view = await renderEditor();
 
+      // The catalogue is the shared card grid, not the former option rows.
+      const brushingCard = view.getByTestId('service-card-service-brushing-brushing-1');
+      expect(borderOf(brushingCard)).toBe(serviceCategoryColors.SERVICE.border);
+      expect(view.container.queryAll((node) => /^service-row-/.test(String(node.props.testID)))).toEqual([]);
+
       await act(async () => {
         fireEvent.press(view.getByText('Brushing 1'));
       });
-      const brushingIndicator = view.getByTestId('service-row-service-brushing-brushing-1-selected');
-      expect(backgroundOf(brushingIndicator)).toBe(serviceCategoryColors.SERVICE.accent);
-      expect(
-        view.getByTestId('service-row-service-brushing-brushing-1').props.accessibilityState,
-      ).toEqual({ selected: true });
+      const brushingCheck = view.getByTestId('service-card-service-brushing-brushing-1-check');
+      expect(backgroundOf(brushingCheck)).toBe(serviceCategoryColors.SERVICE.accent);
+      const selectedBrushing = view.getByTestId('service-card-service-brushing-brushing-1');
+      expect(selectedBrushing.props.accessibilityState).toEqual({ selected: true });
+      expect(backgroundOf(selectedBrushing)).toBe(serviceCategoryColors.SERVICE.tint);
+      expect(borderOf(selectedBrushing)).toBe(serviceCategoryColors.SERVICE.accent);
 
       await act(async () => {
         fireEvent.press(view.getByTestId('catalog-category-TECHNIQUE'));
@@ -1298,9 +1308,12 @@ describe('AppointmentEditingScreen', () => {
       const [techniqueCheck] = view.container.queryAll(
         (node) =>
           typeof node.props.testID === 'string' &&
-          /^service-row-.*balayage-2-selected$/.test(node.props.testID),
+          /^service-card-.*balayage-2-check$/.test(node.props.testID),
       );
       expect(backgroundOf(techniqueCheck)).toBe(serviceCategoryColors.TECHNIQUE.accent);
+      expect(borderOf(view.getByLabelText(/^Balayage 2, /))).toBe(
+        serviceCategoryColors.TECHNIQUE.accent,
+      );
       expect(view.getByLabelText('Développer Balayage 2')).toBeTruthy();
     });
 

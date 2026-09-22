@@ -1,38 +1,36 @@
 // Souris — Summary step (Appointment Creation)
 //
-// Editorial review screen organized in four distinct blocks, each owning a
-// single concern and a single explicit edit action:
-//   1. Cliente          → Changer la cliente
-//   2. Rendez-vous      → Changer l'horaire (inline ±5 minute control)
-//   3. Prestations      → stacked sortable accordion editor (snapshot-only
-//                          price and phase-duration adjustments)
-//   4. Total            → the optional « Réduction » control (preceded by the
-//                          birthday suggestion when the Appointment date is
-//                          the Client birthday) and the read-only
-//                          final summary (Prestations / Réduction / Total when
-//                          a discount is set), CTA lives in the footer
+// The grouped-row review of the redesigned sheets (DESIGN_OVERRIDES.md §27),
+// in the same family as « Modifier le rendez-vous »:
+//   1. Cliente          → ONE tappable GroupedDataRow (the row is the action)
+//   2. Rendez-vous      → the shared Date / Heure group of the earlier steps:
+//                          Date read-only, Heure opens the start-time wheels
+//   3. Prestations      → ONE grouped sortable list (drag handle leading,
+//                          chevron opens the snapshot-only price and
+//                          phase-duration adjustments), « Modifier » returns
+//                          to the catalog step
+//   4. Options          → the « Réduction » row (preceded by the birthday
+//                          suggestion when the Appointment date is the Client
+//                          birthday) and, when a discount is set, its breakdown
+//   5. Final summary    → Temps actif / Temps de pose only when the
+//                          Appointment has pose time (otherwise Temps actif
+//                          would repeat Durée totale), then Durée totale and
+//                          Total. The CTA lives in the footer.
 //
 // Every value comes from the draft snapshot (adjusted prices and durations
-// included), never from stale catalog defaults. No data point is repeated
-// across blocks.
+// included), never from stale catalog defaults.
 
-import { useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeOut,
-  useReducedMotion,
-} from 'react-native-reanimated';
+import type { SymbolViewProps } from 'expo-symbols';
 
 import type { AppointmentDiscount } from '@/domain/appointments';
 import { formatDiscountAmount, formatDiscountLabel } from '@/features/appointments/presentation';
-import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
+import { GroupedDataRow } from '@/shared/ui/GroupedDataRow';
+import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
-  easing,
   foregroundSoft,
   gutter,
   interaction,
@@ -47,15 +45,13 @@ import { AppointmentDiscountSection } from '../../editor/components/AppointmentD
 import { SortableDraftList, type SortableDraftEntry } from '../../editor/components/SortableDraftList';
 import type { StartTimeOfDay } from '../draft-start';
 import type { AppointmentCreationSummary } from '../presentation';
-import {
-  formatCreationDate,
-  formatCreationDuration,
-  formatCreationPrice,
-  formatCreationTime,
-} from '../presentation';
-import { StartTimePicker } from './StartTimePicker';
+import { formatCreationDuration, formatCreationPrice } from '../presentation';
+import { AppointmentScheduleSection } from './AppointmentScheduleSection';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
+const clientIcon: SymbolViewProps['name'] = { ios: 'person', android: 'person' };
+/** Time rows: row padding + accent dot + gap, so separators start under the labels. */
+const TIME_ROW_SEPARATOR_INSET = spacing.base + 8 + spacing.sm;
 
 interface SummaryStepProps {
   readonly clientName: string;
@@ -79,8 +75,8 @@ interface SummaryStepProps {
   readonly onEditServices: () => void;
   readonly onStartAtChange: (time: StartTimeOfDay) => void;
   /** Hours offered by the start-time wheels, both inclusive. */
-  readonly minHour?: number;
-  readonly maxHour?: number;
+  readonly minHour: number;
+  readonly maxHour: number;
 }
 
 export function SummaryStep({
@@ -102,125 +98,75 @@ export function SummaryStep({
   minHour,
   maxHour,
 }: SummaryStepProps) {
-  const [editingTime, setEditingTime] = useState(false);
-  const reducedMotion = useReducedMotion();
-  const timeEntering = useMemo(
-    () =>
-      reducedMotion
-        ? undefined
-        : FadeIn.duration(160).easing(Easing.bezier(...easing.out)),
-    [reducedMotion],
-  );
-  const timeExiting = useMemo(
-    () => (reducedMotion ? undefined : FadeOut.duration(120)),
-    [reducedMotion],
-  );
+  const hasPoseTime = summary.processingMinutes > 0;
+  const durationLabel = formatCreationDuration(summary.elapsedMinutes);
+  const totalLabel = formatCreationPrice(summary.servicesTotal.netCents / 100);
 
   return (
     <ScrollView
       contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.block}>
-        <View style={styles.blockHeader}>
-          <AppText variant="eyebrow" style={styles.blockEyebrow}>
-            Cliente
-          </AppText>
-          <BlockAction
-            accessibilityLabel="Changer la cliente"
-            label="Changer la cliente"
+      <View style={styles.section}>
+        <AppText variant="eyebrow" style={styles.eyebrow}>
+          CLIENTE
+        </AppText>
+        <GroupedSurface testID="summary-client">
+          <GroupedDataRow
+            accessibilityHint="Modifier la cliente"
+            icon={clientIcon}
+            label="Cliente"
             onPress={onEditClient}
             testID="edit-client"
+            value={clientName}
           />
-        </View>
-        <AppText variant="sheetTitle" accessibilityRole="header" selectable style={styles.clientName}>
-          {clientName}
-        </AppText>
+        </GroupedSurface>
       </View>
 
-      <View style={styles.block}>
-        <View style={styles.blockHeader}>
-          <AppText variant="eyebrow" style={styles.blockEyebrow}>
-            Rendez-vous
-          </AppText>
-          {!editingTime && (
-            <BlockAction
-              accessibilityLabel="Changer l'horaire"
-              label="Changer l'horaire"
-              onPress={() => {
-                haptics.selection();
-                setEditingTime(true);
-              }}
-              testID="time-modifier"
-            />
-          )}
-        </View>
-        <AppText variant="control" selectable style={styles.dateLine}>
-          {formatCreationDate(startAt)}
-        </AppText>
-        {editingTime ? (
-          <Animated.View entering={timeEntering} exiting={timeExiting}>
-            <StartTimePicker
-              maxHour={maxHour}
-              minHour={minHour}
-              onChange={onStartAtChange}
-              onDone={() => setEditingTime(false)}
-              startAt={startAt}
-            />
-          </Animated.View>
-        ) : (
-          <Animated.View entering={timeEntering} exiting={timeExiting}>
-            <AppText variant="summaryValue" selectable style={styles.timeRange}>
-              {`${formatCreationTime(startAt)} – ${formatCreationTime(summary.endAt)}`}
-            </AppText>
-          </Animated.View>
-        )}
-      </View>
+      <AppointmentScheduleSection
+        endAt={summary.endAt}
+        maxHour={maxHour}
+        minHour={minHour}
+        onStartTimeChange={onStartAtChange}
+        startAt={startAt}
+      />
 
-      <View style={styles.block}>
-        <SectionHeader count={entries.length} title="Sélectionnées">
-          <BlockAction
+      <View style={styles.section}>
+        <SectionHeader count={entries.length} title="Prestations sélectionnées">
+          <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Modifier les prestations"
-            label="Modifier les prestations"
+            hitSlop={spacing.sm}
             onPress={onEditServices}
+            style={({ pressed }) => [styles.headerAction, pressed && styles.headerActionPressed]}
             testID="edit-services"
-          />
+          >
+            <AppText variant="metadata" style={styles.headerActionText}>
+              Modifier
+            </AppText>
+          </Pressable>
         </SectionHeader>
-        <SortableDraftList
-          canRemove={false}
-          entries={entries}
-          expandedDraftId={expandedDraftId}
-          onRemove={() => {}}
-          onReorder={onReorder}
-          onToggleExpanded={onToggleExpanded}
-          onUpdatePhaseDuration={onUpdatePhaseDuration}
-          onUpdatePrice={onUpdatePrice}
-        />
+        <GroupedSurface testID="summary-selected-services">
+          <SortableDraftList
+            canRemove={false}
+            entries={entries}
+            expandedDraftId={expandedDraftId}
+            grouped
+            onRemove={() => {}}
+            onReorder={onReorder}
+            onToggleExpanded={onToggleExpanded}
+            onUpdatePhaseDuration={onUpdatePhaseDuration}
+            onUpdatePrice={onUpdatePrice}
+          />
+        </GroupedSurface>
       </View>
 
-      <View style={styles.block}>
-        <AppText variant="eyebrow" style={styles.blockEyebrow}>
-          Total
-        </AppText>
-        <View style={styles.timeSurface}>
-          {summary.activeMinutes > 0 && (
-            <TimeRow
-              accent={lavender.lav700}
-              label="Temps actif"
-              value={formatCreationDuration(summary.activeMinutes)}
-            />
-          )}
-          {summary.processingMinutes > 0 && (
-            <TimeRow
-              accent={peach.peach700}
-              label="Temps de pose"
-              value={formatCreationDuration(summary.processingMinutes)}
-            />
-          )}
-        </View>
+      <View style={styles.section}>
+        <SectionHeader title="Options" />
         <AppointmentDiscountSection
           birthdayReminder={birthdayReminder}
           discount={discount}
+          editorStyle={styles.discountRow}
           onChange={onDiscountChange}
           servicesTotal={summary.servicesTotal}
         />
@@ -236,57 +182,62 @@ export function SummaryStep({
             />
           </View>
         )}
-        <View style={styles.finalSummary}>
-          <View>
+      </View>
+
+      <View style={styles.section}>
+        {/* Active / pose split only when it says more than Durée totale. */}
+        {hasPoseTime && (
+          <GroupedSurface testID="creation-time-breakdown">
+            {summary.activeMinutes > 0 && (
+              <>
+                <TimeRow
+                  accent={lavender.lav700}
+                  label="Temps actif"
+                  value={formatCreationDuration(summary.activeMinutes)}
+                />
+                <GroupedSeparator inset={TIME_ROW_SEPARATOR_INSET} />
+              </>
+            )}
+            <TimeRow
+              accent={peach.peach700}
+              label="Temps de pose"
+              value={formatCreationDuration(summary.processingMinutes)}
+            />
+          </GroupedSurface>
+        )}
+        <View
+          accessible
+          accessibilityLabel={`Durée totale ${durationLabel}, total ${totalLabel}`}
+          style={styles.finalSummary}
+          testID="creation-final-summary"
+        >
+          <View style={styles.durationColumn}>
             <AppText variant="metadata" style={styles.finalLabel}>
               Durée totale
             </AppText>
             <AppText variant="summaryValue" style={styles.finalValue}>
-              {formatCreationDuration(summary.elapsedMinutes)}
+              {durationLabel}
             </AppText>
           </View>
+          <View style={styles.finalDivider} />
           <View style={styles.priceColumn}>
             <AppText variant="metadata" style={styles.finalLabel}>
               Total
             </AppText>
             <AppText
               variant="summaryValue"
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              numberOfLines={1}
               style={styles.totalValue}
               testID="creation-total"
             >
-              {formatCreationPrice(summary.servicesTotal.netCents / 100)}
+              {totalLabel}
             </AppText>
           </View>
         </View>
       </View>
     </ScrollView>
-  );
-}
-
-function BlockAction({
-  accessibilityLabel,
-  label,
-  onPress,
-  testID,
-}: {
-  readonly accessibilityLabel: string;
-  readonly label: string;
-  readonly onPress: () => void;
-  readonly testID?: string;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      hitSlop={spacing.sm}
-      onPress={onPress}
-      style={({ pressed }) => [styles.blockAction, pressed && styles.blockActionPressed]}
-      testID={testID}
-    >
-      <AppText variant="metadata" style={styles.blockActionText}>
-        {label}
-      </AppText>
-    </Pressable>
   );
 }
 
@@ -314,7 +265,7 @@ function TimeRow({
   readonly value: string;
 }) {
   return (
-    <View style={styles.timeRow}>
+    <View accessible accessibilityLabel={`${label}, ${value}`} style={styles.timeRow}>
       <View style={[styles.timeAccent, { backgroundColor: accent }]} />
       <AppText variant="metadata" style={styles.timeLabel}>
         {label}
@@ -327,55 +278,57 @@ function TimeRow({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: spacing.xl, paddingTop: spacing.base },
-  block: { gap: spacing.sm, marginBottom: spacing.xl },
-  blockHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  blockEyebrow: { color: foregroundSoft },
-  blockAction: {
+  content: { gap: spacing.xl, paddingBottom: spacing.xl, paddingTop: spacing.base },
+  section: { gap: spacing.sm },
+  eyebrow: { color: foregroundSoft },
+  headerAction: {
     alignItems: 'center',
     borderRadius: radii.small,
     justifyContent: 'center',
     minHeight: 32,
     paddingHorizontal: spacing.sm,
   },
-  blockActionPressed: {
+  headerActionPressed: {
     backgroundColor: semanticColors.surfaceLavender,
     transform: [{ scale: interaction.pressedScale }],
   },
-  blockActionText: { color: semanticColors.accent },
-  clientName: { color: semanticColors.foreground },
-  dateLine: { color: semanticColors.foregroundSoft, fontVariant: ['tabular-nums'] },
-  timeRange: {
-    color: semanticColors.foreground,
-    fontVariant: ['tabular-nums'],
+  headerActionText: { color: semanticColors.accent },
+  // The discount block as a white grouped row, like the lists around it.
+  discountRow: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.borderSubtle,
+    borderRadius: radii.large,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  timeSurface: {
-    backgroundColor: semanticColors.surface,
-    borderRadius: radii.medium,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+  timeRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    minHeight: 44,
+    paddingHorizontal: spacing.base,
   },
-  timeRow: { alignItems: 'center', flexDirection: 'row', minHeight: 36 },
   timeAccent: { borderRadius: radii.pill, height: 8, marginRight: spacing.sm, width: 8 },
   timeLabel: { flex: 1 },
   timeValue: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   finalSummary: {
+    alignItems: 'center',
     backgroundColor: semanticColors.surfaceLavender,
     borderCurve: 'continuous',
     borderRadius: radii.large,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: spacing.base,
     padding: spacing.base,
+  },
+  durationColumn: { flex: 1 },
+  finalDivider: {
+    alignSelf: 'stretch',
+    backgroundColor: semanticColors.borderSubtle,
+    width: StyleSheet.hairlineWidth,
   },
   discountBreakdown: { paddingHorizontal: spacing.base },
   breakdownRow: { alignItems: 'center', flexDirection: 'row', minHeight: 28 },
   finalLabel: { color: foregroundSoft },
   finalValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
-  priceColumn: { alignItems: 'flex-end' },
+  priceColumn: { alignItems: 'flex-end', flex: 1 },
   totalValue: {
     color: lavender.lav700,
     fontVariant: ['tabular-nums'],

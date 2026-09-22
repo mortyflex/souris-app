@@ -20,7 +20,6 @@ export {
   azure,
   appointmentPastels,
   calendarBlockColors,
-  serviceCardColors,
   serviceCategoryColors,
   overlayMaterial,
   receiptPaper,

@@ -952,7 +952,8 @@ gestures, sheet sizing and card geometry are unchanged.
   header. Never an icon-only ✕: sheets say « Fermer » / « Annuler » in words. It is the SAME way
   out as the gestures: one `router.back()`, which `SheetScreen` holds while the close transition
   plays. No haptic, no state reset of its own.
-- **Service picker cards — colour is the service TYPE.** Supersedes the « borderless, stronger
+- **Service picker cards — colour is the service TYPE.** *(Superseded by §28: mint / lavender
+  cards are gone; the shared card catalogue uses the §27 category colours.)* Supersedes the « borderless, stronger
   lavender surface, no outline » wording of §7 for the shared `ServiceSelectionGrid` (Appointment
   creation and editing). `serviceCardColors` (tokens) resolved by
   `features/appointments/editor/service-card-palette.ts` from the Service `type` field — never
@@ -1231,8 +1232,9 @@ Appointment Creation keeps §22 for now.
   handle leading, a small category dot, name, duration · pose, price column, accordion chevron
   (price + durations, unchanged). Swipe-to-remove unchanged, square on the white surface.
 - **Options.** « Réduction » as a white grouped row; birthday reminder above it as before.
-- **Ajouter des prestations.** Search, then a full-width Services / Techniques `SegmentedControl`,
-  then ONE dense list of the chosen type — the same row for both categories: category dot, name
+- **Ajouter des prestations.** *(The dense list is superseded by the shared card grid of §28;
+  search, segment, empty state and add-only taps are unchanged.)* Search, then a full-width
+  Services / Techniques `SegmentedControl`, then ONE dense list of the chosen type — the same row for both categories: category dot, name
   (two lines max), duration · « dont X de pose », price, and a selection ring (empty) or filled
   check. Search filters inside the chosen category; when only the other one matches, the empty
   state offers « Voir N résultats dans Techniques ». Tapping a selected row still adds nothing.
@@ -1246,3 +1248,26 @@ Appointment Creation keeps §22 for now.
   (`sectionTitle`, violet) from the domain services total, live; the Calendar Block notice when
   relevant; one full-width violet « Enregistrer les modifications », disabled while nothing
   changed. Always violet, whatever category is shown.
+
+## 28. Nouveau rendez-vous — Aligned With the Editing Workspace
+
+The creation sheet speaks the §27 language. Flow, steps, rules and data are unchanged.
+
+- **Header.** The §27 editing header in both modes: « Annuler » leading, then « Nouveau
+  rendez-vous » (Cliente) or « Indisponible » (Personnel). No eyebrow, no step title — the
+  segment names the mode, the stepper the step.
+- **Rendez-vous.** On Cliente AND Prestations, `RENDEZ-VOUS` over one `GroupedSurface`: **Date**
+  read-only (the Agenda day: no chevron, not a button) and **Heure** (chevron; the whole row
+  opens the start-time wheels inline). No « Changer l'horaire », no Client row — the Client is
+  chosen in the search + list of the Cliente step, whose rows are separated by hairlines.
+- **Shared prestation catalogue.** `ServiceCatalogPicker` + `ServiceSelectionCard` serve BOTH
+  creation (Prestations step: a tap toggles) and editing (Ajouter des prestations: a tap adds).
+  Search, full-width Services / Techniques segment (`serviceCategoryColors[type].strong` fill),
+  then a two-column grid of cards of the chosen type; search filters inside it and offers the
+  other category when only that one matches. Card: name (two lines max), duration or « 1 h ·
+  dont 30 min de pose », price. Idle: white surface, the category `border` hairline. Selected:
+  the category `tint`, a 1.5 pt `accent` border and an `accent` check badge. Violet for Services,
+  azure for Techniques; never mint. Spoken « Balayage 1, 1 h dont 30 min de pose, 45,00 €,
+  Technique » with the selected state.
+- **Footers.** Creation keeps the count + names line above « Précédent | Continuer »; editing
+  keeps its §27 footer.

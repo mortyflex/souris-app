@@ -16,6 +16,7 @@
 import { formatEuros } from '@/shared/lib/money';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Pressable, StyleSheet, Text } from 'react-native';
+import { serviceCategoryColors } from '@/shared/ui/theme';
 
 import type { Client } from '@/domain/clients';
 import { createInitialClients } from '@/features/clients/data/initial-clients';
@@ -290,11 +291,19 @@ async function clearServiceSearch(view: Rendered) {
   });
 }
 
-// Presses the catalog CARD (labelled « name, duration, price »): a selected
-// name is also written in the footer reminder.
+// Presses the catalog CARD (labelled « name, duration, price, category »): a
+// selected name is also written in the footer reminder. The catalogue shows
+// ONE category at a time, so the helper first opens the segment holding it.
 async function selectService(view: Rendered, name: string) {
+  const card = { name: new RegExp(`^${name}, `) };
+  for (const tab of ['catalog-category-SERVICE', 'catalog-category-TECHNIQUE']) {
+    if (view.queryByRole('button', card)) break;
+    await act(async () => {
+      fireEvent.press(view.getByTestId(tab));
+    });
+  }
   await act(async () => {
-    fireEvent.press(view.getByRole('button', { name: new RegExp(`^${name}, `) }));
+    fireEvent.press(view.getByRole('button', card));
   });
 }
 
@@ -474,24 +483,59 @@ describe('AppointmentCreationScreen', () => {
     expect(view.queryByTestId('selection-names')).toBeNull();
   });
 
-  it('search filters both sections, hides empty ones, and preserves selections', async () => {
+  it('searches inside the chosen category, offers the other one, and preserves selections', async () => {
     const view = await renderCreation();
     await selectClientBeyond60(view);
 
     await selectService(view, 'Brushing 1');
     await searchService(view, 'balayage');
 
-    expect(view.getByText('Balayage 1')).toBeTruthy();
-    expect(view.queryByText('Services')).toBeNull();
-    expect(view.getByText('Techniques')).toBeTruthy();
+    // Services holds no Balayage: the empty state offers Techniques.
+    expect(view.queryByText('Balayage 1')).toBeNull();
+    expect(view.getByText('Aucune prestation trouvée')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('catalog-show-other-category'));
+    });
+    expect(view.getByTestId('catalog-category-TECHNIQUE').props.accessibilityState).toEqual({
+      selected: true,
+    });
 
     await selectService(view, 'Balayage 1');
     await clearServiceSearch(view);
 
-    // Both selections survive; both sections return.
+    // Both selections survive, each card with its own category state.
     expect(view.getByText('2 prestations sélectionnées')).toBeTruthy();
-    expect(view.getByText('Services')).toBeTruthy();
-    expect(view.getByText('Techniques')).toBeTruthy();
+    expect(view.getByTestId('service-card-technique-balayage-balayage-1').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(
+      StyleSheet.flatten(view.getByTestId('service-card-technique-balayage-balayage-1-check').props.style)
+        .backgroundColor,
+    ).toBe(serviceCategoryColors.TECHNIQUE.accent);
+    await act(async () => {
+      fireEvent.press(view.getByTestId('catalog-category-SERVICE'));
+    });
+    expect(
+      StyleSheet.flatten(view.getByTestId('service-card-service-brushing-brushing-1-check').props.style)
+        .backgroundColor,
+    ).toBe(serviceCategoryColors.SERVICE.accent);
+  });
+
+  it('shows the shared Services / Techniques segment in the category colours', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+
+    const background = (testID: string) =>
+      StyleSheet.flatten(view.getByTestId(testID).props.style).backgroundColor;
+    expect(background('catalog-category-SERVICE')).toBe(serviceCategoryColors.SERVICE.strong);
+    expect(view.getByTestId('catalog-list-SERVICE')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('catalog-category-TECHNIQUE'));
+    });
+    expect(background('catalog-category-TECHNIQUE')).toBe(serviceCategoryColors.TECHNIQUE.strong);
+    expect(background('catalog-category-SERVICE')).not.toBe(serviceCategoryColors.SERVICE.strong);
+    expect(view.getByTestId('catalog-list-TECHNIQUE')).toBeTruthy();
   });
 
   it('offers only active Services for new additions and reacts immediately', async () => {
@@ -505,11 +549,16 @@ describe('AppointmentCreationScreen', () => {
 
     expect(view.queryByText('Balayage 1')).toBeNull();
     expect(view.getByText('Aucune prestation trouvée')).toBeTruthy();
+    expect(view.queryByTestId('catalog-show-other-category')).toBeNull();
 
     await act(async () => {
       fireEvent.press(view.getByTestId('reactivate-balayage'));
     });
 
+    // Active again: the Techniques segment finds it at once.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('catalog-show-other-category'));
+    });
     expect(view.getByText('Balayage 1')).toBeTruthy();
   });
 
@@ -520,8 +569,11 @@ describe('AppointmentCreationScreen', () => {
     expect(view.getByTestId('time-modifier-value')).toHaveTextContent('10:15');
     await selectClientBeyond60(view);
 
-    expect(view.getByText('Constance Chevalier')).toBeTruthy();
-    expect(view.getByText('Mar. 25 août · 10:15')).toBeTruthy();
+    // Prestations repeats the Date / Heure group, not the Client.
+    expect(view.getByTestId('appointment-date-value')).toHaveTextContent('Mar. 25 août');
+    expect(view.getByTestId('time-modifier-value')).toHaveTextContent('10:15');
+    expect(view.queryByText('Constance Chevalier')).toBeNull();
+    expect(view.queryByText("Changer l'horaire")).toBeNull();
 
     await searchService(view, 'balayage 1');
     await selectService(view, 'Balayage 1');
@@ -892,7 +944,7 @@ describe('AppointmentCreationScreen', () => {
     expect(view.getByText('2 h 30 min')).toBeTruthy();
 
     await act(async () => {
-      fireEvent.press(view.getByLabelText("Changer l'horaire"));
+      fireEvent.press(view.getByTestId('time-modifier'));
     });
     expect(wheelValue(view, 'start-time-wheel-hour')).toBe('10 heures');
     expect(wheelValue(view, 'start-time-wheel-minute')).toBe('15 minutes');
@@ -902,12 +954,89 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.press(view.getByLabelText("Terminer la modification de l'heure"));
     });
 
-    expect(view.getByText('Mardi 25 août')).toBeTruthy();
+    expect(view.getByTestId('appointment-date-value')).toHaveTextContent('Mar. 25 août');
 
     expect(view.getByText('10:30 – 13:00')).toBeTruthy();
     expect(view.getByText('2 h 30 min')).toBeTruthy();
     expect(view.getByText('1 h 30 min')).toBeTruthy();
     expect(view.getByText('1 h')).toBeTruthy();
+  });
+
+  it('reviews the Résumé in grouped rows: Cliente and Heure are actions, Date is read-only, no TOTAL heading', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+    await searchService(view, 'brushing 1');
+    await selectService(view, 'Brushing 1');
+    await continueToSummary(view);
+
+    // Cliente: one row, the row is the action.
+    const clientRow = view.getByTestId('edit-client');
+    expect(clientRow.props.accessibilityRole).toBe('button');
+    expect(clientRow.props.accessibilityLabel).toBe('Cliente, Constance Chevalier');
+    expect(view.getByTestId('edit-client-value')).toHaveTextContent('Constance Chevalier');
+    expect(view.queryByText('Changer la cliente')).toBeNull();
+
+    // Date: read-only, the full date spoken.
+    const dateRow = view.getByTestId('appointment-date');
+    expect(dateRow.props.accessibilityRole).toBeUndefined();
+    expect(dateRow.props.accessibilityLabel).toBe('Date, Mardi 25 août');
+    expect(view.getByTestId('appointment-date-value')).toHaveTextContent('Mar. 25 août');
+
+    // Heure: the range, one button.
+    const timeRow = view.getByTestId('time-modifier');
+    expect(timeRow.props.accessibilityRole).toBe('button');
+    expect(timeRow.props.accessibilityLabel).toBe('Heure, 10:15 à 10:45');
+    expect(view.getByTestId('time-modifier-value')).toHaveTextContent('10:15 – 10:45');
+    expect(view.queryByText("Changer l'horaire")).toBeNull();
+
+    // Prestations: count, short « Modifier », edit chevron (one row: nothing to reorder).
+    expect(view.getByText('Prestations sélectionnées')).toBeTruthy();
+    expect(view.getByText('Modifier')).toBeTruthy();
+    expect(view.queryByLabelText('Déplacer Brushing 1')).toBeNull();
+    expect(view.getByLabelText('Développer Brushing 1')).toBeTruthy();
+
+    // Options: the Réduction row, no TOTAL heading anywhere.
+    expect(view.getByText('Options')).toBeTruthy();
+    expect(view.getByLabelText('Réduction, aucune')).toBeTruthy();
+    expect(view.getByText('Total')).toBeTruthy();
+    expect(view.queryByText('TOTAL')).toBeNull();
+
+    // No pose time: Temps actif would repeat Durée totale, so no breakdown.
+    expect(view.queryByTestId('creation-time-breakdown')).toBeNull();
+    expect(view.queryByText('Temps actif')).toBeNull();
+    expect(view.queryByText('Temps de pose')).toBeNull();
+    expect(view.getByTestId('creation-final-summary').props.accessibilityLabel).toBe(
+      `Durée totale 30 min, total ${formatEuros(20)}`,
+    );
+
+    // Cliente row returns to the Client step.
+    await act(async () => {
+      fireEvent.press(clientRow);
+    });
+    expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+  });
+
+  it('shows the Temps actif / Temps de pose breakdown only when the Résumé has pose time', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+
+    const breakdown = view.getByTestId('creation-time-breakdown');
+    expect(within(breakdown).getByLabelText('Temps actif, 1 h 30 min')).toBeTruthy();
+    expect(within(breakdown).getByLabelText('Temps de pose, 1 h')).toBeTruthy();
+    expect(view.getByTestId('creation-final-summary').props.accessibilityLabel).toBe(
+      `Durée totale 2 h 30 min, total ${formatEuros(45)}`,
+    );
+
+    // Pose stepped down to zero: the breakdown disappears, Durée totale follows.
+    await expandService(view, 'Balayage 1');
+    await stepPhase(view, BALAYAGE_POSE, -12);
+    expect(view.queryByTestId('creation-time-breakdown')).toBeNull();
+    expect(view.getByTestId('creation-final-summary').props.accessibilityLabel).toBe(
+      `Durée totale 1 h 30 min, total ${formatEuros(45)}`,
+    );
   });
 
   it('emits success feedback only after the appointment is created', async () => {
@@ -955,15 +1084,15 @@ describe('AppointmentCreationScreen', () => {
     const createdClientId = view.getByTestId('new-client-id').props.children as string;
     expect(createdClientId.length).toBeGreaterThan(0);
 
-    // Selected at once: Continuer is enabled and Prestations names her.
+    // Selected at once: Continuer is enabled and the Résumé names her.
     await act(async () => {
       fireEvent.press(view.getByText('Continuer'));
     });
-    expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
 
     await searchService(view, 'coupe brushing 1');
     await selectService(view, 'Coupe Brushing 1');
     await continueToSummary(view);
+    expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
     await act(async () => {
       fireEvent.press(view.getByText('Créer le rendez-vous'));
     });
@@ -1031,7 +1160,7 @@ describe('AppointmentCreationScreen', () => {
       await selectClientByName(view, 'Sofia Petit');
       await continueToSummary(view);
 
-      expect(view.getByRole('header', { name: 'Sofia Petit' })).toBeTruthy();
+      expect(view.getByTestId('edit-client-value')).toHaveTextContent('Sofia Petit');
       expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
 
       await act(async () => {

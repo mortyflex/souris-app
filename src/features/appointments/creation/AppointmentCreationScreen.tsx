@@ -4,8 +4,10 @@
 // The draft (client, selected services, appointment-specific price and
 // processing overrides) lives in this screen's state and survives every
 // step transition. The Agenda startAt is shown as appointment context on
-// every step and is never recalculated or replaced: on Cliente as the
-// read-only Date + editable Heure group, on Prestations as the compact row.
+// every step and is never recalculated or replaced: on Cliente and
+// Prestations as the read-only Date + editable Heure group (the Client is
+// not repeated — it was chosen on the previous step). Prestations uses the
+// shared card catalogue of « Modifier le rendez-vous »: a tap toggles.
 //
 // Birthday: when the APPOINTMENT date (never today's date) is the birthday of
 // the Client just chosen, the Cliente step says so at once — a compact
@@ -80,11 +82,10 @@ import {
 } from '@/shared/ui/theme';
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
-import { AppointmentContextRow } from './components/AppointmentContextRow';
 import { AppointmentScheduleSection } from './components/AppointmentScheduleSection';
 import { ClientPickerStep } from '@/features/clients/selection/ClientPickerStep';
 import { CreationStepper } from './components/CreationStepper';
-import { ServiceSelectionGrid } from '../editor/components/ServiceSelectionGrid';
+import { ServiceCatalogPicker } from '../editor/components/ServiceCatalogPicker';
 import { SummaryStep } from './components/SummaryStep';
 import {
   createSelectedServiceDraft,
@@ -160,9 +161,6 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const today = useToday();
 
   const selectedClient = activeClients.find((client) => client.id === selectedClientId);
-  const selectedClientName = selectedClient
-    ? getClientDisplayName(selectedClient)
-    : undefined;
   // THE birthday truth of this draft, derived on every render: the chosen
   // Client against the APPOINTMENT date. Never stale, never today's date.
   const isBirthdayAppointment =
@@ -390,16 +388,6 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         <CreationStepper step={step} onStepPress={(target) => navigateToStep(target)} />
       )}
 
-      {mode === 'client' && step === 1 && (
-        <AppointmentContextRow
-          startAt={draftStartAt}
-          clientName={selectedClientName}
-          maxHour={startHourRange.maxHour}
-          minHour={startHourRange.minHour}
-          onStartAtChange={chooseDraftStartTime}
-        />
-      )}
-
       {mode === 'client' && step === 0 && (
         <ClientPickerStep
           // Date / Heure (and the birthday reminder) scroll with the list:
@@ -439,10 +427,17 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
           contentContainerStyle={styles.catalogContent}
           style={styles.catalogScroll}
         >
-          <ServiceSelectionGrid
+          <AppointmentScheduleSection
+            maxHour={startHourRange.maxHour}
+            minHour={startHourRange.minHour}
+            onStartTimeChange={chooseDraftStartTime}
+            startAt={draftStartAt}
+          />
+          <ServiceCatalogPicker
             services={activeServices}
             selectedServiceIds={selectedDrafts.map((draft) => draft.serviceId)}
-            onToggleService={toggleService}
+            onSelectService={toggleService}
+            selectedHint="Retirer du rendez-vous"
           />
         </ScrollView>
       )}
@@ -557,8 +552,10 @@ const styles = StyleSheet.create({
   footerButtons: { flexDirection: 'row', gap: spacing.sm },
   catalogScroll: { flex: 1 },
   catalogContent: {
+    gap: spacing.lg,
     paddingBottom: spacing.xl,
     paddingHorizontal: horizontalGutter,
+    paddingTop: spacing.lg,
   },
   selectionFooter: { gap: spacing.xs },
   selectionFooterNames: { color: foregroundSoft },

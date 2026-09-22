@@ -1,10 +1,6 @@
 import type { Service } from '@/domain/appointments';
 
-import {
-  buildServiceSelectionSections,
-  filterServicesOfType,
-  toServiceGridRows,
-} from '../selection-sections';
+import { filterServicesOfType, toServiceGridRows } from '../selection-sections';
 
 function service(
   id: string,
@@ -28,56 +24,6 @@ function service(
     active: true,
   };
 }
-
-describe('buildServiceSelectionSections', () => {
-  it('groups by Service.type only and preserves source order', () => {
-    const sections = buildServiceSelectionSections([
-      service('a', 'SERVICE'),
-      service('b', 'TECHNIQUE'),
-      service('c', 'SERVICE'),
-      service('d', 'TECHNIQUE'),
-    ]);
-
-    expect(sections.map((section) => section.title)).toEqual([
-      'Services',
-      'Techniques',
-    ]);
-    expect(sections[0].data.map((item) => item.id)).toEqual(['a', 'c']);
-    expect(sections[1].data.map((item) => item.id)).toEqual(['b', 'd']);
-  });
-
-  it('omits empty sections', () => {
-    const sections = buildServiceSelectionSections([
-      service('a', 'TECHNIQUE'),
-    ]);
-
-    expect(sections).toHaveLength(1);
-    expect(sections[0].title).toBe('Techniques');
-  });
-
-  it('filters each section independently and hides emptied sections', () => {
-    const sections = buildServiceSelectionSections(
-      [
-        service('simple', 'SERVICE', 'Brushing'),
-        service('technique', 'TECHNIQUE', 'Balayage'),
-      ],
-      'balayage',
-    );
-
-    expect(sections).toHaveLength(1);
-    expect(sections[0].title).toBe('Techniques');
-    expect(sections[0].data[0].name).toBe('Balayage');
-  });
-
-  it('never mutates the source catalog', () => {
-    const services = [service('a', 'SERVICE'), service('b', 'TECHNIQUE')];
-    const before = JSON.stringify(services);
-
-    buildServiceSelectionSections(services, '  balayage  ');
-
-    expect(JSON.stringify(services)).toBe(before);
-  });
-});
 
 describe('toServiceGridRows', () => {
   it('packs services into two-column rows', () => {
