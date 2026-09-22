@@ -241,6 +241,21 @@ async function pressTimes(
   }
 }
 
+/** Opens « ••• », picks an action, and lets the drawer close so the action runs. */
+async function openProductAction(
+  view: Awaited<ReturnType<typeof render>>,
+  testID: "toggle-product-active" | "open-product-deletion",
+) {
+  await act(async () => {
+    fireEvent.press(view.getByTestId("open-product-actions"));
+  });
+  await settleSheetTransition();
+  await act(async () => {
+    fireEvent.press(view.getByTestId(testID));
+  });
+  await settleSheetTransition();
+}
+
 function SeededLegacyStockEditor() {
   const { addProduct } = useProductCatalog();
   const [open, setOpen] = useState(false);
@@ -450,6 +465,51 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("stock-value").props.children).toBe(29);
   });
 
+  it("adjusts the stock directly from the details through the catalog, within 0–30", async () => {
+    const view = await renderEditor(
+      <ProductEditorScreen
+        mode="existing"
+        productId="6974bff937a5d89c2d9afbd0"
+      />,
+    );
+    const stored = () => view.getByTestId("managed-product").props.children as string;
+    const disabled = (testID: string) =>
+      view.getByTestId(testID).props.accessibilityState?.disabled;
+
+    // Stock 0: sold out, the minimum is reached.
+    expect(view.getByTestId("product-stock-value").props.children).toBe(0);
+    expect(view.getByLabelText("Stock actuel, 0")).toBeTruthy();
+    expect(view.getByText("Stock épuisé")).toBeTruthy();
+    expect(view.getByText("0 à 30")).toBeTruthy();
+    expect(disabled("product-stock-decrement")).toBe(true);
+    expect(view.getByLabelText("Diminuer le stock")).toBeTruthy();
+    expect(view.getByLabelText("Augmenter le stock")).toBeTruthy();
+
+    // Each step is committed to the catalog (SQLite first) without the form.
+    await pressTimes(view, "product-stock-increment", 1);
+    expect(view.getByTestId("product-stock-value").props.children).toBe(1);
+    expect(stored()).toMatch(/:1:true$/);
+    expect(view.getByText("En stock")).toBeTruthy();
+    expect(view.queryByText("Stock épuisé")).toBeNull();
+    expect(view.getByLabelText("Stock, 1 unité, en stock")).toBeTruthy();
+    expect(view.queryByTestId("save-product")).toBeNull();
+
+    await pressTimes(view, "product-stock-decrement", 1);
+    expect(stored()).toMatch(/:0:true$/);
+    expect(view.getByText("Stock épuisé")).toBeTruthy();
+
+    // The maximum of the shared selector rule.
+    await pressTimes(view, "product-stock-increment", 31);
+    expect(view.getByTestId("product-stock-value").props.children).toBe(30);
+    expect(stored()).toMatch(/:30:true$/);
+    expect(disabled("product-stock-increment")).toBe(true);
+    expect(view.getByLabelText("Stock, 30 unités, en stock")).toBeTruthy();
+
+    // The full edit form starts from the adjusted stock.
+    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    expect(view.getByTestId("stock-value").props.children).toBe(30);
+  });
+
   it("keeps a legacy stock above 30 intact unless the professional changes it", async () => {
     const view = await renderEditor(<SeededLegacyStockEditor />);
 
@@ -489,9 +549,16 @@ describe("ProductEditorScreen", () => {
     const surfaceStyle = StyleSheet.flatten(view.getByTestId("sheet-screen-surface").props.style);
     expect(surfaceStyle.flex).toBeUndefined();
     expect(surfaceStyle.maxHeight).toBeGreaterThan(0);
-    expect(view.getByText("PRODUIT")).toBeTruthy();
+    // Detail-sheet header: the name alone, then « ••• » and ×.
+    expect(view.queryByText("PRODUIT")).toBeNull();
     expect(view.getByRole("header", { name: "Masque réparateur 5 min" })).toBeTruthy();
-    expect(view.getByLabelText("Fermer")).toBeTruthy();
+    expect(view.getByLabelText("Actions du produit")).toBeTruthy();
+    expect(view.getByTestId("close-product-details").props.accessibilityLabel).toBe("Fermer");
+    expect(view.queryByText("Fermer")).toBeNull();
+    // Management actions are no longer permanent buttons.
+    expect(view.queryByText("Désactiver")).toBeNull();
+    expect(view.queryByText("Supprimer")).toBeNull();
+    expect(within(view.getByTestId("edit-product")).getByText("Modifier le produit")).toBeTruthy();
     expect(view.getByTestId("product-read-actions")).toBeTruthy();
     // Reading may be dismissed by a swipe or an outside tap; a draft may not.
     const outsideTapAllowed = () =>
@@ -518,8 +585,16 @@ describe("ProductEditorScreen", () => {
     expect(view.getByText("3474637152000")).toBeTruthy();
     expect(view.queryByTestId("product-detail-image")).toBeNull();
     expect(view.getByText("Actif")).toBeTruthy();
+    expect(view.getByLabelText("Produit actif")).toBeTruthy();
     expect(view.getByText("Informations")).toBeTruthy();
-    expect(view.getByText("Stock")).toBeTruthy();
+    const information = within(view.getByTestId("product-information"));
+    expect(information.getByText("Marque")).toBeTruthy();
+    expect(information.getByText("Redken")).toBeTruthy();
+    expect(information.getByText("Catégorie")).toBeTruthy();
+    expect(information.getByText("Soin")).toBeTruthy();
+    expect(information.getByText("Code-barres")).toBeTruthy();
+    expect(information.getByText("3474637152000")).toBeTruthy();
+    expect(view.getAllByText("Stock").length).toBeGreaterThan(0);
 
     await act(async () => {
       fireEvent.press(view.getByTestId("edit-product"));
@@ -747,7 +822,7 @@ describe("ProductEditorScreen", () => {
     expect(view.getByText("Actif")).toBeTruthy();
     expect(view.getByText("50,00 €")).toBeTruthy();
     expect(view.getByText("Informations")).toBeTruthy();
-    expect(view.getByText("Stock")).toBeTruthy();
+    expect(view.getByTestId("product-stock")).toBeTruthy();
   });
 
   it("keeps the Product form usable when photo permission is denied", async () => {
@@ -787,9 +862,7 @@ describe("ProductEditorScreen", () => {
       />,
     );
 
-    await act(async () => {
-      fireEvent.press(view.getByText("Désactiver"));
-    });
+    await openProductAction(view, "toggle-product-active");
     expect(alertSpy).not.toHaveBeenCalled();
     expect(view.getByTestId("product-deactivation-dialog")).toBeTruthy();
     expect(view.getByText("Désactiver ce produit ?")).toBeTruthy();
@@ -801,8 +874,14 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("masque-active").props.children).toBe("false");
 
     await act(async () => {
-      fireEvent.press(view.getByText("Réactiver"));
+      fireEvent.press(view.getByTestId("open-product-actions"));
     });
+    await settleSheetTransition();
+    expect(view.getByText("Réactiver le produit")).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByTestId("toggle-product-active"));
+    });
+    await settleSheetTransition();
     expect(mockBack).toHaveBeenCalledTimes(2);
     expect(view.getByTestId("masque-active").props.children).toBe("true");
     alertSpy.mockRestore();
@@ -817,9 +896,7 @@ describe("ProductEditorScreen", () => {
       />,
     );
 
-    await act(async () => {
-      fireEvent.press(view.getByLabelText("Supprimer ce produit"));
-    });
+    await openProductAction(view, "open-product-deletion");
     expect(alertSpy).not.toHaveBeenCalled();
     expect(view.getByTestId("product-deletion-dialog")).toBeTruthy();
     expect(view.getByText("SUPPRESSION")).toBeTruthy();
@@ -835,9 +912,7 @@ describe("ProductEditorScreen", () => {
       "Masque réparateur",
     );
 
-    await act(async () => {
-      fireEvent.press(view.getByLabelText("Supprimer ce produit"));
-    });
+    await openProductAction(view, "open-product-deletion");
     await act(async () => {
       fireEvent.press(view.getByTestId("confirm-product-deletion"));
     });

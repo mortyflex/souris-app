@@ -5,6 +5,11 @@
 // repeats the step so 30 is reachable in a moment. A quantity that already
 // exceeds 30 (legacy data) is shown exactly and can only be lowered — the
 // form never clamps it on its own (product-form.ts).
+//
+// Shared by the Product form (draft value) and Product Details (direct
+// stock adjustment). A caller that persists each step may reject it by
+// returning `false`: the stepper then keeps the committed value and stops
+// repeating.
 
 import { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -20,13 +25,23 @@ import {
 
 interface StockStepperProps {
   readonly value: number;
-  readonly onChange: (value: number) => void;
+  /** Returning `false` rejects the step (e.g. a failed direct write). */
+  readonly onChange: (value: number) => boolean | void;
+  /** The form shows the « Stock » field label; Product Details has its own. */
+  readonly showLabel?: boolean;
+  /** Prefix of the control testIDs (`<prefix>-decrement`, `-value`, `-increment`). */
+  readonly testIDPrefix?: string;
 }
 
 const REPEAT_DELAY_MS = 420;
 const REPEAT_INTERVAL_MS = 90;
 
-export function StockStepper({ value, onChange }: StockStepperProps) {
+export function StockStepper({
+  value,
+  onChange,
+  showLabel = true,
+  testIDPrefix = 'stock',
+}: StockStepperProps) {
   const valueRef = useRef(value);
   const repeat = useRef<{ delay?: ReturnType<typeof setTimeout>; interval?: ReturnType<typeof setInterval> }>({});
 
@@ -39,10 +54,13 @@ export function StockStepper({ value, onChange }: StockStepperProps) {
   const canIncrement = value < STOCK_SELECTOR_MAX;
 
   const step = (delta: 1 | -1) => {
-    const next = stepStockQuantity(valueRef.current, delta);
-    if (next !== valueRef.current) {
-      valueRef.current = next;
-      onChange(next);
+    const current = valueRef.current;
+    const next = stepStockQuantity(current, delta);
+    if (next === current) return;
+    valueRef.current = next;
+    if (onChange(next) === false) {
+      valueRef.current = current;
+      stopRepeat();
     }
   };
 
@@ -63,13 +81,15 @@ export function StockStepper({ value, onChange }: StockStepperProps) {
 
   return (
     <View style={styles.field}>
-      <AppText variant="metadata" style={styles.label}>
-        Stock
-      </AppText>
+      {showLabel && (
+        <AppText variant="metadata" style={styles.label}>
+          Stock
+        </AppText>
+      )}
       <View style={styles.row}>
         <View style={styles.stepper}>
           <Pressable
-            accessibilityLabel="Retirer une unité de stock"
+            accessibilityLabel="Diminuer le stock"
             accessibilityRole="button"
             accessibilityState={{ disabled: !canDecrement }}
             disabled={!canDecrement}
@@ -82,23 +102,23 @@ export function StockStepper({ value, onChange }: StockStepperProps) {
               !canDecrement && styles.stepButtonDisabled,
               pressed && canDecrement && styles.stepButtonPressed,
             ]}
-            testID="stock-decrement"
+            testID={`${testIDPrefix}-decrement`}
           >
             <AppText variant="control" style={[styles.glyph, !canDecrement && styles.glyphDisabled]}>
               −
             </AppText>
           </Pressable>
           <AppText
-            accessibilityLabel={`Stock : ${value}`}
+            accessibilityLabel={`Stock actuel, ${value}`}
             accessibilityLiveRegion="polite"
             variant="summaryValue"
             style={styles.value}
-            testID="stock-value"
+            testID={`${testIDPrefix}-value`}
           >
             {value}
           </AppText>
           <Pressable
-            accessibilityLabel="Ajouter une unité de stock"
+            accessibilityLabel="Augmenter le stock"
             accessibilityRole="button"
             accessibilityState={{ disabled: !canIncrement }}
             disabled={!canIncrement}
@@ -111,7 +131,7 @@ export function StockStepper({ value, onChange }: StockStepperProps) {
               !canIncrement && styles.stepButtonDisabled,
               pressed && canIncrement && styles.stepButtonPressed,
             ]}
-            testID="stock-increment"
+            testID={`${testIDPrefix}-increment`}
           >
             <AppText variant="control" style={[styles.glyph, !canIncrement && styles.glyphDisabled]}>
               +

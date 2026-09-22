@@ -2,14 +2,19 @@
 //
 // Modes:
 // - create: empty shared Product form, "Ajouter le produit";
-// - existing read mode: identity, price, optional informations, stock, then
-//   [Désactiver|Réactiver][Modifier] and the tertiary "Supprimer
-//   définitivement";
+// - existing read mode (Product Details): the detail-sheet header of
+//   Appointment Details (name + « ••• » + ×), price + state pill, ONE grouped
+//   Informations surface, the Stock surface with the direct [−] n [+]
+//   adjustment, and the sticky « Modifier le produit ». Désactiver /
+//   Réactiver and Supprimer live in the « ••• » drawer;
 // - existing edit mode: the SAME form hydrated with current values,
 //   "Annuler" / "Enregistrer les modifications".
 //
 // id/businessId are stable across edits. Current stock is direct V1 state —
-// stock-movement history belongs to the future Sales/Inventory domain.
+// stock-movement history belongs to the future Sales/Inventory domain. The
+// details stepper writes each step through the catalog's `setProductStock`
+// (SQLite first, then state, then sync), with the same selector rules as the
+// form; a failed write keeps the persisted count and alerts.
 //
 // Presented in the canonical Souris sheet shell, sized to its content: the
 // read-first details never leave a blank middle area, and the form grows up
@@ -33,6 +38,8 @@ import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
 import { BarcodeScannerModal } from "@/shared/ui/BarcodeScannerModal";
 import { ConfirmationDialog } from "@/shared/ui/ConfirmationDialog";
+import { GlassIconButton, glassIcons } from "@/shared/ui/GlassIconButton";
+import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetActionBar } from "@/shared/ui/SheetActionBar";
 import { SheetHeader } from "@/shared/ui/SheetHeader";
@@ -43,12 +50,16 @@ import {
   gutter,
   interaction,
   radii,
-  rose,
   semanticColors,
   spacing,
 } from "@/shared/ui/theme";
 
+import { ProductStatePill } from "../components/ProductStatePill";
 import { useProductCatalog } from "../session/ProductCatalogProvider";
+import {
+  ProductActionsSheet,
+  type ProductSecondaryAction,
+} from "./components/ProductActionsSheet";
 import { ProductPhotoField } from "./components/ProductPhotoField";
 import { StockStepper } from "./components/StockStepper";
 import {
@@ -86,6 +97,7 @@ export function ProductEditorScreen({
     getProductById,
     products,
     setProductActive,
+    setProductStock,
     updateProduct,
   } = useProductCatalog();
   const product = getProductById(productId);
@@ -103,6 +115,8 @@ export function ProductEditorScreen({
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmation, setConfirmation] = useState<ProductConfirmation>();
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<ProductSecondaryAction>();
 
   if (mode === "existing" && !product) {
     return (
@@ -211,6 +225,34 @@ export function ProductEditorScreen({
     commitActiveState(false);
   };
 
+  // Runs once the « ••• » drawer is gone, so no dialog races its closing.
+  const runSecondaryAction = () => {
+    const action = pendingAction;
+    setPendingAction(undefined);
+    if (action === "toggle-active") changeActiveState();
+    if (action === "delete") setConfirmation("delete");
+  };
+
+  /** Direct stock adjustment; `false` tells the stepper the write failed. */
+  const adjustStock = (stockQuantity: number): boolean => {
+    if (!product) return false;
+    try {
+      setProductStock(product.id, stockQuantity);
+    } catch {
+      alertPersistenceFailure();
+      return false;
+    }
+    haptics.selection();
+    return true;
+  };
+
+  const startEditing = () => {
+    if (!product) return;
+    setValues(toProductFormValues(product));
+    setAttempted(false);
+    setEditing(true);
+  };
+
   const confirmDelete = () => {
     if (!product) return;
     setConfirmation(undefined);
@@ -234,15 +276,45 @@ export function ProductEditorScreen({
       keyboardAvoiding
       testID="product-sheet"
     >
-      <View style={styles.headerZone}>
-        <SheetHeader
-          action={{ label: closeLabel, onPress: close }}
-          divider
-          eyebrow={mode === "create" ? "NOUVEAU PRODUIT" : "PRODUIT"}
-          title={title}
-          titleNumberOfLines={1}
-        />
-      </View>
+      {mode === "existing" && !editing && product ? (
+        // Detail sheet: name + « ••• » + ×, like Appointment Details. The
+        // creation / editing header (« Annuler » + title) stays for the form.
+        <View style={[styles.headerZone, styles.detailHeader]} testID="product-detail-header">
+          <AppText
+            accessibilityRole="header"
+            numberOfLines={2}
+            selectable
+            style={styles.detailTitle}
+            variant="sheetTitle"
+          >
+            {product.name}
+          </AppText>
+          <View style={styles.headerActions}>
+            <GlassIconButton
+              accessibilityLabel="Actions du produit"
+              icon={glassIcons.more}
+              onPress={() => setMenuVisible(true)}
+              testID="open-product-actions"
+            />
+            <GlassIconButton
+              accessibilityLabel="Fermer"
+              icon={glassIcons.close}
+              onPress={() => router.back()}
+              testID="close-product-details"
+            />
+          </View>
+        </View>
+      ) : (
+        <View style={styles.headerZone}>
+          <SheetHeader
+            action={{ label: closeLabel, onPress: close }}
+            divider
+            eyebrow={mode === "create" ? "NOUVEAU PRODUIT" : "PRODUIT"}
+            title={title}
+            titleNumberOfLines={1}
+          />
+        </View>
+      )}
 
       {editing && values && validation ? (
         <ProductForm
@@ -253,7 +325,7 @@ export function ProductEditorScreen({
           onChangeField={updateField}
         />
       ) : product ? (
-        <ProductReadView product={product} />
+        <ProductReadView onAdjustStock={adjustStock} product={product} />
       ) : null}
 
       {values && editing && (
@@ -282,39 +354,28 @@ export function ProductEditorScreen({
       )}
 
       {mode === "existing" && !editing && product && (
+        // Outside the scroll: always visible; SheetScreen clears the home indicator.
         <SheetActionBar testID="product-read-actions">
-          <View style={styles.readFooterRow}>
-            <AppButton
-              onPress={changeActiveState}
-              style={styles.secondaryButton}
-              title={product.active ? "Désactiver" : "Réactiver"}
-              variant="secondary"
-            />
-            <AppButton
-              onPress={() => {
-                setValues(toProductFormValues(product));
-                setAttempted(false);
-                setEditing(true);
-              }}
-              style={styles.primaryButton}
-              testID="edit-product"
-              title="Modifier"
-            />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Supprimer ce produit"
-            onPress={() => setConfirmation("delete")}
-            style={({ pressed }) => [
-              styles.deleteAction,
-              pressed && styles.deleteActionPressed,
-            ]}
-          >
-            <AppText variant="control" style={styles.deleteText}>
-              Supprimer
-            </AppText>
-          </Pressable>
+          <AppButton
+            onPress={startEditing}
+            testID="edit-product"
+            title="Modifier le produit"
+          />
         </SheetActionBar>
+      )}
+
+      {mode === "existing" && product && (
+        <ProductActionsSheet
+          active={product.active}
+          onClose={() => setMenuVisible(false)}
+          onDismissed={runSecondaryAction}
+          onSelect={(action) => {
+            setPendingAction(action);
+            setMenuVisible(false);
+          }}
+          productName={product.name}
+          visible={menuVisible}
+        />
       )}
 
       <ConfirmationDialog
@@ -475,10 +536,19 @@ function ProductForm({
   );
 }
 
-function ProductReadView({ product }: { readonly product: Product }) {
-  const hasInformation = Boolean(
-    product.brand || product.category || product.barcode,
-  );
+interface ProductReadViewProps {
+  readonly product: Product;
+  readonly onAdjustStock: (stockQuantity: number) => boolean;
+}
+
+function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
+  const informationRows = [
+    { label: "Marque", value: product.brand },
+    { label: "Catégorie", value: product.category },
+    { label: "Code-barres", value: product.barcode },
+  ].filter((row): row is { label: string; value: string } => Boolean(row.value));
+  const price = formatServicePrice(product.price);
+  const soldOut = product.stockQuantity === 0;
 
   return (
     <ScrollView
@@ -497,48 +567,72 @@ function ProductReadView({ product }: { readonly product: Product }) {
       )}
 
       <View style={styles.productSummary}>
-        <View style={styles.statusLine}>
-          <View
-            style={[styles.statusDot, !product.active && styles.inactiveDot]}
-          />
-          <AppText variant="metadata" style={styles.statusText}>
-            {product.active ? "Actif" : "Inactif"}
-          </AppText>
-        </View>
-
-        <AppText variant="summaryValue" style={styles.priceValue}>
-          {formatServicePrice(product.price)}
+        <AppText
+          accessibilityLabel={`Prix, ${price}`}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          numberOfLines={1}
+          selectable
+          style={styles.priceValue}
+          testID="product-price"
+          variant="summaryValue"
+        >
+          {price}
         </AppText>
+        <ProductStatePill
+          accessibilityLabel={product.active ? "Produit actif" : "Produit inactif"}
+          label={product.active ? "Actif" : "Inactif"}
+          testID="product-status-pill"
+          tone={product.active ? "positive" : "neutral"}
+        />
       </View>
 
-      {hasInformation && (
-        <View style={styles.infoSection}>
+      {informationRows.length > 0 && (
+        <View style={styles.section}>
           <SectionHeader title="Informations" />
-          <View style={styles.infoSurface}>
-            <ReadRow label="Marque" value={product.brand} />
-            <ReadRow label="Catégorie" value={product.category} />
-            <ReadRow label="Code-barres" value={product.barcode} />
-          </View>
+          <GroupedSurface testID="product-information">
+            {informationRows.map((row, index) => (
+              <View key={row.label}>
+                {index > 0 && <GroupedSeparator inset={spacing.base} />}
+                <ReadRow label={row.label} value={row.value} />
+              </View>
+            ))}
+          </GroupedSurface>
         </View>
       )}
 
-      <View style={styles.stockSection}>
+      <View style={styles.section}>
         <SectionHeader title="Stock" />
-        <View style={styles.stockSurface}>
-          <AppText variant="summaryValue" style={styles.stockValue}>
-            {product.stockQuantity}
-          </AppText>
-          <AppText
-            variant="metadata"
-            style={
-              product.stockQuantity === 0
-                ? styles.stockEmpty
-                : styles.stockLabel
-            }
+        <GroupedSurface style={styles.stockSurface} testID="product-stock">
+          <View
+            accessible
+            accessibilityLabel={`Stock, ${product.stockQuantity} unité${product.stockQuantity > 1 ? "s" : ""}, ${soldOut ? "stock épuisé" : "en stock"}`}
+            style={styles.stockHeader}
           >
-            {product.stockQuantity === 0 ? "Stock épuisé" : "en stock"}
-          </AppText>
-        </View>
+            <View style={styles.stockIcon}>
+              <SymbolView
+                name={{ ios: "shippingbox", android: "inventory_2" }}
+                size={19}
+                tintColor={semanticColors.accent}
+              />
+            </View>
+            <AppText variant="rowTitle" style={styles.stockTitle}>
+              Stock
+            </AppText>
+            <ProductStatePill
+              accessibilityLabel={soldOut ? "Stock épuisé" : "En stock"}
+              label={soldOut ? "Stock épuisé" : "En stock"}
+              testID="product-stock-state"
+              tone={soldOut ? "exception" : "positive"}
+            />
+          </View>
+          <StockStepper
+            onChange={onAdjustStock}
+            showLabel={false}
+            testIDPrefix="product-stock"
+            value={product.stockQuantity}
+          />
+        </GroupedSurface>
       </View>
     </ScrollView>
   );
@@ -549,18 +643,16 @@ function ReadRow({
   value,
 }: {
   readonly label: string;
-  readonly value?: string;
+  readonly value: string;
 }) {
-  if (!value) return null;
-
   return (
     <View style={styles.readRow}>
-      <AppText variant="metadata" style={styles.readLabel}>
+      <AppText variant="body" style={styles.readLabel}>
         {label}
       </AppText>
       <AppText
         variant="control"
-        numberOfLines={1}
+        numberOfLines={2}
         selectable
         style={styles.readValue}
       >
@@ -592,64 +684,57 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.surfaceLavenderStrong,
     opacity: interaction.pressedOpacity,
   },
+  detailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  detailTitle: { color: semanticColors.foreground, flex: 1, minWidth: 0 },
+  headerActions: { flexDirection: "row", gap: spacing.sm },
   readContent: {
     gap: spacing.lg,
     paddingBottom: spacing.lg,
     paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.base,
+    paddingTop: spacing.sm,
   },
-  productSummary: { gap: spacing.sm },
-  statusLine: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
-  statusDot: {
-    backgroundColor: semanticColors.accent,
-    borderRadius: radii.pill,
-    height: 8,
-    width: 8,
-  },
-  inactiveDot: { backgroundColor: semanticColors.foregroundMuted },
-  statusText: { color: semanticColors.foregroundSoft },
-  priceValue: { color: semanticColors.foreground },
-  infoSection: { gap: spacing.sm },
-  infoSurface: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: "continuous",
-    borderRadius: radii.large,
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  readRow: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
-  readLabel: { color: semanticColors.foregroundSoft, width: 104 },
-  readValue: { color: semanticColors.foreground, flex: 1 },
-  stockSection: { gap: spacing.sm },
-  stockSurface: {
+  productSummary: {
     alignItems: "center",
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: "continuous",
-    borderRadius: radii.large,
     flexDirection: "row",
-    gap: spacing.sm,
-    padding: spacing.md,
+    flexWrap: "wrap",
+    gap: spacing.md,
   },
-  stockValue: {
+  priceValue: {
     color: semanticColors.foreground,
+    flexShrink: 1,
     fontVariant: ["tabular-nums"],
   },
-  stockLabel: { color: semanticColors.foregroundSoft },
-  stockEmpty: { color: rose.rose600 },
+  section: { gap: spacing.sm },
+  readRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    minHeight: 50,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+  },
+  readLabel: { color: foregroundSoft, width: 112 },
+  readValue: { color: semanticColors.foreground, flex: 1 },
+  stockSurface: { gap: spacing.md, padding: spacing.base },
+  stockHeader: { alignItems: "center", flexDirection: "row", gap: spacing.md },
+  stockIcon: {
+    alignItems: "center",
+    backgroundColor: semanticColors.surfaceLavender,
+    borderCurve: "continuous",
+    borderRadius: radii.medium,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  stockTitle: { color: semanticColors.foreground, flex: 1 },
   secondaryButton: { flex: 1 },
   primaryButton: { flex: 1.4 },
-  readFooterRow: { flexDirection: "row", gap: spacing.sm },
-  deleteAction: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: spacing.base,
-  },
-  deleteActionPressed: {
-    backgroundColor: semanticColors.surfaceRose,
-    borderRadius: radii.small,
-  },
-  deleteText: { color: rose.rose600 },
   notFound: {
     alignItems: "center",
     gap: spacing.md,
