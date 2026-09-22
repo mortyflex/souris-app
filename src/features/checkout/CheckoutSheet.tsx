@@ -12,10 +12,15 @@
 // - the expected total is a helper: the received total may differ, the
 //   difference is shown without alarm;
 // - callers own the wording (title, summary lines, confirm label) and may
-//   prefill the entries (payment correction).
+//   prefill the entries (payment correction);
+// - the canonical creation / editing header (DESIGN_OVERRIDES.md §30):
+//   « Annuler » leading, then the title, no eyebrow;
+// - a caller may place ONE adjustment control above the expectation block
+//   (the Appointment discount); it owns that control and recomputes the
+//   summary lines and expected total it passes back in.
 
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import {
@@ -28,7 +33,7 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import {
   fontFamilies,
   foregroundSoft,
@@ -63,6 +68,8 @@ interface CheckoutSheetProps {
   readonly initialAmounts?: CheckoutAmounts;
   readonly onClose: () => void;
   readonly onConfirm: (amounts: CheckoutAmounts) => void;
+  /** Control shown above the expectation block (the Appointment discount). */
+  readonly adjustment?: ReactNode;
   readonly testID?: string;
 }
 
@@ -79,6 +86,7 @@ export function CheckoutSheet({
   initialAmounts,
   onClose,
   onConfirm,
+  adjustment,
   testID = 'checkout-sheet',
 }: CheckoutSheetProps) {
   const [cardText, setCardText] = useState(() => initialText(initialAmounts?.cardAmountCents));
@@ -118,9 +126,11 @@ export function CheckoutSheet({
         </SheetActionBar>
       }
       header={
-        <SheetHeader
-          action={{ accessibilityLabel: 'Annuler l’encaissement', label: 'Annuler', onPress: onClose }}
-          eyebrow="ENCAISSEMENT"
+        <SheetEditingHeader
+          cancelAccessibilityLabel="Annuler l’encaissement"
+          cancelTestID="cancel-checkout"
+          onCancel={onClose}
+          testID="checkout-header"
           title={title}
         />
       }
@@ -131,12 +141,18 @@ export function CheckoutSheet({
       visible={visible}
     >
       <View style={styles.body}>
+        {adjustment}
         <View style={styles.expectation} testID="checkout-expectation">
           {summaryLines.map((line) => (
             <ExpectationRow key={line.label} label={line.label} testID={line.testID} value={formatEuroCents(line.cents)} />
           ))}
           <View style={styles.divider} />
-          <View style={styles.expectationRow}>
+          <View
+            accessible
+            accessibilityLabel={`Total attendu ${formatEuroCents(state.expectedTotalCents)}`}
+            style={styles.expectationRow}
+            testID="checkout-expected-total-row"
+          >
             <AppText variant="control" style={styles.expectedLabel}>
               Total attendu
             </AppText>

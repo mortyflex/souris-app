@@ -10,9 +10,10 @@ import {
 import { AppState } from 'react-native';
 
 import {
+  areAppointmentDiscountsEqual,
   canDeleteAppointmentPermanently,
   canEditAppointment,
-  checkoutAppointment as recordCheckout,
+  checkoutAppointmentWithDiscount as recordCheckout,
   removeAppointmentItem as dropItem,
   reorderAppointmentItemsByIds as arrangeItems,
   setAppointmentDiscount as applyDiscount,
@@ -41,7 +42,11 @@ import { usePersistence } from '@/providers/PersistenceProvider';
 
 import { reconcileAppointmentEntriesForLocalDay } from './reconciliation';
 import { removeAppointmentEntryById } from './deletion';
-import type { AppointmentSessionEntry, AppointmentSessionValue } from './types';
+import type {
+  AppointmentCheckoutDiscount,
+  AppointmentSessionEntry,
+  AppointmentSessionValue,
+} from './types';
 
 const AppointmentSessionContext = createContext<AppointmentSessionValue | null>(null);
 
@@ -241,16 +246,29 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     replaceEntry(next);
   };
 
-  // Checkout: the domain decides eligibility and builds the next record; ONE
-  // transaction then writes status + payment (re-verifying the stored row);
-  // state reflects the record only after the commit.
-  const checkoutAppointment = (appointmentId: string, amounts: AppointmentPaymentAmounts) => {
+  // Checkout: the domain decides eligibility, validates the final discount
+  // and builds the next record; ONE transaction then writes the changed
+  // discount (while the stored row is still editable) and status + payment,
+  // re-verifying the stored row at each step. A refused step rolls both
+  // back; state reflects the record only after the commit.
+  const checkoutAppointment = (
+    appointmentId: string,
+    amounts: AppointmentPaymentAmounts,
+    finalDiscount?: AppointmentCheckoutDiscount,
+  ) => {
     const appointment = requireAppointment(appointmentId, 'checkoutAppointment');
-    const next = recordCheckout(appointment, amounts, new Date());
+    const discount = finalDiscount ? finalDiscount.discount : appointment.discount;
+    const next = recordCheckout(appointment, discount, amounts, new Date());
     if (next === appointment || !next.payment) {
       throw new Error(`checkoutAppointment: Appointment "${appointmentId}" cannot be checked out`);
     }
-    persistCheckout(database, appointmentId, next.payment);
+    const payment = next.payment;
+    runInTransaction(database, () => {
+      if (!areAppointmentDiscountsEqual(appointment.discount, next.discount)) {
+        persistDiscount(database, appointmentId, next.discount);
+      }
+      persistCheckout(database, appointmentId, payment);
+    });
     replaceEntry(next);
   };
 

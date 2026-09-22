@@ -272,8 +272,9 @@ describe('SaleCreationScreen', () => {
     expect(view.queryByText('Aucune cliente')).toBeNull();
     expect(view.queryByText('Vente de passage, sans historique cliente.')).toBeNull();
     expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
-    expect(view.getByText('Produits ajoutés')).toBeTruthy();
-    expect(view.getByText('Aucun produit ajouté')).toBeTruthy();
+    // The empty cart, in its own section above « Ajouter un produit ».
+    expect(within(view.getByTestId('sale-lines-empty')).getByText('Aucun produit ajouté')).toBeTruthy();
+    expect(within(view.getByTestId('sale-lines-section')).getByTestId('sale-lines-empty')).toBeTruthy();
     expect(view.getByText('Ajouter un produit')).toBeTruthy();
     expect(view.getByTestId('sale-unit-count').props.children).toBe('0 produit · ');
     expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(0));
@@ -315,7 +316,6 @@ describe('SaleCreationScreen', () => {
     expect(row.props.accessibilityLabel).toBe('Cliente, Sofia Petit');
     expect(row.props.accessibilityRole).toBeUndefined();
     expect(within(row).queryByTestId('disclosure-chevron')).toBeNull();
-    expect(within(view.getByTestId('sale-client')).getByText('Liée au rendez-vous')).toBeTruthy();
     expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
 
     await press(view, CLIENT_ROW);
@@ -377,8 +377,9 @@ describe('SaleCreationScreen', () => {
 
     await press(view, 'validate-sale');
 
-    expect(view.getByText('ENCAISSEMENT')).toBeTruthy();
+    expect(view.queryByText('ENCAISSEMENT')).toBeNull();
     expect(view.getByRole('header', { name: 'Encaisser la vente' })).toBeTruthy();
+    expect(view.getByLabelText('Annuler l’encaissement')).toBeTruthy();
     expect(view.getByText('Total vente')).toBeTruthy();
     expect(view.getByTestId('checkout-sale-total').props.children).toBe(formatServicePrice(50));
     expect(view.getByTestId('checkout-amount-card').props.autoFocus).toBeFalsy();
@@ -767,8 +768,9 @@ describe('SaleCreationScreen', () => {
     const cart = within(view.getByTestId('sale-lines'));
     expect(cart.getByText('Acidic bonding concentrate')).toBeTruthy();
     expect(view.queryByTestId('sale-lines-empty')).toBeNull();
-    // The section count chip and the line quantity.
-    expect(within(view.getByTestId('sale-lines-section')).getAllByText('1')).toHaveLength(2);
+    // The line, inside the cart section, with its quantity.
+    expect(within(view.getByTestId('sale-lines-section')).getByTestId(`sale-line-${CONCENTRATE_ID}`)).toBeTruthy();
+    expect(view.getByTestId(`sale-line-quantity-${CONCENTRATE_ID}`)).toHaveTextContent('1');
     // The query and its results stay; the result states it is in the sale.
     expect(view.getByPlaceholderText('Rechercher un produit').props.value).toBe('ac');
     expect(results.getAllByTestId(/^sale-product-[^-]+$/).length).toBeGreaterThan(1);

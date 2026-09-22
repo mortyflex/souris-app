@@ -15,6 +15,11 @@ export interface AppointmentSessionEntry {
   readonly appointment: Appointment;
 }
 
+/** The FINAL discount chosen while collecting payment; `undefined` removes it. */
+export interface AppointmentCheckoutDiscount {
+  readonly discount: AppointmentDiscount | undefined;
+}
+
 /** Result of the database-backed pre-check run when the professional taps permanent deletion. */
 export interface AppointmentDeletionEligibility {
   readonly deletable: boolean;
@@ -78,10 +83,17 @@ export interface AppointmentSessionValue {
    * Explicit checkout (« Encaisser »): ONE transaction writes COMPLETED and
    * the recorded card/cash cents together; state changes only after the
    * commit. Throws when the Appointment is not eligible or the write fails.
+   *
+   * `finalDiscount` is the discount chosen in the checkout sheet (its
+   * `discount` may be `undefined`: removed). When it differs from the stored
+   * one it is written in the SAME transaction, before the status changes —
+   * never a completed Appointment without its final discount. Omitted, the
+   * stored discount is kept.
    */
   readonly checkoutAppointment: (
     appointmentId: string,
     amounts: AppointmentPaymentAmounts,
+    finalDiscount?: AppointmentCheckoutDiscount,
   ) => void;
   /** Corrects the card/cash split of a recorded payment; status and paidAt are preserved. */
   readonly updateAppointmentPayment: (

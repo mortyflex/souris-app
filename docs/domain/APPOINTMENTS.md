@@ -670,7 +670,9 @@ own snapshots (`docs/domain/SALES.md`); the Appointment discount never reduces t
 **One action.** `setAppointmentDiscount(appointment, discount | undefined)` is THE way a discount is added,
 changed or removed (`undefined`). The editor uses it; the session exposes it as
 `setAppointmentDiscount(appointmentId, discount)` (one transaction, state updated after the commit). Any
-later surface that proposes a discount must call the same action — it never implements pricing.
+later surface that proposes a discount must call the same action — it never implements pricing. Checkout
+does too: `checkoutAppointmentWithDiscount` applies the final discount through `setAppointmentDiscount`
+before recording the payment (§25b).
 
 **No origin, no reason.** The model is `type + value` only. There is no promotion engine, coupon, campaign
 or `birthdayDiscount` field: a discount offered because of a birthday is this same generic discount.
@@ -695,8 +697,9 @@ derived on every render, so changing the Client or the date updates it at once. 
 reminder states « Une réduction est déjà appliquée à ce rendez-vous. » and offers no action; the wording never
 claims the discount is a birthday discount, because its origin is not recorded. A terminal Appointment is not
 editable, so no birthday discount action exists for it. Appointment Details shows a static « Anniversaire de la
-cliente » line under the date (not on a cancelled or no-show Appointment): no confetti, no discount control —
-« Modifier » stays the place to edit the discount. Nothing is ever discounted automatically, and pricing,
+cliente » line under the date (not on a cancelled or no-show Appointment): no confetti, no discount control in
+the body — « Modifier » and the checkout sheet are the places to edit the discount; checkout shows no birthday
+reminder. Nothing is ever discounted automatically, and pricing,
 checkout, the Cash Register and `Total dépensé` are unchanged.
 
 **Editing rule.** The discount follows the ONE editing eligibility rule (§29, `canEditAppointment`): it can
@@ -718,6 +721,21 @@ percentage input.
 Appointment Details: `Prestations` (gross) → `Réduction -20 %  -20,00 €` → `Total à encaisser`; the
 discount line does not exist without a discount. Checkout sheet: the same line above « Total attendu ».
 Agenda cards never show discount pricing.
+
+**At checkout.** While the Appointment is still editable, the checkout sheet (§25b) shows the SAME
+`AppointmentDiscountEditor` above its expectation, collapsed (`Réduction · Aucune`, `Réduction · -20 % · -19,00 €`),
+so the professional may add, change or remove the discount right before collecting payment, without going
+through « Modifier ». Its choice is a LOCAL DRAFT of that presentation:
+
+- every opening starts from the STORED discount (never from an abandoned draft);
+- the expectation (`Prestations` → `Réduction` → `Produits` → `Total attendu`) and the `Reste …` shortcuts
+  are recomputed at once from the Appointment carrying the draft, through `setAppointmentDiscount` and
+  `getAppointmentExpectedTotal` — the sheet computes nothing itself; Products stay undiscounted;
+- closing or cancelling the sheet writes nothing: the Appointment keeps exactly the discount it had;
+- « Encaisser » writes the final discount and the payment in ONE transaction (§25b).
+
+A `COMPLETED` Appointment — the correction « Modifier l’encaissement », or « Enregistrer un encaissement » on
+an automatically completed visit — keeps its frozen discount: the sheet shows the read-only line and no editor.
 
 ---
 
@@ -1044,6 +1062,12 @@ Rules:
 - a checkout is atomic: `status = COMPLETED` and the payment are written together in ONE transaction, and
   the session state changes only after the commit. On failure nothing changes and nothing appears in the
   Cash Register;
+- **discount chosen at checkout** (§15.3): `checkoutAppointmentWithDiscount(appointment, discount, amounts,
+  now)` validates the final discount, applies it through `setAppointmentDiscount` and records the payment as
+  ONE next record. When the discount differs from the stored one, the session writes it first — while the
+  stored row is still editable — then status + payment, in the SAME transaction; a refused or failed step rolls
+  both back, so a completed Appointment never exists without the discount its payment was taken against. A
+  `COMPLETED` Appointment recording its payment afterwards keeps its frozen discount (a changed one is refused);
 - **correction**: a completed Appointment with a payment may have its card/cash split edited. The status and
   the original `paidAt` are preserved; no second record is created.
 

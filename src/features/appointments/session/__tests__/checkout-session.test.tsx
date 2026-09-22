@@ -34,6 +34,7 @@ function Probe({ appointmentId }: { readonly appointmentId: string }) {
     deleteAppointment,
     getAppointmentById,
     getAppointmentDeletionEligibility,
+    setAppointmentDiscount,
     updateAppointmentPayment,
   } = useAppointmentSession();
   const entry = getAppointmentById(appointmentId);
@@ -74,6 +75,31 @@ function Probe({ appointmentId }: { readonly appointmentId: string }) {
         onPress={() =>
           attempt(() => checkoutAppointment(appointmentId, { cardAmountCents: 5000, cashAmountCents: 2500 }))
         }
+      />
+      <Text testID="discount">{JSON.stringify(entry?.appointment.discount ?? null)}</Text>
+      <Pressable
+        testID="checkout-discounted"
+        onPress={() =>
+          attempt(() =>
+            checkoutAppointment(
+              appointmentId,
+              { cardAmountCents: 7600, cashAmountCents: 0 },
+              { discount: { type: 'PERCENT', percent: 20 } },
+            ),
+          )
+        }
+      />
+      <Pressable
+        testID="checkout-without-discount"
+        onPress={() =>
+          attempt(() =>
+            checkoutAppointment(appointmentId, { cardAmountCents: 9500, cashAmountCents: 0 }, { discount: undefined }),
+          )
+        }
+      />
+      <Pressable
+        testID="set-discount"
+        onPress={() => attempt(() => setAppointmentDiscount(appointmentId, { type: 'PERCENT', percent: 10 }))}
       />
       <Pressable
         testID="checkout-negative"
@@ -176,6 +202,63 @@ describe('AppointmentSessionProvider — checkout', () => {
     expect(view.getByTestId('status').props.children).toBe('COMPLETED');
     expect(loadAppointments(database).find((appointment) => appointment.id === 'agenda-sofia')?.payment)
       .toMatchObject({ cardAmountCents: 7500 });
+  });
+
+  it('writes the discount chosen at checkout together with the payment', async () => {
+    const database = openTestDatabase();
+    const view = await renderSession('agenda-sofia', database);
+
+    await press(view, 'checkout-discounted');
+
+    expect(view.getByTestId('status').props.children).toBe('COMPLETED');
+    expect(view.getByTestId('discount').props.children).toBe('{"type":"PERCENT","percent":20}');
+    const stored = loadAppointments(database).find((appointment) => appointment.id === 'agenda-sofia');
+    expect(stored).toMatchObject({
+      status: 'COMPLETED',
+      discount: { type: 'PERCENT', percent: 20 },
+      payment: { cardAmountCents: 7600, cashAmountCents: 0 },
+    });
+  });
+
+  it('removes a stored discount chosen away at checkout', async () => {
+    const database = openTestDatabase();
+    const view = await renderSession('agenda-sofia', database);
+    await press(view, 'set-discount');
+    expect(view.getByTestId('discount').props.children).toBe('{"type":"PERCENT","percent":10}');
+
+    await press(view, 'checkout-without-discount');
+
+    expect(view.getByTestId('discount').props.children).toBe('null');
+    expect(loadAppointments(database).find((appointment) => appointment.id === 'agenda-sofia')?.discount)
+      .toBeUndefined();
+  });
+
+  it('rolls the discount back with the payment when the checkout write fails — never one without the other', async () => {
+    const { database, control } = openFailableDatabase();
+    const view = await renderSession('agenda-sofia', database);
+    control.failPaymentWrites = true;
+
+    await press(view, 'checkout-discounted');
+
+    expect(view.getByTestId('status').props.children).toBe('SCHEDULED');
+    expect(view.getByTestId('discount').props.children).toBe('null');
+    const stored = loadAppointments(database).find((appointment) => appointment.id === 'agenda-sofia');
+    expect(stored?.status).toBe('SCHEDULED');
+    expect(stored?.discount).toBeUndefined();
+    expect(stored?.payment).toBeUndefined();
+  });
+
+  it('refuses to change the frozen discount of an automatically completed appointment', async () => {
+    const database = openTestDatabase();
+    const view = await renderSession('agenda-anais', database);
+    expect(view.getByTestId('status').props.children).toBe('COMPLETED');
+
+    await press(view, 'checkout-discounted');
+
+    expect(view.getByTestId('payment').props.children).toBe('none');
+    expect(view.getByTestId('discount').props.children).toBe('null');
+    expect(loadAppointments(database).find((appointment) => appointment.id === 'agenda-anais')?.discount)
+      .toBeUndefined();
   });
 
   it('corrects a recorded split without duplicating it, regressing status, or moving paidAt', async () => {

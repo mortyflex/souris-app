@@ -3,7 +3,9 @@ import {
   canDeleteAppointmentPermanently,
   canEditAppointmentPayment,
   checkoutAppointment,
+  checkoutAppointmentWithDiscount,
   finalizePastBusinessDays,
+  getAppointmentExpectedTotal,
   getPaymentTotalCents,
   isCheckoutTotalAcceptable,
   isValidPaymentAmountCents,
@@ -120,6 +122,63 @@ describe('checkoutAppointment', () => {
     const paid = checkoutAppointment(appointment(), { cardAmountCents: 7500, cashAmountCents: 0 }, now);
     expect(canCheckoutAppointment(paid, now)).toBe(false);
     expect(checkoutAppointment(paid, { cardAmountCents: 1, cashAmountCents: 0 }, now)).toBe(paid);
+  });
+});
+
+describe('checkoutAppointmentWithDiscount', () => {
+  const card = (cents: number) => ({ cardAmountCents: cents, cashAmountCents: 0 });
+
+  it('completes the appointment with the discount chosen at checkout, in ONE record', () => {
+    const result = checkoutAppointmentWithDiscount(
+      appointment(),
+      { type: 'PERCENT', percent: 20 },
+      card(6000),
+      now,
+    );
+
+    expect(result.status).toBe('COMPLETED');
+    expect(result.discount).toEqual({ type: 'PERCENT', percent: 20 });
+    expect(result.payment).toMatchObject({ cardAmountCents: 6000, cashAmountCents: 0 });
+    // The expectation of the finished record is the discounted one: 75 − 15.
+    expect(getAppointmentExpectedTotal(result, []).expectedTotalCents).toBe(6000);
+  });
+
+  it('changes or removes an existing discount', () => {
+    const discounted = appointment({ discount: { type: 'PERCENT', percent: 10 } });
+
+    expect(
+      checkoutAppointmentWithDiscount(discounted, { type: 'FIXED', amountCents: 1500 }, card(6000), now).discount,
+    ).toEqual({ type: 'FIXED', amountCents: 1500 });
+    expect(checkoutAppointmentWithDiscount(discounted, undefined, card(7500), now).discount).toBeUndefined();
+  });
+
+  it('keeps the stored discount when the final choice is the same one', () => {
+    const discounted = appointment({ discount: { type: 'FIXED', amountCents: 1500 } });
+    const result = checkoutAppointmentWithDiscount(discounted, { type: 'FIXED', amountCents: 1500 }, card(6000), now);
+
+    expect(result.discount).toEqual({ type: 'FIXED', amountCents: 1500 });
+    expect(result.status).toBe('COMPLETED');
+  });
+
+  it('never rewrites the frozen discount of a completed appointment recording its payment afterwards', () => {
+    const completed = appointment({ status: 'COMPLETED', discount: { type: 'PERCENT', percent: 10 } });
+
+    expect(checkoutAppointmentWithDiscount(completed, undefined, card(7500), now)).toBe(completed);
+    expect(
+      checkoutAppointmentWithDiscount(completed, { type: 'PERCENT', percent: 10 }, card(6750), now).payment,
+    ).toMatchObject({ cardAmountCents: 6750 });
+  });
+
+  it('refuses what checkout refuses, and rejects an invalid discount or amount before anything changes', () => {
+    const early = appointment({ startAt: new Date(2026, 8, 12, 16, 0) });
+    expect(checkoutAppointmentWithDiscount(early, { type: 'PERCENT', percent: 20 }, card(6000), now)).toBe(early);
+
+    expect(() =>
+      checkoutAppointmentWithDiscount(appointment(), { type: 'PERCENT', percent: 60 }, card(3000), now),
+    ).toThrow(RangeError);
+    expect(() =>
+      checkoutAppointmentWithDiscount(appointment(), { type: 'PERCENT', percent: 20 }, card(-1), now),
+    ).toThrow(RangeError);
   });
 });
 

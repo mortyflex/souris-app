@@ -170,7 +170,24 @@ async function reachClientSummary(view: Rendered) {
   await press(view, view.getByText('Continuer'));
 }
 
+// Pinned clock. The development seed places its fixture Appointments on the
+// week of `now` (one of them on the first OTHER day of that week); on the
+// real clock that day is already past from Tuesday on, so the Appointment
+// session would auto-complete it at mount (status change + outbox rows) and
+// the assertions would depend on the weekday the suite runs. A Monday 08:00
+// leaves every seeded Appointment ahead, far from the dates used below.
+const SEED_NOW = new Date(2026, 5, 1, 8, 0);
+
+beforeAll(() => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+});
+
+afterAll(() => {
+  jest.useRealTimers();
+});
+
 beforeEach(() => {
+  jest.setSystemTime(SEED_NOW);
   mockBack.mockClear();
   mockSuccessHaptic.mockClear();
   mockSelectionHaptic.mockClear();

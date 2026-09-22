@@ -1303,12 +1303,17 @@ lifecycle are unchanged.
 - **Order.** Identity, `Vendre un produit`, birthday, next appointment, Activité, history,
   Informations, Notes, then the tertiary archive action.
 
-## 30. Standard Sheet Header — « Annuler » Leading
+## 30. Standard Sheet Header — « Annuler » Leading, Title Centered
 
 Creation and editing sheets use ONE header: `SheetEditingHeader` (`src/shared/ui`), the §27
-recipe — « Annuler » (tertiary, leading), then the title (`sectionTitle`, one line, shrinks
-slightly before truncating). Used by « Nouveau rendez-vous », « Modifier le rendez-vous » and
-« Nouvelle vente ».
+recipe — « Annuler » (tertiary, leading) and the title CENTERED on the header (`sectionTitle`, one
+line, fixed size: it truncates, never auto-shrinks — measured during a sheet's entry animation,
+`adjustsFontSizeToFit` left the checkout title unreadably small). The title is its own layer inset by
+the SAME width on both sides — the measured width of the wider side action — so it is truly centered
+whatever the width of « Annuler », and a long title truncates before reaching it; no empty placeholder
+button. Used by « Nouveau rendez-vous » (and its « Indisponible » mode), « Modifier le rendez-vous »,
+« Nouvelle vente », « Nouvelle prestation », « Modifier la prestation », « Modifier le produit » and the
+checkout sheet (« Encaisser le rendez-vous », « Encaisser la vente », « Modifier l’encaissement »).
 
 - Cancel is always on the left. Equivalent sheets never move it to the right.
 - No redundant eyebrow when the title already names the sheet.

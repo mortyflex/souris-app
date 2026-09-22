@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 
 import { formatEuroCents } from '@/shared/lib/money';
 
@@ -49,9 +49,17 @@ describe('CheckoutSheet', () => {
     const { view } = await renderSheet();
 
     expect(view.getByTestId('checkout-sheet')).toBeTruthy();
-    expect(view.getByText('ENCAISSEMENT')).toBeTruthy();
+    // The canonical editing header: « Annuler » leading, then the title, no eyebrow.
+    expect(view.queryByText('ENCAISSEMENT')).toBeNull();
     expect(view.getByRole('header', { name: 'Encaisser le rendez-vous' })).toBeTruthy();
-    expect(view.getByLabelText('Annuler l’encaissement')).toBeTruthy();
+    expect(view.getByTestId('cancel-checkout').props.accessibilityLabel).toBe('Annuler l’encaissement');
+    expect(
+      within(view.getByTestId('checkout-header'))
+        .getAllByText(/^(Annuler|Encaisser le rendez-vous)$/)
+        .map((node) => node.props.children),
+    ).toEqual(['Annuler', 'Encaisser le rendez-vous']);
+    // The header sits in the sheet's grabber zone: the drag handle and the pan-to-dismiss stay.
+    expect(within(view.getByTestId('bottom-sheet-drag-zone')).getByTestId('checkout-header')).toBeTruthy();
     for (const method of ['card', 'cash'] as const) {
       const input = view.getByTestId(`checkout-amount-${method}`);
       expect(input.props.autoFocus).toBeFalsy();
@@ -172,6 +180,17 @@ describe('CheckoutSheet', () => {
     await type(view, 'card', '95');
     await act(async () => {
       fireEvent.press(view.getByLabelText('Annuler l’encaissement'));
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('keeps the backdrop dismissal', async () => {
+    const { view, onClose, onConfirm } = await renderSheet();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Fermer l’encaissement'));
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);

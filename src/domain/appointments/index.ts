@@ -83,6 +83,7 @@ export {
   canDeleteAppointmentPermanently,
   canEditAppointmentPayment,
   checkoutAppointment,
+  checkoutAppointmentWithDiscount,
   eurosToCents,
   getPaymentTotalCents,
   isCheckoutTotalAcceptable,

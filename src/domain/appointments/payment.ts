@@ -8,8 +8,13 @@
 // `now` is injected. Every operation returns a new Appointment and never
 // mutates its input.
 
-import { canCompleteAppointment } from './lifecycle';
-import type { Appointment, AppointmentPayment } from './types';
+import {
+  areAppointmentDiscountsEqual,
+  isValidAppointmentDiscount,
+  setAppointmentDiscount,
+} from './discount';
+import { canCompleteAppointment, canEditAppointment } from './lifecycle';
+import type { Appointment, AppointmentDiscount, AppointmentPayment } from './types';
 
 /** The amounts the professional records; both non-negative integer cents. */
 export interface AppointmentPaymentAmounts {
@@ -106,6 +111,36 @@ export function checkoutAppointment(
     cashAmountCents: amounts.cashAmountCents,
   };
   return { ...appointment, status: 'COMPLETED', payment };
+}
+
+/**
+ * Checkout with the discount chosen in the checkout sheet: the final
+ * discount and the recorded payment form ONE next record, so a completed
+ * Appointment never exists without the discount its payment was taken
+ * against. `discount` is the FINAL choice (`undefined` = no discount).
+ *
+ * The discount follows THE editing rule: an unchanged discount is always
+ * fine; a changed one needs an editable Appointment — a COMPLETED
+ * Appointment recording its payment afterwards keeps its frozen discount,
+ * and the SAME Appointment is returned (nothing to record). Throws on an
+ * invalid discount or invalid amounts.
+ */
+export function checkoutAppointmentWithDiscount(
+  appointment: Appointment,
+  discount: AppointmentDiscount | undefined,
+  amounts: AppointmentPaymentAmounts,
+  now: Date,
+): Appointment {
+  if (discount !== undefined && !isValidAppointmentDiscount(discount)) {
+    throw new RangeError(`checkoutAppointmentWithDiscount: invalid ${discount.type} discount`);
+  }
+  assertValidAmounts(amounts, 'checkoutAppointmentWithDiscount');
+  if (!canCheckoutAppointment(appointment, now)) return appointment;
+  if (areAppointmentDiscountsEqual(appointment.discount, discount)) {
+    return checkoutAppointment(appointment, amounts, now);
+  }
+  if (!canEditAppointment(appointment)) return appointment;
+  return checkoutAppointment(setAppointmentDiscount(appointment, discount), amounts, now);
 }
 
 /**

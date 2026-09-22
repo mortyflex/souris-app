@@ -36,6 +36,7 @@ import {
 } from "@/features/services/session/ServiceCatalogProvider";
 import type { AppointmentItem } from "@/domain/appointments";
 import { getCashRegisterDaySummary } from "@/domain/cash-register";
+import { getClientActivitySummary } from "@/features/clients/profile/presentation";
 import { getClientSales } from "@/features/sales/presentation";
 import { bootstrapPersistence } from "@/persistence/bootstrap";
 import { insertAppointment, loadAppointments } from "@/persistence/stores/appointments";
@@ -379,6 +380,16 @@ function DiscountProbe() {
       <Pressable testID="apply-oversized-discount" onPress={() => apply({ type: "FIXED", amountCents: 50000 })} />
       <Pressable testID="clear-discount" onPress={() => apply(undefined)} />
     </>
+  );
+}
+
+/** Sofia's derived « Total dépensé » (euros), exactly as her profile reads it. */
+function SpendingProbe() {
+  const { appointments } = useAppointmentSession();
+  return (
+    <Text testID="sofia-total-spent">
+      {getClientActivitySummary(appointments, "client-agenda-sofia").totalSpent}
+    </Text>
   );
 }
 
@@ -823,8 +834,8 @@ describe("AppointmentDetailsScreen", () => {
     await press(view, "checkout-appointment");
 
     expect(view.getByTestId("checkout-sheet")).toBeTruthy();
-    expect(view.getByText("ENCAISSEMENT")).toBeTruthy();
-    expect(view.getByText("Encaisser le rendez-vous")).toBeTruthy();
+    expect(view.queryByText("ENCAISSEMENT")).toBeNull();
+    expect(view.getByRole("header", { name: "Encaisser le rendez-vous" })).toBeTruthy();
     expect(view.getByTestId("checkout-amount-card").props.autoFocus).toBeFalsy();
     expect(view.getByTestId("checkout-amount-cash").props.autoFocus).toBeFalsy();
     expect(view.getByTestId("checkout-services-total").props.children).toBe(formatEuroCents(9500));
@@ -903,6 +914,8 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByText(/^Enregistrer /)).toBeTruthy();
 
     await press(view, "checkout-appointment");
+    // Already COMPLETED: its financial state is frozen, no discount editor.
+    expect(view.queryByTestId("appointment-discount")).toBeNull();
     await typeAmount(view, "cash", "42");
     await press(view, "confirm-checkout");
     await settleSheetTransition();
@@ -1940,6 +1953,279 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(1900)}`);
 
       // …and can no longer be rewritten.
+      await press(view, "clear-discount");
+      expect(view.getByTestId("discount-refused").props.children).toBe("true");
+      expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
+    });
+  });
+
+  // The discount chosen while collecting payment: a draft of the sheet until
+  // « Encaisser », written with the payment in ONE transaction.
+  describe("checkout discount", () => {
+    beforeEach(() => {
+      jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    });
+
+    const probes = (
+      <>
+        <DiscountProbe />
+        <SpendingProbe />
+      </>
+    );
+
+    async function openCheckout(view: Awaited<ReturnType<typeof render>>) {
+      await press(view, "checkout-appointment");
+      await settleSheetTransition();
+    }
+
+    async function closeCheckout(view: Awaited<ReturnType<typeof render>>) {
+      await act(async () => {
+        fireEvent.press(view.getByLabelText("Annuler l’encaissement"));
+      });
+      await settleSheetTransition();
+    }
+
+    const summary = (view: Awaited<ReturnType<typeof render>>) =>
+      view.getByTestId("appointment-discount-summary").props.children as string;
+    const toggleLabel = (view: Awaited<ReturnType<typeof render>>) =>
+      view.getByTestId("appointment-discount-toggle").props.accessibilityLabel as string;
+    const expected = (view: Awaited<ReturnType<typeof render>>) =>
+      view.getByTestId("checkout-expected-total").props.children as string;
+
+    it("shows a collapsed « Réduction · Aucune » row above the expectation when there is no discount", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await openCheckout(view);
+
+      const sheet = within(view.getByTestId("checkout-sheet"));
+      expect(sheet.getByTestId("appointment-discount")).toBeTruthy();
+      expect(summary(view)).toBe("Aucune");
+      expect(toggleLabel(view)).toBe("Réduction, aucune");
+      expect(view.getByTestId("appointment-discount-toggle").props.accessibilityState).toEqual({ expanded: false });
+      expect(view.queryByTestId("appointment-discount-presets")).toBeNull();
+      expect(view.queryByTestId("checkout-discount")).toBeNull();
+      expect(expected(view)).toBe(formatEuroCents(9500));
+      expect(view.getByTestId("checkout-expected-total-row").props.accessibilityLabel).toBe(
+        `Total attendu ${formatEuroCents(9500)}`,
+      );
+      // No birthday prompt, no second surface: only the generic editor.
+      expect(view.queryByTestId("appointment-birthday-notice")).toBeNull();
+    });
+
+    it("prefills an existing percentage discount and its discounted expectation", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await press(view, "apply-percent-discount");
+      await openCheckout(view);
+
+      expect(summary(view)).toBe(`-20 % · -${formatEuroCents(1900)}`);
+      expect(toggleLabel(view)).toBe("Réduction, 20 pour cent");
+      expect(view.getByTestId("checkout-discount").props.children).toBe(formatEuroCents(-1900));
+      expect(expected(view)).toBe(formatEuroCents(7600));
+
+      await press(view, "appointment-discount-toggle");
+      expect(view.getByTestId("appointment-discount-preset-PERCENT-20").props.accessibilityState).toEqual({
+        selected: true,
+      });
+    });
+
+    it("prefills an existing fixed discount in € mode", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await press(view, "apply-fixed-discount");
+      await openCheckout(view);
+
+      expect(summary(view)).toBe(`-${formatEuroCents(1500)}`);
+      expect(toggleLabel(view)).toBe("Réduction, 15 euros");
+      expect(expected(view)).toBe(formatEuroCents(8000));
+
+      await press(view, "appointment-discount-toggle");
+      expect(view.getByTestId("appointment-discount-preset-FIXED-1500").props.accessibilityState).toEqual({
+        selected: true,
+      });
+    });
+
+    it("applies a percentage as a draft and recalculates every amount at once, with one selection tick", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+      mockSelectionHaptic.mockClear();
+
+      await press(view, "appointment-discount-preset-PERCENT-20");
+
+      expect(view.getByTestId("checkout-services-total").props.children).toBe(formatEuroCents(9500));
+      expect(within(view.getByTestId("checkout-expectation")).getByText("Réduction -20 %")).toBeTruthy();
+      expect(view.getByTestId("checkout-discount").props.children).toBe(formatEuroCents(-1900));
+      expect(expected(view)).toBe(formatEuroCents(7600));
+      expect(view.getByTestId("appointment-discount-net-total").props.children).toBe(formatEuroCents(7600));
+      expect(view.getByLabelText(`Saisir le reste en carte, ${formatEuroCents(7600)}`)).toBeTruthy();
+      expect(toggleLabel(view)).toBe("Réduction, 20 pour cent");
+      // A draft: nothing is written before « Encaisser ».
+      expect(view.getByTestId("discount-probe").props.children).toBe("null");
+      expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+
+      // Re-tapping the chosen preset changes nothing and does not tick again.
+      await press(view, "appointment-discount-preset-PERCENT-20");
+      expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+    });
+
+    it("applies a fixed discount through the € mode", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+      await act(async () => {
+        fireEvent.press(view.getByLabelText("Réduction en euros"));
+      });
+
+      await press(view, "appointment-discount-preset-FIXED-1500");
+
+      expect(within(view.getByTestId("checkout-expectation")).getByText("Réduction")).toBeTruthy();
+      expect(view.getByTestId("checkout-discount").props.children).toBe(formatEuroCents(-1500));
+      expect(expected(view)).toBe(formatEuroCents(8000));
+      expect(toggleLabel(view)).toBe("Réduction, 15 euros");
+    });
+
+    it("removes an existing discount in the draft", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await press(view, "apply-percent-discount");
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+      mockSelectionHaptic.mockClear();
+
+      await press(view, "appointment-discount-clear");
+
+      expect(view.queryByTestId("checkout-discount")).toBeNull();
+      expect(expected(view)).toBe(formatEuroCents(9500));
+      expect(summary(view)).toBe("Aucune");
+      expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+      expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
+    });
+
+    it("discounts the services only: linked Products keep their price", async () => {
+      const db = openTestDatabase();
+      persistLinkedSales(db, [MASQUE_ID]);
+      const view = await renderDetails("agenda-sofia", probes, db);
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+
+      await press(view, "appointment-discount-preset-PERCENT-20");
+
+      expect(view.getByTestId("checkout-services-total").props.children).toBe(formatEuroCents(9500));
+      expect(view.getByTestId("checkout-discount").props.children).toBe(formatEuroCents(-1900));
+      expect(view.getByTestId("checkout-products-total").props.children).toBe(formatEuroCents(5000));
+      // 95 − 19 + 50
+      expect(expected(view)).toBe(formatEuroCents(12600));
+    });
+
+    it("discards a new draft discount on cancel, and reopens from the stored state", async () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, () => createDevelopmentSeed(new Date()));
+      const view = await renderDetails("agenda-sofia", probes, db);
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+      await press(view, "appointment-discount-preset-PERCENT-20");
+      expect(expected(view)).toBe(formatEuroCents(7600));
+
+      await closeCheckout(view);
+
+      expect(view.getByTestId("discount-probe").props.children).toBe("null");
+      expect(loadAppointments(db).find((appointment) => appointment.id === "agenda-sofia")?.discount).toBeUndefined();
+      expect(view.getByTestId("appointment-status").props.children).toBe("SCHEDULED");
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
+
+      await openCheckout(view);
+      expect(summary(view)).toBe("Aucune");
+      expect(view.queryByTestId("appointment-discount-presets")).toBeNull();
+      expect(view.queryByTestId("checkout-discount")).toBeNull();
+      expect(expected(view)).toBe(formatEuroCents(9500));
+    });
+
+    it("leaves a stored discount exactly as it was when a modified draft is cancelled", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await press(view, "apply-percent-discount");
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+      await press(view, "appointment-discount-preset-PERCENT-10");
+      expect(expected(view)).toBe(formatEuroCents(8550));
+
+      await closeCheckout(view);
+      expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
+
+      await openCheckout(view);
+      expect(summary(view)).toBe(`-20 % · -${formatEuroCents(1900)}`);
+      expect(expected(view)).toBe(formatEuroCents(7600));
+    });
+
+    it("persists the final discount with the payment, and every derived amount follows it", async () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, () => createDevelopmentSeed(new Date()));
+      const view = await renderDetails("agenda-sofia", probes, db);
+      const caisseBefore = Number(view.getByTestId("caisse-day-total").props.children);
+      const spentBefore = Number(view.getByTestId("sofia-total-spent").props.children);
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+      await press(view, "appointment-discount-preset-PERCENT-20");
+      await press(view, "checkout-fill-card");
+      expect(view.getByTestId("checkout-amount-card").props.value).toBe("76,00");
+      mockSelectionHaptic.mockClear();
+
+      await press(view, "confirm-checkout");
+      await settleSheetTransition();
+
+      expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("7600/0");
+      expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
+      // Exactly the generic discount: no origin, reason or birthday flag.
+      const stored = loadAppointments(db).find((appointment) => appointment.id === "agenda-sofia");
+      expect(stored?.discount).toStrictEqual({ type: "PERCENT", percent: 20 });
+      expect(stored).toMatchObject({ status: "COMPLETED", payment: { cardAmountCents: 7600, cashAmountCents: 0 } });
+      // Details explains the history: gross, discount, net, recorded payment.
+      expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(1900)}`);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(7600));
+      expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(7600));
+      // Caisse reads the recorded payment; « Total dépensé » the net services.
+      expect(Number(view.getByTestId("caisse-day-total").props.children)).toBe(caisseBefore + 7600);
+      expect(Number(view.getByTestId("sofia-total-spent").props.children)).toBe(spentBefore + 76);
+      // Checkout keeps its own single feedback; the editor adds nothing on confirm.
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+      expect(mockSelectionHaptic).not.toHaveBeenCalled();
+    });
+
+    it("keeps a manually entered amount when the discount changes, and records it as entered", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      const caisseBefore = Number(view.getByTestId("caisse-day-total").props.children);
+      await openCheckout(view);
+      await typeAmount(view, "card", "95");
+      await press(view, "appointment-discount-toggle");
+
+      await press(view, "appointment-discount-preset-PERCENT-20");
+
+      expect(view.getByTestId("checkout-amount-card").props.value).toBe("95");
+      expect(view.getByTestId("checkout-entered-total").props.children).toBe(formatEuroCents(9500));
+      expect(view.getByTestId("checkout-difference").props.children).toEqual(["Écart : ", `+${formatEuroCents(1900)}`]);
+
+      await press(view, "confirm-checkout");
+      await settleSheetTransition();
+
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("9500/0");
+      expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
+      expect(Number(view.getByTestId("caisse-day-total").props.children)).toBe(caisseBefore + 9500);
+    });
+
+    it("freezes the discount once completed: the payment correction shows it read-only", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+      await press(view, "appointment-discount-preset-PERCENT-20");
+      await press(view, "checkout-fill-card");
+      await press(view, "confirm-checkout");
+      await settleSheetTransition();
+
+      await press(view, "edit-payment");
+      await settleSheetTransition();
+
+      expect(view.queryByTestId("appointment-discount")).toBeNull();
+      expect(view.getByTestId("checkout-discount").props.children).toBe(formatEuroCents(-1900));
+      expect(expected(view)).toBe(formatEuroCents(7600));
+
       await press(view, "clear-discount");
       expect(view.getByTestId("discount-refused").props.children).toBe("true");
       expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');

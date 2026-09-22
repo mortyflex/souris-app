@@ -497,7 +497,7 @@ Balayage                                 1 h 25
 
 ### Checkout (« Encaisser »)
 
-Tapping `Encaisser` opens the canonical Souris sheet `ENCAISSEMENT — Encaisser le rendez-vous` with the keyboard
+Tapping `Encaisser` opens the canonical Souris sheet `Annuler | Encaisser le rendez-vous` (the §30 editing header, no eyebrow) with the keyboard
 closed. It shows a compact expectation (`Prestations`, `Réduction` when the Appointment has a discount — §15,
 `Produits` when linked Sales exist, `Total attendu`) as a
 helper, then two payment rows — `Carte` and `Espèces` — with editable French decimal amounts (`75`, `75,50`)
@@ -506,6 +506,14 @@ normalized to integer cents, a `Reste …` shortcut that fills the remaining exp
 are all valid; a positive total is required unless the appointment costs nothing. Confirming writes the completed
 status and the payment in one transaction; the sheet closes and Details shows the `Encaissement` summary.
 `Modifier l’encaissement` reopens the same sheet prefilled to correct the split without creating a second record.
+
+Above the expectation, the sheet offers the same collapsed `Réduction` row as creation and editing
+(`Réduction · Aucune`, or the current discount). Opening it shows the usual `%` / `€` presets and
+`Aucune réduction`; the expectation and the `Reste …` shortcuts update at once. The choice stays a draft
+until `Encaisser`, which saves the discount and the payment together; `Annuler` leaves the appointment
+exactly as it was, and the next opening starts again from the saved discount. An amount already typed is
+never rewritten by a discount change — the `Écart` shows the difference. Once the appointment is completed
+the discount is frozen: `Modifier l’encaissement` shows it read-only.
 
 `Total attendu` in the sheet and `TOTAL À ENCAISSER` in Details are the SAME derivation (service snapshots minus
 the Appointment discount, plus linked Product Sales, `docs/domain/APPOINTMENTS.md` §25b): for one Appointment they never disagree, before or
@@ -928,7 +936,7 @@ dashboard, a Sales history screen or tab, and loyalty. Stock remains direct V1 s
 still no stock-movement history — a completed Sale simply decrements the quantity.
 
 **Standalone Product Sale payment.** `Produits → Nouvelle vente`: after `Valider la vente` the same
-Souris checkout sheet (`ENCAISSEMENT — Encaisser la vente`) shows `Total vente` and the `Carte` /
+Souris checkout sheet (`Annuler | Encaisser la vente`) shows `Total vente` and the `Carte` /
 `Espèces` rows, keyboard closed; card only, cash only, or mixed; a positive received total is
 required when the Sale total is positive; the received total may differ. Confirming completes the
 Sale with its payment and decrements stock in one operation; `Annuler` returns to the draft with

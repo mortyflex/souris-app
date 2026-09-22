@@ -20,6 +20,7 @@ import {
   shouldAutoCompleteAppointment,
   updateAppointmentItemPhaseDurations,
   type Appointment,
+  type AppointmentDiscount,
   type AppointmentPaymentAmounts,
   type AppointmentPhaseDurationUpdate,
   type AppointmentProductLine,
@@ -203,15 +204,17 @@ export function AppointmentDetailsScreen({
   // derivation over the linked Sale snapshots; the Sales stay separate).
   const productLines = getAppointmentProductLines(sales, appointment.id);
   // THE expected total: service snapshots + linked Sale snapshots, in cents.
-  // The same value feeds the ticket row here and the checkout sheet.
+  // The checkout sheet derives the same value from the same Appointment (with
+  // its discount draft applied through the domain).
   const expectedTotal = getAppointmentExpectedTotal(appointment, sales);
   const endAt = getAppointmentEnd(appointment);
   const isTerminal = isTerminalAppointmentStatus(appointment.status);
   const isException =
     appointment.status === "CANCELLED" || appointment.status === "NO_SHOW";
   // The Appointment DATE decides (never today's date). A static, read-only
-  // mention: no confetti, no discount control here — « Modifier » owns the
-  // discount. A cancelled or missed visit is not a birthday visit.
+  // mention: no confetti, no discount control in the body — « Modifier » and
+  // the checkout sheet own the discount. A cancelled or missed visit is not a
+  // birthday visit.
   const isBirthdayAppointment =
     client !== undefined &&
     !isException &&
@@ -311,11 +314,16 @@ export function AppointmentDetailsScreen({
     });
   };
 
-  const confirmCheckout = (amounts: AppointmentPaymentAmounts) => {
+  // Checkout records the payment together with the FINAL discount chosen in
+  // the sheet (one transaction); a payment correction never touches it.
+  const confirmCheckout = (
+    amounts: AppointmentPaymentAmounts,
+    discount: AppointmentDiscount | undefined,
+  ) => {
     const succeeded = persist(() =>
       checkoutMode === "edit"
         ? updateAppointmentPayment(appointment.id, amounts)
-        : checkoutAppointment(appointment.id, amounts),
+        : checkoutAppointment(appointment.id, amounts, { discount }),
     );
     if (!succeeded) return;
     setCheckoutMode(undefined);
@@ -577,12 +585,12 @@ export function AppointmentDetailsScreen({
         visible={menuVisible}
       />
       <AppointmentCheckoutSheet
-        discount={appointment.discount}
-        expectation={expectedTotal}
+        appointment={appointment}
         initialAmounts={checkoutMode === "edit" ? appointment.payment : undefined}
         mode={checkoutMode ?? "checkout"}
         onClose={() => setCheckoutMode(undefined)}
         onConfirm={confirmCheckout}
+        sales={sales}
         visible={checkoutMode !== undefined}
       />
       <AppointmentCancellationSheet
