@@ -1488,7 +1488,13 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.getByTestId("three-service-items").props.children).toBe(
         "ts-coupe:0:30|ts-balayage:1:45/40|ts-brushing:2:20",
       );
-      expect(view.getByLabelText("Déplacer Balayage")).toBeTruthy();
+      // The handle LEADS the row, before the tappable time / name / price / chevron.
+      const rowButton = view.getByRole("button", { name: /^Balayage, commence à/ });
+      const [leading] = (rowButton.parent?.children ?? []).filter(
+        (child): child is typeof rowButton => typeof child !== "string",
+      );
+      expect(leading).not.toBe(rowButton);
+      expect(leading?.props.accessibilityLabel).toBe("Déplacer Balayage");
       expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(10000));
 
       await act(async () => {

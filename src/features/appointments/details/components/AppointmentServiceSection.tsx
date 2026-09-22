@@ -13,8 +13,9 @@
 // Service is never involved: only this Appointment's snapshot changes.
 //
 // On an editable Appointment the row also carries the shared reorder handle
-// (SortableRowList) in its header and is wrapped by Details in the shared
-// SwipeToDeleteRow: tap → timing, drag handle → reorder, swipe → remove.
+// (SortableRowList) LEADING its header, like the grouped rows of « Modifier le
+// rendez-vous » and the creation Résumé, and is wrapped by Details in the
+// shared SwipeToDeleteRow: tap → timing, drag handle → reorder, swipe → remove.
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -28,6 +29,7 @@ import Animated, {
 
 import type { AppointmentPhase, AppointmentPhaseDurationUpdate } from '@/domain/appointments';
 import { AppointmentPhaseTimingEditor } from '@/features/appointments/editor/components/AppointmentPhaseTimingEditor';
+import { LEADING_DRAG_HANDLE_WIDTH } from '@/features/appointments/editor/components/SortableRowList';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
@@ -156,24 +158,43 @@ export function AppointmentServiceSection({
 
   return (
     <Animated.View layout={layoutTransition} style={styles.container} testID={`service-section-${item.id}`}>
-      {separated && <View style={styles.separator} />}
+      {separated && (
+        <View
+          style={[
+            styles.separator,
+            {
+              marginLeft:
+                (dragHandle ? LEADING_DRAG_HANDLE_WIDTH : spacing.base) +
+                TIME_COLUMN_WIDTH +
+                spacing.sm,
+            },
+          ]}
+        />
+      )}
       <View style={styles.headerRow}>
+        {dragHandle}
         {expandable ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${item.serviceName}, commence à ${formatAppointmentTime(timelineItem.startAt)}`}
             accessibilityState={{ expanded }}
             onPress={onToggle}
-            style={({ pressed }) => [styles.header, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.header,
+              dragHandle !== undefined && styles.headerWithHandle,
+              pressed && styles.pressed,
+            ]}
           >
             {headerContent}
           </Pressable>
         ) : (
-          <View accessibilityLabel={item.serviceName} style={styles.header}>
+          <View
+            accessibilityLabel={item.serviceName}
+            style={[styles.header, dragHandle !== undefined && styles.headerWithHandle]}
+          >
             {headerContent}
           </View>
         )}
-        {dragHandle}
       </View>
       {expandable && expanded && (
         <Animated.View entering={enteringAnimation} exiting={exitingAnimation}>
@@ -223,7 +244,6 @@ const styles = StyleSheet.create({
   separator: {
     backgroundColor: semanticColors.borderSubtle,
     height: StyleSheet.hairlineWidth,
-    marginLeft: spacing.base + TIME_COLUMN_WIDTH + spacing.sm,
   },
   headerRow: { alignItems: 'center', flexDirection: 'row' },
   header: {
@@ -236,6 +256,8 @@ const styles = StyleSheet.create({
     paddingRight: spacing.md,
     paddingVertical: spacing.md,
   },
+  // The leading handle already provides the left inset.
+  headerWithHandle: { paddingLeft: 0 },
   pressed: { backgroundColor: semanticColors.surfaceLavender },
   time: {
     color: semanticColors.accent,

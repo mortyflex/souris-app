@@ -45,6 +45,7 @@ import {
 import { GroupedSeparator } from '@/shared/ui/GroupedSurface';
 import type { SortableDraftCardProps } from './SortableDraftList';
 import { AppointmentPhaseTimingEditor } from './AppointmentPhaseTimingEditor';
+import { LEADING_DRAG_HANDLE_WIDTH } from './SortableRowList';
 import {
   formatPriceInput,
   getDraftDurationMinutes,
@@ -54,8 +55,6 @@ import {
 import { formatCreationDuration, formatCreationPrice } from '../presentation';
 
 const TRANSITION_EASING = Easing.bezier(...easing.out);
-/** Width taken by the leading reorder handle of a grouped row (44 + margin). */
-const LEADING_HANDLE_WIDTH = 44 + spacing.xs;
 const categoryNames = { SERVICE: 'Service', TECHNIQUE: 'Technique' } as const;
 
 
@@ -119,7 +118,7 @@ export function AppointmentServiceEditorCard({
 
   return (
     <Animated.View layout={layoutTransition} style={grouped ? styles.groupedRow : styles.card}>
-      {separated && <GroupedSeparator inset={dragHandle ? LEADING_HANDLE_WIDTH : spacing.base} />}
+      {separated && <GroupedSeparator inset={dragHandle ? LEADING_DRAG_HANDLE_WIDTH : spacing.base} />}
       <View
         style={[
           styles.cardHeader,

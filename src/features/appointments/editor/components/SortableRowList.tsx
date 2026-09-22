@@ -79,6 +79,9 @@ interface SortableRowListProps<TEntry> {
   readonly gap?: number;
 }
 
+const DRAG_HANDLE_SIZE = 44;
+/** Width a leading drag handle takes in a grouped row (handle + margin). */
+export const LEADING_DRAG_HANDLE_WIDTH = DRAG_HANDLE_SIZE + spacing.xs;
 const DEFAULT_GAP = spacing.sm;
 const LONG_PRESS_MS = 200;
 const MOVE_DURATION_MS = duration.disclosure;
@@ -453,9 +456,9 @@ const styles = StyleSheet.create({
   },
   dragHandle: {
     alignItems: 'center',
-    height: 44,
+    height: DRAG_HANDLE_SIZE,
     justifyContent: 'center',
     marginLeft: spacing.xs,
-    width: 44,
+    width: DRAG_HANDLE_SIZE,
   },
 });
