@@ -8,13 +8,15 @@
 // Wire shape (supabase/migrations/20260917200000_create_sync_pull_function.sql):
 //
 //   { pulled_at, clients: [...], services: [...], products: [...],
-//     appointments: [...], sales: [...], calendar_blocks?: [...] }
+//     appointments: [...], sales: [...], calendar_blocks?: [...],
+//     appointment_deposits?: [...] }
 //
 //   every aggregate   id, sync_version, deleted_at  + the push payload columns
 //   services          + phases[]
 //   appointments      + items[] each with phases[]
 //   sales             + items[]
 //   calendar_blocks   flat; the KEY is absent on a remote that predates them
+//   appointment_deposits  flat; the KEY is absent on a remote that predates them
 //
 // Rules enforced here mirror the remote CHECKs and the local schema: exact
 // non-negative integer cents, vocabularies, a payment is all three columns or
@@ -31,6 +33,7 @@ import { parseBirthdayKey } from '@/domain/clients';
 
 import type { SyncAggregateType } from './aggregate';
 import type {
+  RemoteAppointmentDepositPayload,
   RemoteAppointmentItemPayload,
   RemoteAppointmentPayload,
   RemoteBusinessSnapshot,
@@ -57,6 +60,8 @@ type Json = Record<string, unknown>;
 const SERVICE_TYPES = ['SERVICE', 'TECHNIQUE'];
 const APPOINTMENT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'];
 const CANCELLATION_ACTORS = ['CLIENT', 'BUSINESS'];
+const PAYMENT_METHODS = ['CARD', 'CASH'];
+const DEPOSIT_STATUSES = ['ACTIVE', 'VOIDED'];
 
 function fail(field: string): never {
   throw new RemoteSnapshotInvalidError(field);
@@ -319,6 +324,26 @@ function parseCalendarBlock(row: Json, field: string): RemoteCalendarBlockPayloa
   };
 }
 
+/**
+ * An Appointment deposit: the remote CHECKs again — a strictly positive
+ * amount, the method and status vocabularies, `voided_at` exactly when
+ * VOIDED — so a row the local table would refuse never reaches it.
+ */
+function parseAppointmentDeposit(row: Json, field: string): RemoteAppointmentDepositPayload {
+  const status = oneOf(row, 'status', field, DEPOSIT_STATUSES);
+  const voidedAt = optionalInstant(row, 'voided_at', field);
+  if ((status === 'VOIDED') !== (voidedAt !== null)) fail(`${field}.voided_at`);
+  return {
+    appointment_id: nonEmptyText(row, 'appointment_id', field),
+    amount_cents: integer(row, 'amount_cents', field, 1),
+    payment_method: oneOf(row, 'payment_method', field, PAYMENT_METHODS),
+    paid_at: instant(row, 'paid_at', field),
+    status,
+    voided_at: voidedAt,
+    recorded_at: instant(row, 'recorded_at', field),
+  };
+}
+
 function parseFamily<Payload>(
   value: unknown,
   field: string,
@@ -349,13 +374,20 @@ export function parseRemoteBusinessSnapshot(data: unknown): RemoteBusinessSnapsh
     // Absent on a remote whose functions predate Calendar Blocks: no block,
     // never a failure. Present but malformed is refused like any family.
     calendarBlocks: parseFamily(root.calendar_blocks ?? [], 'calendar_blocks', parseCalendarBlock),
+    // Absent on a remote whose functions predate deposits: no deposit, never
+    // a failure. Present but malformed is refused like any family.
+    appointmentDeposits: parseFamily(
+      root.appointment_deposits ?? [],
+      'appointment_deposits',
+      parseAppointmentDeposit,
+    ),
   };
 }
 
 /**
  * A COMPLETE dataset must be closed over its own references: a live
- * Appointment or Sale names a live Client, a linked Sale names a live
- * Appointment. The local deletion guards (PERSISTENCE.md §7a, §7b) keep that
+ * Appointment or Sale names a live Client, a linked Sale and a deposit name a
+ * live Appointment. The local deletion guards (PERSISTENCE.md §7a, §7b) keep that
  * true on every device, so a dataset that breaks it is refused as a whole
  * rather than restored with history pointing at nothing.
  */
@@ -374,6 +406,9 @@ export function assertSnapshotReferences(snapshot: RemoteBusinessSnapshot): void
       fail('sales[].appointment_id');
     }
   }
+  for (const { payload } of snapshot.appointmentDeposits) {
+    if (payload && !appointments.has(payload.appointment_id)) fail('appointment_deposits[].appointment_id');
+  }
 }
 
 export type RemotePulledEntry =
@@ -385,12 +420,18 @@ export type RemotePulledEntry =
   | {
       readonly aggregateType: 'CALENDAR_BLOCK';
       readonly aggregate: RemotePulledAggregate<RemoteCalendarBlockPayload>;
+    }
+  | {
+      readonly aggregateType: 'APPOINTMENT_DEPOSIT';
+      readonly aggregate: RemotePulledAggregate<RemoteAppointmentDepositPayload>;
     };
 
 /**
  * Every aggregate of the snapshot in DEPENDENCY order — CLIENT, SERVICE,
- * PRODUCT, APPOINTMENT, SALE, then CALENDAR_BLOCK (it references nothing and
- * nothing references it) — and, inside a family, in the remote creation
+ * PRODUCT, APPOINTMENT, SALE, CALENDAR_BLOCK (it references nothing and nothing
+ * references it), then APPOINTMENT_DEPOSIT (it references its Appointment, and
+ * its tombstone is therefore removed BEFORE the Appointment's in the reverse
+ * pass) — and, inside a family, in the remote creation
  * order. Writing in this order keeps every reference resolvable; removing in
  * the reverse order keeps the deletion guards satisfiable.
  */
@@ -405,5 +446,6 @@ export function listSnapshotEntries(snapshot: RemoteBusinessSnapshot): readonly 
     ...snapshot.appointments.map(tag('APPOINTMENT')),
     ...snapshot.sales.map(tag('SALE')),
     ...snapshot.calendarBlocks.map(tag('CALENDAR_BLOCK')),
+    ...snapshot.appointmentDeposits.map(tag('APPOINTMENT_DEPOSIT')),
   ] as readonly RemotePulledEntry[];
 }

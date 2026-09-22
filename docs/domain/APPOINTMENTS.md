@@ -1069,7 +1069,13 @@ Rules:
   both back, so a completed Appointment never exists without the discount its payment was taken against. A
   `COMPLETED` Appointment recording its payment afterwards keeps its frozen discount (a changed one is refused);
 - **correction**: a completed Appointment with a payment may have its card/cash split edited. The status and
-  the original `paidAt` are preserved; no second record is created.
+  the original `paidAt` are preserved; no second record is created;
+- **with deposits** (§25d): the payment records ONLY the money received at the final checkout. The sheet
+  shows `Total attendu`, then `Acomptes déjà versés` and `Reste à encaisser`; the `Reste` shortcut, the `Écart`
+  and the acceptability of the entry are measured against the remaining amount (expected − ACTIVE deposits),
+  never against the whole expected total. A typed amount is never overwritten. `100 €` expected with a `30 €`
+  deposit is checked out as `70 €` — the Caisse then holds `30 €` on the deposit day and `70 €` on the checkout
+  day, never `130 €`.
 
 **Expected total.** ONE canonical derivation (`getAppointmentExpectedTotal`, `src/domain/appointments`)
 feeds both the Appointment Details ticket (`Total à encaisser`) and the checkout sheet (`Total attendu`), so the
@@ -1101,8 +1107,8 @@ the 20 € Product gives `Total attendu 80 €` while `Encaissement 100 €` sta
 amount, and the Cash Register follows that payment alone.
 
 The **Cash Register** (`src/domain/cash-register`) derives ONLY from money explicitly recorded through
-Souris: every `appointment.payment`, plus `sale.payment` of STANDALONE Sales (no `appointmentId`,
-`docs/domain/SALES.md` §4b). A Sale sold during an Appointment is never counted separately — the Appointment
+Souris: every `appointment.payment`, `sale.payment` of STANDALONE Sales (no `appointmentId`,
+`docs/domain/SALES.md` §4b), and every ACTIVE Appointment deposit on its own `paidAt` (§25d). A Sale sold during an Appointment is never counted separately — the Appointment
 checkout already recorded that money (services 75 € + linked products 20 € recorded as 95 € → Caisse 95 €, not
 115 €). Each payment is grouped by the device-local civil day or calendar month of its own `paidAt` — never
 from status alone, from the Client `Total dépensé` metric, or from Sale snapshot totals. Totals are never stored.
@@ -1114,7 +1120,7 @@ exactly the sum of its item snapshot prices, as before.
 
 ## 25c. Day Summary (« Résumé du jour »)
 
-`getAppointmentDaySummary({ appointments, sales }, day)` (`src/domain/appointments/day-summary.ts`) derives
+`getAppointmentDaySummary({ appointments, sales, deposits }, day)` (`src/domain/appointments/day-summary.ts`) derives
 what ONE device-local civil day of Appointments represents. Pure, derived on demand, never stored. The
 Agenda opens it for the day it is showing, which is not necessarily today.
 
@@ -1124,21 +1130,141 @@ the Agenda's own rule). `CANCELLED` and `NO_SHOW` are left out. Calendar Blocks 
 | Value | Derivation |
 | --- | --- |
 | `potentialRevenueCents` — « CA potentiel » | Σ `getAppointmentExpectedTotal(...).expectedTotalCents`: services net of the discount (§15.3) + Sales sold during the Appointment — exactly the « Total à encaisser » of Details |
-| `collectedCents` — « Déjà encaissé » | Σ recorded checkouts (card + cash) of the counted Appointments, whatever the day they were recorded |
-| `remainingToCollectCents` — « Reste à encaisser » | Σ expected totals of the counted Appointments WITHOUT a recorded checkout |
+| `collectedCents` — « Déjà encaissé » | Σ, for the counted Appointments, their ACTIVE deposits (§25d) + their recorded final checkout (card + cash) — whatever the day that money was received |
+| `remainingToCollectCents` — « Reste à encaisser » | Σ, for the counted Appointments NOT settled, `max(expected − ACTIVE deposits, 0)`. Settled = a final checkout is recorded, or the Appointment is `COMPLETED` and fully prepaid (`isAppointmentSettled`) |
 | `totalDurationMinutes` — « Temps total » | Σ `getElapsedDurationMinutes`: booked time, processing included; overlapping Appointments both count |
 | `averageBasketCents` — « Panier moyen » | `potentialRevenueCents` / counted Appointments, rounded to the cent; `0` on an empty day |
-| `rows` | chronological (ties by id): the Appointment, its expected total, whether a checkout is recorded |
+| `rows` | chronological (ties by id): the Appointment, its expected total, its ACTIVE deposits, what was collected, what remains, whether it is settled |
 
 A checkout settles its Appointment even when the amount received differs from the expected total (tip,
 adjustment): `collected + remaining` may therefore differ from the potential revenue. An Appointment
 completed automatically without checkout still counts as remaining — its checkout can be recorded afterwards.
 
-Souris has NO deposit: money is recorded at checkout only. Nothing here invents an advance payment, and
-the product never says « acompte ».
+Worked example — an Appointment of the day expected at `100 €`, a `30 €` deposit paid two weeks earlier, no
+final checkout yet: `CA potentiel 100 €`, `Déjà encaissé 30 €`, `Reste à encaisser 70 €`. After the final
+checkout of `70 €`: `100 € / 100 € / 0 €`. A final payment that differs from what was due (a tip) keeps its
+recorded amount in `Déjà encaissé` and owes nothing. VOIDED deposits count nowhere. A `CANCELLED` or `NO_SHOW`
+Appointment is not counted, so its deposits are not either (they stay in the Caisse of the day they were paid).
 
-This is NOT the Cash Register. The Caisse groups money by `paidAt` and also counts standalone Sales; the
-day summary follows the Appointments of a day. The two legitimately differ.
+This is NOT the Cash Register. The Caisse groups money by the day it was RECEIVED (`paidAt`) and also counts
+standalone Sales; the day summary follows the Appointments of a day, whenever their money came in. The two
+legitimately differ.
+
+## 25d. Deposits (« Acomptes »)
+
+A deposit is money ACTUALLY received in advance for an existing Appointment. It is its own record — never a
+column of the Appointment (`appointment.depositAmount` does not exist) and never a discount: the expected
+total of the Appointment never changes because of a deposit; only what is still to be collected does.
+
+```text
+AppointmentDeposit                      src/domain/appointments/types.ts, deposit.ts
+├── id                 UUID v4, created once per « Prendre un acompte » presentation
+├── businessId
+├── appointmentId
+├── amountCents        integer cents >= 1
+├── paymentMethod      CARD | CASH           (THE PaymentMethod vocabulary of the domain)
+├── paidAt             when the money was received — its Cash Register day
+├── status             ACTIVE | VOIDED
+├── voidedAt?          present exactly when VOIDED
+└── createdAt          when it was recorded (persisted as `recorded_at`)
+```
+
+An Appointment has zero, one or several deposits.
+
+**Statuses.** `ACTIVE` counts wherever money is counted. `VOIDED` is a CORRECTION of a mistaken entry — not a
+refund: it stays in the Appointment's financial history (shown « Annulé », subdued), and counts in no total:
+not the Appointment, not the Caisse, not the day summary. A deposit is never edited and never deleted by a user
+action; to correct an amount the professional voids it and takes a new one. There is no refund workflow and no
+negative cash movement in V1, so there is no refund-date accounting: voiding simply removes the entry from the
+totals, including those of the day it was paid (**known V1 limit**: a Caisse day already read keeps changing
+after a void).
+
+**Authoritative helpers** (`src/domain/appointments/deposit.ts`) — nothing else sums deposits or compares totals:
+
+```text
+getAppointmentActiveDepositTotal(deposits, id)      Σ ACTIVE amounts
+getAppointmentDepositPosition(appt, sales, deps)    { expectedTotalCents, activeDepositTotalCents, remainingCents }
+getAppointmentRemainingAmount(appt, sales, deps)    max(expected − ACTIVE deposits, 0) — « Reste à encaisser »
+validateAppointmentDeposit(appt, sales, deps, c)    APPOINTMENT_NOT_OPEN | INVALID_AMOUNT | EXCEEDS_REMAINING | ok
+canRecordAppointmentDeposit / getMaximumAppointmentDepositCents
+canVoidAppointmentDeposit / voidAppointmentDeposit
+findAppointmentChangeDepositShortfall               THE rule against later edits (below)
+isAppointmentSettled / completePrepaidAppointment
+```
+
+`expectedTotalCents` is THE canonical expected total of §25b — services net of the discount + the Sales sold
+during the Appointment. There is no second definition.
+
+**Eligibility.** Receiving a deposit and CORRECTING one are two different questions:
+
+```text
+                        new deposit    void (correction)
+SCHEDULED / CONFIRMED / IN_PROGRESS  yes            yes
+CANCELLED / NO_SHOW                  no             yes      (canCorrectAppointmentDeposits)
+COMPLETED                            no             no       (settled history, frozen)
+```
+
+A deposit is RECEIVED only while the Appointment is financially open — THE editing rule. A mistaken entry,
+however, stays a mistaken entry after the visit was cancelled or missed, and voiding it takes no money and
+creates no movement: it removes one. `COMPLETED` stays completely frozen — its checkout, its `Écart` and its
+Cash Register history are settled.
+
+**The invariant.** For a financially open Appointment:
+
+```text
+ACTIVE DEPOSITS <= CURRENT EXPECTED TOTAL
+```
+
+- a new deposit must be `> 0`, exact integer cents, and `<= remaining` (a deposit equal to the remaining amount
+  is fine);
+- a change that LOWERS the expected total of an open Appointment may not take it below its ACTIVE deposits
+  (`findAppointmentTotalChangeDepositShortfall`): a larger or new discount, a lower price, a removed service, a
+  removed linked Product, a full « Modifier » edit, the checkout discount. It is refused with « Ce changement
+  ferait passer le total du rendez-vous sous les 50,00 € déjà versés en acompte. » Deposits are never silently
+  reduced or voided;
+- a change that does NOT lower the total (timing, order, notes, lifecycle) is never refused, even if the
+  record was already inconsistent (two devices offline): it can still be moved, cancelled or completed.
+
+Enforcement is at the persistence level, not only in the UI: the store records a deposit after re-reading the
+stored Appointment, its linked Sale lines and its deposits in the same transaction, and every write that can
+lower the total (`updateAppointment`, `removeAppointmentItem`, `updateAppointmentDiscount`, the linked-Product
+removal) re-verifies the rule before it commits — a refusal rolls everything back. The screens ask the same
+domain rule first so they can explain the refusal inline (Details quick edits, « Modifier le rendez-vous »,
+the checkout sheet).
+
+**Fully prepaid.** When ACTIVE deposits cover the whole expected total, the Appointment completes with
+« Terminer le rendez-vous » and NO payment: nothing new was received, so no Cash Register movement is
+created and no fake `0,01 €` is ever entered. It is then settled (`isAppointmentSettled`) and offers no further
+checkout. A typed amount (a tip) turns it back into an ordinary checkout of that amount.
+
+**Cash Register.** An ACTIVE deposit is a real money movement on its own `paidAt`, by its own method: a `30 €`
+card deposit received on 22 September counts on 22 September (card total, « Acompte · <services> » entry that
+opens the Appointment), never again on the Appointment day; the final checkout on 5 October records only the
+`70 €` still due.
+
+**Client spending.** Deposits are not an input of `Total dépensé`: it stays the net value of `COMPLETED`
+Appointments (`100 €` paid as `30 €` + `70 €` counts `100 €`, never `130 €`). They create no Client history row
+either.
+
+**Deletion.** An Appointment holding a deposit — even a VOIDED one — cannot be permanently deleted (§28).
+
+**When the invariant does not hold.** Two devices editing OFFLINE can each make a locally valid write that is
+invalid once merged: one lowers the total to `50 €` while the other records a `60 €` deposit. The remote is the
+authority on the financial state of an Appointment and refuses the SECOND of those writes
+(`docs/architecture/CLOUD_SYNC.md` §21.2), so the invalid state never becomes authoritative; the refused write
+stays queued on its device, which keeps its record.
+
+A device can still HOLD such a state — its own pending write plus what it pulled, a restore of a remote written
+before the rule existed, an administrator's edit. `findAppointmentDepositInvariantBreach` detects it (for every
+status but `COMPLETED`, whose `Écart` is legitimate history) and returns the two amounts and the excess. It is
+never silently accepted:
+
+- `remainingCents` stays `0` — never negative — and no surface may present that `0` as « nothing is due »: the
+  Appointment reads « Conflit financier à résoudre », with the deposits, the total and the excess;
+- while it stands: no checkout (the fully prepaid completion included) and no new deposit;
+- the two ways out are the ordinary financial actions, both traceable: VOID a deposit recorded by mistake, or
+  RAISE the total back (a change that does not lower it is never refused). Nothing is clamped, no deposit is
+  silently voided, no price is silently raised, no device's change is silently overwritten.
 
 ---
 
@@ -1221,8 +1347,9 @@ Appointment Details exposes deletion only as a secondary destructive action, inc
 `CANCELLED`, and `NO_SHOW` records. It requires a focused irreversible-action confirmation, then removes the
 record and returns to the previous screen. Cancellation and no-show never trigger deletion automatically.
 
-**Deletion guard.** An Appointment that carries a recorded payment (Cash Register history) or that a Product
-Sale references (`sale.appointmentId`) cannot be permanently deleted: historical integrity wins. The session
+**Deletion guard.** An Appointment that carries a recorded payment (Cash Register history), holds a deposit
+(§25d, VOIDED included), or that a Product Sale references (`sale.appointmentId`) cannot be permanently
+deleted: historical integrity wins. The session
 pre-checks the stored references so Details shows « Suppression impossible » instead of a confirmation, and the
 store re-verifies inside the deletion transaction (`canDeleteAppointmentPermanently`). There is no cascade and
 no hidden `appointmentId = NULL` rewrite of Sales.

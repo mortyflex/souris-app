@@ -27,6 +27,10 @@ import type { Sale, SaleItem, SalePayment } from '@/domain/sales';
 import { runInTransaction, type SourisDatabase } from '../database';
 import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
 import {
+  assertAppointmentDepositsCovered,
+  readAppointmentDepositPosition,
+} from './appointment-deposits';
+import {
   fromSqlInstant,
   fromSqlOptional,
   fromSqlPaymentColumns,
@@ -199,9 +203,11 @@ export function completeSale(
  *   DELETE the matching sale_items only
  *   DELETE each parent Sale left without any item; keep the others
  *
- * Any failure rolls everything back: no stock change, no line removed, no
- * Sale deleted. Returns what was committed so the caller can reflect it in
- * memory.
+ * When the Appointment is still financially open and the removal would take
+ * its expected total below its ACTIVE deposits, it is refused
+ * (`AppointmentDepositShortfallError`). Any failure rolls everything back: no
+ * stock change, no line removed, no Sale deleted. Returns what was committed
+ * so the caller can reflect it in memory.
  */
 export function deleteAppointmentProduct(
   db: SourisDatabase,
@@ -216,6 +222,9 @@ export function deleteAppointmentProduct(
 
   let outcome: AppointmentProductDeletionOutcome | undefined;
   runInTransaction(db, () => {
+    // The linked lines are part of the expected total: removing them may not
+    // take a financially open Appointment below its deposits.
+    const before = readAppointmentDepositPosition(db, appointmentId);
     const rows = db.getAllSync<{ sale_id: string; quantity: number; paid_at: string | null }>(
       'SELECT si.sale_id, si.quantity, s.paid_at FROM sale_items si JOIN sales s ON s.id = si.sale_id WHERE s.appointment_id = ? AND si.product_id = ? AND si.product_name = ? AND si.unit_price_cents = ? ORDER BY s.rowid, si.position',
       [appointmentId, productId, productName, unitPriceCents],
@@ -257,6 +266,7 @@ export function deleteAppointmentProduct(
       }
     }
 
+    assertAppointmentDepositsCovered(db, appointmentId, before);
     outcome = { restoration: { productId, quantity }, removedSaleIds, trimmedSaleIds };
   });
 

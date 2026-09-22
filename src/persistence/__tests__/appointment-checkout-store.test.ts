@@ -142,7 +142,7 @@ describe('Appointment permanent deletion guard', () => {
     const db = openTestDatabase();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(countAppointmentReferences(db, appointmentLea.id)).toEqual({ hasPayment: false, saleCount: 0 });
+    expect(countAppointmentReferences(db, appointmentLea.id)).toEqual({ hasPayment: false, saleCount: 0, depositCount: 0 });
     deleteAppointment(db, appointmentLea.id);
 
     expect(loadAppointments(db)).toEqual([]);
@@ -155,7 +155,7 @@ describe('Appointment permanent deletion guard', () => {
     bootstrapPersistence(db, createTestSeed);
     checkoutAppointment(db, appointmentLea.id, { paidAt, cardAmountCents: 9500, cashAmountCents: 0 });
 
-    expect(countAppointmentReferences(db, appointmentLea.id)).toEqual({ hasPayment: true, saleCount: 0 });
+    expect(countAppointmentReferences(db, appointmentLea.id)).toEqual({ hasPayment: true, saleCount: 0, depositCount: 0 });
     expect(() => deleteAppointment(db, appointmentLea.id)).toThrow(AppointmentDeleteConflictError);
     expect(reload(db)?.payment?.cardAmountCents).toBe(9500);
     expect(countRows(db, 'appointment_items')).toBe(2);
@@ -167,7 +167,7 @@ describe('Appointment permanent deletion guard', () => {
     completeSale(db, linkedSale, [{ productId: productMask.id, quantity: 2 }]);
 
     expect(countAppointmentSales(db, appointmentLea.id)).toBe(1);
-    expect(countAppointmentReferences(db, appointmentLea.id)).toEqual({ hasPayment: false, saleCount: 1 });
+    expect(countAppointmentReferences(db, appointmentLea.id)).toEqual({ hasPayment: false, saleCount: 1, depositCount: 0 });
     let error: unknown;
     try {
       deleteAppointment(db, appointmentLea.id);
@@ -175,7 +175,7 @@ describe('Appointment permanent deletion guard', () => {
       error = caught;
     }
     expect(error).toBeInstanceOf(AppointmentDeleteConflictError);
-    expect((error as AppointmentDeleteConflictError).references).toEqual({ hasPayment: false, saleCount: 1 });
+    expect((error as AppointmentDeleteConflictError).references).toEqual({ hasPayment: false, saleCount: 1, depositCount: 0 });
     expect(reload(db)).toEqual(appointmentLea);
     expect(loadSales(db)).toEqual([linkedSale]);
     expect(loadSales(db)[0]?.appointmentId).toBe(appointmentLea.id);
@@ -190,7 +190,7 @@ describe('Appointment permanent deletion guard', () => {
       { productId: productMask.id, quantity: 1 },
     ]);
 
-    expect(countAppointmentReferences(db, appointmentLea.id)).toEqual({ hasPayment: true, saleCount: 2 });
+    expect(countAppointmentReferences(db, appointmentLea.id)).toEqual({ hasPayment: true, saleCount: 2, depositCount: 0 });
     expect(() => deleteAppointment(db, appointmentLea.id)).toThrow(AppointmentDeleteConflictError);
     expect(countRows(db, 'sales')).toBe(2);
   });

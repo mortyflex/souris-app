@@ -97,6 +97,11 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
   );
 }
 
+/** For surfaces that may render with or without a Sale session (Appointment editing). */
+export function useOptionalSaleSession(): SaleSessionValue | null {
+  return useContext(SaleSessionContext);
+}
+
 export function useSaleSession(): SaleSessionValue {
   const value = useContext(SaleSessionContext);
   if (!value) {

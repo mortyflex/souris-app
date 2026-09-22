@@ -10,11 +10,20 @@
 // With an Appointment discount, ONE restrained « Réduction » line sits under
 // the total. Without a discount the line does not exist. The total is always
 // shown, as before; only the CTA depends on the checkout rule.
+//
+// With deposits the footer names what is still due — « Reste à encaisser »,
+// the domain remaining amount (expected − ACTIVE deposits) — and the CTA
+// collects that amount; the breakdown lives in the « Acomptes » section. A
+// fully prepaid Appointment (nothing due) reads « Terminer » instead.
 
 import { SymbolView } from 'expo-symbols';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import type { AppointmentDiscount, AppointmentExpectedTotal } from '@/domain/appointments';
+import type {
+  AppointmentDepositPosition,
+  AppointmentDiscount,
+  AppointmentExpectedTotal,
+} from '@/domain/appointments';
 import {
   formatDiscountAmount,
   formatDiscountLabel,
@@ -38,6 +47,13 @@ export type AppointmentCheckoutAction = 'checkout' | 'record';
 
 interface AppointmentCheckoutFooterProps {
   readonly expectedTotal: AppointmentExpectedTotal;
+  /** The domain deposit position; with ACTIVE deposits the footer shows what is still due. */
+  readonly depositPosition?: AppointmentDepositPosition;
+  /**
+   * Deposits above the expected total: the footer names the Appointment total
+   * and offers no checkout — « Reste à encaisser 0,00 € » would be a lie.
+   */
+  readonly financialConflict?: boolean;
   readonly discount?: AppointmentDiscount;
   /** Absent when the Appointment cannot be checked out: the total stays, alone. */
   readonly onCheckout?: () => void;
@@ -46,23 +62,40 @@ interface AppointmentCheckoutFooterProps {
 
 export function AppointmentCheckoutFooter({
   expectedTotal,
+  depositPosition,
+  financialConflict = false,
   discount,
   onCheckout,
   checkoutAction = 'checkout',
 }: AppointmentCheckoutFooterProps) {
-  const amount = formatEuroCents(expectedTotal.expectedTotalCents);
+  const hasDeposits = depositPosition !== undefined && depositPosition.activeDepositTotalCents > 0;
+  const dueCents =
+    hasDeposits && !financialConflict ? depositPosition.remainingCents : expectedTotal.expectedTotalCents;
+  const amount = formatEuroCents(dueCents);
+  const label = financialConflict
+    ? 'Total du rendez-vous'
+    : hasDeposits
+      ? 'Reste à encaisser'
+      : 'Total à encaisser';
+  const prepaid = hasDeposits && dueCents === 0 && checkoutAction === 'checkout';
   const verb = checkoutAction === 'record' ? 'Enregistrer' : 'Encaisser';
+  const ctaTitle = prepaid ? 'Terminer' : `${verb} ${amount}`;
+  const ctaAccessibilityLabel = prepaid
+    ? 'Terminer le rendez-vous'
+    : checkoutAction === 'record'
+      ? `Enregistrer un encaissement de ${amount}`
+      : `Encaisser ${amount}`;
 
   return (
     <SheetActionBar direction="row" style={styles.bar} testID="appointment-checkout-footer">
       <View
         accessible
-        accessibilityLabel={`Total à encaisser ${amount}`}
+        accessibilityLabel={`${label} ${amount}`}
         style={styles.totalColumn}
         testID="appointment-expected-total"
       >
         <AppText variant="metadata" numberOfLines={1} style={styles.label}>
-          Total à encaisser
+          {label}
         </AppText>
         <AppText
           variant="summaryValue"
@@ -93,9 +126,7 @@ export function AppointmentCheckoutFooter({
       {onCheckout && (
         <Pressable
           accessibilityHint="Confirmer la fin du rendez-vous et saisir le montant reçu"
-          accessibilityLabel={
-            checkoutAction === 'record' ? `Enregistrer un encaissement de ${amount}` : `Encaisser ${amount}`
-          }
+          accessibilityLabel={ctaAccessibilityLabel}
           accessibilityRole="button"
           onPress={onCheckout}
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
@@ -113,7 +144,7 @@ export function AppointmentCheckoutFooter({
             minimumFontScale={0.8}
             style={styles.ctaText}
           >
-            {`${verb} ${amount}`}
+            {ctaTitle}
           </AppText>
         </Pressable>
       )}

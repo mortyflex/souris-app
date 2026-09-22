@@ -971,7 +971,13 @@ SQLite cannot alter a CHECK, and their `aggregate_type` vocabulary is CHECKed.
 
 Every row, id and the AUTOINCREMENT sequence are carried over.
 
-That is the one non-`ALTER` migration of the project.
+Appointment deposits are persisted locally (SQLite schema v12, `appointment_deposits`).
+
+They are synced through the existing aggregate sync as their own aggregate type, `APPOINTMENT_DEPOSIT`.
+
+Schema v12 rebuilds `sync_outbox` and `sync_state` with the same procedure as v11.
+
+v11 and v12 are the only non-`ALTER` migrations of the project.
 
 Sync is per aggregate.
 

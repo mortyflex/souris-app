@@ -58,7 +58,7 @@ jest.mock('react-native-safe-area-context', () => {
 
 const live: RestoredSession = { kind: 'authenticated', user: fakeUser };
 const emptySeed = () => createTestSeed({ clients: [], services: [], products: [], appointments: [] });
-const EMPTY_SNAPSHOT = { clients: [], services: [], products: [], appointments: [], sales: [], calendarBlocks: [] };
+const EMPTY_SNAPSHOT = { clients: [], services: [], products: [], appointments: [], sales: [], calendarBlocks: [], appointmentDeposits: [] };
 
 function openBoundDevice(seed: typeof createTestSeed): SourisDatabase {
   const database = openTestDatabase();

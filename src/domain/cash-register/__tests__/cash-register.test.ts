@@ -1,7 +1,9 @@
 import {
   checkoutAppointment,
   getAppointmentExpectedTotal,
+  getAppointmentRemainingAmount,
   type Appointment,
+  type AppointmentDeposit,
   type AppointmentItem,
 } from '../../appointments';
 import type { Sale } from '../../sales';
@@ -260,7 +262,7 @@ describe('Cash Register derivation', () => {
 
       const entries = getCashRegisterDayEntries(sources, day);
 
-      expect(entries.map((entry) => (entry.kind === 'SALE' ? entry.sale.id : entry.appointment.id))).toEqual([
+      expect(entries.map((entry) => (entry.kind === 'SALE' ? entry.sale.id : entry.appointment?.id))).toEqual([
         'morning',
         'late',
       ]);
@@ -279,6 +281,106 @@ describe('Cash Register derivation', () => {
 
       expect(getCashRegisterMonthEntries(sources, new Date(2026, 8, 20)).map((entry) => entry.payment.cardAmountCents)).toEqual([1000]);
       expect(getCashRegisterMonthEntries(sources, new Date(2026, 9, 1))).toEqual([]);
+    });
+  });
+
+  describe('deposits — counted on the day the money was RECEIVED', () => {
+    const appointmentDay = new Date(2026, 9, 5, 10, 0); // 5 October
+    const depositDay = new Date(2026, 8, 22, 11, 0); // 22 September
+    const service: AppointmentItem = {
+      id: 'color',
+      serviceId: 'service-color',
+      order: 0,
+      serviceName: 'Couleur',
+      serviceType: 'TECHNIQUE',
+      price: 100,
+      phases: [{ id: 'p', name: 'Application', durationMinutes: 60, requiresStaff: true }],
+    };
+    const booked = appointment('october', { startAt: appointmentDay, items: [service] });
+    const deposit = (overrides: Partial<AppointmentDeposit> = {}): AppointmentDeposit => ({
+      id: 'deposit-card',
+      businessId: 'business-a',
+      appointmentId: 'october',
+      amountCents: 3000,
+      paymentMethod: 'CARD',
+      paidAt: depositDay,
+      status: 'ACTIVE',
+      createdAt: depositDay,
+      ...overrides,
+    });
+
+    it('22 September counts the deposit; 5 October does not count it again', () => {
+      const sources = { appointments: [booked], ...noSales, deposits: [deposit()] };
+      expect(getCashRegisterDaySummary(sources, depositDay)).toEqual({
+        totalCents: 3000,
+        cardCents: 3000,
+        cashCents: 0,
+        checkoutCount: 1,
+      });
+      expect(getCashRegisterDaySummary(sources, appointmentDay)).toEqual(EMPTY_CASH_REGISTER_SUMMARY);
+      const [entry] = getCashRegisterDayEntries(sources, depositDay);
+      expect(entry?.kind).toBe('DEPOSIT');
+      expect(entry?.kind === 'DEPOSIT' ? entry.appointment?.id : undefined).toBe('october');
+    });
+
+    it('after the final checkout, 5 October holds ONLY the final payment — nothing is counted twice', () => {
+      const due = getAppointmentRemainingAmount(booked, [], [deposit()]);
+      expect(due).toBe(7000);
+      const settled = checkoutAppointment(booked, { cardAmountCents: due, cashAmountCents: 0 }, new Date(2026, 9, 5, 11, 0));
+      const sources = { appointments: [settled], ...noSales, deposits: [deposit()] };
+      expect(getCashRegisterDaySummary(sources, appointmentDay).totalCents).toBe(7000);
+      expect(getCashRegisterDaySummary(sources, depositDay).totalCents).toBe(3000);
+      // The month holds both, once each: 30 + 70 = the 100 € Appointment.
+      expect(getCashRegisterMonthSummary(sources, depositDay).totalCents).toBe(3000);
+      expect(getCashRegisterMonthSummary(sources, appointmentDay).totalCents).toBe(7000);
+    });
+
+    it('splits deposits by their own method and adds several of them', () => {
+      const sources = {
+        appointments: [booked],
+        ...noSales,
+        deposits: [
+          deposit(),
+          deposit({ id: 'deposit-cash', amountCents: 2000, paymentMethod: 'CASH', paidAt: new Date(2026, 8, 22, 16, 0) }),
+        ],
+      };
+      expect(getCashRegisterDaySummary(sources, depositDay)).toEqual({
+        totalCents: 5000,
+        cardCents: 3000,
+        cashCents: 2000,
+        checkoutCount: 2,
+      });
+      expect(getCashRegisterDayEntries(sources, depositDay).map((entry) => entry.kind)).toEqual(['DEPOSIT', 'DEPOSIT']);
+    });
+
+    it('excludes VOIDED deposits from totals and entries', () => {
+      const sources = {
+        appointments: [booked],
+        ...noSales,
+        deposits: [deposit({ status: 'VOIDED', voidedAt: new Date(2026, 8, 23) })],
+      };
+      expect(getCashRegisterDaySummary(sources, depositDay)).toEqual(EMPTY_CASH_REGISTER_SUMMARY);
+      expect(getCashRegisterDayEntries(sources, depositDay)).toEqual([]);
+      expect(getCashRegisterPayments(sources)).toEqual([]);
+    });
+
+    it('aggregates deposits of several days in their month', () => {
+      const sources = {
+        appointments: [booked],
+        ...noSales,
+        deposits: [
+          deposit({ id: 'd1', paidAt: new Date(2026, 8, 2, 9, 0) }),
+          deposit({ id: 'd2', paidAt: new Date(2026, 8, 30, 18, 0), amountCents: 2000, paymentMethod: 'CASH' }),
+          deposit({ id: 'd3', paidAt: new Date(2026, 9, 1, 9, 0), amountCents: 1000 }),
+        ],
+      };
+      expect(getCashRegisterMonthSummary(sources, new Date(2026, 8, 15))).toEqual({
+        totalCents: 5000,
+        cardCents: 3000,
+        cashCents: 2000,
+        checkoutCount: 2,
+      });
+      expect(getCashRegisterMonthEntries(sources, new Date(2026, 8, 15)).map((entry) => entry.payment.paidAt.getDate())).toEqual([2, 30]);
     });
   });
 });

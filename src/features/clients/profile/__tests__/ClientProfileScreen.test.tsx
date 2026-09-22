@@ -621,7 +621,8 @@ describe('ClientProfileScreen', () => {
       fireEvent.press(view.getByTestId('edit-client'));
     });
 
-    expect(view.getByText('Modifier la cliente')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Modifier la cliente' })).toBeTruthy();
+    expect(view.queryByText('CLIENTE')).toBeNull();
     expect(view.getByDisplayValue('Léa')).toBeTruthy();
 
     await act(async () => {
@@ -649,7 +650,7 @@ describe('ClientProfileScreen', () => {
       fireEvent.changeText(view.getByLabelText('Prénom'), 'Léana');
     });
     await act(async () => {
-      fireEvent.press(view.getByText('Fermer'));
+      fireEvent.press(view.getByLabelText('Annuler les modifications'));
     });
 
     expect(view.getByText('Léa Martin')).toBeTruthy();

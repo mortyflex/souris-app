@@ -7,9 +7,11 @@
 //
 // Primary: who paid and how much. Secondary: when, what generated the
 // payment and how it was received. An Appointment checkout reads its item
-// snapshots and opens the existing Appointment Details; a standalone Sale
-// reads its item snapshots and stays read-only — no Sale detail exists, so
-// no chevron is drawn. Month mode adds the day above the time.
+// snapshots and opens the existing Appointment Details; a deposit reads
+// « Acompte » + its Appointment's services and opens the same Details; a
+// standalone Sale reads its item snapshots and stays read-only — no Sale
+// detail exists, so no chevron is drawn. Month mode adds the day above the
+// time.
 
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -32,6 +34,8 @@ import {
 
 /** A standalone Sale is named as such next to its products. */
 const SALE_SOURCE_LABEL = 'Vente';
+/** A deposit is named as such next to its Appointment's services. */
+const DEPOSIT_SOURCE_LABEL = 'Acompte';
 /** A walk-in Sale has no Client to name; nothing is invented. */
 export const WALK_IN_SALE_LABEL = 'Vente sans cliente';
 
@@ -39,6 +43,31 @@ const WHEN_COLUMN = 58;
 const CHEVRON_COLUMN = 14;
 /** Separators start under the names: row padding + time column + gap. */
 export const CASH_REGISTER_ENTRY_SEPARATOR_INSET = spacing.base + WHEN_COLUMN + spacing.md;
+
+/** A stable list key and testID suffix for any counted entry. */
+export function getCashRegisterEntryKey(entry: CashRegisterEntry): string {
+  switch (entry.kind) {
+    case 'APPOINTMENT':
+      return `appointment-${entry.appointment.id}`;
+    case 'SALE':
+      return `sale-${entry.sale.id}`;
+    case 'DEPOSIT':
+      return `deposit-${entry.deposit.id}`;
+  }
+}
+
+function formatEntrySource(entry: CashRegisterEntry): string {
+  switch (entry.kind) {
+    case 'APPOINTMENT':
+      return formatAppointmentServiceSummary(entry.appointment);
+    case 'SALE':
+      return [SALE_SOURCE_LABEL, formatSaleSummary(entry.sale)].filter(Boolean).join(' · ');
+    case 'DEPOSIT':
+      return [DEPOSIT_SOURCE_LABEL, entry.appointment ? formatAppointmentServiceSummary(entry.appointment) : '']
+        .filter(Boolean)
+        .join(' · ');
+  }
+}
 
 interface CashRegisterEntryRowProps {
   readonly entry: CashRegisterEntry;
@@ -51,14 +80,16 @@ interface CashRegisterEntryRowProps {
 
 export function CashRegisterEntryRow({ entry, period, clientName, onPress }: CashRegisterEntryRowProps) {
   const { payment } = entry;
-  const id = entry.kind === 'APPOINTMENT' ? entry.appointment.id : entry.sale.id;
+  const id =
+    entry.kind === 'APPOINTMENT'
+      ? entry.appointment.id
+      : entry.kind === 'SALE'
+        ? entry.sale.id
+        : entry.deposit.id;
   const time = formatAppointmentTime(payment.paidAt);
   const day = period === 'month' ? formatCashRegisterEntryDay(payment.paidAt) : undefined;
   const name = clientName ?? WALK_IN_SALE_LABEL;
-  const source =
-    entry.kind === 'APPOINTMENT'
-      ? formatAppointmentServiceSummary(entry.appointment)
-      : [SALE_SOURCE_LABEL, formatSaleSummary(entry.sale)].filter(Boolean).join(' · ');
+  const source = formatEntrySource(entry);
   const amount = formatEuroCents(payment.cardAmountCents + payment.cashAmountCents);
   const methods = formatCashRegisterEntryMethods(payment);
 

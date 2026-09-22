@@ -107,8 +107,8 @@ describe('schema v11 migration on an existing v10 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(11);
-    expect(CURRENT_SCHEMA_VERSION).toBe(11);
+    expect(readSchemaVersion(db)).toBe(12);
+    expect(CURRENT_SCHEMA_VERSION).toBe(12);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     for (const table of OPERATIONAL_TABLES) expect(dump(db, table)).toEqual(before[table]);
@@ -240,7 +240,7 @@ describe('schema v11 migration on an existing v10 database', () => {
     const db = openSchemaV10Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(11);
+    expect(migrateDatabase(db)).toBe(12);
     insertCalendarBlock(db, {
       id: 'block-1',
       businessId: BUSINESS_ID,

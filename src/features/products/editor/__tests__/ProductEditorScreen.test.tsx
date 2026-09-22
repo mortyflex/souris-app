@@ -571,6 +571,20 @@ describe("ProductEditorScreen", () => {
     expect(outsideTapAllowed()).toBe(true);
   });
 
+  it("creates in the canonical sheet: « Annuler » leading, one centered title, no eyebrow", async () => {
+    const view = await renderEditor(<ProductEditorScreen mode="create" />);
+
+    expect(view.getByRole("header", { name: "Ajouter un produit" })).toBeTruthy();
+    expect(view.queryByText("NOUVEAU PRODUIT")).toBeNull();
+    expect(view.getAllByText("Annuler")).toHaveLength(1);
+    const cancel = view.getByTestId("cancel-product-creation");
+    expect(cancel.props.accessibilityLabel).toBe("Annuler la création");
+    expect(view.getByTestId("sheet-editing-header-leading")).toBeTruthy();
+
+    await act(async () => fireEvent.press(cancel));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
   it("edits in the canonical sheet: « Annuler » + title, sections, one « Enregistrer »", async () => {
     const view = await renderEditor(
       <ProductEditorScreen

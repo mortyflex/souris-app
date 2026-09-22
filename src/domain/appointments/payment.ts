@@ -169,13 +169,16 @@ export function updateAppointmentPayment(
 export interface AppointmentReferences {
   readonly hasPayment: boolean;
   readonly saleCount: number;
+  /** Deposits of the Appointment, ACTIVE and VOIDED alike (financial history). */
+  readonly depositCount: number;
 }
 
 /**
  * Permanent deletion is refused once the Appointment carries a recorded
- * payment (Cash Register history) or is linked to a Product Sale.
+ * payment (Cash Register history), is linked to a Product Sale, or holds a
+ * deposit — even a VOIDED one, which stays the trace of a corrected entry.
  * Historical integrity wins: no cascade, no hidden un-linking.
  */
 export function canDeleteAppointmentPermanently(references: AppointmentReferences): boolean {
-  return !references.hasPayment && references.saleCount === 0;
+  return !references.hasPayment && references.saleCount === 0 && references.depositCount === 0;
 }

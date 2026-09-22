@@ -4,7 +4,11 @@
 // NULL optionals, integer cents) are converted. Canonical domain values
 // never see them.
 
-import { eurosToCents } from '@/domain/appointments';
+import {
+  eurosToCents,
+  isValidAppointmentDiscount,
+  type AppointmentDiscount,
+} from '@/domain/appointments';
 
 import type { SqlValue } from './database';
 
@@ -107,4 +111,32 @@ export function fromSqlPaymentColumns(row: PaymentColumns): RecordedPayment | un
     cardAmountCents: row.card_amount_cents ?? 0,
     cashAmountCents: row.cash_amount_cents ?? 0,
   };
+}
+
+/**
+ * The Appointment discount columns (schema v10): at most ONE is set. Both
+ * NULL — every row written before the columns existed — is "no discount".
+ */
+export interface DiscountColumns {
+  readonly discount_percent: number | null;
+  readonly discount_amount_cents: number | null;
+}
+
+export function fromSqlDiscountColumns(row: DiscountColumns): AppointmentDiscount | undefined {
+  if (row.discount_percent !== null) return { type: 'PERCENT', percent: row.discount_percent };
+  if (row.discount_amount_cents !== null) {
+    return { type: 'FIXED', amountCents: row.discount_amount_cents };
+  }
+  return undefined;
+}
+
+/** `[discount_percent, discount_amount_cents]`; an invalid discount never reaches SQLite. */
+export function toSqlDiscountColumns(
+  discount: AppointmentDiscount | undefined,
+): readonly [number | null, number | null] {
+  if (!discount) return [null, null];
+  if (!isValidAppointmentDiscount(discount)) {
+    throw new RangeError(`appointments: invalid ${discount.type} discount`);
+  }
+  return discount.type === 'PERCENT' ? [discount.percent, null] : [null, discount.amountCents];
 }

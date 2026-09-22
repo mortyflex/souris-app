@@ -101,9 +101,13 @@ describe('ClientFormSheet', () => {
   it('uses the canonical sheet shell and never auto-focuses a field', async () => {
     const view = await renderSheet('create');
 
-    expect(view.getByText('NOUVELLE CLIENTE')).toBeTruthy();
+    // §30 editing header: « Annuler » leading, one centered title, no eyebrow.
+    expect(view.queryByText('NOUVELLE CLIENTE')).toBeNull();
     expect(view.getByRole('header', { name: 'Ajouter une cliente' })).toBeTruthy();
-    expect(view.getByLabelText('Fermer')).toBeTruthy();
+    expect(view.getByLabelText('Annuler la création')).toBeTruthy();
+    expect(view.getAllByText('Annuler')).toHaveLength(1);
+    expect(view.queryByText('Fermer')).toBeNull();
+    expect(view.getByTestId('sheet-editing-header-leading')).toBeTruthy();
     expect(view.getByTestId('bottom-sheet-scrim')).toBeTruthy();
 
     for (const label of ['Prénom', 'Nom', 'Téléphone', 'Email']) {

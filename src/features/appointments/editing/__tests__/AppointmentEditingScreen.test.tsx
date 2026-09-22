@@ -10,6 +10,11 @@ import { haptics } from '@/shared/lib/haptics';
 import { semanticColors, serviceCategoryColors } from '@/shared/ui/theme';
 
 import { AppointmentEditingScreen } from '../AppointmentEditingScreen';
+import { bootstrapPersistence } from '@/persistence/bootstrap';
+import { insertAppointmentDeposit } from '@/persistence/stores/appointment-deposits';
+import { loadAppointments } from '@/persistence/stores/appointments';
+import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
+import { createDevelopmentSeed } from '@/providers/development-seed';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 import { settleWheelOn, wheelRowKeys, wheelValue } from '@/shared/ui/testing/wheels';
@@ -1368,5 +1373,62 @@ describe('AppointmentEditingScreen', () => {
       expect(save.props.accessibilityState.disabled).toBe(false);
       expect(backgroundOf(save)).toBe(semanticColors.accent);
     });
+  });
+});
+
+describe('AppointmentEditingScreen — deposits', () => {
+  beforeAll(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  it('explains and refuses an edit that would take the total below the deposits; a covered edit saves', async () => {
+    const database = openTestDatabase();
+    bootstrapPersistence(database, () => createDevelopmentSeed(new Date()));
+    // agenda-sofia: Balayage 95 €; 60 € already paid ahead.
+    insertAppointmentDeposit(database, {
+      id: 'deposit-sofia',
+      businessId: 'business-test',
+      appointmentId: 'agenda-sofia',
+      amountCents: 6000,
+      paymentMethod: 'CARD',
+      paidAt: new Date(),
+      status: 'ACTIVE',
+      createdAt: new Date(),
+    });
+    const view = await render(
+      <TestPersistenceProvider database={database}>
+        <ClientSessionProvider>
+          <ServiceCatalogProvider>
+            <AppointmentSessionProvider>
+              <CalendarBlockSessionProvider>
+                <AppointmentEditingScreen appointmentId="agenda-sofia" />
+              </CalendarBlockSessionProvider>
+            </AppointmentSessionProvider>
+          </ServiceCatalogProvider>
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
+    );
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage'));
+    });
+
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Balayage'), '50');
+    });
+    expect(view.getByTestId('appointment-edit-deposit-shortfall')).toBeTruthy();
+    expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
+
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Balayage'), '60');
+    });
+    expect(view.queryByTestId('appointment-edit-deposit-shortfall')).toBeNull();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('save-appointment-edit'));
+    });
+    expect(loadAppointments(database).find((appointment) => appointment.id === 'agenda-sofia')?.items[0]?.price).toBe(60);
   });
 });

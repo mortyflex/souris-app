@@ -24,7 +24,10 @@
 // A remote tombstone follows the LOCAL deletion semantics: permanent removal
 // of the row (children cascade), guarded exactly like a user deletion — a
 // Client still referenced by history, or an Appointment with a payment or a
-// linked Sale, is NOT removed (`BLOCKED`); integrity wins over convergence.
+// linked Sale or a deposit, is NOT removed (`BLOCKED`); integrity wins over
+// convergence. A deposit is never tombstoned by Souris (a correction is the
+// VOIDED status, an UPSERT); a remote tombstone written by an administrator
+// removes the local row without a guard — nothing references a deposit.
 
 import { canDeleteAppointmentPermanently } from '@/domain/appointments';
 import { canDeleteClientPermanently } from '@/domain/clients';
@@ -37,6 +40,7 @@ import { toSqlBoolean } from '../values';
 import type { SyncAggregateRef } from './aggregate';
 import { LocalAggregateScopeError } from './aggregate-payload';
 import type {
+  RemoteAppointmentDepositPayload,
   RemoteAppointmentPayload,
   RemoteCalendarBlockPayload,
   RemoteClientPayload,
@@ -283,6 +287,41 @@ function applyCalendarBlock(
   }
 }
 
+function applyAppointmentDeposit(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+  deposit: RemoteAppointmentDepositPayload,
+): void {
+  if (!exists(db, 'appointments', deposit.appointment_id)) {
+    throw new RemoteReferenceMissingError(ref, 'appointment_id');
+  }
+  const params = [
+    deposit.appointment_id,
+    deposit.amount_cents,
+    deposit.payment_method,
+    deposit.paid_at,
+    deposit.status,
+    deposit.voided_at,
+    deposit.recorded_at,
+  ];
+  if (
+    !updateScoped(
+      db,
+      businessId,
+      ref,
+      'appointment_deposits',
+      'appointment_id = ?, amount_cents = ?, payment_method = ?, paid_at = ?, status = ?, voided_at = ?, recorded_at = ?',
+      params,
+    )
+  ) {
+    db.runSync(
+      'INSERT INTO appointment_deposits (appointment_id, amount_cents, payment_method, paid_at, status, voided_at, recorded_at, id, business_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [...params, ref.aggregateId, businessId],
+    );
+  }
+}
+
 /**
  * Writes one LIVE remote aggregate (row + complete child set). Call inside
  * the caller's transaction. Throws for a tombstone (no payload), a missing
@@ -307,6 +346,8 @@ export function applyRemoteAggregate(db: SourisDatabase, businessId: string, ent
       return applySale(db, businessId, ref, entry.aggregate.payload);
     case 'CALENDAR_BLOCK':
       return applyCalendarBlock(db, businessId, ref, entry.aggregate.payload);
+    case 'APPOINTMENT_DEPOSIT':
+      return applyAppointmentDeposit(db, businessId, ref, entry.aggregate.payload);
   }
 }
 
@@ -325,6 +366,7 @@ const PARENT_TABLE = {
   APPOINTMENT: 'appointments',
   SALE: 'sales',
   CALENDAR_BLOCK: 'calendar_blocks',
+  APPOINTMENT_DEPOSIT: 'appointment_deposits',
 } as const;
 
 /**

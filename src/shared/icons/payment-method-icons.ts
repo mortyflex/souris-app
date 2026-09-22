@@ -7,7 +7,10 @@
 
 import type { SymbolViewProps } from 'expo-symbols';
 
-export type PaymentMethod = 'CARD' | 'CASH';
+import type { PaymentMethod } from '@/domain/appointments';
+
+/** THE vocabulary is the domain's (checkout split, deposits, Cash Register). */
+export type { PaymentMethod };
 
 export type PlatformSymbolName = SymbolViewProps['name'];
 

@@ -3,8 +3,11 @@
 // In ONE glance: the money ACTUALLY received on the selected local day or
 // calendar month — « Total encaissé », its card / cash split, then the
 // « Encaissements » that make it up. Derived on every render from the
-// canonical sessions — explicit Appointment checkouts (`appointment.payment`)
-// plus standalone Sale payments (`sale.payment`, Sales without Appointment).
+// canonical sessions — explicit Appointment checkouts (`appointment.payment`,
+// the final checkout only), standalone Sale payments (`sale.payment`, Sales
+// without Appointment) and ACTIVE Appointment deposits, each on the day the
+// money was received (`paidAt`) — a deposit paid on the 22nd counts on the
+// 22nd, never again on the Appointment day. A VOIDED deposit counts nowhere.
 // A Sale sold during an Appointment is never counted separately: the
 // Appointment checkout already recorded that money. Totals and list come
 // from the same domain selection, so a listed payment is always a counted
@@ -70,6 +73,7 @@ import {
 import {
   CashRegisterEntryRow,
   CASH_REGISTER_ENTRY_SEPARATOR_INSET,
+  getCashRegisterEntryKey,
 } from "./components/CashRegisterEntryRow";
 import {
   formatCashRegisterCaption,
@@ -100,7 +104,7 @@ const EMPTY_SUPPORTING_COPY = "Les paiements encaissés apparaîtront ici.";
 
 export function CashRegisterScreen() {
   const router = useRouter();
-  const { appointments } = useAppointmentSession();
+  const { appointments, deposits } = useAppointmentSession();
   const { sales } = useSaleSession();
   const { getClientById } = useClientSession();
   const [period, setPeriod] = useState<CashRegisterPeriod>("day");
@@ -116,6 +120,7 @@ export function CashRegisterScreen() {
   const sources = {
     appointments: appointments.map(({ appointment }) => appointment),
     sales,
+    deposits,
   };
   const summary: CashRegisterSummary =
     period === "day"
@@ -140,22 +145,23 @@ export function CashRegisterScreen() {
 
   const clientNameOf = (entry: CashRegisterEntry): string | undefined => {
     const clientId =
-      entry.kind === "APPOINTMENT"
-        ? entry.appointment.clientId
-        : entry.sale.clientId;
+      entry.kind === "SALE" ? entry.sale.clientId : entry.appointment?.clientId;
     return clientId === undefined
       ? undefined
       : getResolvedClientDisplayName(getClientById(clientId));
   };
-  // Only an Appointment checkout has an existing detail screen.
-  const openEntry = (entry: CashRegisterEntry) =>
-    entry.kind === "APPOINTMENT"
-      ? () =>
+  // An Appointment checkout and a deposit open their Appointment Details; a
+  // standalone Sale has no detail screen.
+  const openEntry = (entry: CashRegisterEntry) => {
+    const appointmentId = entry.kind === "SALE" ? undefined : entry.appointment?.id;
+    return appointmentId === undefined
+      ? undefined
+      : () =>
           router.push({
             pathname: "/appointments/[appointmentId]",
-            params: { appointmentId: entry.appointment.id },
-          })
-      : undefined;
+            params: { appointmentId },
+          });
+  };
 
   return (
     <SafeAreaView
@@ -305,11 +311,7 @@ export function CashRegisterScreen() {
             <GroupedSurface testID="cash-register-entries">
               {entries.map((entry, index) => (
                 <View
-                  key={
-                    entry.kind === "APPOINTMENT"
-                      ? `appointment-${entry.appointment.id}`
-                      : `sale-${entry.sale.id}`
-                  }
+                  key={getCashRegisterEntryKey(entry)}
                 >
                   {index > 0 && (
                     <GroupedSeparator

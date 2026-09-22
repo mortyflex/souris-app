@@ -54,7 +54,12 @@
 
 import { runInTransaction, type SourisDatabase } from '../database';
 
-import { readBoundBusinessId, type SyncConflict, type SyncOperation } from './aggregate';
+import {
+  readBoundBusinessId,
+  type SyncConflict,
+  type SyncFinancialConflict,
+  type SyncOperation,
+} from './aggregate';
 import { readAggregatePayload } from './aggregate-payload';
 import {
   classifySyncBootstrap,
@@ -93,7 +98,7 @@ import {
   writeAcknowledgedRemoteVersion,
 } from './state';
 
-export type { SyncConflict } from './aggregate';
+export type { SyncConflict, SyncFinancialConflict } from './aggregate';
 export type { SyncPullSummary } from './pull-worker';
 
 export type SyncRunResult =
@@ -119,6 +124,12 @@ export type SyncRunResult =
       readonly pushed: number;
       readonly failed: number;
       readonly conflicts: readonly SyncConflict[];
+      /**
+       * Financial writes the remote refused because they would break the
+       * deposit invariant of an Appointment (CLOUD_SYNC.md §21.2). Absent when
+       * there was none. Nothing was written on either side.
+       */
+      readonly financialConflicts?: readonly SyncFinancialConflict[];
       /**
        * Set when the run ended early: anything but a rejection of ONE aggregate
        * (transport, authorization, unexpected server answer) is a run-level
@@ -273,6 +284,9 @@ export function createSyncPushWorker({
     let pushed = 0;
     let failed = 0;
     const conflicts: SyncConflict[] = [];
+    const financialConflicts: SyncFinancialConflict[] = [];
+    // Reported only when there is one, like `stoppedBy` and `pull`.
+    const summarize = () => (financialConflicts.length > 0 ? { financialConflicts } : {});
 
     for (const listed of loadEligibleSyncOutbox(db, businessId, now())) {
       // The list is a snapshot; the entry may have been coalesced or settled since.
@@ -321,7 +335,23 @@ export function createSyncPushWorker({
           failure.label,
           failure.code === 'UNKNOWN' ? nextSyncAttemptAt(now(), entry.attemptCount) : undefined,
         );
-        return { pushed, failed, conflicts, stoppedBy: failure.code };
+        return { pushed, failed, conflicts, ...summarize(), stoppedBy: failure.code };
+      }
+
+      if (result.status === 'FINANCIAL_CONFLICT') {
+        // The remote is the authority on the Appointment's financial state and
+        // refused this write. Keep the entry pending with the ordinary backoff:
+        // voiding a deposit or raising the total makes it pushable again.
+        financialConflicts.push({
+          aggregateType: entry.aggregateType,
+          aggregateId: entry.aggregateId,
+          appointmentId: result.appointmentId,
+          expectedTotalCents: result.expectedTotalCents,
+          activeDepositTotalCents: result.activeDepositTotalCents,
+        });
+        failed += 1;
+        fail(entry, 'FINANCIAL_CONFLICT', nextSyncAttemptAt(now(), entry.attemptCount));
+        continue;
       }
 
       if (result.status === 'CONFLICT') {
@@ -356,7 +386,7 @@ export function createSyncPushWorker({
       pushed += 1;
     }
 
-    return { pushed, failed, conflicts };
+    return { pushed, failed, conflicts, ...summarize() };
   }
 
   async function runOnce(businessId: string): Promise<SyncRunResult> {

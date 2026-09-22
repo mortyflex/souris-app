@@ -107,6 +107,7 @@ export function formatSyncRunResult(result: SyncRunResult): string {
         `appointments ${result.restored.appointments}`,
         `sales ${result.restored.sales}`,
         `calendar blocks ${result.restored.calendarBlocks}`,
+        `deposits ${result.restored.appointmentDeposits}`,
         `tombstones ${result.restored.tombstones}`,
       ].join(' · ');
     case 'PUSHED':

@@ -14,6 +14,12 @@
 // held back by an overlap that already existed: what decides is whether the
 // staff-required intervals actually moved.
 //
+// An edit that would LOWER the expected total below the deposits already
+// received (a removed service, a lower price, a larger discount) is explained
+// inline the same way and cannot be saved — THE domain deposit rule; the
+// store re-verifies it. An edit that does not lower the total is never held
+// back by the deposits.
+//
 // Presented in the canonical Souris sheet shell; swipe-to-dismiss is off
 // (route options). A dirty draft is guarded against « Annuler » and the
 // hardware back by the shared Souris confirmation dialog.
@@ -33,19 +39,24 @@ import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import {
   areAppointmentDiscountsEqual,
   canRemoveAppointmentItem,
+  findAppointmentChangeDepositShortfall,
   getAppointmentServicesTotal,
   setAppointmentDiscount,
   updateAppointmentFromDrafts,
+  type Appointment,
   type AppointmentDiscount,
   type Service,
 } from '@/domain/appointments';
 import { findAppointmentChangeCalendarBlockConflict } from '@/domain/calendar-blocks';
 import { isClientBirthdayOnDate } from '@/domain/clients';
+import { DepositShortfallNotice } from '@/features/appointments/deposits/DepositShortfallNotice';
+import { describeDepositShortfall } from '@/features/appointments/deposits/presentation';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { ScheduleConflictNotice } from '@/features/calendar-blocks/editor/ScheduleConflictNotice';
 import { describeCalendarBlockInTheWay } from '@/features/calendar-blocks/presentation';
 import { useCalendarBlockSession } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { useOptionalSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { isTerminalAppointmentStatus } from '@/features/appointments/presentation';
@@ -91,7 +102,8 @@ const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios
 
 export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingScreenProps) {
   const router = useRouter();
-  const { getAppointmentById, updateAppointment } = useAppointmentSession();
+  const { deposits, getAppointmentById, updateAppointment } = useAppointmentSession();
+  const sales = useOptionalSaleSession()?.sales ?? [];
   const { calendarBlocks } = useCalendarBlockSession();
   const { getClientById } = useClientSession();
   const { activeServices } = useServiceCatalog();
@@ -138,6 +150,25 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           },
           calendarBlocks,
         )
+      : undefined;
+  // THE services composition the save would write (the domain editing and
+  // discount actions), judged against the deposits by THE domain rule.
+  const buildEditedAppointment = (source: Appointment): Appointment =>
+    setAppointmentDiscount(
+      updateAppointmentFromDrafts(
+        source,
+        drafts.map((draft, index) => toAppointmentItemEditDraft(draft, index)),
+      ),
+      draftDiscount,
+    );
+  const depositShortfall =
+    appointment && drafts.length > 0
+      ? findAppointmentChangeDepositShortfall({
+          current: appointment,
+          candidate: buildEditedAppointment(appointment),
+          sales,
+          deposits,
+        })
       : undefined;
   const draftClient = getClientById(draftClientId);
   const clientName = getResolvedClientDisplayName(draftClient);
@@ -228,16 +259,10 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   };
 
   const save = () => {
-    if (!isDirty || isTerminal || blockInTheWay) return;
+    if (!isDirty || isTerminal || blockInTheWay || depositShortfall) return;
 
     // The discount goes through THE domain discount action, never a local rule.
-    const updatedAppointment = setAppointmentDiscount(
-      updateAppointmentFromDrafts(
-        appointment,
-        drafts.map((draft, index) => toAppointmentItemEditDraft(draft, index)),
-      ),
-      draftDiscount,
-    );
+    const updatedAppointment = buildEditedAppointment(appointment);
     try {
       updateAppointment({
         ...entry,
@@ -350,6 +375,12 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
             testID="appointment-calendar-block-conflict"
           />
         )}
+        {depositShortfall && (
+          <DepositShortfallNotice
+            shortfall={describeDepositShortfall(depositShortfall)}
+            testID="appointment-edit-deposit-shortfall"
+          />
+        )}
         <View
           accessible
           accessibilityLabel={`${summaryLabel}, total ${totalLabel}`}
@@ -374,7 +405,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           </AppText>
         </View>
         <AppButton
-          disabled={!isDirty || blockInTheWay !== undefined}
+          disabled={!isDirty || blockInTheWay !== undefined || depositShortfall !== undefined}
           onPress={save}
           testID="save-appointment-edit"
           title="Enregistrer les modifications"

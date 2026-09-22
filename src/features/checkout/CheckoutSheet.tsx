@@ -17,7 +17,18 @@
 //   « Annuler » leading, then the title, no eyebrow;
 // - a caller may place ONE adjustment control above the expectation block
 //   (the Appointment discount); it owns that control and recomputes the
-//   summary lines and expected total it passes back in.
+//   summary lines and expected total it passes back in;
+// - with deposits (`settlement`), the expectation block goes on below
+//   « Total attendu » — « Acomptes déjà versés », then « Reste à encaisser » —
+//   and the « Reste » shortcuts, the « Écart » and the acceptability of the
+//   entry are measured against what is still DUE, never against the whole
+//   expected total: the final payment records only the new money. A typed
+//   amount is never overwritten;
+// - a caller may BLOCK confirmation (`blockingNotice`: a discount below the
+//   deposits) — the notice explains why, the entries stay editable;
+// - when nothing is due and nothing is typed, `zeroBalanceConfirmTitle`
+//   names the action (« Terminer le rendez-vous »): the caller completes
+//   without inventing a payment.
 
 import { SymbolView } from 'expo-symbols';
 import { useState, type ReactNode } from 'react';
@@ -70,6 +81,16 @@ interface CheckoutSheetProps {
   readonly onConfirm: (amounts: CheckoutAmounts) => void;
   /** Control shown above the expectation block (the Appointment discount). */
   readonly adjustment?: ReactNode;
+  /**
+   * Deposits already received for what is being paid. `dueCents` (domain:
+   * expected − ACTIVE deposits, never below 0) replaces the expected total
+   * for the shortcuts, the difference and the acceptability of the entry.
+   */
+  readonly settlement?: { readonly depositsCents: number; readonly dueCents: number };
+  /** Shown under the expectation block; while present, confirmation is disabled. */
+  readonly blockingNotice?: ReactNode;
+  /** Confirm label when nothing is due and nothing is typed (no payment will be recorded). */
+  readonly zeroBalanceConfirmTitle?: string;
   readonly testID?: string;
 }
 
@@ -87,6 +108,9 @@ export function CheckoutSheet({
   onClose,
   onConfirm,
   adjustment,
+  settlement,
+  blockingNotice,
+  zeroBalanceConfirmTitle,
   testID = 'checkout-sheet',
 }: CheckoutSheetProps) {
   const [cardText, setCardText] = useState(() => initialText(initialAmounts?.cardAmountCents));
@@ -104,10 +128,18 @@ export function CheckoutSheet({
     }
   }
 
-  const state = deriveCheckoutFormState(expectedTotalCents, { cardText, cashText });
+  // What the entries are measured against: the amount still due.
+  const dueCents = settlement ? settlement.dueCents : expectedTotalCents;
+  const state = deriveCheckoutFormState(dueCents, { cardText, cashText });
+  const blocked = blockingNotice !== undefined && blockingNotice !== null && blockingNotice !== false;
+  const canConfirm = state.canSubmit && !blocked;
+  const confirmLabel =
+    zeroBalanceConfirmTitle !== undefined && dueCents === 0 && state.enteredTotalCents === 0
+      ? zeroBalanceConfirmTitle
+      : confirmTitle;
 
   const confirm = () => {
-    if (!state.amounts) return;
+    if (!state.amounts || blocked) return;
     onConfirm(state.amounts);
   };
 
@@ -117,11 +149,11 @@ export function CheckoutSheet({
       footer={
         <SheetActionBar>
           <AppButton
-            accessibilityLabel={confirmTitle}
-            disabled={!state.canSubmit}
+            accessibilityLabel={confirmLabel}
+            disabled={!canConfirm}
             onPress={confirm}
             testID="confirm-checkout"
-            title={confirmTitle}
+            title={confirmLabel}
           />
         </SheetActionBar>
       }
@@ -149,7 +181,7 @@ export function CheckoutSheet({
           <View style={styles.divider} />
           <View
             accessible
-            accessibilityLabel={`Total attendu ${formatEuroCents(state.expectedTotalCents)}`}
+            accessibilityLabel={`Total attendu ${formatEuroCents(expectedTotalCents)}`}
             style={styles.expectationRow}
             testID="checkout-expected-total-row"
           >
@@ -157,24 +189,56 @@ export function CheckoutSheet({
               Total attendu
             </AppText>
             <AppText variant="control" style={styles.expectedValue} testID="checkout-expected-total">
-              {formatEuroCents(state.expectedTotalCents)}
+              {formatEuroCents(expectedTotalCents)}
             </AppText>
           </View>
+          {settlement && settlement.depositsCents > 0 && (
+            <>
+              <View
+                accessible
+                accessibilityLabel={`Acomptes déjà versés, ${formatEuroCents(settlement.depositsCents)}`}
+                style={styles.expectationRow}
+                testID="checkout-deposits-row"
+              >
+                <AppText variant="metadata" style={styles.expectationLabel}>
+                  Acomptes déjà versés
+                </AppText>
+                <AppText variant="metadata" style={styles.expectationValue} testID="checkout-deposits">
+                  {formatEuroCents(0 - settlement.depositsCents)}
+                </AppText>
+              </View>
+              <View style={styles.divider} />
+              <View
+                accessible
+                accessibilityLabel={`Reste à encaisser, ${formatEuroCents(settlement.dueCents)}`}
+                style={styles.expectationRow}
+                testID="checkout-due-row"
+              >
+                <AppText variant="control" style={styles.expectedLabel}>
+                  Reste à encaisser
+                </AppText>
+                <AppText variant="control" style={styles.expectedValue} testID="checkout-due">
+                  {formatEuroCents(settlement.dueCents)}
+                </AppText>
+              </View>
+            </>
+          )}
         </View>
+        {blockingNotice}
 
         <View style={styles.methods}>
           <PaymentMethodField
             error={state.cardError}
             method="CARD"
             onChangeText={setCardText}
-            remainingCents={getRemainingExpectedCents(expectedTotalCents, state.cashCents)}
+            remainingCents={getRemainingExpectedCents(dueCents, state.cashCents)}
             value={cardText}
           />
           <PaymentMethodField
             error={state.cashError}
             method="CASH"
             onChangeText={setCashText}
-            remainingCents={getRemainingExpectedCents(expectedTotalCents, state.cardCents)}
+            remainingCents={getRemainingExpectedCents(dueCents, state.cardCents)}
             value={cashText}
           />
         </View>

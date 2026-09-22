@@ -71,6 +71,22 @@ export function toRemotePushResult(data: unknown): RemotePushResult {
       return { status: 'CONFLICT', remoteVersion: parsed };
     case 'ABSENT':
       return { status: 'ABSENT' };
+    case 'FINANCIAL_CONFLICT': {
+      const { appointment_id: appointmentId, expected_total_cents: expected, active_deposit_cents: active } =
+        data as Record<string, unknown>;
+      if (typeof expected !== 'number' || !Number.isSafeInteger(expected) || expected < 0) {
+        throw new SyncRemoteError('UNKNOWN', 'BADRESULT');
+      }
+      if (typeof active !== 'number' || !Number.isSafeInteger(active) || active < 0) {
+        throw new SyncRemoteError('UNKNOWN', 'BADRESULT');
+      }
+      return {
+        status: 'FINANCIAL_CONFLICT',
+        appointmentId: typeof appointmentId === 'string' ? appointmentId : undefined,
+        expectedTotalCents: expected,
+        activeDepositTotalCents: active,
+      };
+    }
     default:
       throw new SyncRemoteError('UNKNOWN', 'BADRESULT');
   }

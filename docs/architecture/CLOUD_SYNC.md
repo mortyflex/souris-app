@@ -17,6 +17,7 @@ V1D.1  Seamless Bootstrap                   done — automatic initial upload an
        Client notes                         done — one additive nullable column carried by the CLIENT aggregate (§18)
        Appointment discount                 done — two additive nullable columns carried by the APPOINTMENT aggregate (§19)
        Calendar Blocks                      done — a NEW aggregate type, CALENDAR_BLOCK, through the same engine (§20)
+       Appointment deposits                 done — a NEW aggregate type, APPOINTMENT_DEPOSIT, through the same engine (§21)
 V1E    Conflict / Retry Hardening
 V1F    Product Image Sync
 ```
@@ -297,6 +298,7 @@ APPOINTMENT   appointments  + appointment_items + appointment_phases
 PRODUCT       products
 SALE          sales         + sale_items
 CALENDAR_BLOCK calendar_blocks                                  (§20)
+APPOINTMENT_DEPOSIT appointment_deposits                        (§21)
 ```
 
 These match the local transaction boundaries (PERSISTENCE.md §7): a Service edit already replaces
@@ -438,8 +440,9 @@ CREATE TABLE sync_state (
 );
 ```
 
-Since schema v11 the `aggregate_type` vocabulary of both tables also holds `'CALENDAR_BLOCK'` (§20;
-the tables were rebuilt with every row preserved, PERSISTENCE.md §4).
+Since schema v11 the `aggregate_type` vocabulary of both tables also holds `'CALENDAR_BLOCK'` (§20),
+and since schema v12 `'APPOINTMENT_DEPOSIT'` (§21); each time the tables were rebuilt with every row
+preserved (PERSISTENCE.md §4).
 
 No `sync_status` column exists on any business table. The outbox row carries the aggregate's
 identity only — never a payload: the worker reads the CURRENT local aggregate at push time. Both
@@ -464,6 +467,7 @@ products row deletion                                           PRODUCT     DELE
 sales + sale_items completion                                   SALE        UPSERT
 sale_items trimmed by an Appointment-linked Product removal     SALE        UPSERT (its child set changed)
 sales row emptied and deleted by that removal                   SALE        DELETE
+appointment_deposits row created / voided                       APPOINTMENT_DEPOSIT UPSERT (never DELETE)
 ```
 
 Children (`service_phases`, `appointment_items`, `appointment_phases`, `sale_items`) never create
@@ -854,6 +858,8 @@ public.sync_push_aggregate(p_business_id uuid, p_aggregate_type text, p_aggregat
   -- { "status": "APPLIED",  "sync_version": n }    the remote now holds the pushed state
   -- { "status": "CONFLICT", "sync_version": n? }   unseen remote revision that differs — NOTHING written
   -- { "status": "ABSENT" }                         DELETE of an aggregate the remote never held
+  -- { "status": "FINANCIAL_CONFLICT", … }          since §21.2: the write would leave an Appointment with
+  --                                                more ACTIVE deposits than its expected total — NOTHING written
 ```
 
 Both are `SECURITY INVOKER`, `search_path = ''`, executable by `authenticated` only, and start with
@@ -1748,3 +1754,162 @@ Local coverage: `calendar-blocks-sync.test.ts` — create / edit / delete → cl
 `ABSENT`, initial upload and push order, a blocks-only device, cloud pull → local for an insert, an
 edit and a tombstone with no echo, fresh-device restore, invalid remote blocks, the conflict contract,
 an older remote, an older build, and the upgrade gap.
+
+---
+
+## 21. Appointment deposits — a new aggregate type (schema v12)
+
+Deposits (`docs/domain/APPOINTMENTS.md` §25d) are money received in advance for an Appointment. They
+are synchronized as their OWN aggregate, `APPOINTMENT_DEPOSIT`, by the existing engine — same outbox,
+same push RPC, same pull RPC, same restore, same conflict contract. No second sync mechanism.
+
+```text
+supabase/migrations/20260924120000_create_appointment_deposits.sql
+
+create table public.appointment_deposits (business_id, id) PK, appointment_id → appointments
+                                         (composite FK, same Business, ON DELETE RESTRICT),
+                                         amount_cents >= 1, payment_method CARD|CASH, paid_at,
+                                         status ACTIVE|VOIDED, voided_at (exactly when VOIDED),
+                                         recorded_at, + sync metadata
+indexes      (business_id, updated_at) · (business_id, appointment_id)
+trigger      appointment_deposits_sync_before_write → the generic sync_aggregate_before_write (§7)
+RLS          owner select / insert / update — NO delete policy
+grants       revoke all from public, anon, authenticated; grant select, insert, update to authenticated
+create or replace function public.sync_count_business_aggregates(..)  also counts appointment_deposits
+create or replace function public.sync_push_aggregate(...)            accepts APPOINTMENT_DEPOSIT
+create or replace function public.sync_pull_business_aggregates(..)   a seventh family: appointment_deposits[]
+```
+
+- **Why its own aggregate, not a child of APPOINTMENT.** A child set is REPLACED by every parent push
+  (§6): an older build pushing an Appointment without a deposit section would erase them. As its own
+  aggregate a deposit is never named by an older build, so it can never be overwritten or removed by
+  one — the §20.1 argument. It also matches reality: a deposit is recorded on another day than its
+  Appointment, and the Appointment row does not change when one is taken.
+- **What travels.** `RemoteAppointmentDepositPayload`: `appointment_id`, `amount_cents`, `payment_method`,
+  `paid_at`, `status`, `voided_at`, `recorded_at` (the device's entry instant; remote `created_at` stays
+  server-owned). Integer cents, exact instants, no conversion.
+- **VOIDED is a status, not a tombstone.** Voiding is an ordinary `UPSERT` under the acknowledged
+  version (one new revision). Souris never sends a DELETE for a deposit. The engine contract still
+  holds: a remote tombstone (an administrator's) removes the local row without a guard, since nothing
+  references a deposit.
+- **Local side.** `SYNC_AGGREGATE_TYPES` gains `APPOINTMENT_DEPOSIT`; SQLite schema v12 rebuilds the two
+  bookkeeping tables (PERSISTENCE.md §4). Push order: `CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE,
+  CALENDAR_BLOCK, APPOINTMENT_DEPOSIT` — a deposit follows its Appointment (remote FK) and its tombstone
+  is applied first in the reverse pass. `aggregate-payload.ts` reads it raw (Business-scoped),
+  `remote-apply.ts` writes it in place and refuses a deposit whose Appointment this device does not hold
+  (`RemoteReferenceMissingError`, fetched again by the next pull), `enqueueInitialUpload` includes it,
+  `isLocalDatabasePopulated` counts it, `RestoreCounts` gained `appointmentDeposits`.
+- **Validation.** `parseRemoteBusinessSnapshot` refuses what the remote CHECKs refuse (amount below 1 or
+  fractional, unknown method or status, `voided_at` not matching the status) before any write, and
+  `assertSnapshotReferences` refuses a complete dataset whose live deposit names an Appointment it does
+  not hold.
+- **Appointment tombstones.** A pulled Appointment tombstone is `BLOCKED` locally while a deposit of it
+  exists (the deletion guard, PERSISTENCE.md §7b); remotely the Appointment can only be tombstoned, and a
+  hard delete is refused by the RESTRICT foreign key (`23001`).
+- **Conflicts.** The ordinary contract (§9, §15.4, §16.6). The financial invariant (deposits <= expected
+  total, APPOINTMENTS.md §25d) is a LOCAL rule enforced by the stores; it is NOT enforced by sync: two
+  devices editing offline (one lowering the price, the other taking a deposit) can produce a record whose
+  deposits exceed its total. Both are kept; the remaining amount is then shown as `0` and any later edit
+  that does not lower the total stays possible.
+- **Retries never duplicate.** The deposit id is created once per sheet presentation; an identical
+  re-push after a lost acknowledgement leaves the version unchanged (§7), and the local store refuses a
+  second insert of the same id.
+
+### 21.2 The financial invariant across devices — server-side rejection
+
+Every device keeps `ACTIVE DEPOSITS <= EXPECTED TOTAL` locally (`docs/domain/APPOINTMENTS.md` §25d), but two
+devices editing OFFLINE can each make a locally valid write that is invalid once merged:
+
+```text
+expected 100 €
+device A (offline)   lowers the total to 50 €     valid against what A knows
+device B (offline)   records a 60 € deposit       valid against what B knows
+after sync           expected 50 € · deposits 60 €     ← never a valid settled state
+```
+
+The ROOT CAUSE is that the two writes touch DIFFERENT aggregates (`APPOINTMENT` and `APPOINTMENT_DEPOSIT`), so
+the per-aggregate revision contract (§9) cannot see the incompatibility: each one is a clean, unconflicted
+revision of its own row.
+
+The remote holds the authoritative financial state of an Appointment — its items, its discount, the Sales sold
+during it and its deposits — so the rule is enforced THERE, at the strongest boundary, and the SECOND of the two
+writes is refused before it becomes authoritative:
+
+```sql
+public.sync_appointment_expected_total_cents(business, appointment)  items − discount + linked Sale lines
+public.sync_appointment_active_deposit_cents(business, appointment)  Σ ACTIVE, non-tombstoned deposits
+public.sync_appointment_deposit_breach(business, appointment)        the FINANCIAL_CONFLICT answer, or NULL
+```
+
+`sync_push_aggregate` evaluates the breach on the state the write WOULD leave, inside the same savepoint as the
+write, for every aggregate that can change it — `APPOINTMENT`, `APPOINTMENT_DEPOSIT`, `SALE` (a linked Sale is
+part of the expected total), on UPSERT and on the tombstone path. On a breach it raises `SC422`, the savepoint
+undoes everything, and it answers:
+
+```json
+{ "status": "FINANCIAL_CONFLICT", "appointment_id": "…", "expected_total_cents": 5000, "active_deposit_cents": 6000 }
+```
+
+Scope and exceptions:
+
+- a COMPLETED Appointment is OUT of scope: its expected total may legitimately fall below what was received (a
+  Product removed after checkout — the `Écart` of APPOINTMENTS.md §25b). Its deposits push normally;
+- an Appointment the remote does not hold yet is out of scope (the FK already refuses an orphan deposit);
+- a VOIDED deposit push always goes through: it LOWERS the deposits, and it is how a device resolves a conflict;
+- an `APPOINTMENT` tombstone is refused while the Appointment holds deposits — an older build's deletion guard
+  does not count them (`FINANCIAL_CONFLICT`, nothing tombstoned);
+- nothing else is touched: a CLIENT, SERVICE, PRODUCT or CALENDAR_BLOCK push never evaluates it.
+
+**Client behavior.** `RemotePushResult` gained `FINANCIAL_CONFLICT`. The push worker does NOT settle the entry:
+it records the ordinary bounded backoff with `last_error = 'FINANCIAL_CONFLICT'`, reports it in the run summary
+(`financialConflicts`, present only when there is one) and moves on to the other aggregates. The local record is
+never dropped, never rewritten: the deposit (or the price change) stays exactly as the professional entered it,
+pending. The device then pulls the other side of the race, holds the invalid combination locally, and Appointment
+Details shows « Conflit financier à résoudre » — no checkout, no new deposit — until the professional voids the
+deposit or raises the total. The next run then pushes the pending entry, and both sides converge.
+
+**Why not a local-only rule.** Nothing on a device can see a change another device has not pushed yet, so a
+local rule can only ever refuse its own writes. And nothing may be repaired silently — clamping, voiding or
+overwriting one side would destroy financial history.
+
+**Older remotes.** A remote whose migration is not applied (or an older one) simply does not evaluate the rule;
+the local rules still hold on every device, and a merged invalid state is still detected and surfaced locally
+(§7 of the domain rule). The check is additive: no existing status, payload or contract changed.
+
+### 21.1 Builds and remotes that predate deposits
+
+- **Older build.** It never names an `APPOINTMENT_DEPOSIT`, so it can neither overwrite nor tombstone one;
+  its pull parser ignores the seventh key; its local schema has no such table. **Limit:** it does not know
+  the deposits, so if IT checks an Appointment out, its sheet proposes the whole expected total — ship the
+  new build to every device before relying on deposits.
+- **Upgrade gap, closed.** Schema v12 clears the pull cursor (as v11 did): the first run of the new build
+  reads the complete dataset once and stores the deposits recorded meanwhile.
+- **Older remote** (migration not applied yet). A pull answer without the `appointment_deposits` key parses
+  as "no deposit" — never a failure, never a local deletion. An `APPOINTMENT_DEPOSIT` push is refused with
+  `22023` (`REJECTED`): the entry stays pending with a bounded backoff, the other aggregates keep syncing,
+  and the deposit leaves at the first run after the migration. Nothing is lost, but until then it reaches
+  neither the cloud nor another device — **apply the migration BEFORE shipping the build.** It is applied by
+  hand, like every Souris migration.
+
+Verified in the out-of-repo PGlite harness (§13 policy), 67 checks: the migration applied on a POPULATED
+database written by the §20 functions — every existing table byte-identical, policies / grants / function
+ACLs unchanged, re-run harmless (three policies, one trigger), an incremental pull after it returns nothing,
+the six existing families of a full pull identical — then the table shape, RLS and grants; create,
+identical re-push, void as an UPSERT (one revision, no tombstone), stale-version CONFLICT, ack-without-row
+CONFLICT, a second deposit of the same Appointment, exact round trip, incremental pull, `ABSENT`, owner
+hard-delete refusal, the RESTRICT foreign key protecting an Appointment that holds a deposit; the CHECK /
+NOT NULL / composite-FK refusals (including an Appointment of another Business) leaving no row;
+server-owned metadata; `anon` and non-owner refusals on the RPCs and the table, Business isolation,
+`business_id` pinned; an older build's APPOINTMENT push leaving every deposit (and the block, the note and
+the discount) untouched; and the invariant of §21.2 — a deposit within the total applied, an Appointment
+reduction below the deposits refused with both amounts and nothing written or revised, a raise always accepted,
+a second deposit that fits exactly applied and the one cent too many refused with no row created, a void always
+accepted, the reduction going through once the deposit was voided, the linked Sale counted in the total, its
+tombstone and an Appointment tombstone refused while deposits stand, a COMPLETED Appointment out of scope, and
+a CLIENT push never touched by it. The V1C / V1D regression harnesses give the same results before and after the
+migration (push all passed; pull 40 + its one by-design failure). Local coverage:
+`appointment-deposits-sync.test.ts` — create / void → cloud, offline coalescing, several deposits, initial
+upload and push order, retry without duplicate, a refused push kept pending, Business scope, cloud pull →
+local with no echo, fresh-device restore (history, ACTIVE totals, VOIDED state, Cash Register and remaining
+identical), invalid remote deposits and dangling references, the Appointment tombstone guard, the conflict
+contract, an older remote, an older build, and the upgrade gap.

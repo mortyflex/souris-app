@@ -1,6 +1,6 @@
 // Souris — sync aggregate vocabulary (Cloud Sync V1B)
 //
-// The six aggregate boundaries of the remote contract
+// The seven aggregate boundaries of the remote contract
 // (docs/architecture/CLOUD_SYNC.md §6). Children never sync on their own: a
 // phase, item, or sale line change marks its PARENT aggregate.
 //
@@ -10,6 +10,7 @@
 //   PRODUCT       products
 //   SALE            sales         + sale_items
 //   CALENDAR_BLOCK  calendar_blocks               (CLOUD_SYNC.md §20)
+//   APPOINTMENT_DEPOSIT appointment_deposits      (CLOUD_SYNC.md §21)
 
 import type { SourisDatabase } from '../database';
 
@@ -20,6 +21,7 @@ export const SYNC_AGGREGATE_TYPES = [
   'PRODUCT',
   'SALE',
   'CALENDAR_BLOCK',
+  'APPOINTMENT_DEPOSIT',
 ] as const;
 
 export type SyncAggregateType = (typeof SYNC_AGGREGATE_TYPES)[number];
@@ -44,6 +46,19 @@ export interface SyncConflict extends SyncAggregateRef {
   readonly acknowledgedVersion: number | undefined;
   /** The version the remote reported (undefined = the remote holds no such row). */
   readonly remoteVersion: number | undefined;
+}
+
+/**
+ * The remote refused a financial write because it would leave an Appointment
+ * with more ACTIVE deposits than its expected total (CLOUD_SYNC.md §21.2).
+ * Neither side was overwritten: the local record stays, its outbox entry stays
+ * pending, and the Appointment shows a financial conflict to resolve.
+ */
+export interface SyncFinancialConflict extends SyncAggregateRef {
+  /** The Appointment whose invariant is broken (undefined only if the remote did not name it). */
+  readonly appointmentId: string | undefined;
+  readonly expectedTotalCents: number;
+  readonly activeDepositTotalCents: number;
 }
 
 /**

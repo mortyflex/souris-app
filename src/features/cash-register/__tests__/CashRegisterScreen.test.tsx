@@ -60,7 +60,8 @@ const MASQUE_ID = '6974bff937a5d89c2d9afbd0'; // Masque réparateur 5 min · 50 
 
 /** Records explicit checkouts and Sales through the canonical sessions at the CURRENT fake time. */
 function CheckoutProbe() {
-  const { checkoutAppointment, updateAppointmentPayment } = useAppointmentSession();
+  const { checkoutAppointment, recordAppointmentDeposit, updateAppointmentPayment, voidAppointmentDeposit } =
+    useAppointmentSession();
   const { setProductStock } = useProductCatalog();
   const { completeSale } = useSaleSession();
   const sell = (id: string, appointmentId?: string, payment?: { cardAmountCents: number; cashAmountCents: number }) =>
@@ -100,6 +101,17 @@ function CheckoutProbe() {
       <Pressable
         testID="edit-sofia"
         onPress={() => updateAppointmentPayment('agenda-sofia', { cardAmountCents: 3000, cashAmountCents: 6500 })}
+      />
+      <Pressable
+        testID="deposit-sofia"
+        onPress={() =>
+          recordAppointmentDeposit({ id: 'deposit-sofia', appointmentId: 'agenda-sofia', amountCents: 3000, paymentMethod: 'CASH' })
+        }
+      />
+      <Pressable testID="void-deposit-sofia" onPress={() => voidAppointmentDeposit('deposit-sofia')} />
+      <Pressable
+        testID="checkout-sofia-rest"
+        onPress={() => checkoutAppointment('agenda-sofia', { cardAmountCents: 6500, cashAmountCents: 0 })}
       />
     </>
   );
@@ -520,5 +532,56 @@ describe('CashRegisterScreen', () => {
     });
 
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  describe('deposits', () => {
+    it('counts a deposit on the day it was received, on its own method, as an « Acompte » entry', async () => {
+      const view = await renderCashRegister();
+
+      await press(view, 'deposit-sofia');
+
+      expect(totals(view)).toMatchObject({
+        total: formatEuroCents(3000),
+        card: formatEuroCents(0),
+        cash: formatEuroCents(3000),
+        count: '1 encaissement',
+      });
+      const row = view.getByTestId('cash-register-entry-deposit-sofia');
+      expect(within(row).getByText(/^Acompte · /)).toBeTruthy();
+      expect(view.getByTestId('cash-register-entry-amount-deposit-sofia').props.children).toBe(formatEuroCents(3000));
+      expect(row.props.accessibilityLabel).toContain('Acompte');
+
+      // It opens the Appointment it was paid for.
+      await press(view, 'cash-register-entry-deposit-sofia');
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/appointments/[appointmentId]',
+        params: { appointmentId: 'agenda-sofia' },
+      });
+    });
+
+    it('the final checkout adds only the remaining money: 30 € + 65 € = 95 €, never 125 €', async () => {
+      const view = await renderCashRegister();
+
+      await press(view, 'deposit-sofia');
+      await press(view, 'checkout-sofia-rest');
+
+      expect(totals(view)).toMatchObject({
+        total: formatEuroCents(9500),
+        card: formatEuroCents(6500),
+        cash: formatEuroCents(3000),
+        count: '2 encaissements',
+      });
+      expect(entryRows(view)).toHaveLength(2);
+    });
+
+    it('a VOIDED deposit counts nowhere', async () => {
+      const view = await renderCashRegister();
+
+      await press(view, 'deposit-sofia');
+      await press(view, 'void-deposit-sofia');
+
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: 'Aucun encaissement' });
+      expect(view.queryByTestId('cash-register-entry-deposit-sofia')).toBeNull();
+    });
   });
 });

@@ -11,14 +11,18 @@
 //   * version mismatch + different state → CONFLICT, nothing written;
 //   * DELETE → tombstone; no row → ABSENT; already tombstoned → same version;
 //   * composite foreign keys: an Appointment / Sale whose Client (or a Sale
-//     whose Appointment) the remote does not hold is REJECTED (23503).
+//     whose Appointment) the remote does not hold is REJECTED (23503);
+//   * the financial invariant (CLOUD_SYNC.md §21.2): a write that would leave an
+//     Appointment with more ACTIVE deposits than its expected total is refused
+//     with FINANCIAL_CONFLICT and NOTHING is written — the same rule as
+//     `sync_appointment_deposit_breach`, on the same authoritative state.
 //
 // …and the CONTRACT of `public.sync_pull_business_aggregates`
 // (supabase/migrations/20260917200000_create_sync_pull_function.sql):
 //
 //   * owner-only, like the push;
-//   * returns the WIRE JSON — `pulled_at` + the six families (`calendar_blocks`
-//     since 20260923120000), each aggregate
+//   * returns the WIRE JSON — `pulled_at` + the seven families (`calendar_blocks`
+//     since 20260923120000, `appointment_deposits` since 20260924120000), each aggregate
 //     as `{ id, sync_version, deleted_at, …payload columns, children }`, in
 //     creation order, tombstones included — instants as ISO-8601 UTC text
 //     with milliseconds, the fixed form `sync_instant_text` produces;
@@ -89,6 +93,11 @@ function referenceError(
   request: RemotePushRequest,
 ): SyncRemoteError | undefined {
   const payload = request.payload as { client_id?: string | null; appointment_id?: string | null };
+  if (request.aggregateType === 'APPOINTMENT_DEPOSIT') {
+    return payload.appointment_id != null && rows.has(`APPOINTMENT/${payload.appointment_id}`)
+      ? undefined
+      : new SyncRemoteError('REJECTED', '23503');
+  }
   if (request.aggregateType !== 'APPOINTMENT' && request.aggregateType !== 'SALE') return undefined;
   if (payload.client_id != null && !rows.has(`CLIENT/${payload.client_id}`)) {
     return new SyncRemoteError('REJECTED', '23503');
@@ -99,6 +108,79 @@ function referenceError(
     !rows.has(`APPOINTMENT/${payload.appointment_id}`)
   ) {
     return new SyncRemoteError('REJECTED', '23503');
+  }
+  return undefined;
+}
+
+
+/** The expected total of one Appointment as the remote holds it (items − discount + linked Sale lines). */
+function remoteExpectedTotalCents(rows: Map<string, FakeRemoteAggregate>, appointmentId: string): number {
+  const appointment = rows.get(`APPOINTMENT/${appointmentId}`);
+  if (!appointment || appointment.deleted) return 0;
+  const payload = appointment.payload as {
+    readonly items?: readonly { readonly price_cents: number }[];
+    readonly discount_percent?: number | null;
+    readonly discount_amount_cents?: number | null;
+  };
+  const gross = (payload.items ?? []).reduce((total, item) => total + item.price_cents, 0);
+  const requested =
+    payload.discount_percent != null
+      ? Math.floor((gross * payload.discount_percent + 50) / 100)
+      : (payload.discount_amount_cents ?? 0);
+  let products = 0;
+  for (const [key, row] of rows) {
+    if (!key.startsWith('SALE/') || row.deleted) continue;
+    const sale = row.payload as {
+      readonly appointment_id?: string | null;
+      readonly items?: readonly { readonly unit_price_cents: number; readonly quantity: number }[];
+    };
+    if (sale.appointment_id !== appointmentId) continue;
+    products += (sale.items ?? []).reduce((total, item) => total + item.unit_price_cents * item.quantity, 0);
+  }
+  return gross - Math.min(requested, gross) + products;
+}
+
+function remoteActiveDepositCents(rows: Map<string, FakeRemoteAggregate>, appointmentId: string): number {
+  let total = 0;
+  for (const [key, row] of rows) {
+    if (!key.startsWith('APPOINTMENT_DEPOSIT/') || row.deleted) continue;
+    const deposit = row.payload as {
+      readonly appointment_id?: string;
+      readonly amount_cents?: number;
+      readonly status?: string;
+    };
+    if (deposit.appointment_id !== appointmentId || deposit.status !== 'ACTIVE') continue;
+    total += deposit.amount_cents ?? 0;
+  }
+  return total;
+}
+
+/** The FINANCIAL_CONFLICT answer, or undefined. COMPLETED and absent Appointments are out of scope. */
+function financialBreach(
+  rows: Map<string, FakeRemoteAggregate>,
+  appointmentId: string | undefined,
+): RemotePushResult | undefined {
+  if (appointmentId === undefined) return undefined;
+  const appointment = rows.get(`APPOINTMENT/${appointmentId}`);
+  if (!appointment || appointment.deleted) return undefined;
+  if ((appointment.payload as { readonly status?: string }).status === 'COMPLETED') return undefined;
+  const expectedTotalCents = remoteExpectedTotalCents(rows, appointmentId);
+  const activeDepositTotalCents = remoteActiveDepositCents(rows, appointmentId);
+  if (activeDepositTotalCents <= expectedTotalCents) return undefined;
+  return { status: 'FINANCIAL_CONFLICT', appointmentId, expectedTotalCents, activeDepositTotalCents };
+}
+
+/** The Appointment whose invariant a write of this aggregate may affect. */
+function affectedAppointmentId(
+  rows: Map<string, FakeRemoteAggregate>,
+  request: RemotePushRequest,
+): string | undefined {
+  if (request.aggregateType === 'APPOINTMENT') return request.aggregateId;
+  if (request.aggregateType === 'APPOINTMENT_DEPOSIT' || request.aggregateType === 'SALE') {
+    const payload = (request.payload ?? rows.get(`${request.aggregateType}/${request.aggregateId}`)?.payload) as
+      | { readonly appointment_id?: string | null }
+      | undefined;
+    return payload?.appointment_id ?? undefined;
   }
   return undefined;
 }
@@ -133,6 +215,8 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
     'no_show_recorded_at',
     'paid_at',
     'completed_at',
+    'voided_at',
+    'recorded_at',
   ];
 
   function toWireAggregate(key: string, row: FakeRemoteAggregate): Record<string, unknown> {
@@ -168,8 +252,22 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
       if (!remote) return { status: 'ABSENT' };
       if (remote.deleted) return { status: 'APPLIED', syncVersion: remote.syncVersion };
       if (!versionMatches) return { status: 'CONFLICT', remoteVersion: remote.syncVersion };
+      if (request.aggregateType === 'APPOINTMENT' && remoteActiveDepositCents(rows, request.aggregateId) > 0) {
+        return {
+          status: 'FINANCIAL_CONFLICT',
+          appointmentId: request.aggregateId,
+          expectedTotalCents: remoteExpectedTotalCents(rows, request.aggregateId),
+          activeDepositTotalCents: remoteActiveDepositCents(rows, request.aggregateId),
+        };
+      }
+      const appointmentId = affectedAppointmentId(rows, request);
       const tombstone = { ...remote, deleted: true, syncVersion: remote.syncVersion + 1, updatedAt: tick() };
       rows.set(key, tombstone);
+      const breach = financialBreach(rows, appointmentId);
+      if (breach) {
+        rows.set(key, remote); // nothing is written
+        return breach;
+      }
       return { status: 'APPLIED', syncVersion: tombstone.syncVersion };
     }
 
@@ -180,6 +278,11 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
       if (rejected) throw rejected;
       const createdAt = tick();
       rows.set(key, { payload: clone(request.payload), syncVersion: 1, deleted: false, createdAt, updatedAt: createdAt });
+      const breach = financialBreach(rows, affectedAppointmentId(rows, request));
+      if (breach) {
+        rows.delete(key); // nothing is written
+        return breach;
+      }
       return { status: 'APPLIED', syncVersion: 1 };
     }
     const identical =
@@ -196,6 +299,11 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
       updatedAt: tick(),
     };
     rows.set(key, next);
+    const breach = financialBreach(rows, affectedAppointmentId(rows, request));
+    if (breach) {
+      rows.set(key, remote); // nothing is written
+      return breach;
+    }
     return { status: 'APPLIED', syncVersion: next.syncVersion };
   }
 
@@ -293,6 +401,7 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
         appointments: family('APPOINTMENT'),
         sales: family('SALE'),
         calendar_blocks: family('CALENDAR_BLOCK'),
+        appointment_deposits: family('APPOINTMENT_DEPOSIT'),
       };
     },
 

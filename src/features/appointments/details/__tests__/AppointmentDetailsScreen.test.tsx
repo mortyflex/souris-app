@@ -39,6 +39,11 @@ import { getCashRegisterDaySummary } from "@/domain/cash-register";
 import { getClientActivitySummary } from "@/features/clients/profile/presentation";
 import { getClientSales } from "@/features/sales/presentation";
 import { bootstrapPersistence } from "@/persistence/bootstrap";
+import {
+  insertAppointmentDeposit,
+  loadAppointmentDeposits,
+  voidAppointmentDeposit,
+} from "@/persistence/stores/appointment-deposits";
 import { insertAppointment, loadAppointments } from "@/persistence/stores/appointments";
 import { insertCalendarBlock } from "@/persistence/stores/calendar-blocks";
 import { findProduct, setProductStock } from "@/persistence/stores/products";
@@ -1063,7 +1068,7 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.queryByTestId("permanent-deletion-dialog")).toBeNull();
     expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
     expect(view.getByText("Suppression impossible")).toBeTruthy();
-    expect(view.getByText(/encaissement enregistré/)).toBeTruthy();
+    expect(view.getByText(/un encaissement, un acompte/)).toBeTruthy();
     expect(view.queryByTestId("confirm-permanent-deletion")).toBeNull();
 
     await press(view, "close-appointment-deletion-blocked");
@@ -2526,5 +2531,413 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.queryByTestId("appointment-service-qe-coupe-swipe-full")).toBeNull();
       expect(view.queryByTestId("save-service-timing-qe-brushing")).toBeNull();
     });
+  });
+});
+
+describe("AppointmentDetailsScreen — deposits (« Acomptes »)", () => {
+  const DEPOSIT_APPOINTMENT = "deposit-appointment";
+  const NOW = new Date(2026, 7, 29, 15, 0);
+
+  beforeAll(() => {
+    jest.useFakeTimers({ doNotFake: ["nextTick", "queueMicrotask"] });
+  });
+
+  beforeEach(() => {
+    jest.setSystemTime(NOW);
+    mockWarningHaptic.mockClear();
+    mockSuccessHaptic.mockClear();
+    mockSelectionHaptic.mockClear();
+    mockAlert.mockClear();
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  interface SeededDeposit {
+    readonly id: string;
+    readonly amountCents: number;
+    readonly paymentMethod?: "CARD" | "CASH";
+    readonly voided?: boolean;
+  }
+
+  /** Coupe 30 € + Balayage 70 € = 100,00 € expected, today 10:00 (started). */
+  function persistDepositAppointment(
+    db: ReturnType<typeof openTestDatabase>,
+    deposits: readonly SeededDeposit[] = [],
+    status: "SCHEDULED" | "COMPLETED" | "CANCELLED" | "NO_SHOW" = "SCHEDULED",
+  ) {
+    bootstrapPersistence(db, () => createDevelopmentSeed(new Date()));
+    insertAppointment(db, {
+      id: DEPOSIT_APPOINTMENT,
+      businessId: "business-test",
+      clientId: "client-agenda-sofia",
+      staffMemberId: "staff-amelie",
+      startAt: new Date(2026, 7, 29, 10, 0),
+      status: "SCHEDULED",
+      items: [
+        {
+          id: "dp-coupe",
+          serviceId: "service-cut",
+          order: 0,
+          serviceName: "Coupe",
+          serviceType: "SERVICE",
+          price: 30,
+          phases: [{ id: "dp-coupe-phase", name: "Coupe", durationMinutes: 30, requiresStaff: true }],
+        },
+        {
+          id: "dp-balayage",
+          serviceId: "service-highlights",
+          order: 1,
+          serviceName: "Balayage",
+          serviceType: "TECHNIQUE",
+          price: 70,
+          phases: [{ id: "dp-application", name: "Application", durationMinutes: 45, requiresStaff: true }],
+        },
+      ],
+    });
+    for (const deposit of deposits) {
+      insertAppointmentDeposit(db, {
+        id: deposit.id,
+        businessId: "business-test",
+        appointmentId: DEPOSIT_APPOINTMENT,
+        amountCents: deposit.amountCents,
+        paymentMethod: deposit.paymentMethod ?? "CARD",
+        paidAt: new Date(2026, 7, 22, 10, 0),
+        status: "ACTIVE",
+        createdAt: new Date(2026, 7, 22, 10, 0),
+      });
+      if (deposit.voided) voidAppointmentDeposit(db, deposit.id, new Date(2026, 7, 23, 9, 0));
+    }
+    if (status !== "SCHEDULED") {
+      db.runSync("UPDATE appointments SET status = ? WHERE id = ?", [status, DEPOSIT_APPOINTMENT]);
+    }
+  }
+
+  const storedDeposits = (db: ReturnType<typeof openTestDatabase>) =>
+    loadAppointmentDeposits(db).filter((deposit) => deposit.appointmentId === DEPOSIT_APPOINTMENT);
+  const storedAppointment = (db: ReturnType<typeof openTestDatabase>) =>
+    loadAppointments(db).find((appointment) => appointment.id === DEPOSIT_APPOINTMENT);
+
+  async function openDepositSheet(view: Awaited<ReturnType<typeof render>>) {
+    await press(view, "take-deposit");
+    await settleSheetTransition();
+  }
+
+  it("without a deposit shows ONE « Prendre un acompte » row and no accounting block", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    expect(within(view.getByTestId("take-deposit")).getByText("Prendre un acompte")).toBeTruthy();
+    expect(view.queryByTestId("appointment-deposits")).toBeNull();
+    const footer = within(view.getByTestId("appointment-checkout-footer"));
+    expect(footer.getByText("Total à encaisser")).toBeTruthy();
+    expect(footer.getByText(`Encaisser ${formatEuroCents(10000)}`)).toBeTruthy();
+  });
+
+  it("takes a deposit through the canonical sheet: one selection tick, one success haptic, the remaining updates", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    await openDepositSheet(view);
+    const header = within(view.getByTestId("deposit-header"));
+    expect(header.getAllByText(/^(Annuler|Prendre un acompte)$/).map((node) => node.props.children)).toEqual([
+      "Annuler",
+      "Prendre un acompte",
+    ]);
+    expect(view.getByTestId("deposit-expected-total").props.children).toBe(formatEuroCents(10000));
+    expect(view.getByTestId("deposit-already-paid").props.children).toBe(formatEuroCents(0));
+    expect(view.getByTestId("confirm-deposit").props.accessibilityState.disabled).toBe(true);
+
+    await press(view, "deposit-quick-3000");
+    expect(view.getByTestId("deposit-new-amount").props.children).toBe(formatEuroCents(3000));
+    expect(view.getByTestId("deposit-remaining-after").props.children).toBe(formatEuroCents(7000));
+    await press(view, "confirm-deposit");
+    await settleSheetTransition();
+
+    expect(storedDeposits(db)).toEqual([
+      expect.objectContaining({ amountCents: 3000, paymentMethod: "CARD", status: "ACTIVE" }),
+    ]);
+    // Received NOW (the sheet transition advanced the fake clock by a few ms).
+    expect(storedDeposits(db)[0]?.paidAt.toDateString()).toBe(NOW.toDateString());
+    expect(view.getByTestId("appointment-deposit-total").props.children).toBe(formatEuroCents(3000));
+    expect(view.getByTestId("appointment-deposit-remaining").props.children).toBe(formatEuroCents(7000));
+    const footer = within(view.getByTestId("appointment-checkout-footer"));
+    expect(footer.getByText("Reste à encaisser")).toBeTruthy();
+    expect(footer.getByText(`Encaisser ${formatEuroCents(7000)}`)).toBeTruthy();
+    expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+    expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    expect(mockAlert).not.toHaveBeenCalled();
+  });
+
+  it("records ONE deposit when « Encaisser l’acompte » is tapped twice", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+    await openDepositSheet(view);
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId("deposit-amount"), "25");
+    });
+    await press(view, "deposit-method-cash");
+
+    await press(view, "confirm-deposit");
+    // The sheet is still mounted while it slides away: a second tap on the same
+    // CTA reaches the handler again and must record nothing.
+    expect(view.getByTestId("confirm-deposit")).toBeTruthy();
+    await press(view, "confirm-deposit");
+    await settleSheetTransition();
+
+    expect(storedDeposits(db)).toEqual([expect.objectContaining({ amountCents: 2500, paymentMethod: "CASH" })]);
+    expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses an amount above what remains, and cancelling the sheet writes nothing", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "d1", amountCents: 8000 }]);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+    await openDepositSheet(view);
+
+    // Only the quick amounts that fit are offered (20 € left).
+    expect(view.getByTestId("deposit-quick-1000")).toBeTruthy();
+    expect(view.getByTestId("deposit-quick-2000")).toBeTruthy();
+    expect(view.queryByTestId("deposit-quick-3000")).toBeNull();
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId("deposit-amount"), "20,01");
+    });
+    expect(view.getByTestId("deposit-error").props.children).toBe(
+      `L’acompte ne peut pas dépasser le reste à encaisser (${formatEuroCents(2000)}).`,
+    );
+    expect(view.getByTestId("confirm-deposit").props.accessibilityState.disabled).toBe(true);
+
+    await press(view, "cancel-deposit");
+    await settleSheetTransition();
+
+    expect(storedDeposits(db)).toHaveLength(1);
+    expect(view.queryByTestId("deposit-sheet")).toBeNull();
+    expect(mockSuccessHaptic).not.toHaveBeenCalled();
+  });
+
+  it("lists several deposits oldest first with their totals, and a VOIDED one subdued, in words", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [
+      { id: "d-card", amountCents: 3000 },
+      { id: "d-cash", amountCents: 2000, paymentMethod: "CASH" },
+      { id: "d-mistake", amountCents: 1000, voided: true },
+    ]);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    const section = within(view.getByTestId("appointment-deposits"));
+    // The section title and the « Acomptes » line of the position.
+    expect(section.getAllByText("Acomptes")).toHaveLength(2);
+    expect(view.getByTestId("appointment-deposit-expected").props.children).toBe(formatEuroCents(10000));
+    expect(view.getByTestId("appointment-deposit-total").props.children).toBe(formatEuroCents(5000));
+    expect(view.getByTestId("appointment-deposit-remaining").props.children).toBe(formatEuroCents(5000));
+    expect(view.getByTestId("appointment-deposit-label-d-card").props.children).toBe("22 août · Carte");
+    expect(view.getByTestId("appointment-deposit-label-d-cash").props.children).toBe("22 août · Espèces");
+    expect(view.getByTestId("appointment-deposit-label-d-mistake").props.children).toBe("22 août · Carte · Annulé");
+    expect(view.getByLabelText(`Acompte annulé, ${formatEuroCents(1000)}, payé par carte le 22 août`)).toBeTruthy();
+    expect(view.getByLabelText(`Total des acomptes, ${formatEuroCents(5000)}`)).toBeTruthy();
+    expect(view.getByLabelText(`Reste à encaisser, ${formatEuroCents(5000)}`)).toBeTruthy();
+    // A VOIDED deposit can no longer be voided.
+    expect(view.queryByTestId("void-deposit-d-mistake")).toBeNull();
+    expect(view.getByTestId("void-deposit-d-card").props.accessibilityLabel).toBe(`Annuler l’acompte de ${formatEuroCents(3000)}`);
+  });
+
+  it("voids a deposit after a confirmation that says it is a correction, not a refund", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "d-card", amountCents: 3000 }]);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    await press(view, "void-deposit-d-card");
+    await settleSheetTransition();
+    const dialog = within(view.getByTestId("void-deposit-dialog"));
+    expect(dialog.getByText(`Annuler l’acompte de ${formatEuroCents(3000)} ?`)).toBeTruthy();
+    expect(dialog.getByText(/ne sera plus compté dans le rendez-vous ni dans la caisse/)).toBeTruthy();
+    expect(dialog.getByText(/pas d’un remboursement/)).toBeTruthy();
+    await press(view, "confirm-void-deposit");
+    await settleSheetTransition();
+
+    expect(storedDeposits(db)).toEqual([expect.objectContaining({ id: "d-card", status: "VOIDED" })]);
+    expect(view.getByTestId("appointment-deposit-label-d-card").props.children).toBe("22 août · Carte · Annulé");
+    expect(view.getByTestId("appointment-deposit-total").props.children).toBe(formatEuroCents(0));
+    expect(view.getByTestId("appointment-deposit-remaining").props.children).toBe(formatEuroCents(10000));
+    expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
+    expect(mockSuccessHaptic).not.toHaveBeenCalled();
+  });
+
+  it("a completed Appointment takes no deposit and voids none; its history stays readable", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "d-card", amountCents: 3000 }], "COMPLETED");
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    expect(view.queryByTestId("take-deposit")).toBeNull();
+    expect(view.queryByTestId("void-deposit-d-card")).toBeNull();
+    expect(view.getByTestId("appointment-deposit-label-d-card").props.children).toBe("22 août · Carte");
+  });
+
+  it.each(["CANCELLED", "NO_SHOW"] as const)("a %s Appointment takes no deposit", async (status) => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [], status);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    expect(view.queryByTestId("take-deposit")).toBeNull();
+    expect(view.queryByTestId("appointment-deposits")).toBeNull();
+  });
+
+  it("the final checkout suggests and records ONLY what remains after the deposits", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "d-card", amountCents: 3000 }]);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    await press(view, "checkout-appointment");
+    await settleSheetTransition();
+    expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(10000));
+    expect(view.getByTestId("checkout-deposits").props.children).toBe(formatEuroCents(-3000));
+    expect(view.getByTestId("checkout-due").props.children).toBe(formatEuroCents(7000));
+    await press(view, "checkout-fill-card");
+    expect(view.getByTestId("checkout-amount-card").props.value).toBe("70,00");
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    expect(storedAppointment(db)).toMatchObject({
+      status: "COMPLETED",
+      payment: { cardAmountCents: 7000, cashAmountCents: 0 },
+    });
+    expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(7000));
+    // Paid exactly what was due: no « Écart ».
+    expect(view.queryByTestId("appointment-payment-difference")).toBeNull();
+    expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it("a fully prepaid Appointment reads « Terminer » and completes with NO payment", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "d-all", amountCents: 10000 }]);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    expect(view.queryByTestId("take-deposit")).toBeNull();
+    const footer = within(view.getByTestId("appointment-checkout-footer"));
+    expect(footer.getByText("Reste à encaisser")).toBeTruthy();
+    expect(footer.getByText("Terminer")).toBeTruthy();
+    expect(footer.getByTestId("checkout-appointment").props.accessibilityLabel).toBe("Terminer le rendez-vous");
+
+    await press(view, "checkout-appointment");
+    await settleSheetTransition();
+    expect(view.getByTestId("checkout-due").props.children).toBe(formatEuroCents(0));
+    expect(within(view.getByTestId("confirm-checkout")).getByText("Terminer le rendez-vous")).toBeTruthy();
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    const stored = storedAppointment(db);
+    expect(stored?.status).toBe("COMPLETED");
+    expect(stored?.payment).toBeUndefined();
+    // Settled: no further checkout is offered.
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
+    expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a checkout discount that would fall below the deposits, and explains why", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "d-card", amountCents: 8000 }]);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    await press(view, "checkout-appointment");
+    await settleSheetTransition();
+    await press(view, "appointment-discount-toggle");
+    await press(view, "appointment-discount-preset-PERCENT-50");
+
+    expect(view.getByTestId("checkout-deposit-shortfall")).toBeTruthy();
+    expect(
+      view.getByText(`Ce changement ferait passer le total du rendez-vous sous les ${formatEuroCents(8000)} déjà versés en acompte.`),
+    ).toBeTruthy();
+    // 50,00 € expected, 80,00 € paid ahead: nothing due, and nothing can be confirmed.
+    expect(view.getByTestId("checkout-due").props.children).toBe(formatEuroCents(0));
+    expect(view.getByTestId("confirm-checkout").props.accessibilityState.disabled).toBe(true);
+    await typeAmount(view, "card", "10");
+    expect(view.getByTestId("confirm-checkout").props.accessibilityState.disabled).toBe(true);
+
+    // Cancelling the checkout changes nothing.
+    await press(view, "cancel-checkout");
+    await settleSheetTransition();
+    expect(storedAppointment(db)).toMatchObject({ status: "SCHEDULED" });
+    expect(storedAppointment(db)?.discount).toBeUndefined();
+  });
+
+  it("refuses a quick service removal that would fall below the deposits, and writes nothing", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "d-card", amountCents: 8000 }]);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    await press(view, "appointment-service-dp-balayage-swipe-full");
+
+    expect(view.getByTestId("appointment-deposit-shortfall")).toBeTruthy();
+    expect(storedAppointment(db)?.items.map((item) => item.id)).toEqual(["dp-coupe", "dp-balayage"]);
+    expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
+    expect(mockAlert).not.toHaveBeenCalled();
+  });
+
+  it.each(["CANCELLED", "NO_SHOW"] as const)(
+    "a %s Appointment still corrects a mistaken deposit: the wording says it is not a refund",
+    async (status) => {
+      const db = openTestDatabase();
+      persistDepositAppointment(db, [{ id: "d-card", amountCents: 3000 }], status);
+      const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+      // No new deposit on a cancelled or missed visit — but the correction stays.
+      expect(view.queryByTestId("take-deposit")).toBeNull();
+      expect(view.getByTestId("void-deposit-d-card")).toBeTruthy();
+
+      await press(view, "void-deposit-d-card");
+      await settleSheetTransition();
+      const dialog = within(view.getByTestId("void-deposit-dialog"));
+      expect(dialog.getByText("Annuler cet acompte ?")).toBeTruthy();
+      expect(
+        dialog.getByText(
+          /Cette action corrige un acompte enregistré par erreur\. Elle ne rembourse pas la cliente\./,
+        ),
+      ).toBeTruthy();
+      expect(dialog.getByText(/plus compté dans le rendez-vous ni dans les totaux de la caisse/)).toBeTruthy();
+      await press(view, "confirm-void-deposit");
+      await settleSheetTransition();
+
+      expect(storedDeposits(db)).toEqual([expect.objectContaining({ id: "d-card", status: "VOIDED" })]);
+      expect(view.getByTestId("appointment-deposit-label-d-card").props.children).toBe("22 août · Carte · Annulé");
+      expect(view.getByTestId("appointment-deposit-total").props.children).toBe(formatEuroCents(0));
+      expect(mockWarningHaptic).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("shows deposits above the total as a financial conflict, blocks checkout and new deposits, and never says « Reste 0,00 € »", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "d-card", amountCents: 8000 }]);
+    // The state a merge of two offline devices leaves behind: the total was
+    // lowered elsewhere (Balayage 70,00 € → 10,00 €, so 40,00 € in all) while
+    // 80,00 € was already paid ahead here.
+    db.runSync("UPDATE appointment_items SET price_cents = 1000 WHERE appointment_id = ? AND id = 'dp-balayage'", [
+      DEPOSIT_APPOINTMENT,
+    ]);
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    expect(view.getByTestId("appointment-deposit-conflict")).toBeTruthy();
+    expect(view.getByText(/Conflit financier à résoudre/)).toBeTruthy();
+    expect(view.getByTestId("appointment-deposit-excess").props.children).toBe(formatEuroCents(4000));
+    expect(view.queryByTestId("appointment-deposit-remaining")).toBeNull();
+    // No checkout, no new deposit while it stands.
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
+    expect(view.queryByTestId("take-deposit")).toBeNull();
+    const footer = within(view.getByTestId("appointment-checkout-footer"));
+    expect(footer.getByText("Total du rendez-vous")).toBeTruthy();
+    expect(footer.queryByText("Reste à encaisser")).toBeNull();
+
+    // Voiding the deposit recorded by mistake resolves it: checkout is offered again.
+    await press(view, "void-deposit-d-card");
+    await settleSheetTransition();
+    await press(view, "confirm-void-deposit");
+    await settleSheetTransition();
+
+    expect(view.queryByTestId("appointment-deposit-conflict")).toBeNull();
+    expect(view.getByTestId("appointment-deposit-remaining").props.children).toBe(formatEuroCents(4000));
+    expect(view.getByTestId("checkout-appointment")).toBeTruthy();
   });
 });

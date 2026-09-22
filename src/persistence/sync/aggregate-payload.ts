@@ -8,7 +8,7 @@
 // instant, and the Business scope.
 //
 // Scope rule: a business-scoped row (services, appointments, products,
-// sales) is pushed ONLY when its `business_id` is the bound Business. A row
+// sales, calendar blocks, appointment deposits) is pushed ONLY when its `business_id` is the bound Business. A row
 // carrying another id is refused loudly — never pushed, never mistaken for a
 // deleted aggregate. `clients` has no `business_id` column; the single local
 // address book belongs to the bound Business (PERSISTENCE.md §4b).
@@ -19,6 +19,7 @@ import { assertAmountCents, fromSqlBoolean, fromSqlInstant } from '../values';
 import type { SyncAggregateRef } from './aggregate';
 import type {
   RemoteAggregatePayload,
+  RemoteAppointmentDepositPayload,
   RemoteAppointmentItemPayload,
   RemoteAppointmentPayload,
   RemoteCalendarBlockPayload,
@@ -319,6 +320,37 @@ function readCalendarBlock(
   };
 }
 
+function readAppointmentDeposit(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+): RemoteAppointmentDepositPayload | undefined {
+  const row = db.getFirstSync<{
+    readonly business_id: string;
+    readonly appointment_id: string;
+    readonly amount_cents: number;
+    readonly payment_method: string;
+    readonly paid_at: string;
+    readonly status: string;
+    readonly voided_at: string | null;
+    readonly recorded_at: string;
+  }>(
+    'SELECT business_id, appointment_id, amount_cents, payment_method, paid_at, status, voided_at, recorded_at FROM appointment_deposits WHERE id = ?',
+    [ref.aggregateId],
+  );
+  assertScoped(row, businessId, ref);
+  if (!row) return undefined;
+  return {
+    appointment_id: row.appointment_id,
+    amount_cents: assertAmountCents(row.amount_cents, 'appointment_deposits.amount_cents'),
+    payment_method: row.payment_method,
+    paid_at: toInstant(row.paid_at),
+    status: row.status,
+    voided_at: toOptionalInstant(row.voided_at),
+    recorded_at: toInstant(row.recorded_at),
+  };
+}
+
 /**
  * The complete current aggregate (row + whole ordered child set), or
  * undefined when the row no longer exists locally. Throws
@@ -343,5 +375,7 @@ export function readAggregatePayload(
       return readSale(db, businessId, ref);
     case 'CALENDAR_BLOCK':
       return readCalendarBlock(db, businessId, ref);
+    case 'APPOINTMENT_DEPOSIT':
+      return readAppointmentDeposit(db, businessId, ref);
   }
 }

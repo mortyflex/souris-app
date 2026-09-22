@@ -11,12 +11,17 @@
 // marks the APPOINTMENT aggregate in the sync outbox within the same
 // transaction (Cloud Sync V1B); permanent deletion leaves an APPOINTMENT
 // DELETE entry that outlives the rows.
+//
+// Deposits (schema v12): every write that can LOWER the expected total — a
+// full update, an item removal, a discount — reads the deposit position
+// before its statements and re-verifies it after them
+// (`assertAppointmentDepositsCovered`), so a financially open Appointment is
+// never left expected below the deposits already received.
 
 import {
   canDeleteAppointmentPermanently,
   canRemoveAppointmentItem,
   isEditableAppointmentStatus,
-  isValidAppointmentDiscount,
   isValidPhaseDurationMinutes,
   type Appointment,
   type AppointmentCancellation,
@@ -34,15 +39,22 @@ import {
 
 import { runInTransaction, type SourisDatabase } from '../database';
 import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
+import {
+  assertAppointmentDepositsCovered,
+  countAppointmentDeposits,
+  readAppointmentDepositPosition,
+} from './appointment-deposits';
 import { countAppointmentSales } from './sales';
 import {
   assertAmountCents,
   fromSqlBoolean,
+  fromSqlDiscountColumns,
   fromSqlInstant,
   fromSqlOptional,
   fromSqlPaymentColumns,
   fromSqlPriceCents,
   toSqlBoolean,
+  toSqlDiscountColumns,
   toSqlInstant,
   toSqlOptional,
   toSqlPaymentColumns,
@@ -96,31 +108,6 @@ function toCancellation(row: AppointmentRow): AppointmentCancellation | undefine
     cancelledBy: row.cancelled_by,
     ...(reason !== undefined ? { reason } : {}),
   };
-}
-
-/**
- * The discount columns (schema v10): at most ONE is set. Both NULL — every
- * row written before the columns existed — is "no discount".
- */
-function fromSqlDiscountColumns(
-  row: Pick<AppointmentRow, 'discount_percent' | 'discount_amount_cents'>,
-): AppointmentDiscount | undefined {
-  if (row.discount_percent !== null) return { type: 'PERCENT', percent: row.discount_percent };
-  if (row.discount_amount_cents !== null) {
-    return { type: 'FIXED', amountCents: row.discount_amount_cents };
-  }
-  return undefined;
-}
-
-/** `[discount_percent, discount_amount_cents]`; an invalid discount never reaches SQLite. */
-function toSqlDiscountColumns(
-  discount: AppointmentDiscount | undefined,
-): readonly [number | null, number | null] {
-  if (!discount) return [null, null];
-  if (!isValidAppointmentDiscount(discount)) {
-    throw new RangeError(`appointments: invalid ${discount.type} discount`);
-  }
-  return discount.type === 'PERCENT' ? [discount.percent, null] : [null, discount.amountCents];
 }
 
 function toAppointment(row: AppointmentRow, items: readonly AppointmentItem[]): Appointment {
@@ -265,6 +252,7 @@ export function insertAppointment(db: SourisDatabase, appointment: Appointment):
  */
 export function updateAppointment(db: SourisDatabase, appointment: Appointment): void {
   runInTransaction(db, () => {
+    const before = readAppointmentDepositPosition(db, appointment.id);
     const result = db.runSync(
       'UPDATE appointments SET client_id = ?, staff_member_id = ?, start_at = ?, status = ?, notes = ?, cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?, no_show_recorded_at = ?, paid_at = ?, card_amount_cents = ?, cash_amount_cents = ?, discount_percent = ?, discount_amount_cents = ? WHERE id = ?',
       [...metadataParams(appointment), appointment.id],
@@ -274,6 +262,7 @@ export function updateAppointment(db: SourisDatabase, appointment: Appointment):
     }
     db.runSync('DELETE FROM appointment_items WHERE appointment_id = ?', [appointment.id]);
     writeItems(db, appointment);
+    assertAppointmentDepositsCovered(db, appointment.id, before);
     markAggregateUpserted(db, 'APPOINTMENT', appointment.id);
   });
 }
@@ -421,6 +410,7 @@ export function removeAppointmentItem(
 ): void {
   runInTransaction(db, () => {
     requireEditableAppointment(db, appointmentId);
+    const before = readAppointmentDepositPosition(db, appointmentId);
     const stored = storedItemIds(db, appointmentId);
     if (!stored.includes(appointmentItemId)) {
       throw new AppointmentItemConflictError(appointmentId, 'ITEM_NOT_FOUND');
@@ -447,6 +437,7 @@ export function removeAppointmentItem(
           [index, appointmentId, itemId],
         );
       });
+    assertAppointmentDepositsCovered(db, appointmentId, before);
     markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
   });
 }
@@ -464,7 +455,9 @@ export class AppointmentDiscountConflictError extends Error {
  * transaction: the stored Appointment must still exist and still be
  * editable, so the discount of a COMPLETED / CANCELLED / NO_SHOW Appointment
  * is never rewritten. Item snapshot prices, payment and linked Sales are
- * untouched; no derived total is stored.
+ * untouched; no derived total is stored. A discount that would take the
+ * expected total below the ACTIVE deposits is refused
+ * (`AppointmentDepositShortfallError`), nothing written.
  */
 export function updateAppointmentDiscount(
   db: SourisDatabase,
@@ -473,6 +466,7 @@ export function updateAppointmentDiscount(
 ): void {
   const [discountPercent, discountAmountCents] = toSqlDiscountColumns(discount);
   runInTransaction(db, () => {
+    const before = readAppointmentDepositPosition(db, appointmentId);
     const result = db.runSync(
       "UPDATE appointments SET discount_percent = ?, discount_amount_cents = ? WHERE id = ? AND status IN ('SCHEDULED', 'CONFIRMED', 'IN_PROGRESS')",
       [discountPercent, discountAmountCents, appointmentId],
@@ -480,6 +474,7 @@ export function updateAppointmentDiscount(
     if (result.changes !== 1) {
       throw new AppointmentDiscountConflictError(appointmentId);
     }
+    assertAppointmentDepositsCovered(db, appointmentId, before);
     markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
   });
 }
@@ -538,6 +533,35 @@ export function updateAppointmentPayment(
   });
 }
 
+/**
+ * « Terminer le rendez-vous » of a FULLY PREPAID Appointment, in ONE
+ * transaction: the stored row must still be financially open, carry no
+ * payment and have started; its ACTIVE deposits must cover the whole
+ * expected total (at least one deposit, nothing left to collect). The status
+ * becomes COMPLETED and NO payment is written — no new money was received,
+ * so nothing new reaches the Cash Register.
+ */
+export function completePrepaidAppointment(
+  db: SourisDatabase,
+  appointmentId: string,
+  now: Date,
+): void {
+  runInTransaction(db, () => {
+    const position = readAppointmentDepositPosition(db, appointmentId);
+    if (!position || position.activeDepositTotalCents === 0 || position.remainingCents !== 0) {
+      throw new AppointmentCheckoutConflictError(appointmentId);
+    }
+    const result = db.runSync(
+      "UPDATE appointments SET status = 'COMPLETED' WHERE id = ? AND status IN ('SCHEDULED', 'CONFIRMED', 'IN_PROGRESS') AND paid_at IS NULL AND start_at <= ?",
+      [appointmentId, toSqlInstant(now)],
+    );
+    if (result.changes !== 1) {
+      throw new AppointmentCheckoutConflictError(appointmentId);
+    }
+    markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
+  });
+}
+
 export class AppointmentDeleteConflictError extends Error {
   constructor(
     readonly appointmentId: string,
@@ -548,7 +572,7 @@ export class AppointmentDeleteConflictError extends Error {
   }
 }
 
-/** The stored facts that anchor the Appointment in history (payment, linked Sales). */
+/** The stored facts that anchor the Appointment in history (payment, linked Sales, deposits). */
 export function countAppointmentReferences(
   db: SourisDatabase,
   appointmentId: string,
@@ -560,6 +584,7 @@ export function countAppointmentReferences(
   return {
     hasPayment: row?.paid_at !== null && row?.paid_at !== undefined,
     saleCount: countAppointmentSales(db, appointmentId),
+    depositCount: countAppointmentDeposits(db, appointmentId),
   };
 }
 
@@ -567,7 +592,8 @@ export function countAppointmentReferences(
  * Permanent deletion: the parent row and every nested item/phase row, in
  * ONE transaction that first re-verifies the stored references:
  *
- *   → a recorded payment or a linked Sale: AppointmentDeleteConflictError,
+ *   → a recorded payment, a linked Sale or a deposit (VOIDED included):
+ *     AppointmentDeleteConflictError,
  *     nothing written (no cascade, no `appointment_id = NULL` rewrite)
  *   → otherwise DELETE + APPOINTMENT DELETE outbox entry
  */

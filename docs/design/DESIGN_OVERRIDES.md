@@ -1312,7 +1312,8 @@ line, fixed size: it truncates, never auto-shrinks — measured during a sheet's
 the SAME width on both sides — the measured width of the wider side action — so it is truly centered
 whatever the width of « Annuler », and a long title truncates before reaching it; no empty placeholder
 button. Used by « Nouveau rendez-vous » (and its « Indisponible » mode), « Modifier le rendez-vous »,
-« Nouvelle vente », « Nouvelle prestation », « Modifier la prestation », « Modifier le produit » and the
+« Nouvelle vente », « Nouvelle prestation », « Modifier la prestation », « Ajouter un produit »,
+« Modifier le produit », « Ajouter une cliente », « Modifier la cliente » and the
 checkout sheet (« Encaisser le rendez-vous », « Encaisser la vente », « Modifier l’encaissement »).
 
 - Cancel is always on the left. Equivalent sheets never move it to the right.
@@ -1371,3 +1372,50 @@ hairline, `radii.large`, `spacing.sm` padding). The glass circles (§21) are unc
 - **Agenda placement.** Inset by the page gutter under the `Jour | Semaine` header, `spacing.xs`
   above and `spacing.sm` below; it replaces the old full-width row and its hairline. The
   timeline keeps its own top inset; the Agenda watermark is unchanged.
+
+---
+
+## 33. Appointment Deposits — « Acomptes » in Details, the Deposit Sheet, the Shortfall Notice
+
+Extends §26 (Details) and §30 (sheet header); nothing else changes. Deposits must read as part of
+the Appointment's payment, not as a new mini-app: the same white grouped surfaces, the lavender
+money surface of the checkout sheet, violet accents, no gradient, no new colour.
+
+- **Details, no deposit.** ONE light white row like « Ajouter une vente »: accent ⊕, accent label
+  « Prendre un acompte », chevron. Shown only while a deposit can be taken.
+- **Details, with deposits.** A `SectionHeader` « Acomptes » (count), then ONE white grouped
+  surface: a lavender position block (`Total attendu`, `Acomptes` in `metadata`, hairline, then
+  « Reste à encaisser » in `control` with the value in `lav700`), then one row per deposit with a
+  hairline on top — `22 sept. · Carte` (`metadata`, navy) and the amount (`control`, tabular) —
+  and, on an ACTIVE deposit of an open Appointment, a quiet accent « Annuler » text action. A
+  VOIDED deposit is `foregroundMuted`, its amount struck through, AND its label ends with
+  « · Annulé »: never colour alone. « Prendre un acompte » closes the group while possible.
+- **Footer.** With deposits the §26 footer label becomes « Reste à encaisser » and the CTA
+  collects that amount; when nothing remains it reads « Terminer » (spoken « Terminer le
+  rendez-vous »).
+- **Deposit sheet.** The §30 header `Annuler | Prendre un acompte`, no eyebrow; drag handle,
+  backdrop and swipe dismissal. Body: the lavender position block of the checkout sheet
+  (`Total attendu`, `Déjà versé`, `Nouvel acompte`, hairline, `Reste après acompte`), « Montant »
+  with the quick-amount chips of the discount editor (same chip geometry, selected = `lav100` fill
+  + accent border) and ONE « Autre montant » field (the checkout field style, rose when invalid,
+  with one rose `metadata` sentence under it), then « Moyen de paiement » as a stretched
+  `SegmentedControl` (`Carte | Espèces`). Footer: the primary « Encaisser l’acompte ».
+- **Void confirmation.** The shared `ConfirmationDialog`, eyebrow « ACOMPTE », title « Annuler
+  l’acompte de 30,00 € ? », a body saying it is a correction and not a refund, `Retour` /
+  « Annuler l’acompte ».
+- **Checkout sheet.** Under « Total attendu »: « Acomptes déjà versés » (`metadata`, negative
+  amount), hairline, « Reste à encaisser » (`control`, `lav700`) inside the same lavender block.
+- **Shortfall notice.** The inline refusal of a change that would take the total below the
+  deposits (Details quick edits, « Modifier », checkout discount) mirrors the schedule conflict
+  notice's structure on the financial palette: `surfaceLavender`, a 28 pt `lav100` badge with the
+  cash glyph, a `lav700` `control` sentence and a soft `metadata` detail; one element announced
+  politely; never red, never a dialog.
+- **Financial conflict.** The SAME component, `tone="conflict"`: `surfaceRose` surface, white badge,
+  `rose700` sentence — the restrained rose of the exception statuses, because the state itself is
+  wrong (deposits above the total, after two devices edited offline). The position block then
+  replaces « Reste à encaisser » with « Acomptes en trop » and the excess in `rose600`, the footer
+  reads « Total du rendez-vous » with no CTA, and « Prendre un acompte » is gone. The reason is
+  always written out; nothing relies on the colour.
+- **Correction on a cancelled or missed visit.** The same `ConfirmationDialog`, worded for the
+  case: « Annuler cet acompte ? » and a body that says it corrects an entry and does not refund.
+- **Agenda.** No deposit badge on appointment cards.

@@ -51,6 +51,30 @@ describe('toRemotePushResult', () => {
     expect(toRemotePushResult({ status: 'CONFLICT', sync_version: 4 })).toEqual({ status: 'CONFLICT', remoteVersion: 4 });
     expect(toRemotePushResult({ status: 'CONFLICT', sync_version: null })).toEqual({ status: 'CONFLICT', remoteVersion: undefined });
     expect(toRemotePushResult({ status: 'ABSENT' })).toEqual({ status: 'ABSENT' });
+    // The remote refused a financial write (CLOUD_SYNC.md §21.2): both amounts are required.
+    expect(
+      toRemotePushResult({
+        status: 'FINANCIAL_CONFLICT',
+        appointment_id: 'appointment-lea',
+        expected_total_cents: 6000,
+        active_deposit_cents: 10000,
+      }),
+    ).toEqual({
+      status: 'FINANCIAL_CONFLICT',
+      appointmentId: 'appointment-lea',
+      expectedTotalCents: 6000,
+      activeDepositTotalCents: 10000,
+    });
+    expect(
+      toRemotePushResult({ status: 'FINANCIAL_CONFLICT', expected_total_cents: 0, active_deposit_cents: 1 }),
+    ).toMatchObject({ appointmentId: undefined });
+    for (const bad of [
+      { status: 'FINANCIAL_CONFLICT' },
+      { status: 'FINANCIAL_CONFLICT', expected_total_cents: 10, active_deposit_cents: -1 },
+      { status: 'FINANCIAL_CONFLICT', expected_total_cents: '10', active_deposit_cents: 20 },
+    ]) {
+      expect(() => toRemotePushResult(bad)).toThrow(SyncRemoteError);
+    }
     for (const bad of [null, 'APPLIED', { status: 'APPLIED' }, { status: 'APPLIED', sync_version: 0 }, { status: 'MERGED' }]) {
       expect(() => toRemotePushResult(bad)).toThrow(SyncRemoteError);
     }

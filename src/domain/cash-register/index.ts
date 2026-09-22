@@ -3,8 +3,14 @@
 // The Cash Register ("Caisse") derives ONLY from money explicitly recorded
 // through Souris:
 //
-//   A. Appointment checkouts          appointment.payment
+//   A. Appointment checkouts          appointment.payment — the money received at the
+//                                     FINAL checkout only (deposits already received
+//                                     are never recorded again there)
 //   B. standalone Sale payments       sale.payment where sale.appointmentId is undefined
+//   C. Appointment deposits           ACTIVE deposits, on their own `paidAt` — the day
+//                                     the money was received, never the Appointment day.
+//                                     A VOIDED deposit is a corrected entry: it counts
+//                                     nowhere (V1 has no refund-date accounting)
 //
 // A Sale sold during an Appointment (« Revente ») is never counted on its
 // own: the Appointment checkout already records the whole amount received,
@@ -17,7 +23,11 @@
 // date substring, so a checkout recorded near midnight lands on the day the
 // professional lived.
 
-import type { Appointment } from '../appointments';
+import {
+  isActiveAppointmentDeposit,
+  type Appointment,
+  type AppointmentDeposit,
+} from '../appointments';
 import type { Sale } from '../sales';
 
 export interface CashRegisterSummary {
@@ -30,6 +40,8 @@ export interface CashRegisterSummary {
 export interface CashRegisterSources {
   readonly appointments: readonly Appointment[];
   readonly sales: readonly Sale[];
+  /** Every Appointment deposit; only ACTIVE ones are counted. Absent = none. */
+  readonly deposits?: readonly AppointmentDeposit[];
 }
 
 export const EMPTY_CASH_REGISTER_SUMMARY: CashRegisterSummary = {
@@ -72,7 +84,23 @@ export type CashRegisterEntry =
       readonly kind: 'SALE';
       readonly payment: RecordedPayment;
       readonly sale: Sale;
+    }
+  | {
+      readonly kind: 'DEPOSIT';
+      readonly payment: RecordedPayment;
+      readonly deposit: AppointmentDeposit;
+      /** The Appointment the deposit was paid for (undefined only if it is not loaded). */
+      readonly appointment: Appointment | undefined;
     };
+
+/** A deposit as the money it is: its whole amount on its one method. */
+function toRecordedPayment(deposit: AppointmentDeposit): RecordedPayment {
+  return {
+    paidAt: deposit.paidAt,
+    cardAmountCents: deposit.paymentMethod === 'CARD' ? deposit.amountCents : 0,
+    cashAmountCents: deposit.paymentMethod === 'CASH' ? deposit.amountCents : 0,
+  };
+}
 
 /** Every entry the Cash Register may count, in source order. */
 function getCashRegisterEntries(sources: CashRegisterSources): readonly CashRegisterEntry[] {
@@ -85,6 +113,19 @@ function getCashRegisterEntries(sources: CashRegisterSources): readonly CashRegi
   for (const sale of sources.sales) {
     if (sale.payment && sale.appointmentId === undefined) {
       entries.push({ kind: 'SALE', payment: sale.payment, sale });
+    }
+  }
+  const deposits = sources.deposits ?? [];
+  if (deposits.length > 0) {
+    const appointmentsById = new Map(sources.appointments.map((appointment) => [appointment.id, appointment]));
+    for (const deposit of deposits) {
+      if (!isActiveAppointmentDeposit(deposit)) continue;
+      entries.push({
+        kind: 'DEPOSIT',
+        payment: toRecordedPayment(deposit),
+        deposit,
+        appointment: appointmentsById.get(deposit.appointmentId),
+      });
     }
   }
   return entries;

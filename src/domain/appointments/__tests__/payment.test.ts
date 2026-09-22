@@ -230,9 +230,11 @@ describe('automatic completion and payment', () => {
 
 describe('permanent deletion guard', () => {
   it('refuses deletion once a payment or a linked Sale exists', () => {
-    expect(canDeleteAppointmentPermanently({ hasPayment: false, saleCount: 0 })).toBe(true);
-    expect(canDeleteAppointmentPermanently({ hasPayment: true, saleCount: 0 })).toBe(false);
-    expect(canDeleteAppointmentPermanently({ hasPayment: false, saleCount: 1 })).toBe(false);
-    expect(canDeleteAppointmentPermanently({ hasPayment: true, saleCount: 2 })).toBe(false);
+    expect(canDeleteAppointmentPermanently({ hasPayment: false, saleCount: 0, depositCount: 0 })).toBe(true);
+    expect(canDeleteAppointmentPermanently({ hasPayment: true, saleCount: 0, depositCount: 0 })).toBe(false);
+    expect(canDeleteAppointmentPermanently({ hasPayment: false, saleCount: 1, depositCount: 0 })).toBe(false);
+    expect(canDeleteAppointmentPermanently({ hasPayment: true, saleCount: 2, depositCount: 0 })).toBe(false);
+    // A deposit — ACTIVE or VOIDED — anchors the Appointment in financial history too.
+    expect(canDeleteAppointmentPermanently({ hasPayment: false, saleCount: 0, depositCount: 1 })).toBe(false);
   });
 });

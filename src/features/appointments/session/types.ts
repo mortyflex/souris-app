@@ -1,9 +1,11 @@
 import type {
   Appointment,
+  AppointmentDeposit,
   AppointmentDiscount,
   AppointmentPaymentAmounts,
   AppointmentPhaseDurationUpdate,
   AppointmentReferences,
+  PaymentMethod,
 } from '@/domain/appointments';
 
 /**
@@ -18,6 +20,15 @@ export interface AppointmentSessionEntry {
 /** The FINAL discount chosen while collecting payment; `undefined` removes it. */
 export interface AppointmentCheckoutDiscount {
   readonly discount: AppointmentDiscount | undefined;
+}
+
+/** What the professional enters in « Prendre un acompte ». */
+export interface AppointmentDepositInput {
+  /** Generated ONCE per sheet presentation: a repeated submission is refused, never duplicated. */
+  readonly id: string;
+  readonly appointmentId: string;
+  readonly amountCents: number;
+  readonly paymentMethod: PaymentMethod;
 }
 
 /** Result of the database-backed pre-check run when the professional taps permanent deletion. */
@@ -95,6 +106,17 @@ export interface AppointmentSessionValue {
     amounts: AppointmentPaymentAmounts,
     finalDiscount?: AppointmentCheckoutDiscount,
   ) => void;
+  /**
+   * « Terminer le rendez-vous » of a FULLY PREPAID Appointment: ACTIVE
+   * deposits cover the whole expected total (with `finalDiscount`, as for
+   * checkout), so it becomes COMPLETED WITHOUT any payment — no new money, no
+   * new Cash Register movement. ONE transaction; throws and changes nothing
+   * when the Appointment is not a prepaid completion.
+   */
+  readonly completePrepaidAppointment: (
+    appointmentId: string,
+    finalDiscount?: AppointmentCheckoutDiscount,
+  ) => void;
   /** Corrects the card/cash split of a recorded payment; status and paidAt are preserved. */
   readonly updateAppointmentPayment: (
     appointmentId: string,
@@ -106,4 +128,20 @@ export interface AppointmentSessionValue {
   ) => AppointmentDeletionEligibility;
   /** Throws `AppointmentDeleteConflictError` when history references the Appointment; nothing changes then. */
   readonly deleteAppointment: (appointmentId: string) => void;
+  /** Every Appointment deposit, ACTIVE and VOIDED, as persisted. */
+  readonly deposits: readonly AppointmentDeposit[];
+  /**
+   * Records a NEW ACTIVE deposit (« Prendre un acompte »), received now. The
+   * stored Appointment must be financially open and still have the amount
+   * left to collect — re-verified in ONE transaction (the stored rows are the
+   * authority). Throws `AppointmentDepositConflictError` and changes nothing
+   * otherwise, including for a second submission of the same id.
+   */
+  readonly recordAppointmentDeposit: (input: AppointmentDepositInput) => AppointmentDeposit;
+  /**
+   * « Annuler l'acompte »: the ACTIVE deposit of a financially open
+   * Appointment becomes VOIDED — a correction, not a refund. It stays in the
+   * history and counts nowhere. Throws and changes nothing otherwise.
+   */
+  readonly voidAppointmentDeposit: (depositId: string) => void;
 }

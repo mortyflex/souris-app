@@ -84,7 +84,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
 Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
@@ -117,6 +117,10 @@ sale_items          (sale_id FK→sales CASCADE, id) PK, position, product_id, p
                     unit_price_cents (v8, CHECK >= 0), quantity (CHECK >= 1)
 calendar_blocks     id PK, business_id, staff_member_id, start_at, end_at (CHECK end_at > start_at),
                     reason (CHECK non-blank)                                               (v11)
+appointment_deposits id PK, business_id, appointment_id (NO FK, like sales.appointment_id),
+                    amount_cents (CHECK >= 1), payment_method (CHECK CARD|CASH), paid_at,
+                    status (CHECK ACTIVE|VOIDED), voided_at? (present exactly when VOIDED),
+                    recorded_at                                                             (v12)
 business_profile    singleton PK (CHECK = 1), id, owner_user_id, owner_first_name,
                     owner_last_name?, name, activity_type, phone?, created_at, updated_at   (v3)
 sync_outbox         id PK AUTOINCREMENT, business_id, aggregate_type (CHECK vocabulary), aggregate_id,
@@ -136,7 +140,8 @@ snapshot, and are never uploaded.
 
 Indexes: `appointments(start_at)`, `appointments(client_id)`, `sales(client_id)`,
 `sales(appointment_id)` (v5), `calendar_blocks(start_at)` and
-`calendar_blocks(business_id, staff_member_id, start_at)` (v11).
+`calendar_blocks(business_id, staff_member_id, start_at)` (v11), `appointment_deposits(appointment_id)`
+and `appointment_deposits(paid_at)` (v12).
 
 `calendar_blocks` deliberately has no client, price, payment, discount or status column: a Calendar
 Block is calendar availability only (`docs/domain/CALENDAR_BLOCKS.md`), and no financial or Client
@@ -210,6 +215,42 @@ edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
 
+### Schema v12 — Appointment deposits
+
+```text
+CREATE TABLE appointment_deposits (id TEXT PRIMARY KEY, business_id, appointment_id,
+  amount_cents CHECK (>= 1), payment_method CHECK (CARD|CASH), paid_at,
+  status CHECK (ACTIVE|VOIDED), voided_at, recorded_at, CHECK ((status = 'VOIDED') = (voided_at IS NOT NULL)));
+CREATE INDEX idx_appointment_deposits_appointment_id …;  CREATE INDEX idx_appointment_deposits_paid_at …;
+
+sync_outbox, sync_state   REBUILT — aggregate_type CHECK gains 'APPOINTMENT_DEPOSIT'
+souris_metadata           DELETE key 'sync_pull_cursor'
+```
+
+The procedure of schema v11, applied again for a new aggregate type (`docs/domain/APPOINTMENTS.md` §25d,
+`CLOUD_SYNC.md` §21):
+
+1. **A new, empty table.** Nothing is backfilled — Souris never fabricates a deposit. A deposit is its
+   own row, never a column of `appointments`. `appointment_id` is plain reference metadata with NO
+   foreign key and NO cascade, exactly like `sales.appointment_id`; the Appointment deletion guard
+   (§7b) refuses to delete an Appointment that holds a deposit. The domain `createdAt` is stored as
+   `recorded_at` (remotely `created_at` is server-owned sync metadata).
+2. **The two sync bookkeeping tables are rebuilt** (`…_v12`, every row and column copied unchanged,
+   the `AUTOINCREMENT` high-water mark carried over through `sqlite_sequence`). Pending intents keep
+   their id, revision and retry/backoff state; every acknowledged version is preserved.
+3. **The pull cursor is cleared**, so a device upgraded from a build that ignored the
+   `appointment_deposits` family fetches the deposits recorded meanwhile, once.
+
+An existing v11 database goes `v11 → v12` with every Client, Service, Appointment, item, phase,
+Product, Sale, Calendar Block and the account binding byte-identical, no wipe, no reseed, nothing
+written to the outbox. Covered by `appointment-deposits-migration.test.ts` — a genuine schema-v11
+fixture on a bound device (paid history, a discount, a linked Sale, a Calendar Block, two FAILED
+outbox entries with their backoff, a settled id above them, acknowledged versions including a
+CALENDAR_BLOCK and a tombstone, a pull cursor): version, untouched raw rows, identical expected totals
+and Cash Register, identical outbox and state rows, the sequence (`next id = 7`), the new vocabulary,
+no `_v12` leftover, the cleared cursor (and only it), idempotence. The remote counterpart is
+`supabase/migrations/20260924120000_create_appointment_deposits.sql`.
+
 ### Schema v11 — Calendar Blocks
 
 ```text
@@ -233,7 +274,7 @@ Three things, in ONE transaction with the version bump:
    acknowledged `remote_version` and `last_synced_at` is preserved; and the `AUTOINCREMENT` high-water
    mark of `sync_outbox` is carried over through `sqlite_sequence`, so an outbox id is still never
    handed out twice even when the highest ids were already settled. These tables hold bookkeeping only
-   — no operational row is read or written. This is the one non-`ALTER` migration of the project, and
+   — no operational row is read or written. This was the first non-`ALTER` migration of the project (schema v12 reuses the procedure), and
    the reason is structural, not a shortcut.
 3. **The pull cursor is cleared.** A build that predates Calendar Blocks ignores the `calendar_blocks`
    family of a pull and still advances its cursor; blocks created on another device meanwhile would sit
@@ -645,7 +686,8 @@ writes the payment columns exactly as the record carries them — `NULL` for a r
 BEGIN
   SELECT paid_at FROM appointments WHERE id = ?
   SELECT COUNT(*) FROM sales WHERE appointment_id = ?
-  payment recorded OR linked Sale  ⇒ throw AppointmentDeleteConflictError(id, references) ⇒ ROLLBACK
+  SELECT COUNT(*) FROM appointment_deposits WHERE appointment_id = ?    (VOIDED included)
+  payment recorded OR linked Sale OR deposit ⇒ throw AppointmentDeleteConflictError(id, references) ⇒ ROLLBACK
   DELETE FROM appointments WHERE id = ?   (items and phases cascade)
 COMMIT
 → remove the entry from session state
@@ -658,6 +700,45 @@ tap time, never cached: once the last linked Sale has been emptied and removed b
 deletion (§8), an unpaid Appointment becomes deletable again while a paid one stays blocked.
 
 ---
+
+### 7g. Appointment deposits
+
+`src/persistence/stores/appointment-deposits.ts` — `loadAppointmentDeposits` (rowid order),
+`insertAppointmentDeposit`, `voidAppointmentDeposit`, `countAppointmentDeposits`,
+`readAppointmentDepositPosition`, `assertAppointmentDepositsCovered`. It reads the tables it needs
+directly and imports neither the Appointment nor the Sale store (both import it); every amount goes
+through the domain derivations.
+
+```text
+insertAppointmentDeposit(deposit)                     domain createAppointmentDeposit (shape) BEFORE any SQL
+BEGIN
+  same id already stored            ⇒ DUPLICATE_DEPOSIT (a double submission never duplicates)
+  readAppointmentDepositPosition    status, expected total (items + discount + linked sale lines), ACTIVE deposits
+  domain validateAppointmentDepositAmount ⇒ APPOINTMENT_NOT_OPEN | INVALID_AMOUNT | EXCEEDS_REMAINING ⇒ ROLLBACK
+  INSERT … status 'ACTIVE'
+  markAggregateUpserted('APPOINTMENT_DEPOSIT', id)
+COMMIT
+
+voidAppointmentDeposit(id, voidedAt)
+BEGIN
+  stored deposit ACTIVE AND its Appointment not COMPLETED (canCorrectAppointmentDeposits:
+  a mistaken entry stays correctable after a cancellation or a no-show), else AppointmentDepositConflictError
+  UPDATE … SET status = 'VOIDED', voided_at = ?     (amount, method and paid_at untouched)
+  markAggregateUpserted('APPOINTMENT_DEPOSIT', id)    (a correction is an UPSERT, never a DELETE)
+COMMIT
+```
+
+**The invariant at the store level.** `updateAppointment`, `removeAppointmentItem`,
+`updateAppointmentDiscount` (appointments store) and `deleteAppointmentProduct` (sales store) read the
+position BEFORE their statements and call `assertAppointmentDepositsCovered` AFTER them, inside the
+same transaction: the domain rule `findAppointmentTotalChangeDepositShortfall` refuses a change that
+lowers the expected total of a financially open Appointment below its ACTIVE deposits, and
+`AppointmentDepositShortfallError` rolls everything back. `completePrepaidAppointment(id, now)` writes
+`COMPLETED` WITHOUT a payment only when the stored ACTIVE deposits cover the whole expected total.
+
+`appointment_deposits` is in `SOURIS_TABLES` (cleared first by the development reset) and in
+`BUSINESS_SCOPED_TABLES`; the hydrated snapshot gained `appointmentDeposits`, read by
+`AppointmentSessionProvider`. Covered by `appointment-deposits-store.test.ts`.
 
 ### 7f. Calendar Blocks
 

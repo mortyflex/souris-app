@@ -15,20 +15,39 @@
 // computes a discount itself. A completed Appointment (payment correction,
 // or recording the payment of an automatically completed visit) keeps its
 // frozen discount: no editor, only the read-only line.
+//
+// Deposits (docs/domain/APPOINTMENTS.md §25d) are NOT a discount: « Total
+// attendu » stays the expected total, then « Acomptes déjà versés » and
+// « Reste à encaisser » follow, and the final payment records ONLY the new
+// money (the « Reste » shortcut and the « Écart » read the remaining amount).
+// A discount draft that would take the expected total below the deposits can
+// be explored, but confirmation is blocked and the notice explains why. A
+// fully prepaid Appointment (nothing due) completes with « Terminer le
+// rendez-vous » and NO payment when nothing is typed.
 
 import { useState } from 'react';
 
 import {
   canEditAppointment,
+  findAppointmentChangeDepositShortfall,
+  findAppointmentDepositInvariantBreach,
+  getAppointmentDepositPosition,
   getAppointmentExpectedTotal,
   getAppointmentServicesTotal,
+  getPaymentTotalCents,
   setAppointmentDiscount,
   type Appointment,
+  type AppointmentDeposit,
   type AppointmentDiscount,
   type AppointmentPaymentAmounts,
 } from '@/domain/appointments';
 import type { Sale } from '@/domain/sales';
 import { AppointmentDiscountEditor } from '@/features/appointments/editor/components/AppointmentDiscountEditor';
+import { DepositShortfallNotice } from '@/features/appointments/deposits/DepositShortfallNotice';
+import {
+  describeDepositInvariantBreach,
+  describeDepositShortfall,
+} from '@/features/appointments/deposits/presentation';
 import { formatDiscountLabel } from '@/features/appointments/presentation';
 import { CheckoutSheet, type CheckoutSummaryLine } from '@/features/checkout/CheckoutSheet';
 
@@ -41,6 +60,8 @@ interface AppointmentCheckoutSheetProps {
   readonly appointment: Appointment;
   /** Every Sale; the linked ones are read through the domain. */
   readonly sales: readonly Sale[];
+  /** Every deposit; this Appointment's ACTIVE ones are read through the domain. */
+  readonly deposits: readonly AppointmentDeposit[];
   /** Recorded amounts when editing; the sheet opens prefilled with them. */
   readonly initialAmounts?: AppointmentPaymentAmounts;
   readonly onClose: () => void;
@@ -49,6 +70,8 @@ interface AppointmentCheckoutSheetProps {
     amounts: AppointmentPaymentAmounts,
     discount: AppointmentDiscount | undefined,
   ) => void;
+  /** Fully prepaid, nothing typed: complete WITHOUT a payment, with the FINAL discount. */
+  readonly onCompletePrepaid?: (discount: AppointmentDiscount | undefined) => void;
 }
 
 export function AppointmentCheckoutSheet({
@@ -56,9 +79,11 @@ export function AppointmentCheckoutSheet({
   mode,
   appointment,
   sales,
+  deposits,
   initialAmounts,
   onClose,
   onConfirm,
+  onCompletePrepaid,
 }: AppointmentCheckoutSheetProps) {
   const discountEditable = mode === 'checkout' && canEditAppointment(appointment);
   const [draftDiscount, setDraftDiscount] = useState(appointment.discount);
@@ -83,6 +108,27 @@ export function AppointmentCheckoutSheet({
     ? setAppointmentDiscount(appointment, draftDiscount)
     : appointment;
   const expectation = getAppointmentExpectedTotal(candidate, sales);
+  const position = getAppointmentDepositPosition(candidate, sales, deposits);
+  // THE deposit rule: the draft may not take the expected total below the
+  // deposits already received (never silently reduced or voided).
+  const shortfall = discountEditable
+    ? findAppointmentChangeDepositShortfall({ current: appointment, candidate, sales, deposits })
+    : undefined;
+  // Defensive: an Appointment whose ACTIVE deposits already exceed its expected
+  // total (a cross-device merge) settles nothing until the conflict is resolved.
+  // Details does not offer checkout then; the sheet refuses it anyway.
+  const breach = findAppointmentDepositInvariantBreach(appointment, sales, deposits);
+  const hasDeposits = position.activeDepositTotalCents > 0;
+  const canCompletePrepaid =
+    mode === 'checkout' && hasDeposits && breach === undefined && onCompletePrepaid !== undefined;
+
+  const confirm = (amounts: AppointmentPaymentAmounts) => {
+    if (canCompletePrepaid && position.remainingCents === 0 && getPaymentTotalCents(amounts) === 0) {
+      onCompletePrepaid(candidate.discount);
+      return;
+    }
+    onConfirm(amounts, candidate.discount);
+  };
 
   const summaryLines: CheckoutSummaryLine[] = [
     { label: 'Prestations', cents: expectation.servicesCents, testID: 'checkout-services-total' },
@@ -114,10 +160,30 @@ export function AppointmentCheckoutSheet({
       }
       confirmTitle={mode === 'edit' ? 'Enregistrer' : 'Encaisser'}
       expectedTotalCents={expectation.expectedTotalCents}
+      blockingNotice={
+        breach ? (
+          <DepositShortfallNotice
+            shortfall={describeDepositInvariantBreach(breach)}
+            testID="checkout-deposit-conflict"
+            tone="conflict"
+          />
+        ) : shortfall ? (
+          <DepositShortfallNotice
+            shortfall={describeDepositShortfall(shortfall)}
+            testID="checkout-deposit-shortfall"
+          />
+        ) : undefined
+      }
       initialAmounts={initialAmounts}
       onClose={onClose}
-      onConfirm={(amounts) => onConfirm(amounts, candidate.discount)}
+      onConfirm={confirm}
+      settlement={
+        hasDeposits
+          ? { depositsCents: position.activeDepositTotalCents, dueCents: position.remainingCents }
+          : undefined
+      }
       summaryLines={summaryLines}
+      zeroBalanceConfirmTitle={canCompletePrepaid ? 'Terminer le rendez-vous' : undefined}
       title={mode === 'edit' ? 'Modifier l’encaissement' : 'Encaisser le rendez-vous'}
       visible={visible}
     />

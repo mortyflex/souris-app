@@ -26,7 +26,7 @@
 // payment is whatever the professional actually received, and the two may
 // legitimately differ (discount, tip, or a Sale removed after checkout).
 
-import type { Sale } from '../sales/types';
+import type { Sale, SaleItem } from '../sales/types';
 import { getAppointmentDiscountCents } from './discount';
 import { eurosToCents } from './payment';
 import type { Appointment, AppointmentDiscount, AppointmentItem } from './types';
@@ -71,8 +71,10 @@ export function getAppointmentLinkedSales(
   return sales.filter((sale) => sale.appointmentId === appointmentId);
 }
 
-/** Exact cents of one Sale, from its item snapshots. */
-export function getSaleTotalCents(sale: Pick<Sale, 'items'>): number {
+/** Exact cents of one Sale, from its item snapshots (unit price × quantity). */
+export function getSaleTotalCents(sale: {
+  readonly items: readonly Pick<SaleItem, 'unitPrice' | 'quantity'>[];
+}): number {
   return sale.items.reduce(
     (total, item) => total + eurosToCents(item.unitPrice) * item.quantity,
     0,

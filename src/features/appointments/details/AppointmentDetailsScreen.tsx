@@ -8,18 +8,27 @@ import {
   canEditAppointment,
   canEditAppointmentPayment,
   canMarkAppointmentNoShow,
+  canCorrectAppointmentDeposits,
+  canRecordAppointmentDeposit,
   canRemoveAppointmentItem,
   cancelAppointment,
   completeAppointment,
+  findAppointmentChangeDepositShortfall,
+  findAppointmentDepositInvariantBreach,
+  getAppointmentDepositPosition,
+  getAppointmentDeposits,
   getAppointmentExpectedTotal,
   getAppointmentProductLines,
   getOrderedItems,
+  isAppointmentSettled,
   markAppointmentNoShow,
   removeAppointmentItem as removeItemFromAppointment,
   reorderAppointmentItemsByIds,
   shouldAutoCompleteAppointment,
   updateAppointmentItemPhaseDurations,
   type Appointment,
+  type AppointmentDeposit,
+  type AppointmentDepositShortfall,
   type AppointmentDiscount,
   type AppointmentPaymentAmounts,
   type AppointmentPhaseDurationUpdate,
@@ -29,12 +38,23 @@ import {
   findAppointmentChangeCalendarBlockConflict,
   type CalendarBlock,
 } from "@/domain/calendar-blocks";
-import type { Sale } from "@/domain/sales";
+import { removeAppointmentProduct, type Sale } from "@/domain/sales";
 import { isClientArchived, isClientBirthdayOnDate } from "@/domain/clients";
 import {
   AppointmentCheckoutSheet,
   type AppointmentCheckoutMode,
 } from "@/features/appointments/checkout/AppointmentCheckoutSheet";
+import {
+  AppointmentDepositSheet,
+  type AppointmentDepositSubmission,
+} from "@/features/appointments/deposits/AppointmentDepositSheet";
+import { AppointmentDepositsSection } from "@/features/appointments/deposits/AppointmentDepositsSection";
+import { AppointmentDepositVoidDialog } from "@/features/appointments/deposits/AppointmentDepositVoidDialog";
+import { DepositShortfallNotice } from "@/features/appointments/deposits/DepositShortfallNotice";
+import {
+  describeDepositInvariantBreach,
+  describeDepositShortfall,
+} from "@/features/appointments/deposits/presentation";
 import { SortableRowList } from "@/features/appointments/editor/components/SortableRowList";
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
 import { ScheduleConflictNotice } from "@/features/calendar-blocks/editor/ScheduleConflictNotice";
@@ -128,18 +148,27 @@ export function AppointmentDetailsScreen({
   // The Calendar Block the LAST quick edit would have run into (nothing was
   // written). Replaced or cleared by the next quick edit.
   const [refusedByBlock, setRefusedByBlock] = useState<CalendarBlock>();
+  // The deposits the LAST quick edit would have left uncovered (nothing was
+  // written). Replaced or cleared by the next quick edit.
+  const [refusedByDeposits, setRefusedByDeposits] = useState<AppointmentDepositShortfall>();
+  const [depositSheetVisible, setDepositSheetVisible] = useState(false);
+  const [depositToVoid, setDepositToVoid] = useState<AppointmentDeposit>();
   const horizontalGutter =
     Platform.OS === "android" ? gutter.android : gutter.ios;
   const {
     checkoutAppointment,
+    completePrepaidAppointment,
     deleteAppointment,
+    deposits,
     getAppointmentById,
     getAppointmentDeletionEligibility,
+    recordAppointmentDeposit,
     removeAppointmentItem,
     reorderAppointmentItems,
     updateAppointment,
     updateAppointmentItemTiming,
     updateAppointmentPayment,
+    voidAppointmentDeposit,
   } = useAppointmentSession();
   const { calendarBlocks } = useCalendarBlockSession();
   const { getClientById } = useClientSession();
@@ -207,6 +236,23 @@ export function AppointmentDetailsScreen({
   // The checkout sheet derives the same value from the same Appointment (with
   // its discount draft applied through the domain).
   const expectedTotal = getAppointmentExpectedTotal(appointment, sales);
+  // Deposits: THE position (expected − ACTIVE deposits) of the domain. A
+  // settled Appointment (final payment, or fully prepaid and completed) is
+  // never offered a checkout again.
+  const appointmentDeposits = getAppointmentDeposits(deposits, appointment.id);
+  const depositPosition = getAppointmentDepositPosition(appointment, sales, deposits);
+  const settled = isAppointmentSettled(appointment, depositPosition);
+  // More received in advance than the Appointment is expected to bring in: only
+  // a merge of two devices edited offline produces it (CLOUD_SYNC.md §21.2).
+  // While it stands, no checkout and no new deposit — voiding one (or raising
+  // the total) is the way out, and the remaining amount is never shown as if
+  // nothing were due.
+  const depositBreach = findAppointmentDepositInvariantBreach(appointment, sales, deposits);
+  const canTakeDeposit =
+    depositBreach === undefined && canRecordAppointmentDeposit(appointment, sales, deposits);
+  // A mistaken entry stays correctable after a cancellation or a no-show; only
+  // a COMPLETED Appointment is frozen.
+  const canVoidDeposits = canCorrectAppointmentDeposits(appointment);
   const endAt = getAppointmentEnd(appointment);
   const isTerminal = isTerminalAppointmentStatus(appointment.status);
   const isException =
@@ -219,7 +265,8 @@ export function AppointmentDetailsScreen({
     client !== undefined &&
     !isException &&
     isClientBirthdayOnDate(client, appointment.startAt);
-  const canCheckout = canCheckoutAppointment(appointment, now);
+  const canCheckout =
+    canCheckoutAppointment(appointment, now) && !settled && depositBreach === undefined;
   const canEditPayment = canEditAppointmentPayment(appointment);
   const canCancel = canCancelAppointment(appointment);
   const canMarkNoShow = canMarkAppointmentNoShow(appointment, now);
@@ -248,6 +295,9 @@ export function AppointmentDetailsScreen({
   // checked, otherwise it is validated against the Calendar Blocks of its staff
   // member. A refused edit writes NOTHING — no clamping, nothing moved — and is
   // explained inline. Appointment-versus-Appointment overlap is never looked at.
+  //
+  // A quick edit that lowers the expected total goes through THE deposit rule
+  // the same way: it may not take the total below the deposits received.
   const isFreeOfCalendarBlocks = (buildCandidate: () => Appointment): boolean => {
     let candidate: Appointment;
     try {
@@ -255,12 +305,17 @@ export function AppointmentDetailsScreen({
     } catch {
       // An invalid edit is the session's to refuse, exactly as before.
       setRefusedByBlock(undefined);
+      setRefusedByDeposits(undefined);
       return true;
     }
     const block = findAppointmentChangeCalendarBlockConflict(appointment, candidate, calendarBlocks);
+    const shortfall = block
+      ? undefined
+      : findAppointmentChangeDepositShortfall({ current: appointment, candidate, sales, deposits });
     setRefusedByBlock(block);
-    if (block) haptics.warning();
-    return block === undefined;
+    setRefusedByDeposits(shortfall);
+    if (block || shortfall) haptics.warning();
+    return block === undefined && shortfall === undefined;
   };
 
   // Appointment-specific timing: ONE atomic write of the item's phase
@@ -392,8 +447,50 @@ export function AppointmentDetailsScreen({
   // payment are never touched; the ticket total and the checkout expectation
   // recompute from the session. Returns whether the deletion was committed so
   // the row can close again on failure.
-  const deleteProductLine = (line: AppointmentProductLine): boolean =>
-    persist(() => deleteAppointmentProduct(appointment.id, line));
+  const deleteProductLine = (line: AppointmentProductLine): boolean => {
+    const removal = removeAppointmentProduct(sales, appointment.id, line);
+    const shortfall = removal.ok
+      ? findAppointmentChangeDepositShortfall({
+          current: appointment,
+          candidate: appointment,
+          sales,
+          candidateSales: removal.removal.sales,
+          deposits,
+        })
+      : undefined;
+    setRefusedByDeposits(shortfall);
+    if (shortfall) {
+      haptics.warning();
+      return false;
+    }
+    return persist(() => deleteAppointmentProduct(appointment.id, line));
+  };
+
+  // « Prendre un acompte »: ONE transaction re-verifies the stored
+  // Appointment; one success haptic once it is committed.
+  const recordDeposit = (submission: AppointmentDepositSubmission): boolean => {
+    const succeeded = persist(() => {
+      recordAppointmentDeposit({ ...submission, appointmentId: appointment.id });
+    });
+    if (!succeeded) return false;
+    setDepositSheetVisible(false);
+    haptics.success();
+    return true;
+  };
+
+  const voidDeposit = (deposit: AppointmentDeposit) => {
+    setDepositToVoid(undefined);
+    if (!persist(() => voidAppointmentDeposit(deposit.id))) return;
+    setRefusedByDeposits(undefined);
+    haptics.warning();
+  };
+
+  // Fully prepaid: completes WITHOUT a payment (no new money received).
+  const completePrepaid = (discount: AppointmentDiscount | undefined) => {
+    if (!persist(() => completePrepaidAppointment(appointment.id, { discount }))) return;
+    setCheckoutMode(undefined);
+    haptics.success();
+  };
 
   const available = new Set<AppointmentSecondaryAction>();
   if (canModify) available.add("modify");
@@ -530,6 +627,14 @@ export function AppointmentDetailsScreen({
             />
           </View>
         )}
+        {refusedByDeposits && (
+          <View style={styles.conflictNotice}>
+            <DepositShortfallNotice
+              shortfall={describeDepositShortfall(refusedByDeposits)}
+              testID="appointment-deposit-shortfall"
+            />
+          </View>
+        )}
 
         <AppointmentSummary summary={summary} />
 
@@ -545,6 +650,23 @@ export function AppointmentDetailsScreen({
           onDeleteLine={deleteProductLine}
         />
 
+        <AppointmentDepositsSection
+          breach={depositBreach}
+          deposits={appointmentDeposits}
+          onTakeDeposit={canTakeDeposit ? () => setDepositSheetVisible(true) : undefined}
+          onVoidDeposit={canVoidDeposits ? setDepositToVoid : undefined}
+          position={depositPosition}
+        />
+        {depositBreach && (
+          <View style={styles.conflictNotice}>
+            <DepositShortfallNotice
+              shortfall={describeDepositInvariantBreach(depositBreach)}
+              testID="appointment-deposit-conflict"
+              tone="conflict"
+            />
+          </View>
+        )}
+
         {appointment.notes && (
           <View style={styles.notes}>
             <AppText variant="control" style={styles.noteLabel}>
@@ -558,7 +680,7 @@ export function AppointmentDetailsScreen({
 
         {canEditPayment && appointment.payment && (
           <AppointmentPaymentSummary
-            expectedTotalCents={expectedTotal.expectedTotalCents}
+            dueCents={depositPosition.remainingCents}
             onEdit={() => setCheckoutMode("edit")}
             payment={appointment.payment}
           />
@@ -568,7 +690,9 @@ export function AppointmentDetailsScreen({
       {/* Outside the scroll: always visible, never covering the content. */}
       <AppointmentCheckoutFooter
         checkoutAction={appointment.status === "COMPLETED" ? "record" : "checkout"}
+        depositPosition={depositPosition}
         discount={appointment.discount}
+        financialConflict={depositBreach !== undefined}
         expectedTotal={expectedTotal}
         onCheckout={canCheckout ? () => setCheckoutMode("checkout") : undefined}
       />
@@ -586,9 +710,11 @@ export function AppointmentDetailsScreen({
       />
       <AppointmentCheckoutSheet
         appointment={appointment}
+        deposits={deposits}
         initialAmounts={checkoutMode === "edit" ? appointment.payment : undefined}
         mode={checkoutMode ?? "checkout"}
         onClose={() => setCheckoutMode(undefined)}
+        onCompletePrepaid={completePrepaid}
         onConfirm={confirmCheckout}
         sales={sales}
         visible={checkoutMode !== undefined}
@@ -604,6 +730,19 @@ export function AppointmentDetailsScreen({
         onClose={() => setActiveSheet(undefined)}
         onConfirm={markNoShow}
         visible={!isTerminal && activeSheet === "no-show"}
+      />
+      <AppointmentDepositSheet
+        onClose={() => setDepositSheetVisible(false)}
+        onConfirm={recordDeposit}
+        position={depositPosition}
+        status={appointment.status}
+        visible={depositSheetVisible && canTakeDeposit}
+      />
+      <AppointmentDepositVoidDialog
+        appointmentStatus={appointment.status}
+        deposit={depositToVoid}
+        onClose={() => setDepositToVoid(undefined)}
+        onConfirm={voidDeposit}
       />
       <AppointmentDeletionDialog
         mode={deletionMode}

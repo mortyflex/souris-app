@@ -115,13 +115,29 @@ export interface RemoteCalendarBlockPayload {
   readonly reason: string;
 }
 
+/**
+ * An Appointment deposit (« Acompte »): money received in advance for ONE
+ * Appointment, in integer cents, by one method. VOIDED is a status carried by
+ * the row — never a tombstone (CLOUD_SYNC.md §21).
+ */
+export interface RemoteAppointmentDepositPayload {
+  readonly appointment_id: string;
+  readonly amount_cents: number;
+  readonly payment_method: string;
+  readonly paid_at: string;
+  readonly status: string;
+  readonly voided_at: string | null;
+  readonly recorded_at: string;
+}
+
 export type RemoteAggregatePayload =
   | RemoteClientPayload
   | RemoteServicePayload
   | RemoteAppointmentPayload
   | RemoteProductPayload
   | RemoteSalePayload
-  | RemoteCalendarBlockPayload;
+  | RemoteCalendarBlockPayload
+  | RemoteAppointmentDepositPayload;
 
 /**
  * One aggregate as the remote holds it (V1D). `payload` is the same shape a
@@ -154,6 +170,8 @@ export interface RemoteBusinessSnapshot {
   readonly sales: readonly RemotePulledAggregate<RemoteSalePayload>[];
   /** Empty when the remote functions predate Calendar Blocks (no `calendar_blocks` key). */
   readonly calendarBlocks: readonly RemotePulledAggregate<RemoteCalendarBlockPayload>[];
+  /** Empty when the remote functions predate deposits (no `appointment_deposits` key). */
+  readonly appointmentDeposits: readonly RemotePulledAggregate<RemoteAppointmentDepositPayload>[];
 }
 
 export interface RemotePushRequest {
@@ -174,7 +192,18 @@ export type RemotePushResult =
   /** The remote is at a revision this device never acknowledged. NOTHING was written. */
   | { readonly status: 'CONFLICT'; readonly remoteVersion: number | undefined }
   /** DELETE of an aggregate the remote never held: no tombstone was created. */
-  | { readonly status: 'ABSENT' };
+  | { readonly status: 'ABSENT' }
+  /**
+   * The write would leave an Appointment with more ACTIVE deposits than its
+   * expected total (CLOUD_SYNC.md §21.2). NOTHING was written: the device keeps
+   * its record, the entry stays pending, and the conflict is surfaced.
+   */
+  | {
+      readonly status: 'FINANCIAL_CONFLICT';
+      readonly appointmentId: string | undefined;
+      readonly expectedTotalCents: number;
+      readonly activeDepositTotalCents: number;
+    };
 
 export type SyncRemoteFailureCode =
   /** No connectivity / transport failure. The run stops; nothing is lost. */

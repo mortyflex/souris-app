@@ -8,7 +8,7 @@
 // activity, purchase history, Agenda layout) are never stored — they are
 // recomputed from these source entities.
 
-import type { Appointment, Service } from '@/domain/appointments';
+import type { Appointment, AppointmentDeposit, Service } from '@/domain/appointments';
 import type { CalendarBlock } from '@/domain/calendar-blocks';
 import type { Client } from '@/domain/clients';
 import type { Product } from '@/domain/products';
@@ -17,6 +17,7 @@ import type { Sale } from '@/domain/sales';
 import type { SourisDatabase } from './database';
 import { migrateDatabase } from './migrations';
 import { seedDatabaseIfNeeded, type FirstRunSeed } from './seed';
+import { loadAppointmentDeposits } from './stores/appointment-deposits';
 import { loadAppointments } from './stores/appointments';
 import { loadCalendarBlocks } from './stores/calendar-blocks';
 import { loadClients } from './stores/clients';
@@ -32,6 +33,8 @@ export interface PersistedSnapshot {
   readonly sales: readonly Sale[];
   /** Personal unavailability. Never part of any client or financial derivation. */
   readonly calendarBlocks: readonly CalendarBlock[];
+  /** Appointment deposits, ACTIVE and VOIDED. */
+  readonly appointmentDeposits: readonly AppointmentDeposit[];
 }
 
 export function loadSnapshot(db: SourisDatabase): PersistedSnapshot {
@@ -42,6 +45,7 @@ export function loadSnapshot(db: SourisDatabase): PersistedSnapshot {
     appointments: loadAppointments(db),
     sales: loadSales(db),
     calendarBlocks: loadCalendarBlocks(db),
+    appointmentDeposits: loadAppointmentDeposits(db),
   };
 }
 

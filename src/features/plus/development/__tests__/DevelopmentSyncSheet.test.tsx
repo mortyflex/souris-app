@@ -170,7 +170,7 @@ describe('DevelopmentSyncSheet', () => {
     // The restore remounted the tree (this sheet included): the state and the result line survive it.
     await waitFor(() => expect(text(view, 'development-sync-state')).toBe('ALREADY_SYNCED'));
     expect(text(view, 'development-sync-result')).toBe(
-      'RESTORED · clients 1 · services 2 · products 2 · appointments 1 · sales 0 · calendar blocks 0 · tombstones 0',
+      'RESTORED · clients 1 · services 2 · products 2 · appointments 1 · sales 0 · calendar blocks 0 · deposits 0 · tombstones 0',
     );
     expect(text(view, 'development-sync-restore')).toBe('aucune en attente');
     expect(text(view, 'development-sync-outbox')).toBe('0 en attente · 0 en échec · 6 acquittés');

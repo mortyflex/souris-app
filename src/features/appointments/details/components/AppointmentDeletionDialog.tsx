@@ -5,8 +5,9 @@
 // shared Souris confirmation dialog, never both:
 //
 //   confirm  → irreversible confirmation (Retour / Supprimer)
-//   blocked  → concise explanation: a recorded checkout or a linked Product
-//              Sale anchors the Appointment in business history. No
+//   blocked  → concise explanation: a recorded checkout, a deposit (even a
+//              voided one) or a linked Product Sale anchors the Appointment
+//              in business history. No
 //              destructive control, no cascade option.
 
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
@@ -23,7 +24,7 @@ export function AppointmentDeletionDialog({ mode, onClose, onConfirm }: Appointm
   if (mode === 'blocked') {
     return (
       <ConfirmationDialog
-        body="Ce rendez-vous possède un encaissement enregistré ou une vente de produits associée. Conservez-le pour préserver l’historique de caisse."
+        body="Ce rendez-vous possède un encaissement, un acompte ou une vente de produits associée. Conservez-le pour préserver l’historique de caisse."
         cancelLabel="Compris"
         cancelTestID="close-appointment-deletion-blocked"
         eyebrow="SUPPRESSION"

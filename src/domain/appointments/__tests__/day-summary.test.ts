@@ -1,6 +1,6 @@
 import type { Sale } from '../../sales/types';
 import { getAppointmentDaySummary } from '../day-summary';
-import type { Appointment, AppointmentItem } from '../types';
+import type { Appointment, AppointmentDeposit, AppointmentItem } from '../types';
 
 const day = new Date(2026, 8, 21);
 
@@ -162,5 +162,81 @@ describe('Appointment day summary', () => {
 
     expect(summary.potentialRevenueCents).toBe(3001);
     expect(summary.averageBasketCents).toBe(1000);
+  });
+
+  describe('deposits — the day of the APPOINTMENT, whenever the money came in', () => {
+    const hundred = () => appointment({ id: 'hundred', items: [item('color', 100, [[60, true]])] });
+    // Paid on 5 September for an Appointment on 21 September.
+    const earlyDeposit: AppointmentDeposit = {
+      id: 'deposit-early',
+      businessId: 'business-a',
+      appointmentId: 'hundred',
+      amountCents: 3000,
+      paymentMethod: 'CARD',
+      paidAt: new Date(2026, 8, 5, 11, 0),
+      status: 'ACTIVE',
+      createdAt: new Date(2026, 8, 5, 11, 0),
+    };
+
+    it('expected 100 €, 30 € paid earlier, no checkout: 100 / 30 / 70', () => {
+      const summary = getAppointmentDaySummary(
+        { appointments: [hundred()], sales: noSales, deposits: [earlyDeposit] },
+        day,
+      );
+      expect(summary.potentialRevenueCents).toBe(10000);
+      expect(summary.collectedCents).toBe(3000);
+      expect(summary.remainingToCollectCents).toBe(7000);
+      expect(summary.rows[0]).toMatchObject({ depositCents: 3000, collectedCents: 3000, remainingCents: 7000, collected: false });
+    });
+
+    it('after the final checkout of 70 €: 100 / 100 / 0', () => {
+      const settled = {
+        ...hundred(),
+        status: 'COMPLETED' as const,
+        payment: { paidAt: new Date(2026, 8, 21, 11, 0), cardAmountCents: 7000, cashAmountCents: 0 },
+      };
+      const summary = getAppointmentDaySummary(
+        { appointments: [settled], sales: noSales, deposits: [earlyDeposit] },
+        day,
+      );
+      expect(summary.potentialRevenueCents).toBe(10000);
+      expect(summary.collectedCents).toBe(10000);
+      expect(summary.remainingToCollectCents).toBe(0);
+    });
+
+    it('a final payment that differs from what was due keeps the recorded amounts and owes nothing', () => {
+      const tipped = {
+        ...hundred(),
+        status: 'COMPLETED' as const,
+        payment: { paidAt: new Date(2026, 8, 21, 11, 0), cardAmountCents: 6500, cashAmountCents: 1000 },
+      };
+      const summary = getAppointmentDaySummary(
+        { appointments: [tipped], sales: noSales, deposits: [earlyDeposit] },
+        day,
+      );
+      expect(summary.collectedCents).toBe(10500);
+      expect(summary.remainingToCollectCents).toBe(0);
+    });
+
+    it('a fully prepaid Appointment completed without payment is settled', () => {
+      const prepaid = { ...hundred(), status: 'COMPLETED' as const };
+      const summary = getAppointmentDaySummary(
+        { appointments: [prepaid], sales: noSales, deposits: [{ ...earlyDeposit, amountCents: 10000 }] },
+        day,
+      );
+      expect(summary.collectedCents).toBe(10000);
+      expect(summary.remainingToCollectCents).toBe(0);
+      expect(summary.rows[0]?.collected).toBe(true);
+    });
+
+    it('a VOIDED deposit is neither collected nor deducted', () => {
+      const voided: AppointmentDeposit = { ...earlyDeposit, status: 'VOIDED', voidedAt: new Date(2026, 8, 6) };
+      const summary = getAppointmentDaySummary(
+        { appointments: [hundred()], sales: noSales, deposits: [voided] },
+        day,
+      );
+      expect(summary.collectedCents).toBe(0);
+      expect(summary.remainingToCollectCents).toBe(10000);
+    });
   });
 });

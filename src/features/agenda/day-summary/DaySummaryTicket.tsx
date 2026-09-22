@@ -3,7 +3,9 @@
 // « Résumé du jour » of the day the Agenda is showing: reads the sessions,
 // asks the domain for the day summary, words it, and hands the receipt to the
 // printer. Every figure comes from `getAppointmentDaySummary`; nothing is
-// computed or stored here. Calendar Blocks are never an input.
+// computed or stored here. Deposits are an input — « Déjà encaissé » counts
+// the deposits of the day's Appointments whatever day they were paid.
+// Calendar Blocks are never an input.
 
 import { getAppointmentDaySummary } from '@/domain/appointments';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
@@ -23,7 +25,7 @@ interface DaySummaryTicketProps {
 }
 
 export function DaySummaryTicket({ visible, day, onClose }: DaySummaryTicketProps) {
-  const { appointments } = useAppointmentSession();
+  const { appointments, deposits } = useAppointmentSession();
   const { sales } = useSaleSession();
   const { getClientById } = useClientSession();
 
@@ -33,7 +35,7 @@ export function DaySummaryTicket({ visible, day, onClose }: DaySummaryTicketProp
       onClose={onClose}
       renderReceipt={({ width, maxHeight }) => {
         const summary = getAppointmentDaySummary(
-          { appointments: appointments.map((entry) => entry.appointment), sales },
+          { appointments: appointments.map((entry) => entry.appointment), sales, deposits },
           day,
         );
         const model = buildDaySummaryReceipt(summary, day, (clientId) =>

@@ -5,8 +5,10 @@
 // correction action. Values are the stored integer cents — never a live
 // recalculation. When the expected total no longer matches what was
 // received (a Revente removed after checkout, a discount, a tip), one quiet
-// « Écart » line shows the signed difference — received minus expected —
-// exactly as the checkout sheet does. The payment itself is never rewritten
+// « Écart » line shows the signed difference — received minus what was DUE
+// at the final checkout (expected − ACTIVE deposits) — exactly as the
+// checkout sheet does. The payment is the final checkout only: deposits are
+// listed in their own section and never counted here twice. The payment itself is never rewritten
 // here; « Modifier l’encaissement » remains the correction.
 
 import { SymbolView } from 'expo-symbols';
@@ -25,18 +27,18 @@ import { foregroundSoft, lavender, radii, semanticColors, spacing } from '@/shar
 
 interface AppointmentPaymentSummaryProps {
   readonly payment: AppointmentPayment;
-  /** The canonical expected total; an « Écart » line appears only when it differs. */
-  readonly expectedTotalCents: number;
+  /** What the final checkout was expected to collect (domain remaining amount); « Écart » only when it differs. */
+  readonly dueCents: number;
   readonly onEdit: () => void;
 }
 
 export function AppointmentPaymentSummary({
   payment,
-  expectedTotalCents,
+  dueCents,
   onEdit,
 }: AppointmentPaymentSummaryProps) {
   const total = getPaymentTotalCents(payment);
-  const difference = total - expectedTotalCents;
+  const difference = total - dueCents;
   const allMethods: readonly { readonly method: PaymentMethod; readonly cents: number }[] = [
     { method: 'CARD', cents: payment.cardAmountCents },
     { method: 'CASH', cents: payment.cashAmountCents },

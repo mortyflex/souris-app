@@ -448,7 +448,11 @@ Prestations (ordered services; each row expands into its phase timing;
 Durée totale · Prestations                    (one banner; no separate active / processing breakdown)
 Produits vendus                               (only when a linked Product Sale exists; one row per sold
                                                Product, quantities aggregated; swipe right to delete)
-TOTAL À ENCAISSER                             (always shown: Prestations + linked Products)
+TOTAL À ENCAISSER                             (always shown: Prestations + linked Products;
+                                               « RESTE À ENCAISSER » once deposits exist)
+Acomptes                                      (no deposit: one « Prendre un acompte » row while it is possible;
+                                               with deposits: Total attendu → Acomptes → Reste à encaisser,
+                                               one row per deposit « 22 sept. · Carte  30,00 € »)
 Note
 Encaissement                                  (once checked out: total, Carte / Espèces, Modifier l’encaissement)
 [ Revente ] [ Encaisser ]                     (side by side, same height; Encaisser is the primary violet action)
@@ -523,6 +527,43 @@ payment itself is never changed automatically.
 
 Souris does not process payments: no card is charged, no terminal or provider is involved. `Encaisser` records
 what the professional received.
+
+### Deposits (« Acomptes »)
+
+A deposit is money received in advance for an existing Appointment (`docs/domain/APPOINTMENTS.md` §25d). It is
+taken from Appointment Details only — never from the creation wizard — while the Appointment is open
+(`SCHEDULED`, `CONFIRMED`, `IN_PROGRESS`) and something remains to collect.
+
+- **Details.** Without a deposit, ONE lightweight row « Prendre un acompte ». With deposits, an « Acomptes »
+  section: `Total attendu`, `Acomptes`, `Reste à encaisser`, then one row per deposit (`22 sept. · Carte 30,00 €`).
+  A voided deposit stays listed, subdued and struck through, labelled « Annulé » in words. The sticky footer
+  shows « Reste à encaisser » and collects that amount. Agenda cards carry no deposit badge.
+- **« Prendre un acompte ».** The canonical editing sheet `Annuler | Prendre un acompte` (no eyebrow, drag
+  handle, backdrop and swipe dismissal). It always shows `Total attendu`, `Déjà versé`, `Nouvel acompte`,
+  `Reste après acompte`; quick amounts `10 € · 20 € · 30 € · 50 €` (only those that fit) fill the entry,
+  « Autre montant » takes any French decimal amount; `Carte | Espèces`. The amount must be above 0 and at
+  most what remains. « Encaisser l’acompte » records it once (a double tap never records two), with one
+  success haptic. Cancelling writes nothing.
+- **Correction.** « Annuler » on a deposit asks for confirmation: the deposit will no longer count in the
+  appointment or the Caisse; it stays visible as « Annulé »; it is a correction, not a refund. An amount is
+  never edited: void, then take a new deposit. A cancelled or missed appointment takes no NEW deposit but keeps
+  the correction — the confirmation is then explicit: « Annuler cet acompte ? », « Cette action corrige un
+  acompte enregistré par erreur. Elle ne rembourse pas la cliente. » A completed appointment is frozen: no
+  deposit, no correction.
+- **Checkout.** Deposits are not a discount: `Total attendu` is unchanged, followed by `Acomptes déjà versés`
+  and `Reste à encaisser`. `Reste …` fills what remains; a typed amount is kept and `Écart` is measured
+  against what remains. The payment records ONLY the money received at checkout.
+- **Fully prepaid.** Nothing remains: the footer reads « Terminer », the sheet « Terminer le rendez-vous »,
+  and the appointment completes with no payment and nothing new in the Caisse.
+- **Protection.** A change that would bring the total below what was already paid ahead — a larger
+  discount (in Details, « Modifier » or the checkout sheet), a lower price, a removed service or product —
+  is explained inline (« Ce changement ferait passer le total du rendez-vous sous les 50,00 € déjà versés en
+  acompte. ») and cannot be saved. Deposits are never reduced or voided silently.
+- **Conflit financier.** Two devices used offline can each make a valid change that no longer fits together
+  (one lowers the total, the other takes a deposit). The cloud refuses the second one, and the device that
+  holds both shows « Conflit financier à résoudre » with the deposits, the total and the excess — never
+  « Reste à encaisser 0,00 € » alone. Until it is resolved: no checkout and no new deposit. The way out is an
+  ordinary action — annuler l'acompte saisi par erreur, or remonter le total du rendez-vous.
 
 Untouched previous-local-day appointments are reconciled at the Appointment session boundary when the app starts,
 returns active on a new local day, or crosses a local-day boundary while open. The operation is idempotent. Same-day
@@ -1138,8 +1179,11 @@ encaissé aujourd’hui                     (« encaissé ce jour » / « encais
   selected calendar month (never a rolling 30-day window); previous / next navigate freely into history, and
   the calendar control of the shared day navigator (the same one as Agenda Jour) opens the canonical
   Souris date picker to jump to any day; « Aujourd’hui » marks today, « Revenir à aujourd’hui » leads back;
-- the amounts derive ONLY from money explicitly recorded: appointment checkouts (`appointment.payment`) and
-  standalone Product Sale payments (`sale.payment`). Automatically completed appointments, cancellations,
+- the amounts derive ONLY from money explicitly recorded: appointment checkouts (`appointment.payment`),
+  standalone Product Sale payments (`sale.payment`) and appointment deposits, each on the day the money was
+  received — a `30 €` deposit taken on 22 September appears that day (« Acompte · Balayage », on its own
+  method), never again on the appointment day, whose checkout records only the remaining `70 €`. A voided
+  deposit counts nowhere (a correction, not a refund: V1 has no refund-date accounting). Automatically completed appointments, cancellations,
   no-shows and Sales without payment contribute nothing; a Sale sold during an appointment is already inside
   the appointment's recorded amount and is never added a second time;
 - the wording is « encaissé » — what was received — never an accounting-grade turnover claim;
@@ -1147,7 +1191,8 @@ encaissé aujourd’hui                     (« encaissé ce jour » / « encais
 - an empty day or month simply shows `0,00 €` with `Carte 0,00 €` / `Espèces 0,00 €` — no illustration;
 - no chart, accounting table, VAT, expense, or profit view. Not V1.
 
-The Client `Total dépensé` metric is unchanged and independent from the Cash Register.
+The Client `Total dépensé` metric is unchanged and independent from the Cash Register: deposits never add to
+it (`100 €` paid as `30 €` + `70 €` counts `100 €`).
 
 Account & Onboarding V1: a `Compte` section shows the Business identity
 (name + activity, e.g. `Maison Léa` / `Coiffure`) and opens a restrained account sheet (activity,

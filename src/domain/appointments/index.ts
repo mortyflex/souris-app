@@ -14,6 +14,9 @@ export type {
   AppointmentNoShow,
   AppointmentPayment,
   AppointmentDiscount,
+  AppointmentDeposit,
+  AppointmentDepositStatus,
+  PaymentMethod,
   Appointment,
 } from "./types";
 
@@ -98,6 +101,42 @@ export {
   isValidAppointmentDiscount,
   setAppointmentDiscount,
 } from "./discount";
+
+export type {
+  AppointmentDepositInvariantBreach,
+  AppointmentDepositPosition,
+  AppointmentDepositRefusal,
+  AppointmentDepositShortfall,
+} from "./deposit";
+export {
+  AppointmentDepositInvalidError,
+  PAYMENT_METHODS,
+  canCompletePrepaidAppointment,
+  canCorrectAppointmentDeposits,
+  canRecordAppointmentDeposit,
+  canVoidAppointmentDeposit,
+  completePrepaidAppointment,
+  createAppointmentDeposit,
+  findAppointmentChangeDepositShortfall,
+  findAppointmentDepositInvariantBreach,
+  findAppointmentTotalChangeDepositShortfall,
+  findDepositInvariantBreach,
+  getActiveDepositTotalCents,
+  getAppointmentActiveDepositTotal,
+  getAppointmentDepositPosition,
+  getAppointmentDeposits,
+  getAppointmentRemainingAmount,
+  getDepositPositionFromTotals,
+  getMaximumAppointmentDepositCents,
+  isActiveAppointmentDeposit,
+  isAppointmentFinanciallyOpen,
+  isAppointmentSettled,
+  isPaymentMethod,
+  isValidDepositAmountCents,
+  validateAppointmentDeposit,
+  validateAppointmentDepositAmount,
+  voidAppointmentDeposit,
+} from "./deposit";
 
 export type { AppointmentExpectedTotal, AppointmentServicesTotal } from "./expected-total";
 export {

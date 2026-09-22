@@ -448,3 +448,20 @@ describe('client history preview', () => {
     expect(formatClientHistoryDate(new Date(2025, 8, 14, 9), now)).toBe('Dim. 14 sept. 2025');
   });
 });
+
+describe('« Total dépensé » and deposits', () => {
+  it('counts the appointment value once: 100 € paid as 30 € deposit + 70 € final payment is 100 €, never 130 €', () => {
+    const paid: Appointment = {
+      ...appointment('with-deposit', 'client-x', new Date(2026, 6, 1, 10), 'COMPLETED', 'Balayage', 100),
+      // The final checkout records ONLY the money received that day.
+      payment: { paidAt: new Date(2026, 6, 1, 12), cardAmountCents: 7000, cashAmountCents: 0 },
+    };
+    const prepaid = appointment('prepaid', 'client-x', new Date(2026, 6, 8, 10), 'COMPLETED', 'Coupe', 40);
+
+    // Deposits are not an input of the Client derivation at all: nothing to add, nothing to skip.
+    const summary = getClientActivitySummary([entry(paid), entry(prepaid)], 'client-x', now);
+
+    expect(summary.totalSpent).toBe(140);
+    expect(summary.completedAppointmentCount).toBe(2);
+  });
+});

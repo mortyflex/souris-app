@@ -11,8 +11,12 @@ import { AppState } from 'react-native';
 
 import {
   areAppointmentDiscountsEqual,
+  canCompleteAppointment,
+  canCorrectAppointmentDeposits,
   canDeleteAppointmentPermanently,
   canEditAppointment,
+  createAppointmentDeposit,
+  voidAppointmentDeposit as markDepositVoided,
   checkoutAppointmentWithDiscount as recordCheckout,
   removeAppointmentItem as dropItem,
   reorderAppointmentItemsByIds as arrangeItems,
@@ -20,6 +24,7 @@ import {
   updateAppointmentItemPhaseDurations as adjustItemPhaseDurations,
   updateAppointmentPayment as correctPayment,
   type Appointment,
+  type AppointmentDeposit,
   type AppointmentDiscount,
   type AppointmentPaymentAmounts,
   type AppointmentPhaseDurationUpdate,
@@ -27,7 +32,13 @@ import {
 import { getLocalDateKey } from '@/features/agenda/calendar/week';
 import { runInTransaction, type SourisDatabase } from '@/persistence/database';
 import {
+  AppointmentDepositConflictError,
+  insertAppointmentDeposit,
+  voidAppointmentDeposit as persistDepositVoid,
+} from '@/persistence/stores/appointment-deposits';
+import {
   checkoutAppointment as persistCheckout,
+  completePrepaidAppointment as persistPrepaidCompletion,
   countAppointmentReferences,
   deleteAppointment as removeAppointment,
   insertAppointment,
@@ -44,6 +55,7 @@ import { reconcileAppointmentEntriesForLocalDay } from './reconciliation';
 import { removeAppointmentEntryById } from './deletion';
 import type {
   AppointmentCheckoutDiscount,
+  AppointmentDepositInput,
   AppointmentSessionEntry,
   AppointmentSessionValue,
 } from './types';
@@ -93,6 +105,12 @@ function millisecondsUntilNextLocalDay(now: Date): number {
  * snapshot. Every mutation is written to SQLite first (parent + items +
  * phases in one transaction) and reflected in state only after success.
  *
+ * Appointment deposits live in the same session: they belong to the
+ * Appointment's financial state, and every surface that reads it (Details,
+ * checkout, Cash Register, day summary) already reads this session. The
+ * stored rows are the authority for every deposit rule: the store re-reads
+ * the Appointment, its linked Sales and its deposits inside each transaction.
+ *
  * Automatic previous-local-day finalization runs here (never in
  * rendering): at session start, when the app returns to the foreground, and
  * whenever the local calendar day changes while the app stays open. The
@@ -109,6 +127,14 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   );
   const committed = useRef(initialState.appointments);
   const lastReconciledDayKey = useRef(initialState.dayKey);
+  const [deposits, setDeposits] = useState<readonly AppointmentDeposit[]>(
+    snapshot.appointmentDeposits,
+  );
+  const committedDeposits = useRef(snapshot.appointmentDeposits);
+  const commitDeposits = (next: readonly AppointmentDeposit[]) => {
+    committedDeposits.current = next;
+    setDeposits(next);
+  };
 
   const commit = useCallback((next: readonly AppointmentSessionEntry[]) => {
     committed.current = next;
@@ -272,6 +298,30 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     replaceEntry(next);
   };
 
+  // Prepaid completion: the final discount goes through THE discount action
+  // (and is written first, guarded against the deposits like any discount);
+  // the store then re-verifies, in the SAME transaction, that the ACTIVE
+  // deposits cover the whole expected total, and writes COMPLETED with NO
+  // payment. State reflects the record only after the commit.
+  const completePrepaidAppointment = (
+    appointmentId: string,
+    finalDiscount?: AppointmentCheckoutDiscount,
+  ) => {
+    const appointment = requireAppointment(appointmentId, 'completePrepaidAppointment');
+    const now = new Date();
+    const candidate = finalDiscount ? applyDiscount(appointment, finalDiscount.discount) : appointment;
+    if (!canCompleteAppointment(candidate, now) || candidate.payment !== undefined) {
+      throw new Error(`completePrepaidAppointment: Appointment "${appointmentId}" cannot be completed`);
+    }
+    runInTransaction(database, () => {
+      if (!areAppointmentDiscountsEqual(appointment.discount, candidate.discount)) {
+        persistDiscount(database, appointmentId, candidate.discount);
+      }
+      persistPrepaidCompletion(database, appointmentId, now);
+    });
+    replaceEntry({ ...candidate, status: 'COMPLETED' });
+  };
+
   const updateAppointmentPayment = (
     appointmentId: string,
     amounts: AppointmentPaymentAmounts,
@@ -297,6 +347,50 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     commit(next);
   };
 
+  // A deposit is received NOW. The domain validates its shape; the store
+  // re-verifies the Appointment (open, enough left to collect) and refuses a
+  // second write of the same id, so a double submission never duplicates.
+  const recordAppointmentDeposit = (input: AppointmentDepositInput): AppointmentDeposit => {
+    const appointment = requireAppointment(input.appointmentId, 'recordAppointmentDeposit');
+    if (committedDeposits.current.some((deposit) => deposit.id === input.id)) {
+      throw new AppointmentDepositConflictError(input.id, 'DUPLICATE_DEPOSIT');
+    }
+    const now = new Date();
+    const deposit = createAppointmentDeposit({
+      id: input.id,
+      businessId: appointment.businessId,
+      appointmentId: appointment.id,
+      amountCents: input.amountCents,
+      paymentMethod: input.paymentMethod,
+      paidAt: now,
+      status: 'ACTIVE',
+      createdAt: now,
+    });
+    insertAppointmentDeposit(database, deposit);
+    commitDeposits([...committedDeposits.current, deposit]);
+    return deposit;
+  };
+
+  const voidAppointmentDeposit = (depositId: string) => {
+    const deposit = committedDeposits.current.find((candidate) => candidate.id === depositId);
+    if (!deposit) throw new AppointmentDepositConflictError(depositId, 'DEPOSIT_NOT_FOUND');
+    const appointment = requireAppointment(deposit.appointmentId, 'voidAppointmentDeposit');
+    // A mistaken entry stays correctable after a cancellation or a no-show; only
+    // a COMPLETED Appointment is frozen (docs/domain/APPOINTMENTS.md §25d).
+    if (!canCorrectAppointmentDeposits(appointment)) {
+      throw new AppointmentDepositConflictError(depositId, 'APPOINTMENT_NOT_OPEN');
+    }
+    const now = new Date();
+    const voided = markDepositVoided(deposit, appointment, now);
+    if (voided === deposit || !voided.voidedAt) {
+      throw new AppointmentDepositConflictError(depositId, 'DEPOSIT_NOT_ACTIVE');
+    }
+    persistDepositVoid(database, depositId, voided.voidedAt);
+    commitDeposits(
+      committedDeposits.current.map((candidate) => (candidate.id === depositId ? voided : candidate)),
+    );
+  };
+
   return (
     <AppointmentSessionContext.Provider
       value={{
@@ -309,9 +403,13 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
         removeAppointmentItem,
         setAppointmentDiscount,
         checkoutAppointment,
+        completePrepaidAppointment,
         updateAppointmentPayment,
         getAppointmentDeletionEligibility,
         deleteAppointment,
+        deposits,
+        recordAppointmentDeposit,
+        voidAppointmentDeposit,
       }}
     >
       {children}

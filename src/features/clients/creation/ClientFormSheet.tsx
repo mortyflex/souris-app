@@ -9,7 +9,7 @@
 // its resting position with the keyboard CLOSED (no autofocus), the fields
 // scroll under a fixed header, the action bar stays reachable above the
 // keyboard, and pan-to-dismiss is off so scrolling the form never abandons
-// the draft — closing goes through « Fermer ».
+// the draft — closing goes through « Annuler » (the §30 editing header).
 
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -21,7 +21,7 @@ import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { TextField } from '@/shared/ui/TextField';
 import { spacing } from '@/shared/ui/theme';
 
@@ -113,9 +113,9 @@ export function ClientFormSheet({
         </SheetActionBar>
       }
       header={
-        <SheetHeader
-          action={{ label: 'Fermer', onPress: onClose }}
-          eyebrow={mode === 'edit' ? 'CLIENTE' : 'NOUVELLE CLIENTE'}
+        <SheetEditingHeader
+          cancelAccessibilityLabel={mode === 'edit' ? 'Annuler les modifications' : 'Annuler la création'}
+          onCancel={onClose}
           title={mode === 'edit' ? 'Modifier la cliente' : 'Ajouter une cliente'}
         />
       }

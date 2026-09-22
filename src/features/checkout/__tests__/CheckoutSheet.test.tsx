@@ -196,4 +196,89 @@ describe('CheckoutSheet', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  describe('with deposits (settlement)', () => {
+    // 95 € expected, 30 € already paid ahead: 65 € due.
+    const settlement = { depositsCents: 3000, dueCents: 6500 };
+
+    it('keeps « Total attendu » and adds the deposits and what is still due', async () => {
+      const { view } = await renderSheet({ settlement });
+
+      expect(view.getByTestId('checkout-expected-total').props.children).toBe(formatEuroCents(9500));
+      expect(view.getByText('Acomptes déjà versés')).toBeTruthy();
+      expect(view.getByTestId('checkout-deposits').props.children).toBe(formatEuroCents(-3000));
+      expect(view.getByText('Reste à encaisser')).toBeTruthy();
+      expect(view.getByTestId('checkout-due').props.children).toBe(formatEuroCents(6500));
+      expect(view.getByLabelText(`Reste à encaisser, ${formatEuroCents(6500)}`)).toBeTruthy();
+    });
+
+    it('the « Reste » shortcut fills what is still due, never the whole total', async () => {
+      const { view, onConfirm } = await renderSheet({ settlement });
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('checkout-fill-card'));
+      });
+      expect(view.getByTestId('checkout-amount-card').props.value).toBe('65,00');
+      expect(view.queryByTestId('checkout-difference')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 6500, cashAmountCents: 0 });
+    });
+
+    it('keeps a manually typed amount and measures the « Écart » against what is due', async () => {
+      const { view, onConfirm } = await renderSheet({ settlement });
+
+      await type(view, 'cash', '70');
+      expect(view.getByTestId('checkout-amount-cash').props.value).toBe('70');
+      expect(view.getByTestId('checkout-difference').props.children).toEqual(['Écart : ', `+${formatEuroCents(500)}`]);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 0, cashAmountCents: 7000 });
+    });
+
+    it('without deposits nothing changes: no deposit line, the whole total is due', async () => {
+      const { view } = await renderSheet();
+      expect(view.queryByTestId('checkout-deposits-row')).toBeNull();
+      expect(view.queryByTestId('checkout-due-row')).toBeNull();
+    });
+
+    it('fully prepaid: nothing due, nothing typed — the zero-balance label, no fake amount', async () => {
+      const { view, onConfirm } = await renderSheet({
+        settlement: { depositsCents: 9500, dueCents: 0 },
+        zeroBalanceConfirmTitle: 'Terminer le rendez-vous',
+      });
+
+      expect(view.queryByTestId('checkout-fill-card')).toBeNull();
+      expect(view.getByText('Terminer le rendez-vous')).toBeTruthy();
+      expect(view.getByTestId('confirm-checkout').props.accessibilityState.disabled).toBe(false);
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 0, cashAmountCents: 0 });
+
+      // A typed amount (a tip) turns it back into an ordinary checkout.
+      await type(view, 'card', '5');
+      expect(view.getByText('Encaisser')).toBeTruthy();
+    });
+
+    it('a blocking notice disables confirmation while the entries stay editable', async () => {
+      const { Text } = jest.requireActual('react-native') as typeof import('react-native');
+      const { view, onConfirm } = await renderSheet({
+        settlement,
+        blockingNotice: <Text testID="blocking">Sous les acomptes</Text>,
+      });
+
+      expect(view.getByTestId('blocking')).toBeTruthy();
+      await type(view, 'card', '65');
+      expect(view.getByTestId('confirm-checkout').props.accessibilityState.disabled).toBe(true);
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
 });

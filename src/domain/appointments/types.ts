@@ -130,6 +130,40 @@ export type AppointmentDiscount =
   | { readonly type: "PERCENT"; readonly percent: number }
   | { readonly type: "FIXED"; readonly amountCents: number };
 
+/**
+ * How money was received — THE Souris vocabulary, shared by the checkout
+ * split, the Appointment deposits and the Cash Register breakdown.
+ */
+export type PaymentMethod = "CARD" | "CASH";
+
+/**
+ * ACTIVE  — money received and counted everywhere money is counted.
+ * VOIDED  — a CORRECTION of a mistaken entry (not a refund): it stays in the
+ *           Appointment financial history, and counts nowhere.
+ */
+export type AppointmentDepositStatus = "ACTIVE" | "VOIDED";
+
+/**
+ * An « Acompte »: money ACTUALLY received in advance for an existing
+ * Appointment, in exact INTEGER CENTS, by one method. An Appointment has any
+ * number of them. It is its own record — never a column of the Appointment,
+ * never a discount — and it is never edited: a mistake is voided and a new
+ * deposit recorded. `paidAt` is when the money was received (the Cash
+ * Register day); `createdAt` when it was recorded.
+ */
+export interface AppointmentDeposit {
+  readonly id: string;
+  readonly businessId: string;
+  readonly appointmentId: string;
+  readonly amountCents: number;
+  readonly paymentMethod: PaymentMethod;
+  readonly paidAt: Date;
+  readonly status: AppointmentDepositStatus;
+  /** Present exactly when the deposit is VOIDED. */
+  readonly voidedAt?: Date;
+  readonly createdAt: Date;
+}
+
 export interface Appointment {
   readonly id: string;
   readonly businessId: string;

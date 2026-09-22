@@ -57,7 +57,6 @@ import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetActionBar } from "@/shared/ui/SheetActionBar";
 import { SheetEditingHeader } from "@/shared/ui/SheetEditingHeader";
-import { SheetHeader } from "@/shared/ui/SheetHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
 import { StatePill, statePillTones } from "@/shared/ui/StatePill";
 import { TextField } from "@/shared/ui/TextField";
@@ -339,12 +338,11 @@ export function ProductEditorScreen({
         </View>
       ) : (
         <View style={styles.headerZone}>
-          <SheetHeader
-            action={{ label: "Annuler", onPress: close }}
-            divider
-            eyebrow="NOUVEAU PRODUIT"
+          <SheetEditingHeader
+            cancelAccessibilityLabel="Annuler la création"
+            cancelTestID="cancel-product-creation"
+            onCancel={close}
             title="Ajouter un produit"
-            titleNumberOfLines={1}
           />
         </View>
       )}

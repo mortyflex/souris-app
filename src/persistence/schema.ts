@@ -440,6 +440,111 @@ ALTER TABLE sync_state_v11 RENAME TO sync_state;
 DELETE FROM souris_metadata WHERE key = 'sync_pull_cursor';
 `;
 
+/**
+ * Schema v12 — Appointment deposits (« Acomptes »).
+ *
+ * 1. `appointment_deposits` — a NEW table, created empty. One row per
+ *    deposit: money actually received in advance for an Appointment, in exact
+ *    integer cents, by ONE method (docs/domain/APPOINTMENTS.md §25d). Never a
+ *    column of `appointments`. `appointment_id` is plain reference metadata,
+ *    exactly like `sales.appointment_id`: NO foreign key and NO cascade — the
+ *    Appointment permanent-deletion guard refuses to delete an Appointment
+ *    that holds a deposit, VOIDED ones included. The CHECKs mirror the domain:
+ *    a strictly positive amount, the CARD / CASH vocabulary, the ACTIVE /
+ *    VOIDED vocabulary, and `voided_at` present exactly when VOIDED.
+ *    `recorded_at` is when the deposit was entered (the domain `createdAt`;
+ *    remotely `created_at` is server-owned sync metadata, hence the name).
+ *    A deposit is never deleted by a user action: a correction is a status
+ *    change.
+ *
+ * 2. The `aggregate_type` vocabulary of `sync_outbox` and `sync_state` gains
+ *    `APPOINTMENT_DEPOSIT` (its own aggregate, CLOUD_SYNC.md §21). SQLite
+ *    cannot alter a CHECK, so both bookkeeping tables are rebuilt with the
+ *    documented copy procedure of schema v11 — every row copied unchanged,
+ *    `id` (FIFO position), revision and retry state kept, the AUTOINCREMENT
+ *    sequence carried over, every acknowledged remote version preserved.
+ *
+ * 3. The pull cursor is cleared, for the reason of schema v11: a build that
+ *    predates deposits ignores the `appointment_deposits` family of a pull and
+ *    still advances its cursor. The next pull reads the complete dataset once
+ *    (acknowledged revisions are skipped) and stores the deposits recorded on
+ *    another device meanwhile.
+ *
+ * No existing Client, Service, Appointment, Product, Sale or Calendar Block
+ * row is touched; no wipe, no reseed; the migration records nothing in the
+ * outbox.
+ */
+const SYNC_AGGREGATE_TYPE_CHECK_V12 =
+  "aggregate_type IN ('CLIENT', 'SERVICE', 'APPOINTMENT', 'PRODUCT', 'SALE', 'CALENDAR_BLOCK', 'APPOINTMENT_DEPOSIT')";
+
+const SCHEMA_V12 = `
+CREATE TABLE IF NOT EXISTS appointment_deposits (
+  id TEXT PRIMARY KEY NOT NULL,
+  business_id TEXT NOT NULL,
+  appointment_id TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents >= 1),
+  payment_method TEXT NOT NULL CHECK (payment_method IN ('CARD', 'CASH')),
+  paid_at TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'VOIDED')),
+  voided_at TEXT,
+  recorded_at TEXT NOT NULL,
+  CHECK ((status = 'VOIDED') = (voided_at IS NOT NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_appointment_deposits_appointment_id
+  ON appointment_deposits(appointment_id);
+CREATE INDEX IF NOT EXISTS idx_appointment_deposits_paid_at ON appointment_deposits(paid_at);
+
+CREATE TABLE sync_outbox_v12 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (${SYNC_AGGREGATE_TYPE_CHECK_V12}),
+  aggregate_id TEXT NOT NULL,
+  operation TEXT NOT NULL CHECK (operation IN ('UPSERT', 'DELETE')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  last_error TEXT,
+  next_attempt_at TEXT,
+  UNIQUE (business_id, aggregate_type, aggregate_id)
+);
+
+INSERT INTO sync_outbox_v12
+  (id, business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at,
+   attempt_count, last_error, next_attempt_at)
+SELECT id, business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at,
+       attempt_count, last_error, next_attempt_at
+FROM sync_outbox
+ORDER BY id;
+
+-- Carry the AUTOINCREMENT high-water mark over (see schema v11).
+DELETE FROM sqlite_sequence WHERE name = 'sync_outbox_v12';
+INSERT INTO sqlite_sequence (name, seq)
+SELECT 'sync_outbox_v12', seq FROM sqlite_sequence WHERE name = 'sync_outbox';
+
+DROP TABLE sync_outbox;
+ALTER TABLE sync_outbox_v12 RENAME TO sync_outbox;
+
+CREATE TABLE sync_state_v12 (
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (${SYNC_AGGREGATE_TYPE_CHECK_V12}),
+  aggregate_id TEXT NOT NULL,
+  remote_version INTEGER NOT NULL CHECK (remote_version >= 1),
+  last_synced_at TEXT NOT NULL,
+  PRIMARY KEY (business_id, aggregate_type, aggregate_id)
+);
+
+INSERT INTO sync_state_v12 (business_id, aggregate_type, aggregate_id, remote_version, last_synced_at)
+SELECT business_id, aggregate_type, aggregate_id, remote_version, last_synced_at
+FROM sync_state;
+
+DROP TABLE sync_state;
+ALTER TABLE sync_state_v12 RENAME TO sync_state;
+
+DELETE FROM souris_metadata WHERE key = 'sync_pull_cursor';
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -452,6 +557,7 @@ export const migrations: readonly Migration[] = [
   { version: 9, up: (db) => db.execSync(SCHEMA_V9) },
   { version: 10, up: (db) => db.execSync(SCHEMA_V10) },
   { version: 11, up: (db) => db.execSync(SCHEMA_V11) },
+  { version: 12, up: (db) => db.execSync(SCHEMA_V12) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;
@@ -462,6 +568,7 @@ export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version
  * binding survives a development data reset.
  */
 export const SOURIS_TABLES = [
+  'appointment_deposits',
   'calendar_blocks',
   'sale_items',
   'sales',
@@ -481,6 +588,7 @@ export const BUSINESS_SCOPED_TABLES = [
   'products',
   'sales',
   'calendar_blocks',
+  'appointment_deposits',
 ] as const;
 
 /**

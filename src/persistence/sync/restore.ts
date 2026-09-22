@@ -12,7 +12,7 @@
 //        re-verify the preconditions                bound to this Business, still empty,
 //                                                   no acknowledged state, approval present
 //        write every live aggregate                 CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE,
-//                                                   CALENDAR_BLOCK
+//                                                   CALENDAR_BLOCK, APPOINTMENT_DEPOSIT
 //                                                   (children with their parent; tombstones skipped)
 //        sync_state ← each remote sync_version      tombstones included: they are known revisions
 //        sync_outbox emptied                        nothing restored is ever pushed back
@@ -68,6 +68,7 @@ export interface RestoreCounts {
   readonly appointments: number;
   readonly sales: number;
   readonly calendarBlocks: number;
+  readonly appointmentDeposits: number;
   /** Remote tombstones: acknowledged, never written as rows. */
   readonly tombstones: number;
 }
@@ -79,6 +80,7 @@ const COUNT_KEY = {
   APPOINTMENT: 'appointments',
   SALE: 'sales',
   CALENDAR_BLOCK: 'calendarBlocks',
+  APPOINTMENT_DEPOSIT: 'appointmentDeposits',
 } as const;
 
 /**
@@ -99,6 +101,7 @@ export function restoreBusinessSnapshot(
     appointments: 0,
     sales: 0,
     calendarBlocks: 0,
+    appointmentDeposits: 0,
     tombstones: 0,
   };
   runInTransaction(db, () => {

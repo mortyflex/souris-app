@@ -65,8 +65,8 @@ describe('schema v10 migration on an existing v9 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(11);
-    expect(CURRENT_SCHEMA_VERSION).toBe(11);
+    expect(readSchemaVersion(db)).toBe(12);
+    expect(CURRENT_SCHEMA_VERSION).toBe(12);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
 
@@ -116,14 +116,14 @@ describe('schema v10 migration on an existing v9 database', () => {
   it('changes no other table definition', () => {
     const db = openSchemaV9Database();
     const tablesBefore = db.getAllSync<{ name: string; sql: string }>(
-      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'sync_outbox', 'sync_state') ORDER BY name",
+      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state') ORDER BY name",
     );
 
     bootstrapPersistence(db, createTestSeed);
 
     expect(
       db.getAllSync<{ name: string; sql: string }>(
-        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'sync_outbox', 'sync_state') ORDER BY name",
+        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state') ORDER BY name",
       ),
     ).toEqual(tablesBefore);
   });
@@ -132,7 +132,7 @@ describe('schema v10 migration on an existing v9 database', () => {
     const db = openSchemaV9Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(11);
+    expect(migrateDatabase(db)).toBe(12);
     updateAppointmentDiscount(db, 'appointment-upcoming', { type: 'PERCENT', percent: 20 });
 
     const reloaded = loadSnapshot(db).appointments.find(
