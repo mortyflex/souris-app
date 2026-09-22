@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BottomSheet } from '@/shared/ui/BottomSheet';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { prepareClientDirectory } from '@/features/clients/directory/sort-clients';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
@@ -65,9 +65,10 @@ export function ClientPickerSheet({
       contentStyle={styles.body}
       dismissOnPanDown={false}
       header={
-        <SheetHeader
-          action={{ label: 'Fermer', onPress: close }}
-          eyebrow="CLIENTE"
+        <SheetEditingHeader
+          cancelLabel="Fermer"
+          cancelTestID="client-picker-close"
+          onCancel={close}
           title="Choisir la cliente"
         />
       }

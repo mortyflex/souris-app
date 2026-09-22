@@ -12,9 +12,9 @@ import { useAppointmentSession } from '@/features/appointments/session/Appointme
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
+import { ReceiptPrinter } from '@/shared/ui/ReceiptPrinter';
 
 import { DaySummaryReceipt } from './DaySummaryReceipt';
-import { ReceiptPrinter } from './ReceiptPrinter';
 import { buildDaySummaryReceipt } from './day-summary-receipt';
 
 interface DaySummaryTicketProps {

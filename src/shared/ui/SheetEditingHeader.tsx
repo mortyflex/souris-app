@@ -4,8 +4,9 @@
 // « Annuler » leading, ONE title centered on the header — « Nouveau
 // rendez-vous », « Modifier le rendez-vous », « Nouvelle vente », « Encaisser
 // le rendez-vous ». No eyebrow. The trailing slot is reserved for a DISTINCT
-// action (never a second « Annuler »). The grabber stays above, drawn by the
-// sheet shell.
+// action (never a second « Annuler »). A picker that only dismisses passes
+// `cancelLabel="Fermer"` (« Choisir la cliente »). The grabber stays above,
+// drawn by the sheet shell.
 //
 // Centering: the actions stay in the row; the title lives in its own layer
 // spanning the whole header, inset by the SAME amount on both sides — the

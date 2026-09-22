@@ -1,6 +1,7 @@
 // Souris — ReceiptPrinter
 //
-// The signature presentation of « Résumé du jour » (DESIGN_OVERRIDES.md §25):
+// The signature presentation of the Souris receipts — « Résumé du jour » and
+// « Tops & tendances » (DESIGN_OVERRIDES.md §25, §34):
 // the Agenda dims, a small light-glass printer capsule lands under the top safe
 // area, and the receipt feeds DOWN out of its groove like paper being printed,
 // then settles. An app-owned element: on an iPhone with a Dynamic Island the
@@ -44,8 +45,9 @@ import Animated, {
 import { initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { haptics } from '@/shared/lib/haptics';
-import { AppText } from '@/shared/ui/AppText';
-import { GlassSurface } from '@/shared/ui/GlassSurface';
+
+import { AppText } from './AppText';
+import { GlassSurface } from './GlassSurface';
 import {
   easing,
   interaction,
@@ -57,7 +59,7 @@ import {
   receiptPrinter,
   scrim,
   semanticColors,
-} from '@/shared/ui/theme';
+} from './theme';
 
 export interface ReceiptPaperFrame {
   readonly width: number;

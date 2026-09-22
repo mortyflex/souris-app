@@ -854,6 +854,18 @@ describe('AppointmentEditingScreen', () => {
       fireEvent.press(view.getByTestId('edit-date'));
     });
     expect(view.getByText('Date du rendez-vous')).toBeTruthy();
+    // The canonical editing header: « Annuler » leading, ONE title, no eyebrow.
+    const dateSheetTitle = view
+      .getAllByTestId('sheet-editing-header-title')
+      .find((layer) => within(layer).queryByText('Date du rendez-vous') !== null)!;
+    const dateSheetHeader = dateSheetTitle.parent!;
+    const dateSheetLeading = within(dateSheetHeader).getByTestId('sheet-editing-header-leading');
+    expect(within(dateSheetTitle).getByRole('header', { name: 'Date du rendez-vous' })).toBeTruthy();
+    expect(dateSheetHeader.children.indexOf(dateSheetLeading)).toBeLessThan(
+      dateSheetHeader.children.indexOf(dateSheetTitle),
+    );
+    expect(within(dateSheetLeading).getByTestId('cancel-date').props.accessibilityLabel).toBe('Annuler');
+    expect(within(dateSheetHeader).queryByText('RENDEZ-VOUS')).toBeNull();
     await act(async () => {
       fireEvent.press(view.getByTestId('mock-date-picker'));
     });
@@ -872,6 +884,26 @@ describe('AppointmentEditingScreen', () => {
 
     expect(Number(view.getByTestId('session-start-at').props.children)).toBe(before);
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('the leading « Annuler » of the date sheet closes it and keeps the date', async () => {
+    const view = await renderEditor();
+    const before = view.getByTestId('session-start-at').props.children;
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('edit-date'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('mock-date-picker'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('cancel-date'));
+    });
+    await settleSheetTransition();
+
+    expect(view.queryByText('Date du rendez-vous')).toBeNull();
+    expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
+    expect(view.getByTestId('session-start-at').props.children).toBe(before);
   });
 
   it('saves a changed date with the local time of day preserved', async () => {

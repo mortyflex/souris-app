@@ -18,14 +18,12 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { daySummaryIcon } from '@/shared/icons/day-summary-icon';
 import { AppText } from '@/shared/ui/AppText';
 import { BrandMark } from '@/shared/ui/BrandMark';
+import { ReceiptPaper, ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
 import {
   foregroundSoft,
   lavender,
   mint,
-  nativeShadows,
   radii,
-  receiptPaper,
-  receiptPrinter,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
@@ -39,99 +37,91 @@ interface DaySummaryReceiptProps {
 }
 
 export function DaySummaryReceipt({ model, width, maxHeight }: DaySummaryReceiptProps) {
-  // The top teeth are drawn LAST, over the room kept for them here, so the
-  // shadow of the paper never tints them.
-  const topEdgeRoom = getToothWidth(width) / 2 - StyleSheet.hairlineWidth;
-
   return (
-    <View style={{ maxHeight, paddingTop: topEdgeRoom, width }} testID="day-summary-receipt">
-      <View style={styles.paper}>
-        <View style={styles.header}>
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={styles.badge}
-          >
-            <SymbolView name={daySummaryIcon} size={20} tintColor={semanticColors.accent} />
-          </View>
-          <AppText accessibilityRole="header" variant="sheetTitle">
-            Résumé du jour
-          </AppText>
-          <AppText variant="control" style={styles.date} testID="day-summary-date">
-            {model.dateLabel}
-          </AppText>
-          <AppText variant="metadata" testID="day-summary-count">
-            {model.countLabel}
-          </AppText>
-        </View>
-
-        <TearLine />
-
-        {model.isEmpty ? (
-          <View accessible style={styles.empty} testID="day-summary-empty">
-            <AppText variant="stateTitle" style={styles.centered}>
-              Cette journée est libre
-            </AppText>
-            <AppText variant="metadata" style={styles.centered}>
-              Aucun rendez-vous prévu.
-            </AppText>
-          </View>
-        ) : (
-          <ScrollView
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            style={styles.list}
-            testID="day-summary-list"
-          >
-            {model.rows.map((row) => (
-              <ReceiptRow key={row.key} row={row} />
-            ))}
-          </ScrollView>
-        )}
-
-        <TearLine />
-
+    <ReceiptPaper maxHeight={maxHeight} testID="day-summary-receipt" width={width}>
+      <View style={styles.header}>
         <View
-          accessible
-          accessibilityLabel={`CA potentiel, ${model.potentialRevenue}`}
-          style={styles.total}
-          testID="day-summary-total"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.badge}
         >
-          <AppText variant="eyebrow" style={styles.totalLabel}>
-            CA potentiel
-          </AppText>
-          <AppText adjustsFontSizeToFit numberOfLines={1} variant="display" style={styles.totalValue}>
-            {model.potentialRevenue}
-          </AppText>
+          <SymbolView name={daySummaryIcon} size={20} tintColor={semanticColors.accent} />
         </View>
-
-        <View style={styles.metrics}>
-          {model.metrics.map((metric) => (
-            <View
-              accessible
-              accessibilityLabel={`${metric.label}, ${metric.value}`}
-              key={metric.key}
-              style={styles.metric}
-              testID={`day-summary-metric-${metric.key}`}
-            >
-              <AppText variant="body" style={styles.metricLabel}>
-                {metric.label}
-              </AppText>
-              <AppText
-                variant="control"
-                style={[styles.metricValue, metric.key === 'collected' && styles.collectedValue]}
-              >
-                {metric.value}
-              </AppText>
-            </View>
-          ))}
-        </View>
-
-        <BrandMark decorative size={84} style={styles.brand} variant="wordmark" />
+        <AppText accessibilityRole="header" variant="sheetTitle">
+          Résumé du jour
+        </AppText>
+        <AppText variant="control" style={styles.date} testID="day-summary-date">
+          {model.dateLabel}
+        </AppText>
+        <AppText variant="metadata" testID="day-summary-count">
+          {model.countLabel}
+        </AppText>
       </View>
-      <PaperEdge side="bottom" width={width} />
-      <PaperEdge side="top" width={width} />
-    </View>
+
+      <ReceiptTearLine />
+
+      {model.isEmpty ? (
+        <View accessible style={styles.empty} testID="day-summary-empty">
+          <AppText variant="stateTitle" style={styles.centered}>
+            Cette journée est libre
+          </AppText>
+          <AppText variant="metadata" style={styles.centered}>
+            Aucun rendez-vous prévu.
+          </AppText>
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          style={styles.list}
+          testID="day-summary-list"
+        >
+          {model.rows.map((row) => (
+            <ReceiptRow key={row.key} row={row} />
+          ))}
+        </ScrollView>
+      )}
+
+      <ReceiptTearLine />
+
+      <View
+        accessible
+        accessibilityLabel={`CA potentiel, ${model.potentialRevenue}`}
+        style={styles.total}
+        testID="day-summary-total"
+      >
+        <AppText variant="eyebrow" style={styles.totalLabel}>
+          CA potentiel
+        </AppText>
+        <AppText adjustsFontSizeToFit numberOfLines={1} variant="display" style={styles.totalValue}>
+          {model.potentialRevenue}
+        </AppText>
+      </View>
+
+      <View style={styles.metrics}>
+        {model.metrics.map((metric) => (
+          <View
+            accessible
+            accessibilityLabel={`${metric.label}, ${metric.value}`}
+            key={metric.key}
+            style={styles.metric}
+            testID={`day-summary-metric-${metric.key}`}
+          >
+            <AppText variant="body" style={styles.metricLabel}>
+              {metric.label}
+            </AppText>
+            <AppText
+              variant="control"
+              style={[styles.metricValue, metric.key === 'collected' && styles.collectedValue]}
+            >
+              {metric.value}
+            </AppText>
+          </View>
+        ))}
+      </View>
+
+      <BrandMark decorative size={84} style={styles.brand} variant="wordmark" />
+    </ReceiptPaper>
   );
 }
 
@@ -166,70 +156,7 @@ function ReceiptRow({ row }: { readonly row: DaySummaryReceiptRow }) {
   );
 }
 
-/** A dashed tear line. Drawn as a clipped dashed box: a one-sided dashed border is not portable. */
-function TearLine() {
-  return (
-    <View style={styles.tearLine}>
-      <View style={styles.tearLineDashes} />
-    </View>
-  );
-}
-
-function getToothCount(width: number): number {
-  return Math.max(Math.floor(width / receiptPrinter.toothWidth), 1);
-}
-
-/** The teeth tile the paper width exactly, so their real width follows it. */
-function getToothWidth(width: number): number {
-  return width / getToothCount(width);
-}
-
-/**
- * The torn edge of the paper: a row of paper-coloured teeth. Each tooth is a
- * square turned 45°, centred on the edge of the paper and clipped to its outer
- * half, so the row tiles the width exactly whatever the device.
- */
-function PaperEdge({ side, width }: { readonly side: 'top' | 'bottom'; readonly width: number }) {
-  const count = getToothCount(width);
-  const toothWidth = getToothWidth(width);
-  const toothHeight = toothWidth / 2;
-  const square = toothWidth / Math.SQRT2;
-
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      pointerEvents="none"
-      style={[styles.edge, { height: toothHeight }, side === 'top' ? styles.edgeTop : styles.edgeBottom]}
-    >
-      {Array.from({ length: count }, (_, index) => (
-        <View key={index} style={{ height: toothHeight, width: toothWidth }}>
-          <View
-            style={[
-              styles.tooth,
-              {
-                height: square,
-                left: (toothWidth - square) / 2,
-                top: side === 'top' ? toothHeight - square / 2 : -square / 2,
-                width: square,
-              },
-            ]}
-          />
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  paper: {
-    backgroundColor: receiptPaper.surface,
-    flexShrink: 1,
-    paddingBottom: spacing.base,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    ...nativeShadows.lifted,
-  },
   header: { alignItems: 'center', gap: 2 },
   badge: {
     alignItems: 'center',
@@ -271,21 +198,4 @@ const styles = StyleSheet.create({
   metricValue: { fontVariant: ['tabular-nums'] },
   collectedValue: { color: mint.mint700 },
   brand: { alignSelf: 'center', marginTop: spacing.md, opacity: 0.85 },
-  tearLine: { height: 1, marginVertical: spacing.base, overflow: 'hidden' },
-  tearLineDashes: {
-    borderColor: receiptPaper.separator,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    height: 2,
-  },
-  edge: { flexDirection: 'row', overflow: 'hidden' },
-  edgeTop: { left: 0, position: 'absolute', right: 0, top: 0 },
-  // The paper is drawn before the bottom edge: tuck the teeth under its last
-  // hairline so no seam can open between the two.
-  edgeBottom: { marginTop: -StyleSheet.hairlineWidth },
-  tooth: {
-    backgroundColor: receiptPaper.surface,
-    position: 'absolute',
-    transform: [{ rotate: '45deg' }],
-  },
 });

@@ -20,7 +20,7 @@ import {
   GroupedDataRow,
 } from '@/shared/ui/GroupedDataRow';
 import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
@@ -135,9 +135,9 @@ export function EditableAppointmentContext({
       <BottomSheet
         backdropLabel="Annuler la sélection de date"
         header={
-          <SheetHeader
-            action={{ label: 'Annuler', onPress: cancelDatePicker }}
-            eyebrow="RENDEZ-VOUS"
+          <SheetEditingHeader
+            cancelTestID="cancel-date"
+            onCancel={cancelDatePicker}
             title="Date du rendez-vous"
           />
         }

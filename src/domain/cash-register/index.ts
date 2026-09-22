@@ -195,3 +195,26 @@ export function getCashRegisterMonthSummary(
 ): CashRegisterSummary {
   return summarize(sources, (paidAt) => isSameLocalMonth(paidAt, month));
 }
+
+/**
+ * A span of time as `[start, end)`: `start` included, `end` excluded. Built
+ * from device-local civil boundaries (local midnights) by the caller.
+ */
+export interface CashRegisterInterval {
+  readonly start: Date;
+  readonly end: Date;
+}
+
+/**
+ * Money received during ANY local span (a week, a year…): the same payment
+ * selection and arithmetic as the day and month summaries, with the bounds
+ * `start <= paidAt < end`.
+ */
+export function getCashRegisterIntervalSummary(
+  sources: CashRegisterSources,
+  interval: CashRegisterInterval,
+): CashRegisterSummary {
+  const start = interval.start.getTime();
+  const end = interval.end.getTime();
+  return summarize(sources, (paidAt) => paidAt.getTime() >= start && paidAt.getTime() < end);
+}

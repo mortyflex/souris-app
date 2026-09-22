@@ -637,8 +637,9 @@ Produits                                  [watermark, cropped by the right edge]
   cross while open. Choosing an option closes the menu first, then runs the flow; leaving the
   screen closes it. No scrim, no drawer, no native action sheet. Produits: « Nouvelle vente »
   (`bag`) and « Ajouter un produit » (`shippingbox`). Agenda: « Nouveau rendez-vous »
-  (`calendar.badge.plus` — Appointment creation on the selected day, unchanged) and « Résumé du
-  jour » (`shared/icons/day-summary-icon`, §25).
+  (`calendar.badge.plus` — Appointment creation on the selected day, unchanged), « Résumé du
+  jour » (`shared/icons/day-summary-icon`, §25) and « Tops & tendances »
+  (`shared/icons/insights-icon`, §34).
 
 ### Short sheets are content-fit
 
@@ -1121,7 +1122,7 @@ The second action of the Agenda + menu (§17) prints the summary of the day THE 
 not necessarily today — as a receipt. A small signature moment: premium and playful, never
 cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
 
-- **Presentation** (`features/agenda/day-summary/ReceiptPrinter.tsx`). Its own transparent Modal, not
+- **Presentation** (`shared/ui/ReceiptPrinter.tsx`, shared with §34). Its own transparent Modal, not
   the bottom sheet: the Agenda dims under the ONE `scrim`, a printer capsule lands under the top safe
   area, the paper feeds DOWN out of it and settles, a worded « Fermer » capsule waits under the paper.
 - **Printer capsule.** App-owned — never the real Dynamic Island, which it simply sits below on the
@@ -1141,7 +1142,7 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
   travel, nothing on close, no sound.
 - **Reduced motion.** No travel, no settle, no drop: the receipt is in place at once and the
   presentation fades. The haptic stays. Everything remains available.
-- **Paper** (`DaySummaryReceipt.tsx`). `receiptPaper.surface` `#FEFBF7` — oklch(0.99 0.006 80), a warm
+- **Paper** (`shared/ui/ReceiptPaper.tsx`, filled by `DaySummaryReceipt.tsx`). `receiptPaper.surface` `#FEFBF7` — oklch(0.99 0.006 80), a warm
   near-white, FLAT: no grain, no texture, no gradient, no serif, no handwriting. Contrast on it:
   foreground 16.6:1, plum 11.7:1, foregroundSoft 8.3:1, mint700 7.8:1, accent 5.3:1. Square corners with
   torn top and bottom edges: a row of 45° paper-coloured squares clipped to their outer half, tiling
@@ -1313,15 +1314,20 @@ the SAME width on both sides — the measured width of the wider side action —
 whatever the width of « Annuler », and a long title truncates before reaching it; no empty placeholder
 button. Used by « Nouveau rendez-vous » (and its « Indisponible » mode), « Modifier le rendez-vous »,
 « Nouvelle vente », « Nouvelle prestation », « Modifier la prestation », « Ajouter un produit »,
-« Modifier le produit », « Ajouter une cliente », « Modifier la cliente » and the
-checkout sheet (« Encaisser le rendez-vous », « Encaisser la vente », « Modifier l’encaissement »).
+« Modifier le produit », « Ajouter une cliente », « Modifier la cliente », the
+checkout sheet (« Encaisser le rendez-vous », « Encaisser la vente », « Modifier l’encaissement »)
+and the pickers opened from these flows: « Choisir la cliente » (« Fermer ») and « Date du
+rendez-vous » (« Annuler »).
 
 - Cancel is always on the left. Equivalent sheets never move it to the right.
 - No redundant eyebrow when the title already names the sheet.
 - The trailing slot is only for a distinct action (« Enregistrer », a menu), never Cancel.
-- The label stays « Annuler »; the spoken label names what is abandoned (« Annuler la vente »).
+- The label stays « Annuler » when an operation is abandoned; the spoken label names what is
+  abandoned (« Annuler la vente »). A picker that only dismisses keeps « Fermer », in the same
+  leading place.
 - `SheetHeader` (eyebrow, large title, trailing « Fermer ») stays the header of read-only
-  drawers and short sheets.
+  drawers and short sheets — the Appointment actions menu, the danger-toned « Annulation » /
+  « Absence » confirmations — and never of a creation, editing or picker sheet.
 
 ## 31. Caisse — Collected Money and Its Encaissements
 
@@ -1419,3 +1425,88 @@ money surface of the checkout sheet, violet accents, no gradient, no new colour.
 - **Correction on a cancelled or missed visit.** The same `ConfirmationDialog`, worded for the
   case: « Annuler cet acompte ? » and a body that says it corrects an entry and does not refund.
 - **Agenda.** No deposit badge on appointment cards.
+
+---
+
+## 34. Tops & tendances — Insights Receipt
+
+The third action of the Agenda + menu (§17) prints a read-only activity recap with the SAME signature
+as « Résumé du jour » (§25). It uses the same `ReceiptPrinter`, capsule, feed, settle, timings, ONE
+`haptics.print()`, Reduce Motion fallback and dismissal paths (« Fermer », the dimmed page « Fermer les
+tops et tendances », hardware back, accessibility escape). It also uses the same `ReceiptPaper` with its
+torn edges and dashed tear lines. There is no second printer. Figures: `docs/domain/INSIGHTS.md`.
+
+- **Glyph.** `chart.line.uptrend.xyaxis` (SF Symbols 4, iOS 16) / `trending_up`, shared by the menu
+  option and the receipt header.
+- **Character.** Visual and comparative. « Résumé du jour » is a vertical operational list; this one
+  is a compact summary followed by ONE horizontal carousel of podiums.
+- **Hierarchy**, top to bottom:
+
+  ```text
+  header      36 pt lavender100 disc + glyph · « Tops & tendances » sheetTitle (the header)
+  controls    stretched SegmentedControl  Jour | Sem. | Mois | Année  (Mois on opening; « Sem. »
+              spoken « Semaine ») · PeriodNavigator without its surface: ‹ Septembre 2026 ›
+  summary     compact lavender050 panel: « ENCAISSÉ » eyebrow, accent · the amount in `display`,
+              plum, tabular — THE strongest value · then one row: « 28 rendez-vous réalisés »
+              (metadata) ↔ « Panier moyen » / value (control) · optional quiet notes
+  tear line
+  rankings    ONE horizontal paged carousel bleeding to the paper edges, one category per page:
+              Top prestations → Top produits → Clientes qui dépensent le plus → Clientes les plus
+              fidèles, each an `InsightsPodium`
+  pagination  four short pills, lav200; the current one a 16 pt accent pill
+  footer      the Souris wordmark, 76 pt, decorative, `spacing.lg` above it, clear of the torn edge
+  ```
+
+- **Podium** (`features/insights/components/InsightsPodium.tsx`), the visual signature of the
+  receipt. The category eyebrow (accent, centred) belongs to the page, so a page stands on its own.
+  Each place is ONE tight vertical unit — medal, name, metric, plinth — with only `spacing.xs` between
+  them. #1 is centred (36 % of the page) and #2 / #3 sit left and right (32 % each), so the three
+  plinths TOUCH on one common floor and read as one silhouette: tall centre (66 pt), medium left
+  (46 pt), short right (32 pt). Plinths are flat lilac blocks with `radii.small` top corners, a flat
+  bottom and a 3 pt deeper top face: #1 `#DCCEF6` / top `#C8B5EF`, #2 and #3 `#EAE2FB` / top
+  `#D8CAF5` (`receiptPodium`). Each carries its rank, understated, on its front face (#1
+  `sectionTitle`, the others `control`, lilac, 80 % opacity) and no other text. Names are
+  `rowTitle`, centred, 2 lines then ellipsis, never auto-shrunk; #1's name is Bold, one weight
+  stronger, not larger. Metrics: #1 `control` plum, #2 and #3 `metadata`. No card, no gradient.
+- **Medals** (`receiptMedal`, Views only, no image or SVG). Each medal is a flat metal disc with a 1.5 pt
+  darker rim, a 1 pt lighter inset ring and the digit centred on it (≥ 6:1), hanging from two
+  ribbon tails that part outwards (±16°), each cut with a swallow-tail notch in paper colour. The
+  tails are in the Souris lilac family, with a darker left tail and a lighter right one for depth.
+  - #1 antique gold: `#E6CD8C` fill, `#B48F3E` rim, `#F3E4B8` ring, `#5A4213` digit. 48 pt disc,
+    `sectionTitle` digit, plum `#654199` / `#7C5FC9` tails 12 × 18 pt.
+  - #2 pearl silver: `#DEDCE7`, `#9E9BB2`, `#EFEEF4`, `#3F3D55`. 38 pt, `control` digit, lilac
+    `#9A85D6` / `#B2A1E2` tails 10 × 14 pt.
+  - #3 soft bronze: `#E2BFA2`, `#A6704B`, `#F0D8C4`, `#5B331A`. 38 pt, same tails as #2.
+
+  Muted, never saturated yellow or orange. The medal and the plinth are decorative: rank is carried
+  by the written digits and by the spoken label.
+- **Fewer than three.** Only existing places render. With one result the winner stands alone in the
+  centre; with two, #1 is centre and #2 left. There is no empty block and no placeholder. An empty
+  category shows one quiet centred `metadata` line in its page (« Aucune prestation sur cette
+  période », « Aucun produit vendu… », « Aucune dépense… », « Aucun rendez-vous réalisé… »).
+- **Paging.** A native horizontal `ScrollView`, `pagingEnabled` (no dependency): one category at a
+  time, clean snaps, no partial page. The page settles on the momentum end, and a real change gives
+  ONE selection haptic, never during the drag. Tapping a pill moves to its category (animated,
+  instant under Reduce Motion). The page survives period changes and is forgotten on close. Nothing
+  re-prints. The summary never scrolls horizontally. Nothing scrolls vertically while the content
+  fits; only an unusually tall layout falls back to a quiet, non-bouncing vertical scroll.
+- **Period labels.** `22 sept. 2026` · `21 – 27 sept. 2026` (`28 sept. – 4 oct. 2026`,
+  `28 déc. 2026 – 3 janv. 2027`) · `Septembre 2026` · `2026`. The arrows are labelled after the period
+  they move by (« Mois précédent », « Semaine suivante »…).
+- **Haptics.** The ONE print haptic, the selection haptic of `SegmentedControl` on a real change only,
+  and nothing on the arrows (like every Souris period navigator). Re-laying out the paper while browsing
+  never prints again.
+- **Empty.** The same complete paper with every figure at zero, one quiet « Aucune activité sur
+  cette période » line under the summary, and each category page showing its own message.
+- **Accessibility.** The Modal is `accessibilityViewIsModal`. The headline, each metric and each
+  podium place is ONE element: « Encaissé, 150,00 € », « 28 rendez-vous réalisés », « Première place,
+  Brushing 2, 6 prestations », « Troisième place, Nora H., 3 rendez-vous ». The places are in rank
+  order in the tree, so screen readers read 1, 2, 3 whatever their visual position. Rank never
+  relies on medal colour, height or side. Only the settled page is exposed. The pagination is ONE
+  adjustable element (« Top prestations, 1 sur 4 ») whose increment / decrement move between
+  categories. The category title is a header. The period options are tabs with their selected state.
+- **Privacy.** This internal ticket names clients as `Prénom N.`. It has no share or export action. A
+  future social card is a separate, sanitized representation.
+- **Not here.** No place is tappable, there is no reward, discount or offer action, and there is no
+  « dépensent le moins » ranking. The podium receives already-worded data, so a future share card can
+  reuse it without the carousel or a capture of this private receipt.

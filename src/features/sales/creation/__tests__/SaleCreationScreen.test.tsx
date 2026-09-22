@@ -719,7 +719,7 @@ describe('SaleCreationScreen', () => {
 
     await press(view, CLIENT_ROW);
 
-    expect(view.getByText('CLIENTE')).toBeTruthy();
+    expect(view.queryByText('CLIENTE')).toBeNull();
     expect(view.getByRole('header', { name: 'Choisir la cliente' })).toBeTruthy();
     // Nothing typed: the whole active directory is offered; the archived Client never.
     expect(view.getByText('Alice Aubert')).toBeTruthy();

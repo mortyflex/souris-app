@@ -124,6 +124,7 @@ Examples:
 src/domain/appointments/
 src/domain/calendar-blocks/
 src/domain/clients/
+src/domain/insights/
 src/domain/products/
 src/domain/sales/
 ```

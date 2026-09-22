@@ -136,6 +136,47 @@ export const receiptPaper = {
   slot: 'rgba(25, 22, 63, 0.24)',
 } as const;
 
+// Podium of « Tops & tendances » (DESIGN_OVERRIDES.md §34). FLAT colours only.
+//
+// Medals: muted metal discs — a warm antique gold, a pearl silver, a soft
+// bronze — each with a darker rim, a lighter inset ring and the digit written
+// on it (≥ 6:1 on its fill), hanging from two ribbon tails in the Souris
+// lilac family. The colour never carries the rank alone: it is also written
+// and spoken.
+export const receiptMedal = {
+  gold: {
+    fill: '#E6CD8C',
+    rim: '#B48F3E',
+    inset: '#F3E4B8',
+    text: '#5A4213',
+    ribbon: '#654199',
+    ribbonShade: '#7C5FC9',
+  },
+  silver: {
+    fill: '#DEDCE7',
+    rim: '#9E9BB2',
+    inset: '#EFEEF4',
+    text: '#3F3D55',
+    ribbon: '#9A85D6',
+    ribbonShade: '#B2A1E2',
+  },
+  bronze: {
+    fill: '#E2BFA2',
+    rim: '#A6704B',
+    inset: '#F0D8C4',
+    text: '#5B331A',
+    ribbon: '#9A85D6',
+    ribbonShade: '#B2A1E2',
+  },
+} as const;
+
+// Plinths: lilac blocks on a common floor, the winner's one step stronger,
+// each with a slightly deeper top face and its rank quietly on the front.
+export const receiptPodium = {
+  first: { face: '#DCCEF6', top: '#C8B5EF', number: '#7C5FC9' },
+  place: { face: '#EAE2FB', top: '#D8CAF5', number: '#9A85D6' },
+} as const;
+
 // Secondary readable foreground — readable secondary metadata text.
 // More legible than muted; reserved for text that is actually read.
 // oklch(0.42 0.055 285)

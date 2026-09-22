@@ -71,8 +71,15 @@ describe('ClientPickerSheet (shared Client selection)', () => {
     const view = await renderPicker();
 
     await act(async () => fireEvent.press(view.getByTestId('open')));
-    expect(view.getByText('CLIENTE')).toBeTruthy();
+    // The canonical editing header: « Fermer » leading, ONE centred title, no eyebrow.
+    expect(view.queryByText('CLIENTE')).toBeNull();
     expect(view.getByRole('header', { name: 'Choisir la cliente' })).toBeTruthy();
+    const leading = view.getByTestId('sheet-editing-header-leading');
+    const title = view.getByTestId('sheet-editing-header-title');
+    expect(leading.parent).toBe(title.parent);
+    expect(leading.parent!.children.indexOf(leading)).toBeLessThan(leading.parent!.children.indexOf(title));
+    expect(view.getByTestId('client-picker-close').props.accessibilityLabel).toBe('Fermer');
+    expect(view.queryByTestId('sheet-editing-header-trailing')).toBeNull();
     expect(view.getByPlaceholderText('Rechercher une cliente').props.autoFocus).toBeFalsy();
     const shouldSet = view.getByTestId('bottom-sheet-drag-zone').props.onMoveShouldSetResponder as (
       event: unknown,
@@ -104,7 +111,7 @@ describe('ClientPickerSheet (shared Client selection)', () => {
     const view = await renderPicker();
 
     await act(async () => fireEvent.press(view.getByTestId('open')));
-    await act(async () => fireEvent.press(view.getByLabelText('Fermer')));
+    await act(async () => fireEvent.press(view.getByTestId('client-picker-close')));
 
     expect(view.getByTestId('selected').props.children).toBe('none');
     await settleSheetTransition();

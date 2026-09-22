@@ -106,7 +106,7 @@ describe('AgendaScreen', () => {
     expect(timelines[0].props.contentInsetAdjustmentBehavior).toBe('automatic');
   });
 
-  it('offers « Nouveau rendez-vous » and « Résumé du jour » from the floating +', async () => {
+  it('offers « Nouveau rendez-vous », « Résumé du jour » and « Tops & tendances » from the floating +', async () => {
     const view = await renderAgenda();
     await settleFloatingReveal();
 
@@ -117,6 +117,7 @@ describe('AgendaScreen', () => {
     expect(options.map((option) => option.props.accessibilityLabel)).toEqual([
       'Nouveau rendez-vous',
       'Résumé du jour',
+      'Tops & tendances',
     ]);
   });
 
@@ -336,6 +337,154 @@ describe('AgendaScreen — day navigation', () => {
     expect(view.queryByTestId('day-summary-list')).toBeNull();
     expect(view.getByLabelText(`CA potentiel, ${formatEuroCents(0)}`)).toBeTruthy();
     expect(view.getByLabelText('Temps total, 0 min')).toBeTruthy();
+  });
+
+  const openInsights = async (view: AgendaView) => {
+    await settleFloatingReveal();
+    await press(view, 'agenda-create');
+    await press(view, 'agenda-insights');
+  };
+  const periodLabel = (view: AgendaView) =>
+    view.getByTestId('business-insights-period-label').props.children as string;
+  const receipt = (view: AgendaView) => within(view.getByTestId('business-insights-receipt'));
+  const pickAgendaDay = async (view: AgendaView, day: Date) => {
+    await press(view, 'agenda-date-calendar');
+    mockPickerDate = day;
+    await press(view, 'mock-date-picker');
+    await press(view, 'agenda-day-picker-confirm');
+    await settleSheetTransition();
+  };
+
+  it('prints « Tops & tendances » on the month of the Agenda date, with ONE print haptic', async () => {
+    const print = jest.spyOn(haptics, 'print');
+    const view = await renderAgenda();
+    expect(view.queryByTestId('business-insights-receipt')).toBeNull();
+
+    await openInsights(view);
+
+    expect(view.getByRole('header', { name: 'Tops & tendances' })).toBeTruthy();
+    expect(periodLabel(view)).toBe('Septembre 2026');
+    expect(receipt(view).getByRole('tab', { name: 'Mois' }).props.accessibilityState).toEqual({ selected: true });
+    expect(receipt(view).getByRole('tab', { name: 'Jour' }).props.accessibilityState).toEqual({ selected: false });
+    expect(view.getByLabelText(/^Encaissé, /)).toBeTruthy();
+    // The seeded visit of Tuesday 15 was completed by the past-day rule.
+    expect(view.getByTestId('business-insights-completed').props.accessibilityLabel).toMatch(
+      /^[1-9]\d* rendez-vous réalisés?$/,
+    );
+    expect(view.getByLabelText(/^Panier moyen, /)).toBeTruthy();
+    // ONE horizontal carousel, first on Top prestations, with its podium.
+    expect(view.getByTestId('business-insights-rankings').props.horizontal).toBe(true);
+    expect(view.getByTestId('business-insights-pagination').props.accessibilityLabel).toBe(
+      'Top prestations, 1 sur 4',
+    );
+    expect(view.getByLabelText(/^Première place, .+, \d+ prestations?$/)).toBeTruthy();
+    // No ranking is interactive, nothing is shared yet, and there is no « moins ».
+    expect(view.queryByText(/Partager/)).toBeNull();
+    expect(view.queryByText(/dépensent le moins/)).toBeNull();
+
+    expect(print).not.toHaveBeenCalled();
+    for (const height of [560, 580]) {
+      await act(async () =>
+        fireEvent(view.getByTestId('business-insights-paper'), 'layout', {
+          nativeEvent: { layout: { height, width: 340, x: 0, y: 0 } },
+        }),
+      );
+    }
+    // Swiping categories and browsing periods re-lay the paper out: it never prints again.
+    await act(async () =>
+      fireEvent(view.getByTestId('business-insights-rankings'), 'momentumScrollEnd', {
+        // Past the end: the carousel settles on its last category.
+        nativeEvent: { contentOffset: { x: 10_000, y: 0 } },
+      }),
+    );
+    expect(view.getByTestId('business-insights-pagination').props.accessibilityLabel).toBe(
+      'Clientes les plus fidèles, 4 sur 4',
+    );
+    expect(view.getByLabelText(/^Première place, .+, \d+ rendez-vous$/)).toBeTruthy();
+    await press(view, 'business-insights-period-year');
+    await act(async () =>
+      fireEvent(view.getByTestId('business-insights-paper'), 'layout', {
+        nativeEvent: { layout: { height: 600, width: 340, x: 0, y: 0 } },
+      }),
+    );
+    expect(print).toHaveBeenCalledTimes(1);
+    print.mockRestore();
+  });
+
+  it('anchors on the Agenda date and browses its own periods without moving the Agenda', async () => {
+    const selection = jest.spyOn(haptics, 'selection');
+    const view = await renderAgenda();
+    await pickAgendaDay(view, new Date(2027, 0, 1));
+    const agendaDate = selectedDate(view);
+
+    await openInsights(view);
+    expect(periodLabel(view)).toBe('Janvier 2027');
+
+    selection.mockClear();
+    await press(view, 'business-insights-period-month');
+    expect(selection).not.toHaveBeenCalled();
+
+    await press(view, 'business-insights-period-day');
+    expect(selection).toHaveBeenCalledTimes(1);
+    expect(periodLabel(view)).toBe('1 janv. 2027');
+    expect(receipt(view).getByRole('button', { name: 'Jour précédent' })).toBeTruthy();
+    await press(view, 'business-insights-navigator-previous');
+    expect(periodLabel(view)).toBe('31 déc. 2026');
+
+    await press(view, 'business-insights-period-week');
+    expect(periodLabel(view)).toBe('28 déc. 2026 – 3 janv. 2027');
+    await press(view, 'business-insights-navigator-previous');
+    expect(periodLabel(view)).toBe('21 – 27 déc. 2026');
+    expect(receipt(view).getByRole('button', { name: 'Semaine suivante' })).toBeTruthy();
+
+    await press(view, 'business-insights-period-year');
+    expect(periodLabel(view)).toBe('2026');
+    await press(view, 'business-insights-navigator-next');
+    expect(periodLabel(view)).toBe('2027');
+    expect(receipt(view).getByRole('button', { name: 'Année précédente' })).toBeTruthy();
+
+    await press(view, 'business-insights-period-month');
+    expect(periodLabel(view)).toBe('Décembre 2027');
+    await press(view, 'business-insights-navigator-next');
+    expect(periodLabel(view)).toBe('Janvier 2028');
+    expect(receipt(view).getByRole('button', { name: 'Mois précédent' })).toBeTruthy();
+
+    await press(view, 'business-insights-close');
+    await act(async () => {
+      jest.advanceTimersByTime(receiptPrint.dismiss);
+    });
+    expect(view.queryByTestId('business-insights-receipt')).toBeNull();
+    expect(selectedDate(view)).toBe(agendaDate);
+
+    // Every opening starts again from the Agenda date, on the month.
+    await openInsights(view);
+    expect(periodLabel(view)).toBe('Janvier 2027');
+    expect(receipt(view).getByRole('tab', { name: 'Mois' }).props.accessibilityState).toEqual({ selected: true });
+    selection.mockRestore();
+  });
+
+  it('prints a complete zero ticket for a period without activity, and closes from the dimmed page', async () => {
+    const view = await renderAgenda();
+    await openInsights(view);
+    await press(view, 'business-insights-period-year');
+    for (let step = 0; step < 4; step += 1) {
+      await press(view, 'business-insights-navigator-next');
+    }
+    expect(periodLabel(view)).toBe('2030');
+
+    expect(view.getByLabelText(`Encaissé, ${formatEuroCents(0)}`)).toBeTruthy();
+    expect(view.getByLabelText('0 rendez-vous réalisés')).toBeTruthy();
+    expect(view.getByLabelText(`Panier moyen, ${formatEuroCents(0)}`)).toBeTruthy();
+    expect(view.getByText('Aucune activité sur cette période')).toBeTruthy();
+    // Each category keeps its own quiet message; no placeholder place.
+    expect(view.getByText('Aucune prestation sur cette période')).toBeTruthy();
+    expect(view.queryByLabelText(/place,/)).toBeNull();
+
+    await press(view, 'business-insights-backdrop');
+    await act(async () => {
+      jest.advanceTimersByTime(receiptPrint.dismiss);
+    });
+    expect(view.queryByTestId('business-insights-receipt')).toBeNull();
   });
 
   it('keeps Week mode on its own week navigation and opens a tapped day in Day mode', async () => {

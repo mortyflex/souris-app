@@ -11,6 +11,7 @@ import {
   EMPTY_CASH_REGISTER_SUMMARY,
   getCashRegisterDayEntries,
   getCashRegisterDaySummary,
+  getCashRegisterIntervalSummary,
   getCashRegisterMonthEntries,
   getCashRegisterMonthSummary,
   getCashRegisterPayments,
@@ -382,5 +383,27 @@ describe('Cash Register derivation', () => {
       });
       expect(getCashRegisterMonthEntries(sources, new Date(2026, 8, 15)).map((entry) => entry.payment.paidAt.getDate())).toEqual([2, 30]);
     });
+  });
+});
+
+describe('Cash Register — any local span', () => {
+  it('counts exactly the payments with start <= paidAt < end, like the day and month summaries', () => {
+    const appointments = [
+      paid('before', new Date(2026, 8, 20, 23, 59), 1000, 0),
+      paid('monday', new Date(2026, 8, 21, 0, 0), 2000, 0),
+      paid('sunday', new Date(2026, 8, 27, 23, 59), 0, 500),
+      paid('after', new Date(2026, 8, 28, 0, 0), 4000, 0),
+    ];
+    const week = { start: new Date(2026, 8, 21), end: new Date(2026, 8, 28) };
+    expect(getCashRegisterIntervalSummary({ appointments, ...noSales }, week)).toEqual({
+      totalCents: 2500,
+      cardCents: 2000,
+      cashCents: 500,
+      checkoutCount: 2,
+    });
+    const month = { start: new Date(2026, 8, 1), end: new Date(2026, 9, 1) };
+    expect(getCashRegisterIntervalSummary({ appointments, ...noSales }, month)).toEqual(
+      getCashRegisterMonthSummary({ appointments, ...noSales }, new Date(2026, 8, 15)),
+    );
   });
 });

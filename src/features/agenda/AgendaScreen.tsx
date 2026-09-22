@@ -4,6 +4,7 @@ import { AppState, Platform, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { daySummaryIcon } from "@/shared/icons/day-summary-icon";
+import { insightsIcon } from "@/shared/icons/insights-icon";
 import { DateNavigator } from "@/shared/ui/DateNavigator";
 import { DayPickerSheet } from "@/shared/ui/DayPickerSheet";
 import { FloatingCreateButton } from "@/shared/ui/FloatingCreateButton";
@@ -12,6 +13,7 @@ import { agenda, gutter, semanticColors, spacing } from "@/shared/ui/theme";
 
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
 import { useCalendarBlockSession } from "@/features/calendar-blocks/session/CalendarBlockSessionProvider";
+import { BusinessInsightsTicket } from "@/features/insights/BusinessInsightsTicket";
 import {
   addLocalDays,
   followTodayChange,
@@ -39,6 +41,7 @@ export function AgendaScreen() {
   const [dayPickerVisible, setDayPickerVisible] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [daySummaryVisible, setDaySummaryVisible] = useState(false);
+  const [insightsVisible, setInsightsVisible] = useState(false);
   const { appointments: allAppointments } = useAppointmentSession();
   const { calendarBlocks } = useCalendarBlockSession();
   const operationalAppointments = getOperationalAgendaEntries(allAppointments);
@@ -176,6 +179,12 @@ export function AgendaScreen() {
             onPress: () => setDaySummaryVisible(true),
             testID: "agenda-day-summary",
           },
+          {
+            icon: insightsIcon,
+            label: "Tops & tendances",
+            onPress: () => setInsightsVisible(true),
+            testID: "agenda-insights",
+          },
         ]}
         menuOpen={createMenuOpen}
         onMenuOpenChange={setCreateMenuOpen}
@@ -185,6 +194,11 @@ export function AgendaScreen() {
         day={selectedDay}
         onClose={() => setDaySummaryVisible(false)}
         visible={daySummaryVisible}
+      />
+      <BusinessInsightsTicket
+        anchor={selectedDay}
+        onClose={() => setInsightsVisible(false)}
+        visible={insightsVisible}
       />
     </SafeAreaView>
   );
