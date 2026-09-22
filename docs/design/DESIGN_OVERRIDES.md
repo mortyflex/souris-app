@@ -361,7 +361,7 @@ introducing a POS visual language:
 - `Nouvelle vente` is a primary action beside a secondary `Ajouter un produit` on the Produits
   tab — no new tab, no KPI, no cash-register surface;
 - Sale creation is one native form sheet in the canonical Souris shell (§16: white surface,
-  Souris grabber, `SheetHeader` with eyebrow / title / tertiary `Annuler`, sticky
+  Souris grabber, the §30 editing header « Annuler | Nouvelle vente » (no eyebrow), sticky
   `SheetActionBar` with `Valider la vente`, no swipe-to-dismiss), like the Product editor — never
   a full-screen modal that would collide with the status bar;
 - Product selection is operational: tapping a search or scan result adds the Product IMMEDIATELY
@@ -1301,3 +1301,17 @@ lifecycle are unchanged.
   lists each line.
 - **Order.** Identity, `Vendre un produit`, birthday, next appointment, Activité, history,
   Informations, Notes, then the tertiary archive action.
+
+## 30. Standard Sheet Header — « Annuler » Leading
+
+Creation and editing sheets use ONE header: `SheetEditingHeader` (`src/shared/ui`), the §27
+recipe — « Annuler » (tertiary, leading), then the title (`sectionTitle`, one line, shrinks
+slightly before truncating). Used by « Nouveau rendez-vous », « Modifier le rendez-vous » and
+« Nouvelle vente ».
+
+- Cancel is always on the left. Equivalent sheets never move it to the right.
+- No redundant eyebrow when the title already names the sheet.
+- The trailing slot is only for a distinct action (« Enregistrer », a menu), never Cancel.
+- The label stays « Annuler »; the spoken label names what is abandoned (« Annuler la vente »).
+- `SheetHeader` (eyebrow, large title, trailing « Fermer ») stays the header of read-only
+  drawers and short sheets.

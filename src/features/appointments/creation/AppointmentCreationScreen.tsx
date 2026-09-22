@@ -71,13 +71,13 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { SheetScreen } from '@/shared/ui/SheetScreen';
 import {
   agenda,
   foregroundSoft,
   gutter,
   lavender,
-  semanticColors,
   spacing,
 } from '@/shared/ui/theme';
 
@@ -342,28 +342,14 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   return (
     <SheetScreen keyboardAvoiding testID="appointment-creation-sheet">
       <View style={styles.headerZone}>
-        {/* The editing header of « Modifier le rendez-vous », in both modes:
+        {/* The shared editing header (SheetEditingHeader), in both modes:
             « Annuler » leading, one title. The segment below names the mode,
             the stepper the step — no eyebrow, no step title. */}
-        <View style={styles.header}>
-          <AppButton
-            accessibilityLabel="Annuler la création"
-            onPress={() => router.back()}
-            style={styles.headerAction}
-            title="Annuler"
-            variant="tertiary"
-          />
-          <AppText
-            accessibilityRole="header"
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}
-            numberOfLines={1}
-            style={styles.headerTitle}
-            variant="sectionTitle"
-          >
-            {mode === 'client' ? 'Nouveau rendez-vous' : CALENDAR_BLOCK_TITLE}
-          </AppText>
-        </View>
+        <SheetEditingHeader
+          cancelAccessibilityLabel="Annuler la création"
+          onCancel={() => router.back()}
+          title={mode === 'client' ? 'Nouveau rendez-vous' : CALENDAR_BLOCK_TITLE}
+        />
         <SegmentedControl
           onChange={setMode}
           options={MODE_OPTIONS}
@@ -538,16 +524,6 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
 
 const styles = StyleSheet.create({
   headerZone: { gap: spacing.xs, paddingHorizontal: horizontalGutter },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginHorizontal: -spacing.md,
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.sm,
-  },
-  headerAction: { paddingHorizontal: spacing.md },
-  headerTitle: { color: semanticColors.foreground, flex: 1 },
   scheduleHeader: { gap: spacing.md },
   footerButtons: { flexDirection: 'row', gap: spacing.sm },
   catalogScroll: { flex: 1 },

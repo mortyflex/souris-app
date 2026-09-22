@@ -5,6 +5,7 @@
 // action at the top-right (« Fermer » / « Annuler »). Used by the shared
 // BottomSheet and by every native sheet screen so all drawers read as one
 // Souris surface. Content-agnostic: wording stays feature-owned.
+// Creation / editing sheets use SheetEditingHeader (« Annuler » leading).
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 

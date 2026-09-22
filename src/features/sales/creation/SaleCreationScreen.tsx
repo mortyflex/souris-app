@@ -27,6 +27,9 @@
 //   there is no walk-in sale and no « Retirer ».
 // An Appointment is never inferred from the Client.
 //
+// Header: the shared editing header (« Annuler » leading, « Nouvelle vente »),
+// like « Nouveau rendez-vous » — no eyebrow.
+//
 // Layout: « Produits ajoutés » (the visual source of truth of the draft)
 // sits ABOVE « Ajouter un produit » and its « Résultats », so what is in the
 // sale never depends on the query length; the query is kept after an add.
@@ -84,7 +87,7 @@ import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
 import { SearchField } from "@/shared/ui/SearchField";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetActionBar } from "@/shared/ui/SheetActionBar";
-import { SheetHeader } from "@/shared/ui/SheetHeader";
+import { SheetEditingHeader } from "@/shared/ui/SheetEditingHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
 import {
   foregroundSoft,
@@ -350,13 +353,9 @@ export function SaleCreationScreen({
   return (
     <SheetScreen keyboardAvoiding testID="sale-creation-sheet">
       <View style={styles.headerZone}>
-        <SheetHeader
-          action={{
-            accessibilityLabel: "Annuler la vente",
-            label: "Annuler",
-            onPress: cancel,
-          }}
-          eyebrow="VENTE"
+        <SheetEditingHeader
+          cancelAccessibilityLabel="Annuler la vente"
+          onCancel={cancel}
           title="Nouvelle vente"
         />
       </View>

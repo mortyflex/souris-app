@@ -648,9 +648,10 @@ describe('SaleCreationScreen', () => {
   it('presents the canonical sheet shell', async () => {
     const view = await renderSale();
 
-    expect(view.getByText('VENTE')).toBeTruthy();
+    expect(view.queryByText('VENTE')).toBeNull();
     expect(view.getByRole('header', { name: 'Nouvelle vente' })).toBeTruthy();
-    expect(view.getByLabelText('Annuler la vente')).toBeTruthy();
+    expect(view.getAllByText('Annuler')).toHaveLength(1);
+    expect(view.getByRole('button', { name: 'Annuler la vente' })).toBeTruthy();
     expect(view.getByPlaceholderText('Rechercher un produit').props.autoFocus).toBeFalsy();
   });
 

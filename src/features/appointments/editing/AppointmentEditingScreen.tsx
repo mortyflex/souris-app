@@ -58,6 +58,7 @@ import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
 import { GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { SheetScreen } from '@/shared/ui/SheetScreen';
 import { foregroundSoft, gutter, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
@@ -264,25 +265,13 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 
   return (
     <SheetScreen keyboardAvoiding testID="appointment-editing-sheet">
-      <View style={styles.header}>
-        <AppButton
-          accessibilityLabel="Annuler les modifications"
-          onPress={cancel}
-          style={styles.headerAction}
-          testID="cancel-appointment-edit"
-          title="Annuler"
-          variant="tertiary"
+      <View style={styles.headerZone}>
+        <SheetEditingHeader
+          cancelAccessibilityLabel="Annuler les modifications"
+          cancelTestID="cancel-appointment-edit"
+          onCancel={cancel}
+          title="Modifier le rendez-vous"
         />
-        <AppText
-          accessibilityRole="header"
-          adjustsFontSizeToFit
-          minimumFontScale={0.85}
-          numberOfLines={1}
-          style={styles.headerTitle}
-          variant="sectionTitle"
-        >
-          Modifier le rendez-vous
-        </AppText>
       </View>
 
       <ScrollView
@@ -423,16 +412,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 }
 
 const styles = StyleSheet.create({
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter - spacing.md,
-    paddingTop: spacing.sm,
-  },
-  headerAction: { paddingHorizontal: spacing.md },
-  headerTitle: { color: semanticColors.foreground, flex: 1 },
+  headerZone: { paddingHorizontal: horizontalGutter },
   editorContent: {
     gap: spacing.xl,
     paddingBottom: spacing.xl,
