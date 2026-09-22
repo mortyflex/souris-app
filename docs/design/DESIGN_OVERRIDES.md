@@ -987,7 +987,8 @@ gestures, sheet sizing and card geometry are unchanged.
   scrolls with the content, so the icon lives in `PushedScreenWatermark`: a full-width zero-height
   anchor under the top bar, lowered to where the title starts, outside the scroll view — never
   clipped by it, and the content scrolls over it. Prestations section headers lose their
-  (invisible, non-sticky) page-coloured fill so the glyph is not cut by a band.
+  (invisible, non-sticky) page-coloured fill so the glyph is not cut by a band. Caisse later
+  quiets its banknote (§31).
 
 ---
 
@@ -1315,3 +1316,53 @@ slightly before truncating). Used by « Nouveau rendez-vous », « Modifier le r
 - The label stays « Annuler »; the spoken label names what is abandoned (« Annuler la vente »).
 - `SheetHeader` (eyebrow, large title, trailing « Fermer ») stays the header of read-only
   drawers and short sheets.
+
+## 31. Caisse — Collected Money and Its Encaissements
+
+Caisse shows money ACTUALLY collected; potential revenue, planned appointments and « reste à
+encaisser » stay in « Résumé du jour ». Payment rules, data and Jour / Mois semantics are
+unchanged.
+
+- **Order.** Top bar (glass back, « GESTION »), « Caisse », `SegmentedControl` Jour | Mois,
+  period navigation, « Total encaissé », card / cash breakdown, « Encaissements », then the
+  empty state or the list. Same structure in both modes and at zero.
+- **Watermark.** The §22 banknote stays as the screen's signature, quieter than on the main
+  screens: `screenWatermarkOptics.cashRegister` scales it down (0.72), lifts it slightly and
+  lowers its opacity (0.05), so it sits beside the title and the switch, never behind the
+  figures. Same right anchor, decoration only.
+- **Period navigation.** ONE control: the shared `PeriodNavigator` (§32). Jour is the shared
+  `DateNavigator`; Mois shows « Septembre 2026 » with a quiet violet « Ce mois-ci » on the
+  current month, otherwise the « Revenir à ce mois-ci » link.
+- **Total encaissé.** One `surfaceLavender` card: the label in `foregroundSoft`, the amount in
+  navy `display`. No period sentence, no count, no empty wording; the period is spoken with it
+  (« Total encaissé aujourd’hui : 245,00 € »).
+- **Breakdown.** One `GroupedSurface`, one column per payment method (Carte | Espèces) split by
+  a hairline: small accent glyph in a `surfaceLavenderStrong` tile, label in `metadata`, value
+  in navy `summaryValue`.
+- **Encaissements.** `SectionHeader` with its count chip, spoken « Encaissements, 4
+  encaissements ». Rows come from the same domain selection as the totals
+  (`getCashRegisterDayEntries` / `getCashRegisterMonthEntries`), oldest payment first: time
+  (Mois: the day above it), client name and amount as primary, source and method as
+  secondary (`Carte`, `Espèces`, `Carte + Espèces`). An Appointment checkout lists its
+  prestations and opens Appointment Details (muted chevron); a standalone Sale reads
+  « Vente · products » and stays read-only — no Sale detail exists.
+- **Empty.** A compact `surfaceLavender` block: 44 pt glyph circle, « Aucun encaissement
+  aujourd’hui » (ce jour / ce mois-ci / ce mois), « Les paiements encaissés apparaîtront
+  ici. » Never taller than it needs; the page may end in whitespace.
+- **No** chart, illustration or extra KPI. Amounts stay navy: green is not introduced here.
+
+## 32. Grouped Period Navigation — Agenda and Caisse
+
+Every period control is ONE module: `PeriodNavigator` (`src/shared/ui`). Previous, the period,
+an optional extra control, then next, on one `surfaceElevated` surface (`borderSubtle`
+hairline, `radii.large`, `spacing.sm` padding). The glass circles (§21) are unchanged.
+
+- **Users.** `DateNavigator` (Agenda Jour, Caisse Jour) adds the calendar before next; Caisse
+  Mois and Agenda Semaine have no extra control.
+- **Copy.** Period in navy `sectionTitle`, centred. Under it, one quiet violet `metadata` line:
+  a static indication (`PeriodNavigatorNote`: « Aujourd’hui », « Ce mois-ci », « Cette
+  semaine ») or the way back (`PeriodNavigatorLink`: « Revenir à aujourd’hui », « Revenir à ce
+  mois-ci »). Agenda Semaine offers no way back: its behaviour is unchanged.
+- **Agenda placement.** Inset by the page gutter under the `Jour | Semaine` header, `spacing.xs`
+  above and `spacing.sm` below; it replaces the old full-width row and its hairline. The
+  timeline keeps its own top inset; the Agenda watermark is unchanged.

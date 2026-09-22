@@ -7,7 +7,9 @@ import {
 import type { Sale } from '../../sales';
 import {
   EMPTY_CASH_REGISTER_SUMMARY,
+  getCashRegisterDayEntries,
   getCashRegisterDaySummary,
+  getCashRegisterMonthEntries,
   getCashRegisterMonthSummary,
   getCashRegisterPayments,
 } from '..';
@@ -241,6 +243,42 @@ describe('Cash Register derivation', () => {
 
       expect(getCashRegisterDaySummary({ appointments: [plain], ...noSales }, day).totalCents).toBe(10000);
       expect(getCashRegisterDaySummary({ appointments: [plain, fixed], ...noSales }, day).totalCents).toBe(18500);
+    });
+  });
+
+  describe('entries of a period', () => {
+    it('lists exactly what the summary counts, with its source, oldest payment first', () => {
+      const day = new Date(2026, 8, 12, 12, 0);
+      const sources = {
+        appointments: [paid('late', new Date(2026, 8, 12, 17, 0), 9500, 0), paid('other-day', new Date(2026, 8, 13, 9, 0), 1000, 0)],
+        sales: [
+          standaloneSale('morning', new Date(2026, 8, 12, 9, 30), 1250, 750),
+          sale('linked-paid', { appointmentId: 'late', completedAt: day, payment: { paidAt: day, cardAmountCents: 2000, cashAmountCents: 0 } }),
+          sale('unpaid', { completedAt: day }),
+        ],
+      };
+
+      const entries = getCashRegisterDayEntries(sources, day);
+
+      expect(entries.map((entry) => (entry.kind === 'SALE' ? entry.sale.id : entry.appointment.id))).toEqual([
+        'morning',
+        'late',
+      ]);
+      expect(entries.map((entry) => entry.kind)).toEqual(['SALE', 'APPOINTMENT']);
+      expect(entries).toHaveLength(getCashRegisterDaySummary(sources, day).checkoutCount);
+      expect(entries.reduce((sum, { payment }) => sum + payment.cardAmountCents + payment.cashAmountCents, 0)).toBe(
+        getCashRegisterDaySummary(sources, day).totalCents,
+      );
+    });
+
+    it('lists the local calendar month and nothing outside it', () => {
+      const sources = {
+        appointments: [paid('first', new Date(2026, 8, 1, 0, 5), 1000, 0), paid('previous', new Date(2026, 7, 31, 23, 55), 500, 0)],
+        ...noSales,
+      };
+
+      expect(getCashRegisterMonthEntries(sources, new Date(2026, 8, 20)).map((entry) => entry.payment.cardAmountCents)).toEqual([1000]);
+      expect(getCashRegisterMonthEntries(sources, new Date(2026, 9, 1))).toEqual([]);
     });
   });
 });

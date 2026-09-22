@@ -4,6 +4,8 @@
 // Money formatting comes from the shared money helpers; totals come from
 // the Appointment domain (cash-register derivation).
 
+import { paymentMethodLabels } from '@/shared/icons/payment-method-icons';
+
 export type CashRegisterPeriod = 'day' | 'month';
 
 export function startOfLocalDay(date: Date): Date {
@@ -58,4 +60,34 @@ export function formatCashRegisterCaption(period: CashRegisterPeriod, isCurrent:
 export function formatCheckoutCount(count: number): string {
   if (count === 0) return 'Aucun encaissement';
   return `${count} encaissement${count > 1 ? 's' : ''}`;
+}
+
+/**
+ * Empty « Encaissements » heading, worded for the selected period.
+ *   Day   → « Aucun encaissement aujourd’hui » / « Aucun encaissement ce jour »
+ *   Month → « Aucun encaissement ce mois-ci » / « Aucun encaissement ce mois »
+ */
+export function formatCashRegisterEmptyTitle(period: CashRegisterPeriod, isCurrent: boolean): string {
+  if (period === 'day') return isCurrent ? 'Aucun encaissement aujourd’hui' : 'Aucun encaissement ce jour';
+  return isCurrent ? 'Aucun encaissement ce mois-ci' : 'Aucun encaissement ce mois';
+}
+
+/**
+ * How ONE payment was received, from its own recorded amounts:
+ * `Carte`, `Espèces`, or `Carte + Espèces` for a mixed payment.
+ * A payment with no amount on either side names no method.
+ */
+export function formatCashRegisterEntryMethods(payment: {
+  readonly cardAmountCents: number;
+  readonly cashAmountCents: number;
+}): string {
+  const methods: string[] = [];
+  if (payment.cardAmountCents > 0) methods.push(paymentMethodLabels.CARD);
+  if (payment.cashAmountCents > 0) methods.push(paymentMethodLabels.CASH);
+  return methods.join(' + ');
+}
+
+/** `22 sept.` — the day of an entry listed in Month mode. */
+export function formatCashRegisterEntryDay(date: Date): string {
+  return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(date);
 }

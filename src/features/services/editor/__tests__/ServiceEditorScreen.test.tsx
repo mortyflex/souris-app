@@ -166,11 +166,13 @@ describe("ServiceEditorScreen", () => {
   it("opens in the canonical sheet shell without auto-focusing a field", async () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
-    expect(view.getByText("NOUVELLE PRESTATION")).toBeTruthy();
+    // Canonical creation header: « Annuler » + « Nouvelle prestation » only.
     expect(
-      view.getByRole("header", { name: "Ajouter une prestation" }),
+      view.getByRole("header", { name: "Nouvelle prestation" }),
     ).toBeTruthy();
-    expect(view.getByLabelText("Annuler")).toBeTruthy();
+    expect(view.queryByText("NOUVELLE PRESTATION")).toBeNull();
+    expect(view.queryByText("Ajouter une prestation")).toBeNull();
+    expect(view.getAllByText("Annuler")).toHaveLength(1);
     // The type chooser is content-fit: never a fixed full-height sheet.
     // Sized by its content, capped at the canonical detent.
     expect(
@@ -181,18 +183,17 @@ describe("ServiceEditorScreen", () => {
     );
     expect(surfaceStyle.flex).toBeUndefined();
     expect(surfaceStyle.maxHeight).toBeGreaterThan(0);
-    expect(view.getByText("Type de prestation")).toBeTruthy();
-    expect(
-      view.getByText("Choisissez la structure qui correspond au déroulé réel."),
-    ).toBeTruthy();
-    expect(view.getByText("Prestation technique")).toBeTruthy();
     await act(async () => {
-      fireEvent.press(view.getByLabelText("Annuler"));
+      fireEvent.press(view.getByTestId("cancel-service-creation"));
     });
     expect(mockBack).toHaveBeenCalledTimes(1);
     await act(async () => {
-      fireEvent.press(view.getByText("Prestation simple"));
+      fireEvent.press(view.getByTestId("choose-service-type-SERVICE"));
     });
+    // The form keeps the same creation header.
+    expect(
+      view.getByRole("header", { name: "Nouvelle prestation" }),
+    ).toBeTruthy();
     expect(
       view.getByLabelText("Nom de la prestation").props.autoFocus,
     ).toBeFalsy();
@@ -201,11 +202,91 @@ describe("ServiceEditorScreen", () => {
     ).toBeFalsy();
   });
 
+  it("chooses the structure with two whole-card options: Service and Technique", async () => {
+    const view = await renderEditor(<ServiceEditorScreen mode="create" />);
+
+    expect(
+      view.getByRole("header", { name: "Choisir le type de prestation" }),
+    ).toBeTruthy();
+    expect(
+      view.getByText(
+        "Sélectionnez la structure qui correspond le mieux au déroulé de votre prestation.",
+      ),
+    ).toBeTruthy();
+    // Service / Technique vocabulary; the old wording is gone.
+    expect(view.queryByText("Prestation simple")).toBeNull();
+    expect(view.queryByText("Prestation technique")).toBeNull();
+    const serviceCard = view.getByTestId("choose-service-type-SERVICE");
+    const techniqueCard = view.getByTestId("choose-service-type-TECHNIQUE");
+    expect(within(serviceCard).getByText("Service")).toBeTruthy();
+    expect(
+      within(serviceCard).getByText(
+        "Une seule durée, la professionnelle reste occupée.",
+      ),
+    ).toBeTruthy();
+    expect(within(techniqueCard).getByText("Technique")).toBeTruthy();
+    expect(
+      within(techniqueCard).getByText(
+        "Plusieurs phases, avec ou sans temps de pose.",
+      ),
+    ).toBeTruthy();
+    expect(serviceCard.props.accessibilityLabel).toBe(
+      "Service, une seule durée, la professionnelle reste occupée",
+    );
+    expect(techniqueCard.props.accessibilityLabel).toBe(
+      "Technique, plusieurs phases, avec ou sans temps de pose",
+    );
+    // Category colours: violet Service, azure Technique.
+    expect(
+      StyleSheet.flatten(
+        view.getByTestId("choose-service-type-SERVICE-icon").props.style,
+      ).backgroundColor,
+    ).toBe(serviceCategoryColors.SERVICE.tint);
+    expect(
+      StyleSheet.flatten(
+        view.getByTestId("choose-service-type-TECHNIQUE-icon").props.style,
+      ).backgroundColor,
+    ).toBe(serviceCategoryColors.TECHNIQUE.tint);
+    expect(StyleSheet.flatten(serviceCard.props.style).borderColor).toBe(
+      serviceCategoryColors.SERVICE.border,
+    );
+    expect(StyleSheet.flatten(techniqueCard.props.style).borderColor).toBe(
+      serviceCategoryColors.TECHNIQUE.border,
+    );
+    // No footer CTA on the chooser.
+    expect(view.queryByTestId("save-service")).toBeNull();
+    expect(view.queryByText(/Continuer/)).toBeNull();
+
+    // The whole Technique card opens the existing phases form.
+    await act(async () => {
+      fireEvent.press(techniqueCard);
+    });
+    expect(view.getByText("Phases")).toBeTruthy();
+    expect(view.getByLabelText("Catégorie, Technique")).toBeTruthy();
+    expect(view.queryByLabelText("Durée de la prestation")).toBeNull();
+  });
+
+  it("opens the existing single-duration form from the whole Service card", async () => {
+    const view = await renderEditor(<ServiceEditorScreen mode="create" />);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId("choose-service-type-SERVICE"));
+    });
+    expect(view.getByLabelText("Catégorie, Service")).toBeTruthy();
+    expect(view.getByLabelText("Durée de la prestation")).toBeTruthy();
+    expect(view.queryByText("Phases")).toBeNull();
+    expect(
+      within(view.getByTestId("save-service")).getByText(
+        "Ajouter la prestation",
+      ),
+    ).toBeTruthy();
+  });
+
   it("creates a simple Service from the professional-facing fields", async () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
     await act(async () => {
-      fireEvent.press(view.getByText("Prestation simple"));
+      fireEvent.press(view.getByTestId("choose-service-type-SERVICE"));
     });
     await act(async () => {
       fireEvent.changeText(
@@ -233,7 +314,7 @@ describe("ServiceEditorScreen", () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
     await act(async () => {
-      fireEvent.press(view.getByText("Prestation technique"));
+      fireEvent.press(view.getByTestId("choose-service-type-TECHNIQUE"));
     });
     await act(async () => {
       fireEvent.changeText(
@@ -422,7 +503,7 @@ describe("ServiceEditorScreen", () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
     await act(async () => {
-      fireEvent.press(view.getByText("Prestation technique"));
+      fireEvent.press(view.getByTestId("choose-service-type-TECHNIQUE"));
     });
     // Phase 1 starts expanded.
     expect(view.getByLabelText("Nom de la phase 1")).toBeTruthy();
@@ -468,7 +549,7 @@ describe("ServiceEditorScreen", () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
     await act(async () => {
-      fireEvent.press(view.getByText("Prestation technique"));
+      fireEvent.press(view.getByTestId("choose-service-type-TECHNIQUE"));
     });
     await act(async () => {
       fireEvent.changeText(view.getByLabelText("Nom de la phase 1"), "Rinçage");
@@ -493,7 +574,7 @@ describe("ServiceEditorScreen", () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
     await act(async () => {
-      fireEvent.press(view.getByText("Prestation technique"));
+      fireEvent.press(view.getByTestId("choose-service-type-TECHNIQUE"));
     });
     await act(async () => {
       fireEvent.changeText(view.getByLabelText("Durée de la phase 1"), "20");
@@ -516,7 +597,7 @@ describe("ServiceEditorScreen", () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
     await act(async () => {
-      fireEvent.press(view.getByText("Prestation technique"));
+      fireEvent.press(view.getByTestId("choose-service-type-TECHNIQUE"));
     });
 
     // Unnamed active phase: soft placeholder title, empty draft name.
@@ -579,7 +660,7 @@ describe("ServiceEditorScreen", () => {
     const view = await renderEditor(<ServiceEditorScreen mode="create" />);
 
     await act(async () => {
-      fireEvent.press(view.getByText("Prestation technique"));
+      fireEvent.press(view.getByTestId("choose-service-type-TECHNIQUE"));
     });
     await act(async () => {
       fireEvent.press(view.getByText("Ajouter une phase"));

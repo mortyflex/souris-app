@@ -71,6 +71,20 @@ describe('ScreenWatermarkIcon', () => {
     expect(style.opacity).toBe(watermark.opacity);
   });
 
+  it('keeps the Caisse banknote as a quieter, smaller signature on the same right anchor', async () => {
+    const view = await render(<ScreenWatermarkIcon kind="cashRegister" />);
+    const style = StyleSheet.flatten(
+      view.getByTestId('screen-watermark-cashRegister', { includeHiddenElements: true }).props.style,
+    );
+
+    expect(style.opacity).toBeLessThan(watermark.opacity);
+    expect(style.opacity).toBeGreaterThan(0);
+    expect(style.right).toBe(-watermark.size * watermark.cropRight);
+    const size = watermark.size * screenWatermarkOptics.cashRegister.scale;
+    expect(size).toBeLessThan(watermark.size);
+    expect(mockSymbolView).toHaveBeenLastCalledWith(expect.objectContaining({ size }));
+  });
+
   it('anchors a pushed screen watermark in a full-width block that takes no room', async () => {
     const view = await render(<PushedScreenWatermark kind="services" titleOffset={16} />);
 

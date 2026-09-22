@@ -11,7 +11,7 @@ import {
   navigatorDateMaxFontScale,
 } from '../DateNavigator';
 import { glassIconButtonSize } from '../GlassIconButton';
-import { typography } from '../theme';
+import { radii, semanticColors, typography } from '../theme';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
@@ -117,6 +117,24 @@ describe('DateNavigator', () => {
       expect(source).toMatch(/from ['"]@\/shared\/ui\/DateNavigator['"]/);
       expect(source).toContain('<DateNavigator');
     }
+  });
+
+  it('lays its controls and the date on ONE grouped period surface', async () => {
+    const { view: pending } = renderNavigator({ testID: 'nav' });
+    const view = await pending;
+
+    const surface = view.getByTestId('nav');
+    expect(StyleSheet.flatten(surface.props.style)).toMatchObject({
+      backgroundColor: semanticColors.surfaceElevated,
+      borderColor: semanticColors.borderSubtle,
+      borderRadius: radii.large,
+      flexDirection: 'row',
+    });
+    expect(
+      within(surface)
+        .getAllByRole('button')
+        .map((button) => button.props.accessibilityLabel),
+    ).toEqual(['Jour précédent', 'Revenir à aujourd’hui', 'Choisir une date', 'Jour suivant']);
   });
 
   it('exposes previous day, choose date and next day as the shared glass controls', async () => {

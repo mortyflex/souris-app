@@ -1,7 +1,7 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
-import { receiptPrint, semanticColors } from '@/shared/ui/theme';
+import { radii, receiptPrint, semanticColors } from '@/shared/ui/theme';
 
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
@@ -173,6 +173,44 @@ describe('AgendaScreen — day navigation', () => {
     expect(view.getByRole('button', { name: 'Jour précédent' })).toBeTruthy();
     expect(view.getByRole('button', { name: 'Choisir une date' })).toBeTruthy();
     expect(view.getByRole('button', { name: 'Jour suivant' })).toBeTruthy();
+  });
+
+  it('groups previous, date, calendar and next into ONE period surface, like Caisse', async () => {
+    const view = await renderAgenda();
+
+    const surface = view.getByTestId('agenda-date');
+    expect(StyleSheet.flatten(surface.props.style)).toMatchObject({
+      backgroundColor: semanticColors.surfaceElevated,
+      borderRadius: radii.large,
+      flexDirection: 'row',
+    });
+    for (const testID of ['agenda-date-previous', 'agenda-date-date', 'agenda-date-today', 'agenda-date-calendar', 'agenda-date-next']) {
+      expect(within(surface).getByTestId(testID)).toBeTruthy();
+    }
+    expect(view.getByLabelText('Jour').props.accessibilityState.selected).toBe(true);
+    expect(view.getByLabelText('Semaine').props.accessibilityState.selected).toBe(false);
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Semaine'));
+    });
+
+    const week = view.getByTestId('agenda-week');
+    expect(StyleSheet.flatten(week.props.style)).toMatchObject({
+      backgroundColor: semanticColors.surfaceElevated,
+      borderRadius: radii.large,
+    });
+    expect(within(week).getByRole('button', { name: 'Semaine précédente' })).toBeTruthy();
+    expect(within(week).getByRole('button', { name: 'Semaine suivante' })).toBeTruthy();
+    expect(within(week).getByTestId('agenda-week-range').props.children).toBe('14 – 20 sept');
+    expect(within(week).getByText('Cette semaine')).toBeTruthy();
+    // Week mode keeps its own controls: no calendar was added.
+    expect(within(week).queryByRole('button', { name: 'Choisir une date' })).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Semaine suivante'));
+    });
+    expect(view.getByTestId('agenda-week-range').props.children).toBe('21 – 27 sept');
+    expect(view.queryByTestId('agenda-week-current')).toBeNull();
   });
 
   it('moves exactly one day per arrow press and shows that day on the timeline', async () => {

@@ -1,19 +1,21 @@
 // Souris — Caisse (Cash Register)
 //
-// In ONE glance: the money received on the selected local day or calendar
-// month, split by card and cash. Derived on every render from the canonical
-// sessions — explicit Appointment checkouts (`appointment.payment`) plus
-// standalone Sale payments (`sale.payment`, Sales without Appointment).
+// In ONE glance: the money ACTUALLY received on the selected local day or
+// calendar month — « Total encaissé », its card / cash split, then the
+// « Encaissements » that make it up. Derived on every render from the
+// canonical sessions — explicit Appointment checkouts (`appointment.payment`)
+// plus standalone Sale payments (`sale.payment`, Sales without Appointment).
 // A Sale sold during an Appointment is never counted separately: the
-// Appointment checkout already recorded that money. Nothing is stored,
-// cached or charted.
+// Appointment checkout already recorded that money. Totals and list come
+// from the same domain selection, so a listed payment is always a counted
+// one. Nothing is stored, cached or charted; planned or potential revenue
+// belongs to « Résumé du jour », never here.
 
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useState } from "react";
 import {
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -21,13 +23,19 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  getCashRegisterDayEntries,
   getCashRegisterDaySummary,
+  getCashRegisterMonthEntries,
   getCashRegisterMonthSummary,
+  type CashRegisterEntry,
   type CashRegisterSummary,
 } from "@/domain/cash-register";
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
+import { getResolvedClientDisplayName } from "@/features/clients/presentation";
+import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import {
+  cashRegisterIcon,
   paymentMethodIcons,
   paymentMethodLabels,
   type PaymentMethod,
@@ -36,25 +44,36 @@ import { formatEuroCents } from "@/shared/lib/money";
 import { AppText } from "@/shared/ui/AppText";
 import { DateNavigator } from "@/shared/ui/DateNavigator";
 import { DayPickerSheet } from "@/shared/ui/DayPickerSheet";
+import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
+import {
+  PeriodNavigator,
+  PeriodNavigatorCopy,
+  PeriodNavigatorLink,
+  PeriodNavigatorNote,
+} from "@/shared/ui/PeriodNavigator";
 import {
   GlassIconButton,
   glassIconButtonSize,
   glassIcons,
 } from "@/shared/ui/GlassIconButton";
 import { PushedScreenWatermark } from "@/shared/ui/ScreenWatermarkIcon";
+import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SegmentedControl } from "@/shared/ui/SegmentedControl";
 import {
   foregroundSoft,
   gutter,
-  interaction,
-  lavender,
   radii,
   semanticColors,
   spacing,
 } from "@/shared/ui/theme";
 
 import {
+  CashRegisterEntryRow,
+  CASH_REGISTER_ENTRY_SEPARATOR_INSET,
+} from "./components/CashRegisterEntryRow";
+import {
   formatCashRegisterCaption,
+  formatCashRegisterEmptyTitle,
   formatCashRegisterMonth,
   formatCheckoutCount,
   isSameLocalDay,
@@ -74,10 +93,16 @@ const PERIOD_OPTIONS = [
   { value: "month", label: "Mois" },
 ] as const;
 
+/** The breakdown lists every method the checkout records, in this order. */
+const PAYMENT_METHODS: readonly PaymentMethod[] = ["CARD", "CASH"];
+
+const EMPTY_SUPPORTING_COPY = "Les paiements encaissés apparaîtront ici.";
+
 export function CashRegisterScreen() {
   const router = useRouter();
   const { appointments } = useAppointmentSession();
   const { sales } = useSaleSession();
+  const { getClientById } = useClientSession();
   const [period, setPeriod] = useState<CashRegisterPeriod>("day");
   const [selectedDay, setSelectedDay] = useState(() =>
     startOfLocalDay(new Date()),
@@ -96,6 +121,10 @@ export function CashRegisterScreen() {
     period === "day"
       ? getCashRegisterDaySummary(sources, selectedDay)
       : getCashRegisterMonthSummary(sources, selectedMonth);
+  const entries =
+    period === "day"
+      ? getCashRegisterDayEntries(sources, selectedDay)
+      : getCashRegisterMonthEntries(sources, selectedMonth);
   const isCurrentPeriod =
     period === "day"
       ? isSameLocalDay(selectedDay, now)
@@ -105,6 +134,28 @@ export function CashRegisterScreen() {
     setSelectedDay((current) => shiftLocalDay(current, amount));
   const shiftMonth = (amount: number) =>
     setSelectedMonth((current) => shiftLocalMonth(current, amount));
+
+  const caption = formatCashRegisterCaption(period, isCurrentPeriod);
+  const total = formatEuroCents(summary.totalCents);
+
+  const clientNameOf = (entry: CashRegisterEntry): string | undefined => {
+    const clientId =
+      entry.kind === "APPOINTMENT"
+        ? entry.appointment.clientId
+        : entry.sale.clientId;
+    return clientId === undefined
+      ? undefined
+      : getResolvedClientDisplayName(getClientById(clientId));
+  };
+  // Only an Appointment checkout has an existing detail screen.
+  const openEntry = (entry: CashRegisterEntry) =>
+    entry.kind === "APPOINTMENT"
+      ? () =>
+          router.push({
+            pathname: "/appointments/[appointmentId]",
+            params: { appointmentId: entry.appointment.id },
+          })
+      : undefined;
 
   return (
     <SafeAreaView
@@ -141,7 +192,7 @@ export function CashRegisterScreen() {
         />
 
         {period === "day" ? (
-          // The SAME selected day drives the summary above: arrows and
+          // The SAME selected day drives the summary below: arrows and
           // calendar are two ways to reach one state.
           <DateNavigator
             date={selectedDay}
@@ -153,82 +204,128 @@ export function CashRegisterScreen() {
             testID="cash-register"
           />
         ) : (
-          <View style={styles.navigation}>
-            <GlassIconButton
-              accessibilityLabel="Mois précédent"
-              icon={glassIcons.previous}
-              onPress={() => shiftMonth(-1)}
-              testID="cash-register-previous"
-            />
-            <View style={styles.periodCopy}>
-              <AppText
-                variant="control"
-                numberOfLines={1}
-                style={styles.periodLabel}
-                testID="cash-register-period-label"
-              >
-                {formatCashRegisterMonth(selectedMonth)}
-              </AppText>
-              {!isCurrentPeriod && (
-                <Pressable
-                  accessibilityLabel="Ce mois-ci"
-                  accessibilityRole="button"
-                  onPress={() =>
-                    setSelectedMonth(startOfLocalMonth(new Date()))
-                  }
-                  style={({ pressed }) => [
-                    styles.currentShortcut,
-                    pressed && styles.pressedControl,
-                  ]}
-                  testID="cash-register-current"
-                >
-                  <AppText
-                    variant="metadata"
-                    style={styles.currentShortcutText}
-                  >
+          <PeriodNavigator
+            nextLabel="Mois suivant"
+            onNext={() => shiftMonth(1)}
+            onPrevious={() => shiftMonth(-1)}
+            previousLabel="Mois précédent"
+            testID="cash-register"
+          >
+            <PeriodNavigatorCopy
+              secondary={
+                isCurrentPeriod ? (
+                  <PeriodNavigatorNote testID="cash-register-this-month">
                     Ce mois-ci
-                  </AppText>
-                </Pressable>
-              )}
-            </View>
-            <GlassIconButton
-              accessibilityLabel="Mois suivant"
-              icon={glassIcons.next}
-              onPress={() => shiftMonth(1)}
-              testID="cash-register-next"
+                  </PeriodNavigatorNote>
+                ) : (
+                  <PeriodNavigatorLink
+                    label="Revenir à ce mois-ci"
+                    onPress={() =>
+                      setSelectedMonth(startOfLocalMonth(new Date()))
+                    }
+                    testID="cash-register-current"
+                  />
+                )
+              }
+              title={formatCashRegisterMonth(selectedMonth)}
+              titleTestID="cash-register-period-label"
             />
-          </View>
+          </PeriodNavigator>
         )}
 
-        <View style={styles.totalCard} testID="cash-register-total-card">
+        <View
+          accessible
+          accessibilityLabel={`Total ${caption} : ${total}`}
+          style={styles.totalCard}
+          testID="cash-register-total-card"
+        >
+          <AppText variant="body" style={styles.totalLabel}>
+            Total encaissé
+          </AppText>
           <AppText
-            accessibilityLabel={`${formatEuroCents(summary.totalCents)} ${formatCashRegisterCaption(period, isCurrentPeriod)}`}
             selectable
             style={styles.totalValue}
             testID="cash-register-total"
             variant="display"
           >
-            {formatEuroCents(summary.totalCents)}
-          </AppText>
-          <AppText
-            variant="control"
-            style={styles.totalCaption}
-            testID="cash-register-caption"
-          >
-            {formatCashRegisterCaption(period, isCurrentPeriod)}
-          </AppText>
-          <AppText
-            variant="metadata"
-            style={styles.checkoutCount}
-            testID="cash-register-count"
-          >
-            {formatCheckoutCount(summary.checkoutCount)}
+            {total}
           </AppText>
         </View>
 
-        <View style={styles.methods}>
-          <MethodCard cents={summary.cardCents} method="CARD" />
-          <MethodCard cents={summary.cashCents} method="CASH" />
+        <GroupedSurface style={styles.methods} testID="cash-register-methods">
+          {PAYMENT_METHODS.map((method, index) => (
+            <View key={method} style={styles.methodColumn}>
+              {index > 0 && <View style={styles.methodDivider} />}
+              <MethodCell
+                cents={
+                  method === "CARD" ? summary.cardCents : summary.cashCents
+                }
+                method={method}
+              />
+            </View>
+          ))}
+        </GroupedSurface>
+
+        <View style={styles.entriesSection}>
+          <View
+            accessible
+            accessibilityLabel={`Encaissements, ${formatCheckoutCount(summary.checkoutCount)}`}
+            accessibilityRole="header"
+            testID="cash-register-count"
+          >
+            <SectionHeader
+              count={summary.checkoutCount}
+              style={styles.entriesHeader}
+              title="Encaissements"
+            />
+          </View>
+
+          {entries.length === 0 ? (
+            <View
+              accessible
+              accessibilityLabel={`${formatCashRegisterEmptyTitle(period, isCurrentPeriod)}. ${EMPTY_SUPPORTING_COPY}`}
+              style={styles.emptyState}
+              testID="cash-register-empty"
+            >
+              <View style={styles.emptyIcon}>
+                <SymbolView
+                  name={cashRegisterIcon}
+                  size={20}
+                  tintColor={semanticColors.accent}
+                />
+              </View>
+              <AppText variant="control" style={styles.emptyTitle}>
+                {formatCashRegisterEmptyTitle(period, isCurrentPeriod)}
+              </AppText>
+              <AppText variant="metadata" style={styles.emptyCopy}>
+                {EMPTY_SUPPORTING_COPY}
+              </AppText>
+            </View>
+          ) : (
+            <GroupedSurface testID="cash-register-entries">
+              {entries.map((entry, index) => (
+                <View
+                  key={
+                    entry.kind === "APPOINTMENT"
+                      ? `appointment-${entry.appointment.id}`
+                      : `sale-${entry.sale.id}`
+                  }
+                >
+                  {index > 0 && (
+                    <GroupedSeparator
+                      inset={CASH_REGISTER_ENTRY_SEPARATOR_INSET}
+                    />
+                  )}
+                  <CashRegisterEntryRow
+                    clientName={clientNameOf(entry)}
+                    entry={entry}
+                    onPress={openEntry(entry)}
+                    period={period}
+                  />
+                </View>
+              ))}
+            </GroupedSurface>
+          )}
         </View>
       </ScrollView>
 
@@ -247,7 +344,7 @@ export function CashRegisterScreen() {
   );
 }
 
-function MethodCard({
+function MethodCell({
   method,
   cents,
 }: {
@@ -259,20 +356,25 @@ function MethodCard({
     <View
       accessible
       accessibilityLabel={`${label} ${formatEuroCents(cents)}`}
-      style={styles.methodCard}
+      style={styles.methodCell}
       testID={`cash-register-${method.toLowerCase()}`}
     >
       <View style={styles.methodIcon}>
         <SymbolView
           name={paymentMethodIcons[method]}
-          size={18}
+          size={17}
           tintColor={semanticColors.accent}
         />
       </View>
       <AppText variant="metadata" style={styles.methodLabel}>
         {label}
       </AppText>
-      <AppText variant="summaryValue" selectable style={styles.methodValue}>
+      <AppText
+        variant="summaryValue"
+        numberOfLines={1}
+        selectable
+        style={styles.methodValue}
+      >
         {formatEuroCents(cents)}
       </AppText>
     </View>
@@ -291,22 +393,60 @@ const styles = StyleSheet.create({
   // Mirrors the back button so the eyebrow stays centred.
   topBarSpacer: { height: glassIconButtonSize, width: glassIconButtonSize },
   eyebrow: { color: semanticColors.accent },
-  pressedControl: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
-  },
   content: {
     gap: spacing.lg,
     paddingBottom: spacing["3xl"],
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
   },
-  navigation: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
-  periodCopy: { alignItems: "center", flex: 1, gap: 2, minWidth: 0 },
-  periodLabel: { color: semanticColors.foreground, textAlign: "center" },
-  currentShortcut: { paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  currentShortcutText: { color: semanticColors.accent },
   totalCard: {
+    backgroundColor: semanticColors.surfaceLavender,
+    borderCurve: "continuous",
+    borderRadius: radii.large,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  totalLabel: { color: foregroundSoft },
+  totalValue: {
+    color: semanticColors.foreground,
+    fontVariant: ["tabular-nums"],
+  },
+  methods: { flexDirection: "row" },
+  methodColumn: { flex: 1, flexDirection: "row", minWidth: 0 },
+  methodDivider: {
+    alignSelf: "stretch",
+    backgroundColor: semanticColors.borderSubtle,
+    marginVertical: spacing.base,
+    width: StyleSheet.hairlineWidth,
+  },
+  methodCell: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.base,
+  },
+  methodIcon: {
+    alignItems: "center",
+    backgroundColor: semanticColors.surfaceLavenderStrong,
+    borderCurve: "continuous",
+    borderRadius: radii.medium,
+    height: 34,
+    justifyContent: "center",
+    marginBottom: spacing.xs,
+    width: 34,
+  },
+  methodLabel: { color: foregroundSoft },
+  methodValue: {
+    color: semanticColors.foreground,
+    fontVariant: ["tabular-nums"],
+  },
+  entriesSection: { gap: spacing.md, marginTop: spacing.xs },
+  entriesHeader: { justifyContent: "flex-start", gap: spacing.sm },
+  // Quieter than the figures: a light lavender band, a small glyph, two lines.
+  emptyState: {
+    alignItems: "center",
     backgroundColor: semanticColors.surfaceLavender,
     borderCurve: "continuous",
     borderRadius: radii.large,
@@ -314,35 +454,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
   },
-  totalValue: {
-    color: semanticColors.foreground,
-    fontVariant: ["tabular-nums"],
-  },
-  totalCaption: { color: lavender.lav700 },
-  checkoutCount: { color: foregroundSoft },
-  methods: { flexDirection: "row", gap: spacing.sm },
-  methodCard: {
-    backgroundColor: semanticColors.surface,
-    borderCurve: "continuous",
-    borderRadius: radii.large,
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
-    padding: spacing.base,
-  },
-  methodIcon: {
+  emptyIcon: {
     alignItems: "center",
     backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderCurve: "continuous",
-    borderRadius: radii.medium,
-    height: 36,
+    borderRadius: radii.pill,
+    height: 44,
     justifyContent: "center",
     marginBottom: spacing.xs,
-    width: 36,
+    width: 44,
   },
-  methodLabel: { color: foregroundSoft },
-  methodValue: {
-    color: semanticColors.foreground,
-    fontVariant: ["tabular-nums"],
-  },
+  emptyTitle: { color: semanticColors.foreground, textAlign: "center" },
+  emptyCopy: { color: foregroundSoft, textAlign: "center" },
 });

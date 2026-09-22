@@ -1,7 +1,9 @@
 // Souris — Prestation editor screen (create + details + edit)
 //
 // Modes:
-// - create: type chooser, then the shared Prestation form;
+// - create: « Annuler » + « Nouvelle prestation », the Service / Technique
+//   type chooser (structure icons, category colours), then the shared
+//   Prestation form;
 // - existing read mode (Prestation Details): the detail-sheet header (name +
 //   « ••• » + ×), price + Active/Inactive + the Service / Technique category,
 //   ONE grouped Informations surface (Durée, Temps de pose only when there is
@@ -55,7 +57,6 @@ import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetActionBar } from "@/shared/ui/SheetActionBar";
 import { SheetEditingHeader } from "@/shared/ui/SheetEditingHeader";
-import { SheetHeader } from "@/shared/ui/SheetHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
 import { StatePill, statePillTones } from "@/shared/ui/StatePill";
 import {
@@ -345,13 +346,13 @@ export function ServiceEditorScreen({
           />
         </View>
       ) : (
+        // Creation sheet: the same canonical header, on the type chooser and
+        // on the form that follows it. « Annuler » leaves the creation.
         <View style={styles.headerZone}>
-          <SheetHeader
-            action={{ label: "Annuler", onPress: close }}
-            divider
-            eyebrow="NOUVELLE PRESTATION"
-            title="Ajouter une prestation"
-            titleNumberOfLines={1}
+          <SheetEditingHeader
+            cancelTestID="cancel-service-creation"
+            onCancel={close}
+            title="Nouvelle prestation"
           />
         </View>
       )}
@@ -481,51 +482,74 @@ function ServiceKindPicker({
       contentContainerStyle={styles.kindContent}
       style={styles.scroll}
     >
-      <AppText variant="sectionTitle">Type de prestation</AppText>
-      <AppText variant="metadata" style={styles.kindIntro}>
-        Choisissez la structure qui correspond au déroulé réel.
-      </AppText>
+      <View style={styles.kindIntroBlock}>
+        <AppText variant="sectionTitle" accessibilityRole="header">
+          Choisir le type de prestation
+        </AppText>
+        <AppText variant="metadata" style={styles.kindIntro}>
+          Sélectionnez la structure qui correspond le mieux au déroulé de votre
+          prestation.
+        </AppText>
+      </View>
+      {/* Structure icons (one duration / ordered phases) — never the family
+          pictograms of the catalogue. */}
       <KindChoice
         description="Une seule durée, la professionnelle reste occupée."
         icon={{ ios: "clock", android: "schedule" }}
-        label="Prestation simple"
         onPress={() => onSelect("SERVICE")}
+        type="SERVICE"
       />
       <KindChoice
         description="Plusieurs phases, avec ou sans temps de pose."
         icon={{ ios: "list.number", android: "format_list_numbered" }}
-        label="Prestation technique"
         onPress={() => onSelect("TECHNIQUE")}
+        type="TECHNIQUE"
       />
     </ScrollView>
   );
 }
 
+/** The whole card is the choice; its colours are the category's. */
 function KindChoice({
-  label,
+  type,
   description,
   icon,
   onPress,
 }: {
-  readonly label: string;
+  readonly type: ServiceType;
   readonly description: string;
   readonly icon: SymbolViewProps["name"];
   readonly onPress: () => void;
 }) {
+  const colors = serviceCategoryColors[type];
+  const label = serviceCategoryLabels[type];
+  // « Une seule durée, … » is spoken lower-cased after the label.
+  const spokenDescription =
+    description.charAt(0).toLowerCase() +
+    description.slice(1).replace(/\.$/, "");
+
   return (
     <Pressable
+      accessibilityLabel={`${label}, ${spokenDescription}`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [
         styles.kindChoice,
-        pressed && styles.kindChoicePressed,
+        { borderColor: colors.border },
+        pressed && [styles.kindChoicePressed, { backgroundColor: colors.tint }],
       ]}
+      testID={`choose-service-type-${type}`}
     >
-      <View style={styles.kindIcon}>
-        <SymbolView name={icon} size={20} tintColor={semanticColors.accent} />
+      <View
+        style={[styles.kindIcon, { backgroundColor: colors.tint }]}
+        testID={`choose-service-type-${type}-icon`}
+      >
+        <SymbolView name={icon} size={22} tintColor={colors.accent} />
       </View>
       <View style={styles.kindCopy}>
-        <AppText variant="rowTitle">{label}</AppText>
+        <AppText variant="rowTitle" style={styles.kindTitle}>
+          {label}
+        </AppText>
         <AppText variant="metadata" style={styles.kindDescription}>
           {description}
         </AppText>
@@ -836,15 +860,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.xl,
   },
-  kindIntro: { color: foregroundSoft, marginBottom: spacing.sm },
+  kindIntroBlock: { gap: spacing.xs, marginBottom: spacing.sm },
+  kindIntro: { color: foregroundSoft },
   kindChoice: {
     alignItems: "center",
-    backgroundColor: semanticColors.surfaceLavender,
+    backgroundColor: semanticColors.surfaceElevated,
     borderCurve: "continuous",
     borderRadius: radii.large,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: spacing.md,
-    minHeight: 82,
+    minHeight: 88,
     padding: spacing.base,
   },
   kindChoicePressed: {
@@ -853,14 +879,14 @@ const styles = StyleSheet.create({
   },
   kindIcon: {
     alignItems: "center",
-    backgroundColor: semanticColors.surfaceLavenderStrong,
     borderCurve: "continuous",
     borderRadius: radii.medium,
-    height: 44,
+    height: 52,
     justifyContent: "center",
-    width: 44,
+    width: 52,
   },
-  kindCopy: { flex: 1, gap: spacing.xs },
+  kindCopy: { flex: 1, gap: spacing.xs, minWidth: 0 },
+  kindTitle: { color: semanticColors.foreground },
   kindDescription: { color: foregroundSoft, lineHeight: 18 },
   formContent: {
     gap: spacing.xl,

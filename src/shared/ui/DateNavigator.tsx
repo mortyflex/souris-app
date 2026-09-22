@@ -2,9 +2,13 @@
 //
 // The ONE single-day navigation of Souris (Agenda Jour, Caisse Jour):
 //
-//     ( ‹ )     Mercredi 16 sept.     ( calendar ) ( › )
-//                  Aujourd’hui
+//   ╭────────────────────────────────────────────────╮
+//   │ ( ‹ )   Mercredi 16 sept.   ( calendar ) ( › ) │
+//   │           Aujourd’hui                          │
+//   ╰────────────────────────────────────────────────╯
 //
+// Built on the grouped PeriodNavigator surface, like Agenda Semaine and
+// Caisse Mois, so every period control reads as one module.
 // One selected date on ONE line, large enough to be read at a glance, between
 // the shared glass controls (GlassIconButton): previous day, choose a date,
 // next day. No year, an abbreviated month; when the space between the controls
@@ -16,18 +20,12 @@
 // elsewhere the same line offers the way back when the caller provides one.
 
 import { useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 
 import { AppText } from './AppText';
 import { GlassIconButton, glassIcons } from './GlassIconButton';
-import { interaction, semanticColors, spacing, typography } from './theme';
+import { PeriodNavigator, PeriodNavigatorLink, PeriodNavigatorNote } from './PeriodNavigator';
+import { semanticColors, typography } from './theme';
 
 interface DateNavigatorProps {
   readonly date: Date;
@@ -95,70 +93,53 @@ export function DateNavigator({
   const shownDate = fits ? fullDate : formatNavigatorDate(date, 'compact');
 
   return (
-    <View style={[styles.navigator, style]} testID={testID}>
-      <GlassIconButton
-        accessibilityLabel="Jour précédent"
-        icon={glassIcons.previous}
-        onPress={onPrevious}
-        testID={`${testID}-previous`}
-      />
-      <View onLayout={(event) => setCopyWidth(event.nativeEvent.layout.width)} style={styles.copy}>
-        {/* Read aloud in full whatever the visible format. */}
-        <AppText
-          accessibilityLabel={fullDate}
-          // No `adjustsFontSizeToFit`: it shrank a date that fitted (see
-          // DESIGN_OVERRIDES.md §21). The size is fixed; only growth is capped.
-          maxFontSizeMultiplier={navigatorDateMaxFontScale}
-          numberOfLines={1}
-          style={styles.date}
-          testID={`${testID}-date`}
-          variant="sectionTitle"
-        >
-          {shownDate}
-        </AppText>
-        {isToday ? (
-          <AppText variant="metadata" style={styles.secondary} testID={`${testID}-today`}>
-            Aujourd’hui
-          </AppText>
-        ) : (
-          onGoToToday && (
-            <Pressable
-              accessibilityLabel="Revenir à aujourd’hui"
-              accessibilityRole="button"
-              hitSlop={spacing.sm}
-              onPress={onGoToToday}
-              style={({ pressed }) => pressed && styles.pressed}
-              testID={`${testID}-go-to-today`}
-            >
-              <AppText variant="metadata" style={styles.secondary}>
-                Revenir à aujourd’hui
-              </AppText>
-            </Pressable>
-          )
-        )}
-      </View>
-      <GlassIconButton
-        accessibilityLabel="Choisir une date"
-        icon={glassIcons.calendar}
-        onPress={onOpenCalendar}
-        testID={`${testID}-calendar`}
-      />
-      <GlassIconButton
-        accessibilityLabel="Jour suivant"
-        icon={glassIcons.next}
-        onPress={onNext}
-        testID={`${testID}-next`}
-      />
-    </View>
+    <PeriodNavigator
+      nextLabel="Jour suivant"
+      onCopyLayout={(event) => setCopyWidth(event.nativeEvent.layout.width)}
+      onNext={onNext}
+      onPrevious={onPrevious}
+      previousLabel="Jour précédent"
+      style={style}
+      testID={testID}
+      trailing={
+        <GlassIconButton
+          accessibilityLabel="Choisir une date"
+          icon={glassIcons.calendar}
+          onPress={onOpenCalendar}
+          testID={`${testID}-calendar`}
+        />
+      }
+    >
+      {/* Read aloud in full whatever the visible format. */}
+      <AppText
+        accessibilityLabel={fullDate}
+        // No `adjustsFontSizeToFit`: it shrank a date that fitted (see
+        // DESIGN_OVERRIDES.md §21). The size is fixed; only growth is capped.
+        maxFontSizeMultiplier={navigatorDateMaxFontScale}
+        numberOfLines={1}
+        style={styles.date}
+        testID={`${testID}-date`}
+        variant="sectionTitle"
+      >
+        {shownDate}
+      </AppText>
+      {isToday ? (
+        <PeriodNavigatorNote testID={`${testID}-today`}>Aujourd’hui</PeriodNavigatorNote>
+      ) : (
+        onGoToToday && (
+          <PeriodNavigatorLink
+            label="Revenir à aujourd’hui"
+            onPress={onGoToToday}
+            testID={`${testID}-go-to-today`}
+          />
+        )
+      )}
+    </PeriodNavigator>
   );
 }
 
 const styles = StyleSheet.create({
-  navigator: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
-  copy: { alignItems: 'center', flex: 1, minWidth: 0 },
   // Stretched to the measured width between the controls: the text is centred
   // inside a definite box instead of being sized by its own content.
   date: { alignSelf: 'stretch', color: semanticColors.foreground, textAlign: 'center' },
-  secondary: { color: semanticColors.accent, textAlign: 'center' },
-  pressed: { opacity: interaction.pressedOpacity },
 });

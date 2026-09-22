@@ -29,7 +29,7 @@
 // Decoration only: absolutely positioned (no layout impact), pointer-
 // transparent, hidden from accessibility, and drawn UNDER the screen content
 // so titles and actions always stay on top. One opacity for every main screen
-// (theme `watermark`).
+// (theme `watermark`); a data-dense pushed screen (Caisse) may ask for less.
 
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
@@ -60,6 +60,8 @@ interface WatermarkOptics {
   readonly scale: number;
   /** Extra fraction of the shared size lifted above the title block. */
   readonly rise: number;
+  /** Quieter opacity for a screen whose content is dense data; defaults to the shared one. */
+  readonly opacity?: number;
 }
 
 /** Restrained per-symbol optical adjustments; 1 / 0 is the reference (Produits). */
@@ -70,7 +72,9 @@ export const screenWatermarkOptics: Record<ScreenWatermarkKind, WatermarkOptics>
   clients: { scale: 1.16, rise: 0.16 },
   products: { scale: 1, rise: 0 },
   settings: { scale: 1, rise: 0 },
-  cashRegister: { scale: 1, rise: 0 },
+  // Caisse is read for its figures: a smaller, fainter banknote stays a
+  // signature beside the title and never reaches behind the totals.
+  cashRegister: { scale: 0.72, rise: 0.06, opacity: 0.05 },
   services: { scale: 1, rise: 0 },
 };
 
@@ -86,7 +90,13 @@ export function ScreenWatermarkIcon({ kind }: ScreenWatermarkIconProps) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       pointerEvents="none"
-      style={[styles.anchor, { top: styles.anchor.top - watermark.size * optics.rise }]}
+      style={[
+        styles.anchor,
+        {
+          opacity: optics.opacity ?? watermark.opacity,
+          top: styles.anchor.top - watermark.size * optics.rise,
+        },
+      ]}
       testID={`screen-watermark-${kind}`}
     >
       <SymbolView

@@ -5,6 +5,7 @@ import {
   AppointmentSessionProvider,
   useAppointmentSession,
 } from '@/features/appointments/session/AppointmentSessionProvider';
+import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import {
   ProductCatalogProvider,
   useProductCatalog,
@@ -13,14 +14,16 @@ import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/Sa
 import { formatEuroCents } from '@/shared/lib/money';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { glassIconButtonSize } from '@/shared/ui/GlassIconButton';
+import { watermark as watermarkTheme } from '@/shared/ui/theme';
 
 import { CashRegisterScreen } from '../CashRegisterScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 const mockBack = jest.fn();
+const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: mockBack }),
+  useRouter: () => ({ push: mockPush, back: mockBack }),
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
@@ -105,14 +108,16 @@ function CheckoutProbe() {
 function renderCashRegister() {
   return render(
     <TestPersistenceProvider>
-      <ProductCatalogProvider>
-        <SaleSessionProvider>
-          <AppointmentSessionProvider>
-            <CashRegisterScreen />
-            <CheckoutProbe />
-          </AppointmentSessionProvider>
-        </SaleSessionProvider>
-      </ProductCatalogProvider>
+      <ClientSessionProvider>
+        <ProductCatalogProvider>
+          <SaleSessionProvider>
+            <AppointmentSessionProvider>
+              <CashRegisterScreen />
+              <CheckoutProbe />
+            </AppointmentSessionProvider>
+          </SaleSessionProvider>
+        </ProductCatalogProvider>
+      </ClientSessionProvider>
     </TestPersistenceProvider>,
   );
 }
@@ -131,14 +136,22 @@ function periodLabel(view: Awaited<ReturnType<typeof render>>): string {
 }
 
 function totals(view: Awaited<ReturnType<typeof render>>) {
+  const total = view.getByTestId('cash-register-total').props.children as string;
+  // The period caption is spoken with the KPI: « Total encaissé aujourd’hui : 0,00 € ».
+  const totalLabel = view.getByTestId('cash-register-total-card').props.accessibilityLabel as string;
+  const countLabel = view.getByTestId('cash-register-count').props.accessibilityLabel as string;
   return {
-    total: view.getByTestId('cash-register-total').props.children as string,
+    total,
     card: within(view.getByTestId('cash-register-card')).getAllByText(/€/)[0]!.props.children as string,
     cash: within(view.getByTestId('cash-register-cash')).getAllByText(/€/)[0]!.props.children as string,
-    count: view.getByTestId('cash-register-count').props.children as string,
-    caption: view.getByTestId('cash-register-caption').props.children as string,
+    count: countLabel.replace('Encaissements, ', ''),
+    caption: totalLabel.replace(/^Total /, '').replace(` : ${total}`, ''),
     period: periodLabel(view),
   };
+}
+
+function entryRows(view: Awaited<ReturnType<typeof render>>) {
+  return view.queryAllByTestId(/^cash-register-entry-(?!amount-)/);
 }
 
 describe('CashRegisterScreen', () => {
@@ -149,6 +162,7 @@ describe('CashRegisterScreen', () => {
   beforeEach(() => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     mockBack.mockClear();
+    mockPush.mockClear();
     mockPickerDate = undefined;
   });
 
@@ -179,6 +193,101 @@ describe('CashRegisterScreen', () => {
     expect(view.queryByText(/TVA|Bénéfice|Dépenses|chiffre d’affaires/i)).toBeNull();
   });
 
+  it('answers « how much was collected » once, with an intentional empty Encaissements section', async () => {
+    const view = await renderCashRegister();
+
+    expect(view.getByText('Total encaissé')).toBeTruthy();
+    expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+      `Total encaissé aujourd’hui : ${formatEuroCents(0)}`,
+    );
+    // The KPI no longer repeats the period or the empty status in words.
+    expect(view.queryByText('encaissé aujourd’hui')).toBeNull();
+    expect(view.queryByText('Aucun encaissement')).toBeNull();
+    // Card and cash share ONE grouped surface.
+    const methods = view.getByTestId('cash-register-methods');
+    expect(within(methods).getByTestId('cash-register-card')).toBeTruthy();
+    expect(within(methods).getByTestId('cash-register-cash')).toBeTruthy();
+    expect(view.getByLabelText(`Carte ${formatEuroCents(0)}`)).toBeTruthy();
+
+    expect(view.getByText('Encaissements')).toBeTruthy();
+    expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe('Encaissements, Aucun encaissement');
+    const empty = view.getByTestId('cash-register-empty');
+    expect(within(empty).getByText('Aucun encaissement aujourd’hui')).toBeTruthy();
+    expect(within(empty).getByText('Les paiements encaissés apparaîtront ici.')).toBeTruthy();
+    expect(view.queryByTestId('cash-register-entries')).toBeNull();
+    expect(entryRows(view)).toHaveLength(0);
+
+    await press(view, 'cash-register-previous');
+    expect(within(view.getByTestId('cash-register-empty')).getByText('Aucun encaissement ce jour')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Mois'));
+    });
+    expect(within(view.getByTestId('cash-register-empty')).getByText('Aucun encaissement ce mois-ci')).toBeTruthy();
+    await press(view, 'cash-register-previous');
+    expect(within(view.getByTestId('cash-register-empty')).getByText('Aucun encaissement ce mois')).toBeTruthy();
+  });
+
+  it('lists the payments of the selected day, oldest first, from both sources', async () => {
+    const view = await renderCashRegister();
+    await press(view, 'stock-products');
+    jest.setSystemTime(new Date(2026, 7, 29, 10, 30));
+    await press(view, 'sell-standalone-mixed');
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    await press(view, 'checkout-sofia');
+    // Paid yesterday: counted on its own day only.
+    jest.setSystemTime(new Date(2026, 7, 28, 18, 0));
+    await press(view, 'checkout-elodie');
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+
+    expect(view.queryByTestId('cash-register-empty')).toBeNull();
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(14500), count: '2 encaissements' });
+    expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe('Encaissements, 2 encaissements');
+
+    const rows = entryRows(view);
+    expect(rows.map((row) => row.props.testID)).toEqual([
+      'cash-register-entry-sale-standalone-mixed',
+      'cash-register-entry-agenda-sofia',
+    ]);
+
+    // A standalone Sale names its source and its mixed payment; no detail exists, so it is read-only.
+    const sale = view.getByTestId('cash-register-entry-sale-standalone-mixed');
+    expect(sale.props.accessibilityRole).toBeUndefined();
+    expect(within(sale).getByText('10:30')).toBeTruthy();
+    expect(within(sale).getByText('Sofia Petit')).toBeTruthy();
+    expect(within(sale).getByText(/^Vente · /)).toBeTruthy();
+    expect(within(sale).getByText(formatEuroCents(5000))).toBeTruthy();
+    expect(within(sale).getByText('Carte + Espèces')).toBeTruthy();
+
+    // An Appointment checkout opens the existing Appointment Details.
+    const appointment = view.getByTestId('cash-register-entry-agenda-sofia');
+    expect(appointment.props.accessibilityRole).toBe('button');
+    expect(appointment.props.accessibilityLabel).toContain(`15:00, Sofia Petit, `);
+    expect(appointment.props.accessibilityLabel).toContain(`${formatEuroCents(9500)}, Carte`);
+    expect(within(appointment).getByText('Carte')).toBeTruthy();
+    await press(view, 'cash-register-entry-agenda-sofia');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/appointments/[appointmentId]',
+      params: { appointmentId: 'agenda-sofia' },
+    });
+
+    await press(view, 'cash-register-previous');
+    expect(entryRows(view).map((row) => row.props.testID)).toEqual(['cash-register-entry-agenda-elodie']);
+    expect(within(view.getByTestId('cash-register-entry-agenda-elodie')).getByText('Espèces')).toBeTruthy();
+
+    // Month mode lists the whole month from the SAME selection, each row dated.
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Mois'));
+    });
+    expect(entryRows(view).map((row) => row.props.testID)).toEqual([
+      'cash-register-entry-agenda-elodie',
+      'cash-register-entry-sale-standalone-mixed',
+      'cash-register-entry-agenda-sofia',
+    ]);
+    expect(within(view.getByTestId('cash-register-entry-agenda-elodie')).getByText('28 août')).toBeTruthy();
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(18500), count: '3 encaissements' });
+  });
+
   it('carries the decorative cash-register watermark, hidden from accessibility and touches', async () => {
     const view = await renderCashRegister();
 
@@ -186,6 +295,8 @@ describe('CashRegisterScreen', () => {
     const watermark = view.getByTestId('screen-watermark-cashRegister', { includeHiddenElements: true });
     expect(watermark.props.pointerEvents).toBe('none');
     expect(watermark.props.accessibilityElementsHidden).toBe(true);
+    // Kept as a signature, quieter than on the main screens.
+    expect(StyleSheet.flatten(watermark.props.style).opacity).toBeLessThan(watermarkTheme.opacity);
     expect(view.getByRole('header', { name: 'Caisse' })).toBeTruthy();
   });
 
@@ -339,10 +450,12 @@ describe('CashRegisterScreen', () => {
       period: 'Août 2026',
     });
     expect(view.queryByTestId('cash-register-current')).toBeNull();
+    expect(view.getByTestId('cash-register-this-month')).toBeTruthy();
 
     await press(view, 'cash-register-previous');
     expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Juillet 2026', caption: 'encaissé ce mois' });
-    expect(view.getByTestId('cash-register-current')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Revenir à ce mois-ci' })).toBe(view.getByTestId('cash-register-current'));
+    expect(view.queryByTestId('cash-register-this-month')).toBeNull();
 
     await press(view, 'cash-register-current');
     expect(totals(view)).toMatchObject({ total: formatEuroCents(18500), period: 'Août 2026' });

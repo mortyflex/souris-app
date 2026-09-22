@@ -129,8 +129,8 @@ export function AgendaScreen() {
             onOpenCalendar={() => setDayPickerVisible(true)}
             onPrevious={() => shiftSelectedDay(-1)}
             style={[
-              styles.dayNavigation,
-              { paddingHorizontal: horizontalGutter },
+              styles.periodNavigation,
+              { marginHorizontal: horizontalGutter },
             ]}
             testID="agenda-date"
           />
@@ -193,10 +193,6 @@ export function AgendaScreen() {
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
   header: { paddingBottom: spacing.md },
-  dayNavigation: {
-    borderBottomColor: semanticColors.borderSubtle,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.xs,
-  },
+  // The grouped period surface replaces the old hairline under the row.
+  periodNavigation: { marginBottom: spacing.sm, marginTop: spacing.xs },
 });

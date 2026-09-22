@@ -1,4 +1,7 @@
 import {
+  formatCashRegisterEmptyTitle,
+  formatCashRegisterEntryDay,
+  formatCashRegisterEntryMethods,
   formatCashRegisterMonth,
   formatCheckoutCount,
   isSameLocalDay,
@@ -35,5 +38,23 @@ describe('Cash Register presentation', () => {
     expect(formatCheckoutCount(0)).toBe('Aucun encaissement');
     expect(formatCheckoutCount(1)).toBe('1 encaissement');
     expect(formatCheckoutCount(3)).toBe('3 encaissements');
+  });
+
+  it('words the empty Encaissements heading for the selected period', () => {
+    expect(formatCashRegisterEmptyTitle('day', true)).toBe('Aucun encaissement aujourd’hui');
+    expect(formatCashRegisterEmptyTitle('day', false)).toBe('Aucun encaissement ce jour');
+    expect(formatCashRegisterEmptyTitle('month', true)).toBe('Aucun encaissement ce mois-ci');
+    expect(formatCashRegisterEmptyTitle('month', false)).toBe('Aucun encaissement ce mois');
+  });
+
+  it('names how one payment was received from its own amounts', () => {
+    expect(formatCashRegisterEntryMethods({ cardAmountCents: 9500, cashAmountCents: 0 })).toBe('Carte');
+    expect(formatCashRegisterEntryMethods({ cardAmountCents: 0, cashAmountCents: 4000 })).toBe('Espèces');
+    expect(formatCashRegisterEntryMethods({ cardAmountCents: 1000, cashAmountCents: 4000 })).toBe('Carte + Espèces');
+    expect(formatCashRegisterEntryMethods({ cardAmountCents: 0, cashAmountCents: 0 })).toBe('');
+  });
+
+  it('dates a Month mode entry compactly', () => {
+    expect(formatCashRegisterEntryDay(new Date(2026, 8, 22, 9, 0))).toBe('22 sept.');
   });
 });

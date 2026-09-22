@@ -1,16 +1,17 @@
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { CalendarBlock } from '@/domain/calendar-blocks';
-import { AppText } from '@/shared/ui/AppText';
-import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
+import {
+  PeriodNavigator,
+  PeriodNavigatorCopy,
+  PeriodNavigatorNote,
+} from '@/shared/ui/PeriodNavigator';
 import { TabBarGlassScrollEdge } from '@/shared/ui/TabBarGlassScrollEdge';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import {
   bottomClearance,
   gutter,
-  semanticColors,
   spacing,
-  touchTarget,
 } from '@/shared/ui/theme';
 
 import {
@@ -63,30 +64,29 @@ export function WeekView({
   const groups = groupAppointmentsByLocalDay(appointments, days);
   const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
   const bottomPadding = Platform.OS === 'android' ? bottomClearance.android : bottomClearance.ios;
-  const minimumTouchTarget = Platform.OS === 'android' ? touchTarget.android : touchTarget.ios;
+  // A quiet « Cette semaine » under the range, like « Aujourd’hui » in Jour.
+  const isCurrentWeek = getStartOfWeek(selectedDay).getTime() === getStartOfWeek(today).getTime();
 
   return (
     <View style={styles.container}>
-      <View
-        style={[
-          styles.weekHeader,
-          { minHeight: minimumTouchTarget, paddingHorizontal: horizontalGutter },
-        ]}
+      <PeriodNavigator
+        nextLabel="Semaine suivante"
+        onNext={() => onShiftWeek(1)}
+        onPrevious={() => onShiftWeek(-1)}
+        previousLabel="Semaine précédente"
+        style={[styles.periodNavigation, { marginHorizontal: horizontalGutter }]}
+        testID="agenda-week"
       >
-        <GlassIconButton
-          accessibilityLabel="Semaine précédente"
-          icon={glassIcons.previous}
-          onPress={() => onShiftWeek(-1)}
+        <PeriodNavigatorCopy
+          secondary={
+            isCurrentWeek ? (
+              <PeriodNavigatorNote testID="agenda-week-current">Cette semaine</PeriodNavigatorNote>
+            ) : undefined
+          }
+          title={formatWeekRange(selectedDay)}
+          titleTestID="agenda-week-range"
         />
-        <AppText variant="control" style={styles.range}>
-          {formatWeekRange(selectedDay)}
-        </AppText>
-        <GlassIconButton
-          accessibilityLabel="Semaine suivante"
-          icon={glassIcons.next}
-          onPress={() => onShiftWeek(1)}
-        />
-      </View>
+      </PeriodNavigator>
       <TabBarGlassScrollEdge>
         <ScrollView
           // Native tab bar overlay: system bottom inset, see DayTimeline.
@@ -116,13 +116,7 @@ export function WeekView({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  weekHeader: {
-    alignItems: 'center',
-    borderBottomColor: semanticColors.borderSubtle,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  range: { color: semanticColors.foreground },
+  // Same grouped surface and rhythm as the Jour navigator.
+  periodNavigation: { marginBottom: spacing.sm, marginTop: spacing.xs },
   scrollContent: { paddingTop: spacing.sm },
 });

@@ -39,7 +39,7 @@ export const EMPTY_CASH_REGISTER_SUMMARY: CashRegisterSummary = {
   checkoutCount: 0,
 };
 
-interface RecordedPayment {
+export interface RecordedPayment {
   readonly paidAt: Date;
   readonly cardAmountCents: number;
   readonly cashAmountCents: number;
@@ -57,16 +57,68 @@ function isSameLocalMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-/** Every payment the Cash Register may count, in source order. */
-export function getCashRegisterPayments(sources: CashRegisterSources): readonly RecordedPayment[] {
-  const payments: RecordedPayment[] = [];
+/**
+ * One counted payment together with what recorded it: an Appointment
+ * checkout or a standalone Sale. Read-only view over the same selection
+ * as the totals, so a listed entry is always an entry the totals count.
+ */
+export type CashRegisterEntry =
+  | {
+      readonly kind: 'APPOINTMENT';
+      readonly payment: RecordedPayment;
+      readonly appointment: Appointment;
+    }
+  | {
+      readonly kind: 'SALE';
+      readonly payment: RecordedPayment;
+      readonly sale: Sale;
+    };
+
+/** Every entry the Cash Register may count, in source order. */
+function getCashRegisterEntries(sources: CashRegisterSources): readonly CashRegisterEntry[] {
+  const entries: CashRegisterEntry[] = [];
   for (const appointment of sources.appointments) {
-    if (appointment.payment) payments.push(appointment.payment);
+    if (appointment.payment) {
+      entries.push({ kind: 'APPOINTMENT', payment: appointment.payment, appointment });
+    }
   }
   for (const sale of sources.sales) {
-    if (sale.payment && sale.appointmentId === undefined) payments.push(sale.payment);
+    if (sale.payment && sale.appointmentId === undefined) {
+      entries.push({ kind: 'SALE', payment: sale.payment, sale });
+    }
   }
-  return payments;
+  return entries;
+}
+
+/** Every payment the Cash Register may count, in source order. */
+export function getCashRegisterPayments(sources: CashRegisterSources): readonly RecordedPayment[] {
+  return getCashRegisterEntries(sources).map((entry) => entry.payment);
+}
+
+/** The counted entries of one period, oldest payment first. */
+function listEntries(
+  sources: CashRegisterSources,
+  includes: (paidAt: Date) => boolean,
+): readonly CashRegisterEntry[] {
+  return getCashRegisterEntries(sources)
+    .filter((entry) => includes(entry.payment.paidAt))
+    .sort((a, b) => a.payment.paidAt.getTime() - b.payment.paidAt.getTime());
+}
+
+/** Entries paid on ONE local civil day, oldest first — exactly what the day summary counts. */
+export function getCashRegisterDayEntries(
+  sources: CashRegisterSources,
+  day: Date,
+): readonly CashRegisterEntry[] {
+  return listEntries(sources, (paidAt) => isSameLocalDay(paidAt, day));
+}
+
+/** Entries paid during ONE local calendar month, oldest first — exactly what the month summary counts. */
+export function getCashRegisterMonthEntries(
+  sources: CashRegisterSources,
+  month: Date,
+): readonly CashRegisterEntry[] {
+  return listEntries(sources, (paidAt) => isSameLocalMonth(paidAt, month));
 }
 
 function summarize(
