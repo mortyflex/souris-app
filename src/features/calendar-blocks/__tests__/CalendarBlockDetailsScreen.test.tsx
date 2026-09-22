@@ -170,7 +170,7 @@ async function press(view: Rendered, testID: string) {
 }
 
 const timeOf = (view: Rendered, testID: string) =>
-  view.getByTestId(testID).props.accessibilityValue.text as string;
+  view.getByTestId(`${testID}-value`).props.children as string;
 
 beforeEach(() => {
   mockPush.mockClear();

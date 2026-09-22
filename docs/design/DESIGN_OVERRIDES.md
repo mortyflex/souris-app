@@ -1078,17 +1078,19 @@ fast — never a technical admin form, never a grey disabled state.
   « n rendez-vous »; the day header says « 1 créneau indisponible » to assistive technologies.
 - **Creation — « Cliente | Personnel ».** The shared light-glass `SegmentedControl` (§21), directly
   under the sheet header; no new switch style. Spoken « Rendez-vous cliente » / « Rendez-vous
-  personnel ». In « Personnel » the header reads `CRÉNEAU PERSONNEL` / « Indisponible » and the stepper,
-  the context row, every step and the step action bar are replaced by ONE form:
-  - a `mauve050` context card (`radii.large`): badge, « Indisponible », « Mardi 25 août »;
-  - **Début / Fin** — two neutral `surface` cards side by side (`radii.large`, 64 pt), `metadata` label
-    over a tabular `sectionTitle` time. Tapping one turns it `surfaceLavender` with a 1.5 pt accent
-    border and opens the shared `TimeWheelPicker` (5-minute step) right below, with the usual
-    « Terminer » text action; one picker at a time. An end that is not after the start borders the
-    « Fin » card in `rose200` and says so in `rose600` `metadata`;
+  personnel ». Both modes share the editing header of §27 (« Annuler » leading, one title): « Nouveau
+  rendez-vous » in « Cliente », « Indisponible » in « Personnel » — no eyebrow. In « Personnel » the
+  stepper, the context row, every step and the step action bar are replaced by ONE form, in the same
+  row language as the Cliente step:
+  - `CRÉNEAU` (`eyebrow`, `foregroundSoft`) over ONE `GroupedSurface` of three `GroupedDataRow`s:
+    **Date** read-only (calendar glyph, « Mar. 25 août », no chevron, not a button, spoken « Date,
+    mardi 25 août »), then **Début** and **Fin** (clock glyph, tabular time, chevron; spoken « Début,
+    14 heures 30 »). Tapping one turns its chevron and opens the shared `TimeWheelPicker` (5-minute
+    step) inside the group, with the usual « Terminer » text action; one picker at a time. An end
+    that is not after the start says so in `rose600` `metadata` under the group. No context card;
   - **Motif** — pill chips, 40 pt high with vertical hit slop up to the touch target, white on the
-    sheet with a `borderSubtle` hairline. Selected: `mauve100` fill, 1.5 pt `mauve600` border, plum
-    text, `accessibilityState.selected` (radio). « Autre » reveals the shared `TextField`
+    sheet with a `borderSubtle` hairline. Selected: `surfaceLavender` fill, 1.5 pt `accent` border,
+    `accent` text, `accessibilityState.selected` (radio). « Autre » reveals the shared `TextField`
     (« Précisez le motif »), focused only when the professional tapped it;
   - the primary `AppButton` « Bloquer le créneau » in the shared `SheetActionBar`.
 - **Conflict notice.** `ScheduleConflictNotice` — `mauve050`, 28 pt badge, a plum `control` sentence and

@@ -4,11 +4,12 @@
 // The draft (client, selected services, appointment-specific price and
 // processing overrides) lives in this screen's state and survives every
 // step transition. The Agenda startAt is shown as appointment context on
-// every step and is never recalculated or replaced.
+// every step and is never recalculated or replaced: on Cliente as the
+// read-only Date + editable Heure group, on Prestations as the compact row.
 //
 // Birthday: when the APPOINTMENT date (never today's date) is the birthday of
 // the Client just chosen, the Cliente step says so at once — a compact
-// reminder under the context row, plus one short confetti burst and one
+// reminder under the Date / Heure group, plus one short confetti burst and one
 // success haptic. The celebration belongs to the SELECTION EVENT (a tap on a
 // different Client, or a Client created from the picker): a re-render or a
 // step change never replays it, choosing her again after another Client does.
@@ -24,7 +25,8 @@
 // member is explained inline on the Résumé and cannot be created.
 //
 // Presented as a native form sheet in the canonical Souris shell
-// (SheetScreen + SheetHeader + SheetActionBar). The route disables
+// (SheetScreen + SheetActionBar) under the editing header of « Modifier le
+// rendez-vous ». The route disables
 // swipe-to-dismiss (`src/app/(app)/_layout.tsx`): scrolling the Client list
 // never abandons the draft — leaving goes through the explicit « Annuler ».
 
@@ -67,12 +69,19 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { SheetScreen } from '@/shared/ui/SheetScreen';
-import { agenda, foregroundSoft, gutter, lavender, spacing } from '@/shared/ui/theme';
+import {
+  agenda,
+  foregroundSoft,
+  gutter,
+  lavender,
+  semanticColors,
+  spacing,
+} from '@/shared/ui/theme';
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
 import { AppointmentContextRow } from './components/AppointmentContextRow';
+import { AppointmentScheduleSection } from './components/AppointmentScheduleSection';
 import { ClientPickerStep } from '@/features/clients/selection/ClientPickerStep';
 import { CreationStepper } from './components/CreationStepper';
 import { ServiceSelectionGrid } from '../editor/components/ServiceSelectionGrid';
@@ -98,7 +107,7 @@ import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessP
 import { createAppointmentId, createAppointmentItemId } from './runtime-ids';
 import { getAppointmentCreationSummary } from './presentation';
 import { formatSelectedServiceNames, formatSelectionCountLabel } from '../editor/presentation';
-import { canNavigateTo, stepLabels, type CreationStep } from './steps';
+import { canNavigateTo, type CreationStep } from './steps';
 
 interface AppointmentCreationScreenProps {
   readonly startAt: Date;
@@ -335,15 +344,28 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   return (
     <SheetScreen keyboardAvoiding testID="appointment-creation-sheet">
       <View style={styles.headerZone}>
-        <SheetHeader
-          action={{
-            accessibilityLabel: 'Annuler la création',
-            label: 'Annuler',
-            onPress: () => router.back(),
-          }}
-          eyebrow={mode === 'client' ? 'NOUVEAU RENDEZ-VOUS' : 'CRÉNEAU PERSONNEL'}
-          title={mode === 'client' ? stepLabels[step] : CALENDAR_BLOCK_TITLE}
-        />
+        {/* The editing header of « Modifier le rendez-vous », in both modes:
+            « Annuler » leading, one title. The segment below names the mode,
+            the stepper the step — no eyebrow, no step title. */}
+        <View style={styles.header}>
+          <AppButton
+            accessibilityLabel="Annuler la création"
+            onPress={() => router.back()}
+            style={styles.headerAction}
+            title="Annuler"
+            variant="tertiary"
+          />
+          <AppText
+            accessibilityRole="header"
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+            numberOfLines={1}
+            style={styles.headerTitle}
+            variant="sectionTitle"
+          >
+            {mode === 'client' ? 'Nouveau rendez-vous' : CALENDAR_BLOCK_TITLE}
+          </AppText>
+        </View>
         <SegmentedControl
           onChange={setMode}
           options={MODE_OPTIONS}
@@ -368,7 +390,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         <CreationStepper step={step} onStepPress={(target) => navigateToStep(target)} />
       )}
 
-      {mode === 'client' && step !== 2 && (
+      {mode === 'client' && step === 1 && (
         <AppointmentContextRow
           startAt={draftStartAt}
           clientName={selectedClientName}
@@ -378,20 +400,29 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
         />
       )}
 
-      {mode === 'client' && step === 0 && isBirthdayAppointment && (
-        <View style={styles.birthdayNotice}>
-          <BirthdayNotice
-            accessibilityLabel={`${birthdayMessage} ${SELECTION_BIRTHDAY_SUGGESTION}`}
-            compact
-            messages={[SELECTION_BIRTHDAY_SUGGESTION]}
-            testID="client-selection-birthday-notice"
-            title={birthdayMessage}
-          />
-        </View>
-      )}
-
       {mode === 'client' && step === 0 && (
         <ClientPickerStep
+          // Date / Heure (and the birthday reminder) scroll with the list:
+          // one vertical scroll, the footer stays outside it.
+          header={
+            <View style={styles.scheduleHeader}>
+              <AppointmentScheduleSection
+                maxHour={startHourRange.maxHour}
+                minHour={startHourRange.minHour}
+                onStartTimeChange={chooseDraftStartTime}
+                startAt={draftStartAt}
+              />
+              {isBirthdayAppointment && (
+                <BirthdayNotice
+                  accessibilityLabel={`${birthdayMessage} ${SELECTION_BIRTHDAY_SUGGESTION}`}
+                  compact
+                  messages={[SELECTION_BIRTHDAY_SUGGESTION]}
+                  testID="client-selection-birthday-notice"
+                  title={birthdayMessage}
+                />
+              )}
+            </View>
+          }
           clients={visibleClients}
           query={clientQuery}
           selectedClientId={selectedClientId}
@@ -512,7 +543,17 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
 
 const styles = StyleSheet.create({
   headerZone: { gap: spacing.xs, paddingHorizontal: horizontalGutter },
-  birthdayNotice: { paddingHorizontal: horizontalGutter, paddingTop: spacing.sm },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginHorizontal: -spacing.md,
+    paddingBottom: spacing.sm,
+    paddingTop: spacing.sm,
+  },
+  headerAction: { paddingHorizontal: spacing.md },
+  headerTitle: { color: semanticColors.foreground, flex: 1 },
+  scheduleHeader: { gap: spacing.md },
   footerButtons: { flexDirection: 'row', gap: spacing.sm },
   catalogScroll: { flex: 1 },
   catalogContent: {

@@ -29,6 +29,25 @@ export function formatBlockDate(date: Date): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+/** Compact date of the form's Date row: « Mar. 25 août ». */
+export function formatBlockDateShort(date: Date): string {
+  const value = new Intl.DateTimeFormat('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    weekday: 'short',
+  }).format(date);
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** Spoken date of the form's Date row: « mardi 25 août », never abbreviated. */
+export function formatSpokenBlockDate(date: Date): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    weekday: 'long',
+  }).format(date);
+}
+
 /** Spoken time: « 10 heures », « 11 heures 30 », « 1 heure 05 ». */
 export function formatSpokenBlockTime(date: Date): string {
   const hour = date.getHours();

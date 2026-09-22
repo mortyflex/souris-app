@@ -22,6 +22,8 @@ interface GroupedDataRowProps {
   readonly icon: SymbolViewProps["name"];
   readonly label: string;
   readonly value: string;
+  /** Spoken in place of the compact visible value (e.g. a full date). */
+  readonly accessibilityValueLabel?: string;
   /** Absent: the value is read-only (no chevron, not a button). */
   readonly onPress?: () => void;
   readonly accessibilityHint?: string;
@@ -36,11 +38,13 @@ export function GroupedDataRow({
   icon,
   label,
   value,
+  accessibilityValueLabel,
   onPress,
   accessibilityHint,
   expanded,
   testID,
 }: GroupedDataRowProps) {
+  const accessibilityLabel = `${label}, ${accessibilityValueLabel ?? value}`;
   const content = (
     <>
       <View style={styles.iconColumn}>
@@ -66,7 +70,7 @@ export function GroupedDataRow({
     return (
       <View
         accessible
-        accessibilityLabel={`${label}, ${value}`}
+        accessibilityLabel={accessibilityLabel}
         style={styles.row}
         testID={testID}
       >
@@ -78,7 +82,7 @@ export function GroupedDataRow({
   return (
     <Pressable
       accessibilityHint={accessibilityHint}
-      accessibilityLabel={`${label}, ${value}`}
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       accessibilityState={expanded === undefined ? undefined : { expanded }}
       onPress={onPress}

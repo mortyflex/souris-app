@@ -384,15 +384,34 @@ describe('AppointmentCreationScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByLabelText("Terminer la modification de l'heure"));
     });
-    expect(view.getByText(/· 23:55$/)).toBeTruthy();
+    expect(view.getByTestId('time-modifier-value')).toHaveTextContent('23:55');
+  });
+
+  it('shows the Agenda date read-only and the time as the one editable row', async () => {
+    const view = await renderCreation();
+
+    // Date: information, never an action — no button role, no « Changer la date ».
+    const date = view.getByTestId('appointment-date');
+    expect(date.props.accessibilityRole).toBeUndefined();
+    expect(date.props.accessibilityLabel).toBe('Date, Mardi 25 août');
+    expect(view.queryByLabelText('Changer la date')).toBeNull();
+    // Heure: the whole row is the button; no separate « Changer l'horaire » link.
+    expect(view.getByRole('button', { name: 'Heure, 10:15' })).toBeTruthy();
+    expect(view.queryByText("Changer l'horaire")).toBeNull();
+    // No Cliente row above the search: the Client is picked in the list.
+    expect(view.queryByText('Choisir une cliente')).toBeNull();
+    expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+    expect(view.getByText('Ajouter une cliente')).toBeTruthy();
   });
 
   it('opens in the canonical Souris sheet shell with a scrollable Client list and no auto-focus', async () => {
     const view = await renderCreation();
 
     expect(view.getByTestId('appointment-creation-sheet')).toBeTruthy();
-    expect(view.getByText('NOUVEAU RENDEZ-VOUS')).toBeTruthy();
-    expect(view.getByRole('header', { name: 'Cliente' })).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Nouveau rendez-vous' })).toBeTruthy();
+    // The stepper and the segment name the mode: no « Cliente » page title.
+    expect(view.queryByRole('header', { name: 'Cliente' })).toBeNull();
+    expect(view.queryByText('NOUVEAU RENDEZ-VOUS')).toBeNull();
     expect(view.getByLabelText('Annuler la création')).toBeTruthy();
     expect(view.getByTestId('appointment-creation-actions')).toBeTruthy();
     expect(view.getByText('Continuer')).toBeTruthy();
@@ -407,7 +426,7 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.scroll(list, { nativeEvent: { contentOffset: { y: 1200 } } });
     });
     expect(view.getByTestId('appointment-creation-sheet')).toBeTruthy();
-    expect(view.getByText('NOUVEAU RENDEZ-VOUS')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Nouveau rendez-vous' })).toBeTruthy();
     expect(mockBack).not.toHaveBeenCalled();
   });
 
@@ -497,7 +516,8 @@ describe('AppointmentCreationScreen', () => {
   it('creates an appointment with adjustments and preserves the draft across step transitions', async () => {
     const view = await renderCreation();
 
-    expect(view.getByText('Mar. 25 août · 10:15')).toBeTruthy();
+    expect(view.getByTestId('appointment-date-value')).toHaveTextContent('Mar. 25 août');
+    expect(view.getByTestId('time-modifier-value')).toHaveTextContent('10:15');
     await selectClientBeyond60(view);
 
     expect(view.getByText('Constance Chevalier')).toBeTruthy();
@@ -935,7 +955,7 @@ describe('AppointmentCreationScreen', () => {
     const createdClientId = view.getByTestId('new-client-id').props.children as string;
     expect(createdClientId.length).toBeGreaterThan(0);
 
-    expect(view.getByText('Nouvelle Cliente')).toBeTruthy();
+    // Selected at once: Continuer is enabled and Prestations names her.
     await act(async () => {
       fireEvent.press(view.getByText('Continuer'));
     });
@@ -1131,7 +1151,7 @@ describe('AppointmentCreationScreen', () => {
       await tapClient(view, 'Léa Martin');
 
       // Still on the Cliente step: the selection succeeded and the reminder is there.
-      expect(view.getByRole('header', { name: 'Cliente' })).toBeTruthy();
+      expect(view.getByLabelText('Cliente — étape en cours')).toBeTruthy();
       expect(view.getByRole('button', { name: /Léa Martin/ }).props.accessibilityState.selected).toBe(true);
       const notice = view.getByTestId('client-selection-birthday-notice');
       expect(within(notice).getByText("C'est l'anniversaire de Léa ce jour-là.")).toBeTruthy();

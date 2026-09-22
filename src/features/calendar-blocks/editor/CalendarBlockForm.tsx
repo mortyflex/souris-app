@@ -4,9 +4,11 @@
 // créneau ») and editing (« Enregistrer les modifications »). One compact,
 // direct form — no steps, no client, no service, no price:
 //
-//   [ Indisponible · date ]
-//   Début   Fin            two time cards; tapping one opens the shared
-//                          5-minute wheels right below, one at a time
+//   CRÉNEAU                one grouped surface, same rows as the Cliente
+//     Date                 step: Date read-only (the Agenda day, no chevron);
+//     Début  >             Début / Fin are the actions — tapping one opens
+//     Fin    >             the shared 5-minute wheels inside the group, one
+//                          at a time
 //   Motif                  quick suggestion chips (a UX shortcut: the saved
 //                          reason is plain text) + a free-text field behind
 //                          « Autre »
@@ -19,18 +21,22 @@
 
 import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import type { SymbolViewProps } from 'expo-symbols';
 
 import { CALENDAR_BLOCK_REASON_MAX_LENGTH } from '@/domain/calendar-blocks';
-import { calendarBlockIcon } from '@/shared/icons/calendar-block-icon';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import {
+  GROUPED_DATA_ROW_SEPARATOR_INSET,
+  GroupedDataRow,
+} from '@/shared/ui/GroupedDataRow';
+import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
 import { TextField } from '@/shared/ui/TextField';
 import { TimeWheelPicker } from '@/shared/ui/TimeWheelPicker';
 import {
-  calendarBlockColors,
+  foregroundSoft,
   gutter,
   interaction,
   radii,
@@ -42,10 +48,11 @@ import {
 
 import { useCalendarBlockSession } from '../session/CalendarBlockSessionProvider';
 import {
-  CALENDAR_BLOCK_TITLE,
   describeCalendarBlockConflict,
-  formatBlockDate,
+  formatBlockDateShort,
   formatBlockTime,
+  formatSpokenBlockDate,
+  formatSpokenBlockTime,
 } from '../presentation';
 import {
   BLOCK_MINUTE_STEP,
@@ -91,6 +98,8 @@ type TimeField = 'start' | 'end';
 const REASON_REQUIRED_MESSAGE = 'Indiquez un motif pour ce créneau.';
 const END_BEFORE_START_MESSAGE = "L'heure de fin doit être après l'heure de début.";
 
+const dateIcon: SymbolViewProps['name'] = { ios: 'calendar', android: 'calendar_today' };
+const timeIcon: SymbolViewProps['name'] = { ios: 'clock', android: 'schedule' };
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 const minimumTouchTarget = touchTarget[Platform.OS === 'android' ? 'android' : 'ios'];
 const chipHeight = 40;
@@ -158,90 +167,82 @@ export function CalendarBlockForm({
         style={fill ? styles.fill : styles.fit}
         testID="calendar-block-form"
       >
-        <View
-          accessible
-          accessibilityLabel={`${CALENDAR_BLOCK_TITLE}, ${formatBlockDate(times.startAt)}`}
-          style={styles.context}
-          testID="calendar-block-context"
-        >
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={styles.contextBadge}
-          >
-            <SymbolView name={calendarBlockIcon} size={18} tintColor={calendarBlockColors.accent} />
-          </View>
-          <View style={styles.contextCopy}>
-            <AppText variant="rowTitle" style={styles.contextTitle}>
-              {CALENDAR_BLOCK_TITLE}
-            </AppText>
-            <AppText variant="metadata" style={styles.contextDate}>
-              {formatBlockDate(times.startAt)}
-            </AppText>
-          </View>
-        </View>
-
         <View style={styles.section}>
-          <View style={styles.timeRow}>
-            <TimeCard
+          <AppText variant="eyebrow" style={styles.eyebrow}>
+            CRÉNEAU
+          </AppText>
+          <GroupedSurface testID="calendar-block-slot">
+            <GroupedDataRow
+              accessibilityValueLabel={formatSpokenBlockDate(times.startAt)}
+              icon={dateIcon}
+              label="Date"
+              testID="calendar-block-date"
+              value={formatBlockDateShort(times.startAt)}
+            />
+            <GroupedSeparator inset={GROUPED_DATA_ROW_SEPARATOR_INSET} />
+            <GroupedDataRow
+              accessibilityHint="Ouvre le choix de l'heure"
+              accessibilityValueLabel={formatSpokenBlockTime(times.startAt)}
+              expanded={openField === 'start'}
+              icon={timeIcon}
               label="Début"
-              accessibilityLabel="Heure de début"
               onPress={() => toggleField('start')}
-              open={openField === 'start'}
               testID="calendar-block-start"
               value={formatBlockTime(times.startAt)}
             />
-            <TimeCard
+            <GroupedSeparator inset={GROUPED_DATA_ROW_SEPARATOR_INSET} />
+            <GroupedDataRow
+              accessibilityHint="Ouvre le choix de l'heure"
+              accessibilityValueLabel={formatSpokenBlockTime(times.endAt)}
+              expanded={openField === 'end'}
+              icon={timeIcon}
               label="Fin"
-              accessibilityLabel="Heure de fin"
-              invalid={!intervalValid}
               onPress={() => toggleField('end')}
-              open={openField === 'end'}
               testID="calendar-block-end"
               value={formatBlockTime(times.endAt)}
             />
-          </View>
-          {openField && (
-            <View style={styles.picker}>
-              <TimeWheelPicker
-                accessibilityLabel={
-                  openField === 'start'
-                    ? 'Heure de début, heures et minutes'
-                    : 'Heure de fin, heures et minutes'
-                }
-                // One picker per field: the off-grid minute it remembers is the field's own.
-                key={openField}
-                maxHour={blockHourRange.maxHour}
-                minHour={blockHourRange.minHour}
-                minuteStep={BLOCK_MINUTE_STEP}
-                onChange={(time) =>
-                  setTimes((current) =>
+            {openField && (
+              <View style={styles.picker}>
+                <TimeWheelPicker
+                  accessibilityLabel={
                     openField === 'start'
-                      ? setBlockStartTime(current, time)
-                      : setBlockEndTime(current, time),
-                  )
-                }
-                testID={`calendar-block-${openField}-wheel`}
-                value={
-                  openField === 'start'
-                    ? { hour: times.startAt.getHours(), minute: times.startAt.getMinutes() }
-                    : { hour: times.endAt.getHours(), minute: times.endAt.getMinutes() }
-                }
-              />
-              <Pressable
-                accessibilityLabel="Terminer la modification de l'heure"
-                accessibilityRole="button"
-                hitSlop={spacing.sm}
-                onPress={() => setOpenField(undefined)}
-                style={({ pressed }) => [styles.doneAction, pressed && styles.doneActionPressed]}
-                testID="calendar-block-time-done"
-              >
-                <AppText variant="metadata" style={styles.doneText}>
-                  Terminer
-                </AppText>
-              </Pressable>
-            </View>
-          )}
+                      ? 'Heure de début, heures et minutes'
+                      : 'Heure de fin, heures et minutes'
+                  }
+                  // One picker per field: the off-grid minute it remembers is the field's own.
+                  key={openField}
+                  maxHour={blockHourRange.maxHour}
+                  minHour={blockHourRange.minHour}
+                  minuteStep={BLOCK_MINUTE_STEP}
+                  onChange={(time) =>
+                    setTimes((current) =>
+                      openField === 'start'
+                        ? setBlockStartTime(current, time)
+                        : setBlockEndTime(current, time),
+                    )
+                  }
+                  testID={`calendar-block-${openField}-wheel`}
+                  value={
+                    openField === 'start'
+                      ? { hour: times.startAt.getHours(), minute: times.startAt.getMinutes() }
+                      : { hour: times.endAt.getHours(), minute: times.endAt.getMinutes() }
+                  }
+                />
+                <Pressable
+                  accessibilityLabel="Terminer la modification de l'heure"
+                  accessibilityRole="button"
+                  hitSlop={spacing.sm}
+                  onPress={() => setOpenField(undefined)}
+                  style={({ pressed }) => [styles.doneAction, pressed && styles.doneActionPressed]}
+                  testID="calendar-block-time-done"
+                >
+                  <AppText variant="metadata" style={styles.doneText}>
+                    Terminer
+                  </AppText>
+                </Pressable>
+              </View>
+            )}
+          </GroupedSurface>
           {!intervalValid && (
             <AppText
               accessibilityLiveRegion="polite"
@@ -335,43 +336,6 @@ function toReasonDraftReason(initialReason: string | undefined): string | undefi
   return resolveReason(toReasonDraft(initialReason));
 }
 
-interface TimeCardProps {
-  readonly label: string;
-  readonly accessibilityLabel: string;
-  readonly value: string;
-  readonly open: boolean;
-  readonly invalid?: boolean;
-  readonly onPress: () => void;
-  readonly testID: string;
-}
-
-function TimeCard({ label, accessibilityLabel, value, open, invalid = false, onPress, testID }: TimeCardProps) {
-  return (
-    <Pressable
-      accessibilityHint="Ouvre le choix de l'heure"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      accessibilityState={{ expanded: open }}
-      accessibilityValue={{ text: value }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.timeCard,
-        open && styles.timeCardOpen,
-        invalid && styles.timeCardInvalid,
-        pressed && styles.pressed,
-      ]}
-      testID={testID}
-    >
-      <AppText variant="metadata" style={styles.timeLabel}>
-        {label}
-      </AppText>
-      <AppText variant="sectionTitle" style={styles.timeValue}>
-        {value}
-      </AppText>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   fit: { flexShrink: 1 },
@@ -381,51 +345,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
   },
-  context: {
-    alignItems: 'center',
-    backgroundColor: calendarBlockColors.surface,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-  },
-  contextBadge: {
-    alignItems: 'center',
-    backgroundColor: calendarBlockColors.background,
-    borderRadius: radii.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  contextCopy: { flex: 1, gap: 2, minWidth: 0 },
-  contextTitle: { color: calendarBlockColors.title },
-  contextDate: { color: calendarBlockColors.subtitle, fontVariant: ['tabular-nums'] },
   section: { gap: spacing.sm },
+  eyebrow: { color: foregroundSoft },
   sectionTitle: { color: semanticColors.foreground },
-  timeRow: { flexDirection: 'row', gap: spacing.sm },
-  timeCard: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.surface,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    borderWidth: 1.5,
-    flex: 1,
-    gap: 2,
-    minHeight: 64,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-  },
-  timeCardOpen: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderColor: semanticColors.accent,
-  },
-  timeCardInvalid: { borderColor: rose.rose200 },
-  timeLabel: { color: semanticColors.foregroundSoft },
-  timeValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
-  picker: { gap: spacing.xs },
+  picker: { gap: spacing.xs, paddingBottom: spacing.sm, paddingHorizontal: spacing.base },
   doneAction: {
     alignItems: 'center',
     alignSelf: 'flex-end',
@@ -451,13 +374,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.base,
   },
+  // Subtle Souris-purple tint + a thicker accent border: selection never
+  // rests on the fill colour alone (and the chip is a selected radio).
   chipSelected: {
-    backgroundColor: calendarBlockColors.background,
-    borderColor: calendarBlockColors.accent,
+    backgroundColor: semanticColors.surfaceLavender,
+    borderColor: semanticColors.accent,
     borderWidth: 1.5,
   },
   chipText: { color: semanticColors.foreground },
-  chipTextSelected: { color: calendarBlockColors.title },
+  chipTextSelected: { color: semanticColors.accent },
   error: { color: rose.rose600 },
   pressed: {
     opacity: interaction.pressedOpacity,

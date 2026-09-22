@@ -6,8 +6,11 @@
 // shared ClientPickerSheet. No display cap: FlatList
 // virtualization keeps the list fast without limiting the business dataset.
 // A restrained "Ajouter une cliente" action opens the shared creation sheet
-// when the person is not in the directory.
+// when the person is not in the directory. An optional `header` scrolls
+// above the search inside the same list, so the step keeps ONE vertical
+// scroll. Rows are a plain list: avatar + name, hairline separators.
 
+import type { ReactNode } from 'react';
 import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
@@ -32,6 +35,8 @@ interface ClientPickerStepProps {
   readonly onChangeQuery: (query: string) => void;
   readonly onSelectClient: (clientId: string) => void;
   readonly onAddClientPress: () => void;
+  /** Context shown above the search, inside the one scroll. */
+  readonly header?: ReactNode;
 }
 
 export function ClientPickerStep({
@@ -41,6 +46,7 @@ export function ClientPickerStep({
   onChangeQuery,
   onSelectClient,
   onAddClientPress,
+  header,
 }: ClientPickerStepProps) {
   return (
     <FlatList
@@ -50,6 +56,7 @@ export function ClientPickerStep({
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={
         <View style={styles.listHeader}>
+          {header && <View style={styles.header}>{header}</View>}
           <SearchField
             accessibilityLabel="Rechercher une cliente"
             onChangeText={onChangeQuery}
@@ -83,6 +90,7 @@ export function ClientPickerStep({
           </AppText>
         </View>
       }
+      ItemSeparatorComponent={RowSeparator}
       renderItem={({ item }) => {
         const selected = item.id === selectedClientId;
         return (
@@ -129,6 +137,10 @@ export function ClientPickerStep({
   );
 }
 
+function RowSeparator() {
+  return <View style={styles.separator} />;
+}
+
 const styles = StyleSheet.create({
   stepList: { flex: 1 },
   listContent: { paddingBottom: spacing.lg },
@@ -138,6 +150,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.lg,
   },
+  header: { paddingBottom: spacing.md },
   addAction: {
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -177,6 +190,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: spacing.md,
     width: 36,
+  },
+  separator: {
+    backgroundColor: semanticColors.borderSubtle,
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: horizontalGutter,
   },
   selectedAvatar: { backgroundColor: semanticColors.borderLavender },
   avatarText: { color: semanticColors.accent },

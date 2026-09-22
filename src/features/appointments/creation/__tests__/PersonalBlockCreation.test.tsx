@@ -154,7 +154,7 @@ async function switchTo(view: Rendered, label: 'Rendez-vous cliente' | 'Rendez-v
 }
 
 const timeOf = (view: Rendered, testID: string) =>
-  view.getByTestId(testID).props.accessibilityValue.text as string;
+  view.getByTestId(`${testID}-value`).props.children as string;
 
 /** Léa + Brushing 1, up to the Résumé of the client flow. */
 async function reachClientSummary(view: Rendered) {
@@ -182,7 +182,7 @@ describe('creation type choice', () => {
 
     expect(view.getByRole('tab', { name: 'Rendez-vous cliente' }).props.accessibilityState).toEqual({ selected: true });
     expect(view.getByRole('tab', { name: 'Rendez-vous personnel' }).props.accessibilityState).toEqual({ selected: false });
-    expect(view.getByText('NOUVEAU RENDEZ-VOUS')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Nouveau rendez-vous' })).toBeTruthy();
     expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
     expect(view.getByText('Prestations')).toBeTruthy();
     expect(view.getByText('Continuer')).toBeTruthy();
@@ -195,7 +195,9 @@ describe('creation type choice', () => {
     await switchTo(view, 'Rendez-vous personnel');
 
     expect(view.getByTestId('calendar-block-form')).toBeTruthy();
-    expect(view.getByText('CRÉNEAU PERSONNEL')).toBeTruthy();
+    // Same header as the Cliente step: « Annuler » leading, one title.
+    expect(view.getByRole('header', { name: 'Indisponible' })).toBeTruthy();
+    expect(view.queryByText('CRÉNEAU PERSONNEL')).toBeNull();
     expect(view.getAllByText('Indisponible').length).toBeGreaterThan(0);
     expect(view.getByText('Bloquer le créneau')).toBeTruthy();
     // Every client / service / pricing control is gone.
@@ -217,15 +219,18 @@ describe('creation type choice', () => {
 
     expect(timeOf(view, 'calendar-block-start')).toBe('14:30');
     expect(timeOf(view, 'calendar-block-end')).toBe('15:00');
-    expect(view.getByLabelText('Indisponible, Mardi 25 août')).toBeTruthy();
+    expect(view.getByTestId('calendar-block-date-value').props.children).toBe('Mar. 25 août');
   });
 
   it('is fully labelled for assistive technologies', async () => {
     const view = await renderCreation();
     await switchTo(view, 'Rendez-vous personnel');
 
-    expect(view.getByRole('button', { name: 'Heure de début' })).toBeTruthy();
-    expect(view.getByRole('button', { name: 'Heure de fin' })).toBeTruthy();
+    // Date is information, never an action; Début / Fin are the two buttons.
+    const date = view.getByLabelText('Date, mardi 25 août');
+    expect(date.props.accessibilityRole).toBeUndefined();
+    expect(view.getByRole('button', { name: 'Début, 14 heures 30' })).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Fin, 15 heures' })).toBeTruthy();
     expect(view.getByText('Motif')).toBeTruthy();
     expect(view.getAllByRole('radio').map((chip) => chip.props.accessibilityLabel)).toEqual([
       'Pause',
@@ -320,13 +325,13 @@ describe('blocking a slot', () => {
     const view = await renderCreation(database);
     await switchTo(view, 'Rendez-vous personnel');
 
-    await press(view, view.getByRole('button', { name: 'Heure de début' }));
+    await press(view, view.getByTestId('calendar-block-start'));
     await settleWheelOn(view, 'calendar-block-start-wheel-hour', '10');
     await settleWheelOn(view, 'calendar-block-start-wheel-minute', '10');
     expect(timeOf(view, 'calendar-block-start')).toBe('10:10');
     expect(timeOf(view, 'calendar-block-end')).toBe('10:40');
 
-    await press(view, view.getByRole('button', { name: 'Heure de fin' }));
+    await press(view, view.getByTestId('calendar-block-end'));
     await settleWheelOn(view, 'calendar-block-end-wheel-hour', '11');
     await settleWheelOn(view, 'calendar-block-end-wheel-minute', '25');
     await press(view, view.getByTestId('calendar-block-time-done'));
@@ -346,7 +351,7 @@ describe('blocking a slot', () => {
     await switchTo(view, 'Rendez-vous personnel');
     await press(view, view.getByRole('radio', { name: 'Pause' }));
 
-    await press(view, view.getByRole('button', { name: 'Heure de fin' }));
+    await press(view, view.getByTestId('calendar-block-end'));
     await settleWheelOn(view, 'calendar-block-end-wheel-hour', '13');
 
     expect(view.getByText("L'heure de fin doit être après l'heure de début.")).toBeTruthy();
