@@ -602,6 +602,129 @@ describe("ServiceEditorScreen", () => {
     expect(view.getAllByText("Nouvelle phase").length).toBe(1);
   });
 
+  it("edits a Service in the canonical sheet: « Annuler » + title, Informations, one « Enregistrer »", async () => {
+    const view = await renderEditor(
+      <ServiceEditorScreen
+        mode="existing"
+        serviceId="service-brushing-brushing-1"
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(view.getByTestId("edit-service"));
+    });
+
+    // Header: the action, never the name; no eyebrow, no detail controls.
+    expect(
+      view.getByRole("header", { name: "Modifier la prestation" }),
+    ).toBeTruthy();
+    expect(view.queryByRole("header", { name: "Brushing 1" })).toBeNull();
+    expect(view.queryByText("PRESTATION")).toBeNull();
+    expect(view.queryByLabelText("Actions de la prestation")).toBeNull();
+    expect(view.getAllByText("Annuler")).toHaveLength(1);
+    expect(view.getByTestId("cancel-service-edit")).toBeTruthy();
+
+    // Informations: the read-only type pill in the Service colours, then the fields.
+    const information = within(view.getByTestId("service-form-information"));
+    expect(information.getByText("Informations")).toBeTruthy();
+    expect(information.getByLabelText("Catégorie, Service")).toBeTruthy();
+    expect(
+      StyleSheet.flatten(
+        view.getByTestId("service-form-category-pill-dot").props.style,
+      ).backgroundColor,
+    ).toBe(serviceCategoryColors.SERVICE.accent);
+    expect(view.queryByText("Prestation simple")).toBeNull();
+    expect(information.getByLabelText("Nom de la prestation").props.value).toBe(
+      "Brushing 1",
+    );
+    expect(
+      information.getByLabelText("Prix de la prestation").props.value,
+    ).toBe("20,00");
+    expect(
+      information.getByLabelText("Durée de la prestation").props.value,
+    ).toBe("30");
+    expect(information.getByText("€")).toBeTruthy();
+    expect(information.getByText("min")).toBeTruthy();
+    // A Service has no pose: no pose field, no phases.
+    expect(view.queryByText("Temps de pose")).toBeNull();
+    expect(view.queryByText("Phases")).toBeNull();
+    // No management actions and no pictogram in the form.
+    expect(view.queryByText(/Désactiver|Supprimer/)).toBeNull();
+    expect(
+      view.queryByTestId("service-family-icon", {
+        includeHiddenElements: true,
+      }),
+    ).toBeNull();
+
+    // ONE footer action: short visible label, explicit spoken label.
+    const save = view.getByTestId("save-service");
+    expect(within(save).getByText("Enregistrer")).toBeTruthy();
+    expect(save.props.accessibilityLabel).toBe(
+      "Enregistrer les modifications de la prestation",
+    );
+    expect(view.queryByText("Enregistrer les modifications")).toBeNull();
+
+    // Validation still gates the same save.
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText("Nom de la prestation"), "  ");
+    });
+    expect(save.props.accessibilityState).toMatchObject({ disabled: true });
+    await act(async () => {
+      fireEvent.changeText(
+        view.getByLabelText("Nom de la prestation"),
+        "Brushing express",
+      );
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId("save-service"));
+    });
+    expect(view.getByTestId("managed-service").props.children).toContain(
+      ":Brushing express:SERVICE:20:",
+    );
+    // Success returns to the details.
+    expect(view.getByRole("header", { name: "Brushing express" })).toBeTruthy();
+  });
+
+  it("edits a Technique with its type pill and its phases — where Temps de pose lives", async () => {
+    const view = await renderEditor(
+      <ServiceEditorScreen
+        mode="existing"
+        serviceId="technique-balayage-balayage-1"
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(view.getByTestId("edit-service"));
+    });
+
+    expect(
+      view.getByRole("header", { name: "Modifier la prestation" }),
+    ).toBeTruthy();
+    expect(view.getByLabelText("Catégorie, Technique")).toBeTruthy();
+    expect(
+      StyleSheet.flatten(
+        view.getByTestId("service-form-category-pill-dot").props.style,
+      ).backgroundColor,
+    ).toBe(serviceCategoryColors.TECHNIQUE.accent);
+    expect(view.getByLabelText("Nom de la prestation").props.value).toBe(
+      "Balayage 1",
+    );
+    // Timing is the ordered phases (the processing one included), never a single duration.
+    expect(view.queryByLabelText("Durée de la prestation")).toBeNull();
+    expect(view.getByText("Phases")).toBeTruthy();
+    expect(view.getAllByText("Temps de pose").length).toBeGreaterThanOrEqual(1);
+
+    // Cancel discards the draft and returns to the details.
+    await act(async () => {
+      fireEvent.changeText(
+        view.getByLabelText("Nom de la prestation"),
+        "Autre",
+      );
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId("cancel-service-edit"));
+    });
+    expect(view.getByRole("header", { name: "Balayage 1" })).toBeTruthy();
+  });
+
   it("hydrates an existing Service and edits it without changing stable identity", async () => {
     const view = await renderEditor(
       <ServiceEditorScreen

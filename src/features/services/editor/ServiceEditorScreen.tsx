@@ -7,7 +7,10 @@
 //   ONE grouped Informations surface (Durée, Temps de pose only when there is
 //   one), the ordered phases of a Technique, and the sticky « Modifier la
 //   prestation ». Désactiver / Réactiver and Supprimer live in « ••• »;
-// - existing edit mode: the SAME form hydrated with current values.
+// - existing edit mode: the SAME form hydrated with current values, under the
+//   canonical « Annuler » + « Modifier la prestation » header, one
+//   « Informations » section headed by the read-only Service / Technique pill,
+//   and ONE sticky « Enregistrer ».
 //
 // Durations come from the catalogue presentation helpers; the details never
 // compute timing of their own. Deactivation and deletion keep the shared
@@ -51,6 +54,7 @@ import {
 import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetActionBar } from "@/shared/ui/SheetActionBar";
+import { SheetEditingHeader } from "@/shared/ui/SheetEditingHeader";
 import { SheetHeader } from "@/shared/ui/SheetHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
 import { StatePill, statePillTones } from "@/shared/ui/StatePill";
@@ -173,9 +177,6 @@ export function ServiceEditorScreen({
   }
 
   const validation = values ? validateServiceForm(values) : undefined;
-  const title =
-    mode === "create" ? "Ajouter une prestation" : (service?.name ?? "");
-  const closeLabel = mode === "create" || editing ? "Annuler" : "Fermer";
 
   const close = () => {
     if (mode === "existing" && editing && service) {
@@ -333,13 +334,23 @@ export function ServiceEditorScreen({
             title={service.name}
           />
         </View>
+      ) : mode === "existing" ? (
+        // Editing sheet: the canonical « Annuler » + title header, the ONE
+        // Cancel of the sheet (back to the details, draft discarded).
+        <View style={styles.headerZone}>
+          <SheetEditingHeader
+            cancelTestID="cancel-service-edit"
+            onCancel={close}
+            title="Modifier la prestation"
+          />
+        </View>
       ) : (
         <View style={styles.headerZone}>
           <SheetHeader
-            action={{ label: closeLabel, onPress: close }}
+            action={{ label: "Annuler", onPress: close }}
             divider
-            eyebrow={mode === "create" ? "NOUVELLE PRESTATION" : "PRESTATION"}
-            title={title}
+            eyebrow="NOUVELLE PRESTATION"
+            title="Ajouter une prestation"
             titleNumberOfLines={1}
           />
         </View>
@@ -386,25 +397,17 @@ export function ServiceEditorScreen({
       ) : null}
 
       {values && editing && (
-        <SheetActionBar direction="row">
-          {mode === "existing" && (
-            <AppButton
-              onPress={close}
-              style={styles.secondaryButton}
-              title="Annuler"
-              variant="secondary"
-            />
-          )}
+        <SheetActionBar>
           <AppButton
+            accessibilityLabel={
+              mode === "create"
+                ? undefined
+                : "Enregistrer les modifications de la prestation"
+            }
             disabled={!validation?.valid}
             onPress={save}
-            style={styles.primaryButton}
             testID="save-service"
-            title={
-              mode === "create"
-                ? "Ajouter la prestation"
-                : "Enregistrer les modifications"
-            }
+            title={mode === "create" ? "Ajouter la prestation" : "Enregistrer"}
           />
         </SheetActionBar>
       )}
@@ -581,54 +584,69 @@ function ServiceForm({
       contentContainerStyle={styles.formContent}
       style={styles.scroll}
     >
-      <View style={styles.kindLabel}>
-        <AppText variant="metadata" style={styles.kindLabelText}>
-          {values.type === "SERVICE"
-            ? "Prestation simple"
-            : "Prestation technique"}
-        </AppText>
-      </View>
-      <TextField
-        accessibilityLabel="Nom de la prestation"
-        error={
-          attempted && !validation.nameValid ? "Le nom est requis." : undefined
-        }
-        label="Nom"
-        onChangeText={onChangeName}
-        placeholder="Ex. Coupe"
-        value={values.name}
-      />
-      <TextField
-        accessibilityLabel="Prix de la prestation"
-        error={
-          attempted && !validation.priceValid
-            ? "Indiquez un prix valide, positif ou nul."
-            : undefined
-        }
-        keyboardType="decimal-pad"
-        label="Prix"
-        onChangeText={onChangePrice}
-        placeholder="42,00"
-        suffix="€"
-        value={values.price}
-      />
-
-      {values.type === "SERVICE" ? (
+      <View style={styles.formSection} testID="service-form-information">
+        {/* The type is chosen at creation and never edited: a read-only pill in
+          the validated category colours, next to the section title. */}
+        <SectionHeader title="Informations">
+          <StatePill
+            accessibilityLabel={`Catégorie, ${serviceCategoryLabels[values.type]}`}
+            colors={{
+              fill: serviceCategoryColors[values.type].tint,
+              dot: serviceCategoryColors[values.type].accent,
+              text: serviceCategoryColors[values.type].strong,
+            }}
+            label={serviceCategoryLabels[values.type]}
+            testID="service-form-category-pill"
+          />
+        </SectionHeader>
         <TextField
-          accessibilityLabel="Durée de la prestation"
+          accessibilityLabel="Nom de la prestation"
           error={
-            attempted && !validation.simpleDurationValid
-              ? "Indiquez une durée positive en minutes."
+            attempted && !validation.nameValid
+              ? "Le nom est requis."
               : undefined
           }
-          keyboardType="number-pad"
-          label="Durée"
-          onChangeText={onChangeSimpleDuration}
-          placeholder="45"
-          suffix="min"
-          value={values.simpleDurationMinutes}
+          label="Nom"
+          onChangeText={onChangeName}
+          placeholder="Ex. Coupe"
+          value={values.name}
         />
-      ) : (
+        <TextField
+          accessibilityLabel="Prix de la prestation"
+          error={
+            attempted && !validation.priceValid
+              ? "Indiquez un prix valide, positif ou nul."
+              : undefined
+          }
+          keyboardType="decimal-pad"
+          label="Prix"
+          onChangeText={onChangePrice}
+          placeholder="42,00"
+          suffix="€"
+          value={values.price}
+        />
+
+        {values.type === "SERVICE" && (
+          <TextField
+            accessibilityLabel="Durée de la prestation"
+            error={
+              attempted && !validation.simpleDurationValid
+                ? "Indiquez une durée positive en minutes."
+                : undefined
+            }
+            keyboardType="number-pad"
+            label="Durée"
+            onChangeText={onChangeSimpleDuration}
+            placeholder="45"
+            suffix="min"
+            value={values.simpleDurationMinutes}
+          />
+        )}
+      </View>
+
+      {/* A Technique's timing — Temps de pose included — is its ordered
+          phases; a Service has one duration and no pose. */}
+      {values.type === "TECHNIQUE" && (
         <View style={styles.phasesSection}>
           <SectionHeader count={values.phases.length} title="Phases" />
           <SortablePhaseEditor
@@ -845,20 +863,13 @@ const styles = StyleSheet.create({
   kindCopy: { flex: 1, gap: spacing.xs },
   kindDescription: { color: foregroundSoft, lineHeight: 18 },
   formContent: {
-    gap: spacing.base,
+    gap: spacing.xl,
     paddingBottom: spacing.xl,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
-  kindLabel: {
-    alignSelf: "flex-start",
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderRadius: radii.small,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  kindLabelText: { color: semanticColors.accent },
-  phasesSection: { gap: spacing.md, paddingTop: spacing.sm },
+  formSection: { gap: spacing.md },
+  phasesSection: { gap: spacing.md },
   formError: { color: semanticColors.foregroundSoft },
   readContent: {
     gap: spacing.lg,
@@ -895,8 +906,6 @@ const styles = StyleSheet.create({
   activeLabel: { color: semanticColors.accent },
   processingLabel: { color: peach.peach700 },
   phaseDuration: { fontVariant: ["tabular-nums"] },
-  secondaryButton: { flex: 1 },
-  primaryButton: { flex: 1.4 },
   notFound: {
     alignItems: "center",
     gap: spacing.md,
