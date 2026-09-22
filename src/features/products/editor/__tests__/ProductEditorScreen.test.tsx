@@ -631,7 +631,9 @@ describe("ProductEditorScreen", () => {
     expect(view.getByText("Masque réparateur 5 min")).toBeTruthy();
     expect(view.getByText("Redken")).toBeTruthy();
     expect(view.getByText("3474637152000")).toBeTruthy();
-    expect(view.queryByTestId("product-detail-image")).toBeNull();
+    // No photo: the catalogue's placeholder, never an empty slot.
+    expect(view.getByTestId("product-detail-image")).toBeTruthy();
+    expect(view.queryByTestId("product-detail-image-source")).toBeNull();
     expect(view.getByText("Actif")).toBeTruthy();
     expect(view.getByLabelText("Produit actif")).toBeTruthy();
     expect(view.getByText("Informations")).toBeTruthy();
@@ -661,6 +663,35 @@ describe("ProductEditorScreen", () => {
     );
     expect(view.getByText("29,00 €")).toBeTruthy();
     expect(view.getByText("7")).toBeTruthy();
+  });
+
+  it("shows the catalogue image as a compact, read-only thumbnail beside price and status", async () => {
+    const view = await renderEditor(<SeededImageEditor />);
+    await act(async () =>
+      fireEvent.press(view.getByTestId("open-seeded-image-product")),
+    );
+
+    const identity = within(view.getByTestId("product-identity"));
+    const image = identity.getByTestId("product-detail-image");
+    // The same Product.imageUri and component the catalogue row renders.
+    expect(identity.getByTestId("product-detail-image-source").props.source).toEqual({
+      uri: ORIGINAL_IMAGE_URI,
+    });
+    expect(image.props.accessibilityLabel).toBe("Photo de Masque réparateur 5 min");
+    expect(image.props.accessibilityRole).toBe("image");
+    const imageStyle = StyleSheet.flatten(image.props.style);
+    expect(imageStyle.width).toBe(imageStyle.height);
+    expect(imageStyle.height).toBeLessThanOrEqual(100);
+    expect(identity.getByTestId("product-price")).toBeTruthy();
+    expect(identity.getByLabelText("Produit actif")).toBeTruthy();
+    // Read-only: no photo editing from the details.
+    expect(view.queryByTestId("product-photo-tile")).toBeNull();
+    expect(view.queryByText("Ajouter une photo")).toBeNull();
+    expect(view.queryByLabelText("Modifier la photo")).toBeNull();
+    expect(view.queryByTestId("product-photo-source-sheet")).toBeNull();
+    // Photo editing stays in « Modifier le produit ».
+    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    expect(view.getByTestId("product-photo-tile")).toBeTruthy();
   });
 
   it("keeps an image replacement in the edit draft until Save and discards it on Cancel", async () => {
@@ -866,7 +897,8 @@ describe("ProductEditorScreen", () => {
     await act(async () => fireEvent.press(view.getByTestId("save-product")));
 
     expect(view.getByTestId("managed-image").props.children).toBe("-");
-    expect(view.queryByTestId("product-detail-image")).toBeNull();
+    expect(view.queryByTestId("product-detail-image-source")).toBeNull();
+    expect(view.getByLabelText("Aucune photo pour Masque réparateur 5 min")).toBeTruthy();
     expect(view.getByText("Actif")).toBeTruthy();
     expect(view.getByText("50,00 €")).toBeTruthy();
     expect(view.getByText("Informations")).toBeTruthy();

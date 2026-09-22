@@ -577,36 +577,37 @@ function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
       style={styles.scroll}
       testID="product-read-view"
     >
-      {product.imageUri && (
+      {/* Identity: the catalogue's image (or its placeholder), read-only —
+          the photo is changed in « Modifier le produit ». */}
+      <View style={styles.productIdentity} testID="product-identity">
         <ProductImage
           imageUri={product.imageUri}
           productName={product.name}
           testID="product-detail-image"
           variant="detail"
         />
-      )}
-
-      <View style={styles.productSummary}>
-        <AppText
-          accessibilityLabel={`Prix, ${price}`}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
-          numberOfLines={1}
-          selectable
-          style={styles.priceValue}
-          testID="product-price"
-          variant="summaryValue"
-        >
-          {price}
-        </AppText>
-        <ProductStatePill
-          accessibilityLabel={
-            product.active ? "Produit actif" : "Produit inactif"
-          }
-          label={product.active ? "Actif" : "Inactif"}
-          testID="product-status-pill"
-          tone={product.active ? "positive" : "neutral"}
-        />
+        <View style={styles.productSummary}>
+          <AppText
+            accessibilityLabel={`Prix, ${price}`}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            numberOfLines={1}
+            selectable
+            style={styles.priceValue}
+            testID="product-price"
+            variant="summaryValue"
+          >
+            {price}
+          </AppText>
+          <ProductStatePill
+            accessibilityLabel={
+              product.active ? "Produit actif" : "Produit inactif"
+            }
+            label={product.active ? "Actif" : "Inactif"}
+            testID="product-status-pill"
+            tone={product.active ? "positive" : "neutral"}
+          />
+        </View>
       </View>
 
       {informationRows.length > 0 && (
@@ -722,12 +723,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
   },
-  productSummary: {
+  productIdentity: {
     alignItems: "center",
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.md,
+    gap: spacing.base,
   },
+  productSummary: { flex: 1, gap: spacing.sm, minWidth: 0 },
   priceValue: {
     color: semanticColors.foreground,
     flexShrink: 1,

@@ -4,6 +4,8 @@
 // (docs/design/DESIGN_OVERRIDES.md §11 and §13).
 //
 // - photographs: `cover` thumbnail, `contain` detail/form, lavender surface;
+// - the details show a compact square (recognition, not merchandising) on the
+//   catalogue's lavender surface, so list → details reads as ONE identity;
 // - isolated (transparent PNG) images: a "sticker" — a clean white contour
 //   drawn from offset copies of the silhouette, plus a soft navy shadow — so
 //   the Product reads as a cut-out object resting on the surface;
@@ -34,20 +36,19 @@ interface ProductImageProps {
 }
 
 /**
- * Media surface heights. Details are deliberately tall (near square on a
- * phone width) so a typical bottle fills most of the box with `contain`; the
- * form tile stays balanced (≈ 16:9) so it never dominates the edit form, and
- * the catalog thumbnail stays compact.
+ * Media surface heights. The details square sits beside the price; the form
+ * tile stays balanced (≈ 16:9) so it never dominates the edit form, and the
+ * catalog thumbnail stays compact.
  */
 export const productImageHeights = {
   thumbnail: 52,
   form: 200,
-  detail: 320,
+  detail: 96,
 } as const satisfies Record<ProductImageVariant, number>;
 
 const symbolSizes: Record<ProductImageVariant, number> = {
   thumbnail: 20,
-  detail: 36,
+  detail: 32,
   form: 28,
 };
 
@@ -96,11 +97,11 @@ const stickerGeometry: Record<ProductImageVariant, StickerGeometry> = {
     shadowBlur: 5,
   },
   detail: {
-    outline: 4,
+    outline: 2,
     directions: fullRing,
-    inset: spacing.base,
-    shadowOffsetY: 8,
-    shadowBlur: 6,
+    inset: spacing.sm,
+    shadowOffsetY: 3,
+    shadowBlur: 2,
   },
 };
 
@@ -227,10 +228,10 @@ const variantStyles = StyleSheet.create({
     width: productImageHeights.thumbnail,
   },
   detail: {
-    backgroundColor: semanticColors.surfaceMedia,
+    backgroundColor: semanticColors.surfaceLavender,
     borderRadius: radii.large,
     height: productImageHeights.detail,
-    width: '100%',
+    width: productImageHeights.detail,
   },
   form: {
     backgroundColor: semanticColors.surfaceMedia,
