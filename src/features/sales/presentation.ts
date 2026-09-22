@@ -32,6 +32,11 @@ export function formatSaleQuantity(quantity: number): string {
   return `×${quantity}`;
 }
 
+/** `0 produit`, `1 produit`, `3 produits` — total units of a Sale draft. */
+export function formatSaleUnitCount(count: number): string {
+  return `${count} ${count > 1 ? 'produits' : 'produit'}`;
+}
+
 const UNKNOWN_PRODUCT_LABEL = 'Un produit';
 
 /**

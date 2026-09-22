@@ -1,8 +1,10 @@
 // Souris — Sale line row
 //
-// One compact draft line: thumbnail, name, unit price, quiet stock hint, a
-// [−] n [+] quantity control bounded by current stock, the line subtotal, and
-// an explicit remove action. The row reads the LIVE Product for presentation
+// One draft line of « Produits ajoutés », drawn inside that section's
+// GroupedSurface (the surface owns the separators): thumbnail, name (two
+// lines at most), brand · category, quiet stock hint, the line total aligned
+// right, then a compact [−] n [+] control bounded by current stock and a
+// secondary remove action. The row reads the LIVE Product for presentation
 // only; the snapshot is taken at completion.
 
 import { SymbolView } from 'expo-symbols';
@@ -16,7 +18,6 @@ import { AppText } from '@/shared/ui/AppText';
 import {
   foregroundSoft,
   interaction,
-  lavender,
   radii,
   rose,
   semanticColors,
@@ -38,155 +39,160 @@ export function SaleLineRow({ line, product, onIncrement, onDecrement, onRemove 
   const canDecrement = line.quantity > 1;
   const overStock = product !== undefined && line.quantity > product.stockQuantity;
   const subtotal = product ? getSaleItemTotal({ unitPrice: product.price, quantity: line.quantity }) : 0;
+  const meta = product ? [product.brand, product.category].filter(Boolean).join(' · ') : '';
 
   return (
     <View style={styles.row} testID={`sale-line-${line.productId}`}>
-      <ProductImage
-        imageUri={product?.imageUri}
-        productName={product?.name}
-        testID={`sale-line-image-${line.productId}`}
-        variant="thumbnail"
-      />
-      <View style={styles.copy}>
-        <AppText variant="rowTitle" numberOfLines={1} style={styles.name}>
-          {name}
-        </AppText>
-        {product ? (
-          <AppText variant="metadata" numberOfLines={1} style={styles.unitPrice}>
-            {`${formatServicePrice(product.price)} / unité`}
+      <View style={styles.summary}>
+        <ProductImage
+          imageUri={product?.imageUri}
+          productName={product?.name}
+          testID={`sale-line-image-${line.productId}`}
+          variant="thumbnail"
+        />
+        <View style={styles.copy}>
+          <AppText variant="rowTitle" numberOfLines={2} style={styles.name}>
+            {name}
           </AppText>
-        ) : (
-          <AppText variant="metadata" numberOfLines={1} style={styles.warning}>
-            Ce produit n’est plus dans le catalogue.
-          </AppText>
-        )}
-        {product && (
-          <AppText
-            variant="metadata"
-            numberOfLines={1}
-            style={[styles.stock, overStock && styles.warning]}
-          >
-            {product.stockQuantity > 0 ? `Stock ${product.stockQuantity}` : 'Stock épuisé'}
-          </AppText>
-        )}
-        <View style={styles.controls}>
-          <View style={styles.stepper}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Retirer une unité de ${name}`}
-              accessibilityState={{ disabled: !canDecrement }}
-              disabled={!canDecrement}
-              hitSlop={spacing.xs}
-              onPress={onDecrement}
-              style={({ pressed }) => [
-                styles.stepButton,
-                !canDecrement && styles.stepButtonDisabled,
-                pressed && canDecrement && styles.stepButtonPressed,
-              ]}
-              testID={`sale-line-decrement-${line.productId}`}
-            >
+          {product ? (
+            <>
+              {meta.length > 0 && (
+                <AppText variant="metadata" numberOfLines={1} style={styles.meta}>
+                  {meta}
+                </AppText>
+              )}
               <AppText
-                variant="control"
-                style={[styles.stepGlyph, !canDecrement && styles.stepGlyphDisabled]}
+                variant="metadata"
+                numberOfLines={1}
+                style={[styles.meta, overStock && styles.warning]}
               >
-                −
+                {product.stockQuantity > 0 ? `Stock ${product.stockQuantity}` : 'Stock épuisé'}
+                {line.quantity > 1 ? ` · ${formatServicePrice(product.price)} / unité` : ''}
               </AppText>
-            </Pressable>
+            </>
+          ) : (
+            <AppText variant="metadata" numberOfLines={2} style={styles.warning}>
+              Ce produit n’est plus dans le catalogue.
+            </AppText>
+          )}
+        </View>
+        <AppText
+          variant="control"
+          style={styles.subtotal}
+          testID={`sale-line-total-${line.productId}`}
+        >
+          {product ? formatServicePrice(subtotal) : '—'}
+        </AppText>
+      </View>
+
+      <View style={styles.controls}>
+        <View style={styles.stepper}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Diminuer la quantité de ${name}`}
+            accessibilityState={{ disabled: !canDecrement }}
+            disabled={!canDecrement}
+            hitSlop={spacing.xs}
+            onPress={onDecrement}
+            style={({ pressed }) => [
+              styles.stepButton,
+              pressed && canDecrement && styles.stepButtonPressed,
+            ]}
+            testID={`sale-line-decrement-${line.productId}`}
+          >
             <AppText
               variant="control"
-              style={styles.quantity}
-              testID={`sale-line-quantity-${line.productId}`}
+              style={[styles.stepGlyph, !canDecrement && styles.stepGlyphDisabled]}
             >
-              {line.quantity}
+              −
             </AppText>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Ajouter une unité de ${name}`}
-              accessibilityState={{ disabled: !canIncrement }}
-              disabled={!canIncrement}
-              hitSlop={spacing.xs}
-              onPress={onIncrement}
-              style={({ pressed }) => [
-                styles.stepButton,
-                !canIncrement && styles.stepButtonDisabled,
-                pressed && canIncrement && styles.stepButtonPressed,
-              ]}
-              testID={`sale-line-increment-${line.productId}`}
-            >
-              <AppText
-                variant="control"
-                style={[styles.stepGlyph, !canIncrement && styles.stepGlyphDisabled]}
-              >
-                +
-              </AppText>
-            </Pressable>
-          </View>
+          </Pressable>
           <AppText
+            accessibilityLabel={`Quantité ${line.quantity}`}
             variant="control"
-            style={styles.subtotal}
-            testID={`sale-line-total-${line.productId}`}
+            style={styles.quantity}
+            testID={`sale-line-quantity-${line.productId}`}
           >
-            {product ? formatServicePrice(subtotal) : '—'}
+            {line.quantity}
           </AppText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Augmenter la quantité de ${name}`}
+            accessibilityState={{ disabled: !canIncrement }}
+            disabled={!canIncrement}
+            hitSlop={spacing.xs}
+            onPress={onIncrement}
+            style={({ pressed }) => [
+              styles.stepButton,
+              pressed && canIncrement && styles.stepButtonPressed,
+            ]}
+            testID={`sale-line-increment-${line.productId}`}
+          >
+            <AppText
+              variant="control"
+              style={[styles.stepGlyph, !canIncrement && styles.stepGlyphDisabled]}
+            >
+              +
+            </AppText>
+          </Pressable>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Retirer ${name} de la vente`}
+          hitSlop={spacing.sm}
+          onPress={onRemove}
+          style={({ pressed }) => [styles.removeButton, pressed && styles.removeButtonPressed]}
+          testID={`sale-line-remove-${line.productId}`}
+        >
+          <SymbolView
+            name={{ ios: 'trash', android: 'delete' }}
+            size={16}
+            tintColor={rose.rose600}
+          />
+        </Pressable>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Retirer ${name} de la vente`}
-        hitSlop={spacing.sm}
-        onPress={onRemove}
-        style={({ pressed }) => [styles.removeButton, pressed && styles.removeButtonPressed]}
-        testID={`sale-line-remove-${line.productId}`}
-      >
-        <SymbolView
-          name={{ ios: 'xmark', android: 'close' }}
-          size={14}
-          tintColor={semanticColors.foregroundSoft}
-        />
-      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
   },
+  summary: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md },
   copy: { flex: 1, gap: 2, minWidth: 0 },
-  name: { color: lavender.lav700 },
-  unitPrice: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  stock: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
+  name: { color: semanticColors.foreground },
+  meta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   warning: { color: rose.rose600 },
+  subtotal: {
+    color: semanticColors.foreground,
+    flexShrink: 0,
+    fontVariant: ['tabular-nums'],
+  },
   controls: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.sm,
   },
   stepper: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surfaceElevated,
+    backgroundColor: semanticColors.surfaceLavender,
     borderRadius: radii.medium,
     flexDirection: 'row',
     gap: spacing.xs,
-    padding: spacing.xs,
+    padding: 2,
   },
   stepButton: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavenderStrong,
     borderRadius: radii.small,
     height: 36,
     justifyContent: 'center',
-    width: 40,
+    width: 44,
   },
-  stepButtonDisabled: { backgroundColor: semanticColors.surface },
   stepButtonPressed: {
-    backgroundColor: semanticColors.borderLavender,
+    backgroundColor: semanticColors.surfaceLavenderStrong,
     transform: [{ scale: interaction.pressedScale }],
   },
   stepGlyph: { color: semanticColors.accent, fontSize: 18, lineHeight: 21 },
@@ -194,20 +200,18 @@ const styles = StyleSheet.create({
   quantity: {
     color: semanticColors.foreground,
     fontVariant: ['tabular-nums'],
-    minWidth: 32,
+    minWidth: 28,
     textAlign: 'center',
   },
-  subtotal: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   removeButton: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
     borderRadius: radii.pill,
-    height: 32,
+    height: 36,
     justifyContent: 'center',
-    width: 32,
+    width: 36,
   },
   removeButtonPressed: {
-    backgroundColor: semanticColors.surfaceLavenderStrong,
+    backgroundColor: semanticColors.surfaceRose,
     transform: [{ scale: interaction.pressedScale }],
   },
 });

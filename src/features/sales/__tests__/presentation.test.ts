@@ -4,6 +4,7 @@ import {
   describeSaleCompletionIssue,
   formatSaleDate,
   formatSaleQuantity,
+  formatSaleUnitCount,
   getClientSales,
 } from '../presentation';
 
@@ -29,6 +30,12 @@ describe('Sale presentation', () => {
   it('formats dates and quantities in the compact French style', () => {
     expect(formatSaleDate(new Date(2026, 8, 11, 10))).toBe('11 sept. 2026');
     expect(formatSaleQuantity(2)).toBe('×2');
+  });
+
+  it('counts draft units with French pluralisation (0 and 1 are singular)', () => {
+    expect(formatSaleUnitCount(0)).toBe('0 produit');
+    expect(formatSaleUnitCount(1)).toBe('1 produit');
+    expect(formatSaleUnitCount(3)).toBe('3 produits');
   });
 
   it('explains completion issues concisely', () => {

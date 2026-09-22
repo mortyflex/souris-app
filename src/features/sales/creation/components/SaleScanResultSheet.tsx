@@ -11,10 +11,11 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import type { Product } from '@/domain/products';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { foregroundSoft, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
-import { SaleProductRow } from './SaleProductRow';
+import { SALE_ROW_SEPARATOR_INSET, SaleProductRow } from './SaleProductRow';
 
 export type SaleScanResult =
   | { readonly kind: 'unknown'; readonly barcode: string }
@@ -69,14 +70,18 @@ export function SaleScanResultSheet({
                 showsVerticalScrollIndicator={false}
                 style={styles.matches}
               >
-                {result.matches.map((product) => (
-                  <SaleProductRow
-                    draftQuantity={draftQuantityOf(product.id)}
-                    key={product.id}
-                    onPress={() => onSelectProduct(product)}
-                    product={product}
-                  />
-                ))}
+                <GroupedSurface>
+                  {result.matches.map((product, index) => (
+                    <View key={product.id}>
+                      {index > 0 && <GroupedSeparator inset={SALE_ROW_SEPARATOR_INSET} />}
+                      <SaleProductRow
+                        draftQuantity={draftQuantityOf(product.id)}
+                        onPress={() => onSelectProduct(product)}
+                        product={product}
+                      />
+                    </View>
+                  ))}
+                </GroupedSurface>
               </ScrollView>
             </>
           ) : (

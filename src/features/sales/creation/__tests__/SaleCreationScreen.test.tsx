@@ -33,6 +33,13 @@ jest.mock('expo-router/react-navigation', () => ({
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
+// Rendered as a marker so the Client row can prove it has (or lacks) a chevron.
+jest.mock('@/shared/ui/DisclosureChevron', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
+  return { DisclosureChevron: () => React.createElement(View, { testID: 'disclosure-chevron' }) };
+});
+
 jest.mock('expo-image', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -209,6 +216,20 @@ function renderSaleFromAppointment(initialAppointmentId: string, initialClientId
   );
 }
 
+const CLIENT_ROW = 'sale-client-row';
+
+function clientValue(view: Awaited<ReturnType<typeof render>>) {
+  return view.getByTestId('sale-client-row-value').props.children;
+}
+
+async function chooseClient(view: Awaited<ReturnType<typeof render>>, query: string, name: string) {
+  await press(view, CLIENT_ROW);
+  await act(async () => {
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), query);
+  });
+  await act(async () => fireEvent.press(view.getByText(name)));
+}
+
 async function press(view: Awaited<ReturnType<typeof render>>, testID: string) {
   await act(async () => fireEvent.press(view.getByTestId(testID)));
 }
@@ -240,33 +261,35 @@ describe('SaleCreationScreen', () => {
     warningHaptic.mockClear();
   });
 
-  it('starts empty, without Client, with completion disabled', async () => {
+  it('starts a Produits sale with an editable Client row to fill, an empty cart and completion disabled', async () => {
     const view = await renderSale();
 
     expect(view.getByText('Nouvelle vente')).toBeTruthy();
-    expect(view.getByText('Aucune cliente')).toBeTruthy();
+    const row = view.getByTestId(CLIENT_ROW);
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(row.props.accessibilityLabel).toBe('Cliente, Choisir une cliente');
+    expect(within(row).getByTestId('disclosure-chevron')).toBeTruthy();
+    expect(view.queryByText('Aucune cliente')).toBeNull();
+    expect(view.queryByText('Vente de passage, sans historique cliente.')).toBeNull();
+    expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
+    expect(view.getByText('Produits ajoutés')).toBeTruthy();
     expect(view.getByText('Aucun produit ajouté')).toBeTruthy();
+    expect(view.getByText('Ajouter un produit')).toBeTruthy();
+    expect(view.getByTestId('sale-unit-count').props.children).toBe('0 produit · ');
+    expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(0));
     expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(true);
-    expect(view.queryByTestId('sale-total')).toBeNull();
   });
 
-  it('hydrates a supplied Client on the first render, still changeable and removable', async () => {
+  it('hydrates a supplied Client (Client Profile) on the first render, replaceable but never removable', async () => {
     const view = await renderSale('client-agenda-camille');
 
-    const clientSurface = within(view.getByTestId('sale-client'));
-    expect(clientSurface.getByText('Camille Durand')).toBeTruthy();
-    expect(clientSurface.queryByText('Aucune cliente')).toBeNull();
-    expect(view.getByLabelText('Modifier la cliente')).toBeTruthy();
+    expect(clientValue(view)).toBe('Camille Durand');
+    expect(view.getByTestId(CLIENT_ROW).props.accessibilityLabel).toBe('Cliente, Camille Durand');
 
-    await act(async () => fireEvent.press(view.getByLabelText('Modifier la cliente')));
-    await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa');
-    });
-    await act(async () => fireEvent.press(view.getByText('Léa Martin')));
-    expect(within(view.getByTestId('sale-client')).getByText('Léa Martin')).toBeTruthy();
-
-    await act(async () => fireEvent.press(view.getByLabelText('Retirer la cliente')));
-    expect(view.getByText('Aucune cliente')).toBeTruthy();
+    await chooseClient(view, 'Léa', 'Léa Martin');
+    expect(clientValue(view)).toBe('Léa Martin');
+    expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
+    expect(view.queryByText('Retirer')).toBeNull();
   });
 
   it('attaches the supplied Client to the completed Sale', async () => {
@@ -282,6 +305,34 @@ describe('SaleCreationScreen', () => {
       'client-agenda-camille|Masque réparateur 5 min:50:1',
     );
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('fixes the Appointment Client: read-only row, no chevron, no picker, no removal', async () => {
+    const view = await renderSaleFromAppointment('agenda-sofia');
+
+    const row = view.getByTestId(CLIENT_ROW);
+    expect(clientValue(view)).toBe('Sofia Petit');
+    expect(row.props.accessibilityLabel).toBe('Cliente, Sofia Petit');
+    expect(row.props.accessibilityRole).toBeUndefined();
+    expect(within(row).queryByTestId('disclosure-chevron')).toBeNull();
+    expect(within(view.getByTestId('sale-client')).getByText('Liée au rendez-vous')).toBeTruthy();
+    expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
+
+    await press(view, CLIENT_ROW);
+    expect(view.queryByPlaceholderText('Rechercher une cliente')).toBeNull();
+    expect(clientValue(view)).toBe('Sofia Petit');
+
+    // The Client requirement is already met: only the empty cart blocks validation.
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(true);
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('takes the Client from the Appointment itself, never from a different route Client', async () => {
+    const view = await renderSaleFromAppointment('agenda-sofia', 'client-agenda-camille');
+    expect(clientValue(view)).toBe('Sofia Petit');
   });
 
   it('links a Sale opened from Appointment Details to that Appointment', async () => {
@@ -304,6 +355,8 @@ describe('SaleCreationScreen', () => {
 
   it('drops an unknown Appointment id instead of inventing a link', async () => {
     const view = await renderSaleFromAppointment('appointment-unknown');
+    // No Appointment: the Client is the editable preselection.
+    expect(view.getByTestId(CLIENT_ROW).props.accessibilityRole).toBe('button');
     await press(view, 'stock-masque-2');
     await search(view, 'masque');
     await press(view, `sale-product-${MASQUE_ID}`);
@@ -317,6 +370,7 @@ describe('SaleCreationScreen', () => {
 
   it('keeps a Sale opened from Produits standalone and records its payment', async () => {
     const view = await renderSale();
+    await chooseClient(view, 'Camille', 'Camille Durand');
     await press(view, 'stock-masque-2');
     await search(view, 'masque');
     await press(view, `sale-product-${MASQUE_ID}`);
@@ -338,7 +392,7 @@ describe('SaleCreationScreen', () => {
   });
 
   it('records a mixed card + cash payment and lets the received total differ', async () => {
-    const view = await renderSale();
+    const view = await renderSale('client-agenda-camille');
     await press(view, 'stock-masque-2');
     await search(view, 'masque');
     await press(view, `sale-product-${MASQUE_ID}`);
@@ -352,7 +406,7 @@ describe('SaleCreationScreen', () => {
   });
 
   it('lets the payment step be cancelled without completing the Sale', async () => {
-    const view = await renderSale();
+    const view = await renderSale('client-agenda-camille');
     await press(view, 'stock-masque-2');
     await search(view, 'masque');
     await press(view, `sale-product-${MASQUE_ID}`);
@@ -370,29 +424,33 @@ describe('SaleCreationScreen', () => {
   it('falls back to no Client when the supplied id is unknown, without inventing data', async () => {
     const view = await renderSale('client-missing');
 
-    expect(view.getByText('Aucune cliente')).toBeTruthy();
-    expect(view.getByLabelText('Choisir une cliente')).toBeTruthy();
+    expect(clientValue(view)).toBe('Choisir une cliente');
     expect(view.queryByText('Cliente inconnue')).toBeNull();
   });
 
-  it('chooses, changes and removes the optional Client through the shared picker', async () => {
+  it('requires a Client for a Produits sale: chosen, then replaced, through the whole row', async () => {
     const view = await renderSale();
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
 
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir une cliente')));
-    await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Camille');
-    });
-    await act(async () => fireEvent.press(view.getByText('Camille Durand')));
+    // A product alone is not enough: no walk-in sale.
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(true);
+    await press(view, 'validate-sale');
+    expect(view.queryByTestId('sale-payment-sheet')).toBeNull();
 
-    expect(within(view.getByTestId('sale-client')).getByText('Camille Durand')).toBeTruthy();
-    expect(view.getByLabelText('Modifier la cliente')).toBeTruthy();
+    await chooseClient(view, 'Camille', 'Camille Durand');
+    expect(clientValue(view)).toBe('Camille Durand');
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(false);
 
-    await act(async () => fireEvent.press(view.getByLabelText('Retirer la cliente')));
-    expect(view.getByText('Aucune cliente')).toBeTruthy();
+    await chooseClient(view, 'Léa', 'Léa Martin');
+    expect(clientValue(view)).toBe('Léa Martin');
+    expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(false);
   });
 
   it('adds a searched Product immediately, increments on second tap, and bounds by stock', async () => {
-    const view = await renderSale();
+    const view = await renderSale('client-agenda-camille');
     await press(view, 'stock-masque-2');
 
     await search(view, 'masque');
@@ -406,7 +464,7 @@ describe('SaleCreationScreen', () => {
     await press(view, `sale-product-${MASQUE_ID}`);
     expect(view.getAllByTestId(/^sale-line-[^-]+$/)).toHaveLength(1);
     expect(view.getByTestId(`sale-line-quantity-${MASQUE_ID}`).props.children).toBe(2);
-    expect(view.getByTestId(`sale-product-count-${MASQUE_ID}`)).toBeTruthy();
+    expect(view.getByTestId(`sale-product-added-${MASQUE_ID}`)).toBeTruthy();
     expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(100));
 
     // Stock is 2: a third tap is refused with a clear notice, nothing changes.
@@ -465,11 +523,7 @@ describe('SaleCreationScreen', () => {
     await press(view, 'stock-masque-2');
     await press(view, 'stock-concentrate-3');
 
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir une cliente')));
-    await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Camille');
-    });
-    await act(async () => fireEvent.press(view.getByText('Camille Durand')));
+    await chooseClient(view, 'Camille', 'Camille Durand');
 
     await search(view, 'masque');
     await press(view, `sale-product-${MASQUE_ID}`);
@@ -489,19 +543,6 @@ describe('SaleCreationScreen', () => {
     expect(view.getByTestId('concentrate-stock').props.children).toBe(1);
     expect(successHaptic).toHaveBeenCalledTimes(1);
     expect(mockBack).toHaveBeenCalledTimes(1);
-  });
-
-  it('completes a walk-in Sale without Client', async () => {
-    const view = await renderSale();
-    await press(view, 'stock-masque-2');
-    await search(view, 'masque');
-    await press(view, `sale-product-${MASQUE_ID}`);
-
-    await press(view, 'validate-sale');
-    await payAndConfirm(view, '50');
-
-    expect(view.getByTestId('last-sale').props.children).toBe('walk-in|Masque réparateur 5 min:50:1');
-    expect(view.getByTestId('masque-stock').props.children).toBe(1);
   });
 
   it('explains insufficient stock when the catalog changed while drafting and blocks completion', async () => {
@@ -655,10 +696,10 @@ describe('SaleCreationScreen', () => {
   it('never attaches an archived Client: no preselection from a stale route, never offered by the picker', async () => {
     const view = await renderSale('client-agenda-camille', createSeedWithArchivedCamille);
 
-    expect(view.getByText('Aucune cliente')).toBeTruthy();
+    expect(clientValue(view)).toBe('Choisir une cliente');
     expect(view.queryByText('Camille Durand')).toBeNull();
 
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir une cliente')));
+    await press(view, CLIENT_ROW);
     await act(async () => {
       fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Camille');
     });
@@ -672,9 +713,9 @@ describe('SaleCreationScreen', () => {
     await press(view, 'stock-masque-2');
     await search(view, 'masque');
     await press(view, `sale-product-${MASQUE_ID}`);
-    expect(view.getByText('Aucune cliente')).toBeTruthy();
+    expect(clientValue(view)).toBe('Choisir une cliente');
 
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir une cliente')));
+    await press(view, CLIENT_ROW);
 
     expect(view.getByText('CLIENTE')).toBeTruthy();
     expect(view.getByRole('header', { name: 'Choisir la cliente' })).toBeTruthy();
@@ -697,8 +738,8 @@ describe('SaleCreationScreen', () => {
 
     await act(async () => fireEvent.press(view.getByText('Alice Aubert')));
 
-    expect(within(view.getByTestId('sale-client')).getByText('Alice Aubert')).toBeTruthy();
-    expect(view.getByLabelText('Modifier la cliente')).toBeTruthy();
+    expect(clientValue(view)).toBe('Alice Aubert');
+    expect(view.getByTestId(CLIENT_ROW).props.accessibilityLabel).toBe('Cliente, Alice Aubert');
     await settleSheetTransition();
     expect(view.queryByText('Choisir la cliente')).toBeNull();
 
@@ -708,5 +749,71 @@ describe('SaleCreationScreen', () => {
     expect(view.getByTestId('masque-stock').props.children).toBe(2);
     expect(view.getByTestId('sales-count').props.children).toBe(0);
     expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('keeps the added Product visible in « Produits ajoutés » above many results of a short query (regression: ac)', async () => {
+    const view = await renderSale('client-agenda-camille');
+    await press(view, 'stock-concentrate-3');
+
+    await search(view, 'ac');
+    const results = within(view.getByTestId('sale-search-results'));
+    expect(results.getAllByTestId(/^sale-product-[^-]+$/).length).toBeGreaterThan(1);
+    expect(view.getByTestId(`sale-product-add-${CONCENTRATE_ID}`)).toBeTruthy();
+
+    await press(view, `sale-product-${CONCENTRATE_ID}`);
+
+    // The cart shows it at once, in its own section, whatever the result count.
+    const cart = within(view.getByTestId('sale-lines'));
+    expect(cart.getByText('Acidic bonding concentrate')).toBeTruthy();
+    expect(view.queryByTestId('sale-lines-empty')).toBeNull();
+    // The section count chip and the line quantity.
+    expect(within(view.getByTestId('sale-lines-section')).getAllByText('1')).toHaveLength(2);
+    // The query and its results stay; the result states it is in the sale.
+    expect(view.getByPlaceholderText('Rechercher un produit').props.value).toBe('ac');
+    expect(results.getAllByTestId(/^sale-product-[^-]+$/).length).toBeGreaterThan(1);
+    expect(view.getByTestId(`sale-product-added-${CONCENTRATE_ID}`)).toBeTruthy();
+    expect(view.getByTestId(`sale-product-${CONCENTRATE_ID}`).props.accessibilityLabel).toBe(
+      'Acidic bonding concentrate, déjà ajouté, quantité 1',
+    );
+    // « Produits ajoutés » is rendered before the search results.
+    const tree = JSON.stringify(view.toJSON());
+    expect(tree.indexOf('"sale-lines"')).toBeLessThan(tree.indexOf('"sale-search-results"'));
+    expect(view.getByTestId('sale-unit-count').props.children).toBe('1 produit · ');
+    expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(12));
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('returns a removed Product to the available state and updates count, total and validation', async () => {
+    const view = await renderSale('client-agenda-camille');
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+    await press(view, `sale-line-increment-${MASQUE_ID}`);
+    expect(view.getByTestId('sale-unit-count').props.children).toBe('2 produits · ');
+
+    await press(view, `sale-line-remove-${MASQUE_ID}`);
+
+    expect(view.getByTestId('sale-lines-empty')).toBeTruthy();
+    expect(view.queryByTestId(`sale-product-added-${MASQUE_ID}`)).toBeNull();
+    expect(view.getByTestId(`sale-product-add-${MASQUE_ID}`)).toBeTruthy();
+    expect(view.getByTestId('sale-unit-count').props.children).toBe('0 produit · ');
+    expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(0));
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('shows an out-of-stock result as unavailable and never adds it', async () => {
+    const view = await renderSale('client-agenda-camille');
+    // The legacy catalog starts at 0 in stock.
+    await search(view, 'masque');
+
+    const row = view.getByTestId(`sale-product-${MASQUE_ID}`);
+    expect(row.props.accessibilityState.disabled).toBe(true);
+    expect(row.props.accessibilityLabel).toBe('Masque réparateur 5 min, stock épuisé, indisponible');
+    expect(within(row).getByText('Stock épuisé')).toBeTruthy();
+    expect(view.getByTestId(`sale-product-unavailable-${MASQUE_ID}`)).toBeTruthy();
+
+    await press(view, `sale-product-${MASQUE_ID}`);
+    expect(view.queryByTestId(`sale-line-${MASQUE_ID}`)).toBeNull();
+    expect(view.getByTestId('sale-lines-empty')).toBeTruthy();
   });
 });

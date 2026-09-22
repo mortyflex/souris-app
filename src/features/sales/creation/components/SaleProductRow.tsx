@@ -1,23 +1,33 @@
 // Souris — Sale product result row
 //
-// A search / scan result inside Sale creation. Tapping adds the Product
-// immediately (or increments it); the small count chip shows how many units
-// the draft already holds. No intermediate "Ajouter" confirmation.
+// A search result inside Sale creation, drawn inside the « Résultats »
+// GroupedSurface (the surface owns the separators). Every row states where
+// it stands, never by colour alone:
+//
+// - available, not in the sale: a `+` add affordance;
+// - already in the sale: `✓ Ajouté` — tapping again still adds one unit,
+//   exactly like a second scan (the quantity lives in « Produits ajoutés »);
+// - no stock: `Stock épuisé` + `Indisponible`, not pressable.
+//
+// No intermediate "Ajouter" confirmation.
 
+import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { Product } from '@/domain/products';
-import { ProductImage } from '@/features/products/components/ProductImage';
+import { ProductImage, productImageHeights } from '@/features/products/components/ProductImage';
 import { formatServicePrice } from '@/features/services/presentation';
 import { AppText } from '@/shared/ui/AppText';
 import {
   foregroundSoft,
-  lavender,
   radii,
   rose,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
+
+/** Separators of the grouped surfaces start under the Product copy. */
+export const SALE_ROW_SEPARATOR_INSET = spacing.base + productImageHeights.thumbnail + spacing.md;
 
 interface SaleProductRowProps {
   readonly product: Product;
@@ -28,12 +38,24 @@ interface SaleProductRowProps {
 
 export function SaleProductRow({ product, draftQuantity, onPress }: SaleProductRowProps) {
   const meta = [product.brand, product.category].filter(Boolean).join(' · ');
-  const stockLabel = product.stockQuantity > 0 ? `Stock ${product.stockQuantity}` : 'Stock épuisé';
+  const soldOut = product.stockQuantity <= 0;
+  const added = draftQuantity > 0;
+  const stockLabel = soldOut ? 'Stock épuisé' : `Stock ${product.stockQuantity}`;
+  const price = formatServicePrice(product.price);
+
+  const accessibilityLabel = soldOut
+    ? `${product.name}, stock épuisé, indisponible`
+    : added
+      ? `${product.name}, déjà ajouté, quantité ${draftQuantity}`
+      : `${product.name}, ${price}, stock ${product.stockQuantity}, ajouter`;
 
   return (
     <Pressable
+      accessibilityHint={added && !soldOut ? 'Ajoute une unité à la vente' : undefined}
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
-      accessibilityLabel={`Ajouter ${product.name}, ${formatServicePrice(product.price)}, ${stockLabel}`}
+      accessibilityState={{ disabled: soldOut }}
+      disabled={soldOut}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
       testID={`sale-product-${product.id}`}
@@ -45,7 +67,11 @@ export function SaleProductRow({ product, draftQuantity, onPress }: SaleProductR
         variant="thumbnail"
       />
       <View style={styles.copy}>
-        <AppText variant="rowTitle" numberOfLines={1} style={styles.name}>
+        <AppText
+          variant="rowTitle"
+          numberOfLines={2}
+          style={[styles.name, soldOut && styles.nameSoldOut]}
+        >
           {product.name}
         </AppText>
         {meta.length > 0 && (
@@ -56,21 +82,42 @@ export function SaleProductRow({ product, draftQuantity, onPress }: SaleProductR
         <AppText
           variant="metadata"
           numberOfLines={1}
-          style={[styles.stock, product.stockQuantity === 0 && styles.stockEmpty]}
+          style={[styles.stock, soldOut && styles.stockEmpty]}
         >
           {stockLabel}
         </AppText>
       </View>
-      {draftQuantity > 0 && (
-        <View style={styles.countChip} testID={`sale-product-count-${product.id}`}>
-          <AppText variant="chip" style={styles.countText}>
-            {`×${draftQuantity}`}
-          </AppText>
-        </View>
-      )}
-      <AppText variant="control" style={styles.price}>
-        {formatServicePrice(product.price)}
-      </AppText>
+      <View style={styles.trailing}>
+        <AppText variant="control" style={[styles.price, soldOut && styles.priceSoldOut]}>
+          {price}
+        </AppText>
+        {soldOut ? (
+          <View style={styles.unavailableChip} testID={`sale-product-unavailable-${product.id}`}>
+            <AppText variant="chip" style={styles.unavailableText}>
+              Indisponible
+            </AppText>
+          </View>
+        ) : added ? (
+          <View style={styles.addedChip} testID={`sale-product-added-${product.id}`}>
+            <SymbolView
+              name={{ ios: 'checkmark', android: 'check' }}
+              size={11}
+              tintColor={semanticColors.accent}
+            />
+            <AppText variant="chip" style={styles.addedText}>
+              Ajouté
+            </AppText>
+          </View>
+        ) : (
+          <View style={styles.addButton} testID={`sale-product-add-${product.id}`}>
+            <SymbolView
+              name={{ ios: 'plus', android: 'add' }}
+              size={14}
+              tintColor={semanticColors.accent}
+            />
+          </View>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -78,28 +125,48 @@ export function SaleProductRow({ product, draftQuantity, onPress }: SaleProductR
 const styles = StyleSheet.create({
   row: {
     alignItems: 'center',
-    borderBottomColor: semanticColors.borderSubtle,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.md,
     minHeight: 68,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
   },
   rowPressed: { backgroundColor: semanticColors.surfaceLavender },
   copy: { flex: 1, gap: 2, minWidth: 0 },
-  name: { color: lavender.lav700 },
+  name: { color: semanticColors.foreground },
+  nameSoldOut: { color: foregroundSoft },
   meta: { color: foregroundSoft },
   stock: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   stockEmpty: { color: rose.rose600 },
-  countChip: {
+  trailing: { alignItems: 'flex-end', flexShrink: 0, gap: spacing.xs },
+  price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  priceSoldOut: { color: foregroundSoft },
+  addButton: {
     alignItems: 'center',
     backgroundColor: semanticColors.surfaceLavenderStrong,
     borderRadius: radii.pill,
+    height: 28,
     justifyContent: 'center',
+    width: 28,
+  },
+  addedChip: {
+    alignItems: 'center',
+    backgroundColor: semanticColors.surfaceLavenderStrong,
+    borderRadius: radii.pill,
+    flexDirection: 'row',
+    gap: 4,
     minHeight: 24,
-    minWidth: 32,
     paddingHorizontal: spacing.sm,
   },
-  countText: { color: semanticColors.accent, fontVariant: ['tabular-nums'] },
-  price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  addedText: { color: semanticColors.accent },
+  unavailableChip: {
+    alignItems: 'center',
+    borderColor: semanticColors.borderSubtle,
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    minHeight: 24,
+    paddingHorizontal: spacing.sm,
+  },
+  unavailableText: { color: foregroundSoft },
 });

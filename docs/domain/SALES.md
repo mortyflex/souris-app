@@ -67,26 +67,34 @@ understandable from `productName`, `quantity`, and `unitPrice` alone.
 
 ---
 
-## 4. Optional Client
+## 4. Client of a Sale
 
-`clientId` is optional. An entry context may PREFILL it: opening the Sale flow from a Client
-Profile or from Appointment Details preselects that Client (the Appointment's `clientId`) in the
-draft, and the professional may still change or remove it before completion. An unknown
-supplied id falls back to no Client — nothing is invented.
+`clientId` is optional in the canonical model, but the Sale creation flow requires one
+(product decision, September 2026). The « Cliente » row depends on the entry context, decided by
+the resolved Appointment id and never by UI state:
+
+- Appointment Details (« Revente »): the Sale belongs to the Appointment's own `clientId`. The
+  row is read-only (no chevron, no picker, no removal); a different route Client is ignored.
+- Produits → « Nouvelle vente »: no Client at first (« Choisir une cliente »). The whole row opens
+  the shared picker; a selection replaces the current Client. « Valider la vente » stays disabled
+  until a Client is chosen.
+- Client Profile: that Client is preselected in the same editable row, replaceable.
+
+There is no « Retirer », no walk-in sale and no anonymous Client in the flow. An unknown or
+archived supplied id falls back to no Client — nothing is invented.
 
 The Appointment may be persisted on the Sale. `appointmentId` is optional and set ONLY when the
 flow was opened from Appointment Details (« Revente ») and the id resolves to an existing
 Appointment; a Sale opened from the Client Profile or from Produits keeps `appointmentId`
 undefined. An Appointment is never inferred from the Client. The link is plain reference
 metadata (no foreign key, no cascade): the Sale snapshot stays valid history even if the
-Appointment later disappears, and it never resolves live Appointment data. Changing or removing
-the Client in the draft does not change the Appointment link — it records where the Sale happened.
+Appointment later disappears, and it never resolves live Appointment data. The Appointment and its Client are fixed together for the whole draft.
 
-`clientId` is optional in the canonical model. A walk-in Product sale is a valid Sale: it decrements stock and is stored
-in the session like any other Sale, but it appears on no Client Profile. Souris never fabricates
-a "Client de passage" record.
+`clientId` stays optional in the canonical model so that historical walk-in Sales (created before
+the Client requirement) remain valid: they decrement stock and are stored like any other Sale, but
+appear on no Client Profile. Souris never fabricates a "Client de passage" record.
 
-Selecting or removing a Client in the Sale draft never mutates the Client session. Purchase
+Selecting or replacing a Client in the Sale draft never mutates the Client session. Purchase
 history is derived from Sales through `sale.clientId` and never stored on the Client.
 
 ---

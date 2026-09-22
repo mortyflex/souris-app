@@ -1,10 +1,10 @@
 // Souris — Sale creation (Nouvelle vente)
 //
-// ONE focused operational flow: optional Client, Product search + scan,
-// immediate add / increment, bounded quantities, derived total, then
-// "Valider la vente". The draft is local to this screen; the canonical
-// Product catalog and the Sale session change ONLY through the atomic
-// completion boundary (`useSaleSession().completeSale`).
+// ONE focused operational flow: a Client, Product search + scan, immediate
+// add / increment, bounded quantities, derived total, then « Valider la
+// vente ». The draft is local to this screen; the canonical Product catalog
+// and the Sale session change ONLY through the atomic completion boundary
+// (`useSaleSession().completeSale`).
 //
 // Live Product values (name, price, image, stock) feed the draft UI; the
 // completed Sale keeps its own snapshot.
@@ -14,53 +14,78 @@
 // draft with lines is guarded against « Annuler » and the hardware back by
 // the shared Souris confirmation dialog.
 //
-// Entry contexts: Client Profile and Appointment Details open this screen with
-// an `initialClientId` (resolved on the first render, never a flicker of
-// « Aucune cliente »); the Produits tab opens it without one (walk-in).
-// Appointment Details (« Revente ») also passes the Appointment id: when it
-// resolves to a known Appointment, the completed Sale carries it so the
-// Appointment can list its Products. Nothing else about the origin reaches
-// the Sale, and an Appointment is never inferred from the Client.
+// Entry contexts (docs/domain/SALES.md §4), decided by the resolved
+// Appointment id, never by UI state:
+// - Appointment Details (« Revente ») passes the Appointment id. When it
+//   resolves to a known Appointment, the Sale belongs to THAT Appointment's
+//   Client: the « Cliente » row is read-only (no chevron, no picker, no
+//   removal) and the completed Sale carries the Appointment id so the
+//   Appointment can list its Products.
+// - Produits (and the Client Profile, which preselects its Client) open an
+//   editable « Cliente » row: the whole row opens the shared picker, and a
+//   selection replaces the current Client. A Client is required to validate;
+//   there is no walk-in sale and no « Retirer ».
+// An Appointment is never inferred from the Client.
+//
+// Layout: « Produits ajoutés » (the visual source of truth of the draft)
+// sits ABOVE « Ajouter un produit » and its « Résultats », so what is in the
+// sale never depends on the query length; the query is kept after an add.
+// The footer always states units and total above « Valider la vente ».
 //
 // Payment: a STANDALONE Sale records what was received (card / cash) in the
 // shared checkout sheet before it completes; a Sale sold during an
 // Appointment skips that step because the Appointment checkout records the
 // whole amount received.
 
-import { useRouter } from 'expo-router';
-import { usePreventRemove } from 'expo-router/react-navigation';
-import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
+import { SymbolView, type SymbolViewProps } from "expo-symbols";
+import { useEffect, useRef, useState } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 
-import type { Product } from '@/domain/products';
-import { eurosToCents } from '@/domain/appointments';
+import { eurosToCents } from "@/domain/appointments";
+import {
+  getClientDisplayName,
+  isClientArchived,
+  type Client,
+} from "@/domain/clients";
+import type { Product } from "@/domain/products";
 import {
   getSaleTotal,
   prepareSaleCompletion,
   type SaleDraft,
   type SaleDraftLine,
   type SalePaymentAmounts,
-} from '@/domain/sales';
-import { getClientDisplayName, isClientArchived } from '@/domain/clients';
-import { ClientPickerSheet } from '@/features/clients/selection/ClientPickerSheet';
-import { useOptionalAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
-import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
-import { findProductsByBarcode, prepareProductDirectory } from '@/features/products/search/filter-products';
-import { useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
-import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
-import { formatServicePrice } from '@/features/services/presentation';
-import { alertPersistenceFailure } from '@/providers/persistence-failure';
-import { haptics } from '@/shared/lib/haptics';
-import { AppButton } from '@/shared/ui/AppButton';
-import { AppText } from '@/shared/ui/AppText';
-import { BarcodeScannerModal } from '@/shared/ui/BarcodeScannerModal';
-import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
-import { SearchField } from '@/shared/ui/SearchField';
-import { SectionHeader } from '@/shared/ui/SectionHeader';
-import { SheetActionBar } from '@/shared/ui/SheetActionBar';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
-import { SheetScreen } from '@/shared/ui/SheetScreen';
+} from "@/domain/sales";
+import { useOptionalAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
+import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
+import { ClientPickerSheet } from "@/features/clients/selection/ClientPickerSheet";
+import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
+import {
+  findProductsByBarcode,
+  prepareProductDirectory,
+} from "@/features/products/search/filter-products";
+import { useProductCatalog } from "@/features/products/session/ProductCatalogProvider";
+import { formatServicePrice } from "@/features/services/presentation";
+import { alertPersistenceFailure } from "@/providers/persistence-failure";
+import { haptics } from "@/shared/lib/haptics";
+import { AppButton } from "@/shared/ui/AppButton";
+import { AppText } from "@/shared/ui/AppText";
+import { BarcodeScannerModal } from "@/shared/ui/BarcodeScannerModal";
+import { ConfirmationDialog } from "@/shared/ui/ConfirmationDialog";
+import { GroupedDataRow } from "@/shared/ui/GroupedDataRow";
+import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
+import { SearchField } from "@/shared/ui/SearchField";
+import { SectionHeader } from "@/shared/ui/SectionHeader";
+import { SheetActionBar } from "@/shared/ui/SheetActionBar";
+import { SheetHeader } from "@/shared/ui/SheetHeader";
+import { SheetScreen } from "@/shared/ui/SheetScreen";
 import {
   foregroundSoft,
   gutter,
@@ -69,23 +94,37 @@ import {
   rose,
   semanticColors,
   spacing,
-} from '@/shared/ui/theme';
+} from "@/shared/ui/theme";
 
-import { describeSaleCompletionIssue } from '../presentation';
-import { useSaleSession } from '../session/SaleSessionProvider';
-import { SaleLineRow } from './components/SaleLineRow';
-import { SalePaymentSheet } from './components/SalePaymentSheet';
-import { SaleProductRow } from './components/SaleProductRow';
-import { SaleScanResultSheet, type SaleScanResult } from './components/SaleScanResultSheet';
+import {
+  describeSaleCompletionIssue,
+  formatSaleUnitCount,
+} from "../presentation";
+import { useSaleSession } from "../session/SaleSessionProvider";
+import { SaleLineRow } from "./components/SaleLineRow";
+import { SalePaymentSheet } from "./components/SalePaymentSheet";
+import {
+  SALE_ROW_SEPARATOR_INSET,
+  SaleProductRow,
+} from "./components/SaleProductRow";
+import {
+  SaleScanResultSheet,
+  type SaleScanResult,
+} from "./components/SaleScanResultSheet";
 import {
   addProductToDraft,
   getDraftQuantity,
   removeDraftLine,
   setDraftLineQuantity,
-} from './draft';
-import { createSaleId, createSaleItemId } from './runtime-ids';
+} from "./draft";
+import { createSaleId, createSaleItemId } from "./runtime-ids";
 
-const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
+const horizontalGutter =
+  Platform.OS === "android" ? gutter.android : gutter.ios;
+const clientIcon: SymbolViewProps["name"] = {
+  ios: "person",
+  android: "person",
+};
 
 // Validation preview only needs a stable placeholder instant; the real
 // completion instant is taken when the professional validates.
@@ -98,7 +137,15 @@ interface SaleCreationScreenProps {
   readonly initialAppointmentId?: string;
 }
 
-export function SaleCreationScreen({ initialClientId, initialAppointmentId }: SaleCreationScreenProps) {
+/** An archived Client is historical: she is never attached to a NEW Sale. */
+function activeClientId(client: Client | undefined): string | undefined {
+  return client && !isClientArchived(client) ? client.id : undefined;
+}
+
+export function SaleCreationScreen({
+  initialClientId,
+  initialAppointmentId,
+}: SaleCreationScreenProps) {
   const router = useRouter();
   const business = useCurrentBusiness();
   const { products, activeProducts, getProductById } = useProductCatalog();
@@ -106,22 +153,27 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
   const { completeSale } = useSaleSession();
   const appointmentSession = useOptionalAppointmentSession();
   // The link is kept only for an Appointment that actually exists; a stale
-  // or foreign route parameter never becomes Sale history.
-  const [appointmentId] = useState<string | undefined>(
-    () => appointmentSession?.getAppointmentById(initialAppointmentId)?.appointment.id,
+  // or foreign route parameter never becomes Sale history. Its Client is
+  // authoritative and fixed for the whole draft.
+  const [linkedAppointment] = useState(
+    () =>
+      appointmentSession?.getAppointmentById(initialAppointmentId)?.appointment,
   );
+  const appointmentId = linkedAppointment?.id;
+  const clientLocked = linkedAppointment !== undefined;
 
   const [saleId] = useState(() => createSaleId());
   const lineSequence = useRef(0);
   const [lines, setLines] = useState<readonly SaleDraftLine[]>([]);
-  // An archived Client is historical: she is never attached to a NEW Sale,
-  // even when a stale route parameter names her.
-  const [clientId, setClientId] = useState<string | undefined>(() => {
-    const initialClient = getClientById(initialClientId);
-    return initialClient && !isClientArchived(initialClient) ? initialClient.id : undefined;
-  });
+  const [clientId, setClientId] = useState<string | undefined>(() =>
+    activeClientId(
+      getClientById(
+        linkedAppointment ? linkedAppointment.clientId : initialClientId,
+      ),
+    ),
+  );
   const [clientPickerVisible, setClientPickerVisible] = useState(false);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scanResult, setScanResult] = useState<SaleScanResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -131,9 +183,15 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
 
   const client = getClientById(clientId);
   const trimmedQuery = query.trim();
-  const searchResults = trimmedQuery.length > 0 ? prepareProductDirectory(activeProducts, trimmedQuery) : [];
+  const searchResults =
+    trimmedQuery.length > 0
+      ? prepareProductDirectory(activeProducts, trimmedQuery)
+      : [];
 
-  const buildDraft = (completedAt: Date, payment?: SalePaymentAmounts): SaleDraft => ({
+  const buildDraft = (
+    completedAt: Date,
+    payment?: SalePaymentAmounts,
+  ): SaleDraft => ({
     id: saleId,
     businessId: business.id,
     clientId,
@@ -143,10 +201,16 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
     lines,
   });
 
-  const validation = prepareSaleCompletion(buildDraft(PREVIEW_INSTANT), products);
+  const validation = prepareSaleCompletion(
+    buildDraft(PREVIEW_INSTANT),
+    products,
+  );
+  // The canonical model still accepts historical walk-in Sales; this flow
+  // creates Sales for a Client only.
+  const canValidate = validation.ok && clientId !== undefined;
   const issues = validation.ok
     ? []
-    : validation.issues.filter((issue) => issue.kind !== 'EMPTY_SALE');
+    : validation.issues.filter((issue) => issue.kind !== "EMPTY_SALE");
   const total = getSaleTotal({
     items: lines.map((line) => ({
       unitPrice: getProductById(line.productId)?.price ?? 0,
@@ -161,7 +225,7 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
       return createSaleItemId(saleId, lineSequence.current);
     });
 
-    if (result.outcome === 'added' || result.outcome === 'incremented') {
+    if (result.outcome === "added" || result.outcome === "incremented") {
       setLines(result.lines);
       setNotice(null);
       haptics.selection();
@@ -170,8 +234,8 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
 
     haptics.warning();
     setNotice(
-      result.outcome === 'inactive'
-        ? 'Ce produit est inactif.'
+      result.outcome === "inactive"
+        ? "Ce produit est inactif."
         : `Stock insuffisant pour ${product.name}.`,
     );
   };
@@ -186,18 +250,20 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
       return;
     }
     if (matches.length === 0) {
-      setScanResult({ kind: 'unknown', barcode });
+      setScanResult({ kind: "unknown", barcode });
       return;
     }
     if (active.length === 0) {
-      setScanResult({ kind: 'inactive', barcode });
+      setScanResult({ kind: "inactive", barcode });
       return;
     }
-    setScanResult({ kind: 'multiple', barcode, matches: active });
+    setScanResult({ kind: "multiple", barcode, matches: active });
   };
 
   const changeQuantity = (line: SaleDraftLine, delta: number) => {
-    setLines((current) => setDraftLineQuantity(current, line.id, line.quantity + delta));
+    setLines((current) =>
+      setDraftLineQuantity(current, line.id, line.quantity + delta),
+    );
     setNotice(null);
     haptics.selection();
   };
@@ -240,6 +306,7 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
   // A standalone Sale records its payment first; a Sale sold during an
   // Appointment completes directly (the Appointment checkout records the money).
   const validate = () => {
+    if (!canValidate) return;
     if (appointmentId === undefined) {
       setPaymentVisible(true);
       return;
@@ -255,6 +322,8 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
     requestDiscard();
   };
 
+  const clientName = client ? getClientDisplayName(client) : undefined;
+
   const scanAccessory = (
     <Pressable
       accessibilityRole="button"
@@ -264,11 +333,14 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
         setScanResult(null);
         setScannerVisible(true);
       }}
-      style={({ pressed }) => [styles.scanAction, pressed && styles.scanActionPressed]}
+      style={({ pressed }) => [
+        styles.scanAction,
+        pressed && styles.scanActionPressed,
+      ]}
       testID="sale-open-barcode-scanner"
     >
       <SymbolView
-        name={{ ios: 'barcode.viewfinder', android: 'barcode_scanner' }}
+        name={{ ios: "barcode.viewfinder", android: "barcode_scanner" }}
         size={19}
         tintColor={semanticColors.accent}
       />
@@ -279,136 +351,167 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
     <SheetScreen keyboardAvoiding testID="sale-creation-sheet">
       <View style={styles.headerZone}>
         <SheetHeader
-          action={{ accessibilityLabel: 'Annuler la vente', label: 'Annuler', onPress: cancel }}
+          action={{
+            accessibilityLabel: "Annuler la vente",
+            label: "Annuler",
+            onPress: cancel,
+          }}
           eyebrow="VENTE"
           title="Nouvelle vente"
         />
       </View>
 
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.section}>
-            <SectionHeader title="Cliente" />
-            <View style={styles.clientSurface} testID="sale-client">
-              <View style={styles.clientCopy}>
-                <AppText variant="rowTitle" numberOfLines={1} style={styles.clientName}>
-                  {client ? getClientDisplayName(client) : 'Aucune cliente'}
-                </AppText>
-                {!client && (
-                  <AppText variant="metadata" style={styles.clientHint}>
-                    Vente de passage, sans historique cliente.
-                  </AppText>
-                )}
-              </View>
-              <View style={styles.clientActions}>
-                {client && (
-                  <AppButton
-                    accessibilityLabel="Retirer la cliente"
-                    onPress={() => setClientId(undefined)}
-                    style={styles.clientAction}
-                    title="Retirer"
-                    variant="tertiary"
-                  />
-                )}
-                <AppButton
-                  accessibilityLabel={client ? 'Modifier la cliente' : 'Choisir une cliente'}
-                  onPress={() => setClientPickerVisible(true)}
-                  style={styles.clientAction}
-                  title={client ? 'Modifier' : 'Choisir une cliente'}
-                  variant="tertiary"
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <SectionHeader count={unitCount} title="Produits" />
-            <SearchField
-              accessibilityLabel="Rechercher un produit"
-              onChangeText={setQuery}
-              placeholder="Rechercher un produit"
-              trailingAccessory={scanAccessory}
-              value={query}
-            />
-
-            {notice && (
-              <AppText variant="metadata" style={styles.notice} testID="sale-notice">
-                {notice}
-              </AppText>
-            )}
-
-            {trimmedQuery.length > 0 && (
-              <View style={styles.results} testID="sale-search-results">
-                {searchResults.length === 0 ? (
-                  <AppText variant="metadata" style={styles.emptyResults}>
-                    Aucun produit actif ne correspond.
-                  </AppText>
-                ) : (
-                  searchResults.map((product) => (
-                    <SaleProductRow
-                      draftQuantity={getDraftQuantity(lines, product.id)}
-                      key={product.id}
-                      onPress={() => addProduct(product)}
-                      product={product}
-                    />
-                  ))
-                )}
-              </View>
-            )}
-
-            {lines.length === 0 ? (
-              <View style={styles.emptyLines}>
-                <AppText variant="stateTitle">Aucun produit ajouté</AppText>
-                <AppText variant="metadata" style={styles.emptyLinesText}>
-                  Recherchez ou scannez un produit pour l’ajouter à la vente.
-                </AppText>
-              </View>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.section}>
+          <GroupedSurface testID="sale-client">
+            {clientLocked ? (
+              <GroupedDataRow
+                detail="Liée au rendez-vous"
+                icon={clientIcon}
+                label="Cliente"
+                testID="sale-client-row"
+                value={clientName ?? "—"}
+              />
             ) : (
-              <View style={styles.lines}>
-                {lines.map((line) => (
+              <GroupedDataRow
+                accessibilityHint={
+                  clientName ? "Changer la cliente" : undefined
+                }
+                icon={clientIcon}
+                label="Cliente"
+                onPress={() => setClientPickerVisible(true)}
+                testID="sale-client-row"
+                value={clientName ?? "Choisir une cliente"}
+              />
+            )}
+          </GroupedSurface>
+        </View>
+
+        <View style={styles.section} testID="sale-lines-section">
+          {lines.length === 0 ? (
+            <View style={styles.emptyLines} testID="sale-lines-empty">
+              <AppText variant="rowTitle" style={styles.emptyLinesTitle}>
+                Aucun produit ajouté
+              </AppText>
+              <AppText variant="metadata" style={styles.emptyLinesText}>
+                Recherchez ou scannez un produit pour l’ajouter à la vente.
+              </AppText>
+            </View>
+          ) : (
+            <GroupedSurface testID="sale-lines">
+              {lines.map((line, index) => (
+                <View key={line.id}>
+                  {index > 0 && (
+                    <GroupedSeparator inset={SALE_ROW_SEPARATOR_INSET} />
+                  )}
                   <SaleLineRow
-                    key={line.id}
                     line={line}
                     onDecrement={() => changeQuantity(line, -1)}
                     onIncrement={() => changeQuantity(line, 1)}
                     onRemove={() => removeLine(line)}
                     product={getProductById(line.productId)}
                   />
-                ))}
-              </View>
-            )}
-          </View>
-
-          {lines.length > 0 && (
-            <View style={styles.totalSurface}>
-              <AppText variant="sectionTitle" style={styles.totalLabel}>
-                Total
-              </AppText>
-              <AppText variant="summaryValue" style={styles.totalValue} testID="sale-total">
-                {formatServicePrice(total)}
-              </AppText>
-            </View>
+                </View>
+              ))}
+            </GroupedSurface>
           )}
 
           {issues.length > 0 && (
             <View style={styles.issues} testID="sale-issues">
               {issues.map((issue, index) => (
-                <AppText key={`${issue.kind}-${index}`} variant="metadata" style={styles.issueText}>
-                  {describeSaleCompletionIssue(issue, (productId) => getProductById(productId)?.name)}
+                <AppText
+                  key={`${issue.kind}-${index}`}
+                  variant="metadata"
+                  style={styles.issueText}
+                >
+                  {describeSaleCompletionIssue(
+                    issue,
+                    (productId) => getProductById(productId)?.name,
+                  )}
                 </AppText>
               ))}
             </View>
           )}
-        </ScrollView>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Ajouter un produit" />
+          <SearchField
+            accessibilityLabel="Rechercher un produit"
+            onChangeText={setQuery}
+            placeholder="Rechercher un produit"
+            trailingAccessory={scanAccessory}
+            value={query}
+          />
+
+          {notice && (
+            <AppText
+              variant="metadata"
+              style={styles.notice}
+              testID="sale-notice"
+            >
+              {notice}
+            </AppText>
+          )}
+        </View>
+
+        {trimmedQuery.length > 0 && (
+          <View style={styles.section} testID="sale-search-results">
+            <SectionHeader title="Résultats" />
+            {searchResults.length === 0 ? (
+              <AppText variant="metadata" style={styles.emptyResults}>
+                Aucun produit actif ne correspond.
+              </AppText>
+            ) : (
+              <GroupedSurface>
+                {searchResults.map((product, index) => (
+                  <View key={product.id}>
+                    {index > 0 && (
+                      <GroupedSeparator inset={SALE_ROW_SEPARATOR_INSET} />
+                    )}
+                    <SaleProductRow
+                      draftQuantity={getDraftQuantity(lines, product.id)}
+                      onPress={() => addProduct(product)}
+                      product={product}
+                    />
+                  </View>
+                ))}
+              </GroupedSurface>
+            )}
+          </View>
+        )}
+      </ScrollView>
 
       <SheetActionBar>
+        <View
+          accessible
+          accessibilityLabel={`${formatSaleUnitCount(unitCount)}, total ${formatServicePrice(total)}`}
+          style={styles.summary}
+          testID="sale-summary"
+        >
+          <AppText
+            variant="body"
+            style={styles.summaryCount}
+            testID="sale-unit-count"
+          >
+            {`${formatSaleUnitCount(unitCount)} · `}
+          </AppText>
+          <AppText
+            variant="control"
+            style={styles.summaryTotal}
+            testID="sale-total"
+          >
+            {formatServicePrice(total)}
+          </AppText>
+        </View>
         <AppButton
           accessibilityLabel="Valider la vente"
-          disabled={!validation.ok}
+          disabled={!canValidate}
           onPress={validate}
           testID="validate-sale"
           title="Valider la vente"
@@ -422,15 +525,17 @@ export function SaleCreationScreen({ initialClientId, initialAppointmentId }: Sa
         visible={paymentVisible}
       />
 
-      <ClientPickerSheet
-        onClose={() => setClientPickerVisible(false)}
-        onSelectClient={(selectedClientId) => {
-          setClientId(selectedClientId);
-          setClientPickerVisible(false);
-        }}
-        selectedClientId={clientId}
-        visible={clientPickerVisible}
-      />
+      {!clientLocked && (
+        <ClientPickerSheet
+          onClose={() => setClientPickerVisible(false)}
+          onSelectClient={(selectedClientId) => {
+            setClientId(selectedClientId);
+            setClientPickerVisible(false);
+          }}
+          selectedClientId={clientId}
+          visible={clientPickerVisible}
+        />
+      )}
 
       <BarcodeScannerModal
         onClose={() => setScannerVisible(false)}
@@ -472,29 +577,16 @@ const styles = StyleSheet.create({
   headerZone: { paddingHorizontal: horizontalGutter },
   content: {
     gap: spacing.xl,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: spacing["3xl"],
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
   },
   section: { gap: spacing.md },
-  clientSurface: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    gap: spacing.sm,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-  },
-  clientCopy: { gap: 2 },
-  clientName: { color: semanticColors.foreground },
-  clientHint: { color: foregroundSoft },
-  clientActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  clientAction: { paddingHorizontal: spacing.md },
   scanAction: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: radii.small,
     height: 44,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: 44,
   },
   scanActionPressed: {
@@ -502,41 +594,30 @@ const styles = StyleSheet.create({
     opacity: interaction.pressedOpacity,
   },
   notice: { color: rose.rose600 },
-  results: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    paddingHorizontal: spacing.md,
-  },
-  emptyResults: { color: foregroundSoft, paddingVertical: spacing.md },
+  emptyResults: { color: foregroundSoft },
   emptyLines: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: semanticColors.surface,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.large,
-    gap: spacing.xs,
-    padding: spacing.lg,
-  },
-  emptyLinesText: { color: foregroundSoft, textAlign: 'center' },
-  lines: { gap: spacing.sm },
-  totalSurface: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 2,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
   },
-  totalLabel: { color: semanticColors.foreground },
-  totalValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  emptyLinesTitle: { color: semanticColors.foreground },
+  emptyLinesText: { color: foregroundSoft, textAlign: "center" },
   issues: {
     backgroundColor: semanticColors.surfaceRose,
-    borderCurve: 'continuous',
+    borderCurve: "continuous",
     borderRadius: radii.medium,
     gap: spacing.xs,
     padding: spacing.md,
   },
   issueText: { color: rose.rose600 },
+  summary: { alignItems: "baseline", flexDirection: "row" },
+  summaryCount: { color: foregroundSoft, fontVariant: ["tabular-nums"] },
+  summaryTotal: {
+    color: semanticColors.foreground,
+    fontVariant: ["tabular-nums"],
+  },
 });
