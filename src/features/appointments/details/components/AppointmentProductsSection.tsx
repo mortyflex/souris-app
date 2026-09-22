@@ -55,9 +55,11 @@ export function AppointmentProductsSection({
 const styles = StyleSheet.create({
   section: { gap: spacing.sm, marginTop: spacing.xl },
   surface: {
-    backgroundColor: semanticColors.surfaceLavender,
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.borderSubtle,
     borderCurve: 'continuous',
     borderRadius: radii.large,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     paddingVertical: spacing.xs,
   },

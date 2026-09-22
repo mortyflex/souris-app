@@ -1,13 +1,6 @@
 import { useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useEffect, useState } from "react";
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Platform, ScrollView, StyleSheet, View } from "react-native";
 
 import {
   canCancelAppointment,
@@ -50,24 +43,26 @@ import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
-import { birthdayIcon } from "@/shared/icons/birthday-icon";
 import { haptics } from "@/shared/lib/haptics";
-import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
+import { GlassIconButton, glassIcons } from "@/shared/ui/GlassIconButton";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
 import { SwipeToDeleteRow, useSwipeHintTarget } from "@/shared/ui/SwipeToDeleteRow";
 import {
   foregroundSoft,
   gutter,
-  interaction,
   radii,
   rose,
   semanticColors,
   spacing,
-  touchTarget,
 } from "@/shared/ui/theme";
 
+import {
+  AppointmentActionsSheet,
+  type AppointmentSecondaryAction,
+} from "./components/AppointmentActionsSheet";
+import { AppointmentCheckoutFooter } from "./components/AppointmentCheckoutFooter";
 import {
   AppointmentDeletionDialog,
   type AppointmentDeletionDialogMode,
@@ -76,20 +71,19 @@ import {
   AppointmentCancellationSheet,
   AppointmentNoShowSheet,
 } from "./components/AppointmentLifecycleSheets";
+import { AppointmentMeta } from "./components/AppointmentMeta";
 import { AppointmentPaymentSummary } from "./components/AppointmentPaymentSummary";
-import { AppointmentPrimaryActions } from "./components/AppointmentPrimaryActions";
 import { AppointmentProductsSection } from "./components/AppointmentProductsSection";
+import { AppointmentSaleRow } from "./components/AppointmentSaleRow";
 import { AppointmentServiceSection } from "./components/AppointmentServiceSection";
 import { AppointmentSummary } from "./components/AppointmentSummary";
-import { AppointmentTicketTotal } from "./components/AppointmentTicketTotal";
 import {
   formatAppointmentDate,
   formatAppointmentTime,
-  formatCancellationActorLabel,
   getAppointmentDetailServices,
   getAppointmentDetailSummary,
+  getAppointmentDisplayStatus,
   getAppointmentEnd,
-  getAppointmentStatusLabel,
   isTerminalAppointmentStatus,
 } from "./presentation";
 
@@ -127,6 +121,8 @@ export function AppointmentDetailsScreen({
   const [activeSheet, setActiveSheet] = useState<"cancellation" | "no-show">();
   const [checkoutMode, setCheckoutMode] = useState<AppointmentCheckoutMode>();
   const [deletionMode, setDeletionMode] = useState<AppointmentDeletionDialogMode>();
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<AppointmentSecondaryAction>();
   const [deletedByCurrentScreen, setDeletedByCurrentScreen] = useState(false);
   // The Calendar Block the LAST quick edit would have run into (nothing was
   // written). Replaced or cleared by the next quick edit.
@@ -196,8 +192,9 @@ export function AppointmentDetailsScreen({
   const { appointment } = entry;
   const client = getClientById(appointment.clientId);
   const clientDisplayName = getResolvedClientDisplayName(client);
-  // Revente opens a NEW Sale for the Client: an archived Client keeps her
-  // history readable here but is never attached to new business actions.
+  // « Ajouter une vente » (a Revente) opens a NEW Sale for the Client: an
+  // archived Client keeps her history readable here but is never attached to
+  // new business actions.
   // Encaisser stays possible: an existing Appointment can still be finalized.
   const canSellToClient = client !== undefined && !isClientArchived(client);
   const services = getAppointmentDetailServices(appointment);
@@ -228,7 +225,6 @@ export function AppointmentDetailsScreen({
   const canModify = canEditAppointment(appointment);
   // Same editing rule as « Modifier »: an Appointment always keeps one Service.
   const canRemoveService = canModify && canRemoveAppointmentItem(services.length);
-  const hasNormalActions = canMarkNoShow || canCancel || canModify;
 
   // Every lifecycle write goes through the persisted session; a failed write
   // leaves the record unchanged and is reported once.
@@ -391,6 +387,37 @@ export function AppointmentDetailsScreen({
   const deleteProductLine = (line: AppointmentProductLine): boolean =>
     persist(() => deleteAppointmentProduct(appointment.id, line));
 
+  const available = new Set<AppointmentSecondaryAction>();
+  if (canModify) available.add("modify");
+  if (canMarkNoShow) available.add("no-show");
+  if (canCancel) available.add("cancel");
+
+  // The chosen « ••• » action runs once the action list is gone, so the next
+  // drawer, dialog or route never races the closing one.
+  const runSecondaryAction = () => {
+    const action = pendingAction;
+    setPendingAction(undefined);
+    switch (action) {
+      case "modify":
+        router.push({
+          pathname: "/appointments/edit/[appointmentId]",
+          params: { appointmentId: appointment.id },
+        });
+        return;
+      case "no-show":
+        setActiveSheet("no-show");
+        return;
+      case "cancel":
+        setActiveSheet("cancellation");
+        return;
+      case "delete":
+        requestDeletion();
+        return;
+      default:
+        return;
+    }
+  };
+
   return (
     <SheetScreen fit="content" testID="appointment-details-sheet">
       <ScrollView
@@ -400,145 +427,92 @@ export function AppointmentDetailsScreen({
           { paddingHorizontal: horizontalGutter },
         ]}
         style={styles.scroll}
+        testID="appointment-details-scroll"
       >
-        <View style={styles.appointmentHeader}>
-          <View
-            style={styles.identityHeader}
-            testID="appointment-identity-header"
-          >
-            <View style={styles.identityAccent} />
-            <View style={styles.identityCopy}>
-              <AppText variant="eyebrow" style={styles.identityEyebrow}>
-                RENDEZ-VOUS
-              </AppText>
-              <AppText
-                variant="sheetTitle"
-                accessibilityRole="header"
-                selectable
-                style={styles.clientName}
-              >
-                {clientDisplayName}
-              </AppText>
-            </View>
-            {/* The « Fermer » text action of every Souris sheet (SheetHeader's
-                tertiary AppButton). The very same way out as the swipe and the
-                outside tap: SheetScreen plays the close transition, then the
-                route leaves. */}
-            <AppButton
+        <View style={styles.identityHeader} testID="appointment-identity-header">
+          <View style={styles.identityAccent} />
+          <View style={styles.identityCopy}>
+            <AppText variant="eyebrow" style={styles.identityEyebrow}>
+              RENDEZ-VOUS
+            </AppText>
+            <AppText
+              variant="sheetTitle"
+              accessibilityRole="header"
+              numberOfLines={2}
+              selectable
+              style={styles.clientName}
+            >
+              {clientDisplayName}
+            </AppText>
+          </View>
+          <View style={styles.headerActions}>
+            <GlassIconButton
+              accessibilityLabel="Actions du rendez-vous"
+              icon={glassIcons.more}
+              onPress={() => setMenuVisible(true)}
+              testID="open-appointment-actions"
+            />
+            {/* The same way out as the swipe and the outside tap: SheetScreen
+                plays the close transition, then the route leaves. */}
+            <GlassIconButton
               accessibilityLabel="Fermer"
+              icon={glassIcons.close}
               onPress={() => router.back()}
-              style={styles.closeAction}
               testID="close-appointment-details"
-              title="Fermer"
-              variant="tertiary"
             />
           </View>
-          <View style={styles.metaSurface}>
-            <AppText variant="control" selectable style={styles.dateLine}>
-              {formatAppointmentDate(appointment.startAt)}
-            </AppText>
-            {isBirthdayAppointment && (
-              <View
-                accessible
-                accessibilityLabel="Anniversaire de la cliente"
-                style={styles.birthdayLine}
-                testID="appointment-birthday-indication"
-              >
-                <SymbolView name={birthdayIcon} size={14} tintColor={rose.rose700} />
-                <AppText variant="metadata" style={styles.birthdayText}>
-                  Anniversaire de la cliente
-                </AppText>
-              </View>
-            )}
-            <View style={styles.metaBottomRow}>
-              <AppText variant="control" selectable style={styles.timeLine}>
-                {formatAppointmentTime(appointment.startAt)} –{" "}
-                {formatAppointmentTime(endAt)}
-              </AppText>
-              <View style={styles.statusRow}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    isException
-                      ? styles.exceptionStatusDot
-                      : isTerminal
-                        ? styles.completedStatusDot
-                        : styles.activeStatusDot,
-                  ]}
-                />
-                <AppText
-                  variant="chip"
-                  style={
-                    isException
-                      ? styles.exceptionStatusText
-                      : isTerminal
-                        ? styles.completedStatusText
-                        : styles.activeStatusText
-                  }
-                >
-                  {getAppointmentStatusLabel(appointment.status)}
-                </AppText>
-              </View>
-            </View>
-            {appointment.cancellation && (
-              <View style={styles.outcomeMetadata}>
-                <AppText variant="metadata" style={styles.outcomeActor}>
-                  {formatCancellationActorLabel(
-                    appointment.cancellation.cancelledBy,
-                  )}
-                </AppText>
-                {appointment.cancellation.reason && (
-                  <AppText
-                    variant="metadata"
-                    selectable
-                    style={styles.outcomeReason}
-                  >
-                    {appointment.cancellation.reason}
-                  </AppText>
-                )}
-              </View>
-            )}
-          </View>
         </View>
+
+        <AppointmentMeta
+          cancellation={appointment.cancellation}
+          dateLabel={formatAppointmentDate(appointment.startAt)}
+          isBirthday={isBirthdayAppointment}
+          status={getAppointmentDisplayStatus(appointment, now)}
+          timeLabel={`${formatAppointmentTime(appointment.startAt)} – ${formatAppointmentTime(endAt)}`}
+        />
 
         <SectionHeader
           count={services.length}
           style={styles.sectionHeader}
           title="Prestations"
         />
-        <SortableRowList
-          entries={services}
-          getKey={(service) => service.item.id}
-          getLabel={(service) => service.item.serviceName}
-          onReorder={reorderServices}
-          renderRow={(service, { dragHandle }) => {
-            const section = (
-              <AppointmentServiceSection
-                dragHandle={dragHandle}
-                editable={canModify}
-                expanded={expandedItemIds.has(service.item.id)}
-                service={service}
-                onSaveTiming={(updates) => saveServiceTiming(service.item.id, updates)}
-                onToggle={() => toggleItem(service.item.id)}
-              />
-            );
-            if (!canRemoveService) return section;
-            return (
-              <SwipeToDeleteRow
-                borderRadius={radii.medium}
-                deleteAccessibilityLabel={`Retirer ${service.item.serviceName} du rendez-vous`}
-                deleteTestID={`remove-appointment-service-${service.item.id}`}
-                hint={swipeHintTarget === `service:${service.item.id}`}
-                onDelete={() => removeService(service.item.id)}
-                surfaceColor={semanticColors.surfaceLavender}
-                testID={`appointment-service-${service.item.id}`}
-              >
-                {section}
-              </SwipeToDeleteRow>
-            );
-          }}
-          sortable={canModify}
-        />
+        <View style={styles.servicesGroup} testID="appointment-services">
+          <SortableRowList
+            entries={services}
+            gap={0}
+            getKey={(service) => service.item.id}
+            getLabel={(service) => service.item.serviceName}
+            onReorder={reorderServices}
+            renderRow={(service, { dragHandle }) => {
+              const section = (
+                <AppointmentServiceSection
+                  dragHandle={dragHandle}
+                  editable={canModify}
+                  expanded={expandedItemIds.has(service.item.id)}
+                  separated={services.indexOf(service) > 0}
+                  service={service}
+                  onSaveTiming={(updates) => saveServiceTiming(service.item.id, updates)}
+                  onToggle={() => toggleItem(service.item.id)}
+                />
+              );
+              if (!canRemoveService) return section;
+              return (
+                <SwipeToDeleteRow
+                  borderRadius={0}
+                  deleteAccessibilityLabel={`Retirer ${service.item.serviceName} du rendez-vous`}
+                  deleteTestID={`remove-appointment-service-${service.item.id}`}
+                  hint={swipeHintTarget === `service:${service.item.id}`}
+                  onDelete={() => removeService(service.item.id)}
+                  surfaceColor={semanticColors.surfaceElevated}
+                  testID={`appointment-service-${service.item.id}`}
+                >
+                  {section}
+                </SwipeToDeleteRow>
+              );
+            }}
+            sortable={canModify}
+          />
+        </View>
 
         {refusedByBlock && (
           <View style={styles.conflictNotice}>
@@ -551,6 +525,8 @@ export function AppointmentDetailsScreen({
 
         <AppointmentSummary summary={summary} />
 
+        {canSellToClient && <AppointmentSaleRow onPress={openSale} />}
+
         <AppointmentProductsSection
           hintKey={
             swipeHintTarget?.startsWith("product:")
@@ -560,8 +536,6 @@ export function AppointmentDetailsScreen({
           lines={productLines}
           onDeleteLine={deleteProductLine}
         />
-
-        <AppointmentTicketTotal discount={appointment.discount} expectedTotal={expectedTotal} />
 
         {appointment.notes && (
           <View style={styles.notes}>
@@ -581,80 +555,27 @@ export function AppointmentDetailsScreen({
             payment={appointment.payment}
           />
         )}
-
-        <View style={styles.appointmentActions} testID="appointment-actions">
-          <AppointmentPrimaryActions
-            checkoutLabel={
-              appointment.status === "COMPLETED"
-                ? "Enregistrer un encaissement"
-                : "Encaisser"
-            }
-            onCheckout={canCheckout ? () => setCheckoutMode("checkout") : undefined}
-            onSell={canSellToClient ? openSale : undefined}
-          />
-          {hasNormalActions && (
-            <View
-              style={styles.normalActions}
-              testID="appointment-normal-actions"
-            >
-              {canMarkNoShow && (
-                <AppButton
-                  onPress={() => setActiveSheet("no-show")}
-                  style={styles.normalAction}
-                  testID="open-no-show"
-                  title="Absence"
-                  variant="dangerSoft"
-                />
-              )}
-              {canCancel && (
-                <AppButton
-                  onPress={() => setActiveSheet("cancellation")}
-                  style={styles.normalAction}
-                  testID="open-cancellation"
-                  title="Annuler"
-                  variant="dangerSoft"
-                />
-              )}
-              {canModify && (
-                <AppButton
-                  accessibilityLabel="Modifier le rendez-vous"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/appointments/edit/[appointmentId]",
-                      params: { appointmentId: appointment.id },
-                    })
-                  }
-                  style={[
-                    styles.normalAction,
-                    !canMarkNoShow && !canCancel && styles.onlyNormalAction,
-                  ]}
-                  testID="modify-appointment"
-                  title="Modifier"
-                  variant="secondary"
-                />
-              )}
-            </View>
-          )}
-          {/* Pushes the destructive action as low as the sheet allows: it takes
-              any spare height, and never less than a clear separation. */}
-          <View style={styles.deleteSpacer} />
-          <Pressable
-            accessibilityHint="Supprime le rendez-vous de l’agenda et de l’historique"
-            accessibilityRole="button"
-            onPress={requestDeletion}
-            style={({ pressed }) => [
-              styles.deleteTextAction,
-              pressed && styles.deleteTextActionPressed,
-            ]}
-            testID="open-permanent-deletion"
-          >
-            <AppText variant="control" style={styles.deleteText}>
-              Supprimer
-            </AppText>
-          </Pressable>
-        </View>
       </ScrollView>
 
+      {/* Outside the scroll: always visible, never covering the content. */}
+      <AppointmentCheckoutFooter
+        checkoutAction={appointment.status === "COMPLETED" ? "record" : "checkout"}
+        discount={appointment.discount}
+        expectedTotal={expectedTotal}
+        onCheckout={canCheckout ? () => setCheckoutMode("checkout") : undefined}
+      />
+
+      <AppointmentActionsSheet
+        available={available}
+        clientName={clientDisplayName}
+        onClose={() => setMenuVisible(false)}
+        onDismissed={runSecondaryAction}
+        onSelect={(action) => {
+          setPendingAction(action);
+          setMenuVisible(false);
+        }}
+        visible={menuVisible}
+      />
       <AppointmentCheckoutSheet
         discount={appointment.discount}
         expectation={expectedTotal}
@@ -687,15 +608,12 @@ export function AppointmentDetailsScreen({
 
 const styles = StyleSheet.create({
   scroll: { flexShrink: 1 },
-  // Grows with the sheet so the actions block can push « Supprimer » down; the
-  // bottom breathing room sits ABOVE the destructive action, not under it (the
-  // sheet shell already clears the home indicator).
-  content: { flexGrow: 1, paddingBottom: spacing.sm, paddingTop: spacing.sm },
-  appointmentHeader: { paddingBottom: spacing.xl },
+  content: { paddingBottom: spacing.xl, paddingTop: spacing.sm },
   identityHeader: {
-    alignItems: "stretch",
+    alignItems: "center",
     flexDirection: "row",
-    marginBottom: spacing.base,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
   identityAccent: {
     alignSelf: "stretch",
@@ -707,88 +625,29 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.xs,
     justifyContent: "center",
-    marginLeft: spacing.md,
+    marginLeft: spacing.xs,
     minWidth: 0,
   },
-  closeAction: { alignSelf: "center", paddingHorizontal: spacing.md },
+  headerActions: { flexDirection: "row", gap: spacing.sm },
   identityEyebrow: { color: rose.rose600 },
   clientName: { color: semanticColors.foreground },
-  metaSurface: {
-    backgroundColor: semanticColors.surfaceRose,
-    borderCurve: "continuous",
-    borderRadius: radii.medium,
-    padding: spacing.base,
-  },
-  dateLine: { color: semanticColors.foreground },
-  birthdayLine: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs,
-    marginTop: spacing.xs,
-  },
-  birthdayText: { color: rose.rose700 },
-  metaBottomRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: spacing.sm,
-  },
-  timeLine: {
-    color: semanticColors.foreground,
-    flexShrink: 1,
-    fontVariant: ["tabular-nums"],
-  },
-  statusRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    marginLeft: spacing.sm,
-  },
-  statusDot: {
-    borderRadius: radii.pill,
-    height: 6,
-    marginRight: spacing.xs,
-    width: 6,
-  },
-  activeStatusDot: { backgroundColor: semanticColors.accent },
-  activeStatusText: { color: semanticColors.accent },
-  completedStatusDot: { backgroundColor: foregroundSoft },
-  completedStatusText: { color: foregroundSoft },
-  exceptionStatusDot: { backgroundColor: rose.rose600 },
-  exceptionStatusText: { color: rose.rose600 },
-  outcomeMetadata: {
-    borderTopColor: rose.rose200,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-  },
-  outcomeActor: { color: rose.rose600 },
-  outcomeReason: { color: foregroundSoft },
   sectionHeader: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
+    marginTop: spacing.xl,
+  },
+  servicesGroup: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.borderSubtle,
+    borderCurve: "continuous",
+    borderRadius: radii.large,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
   },
   conflictNotice: { marginTop: spacing.sm },
   notes: {
     marginTop: spacing.xl,
   },
   noteLabel: { color: semanticColors.foreground, marginBottom: spacing.sm },
-  appointmentActions: { flexGrow: 1, gap: spacing.sm, marginTop: spacing.xl },
-  normalActions: { flexDirection: "row", gap: spacing.sm },
-  normalAction: { flex: 1, minWidth: 0, paddingHorizontal: spacing.sm },
-  onlyNormalAction: { flex: 0, marginLeft: "auto" },
-  deleteSpacer: { flexGrow: 1, minHeight: spacing.xl },
-  deleteTextAction: {
-    alignItems: "center",
-    alignSelf: "center",
-    justifyContent: "center",
-    minHeight: touchTarget[Platform.OS === "android" ? "android" : "ios"],
-    paddingHorizontal: spacing.md,
-  },
-  deleteTextActionPressed: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
-  },
-  deleteText: { color: rose.rose600 },
   notFound: {
     alignItems: "center",
     justifyContent: "center",

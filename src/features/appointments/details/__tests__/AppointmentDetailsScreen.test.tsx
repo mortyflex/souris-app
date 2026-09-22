@@ -153,6 +153,32 @@ jest.mock("react-native-safe-area-context", () => {
   };
 });
 
+// The preset Modal mock never reports dismissal; this one mirrors the iOS
+// contract (onDismiss once `visible` has dropped), so the « ••• » action list
+// chains its action exactly as on device.
+jest.mock("react-native/Libraries/Modal/Modal", () => {
+  const React = jest.requireActual("react") as typeof import("react");
+  const { View } = jest.requireActual("react-native") as typeof import("react-native");
+
+  interface MockModalProps {
+    readonly visible?: boolean;
+    readonly onDismiss?: () => void;
+    readonly children?: React.ReactNode;
+  }
+
+  class MockModal extends React.Component<MockModalProps> {
+    componentDidUpdate(previous: MockModalProps) {
+      if (previous.visible && !this.props.visible) this.props.onDismiss?.();
+    }
+
+    render() {
+      return this.props.visible ? React.createElement(View, null, this.props.children) : null;
+    }
+  }
+
+  return { __esModule: true, default: MockModal };
+});
+
 // Real legacy catalog identities of the development seed.
 const MASQUE_ID = "6974bff937a5d89c2d9afbd0"; // Masque réparateur 5 min · 50 €
 const CONCENTRATE_ID = "68d802c055b09988d663415f"; // Acidic bonding concentrate · 12 €
@@ -602,6 +628,29 @@ async function press(view: Awaited<ReturnType<typeof render>>, testID: string) {
   });
 }
 
+/** The « ••• » actions currently offered, in order (the list is closed again). */
+async function secondaryActions(view: Awaited<ReturnType<typeof render>>): Promise<string[]> {
+  await press(view, "open-appointment-actions");
+  await settleSheetTransition();
+  const ids = within(view.getByTestId("appointment-actions-sheet"))
+    .getAllByRole("button")
+    .map(({ props }) => props.testID as string)
+    .filter((testID) => testID !== undefined);
+  await act(async () => {
+    fireEvent.press(view.getByLabelText("Fermer les actions"));
+  });
+  await settleSheetTransition();
+  return ids;
+}
+
+/** Opens « ••• », chooses one action and lets the list close so the action runs. */
+async function chooseAction(view: Awaited<ReturnType<typeof render>>, testID: string) {
+  await press(view, "open-appointment-actions");
+  await settleSheetTransition();
+  await press(view, testID);
+  await settleSheetTransition();
+}
+
 async function typeAmount(
   view: Awaited<ReturnType<typeof render>>,
   method: "card" | "cash",
@@ -631,24 +680,20 @@ describe("AppointmentDetailsScreen", () => {
     jest.useRealTimers();
   });
 
-  it("moves Modifier from the identity header to the rightmost normal action", async () => {
+  it("moves Modifier and the lifecycle actions behind « ••• », never onto the main sheet", async () => {
     const view = await renderDetails();
 
     expect(view.getByText("Sofia Petit")).toBeTruthy();
-    expect(
-      within(view.getByTestId("appointment-identity-header")).queryByTestId(
-        "modify-appointment",
-      ),
-    ).toBeNull();
-    expect(
-      within(view.getByTestId("appointment-normal-actions"))
-        .getAllByRole("button")
-        .map(({ props }) => props.testID),
-    ).toEqual(["open-cancellation", "modify-appointment"]);
-    expect(view.queryByText("Actions")).toBeNull();
-    expect(view.queryByText("Actions secondaires")).toBeNull();
+    expect(view.queryByTestId("modify-appointment")).toBeNull();
+    expect(view.queryByTestId("open-cancellation")).toBeNull();
+    expect(view.queryByTestId("open-permanent-deletion")).toBeNull();
+    expect(await secondaryActions(view)).toEqual([
+      "modify-appointment",
+      "open-cancellation",
+      "open-permanent-deletion",
+    ]);
 
-    await press(view, "modify-appointment");
+    await chooseAction(view, "modify-appointment");
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: "/appointments/edit/[appointmentId]",
@@ -656,17 +701,18 @@ describe("AppointmentDetailsScreen", () => {
     });
   });
 
-  it("offers the visible « Fermer » text action of every sheet in the identity header", async () => {
+  it("closes from the icon button of the identity header, spoken « Fermer »", async () => {
     const view = await renderDetails();
 
     const header = within(view.getByTestId("appointment-identity-header"));
     const close = header.getByRole("button", { name: "Fermer" });
     expect(close.props.testID).toBe("close-appointment-details");
-    // A worded action, not an icon-only control.
-    expect(header.getByText("Fermer")).toBeTruthy();
+    // An icon button beside « ••• », no longer the large worded action.
+    expect(header.queryByText("Fermer")).toBeNull();
     expect(
-      within(close).queryByTestId("glass-surface", { includeHiddenElements: true }),
-    ).toBeNull();
+      within(close).getByTestId("glass-surface", { includeHiddenElements: true }),
+    ).toBeTruthy();
+    expect(header.getByRole("button", { name: "Actions du rendez-vous" })).toBeTruthy();
 
     await press(view, "close-appointment-details");
 
@@ -678,7 +724,7 @@ describe("AppointmentDetailsScreen", () => {
     expect(mockSelectionHaptic).not.toHaveBeenCalled();
   });
 
-  it("keeps the outside-tap dismissal next to « Fermer »", async () => {
+  it("keeps the outside-tap dismissal next to the close button", async () => {
     const view = await renderDetails();
 
     const scrim = view.getByTestId("sheet-screen-scrim");
@@ -695,14 +741,15 @@ describe("AppointmentDetailsScreen", () => {
     });
     const view = await renderDetails();
 
-    expect(view.getByTestId("modify-appointment")).toBeTruthy();
-    expect(view.getByTestId("open-cancellation")).toBeTruthy();
-    expect(view.getByTestId("open-permanent-deletion")).toBeTruthy();
+    expect(await secondaryActions(view)).toEqual([
+      "modify-appointment",
+      "open-cancellation",
+      "open-permanent-deletion",
+    ]);
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
     expect(view.queryByText("Terminer")).toBeNull();
-    expect(view.queryByTestId("open-no-show")).toBeNull();
 
-    await user.press(view.getByTestId("open-cancellation"));
+    await chooseAction(view, "open-cancellation");
 
     expect(view.getByText("Annuler ce rendez-vous ?")).toBeTruthy();
     expect(
@@ -725,32 +772,33 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByText("Annulé")).toBeTruthy();
     expect(view.getByText("Annulé par la cliente")).toBeTruthy();
     expect(view.getByText("Empêchement")).toBeTruthy();
-    expect(view.queryByTestId("modify-appointment")).toBeNull();
-    expect(view.queryByTestId("open-cancellation")).toBeNull();
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
+    expect(await secondaryActions(view)).toEqual(["open-permanent-deletion"]);
   });
 
-  it("shows Revente and Encaisser side by side, above the lifecycle actions, and links the Sale to the Appointment", async () => {
+  it("offers « Ajouter une vente » in the body, checkout with its amount in the sticky footer, and links the Sale to the Appointment", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     const view = await renderDetails();
 
     expect(view.queryByText("Terminer")).toBeNull();
     expect(view.queryByTestId("complete-appointment")).toBeNull();
-    const primaryRow = within(view.getByTestId("appointment-primary-actions"));
-    expect(
-      primaryRow.getAllByRole("button").map(({ props }) => props.testID),
-    ).toEqual(["sell-product", "checkout-appointment"]);
-    expect(primaryRow.getByText("Revente")).toBeTruthy();
-    expect(primaryRow.getByText("Encaisser")).toBeTruthy();
-    expect(
-      within(view.getByTestId("appointment-normal-actions")).queryByTestId("sell-product"),
-    ).toBeNull();
-    const actionOrder = within(view.getByTestId("appointment-actions"))
-      .getAllByRole("button")
-      .map(({ props }) => props.testID);
-    expect(actionOrder.indexOf("checkout-appointment")).toBeLessThan(
-      actionOrder.indexOf("open-no-show"),
+    expect(view.queryByText("Revente")).toBeNull();
+    const body = within(view.getByTestId("appointment-details-scroll"));
+    expect(within(body.getByTestId("sell-product")).getByText("Ajouter une vente")).toBeTruthy();
+    // The footer lives outside the scrolling body: it never scrolls away.
+    expect(body.queryByTestId("checkout-appointment")).toBeNull();
+    const footer = within(view.getByTestId("appointment-checkout-footer"));
+    expect(footer.getByText("Total à encaisser")).toBeTruthy();
+    expect(footer.getByText(`Encaisser ${formatEuroCents(9500)}`)).toBeTruthy();
+    expect(footer.getByTestId("checkout-appointment").props.accessibilityLabel).toBe(
+      `Encaisser ${formatEuroCents(9500)}`,
     );
+    // The amount to charge lives in the footer only: the summary carries none.
+    const summary = within(view.getByTestId("appointment-summary"));
+    expect(summary.getByText("Durée totale")).toBeTruthy();
+    expect(summary.getByText("Nombre de prestations")).toBeTruthy();
+    expect(summary.queryByText(/€/)).toBeNull();
+    expect(view.queryByTestId("appointment-services-total")).toBeNull();
 
     await press(view, "sell-product");
     expect(mockPush).toHaveBeenCalledWith({
@@ -764,14 +812,13 @@ describe("AppointmentDetailsScreen", () => {
     const view = await renderDetails();
 
     expect(view.getByTestId("checkout-appointment")).toBeTruthy();
-    expect(view.getByTestId("open-no-show")).toBeTruthy();
-    expect(view.getByTestId("open-cancellation")).toBeTruthy();
     expect(view.queryByText("Démarrer")).toBeNull();
-    expect(
-      within(view.getByTestId("appointment-normal-actions"))
-        .getAllByRole("button")
-        .map(({ props }) => props.testID),
-    ).toEqual(["open-no-show", "open-cancellation", "modify-appointment"]);
+    expect(await secondaryActions(view)).toEqual([
+      "modify-appointment",
+      "open-no-show",
+      "open-cancellation",
+      "open-permanent-deletion",
+    ]);
 
     await press(view, "checkout-appointment");
 
@@ -800,10 +847,8 @@ describe("AppointmentDetailsScreen", () => {
     expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
     expect(view.queryByTestId("checkout-sheet")).toBeNull();
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
-    expect(view.queryByTestId("open-no-show")).toBeNull();
-    expect(view.queryByTestId("open-cancellation")).toBeNull();
-    expect(view.queryByTestId("modify-appointment")).toBeNull();
     expect(view.getByTestId("sell-product")).toBeTruthy();
+    expect(await secondaryActions(view)).toEqual(["open-permanent-deletion"]);
 
     const payment = within(view.getByTestId("appointment-payment"));
     expect(payment.getByText("Encaissement")).toBeTruthy();
@@ -854,7 +899,8 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
     expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
     expect(view.queryByTestId("appointment-payment-total")).toBeNull();
-    expect(view.getByText("Enregistrer un encaissement")).toBeTruthy();
+    expect(view.getByLabelText(/^Enregistrer un encaissement de /)).toBeTruthy();
+    expect(view.getByText(/^Enregistrer /)).toBeTruthy();
 
     await press(view, "checkout-appointment");
     await typeAmount(view, "cash", "42");
@@ -871,29 +917,28 @@ describe("AppointmentDetailsScreen", () => {
     const view = await renderDetails();
 
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
-    expect(view.queryByTestId("open-no-show")).toBeNull();
+    expect(await secondaryActions(view)).not.toContain("open-no-show");
 
     await act(async () => {
       jest.advanceTimersByTime(30_000);
     });
 
     expect(view.getByTestId("checkout-appointment")).toBeTruthy();
-    expect(view.getByTestId("open-no-show")).toBeTruthy();
+    expect(await secondaryActions(view)).toContain("open-no-show");
   });
 
   it("confirms and preserves a started same-day no-show", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     const view = await renderDetails();
 
-    await press(view, "open-no-show");
+    await chooseAction(view, "open-no-show");
     expect(view.getByText("Marquer comme absence ?")).toBeTruthy();
 
     await press(view, "confirm-no-show");
 
     expect(view.getByText("Absence")).toBeTruthy();
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
-    expect(view.queryByTestId("open-no-show")).toBeNull();
-    expect(view.queryByTestId("open-cancellation")).toBeNull();
+    expect(await secondaryActions(view)).toEqual(["open-permanent-deletion"]);
     expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
   });
 
@@ -904,7 +949,7 @@ describe("AppointmentDetailsScreen", () => {
     });
     const view = await renderDetails();
 
-    await user.press(view.getByTestId("open-cancellation"));
+    await chooseAction(view, "open-cancellation");
     await user.press(view.getByTestId("cancellation-actor-client"));
     jest.setSystemTime(new Date(2026, 7, 30, 0, 0, 1));
 
@@ -920,16 +965,14 @@ describe("AppointmentDetailsScreen", () => {
   it("requires a focused confirmation and lets Retour preserve the appointment", async () => {
     const view = await renderDetails();
 
-    const deleteAction = view.getByTestId("open-permanent-deletion");
-    expect(deleteAction.props.accessibilityRole).toBe("button");
-    expect(deleteAction.props.accessibilityState.disabled).toBeUndefined();
-    expect(view.queryByText("Actions")).toBeNull();
-    expect(view.queryByText("Actions secondaires")).toBeNull();
+    // Never alone at the bottom of the sheet: « Supprimer » lives behind « ••• ».
+    expect(view.queryByTestId("open-permanent-deletion")).toBeNull();
+    expect(view.queryByText("Supprimer")).toBeNull();
     expect(view.getByTestId("appointment-presence").props.children).toBe(
       "present",
     );
 
-    await press(view, "open-permanent-deletion");
+    await chooseAction(view, "open-permanent-deletion");
 
     expect(view.getByTestId("permanent-deletion-dialog")).toBeTruthy();
     expect(view.getByText("SUPPRESSION")).toBeTruthy();
@@ -955,7 +998,7 @@ describe("AppointmentDetailsScreen", () => {
   it("permanently deletes the appointment, triggers warning haptics, and closes Details", async () => {
     const view = await renderDetails();
 
-    await press(view, "open-permanent-deletion");
+    await chooseAction(view, "open-permanent-deletion");
     expect(view.getByTestId("appointment-presence").props.children).toBe(
       "present",
     );
@@ -976,16 +1019,15 @@ describe("AppointmentDetailsScreen", () => {
     });
     const view = await renderDetails();
 
-    await user.press(view.getByTestId("open-cancellation"));
+    await chooseAction(view, "open-cancellation");
     await user.press(view.getByTestId("cancellation-actor-client"));
     await user.press(view.getByTestId("confirm-cancellation"));
 
     expect(view.getByText("Annulé")).toBeTruthy();
-    expect(view.getByTestId("open-permanent-deletion")).toBeTruthy();
-    expect(view.queryByTestId("open-cancellation")).toBeNull();
+    expect(await secondaryActions(view)).toEqual(["open-permanent-deletion"]);
     mockWarningHaptic.mockClear();
 
-    await user.press(view.getByTestId("open-permanent-deletion"));
+    await chooseAction(view, "open-permanent-deletion");
     await user.press(view.getByTestId("confirm-permanent-deletion"));
 
     expect(view.getByTestId("appointment-presence").props.children).toBe(
@@ -1003,7 +1045,7 @@ describe("AppointmentDetailsScreen", () => {
     await press(view, "confirm-checkout");
     await settleSheetTransition();
 
-    await press(view, "open-permanent-deletion");
+    await chooseAction(view, "open-permanent-deletion");
 
     expect(view.queryByTestId("permanent-deletion-dialog")).toBeNull();
     expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
@@ -1023,7 +1065,7 @@ describe("AppointmentDetailsScreen", () => {
     await press(view, "stock-products");
     await press(view, "sell-linked-shampoo");
 
-    await press(view, "open-permanent-deletion");
+    await chooseAction(view, "open-permanent-deletion");
 
     expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
     expect(view.queryByTestId("permanent-deletion-dialog")).toBeNull();
@@ -1054,7 +1096,6 @@ describe("AppointmentDetailsScreen", () => {
     const view = await renderDetails();
     expect(view.queryByTestId("appointment-products")).toBeNull();
     // Before any Revente the ticket total is simply the Prestations total — never hidden.
-    expect(view.getByTestId("appointment-services-total").props.children).toBe(formatEuros(95));
     expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
 
     await press(view, "stock-products");
@@ -1299,7 +1340,7 @@ describe("AppointmentDetailsScreen", () => {
         fireEvent.press(view.getByLabelText("Annuler l’encaissement"));
       });
       await settleSheetTransition();
-      await press(view, "open-permanent-deletion");
+      await chooseAction(view, "open-permanent-deletion");
       expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
     });
 
@@ -1307,14 +1348,14 @@ describe("AppointmentDetailsScreen", () => {
       const view = await renderDetails();
       await press(view, "stock-products");
       await press(view, "sell-linked-shampoo");
-      await press(view, "open-permanent-deletion");
+      await chooseAction(view, "open-permanent-deletion");
       expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
       await press(view, "close-appointment-deletion-blocked");
 
       await press(view, `${masqueRow}-swipe-full`);
       expect(view.getByTestId("stock-masque").props.children).toBe(5);
 
-      await press(view, "open-permanent-deletion");
+      await chooseAction(view, "open-permanent-deletion");
       expect(view.queryByTestId("appointment-deletion-blocked")).toBeNull();
       expect(view.getByTestId("permanent-deletion-dialog")).toBeTruthy();
     });
@@ -1477,7 +1518,7 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.getByTestId("three-service-items").props.children).toBe("ts-coupe:0:30|ts-brushing:1:20");
       expect(storedOrder(db)).toEqual(["ts-coupe", "ts-brushing"]);
       expect(view.queryByTestId("service-section-ts-balayage")).toBeNull();
-      expect(view.getByTestId("appointment-services-total").props.children).toBe(formatEuros(50));
+      expect(view.getByTestId("appointment-service-count").props.children).toBe("2");
       expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(5000));
       expect(view.getByText("50 min")).toBeTruthy();
       expect(view.getByText("10:00 – 10:50")).toBeTruthy();
@@ -1647,7 +1688,7 @@ describe("AppointmentDetailsScreen", () => {
     });
   });
 
-  it("keeps an archived Client fully readable, withholds Revente, and keeps Encaisser", async () => {
+  it("keeps an archived Client fully readable, withholds « Ajouter une vente », and keeps Encaisser", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     const view = await renderDetails("agenda-sofia", <ClientLifecycleProbe />);
 
@@ -1658,10 +1699,14 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByText("Sofia Petit")).toBeTruthy();
     expect(view.queryByText("Cliente inconnue")).toBeNull();
     expect(view.queryByTestId("sell-product")).toBeNull();
-    expect(view.queryByText("Revente")).toBeNull();
+    expect(view.queryByText("Ajouter une vente")).toBeNull();
     expect(view.getByTestId("checkout-appointment")).toBeTruthy();
-    expect(view.getByTestId("appointment-normal-actions")).toBeTruthy();
-    expect(view.getByTestId("open-permanent-deletion")).toBeTruthy();
+    expect(await secondaryActions(view)).toEqual([
+      "modify-appointment",
+      "open-no-show",
+      "open-cancellation",
+      "open-permanent-deletion",
+    ]);
   });
 
   describe("appointment-specific timing", () => {
@@ -1784,7 +1829,7 @@ describe("AppointmentDetailsScreen", () => {
       });
       const view = await renderDetails();
 
-      await user.press(view.getByTestId("open-cancellation"));
+      await chooseAction(view, "open-cancellation");
       await user.press(view.getByTestId("cancellation-actor-client"));
       await user.press(view.getByTestId("confirm-cancellation"));
       expect(view.getByText("Annulé")).toBeTruthy();
@@ -1806,19 +1851,18 @@ describe("AppointmentDetailsScreen", () => {
 
       expect(view.queryByTestId("appointment-discount-row")).toBeNull();
       expect(view.queryByText(/Réduction/)).toBeNull();
-      expect(view.getByTestId("appointment-services-total").props.children).toBe(formatEuros(95));
       expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
     });
 
-    it("shows gross, percentage discount and final total; the item snapshot price stays as booked", async () => {
+    it("shows the percentage discount under the final total; the item snapshot price stays as booked", async () => {
       const view = await renderDetails("agenda-sofia", <DiscountProbe />);
       await press(view, "apply-percent-discount");
 
       expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
-      // Prestations 95,00 € → Réduction -20 % -19,00 € → Total 76,00 €
-      expect(view.getByTestId("appointment-services-total").props.children).toBe(formatEuros(95));
-      const row = within(view.getByTestId("appointment-discount-row"));
-      expect(row.getByText("Réduction -20 %")).toBeTruthy();
+      // Total 76,00 € with « Réduction -20 % · -19,00 € » under it (Prestations 95,00 €)
+      expect(view.getByTestId("appointment-discount-row")).toHaveTextContent(
+        `Réduction -20 % · -${formatEuroCents(1900)}`,
+      );
       expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(1900)}`);
       expect(view.getByTestId("appointment-discount-row").props.accessibilityLabel).toBe(
         `Réduction de 20 pour cent, -${formatEuroCents(1900)}`,
@@ -1838,7 +1882,9 @@ describe("AppointmentDetailsScreen", () => {
       const view = await renderDetails("agenda-sofia", <DiscountProbe />);
 
       await press(view, "apply-fixed-discount");
-      expect(within(view.getByTestId("appointment-discount-row")).getByText("Réduction")).toBeTruthy();
+      expect(view.getByTestId("appointment-discount-row")).toHaveTextContent(
+        `Réduction · -${formatEuroCents(1500)}`,
+      );
       expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(1500)}`);
       expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(8000));
 
@@ -1910,8 +1956,8 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.queryByTestId("birthday-confetti", { includeHiddenElements: true })).toBeNull();
       expect(view.queryByTestId("appointment-discount")).toBeNull();
       expect(view.queryByText("Appliquer une réduction")).toBeNull();
-      expect(view.getByTestId("modify-appointment")).toBeTruthy();
       expect(mockSuccessHaptic).not.toHaveBeenCalled();
+      expect(await secondaryActions(view)).toContain("modify-appointment");
     });
 
     it("shows nothing when the birthday is another day", async () => {

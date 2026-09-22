@@ -1,7 +1,10 @@
 // Souris — Appointment Details service accordion
 //
-// Collapsed: start time, service name, compact total duration, price and a
-// chevron. Expanded on an EDITABLE Appointment: the shared per-phase timing
+// One row of the grouped « Prestations » list: the list owns the white
+// surface, each row after the first draws its own inset separator. Collapsed:
+// start time (accent), service name, compact total duration, price and a
+// chevron — a row that cannot open keeps the chevron slot empty so every
+// price stays in the same column. Expanded on an EDITABLE Appointment: the shared per-phase timing
 // editor (±5 min steppers, no keyboard) working on a local draft, with one
 // compact « Enregistrer » that persists the whole item atomically. Expanded
 // on a read-only Appointment: the historical phase rows.
@@ -32,7 +35,6 @@ import {
   duration,
   easing,
   foregroundSoft,
-  radii,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
@@ -47,6 +49,8 @@ import {
 import { AppointmentPhaseRow } from './AppointmentPhaseRow';
 
 const TRANSITION_EASING = Easing.bezier(...easing.out);
+/** Width of the start-time column; the separators are inset to the name column. */
+const TIME_COLUMN_WIDTH = 44;
 
 interface AppointmentServiceSectionProps {
   readonly service: AppointmentDetailService;
@@ -58,6 +62,8 @@ interface AppointmentServiceSectionProps {
   readonly onSaveTiming?: (updates: readonly AppointmentPhaseDurationUpdate[]) => boolean;
   /** The shared reorder handle, present while the Appointment is editable and has several items. */
   readonly dragHandle?: ReactNode;
+  /** Draws the inset separator above the row (every row but the first). */
+  readonly separated?: boolean;
 }
 
 type DraftDurations = Readonly<Record<string, number>>;
@@ -78,6 +84,7 @@ export function AppointmentServiceSection({
   editable = false,
   onSaveTiming,
   dragHandle,
+  separated = false,
 }: AppointmentServiceSectionProps) {
   const { item, timelineItem } = service;
   const simple = isServicePhaseRedundant(service);
@@ -139,14 +146,17 @@ export function AppointmentServiceSection({
       <AppText variant="metadata" selectable style={styles.price}>
         {formatPrice(item.price)}
       </AppText>
-      {expandable && (
+      {expandable ? (
         <DisclosureChevron expanded={expanded} style={styles.chevron} />
+      ) : (
+        <View style={styles.chevronSlot} />
       )}
     </>
   );
 
   return (
     <Animated.View layout={layoutTransition} style={styles.container} testID={`service-section-${item.id}`}>
+      {separated && <View style={styles.separator} />}
       <View style={styles.headerRow}>
         {expandable ? (
           <Pressable
@@ -209,11 +219,11 @@ export function AppointmentServiceSection({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.medium,
-    overflow: 'hidden',
+  container: { backgroundColor: semanticColors.surfaceElevated, overflow: 'hidden' },
+  separator: {
+    backgroundColor: semanticColors.borderSubtle,
+    height: StyleSheet.hairlineWidth,
+    marginLeft: spacing.base + TIME_COLUMN_WIDTH + spacing.sm,
   },
   headerRow: { alignItems: 'center', flexDirection: 'row' },
   header: {
@@ -221,30 +231,29 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     minWidth: 0,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    minHeight: 60,
+    paddingLeft: spacing.base,
+    paddingRight: spacing.md,
+    paddingVertical: spacing.md,
   },
-  pressed: { backgroundColor: semanticColors.surfaceLavenderStrong },
+  pressed: { backgroundColor: semanticColors.surfaceLavender },
   time: {
     color: semanticColors.accent,
     fontVariant: ['tabular-nums'],
     marginRight: spacing.sm,
-    minWidth: 40,
+    width: TIME_COLUMN_WIDTH,
   },
   titleBody: { flex: 1, gap: 2, minWidth: 0 },
   serviceName: { color: semanticColors.foreground },
   serviceMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  price: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
-  chevron: { marginLeft: spacing.sm },
-  expandedBody: {
-    backgroundColor: semanticColors.surfaceElevated,
-    paddingVertical: spacing.xs,
-  },
+  price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
+  chevron: { marginLeft: spacing.xs },
+  chevronSlot: { marginLeft: spacing.xs, width: 24 },
+  expandedBody: { paddingBottom: spacing.sm, paddingHorizontal: spacing.sm },
   timingBody: {
-    backgroundColor: semanticColors.surfaceElevated,
     gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   timingFooter: {
     alignItems: 'center',

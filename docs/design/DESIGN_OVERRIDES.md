@@ -1169,3 +1169,40 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
   « 09:00, Coloration, Léa Martin, 95,00 €, encaissé » — as are the total and each breakdown line.
   « encaissé » is never colour alone: a check glyph and the spoken word.
 - **Wording.** Souris has no deposit: the line reads « Déjà encaissé », never « Acomptes ».
+
+---
+
+## 26. Appointment Details — Checkout-First Sheet
+
+Supersedes, for Appointment Details only: the worded « Fermer » of §22 (« never an icon-only ✕ »),
+the `Revente` pill of §14 and the gross « Prestations » banner + « TOTAL À ENCAISSER » row of §23.
+Data, eligibility rules, handlers, sheet gestures and sizing are unchanged. ONE layout for every
+status; only the data (status pill, available actions, CTA) changes.
+
+- **Header.** Rose accent bar, `RENDEZ-VOUS` eyebrow, client name (`sheetTitle`, two lines max).
+  On the right, two `GlassIconButton`s (§21): « ••• » (spoken « Actions du rendez-vous ») and ✕
+  (spoken « Fermer »). The ✕ is the same `router.back()` as the swipe and the outside tap.
+- **Metadata.** No card: calendar glyph + date, clock glyph + time range (`body`, soft glyphs),
+  the status pill on the right, closed by a hairline. Pill = dot + label on a light fill of the
+  same family: `scheduled` lavender, `current` mint (« En cours »), `completed` neutral,
+  `exception` rose. « En cours » is presentation only — a live Appointment whose time range
+  contains now; the stored status never changes. The label is always written.
+- **Prestations.** ONE white grouped list (`surfaceElevated`, `borderSubtle` hairline,
+  `radii.large`) with inset separators: accent start time, `control` name, soft duration · phases,
+  navy price in a fixed column, then the accordion chevron (an empty slot when the row cannot
+  open). On an editable Appointment the reorder handle stays: reordering is a documented Details
+  quick edit (`docs/domain/APPOINTMENTS.md`). Swipe-to-remove unchanged.
+- **Summary.** One white surface, two columns: « Durée totale » and « Nombre de prestations »,
+  each with a 20 pt accent glyph. No amount.
+- **« Ajouter une vente ».** The Revente as a light white row: accent ⊕, accent label, chevron.
+  Secondary to checkout; hidden for an archived Client.
+- **« ••• » actions.** A `BottomSheet` action list: Modifier le rendez-vous (navy, accent glyph),
+  Marquer une absence and Annuler le rendez-vous (`rose700`), then « Supprimer le rendez-vous »
+  (`rose600`) in its own group. Only eligible actions are listed. The chosen action runs from
+  `onDismissed`, so the next drawer, dialog or route never races the closing list. Deletion keeps
+  the shared `ConfirmationDialog` (confirm / blocked).
+- **Sticky checkout footer.** `SheetActionBar` below the scroll (hairline on top): « Total à
+  encaisser » (`metadata`) over the amount (`summaryValue`), then a quiet `Réduction … · -X €` line
+  when a discount exists; on the right the primary violet CTA naming the amount — « Encaisser
+  95,00 € », or « Enregistrer 95,00 € » on a completed Appointment without payment. No CTA when
+  checkout is not allowed; the total stays. The recorded payment summary stays in the body.

@@ -51,7 +51,7 @@ export function AppointmentProductRow({ line, onDelete, hint = false }: Appointm
         deleteTestID={`delete-appointment-product-${line.productId}`}
         hint={hint}
         onDelete={deleteWithFeedback}
-        surfaceColor={semanticColors.surfaceLavender}
+        surfaceColor={semanticColors.surfaceElevated}
         testID={`appointment-product-${line.productId}`}
       >
         <View

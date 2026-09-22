@@ -1,9 +1,10 @@
 // Souris — GlassIconButton
 //
 // The circular light-glass icon control (docs/design/DESIGN_OVERRIDES.md §21):
-// the back button of pushed screens and the Agenda previous / next arrows. One
-// size, one material (GlassSurface), one dark thin glyph centred in the circle;
-// only the symbol changes. Behaviour stays with the caller.
+// the back button of pushed screens, the Agenda previous / next arrows and the
+// « ••• » / close controls of Appointment Details. One size, one material
+// (GlassSurface), one dark thin glyph centred in the circle; only the symbol
+// changes. Behaviour stays with the caller.
 
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, StyleSheet } from 'react-native';
@@ -19,6 +20,8 @@ export const glassIcons = {
   previous: { ios: 'chevron.left', android: 'chevron_left' },
   next: { ios: 'chevron.right', android: 'chevron_right' },
   calendar: { ios: 'calendar', android: 'calendar_month' },
+  more: { ios: 'ellipsis', android: 'more_horiz' },
+  close: { ios: 'xmark', android: 'close' },
 } as const satisfies Record<string, SymbolViewProps['name']>;
 
 interface GlassIconButtonProps {

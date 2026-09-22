@@ -72,9 +72,14 @@ interface SortableRowListProps<TEntry> {
   readonly renderRow: (entry: TEntry, props: SortableRowRenderProps) => ReactNode;
   /** Disables the drag handle and gesture entirely (read-only lists). */
   readonly sortable?: boolean;
+  /**
+   * Vertical space between rows (default `spacing.sm`). `0` joins the rows
+   * into one grouped surface whose rows draw their own separators.
+   */
+  readonly gap?: number;
 }
 
-const GAP = spacing.sm;
+const DEFAULT_GAP = spacing.sm;
 const LONG_PRESS_MS = 200;
 const MOVE_DURATION_MS = duration.disclosure;
 const MOVE_EASING = Easing.bezier(...easing.out);
@@ -88,6 +93,7 @@ export function SortableRowList<TEntry>({
   onReorder,
   renderRow,
   sortable: sortingEnabled = true,
+  gap = DEFAULT_GAP,
 }: SortableRowListProps<TEntry>) {
   const [heights, setHeights] = useState<HeightMap>({});
   const reducedMotion = useReducedMotion();
@@ -102,8 +108,8 @@ export function SortableRowList<TEntry>({
   const sortable = sortingEnabled && entries.length > 1;
   const ready = keys.every((key) => heights[key] !== undefined);
   const totalHeight = keys.reduce(
-    (total, key) => total + (heights[key] ?? 0) + GAP,
-    keys.length > 0 ? -GAP : 0,
+    (total, key) => total + (heights[key] ?? 0) + gap,
+    keys.length > 0 ? -gap : 0,
   );
   const moveDuration = reducedMotion ? 0 : MOVE_DURATION_MS;
   const liftDuration = reducedMotion ? 0 : duration.state;
@@ -149,6 +155,7 @@ export function SortableRowList<TEntry>({
             dragBase={dragBase}
             dragTop={dragTop}
             fromIndex={index}
+            gap={gap}
             label={getLabel(entry)}
             liftDuration={liftDuration}
             measure={measure(key)}
@@ -179,6 +186,7 @@ function triggerDragEndHaptic() {
 interface DragGestureParams {
   readonly rowKey: string;
   readonly fromIndex: number;
+  readonly gap: number;
   readonly activeKey: SharedValue<string | null>;
   readonly dragBase: SharedValue<number>;
   readonly dragTop: SharedValue<number>;
@@ -191,6 +199,7 @@ function buildPanGesture(params: DragGestureParams) {
   const {
     rowKey,
     fromIndex,
+    gap,
     activeKey,
     dragBase,
     dragTop,
@@ -218,7 +227,7 @@ function buildPanGesture(params: DragGestureParams) {
       if (otherId === id) {
         break;
       }
-      top += (rowHeights[otherId] ?? 0) + GAP;
+      top += (rowHeights[otherId] ?? 0) + gap;
     }
     return top;
   };
@@ -237,7 +246,7 @@ function buildPanGesture(params: DragGestureParams) {
       if (otherCenter < draggedCenter) {
         insertIndex += 1;
       }
-      cursor += (rowHeights[otherId] ?? 0) + GAP;
+      cursor += (rowHeights[otherId] ?? 0) + gap;
     }
     return insertIndex;
   };
@@ -329,6 +338,7 @@ interface SortableRowProps {
   readonly rowKey: string;
   readonly label: string;
   readonly fromIndex: number;
+  readonly gap: number;
   readonly activeKey: SharedValue<string | null>;
   readonly dragBase: SharedValue<number>;
   readonly dragTop: SharedValue<number>;
@@ -347,6 +357,7 @@ function SortableRow({
   rowKey,
   label,
   fromIndex,
+  gap,
   activeKey,
   dragBase,
   dragTop,
@@ -369,6 +380,7 @@ function SortableRow({
       buildPanGesture({
         rowKey,
         fromIndex,
+        gap,
         activeKey,
         dragBase,
         dragTop,
@@ -376,7 +388,7 @@ function SortableRow({
         sharedOrder,
         onReorder,
       }),
-    [activeKey, dragBase, dragTop, fromIndex, onReorder, rowKey, sharedHeights, sharedOrder],
+    [activeKey, dragBase, dragTop, fromIndex, gap, onReorder, rowKey, sharedHeights, sharedOrder],
   );
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -388,7 +400,7 @@ function SortableRow({
       if (otherId === rowKey) {
         break;
       }
-      slot += (rowHeights[otherId] ?? 0) + GAP;
+      slot += (rowHeights[otherId] ?? 0) + gap;
     }
 
     let top = slot;
@@ -424,7 +436,7 @@ function SortableRow({
   return (
     <Animated.View
       onLayout={measure}
-      style={[ready ? styles.rowAbsolute : styles.rowFlow, ready && animatedStyle]}
+      style={[ready ? styles.rowAbsolute : { marginBottom: gap }, ready && animatedStyle]}
       testID={`sortable-row-${rowKey}`}
     >
       {children(sortable ? <DragHandle dragGesture={dragGesture} label={label} /> : undefined)}
@@ -434,7 +446,6 @@ function SortableRow({
 
 const styles = StyleSheet.create({
   container: { position: 'relative' },
-  rowFlow: { marginBottom: GAP },
   rowAbsolute: {
     left: 0,
     position: 'absolute',
