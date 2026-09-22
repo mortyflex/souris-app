@@ -34,13 +34,14 @@ interface ProductImageProps {
 }
 
 /**
- * Media surface heights. Form and details are deliberately tall (near 4:3 and
- * near square on a phone width) so a typical bottle fills most of the box with
- * `contain`; the catalog thumbnail stays compact.
+ * Media surface heights. Details are deliberately tall (near square on a
+ * phone width) so a typical bottle fills most of the box with `contain`; the
+ * form tile stays balanced (≈ 16:9) so it never dominates the edit form, and
+ * the catalog thumbnail stays compact.
  */
 export const productImageHeights = {
   thumbnail: 52,
-  form: 264,
+  form: 200,
   detail: 320,
 } as const satisfies Record<ProductImageVariant, number>;
 

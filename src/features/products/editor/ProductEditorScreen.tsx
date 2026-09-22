@@ -26,7 +26,13 @@
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 
 import type { Product } from "@/domain/products";
 import { ProductImage } from "@/features/products/components/ProductImage";
@@ -42,6 +48,7 @@ import { GlassIconButton, glassIcons } from "@/shared/ui/GlassIconButton";
 import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
 import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetActionBar } from "@/shared/ui/SheetActionBar";
+import { SheetEditingHeader } from "@/shared/ui/SheetEditingHeader";
 import { SheetHeader } from "@/shared/ui/SheetHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
 import { TextField } from "@/shared/ui/TextField";
@@ -144,9 +151,6 @@ export function ProductEditorScreen({
           candidate.barcode === values.barcode.trim(),
       )
     : undefined;
-  const title =
-    mode === "create" ? "Ajouter un produit" : (product?.name ?? "");
-  const closeLabel = mode === "create" || editing ? "Annuler" : "Fermer";
 
   const close = () => {
     if (mode === "existing" && editing && product) {
@@ -279,7 +283,10 @@ export function ProductEditorScreen({
       {mode === "existing" && !editing && product ? (
         // Detail sheet: name + « ••• » + ×, like Appointment Details. The
         // creation / editing header (« Annuler » + title) stays for the form.
-        <View style={[styles.headerZone, styles.detailHeader]} testID="product-detail-header">
+        <View
+          style={[styles.headerZone, styles.detailHeader]}
+          testID="product-detail-header"
+        >
           <AppText
             accessibilityRole="header"
             numberOfLines={2}
@@ -304,13 +311,23 @@ export function ProductEditorScreen({
             />
           </View>
         </View>
+      ) : mode === "existing" ? (
+        // Editing sheet: the canonical « Annuler » + title header, the ONE
+        // Cancel of the sheet (back to the details, draft discarded).
+        <View style={styles.headerZone}>
+          <SheetEditingHeader
+            cancelTestID="cancel-product-edit"
+            onCancel={close}
+            title="Modifier le produit"
+          />
+        </View>
       ) : (
         <View style={styles.headerZone}>
           <SheetHeader
-            action={{ label: closeLabel, onPress: close }}
+            action={{ label: "Annuler", onPress: close }}
             divider
-            eyebrow={mode === "create" ? "NOUVEAU PRODUIT" : "PRODUIT"}
-            title={title}
+            eyebrow="NOUVEAU PRODUIT"
+            title="Ajouter un produit"
             titleNumberOfLines={1}
           />
         </View>
@@ -329,26 +346,15 @@ export function ProductEditorScreen({
       ) : null}
 
       {values && editing && (
-        <SheetActionBar direction="row">
-          {mode === "existing" && (
-            <AppButton
-              onPress={close}
-              style={styles.secondaryButton}
-              testID="cancel-product-edit"
-              title="Annuler"
-              variant="secondary"
-            />
-          )}
+        <SheetActionBar>
           <AppButton
+            accessibilityLabel={
+              mode === "create" ? undefined : "Enregistrer les modifications"
+            }
             disabled={!validation?.valid || saving}
             onPress={() => void save()}
-            style={styles.primaryButton}
             testID="save-product"
-            title={
-              mode === "create"
-                ? "Ajouter le produit"
-                : "Enregistrer les modifications"
-            }
+            title={mode === "create" ? "Ajouter le produit" : "Enregistrer"}
           />
         </SheetActionBar>
       )}
@@ -432,7 +438,7 @@ function ProductForm({
   const scanAction = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Scanner le code-barres"
+      accessibilityLabel="Scanner un code-barres"
       hitSlop={spacing.sm}
       onPress={() => setScannerVisible(true)}
       style={({ pressed }) => [
@@ -463,66 +469,78 @@ function ProductForm({
           onChangeImageUri={(imageUri) => onChangeField("imageUri", imageUri)}
           productName={values.name}
         />
-        <TextField
-          accessibilityLabel="Nom du produit"
-          error={
-            attempted && !validation.nameValid
-              ? "Le nom est requis."
-              : undefined
-          }
-          label="Nom"
-          onChangeText={(text) => onChangeField("name", text)}
-          placeholder="Ex. Shampooing"
-          value={values.name}
-        />
-        <TextField
-          accessibilityLabel="Marque du produit"
-          label="Marque"
-          onChangeText={(text) => onChangeField("brand", text)}
-          placeholder="Optionnel"
-          value={values.brand}
-        />
-        <TextField
-          accessibilityLabel="Catégorie du produit"
-          label="Catégorie"
-          onChangeText={(text) => onChangeField("category", text)}
-          placeholder="Optionnel"
-          value={values.category}
-        />
-        <View style={styles.barcodeField}>
+        <View style={styles.formSection} testID="product-form-information">
+          <SectionHeader title="Informations" />
           <TextField
-            accessibilityLabel="Code-barres du produit"
-            label="Code-barres"
-            onChangeText={(text) => onChangeField("barcode", text)}
-            placeholder="Optionnel"
-            trailingAccessory={scanAction}
-            value={values.barcode}
+            accessibilityLabel="Nom du produit"
+            error={
+              attempted && !validation.nameValid
+                ? "Le nom est requis."
+                : undefined
+            }
+            label="Nom"
+            onChangeText={(text) => onChangeField("name", text)}
+            placeholder="Ex. Shampooing"
+            value={values.name}
           />
-          {duplicateBarcodeProduct && (
-            <AppText variant="metadata" style={styles.duplicateBarcodeHint}>
-              Ce code-barres est aussi utilisé par «{" "}
-              {duplicateBarcodeProduct.name} ».
-            </AppText>
-          )}
+          <TextField
+            accessibilityLabel="Marque du produit"
+            label="Marque"
+            onChangeText={(text) => onChangeField("brand", text)}
+            placeholder="Optionnel"
+            value={values.brand}
+          />
+          <TextField
+            accessibilityLabel="Catégorie du produit"
+            label="Catégorie"
+            onChangeText={(text) => onChangeField("category", text)}
+            placeholder="Optionnel"
+            value={values.category}
+          />
+          <View style={styles.barcodeField}>
+            <TextField
+              accessibilityLabel="Code-barres du produit"
+              label="Code-barres"
+              onChangeText={(text) => onChangeField("barcode", text)}
+              placeholder="Optionnel"
+              trailingAccessory={scanAction}
+              value={values.barcode}
+            />
+            {duplicateBarcodeProduct && (
+              <AppText variant="metadata" style={styles.duplicateBarcodeHint}>
+                Ce code-barres est aussi utilisé par «{" "}
+                {duplicateBarcodeProduct.name} ».
+              </AppText>
+            )}
+          </View>
         </View>
-        <TextField
-          accessibilityLabel="Prix du produit"
-          error={
-            attempted && !validation.priceValid
-              ? "Indiquez un prix valide, positif ou nul."
-              : undefined
-          }
-          keyboardType="decimal-pad"
-          label="Prix"
-          onChangeText={(text) => onChangeField("price", text)}
-          placeholder="25,00"
-          suffix="€"
-          value={values.price}
-        />
-        <StockStepper
-          onChange={(stockQuantity) => onChangeField("stockQuantity", stockQuantity)}
-          value={values.stockQuantity}
-        />
+        <View style={styles.formSection} testID="product-form-sale">
+          <SectionHeader title="Vente" />
+          <TextField
+            accessibilityLabel="Prix du produit"
+            error={
+              attempted && !validation.priceValid
+                ? "Indiquez un prix valide, positif ou nul."
+                : undefined
+            }
+            keyboardType="decimal-pad"
+            label="Prix"
+            onChangeText={(text) => onChangeField("price", text)}
+            placeholder="25,00"
+            suffix="€"
+            value={values.price}
+          />
+        </View>
+        <View style={styles.formSection} testID="product-form-stock">
+          <SectionHeader title="Stock" />
+          <StockStepper
+            onChange={(stockQuantity) =>
+              onChangeField("stockQuantity", stockQuantity)
+            }
+            showLabel={false}
+            value={values.stockQuantity}
+          />
+        </View>
       </ScrollView>
       <BarcodeScannerModal
         onClose={() => setScannerVisible(false)}
@@ -546,7 +564,9 @@ function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
     { label: "Marque", value: product.brand },
     { label: "Catégorie", value: product.category },
     { label: "Code-barres", value: product.barcode },
-  ].filter((row): row is { label: string; value: string } => Boolean(row.value));
+  ].filter((row): row is { label: string; value: string } =>
+    Boolean(row.value),
+  );
   const price = formatServicePrice(product.price);
   const soldOut = product.stockQuantity === 0;
 
@@ -580,7 +600,9 @@ function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
           {price}
         </AppText>
         <ProductStatePill
-          accessibilityLabel={product.active ? "Produit actif" : "Produit inactif"}
+          accessibilityLabel={
+            product.active ? "Produit actif" : "Produit inactif"
+          }
           label={product.active ? "Actif" : "Inactif"}
           testID="product-status-pill"
           tone={product.active ? "positive" : "neutral"}
@@ -666,11 +688,12 @@ const styles = StyleSheet.create({
   headerZone: { paddingHorizontal: horizontalGutter },
   scroll: { flexShrink: 1 },
   formContent: {
-    gap: spacing.base,
+    gap: spacing.xl,
     paddingBottom: spacing.xl,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
+  formSection: { gap: spacing.md },
   barcodeField: { gap: spacing.xs },
   duplicateBarcodeHint: { color: semanticColors.foregroundSoft },
   scanAction: {
@@ -733,8 +756,6 @@ const styles = StyleSheet.create({
     width: 40,
   },
   stockTitle: { color: semanticColors.foreground, flex: 1 },
-  secondaryButton: { flex: 1 },
-  primaryButton: { flex: 1.4 },
   notFound: {
     alignItems: "center",
     gap: spacing.md,

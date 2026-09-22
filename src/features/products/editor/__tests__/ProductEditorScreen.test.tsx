@@ -571,6 +571,54 @@ describe("ProductEditorScreen", () => {
     expect(outsideTapAllowed()).toBe(true);
   });
 
+  it("edits in the canonical sheet: « Annuler » + title, sections, one « Enregistrer »", async () => {
+    const view = await renderEditor(
+      <ProductEditorScreen
+        mode="existing"
+        productId="6974bff937a5d89c2d9afbd0"
+      />,
+    );
+
+    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+
+    // Header: « Annuler » leading, the edit title, no eyebrow nor product name.
+    expect(view.getByRole("header", { name: "Modifier le produit" })).toBeTruthy();
+    expect(view.queryByRole("header", { name: "Masque réparateur 5 min" })).toBeNull();
+    expect(view.queryByText("PRODUIT")).toBeNull();
+    expect(view.getAllByText("Annuler")).toHaveLength(1);
+    expect(view.getByTestId("cancel-product-edit").props.accessibilityLabel).toBe("Annuler");
+
+    // Informations → Vente → Stock, in one scroll.
+    const information = within(view.getByTestId("product-form-information"));
+    expect(information.getByText("Informations")).toBeTruthy();
+    expect(information.getByLabelText("Nom du produit")).toBeTruthy();
+    expect(information.getByLabelText("Marque du produit")).toBeTruthy();
+    expect(information.getByLabelText("Catégorie du produit")).toBeTruthy();
+    expect(information.getByLabelText("Code-barres du produit")).toBeTruthy();
+    expect(information.getByLabelText("Scanner un code-barres")).toBeTruthy();
+    const sale = within(view.getByTestId("product-form-sale"));
+    expect(sale.getByText("Vente")).toBeTruthy();
+    expect(sale.getByLabelText("Prix du produit")).toBeTruthy();
+    const stock = within(view.getByTestId("product-form-stock"));
+    expect(stock.getAllByText("Stock")).toHaveLength(1);
+    expect(stock.getByText("0 à 30")).toBeTruthy();
+
+    // ONE footer action, short visible label, descriptive spoken label.
+    const save = view.getByTestId("save-product");
+    expect(within(save).getByText("Enregistrer")).toBeTruthy();
+    expect(save.props.accessibilityLabel).toBe("Enregistrer les modifications");
+    expect(view.queryByText("Enregistrer les modifications")).toBeNull();
+    expect(within(view.getByTestId("product-sheet")).getAllByRole("button", { name: /^Enregistrer/ })).toHaveLength(1);
+
+    // The one Cancel discards the draft and returns to the details.
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText("Nom du produit"), "Autre nom");
+    });
+    await act(async () => fireEvent.press(view.getByTestId("cancel-product-edit")));
+    expect(view.getByRole("header", { name: "Masque réparateur 5 min" })).toBeTruthy();
+    expect(view.getByTestId("managed-product").props.children).toContain("Masque réparateur 5 min");
+  });
+
   it("hydrates an existing Product and edits it with stable identity", async () => {
     const view = await renderEditor(
       <ProductEditorScreen
@@ -956,7 +1004,7 @@ describe("ProductEditorScreen", () => {
     const view = await renderEditor(<ProductEditorScreen mode="create" />);
 
     await act(async () =>
-      fireEvent.press(view.getByLabelText("Scanner le code-barres")),
+      fireEvent.press(view.getByLabelText("Scanner un code-barres")),
     );
     await act(async () =>
       fireEvent.press(view.getByTestId("mock-camera-detection")),
@@ -994,7 +1042,7 @@ describe("ProductEditorScreen", () => {
 
     await act(async () => fireEvent.press(view.getByTestId("edit-product")));
     await act(async () =>
-      fireEvent.press(view.getByLabelText("Scanner le code-barres")),
+      fireEvent.press(view.getByLabelText("Scanner un code-barres")),
     );
     await act(async () =>
       fireEvent.press(view.getByTestId("mock-camera-detection")),
@@ -1017,7 +1065,7 @@ describe("ProductEditorScreen", () => {
 
     await act(async () => fireEvent.press(view.getByTestId("edit-product")));
     await act(async () =>
-      fireEvent.press(view.getByLabelText("Scanner le code-barres")),
+      fireEvent.press(view.getByLabelText("Scanner un code-barres")),
     );
     await act(async () =>
       fireEvent.press(view.getByTestId("mock-camera-detection")),
