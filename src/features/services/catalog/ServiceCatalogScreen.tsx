@@ -1,5 +1,26 @@
+// Souris — Prestations & tarifs (management list)
+//
+// Gestion › Prestations & tarifs: the pushed-screen top bar, the title, then
+// the Services / Techniques segment (the category taxonomy, with the SAME
+// options as the appointment prestation picker: category colour when
+// selected, live count), the search, and the chosen category's Prestations in
+// grouped surfaces — the active ones first, then « Inactives » when there are
+// any, so nothing that was reachable before is hidden.
+//
+// - Search reuses the picker's `filterServicesOfType` (accent-insensitive,
+//   inside the chosen category). Like the picker, the query survives a
+//   segment switch, and an empty result offers the other category's matches.
+// - Every row leads with the Prestation's automatic family pictogram
+//   (PrestationIcon — the ONE mapping, shared with Prestation Details), keeps
+//   the name in primary navy, the duration (and « dont … de pose » when
+//   there is one) secondary, the price aligned before the chevron. The whole
+//   row opens Prestation Details; management actions live there.
+// - One SectionList carries everything (no nested scroll); its bottom
+//   clearance keeps the last row above the floating « + ».
+
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import { useMemo, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -10,7 +31,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { Service } from '@/domain/appointments';
+import type { Service, ServiceType } from '@/domain/appointments';
+import { filterServicesOfType } from '@/features/appointments/editor/selection-sections';
+import { PrestationIcon } from '@/features/services/components/PrestationIcon';
 import {
   formatServiceDuration,
   formatServicePrice,
@@ -21,14 +44,17 @@ import { useServiceCatalog } from '@/features/services/session/ServiceCatalogPro
 import { AppText } from '@/shared/ui/AppText';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
 import { GlassIconButton, glassIconButtonSize, glassIcons } from '@/shared/ui/GlassIconButton';
-import { PushedScreenWatermark } from '@/shared/ui/ScreenWatermarkIcon';
+import { SearchField } from '@/shared/ui/SearchField';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
+import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import {
   bottomClearance,
   foregroundSoft,
   gutter,
-  lavender,
+  interaction,
+  radii,
   semanticColors,
+  serviceCategoryColors,
   spacing,
 } from '@/shared/ui/theme';
 
@@ -36,11 +62,47 @@ import { buildCatalogSections, type CatalogListSection } from './catalog-section
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
+const categoryLabels: Readonly<Record<ServiceType, string>> = {
+  SERVICE: 'Services',
+  TECHNIQUE: 'Techniques',
+};
+
+const emptyCategoryTitles: Readonly<Record<ServiceType, string>> = {
+  SERVICE: 'Aucun service',
+  TECHNIQUE: 'Aucune technique',
+};
+
+const ROW_ICON_SIZE = 44;
+/** Separators start under the names: row padding + pictogram + gap. */
+const ROW_SEPARATOR_INSET = spacing.base + ROW_ICON_SIZE + spacing.md;
+
 export function ServiceCatalogScreen() {
   const router = useRouter();
   const { services } = useServiceCatalog();
-  const sections: readonly SectionListData<Service, CatalogListSection>[] =
-    buildCatalogSections(services);
+  const [category, setCategory] = useState<ServiceType>('SERVICE');
+  const [query, setQuery] = useState('');
+  const otherCategory: ServiceType = category === 'SERVICE' ? 'TECHNIQUE' : 'SERVICE';
+  const searching = query.trim().length > 0;
+
+  const categoryOptions = useMemo<readonly SegmentedControlOption<ServiceType>[]>(
+    () =>
+      (['SERVICE', 'TECHNIQUE'] as const).map((type) => ({
+        value: type,
+        label: categoryLabels[type],
+        selectedColor: serviceCategoryColors[type].strong,
+        count: services.filter((service) => service.type === type).length,
+        testID: `catalog-category-${type}`,
+      })),
+    [services],
+  );
+  const sections = useMemo<readonly SectionListData<Service, CatalogListSection>[]>(
+    () => buildCatalogSections(filterServicesOfType(services, category, query)),
+    [services, category, query],
+  );
+  const otherMatches = useMemo(
+    () => (searching ? filterServicesOfType(services, otherCategory, query).length : 0),
+    [services, otherCategory, query, searching],
+  );
 
   const openService = (serviceId: string) => {
     router.push({ pathname: '/services/[serviceId]', params: { serviceId } });
@@ -59,41 +121,81 @@ export function ServiceCatalogScreen() {
         </AppText>
         <View style={styles.topBarSpacer} />
       </View>
-      <PushedScreenWatermark kind="services" titleOffset={spacing.base} />
 
       <SectionList
         sections={sections}
         initialNumToRender={40}
         keyExtractor={(service) => service.id}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
+        testID="service-catalog-list"
         ListHeaderComponent={
           <View style={styles.intro}>
             <AppText variant="screenTitle" accessibilityRole="header">
               Prestations & tarifs
             </AppText>
+            <SegmentedControl
+              onChange={setCategory}
+              options={categoryOptions}
+              stretch
+              testID="catalog-category"
+              value={category}
+            />
+            <SearchField
+              accessibilityLabel="Rechercher une prestation"
+              onChangeText={setQuery}
+              placeholder="Rechercher une prestation"
+              value={query}
+            />
           </View>
         }
         renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeaderBlock}>
-            {section.showGroupLabel && (
-              <AppText variant="eyebrow" style={styles.groupEyebrow}>
-                {section.groupLabel === 'ACTIVES' ? 'Actives' : 'Inactives'}
-              </AppText>
-            )}
-            <SectionHeader count={section.data.length} title={section.title} />
-          </View>
+          <SectionHeader
+            count={section.data.length}
+            style={styles.sectionHeader}
+            // The segment already names the category: the active group
+            // repeats it once as its title, the other one says « Inactives ».
+            title={section.groupLabel === 'ACTIVES' ? section.title : 'Inactives'}
+          />
         )}
-        renderItem={({ item }) => (
-          <ServiceCatalogRow service={item} onPress={() => openService(item.id)} />
+        renderItem={({ item, index, section }) => (
+          <ServiceCatalogRow
+            first={index === 0}
+            last={index === section.data.length - 1}
+            onPress={() => openService(item.id)}
+            service={item}
+          />
         )}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <AppText variant="stateTitle">Aucune prestation</AppText>
-            <AppText variant="metadata" style={styles.emptyStateText}>
-              Ajoutez votre première prestation pour alimenter les rendez-vous.
+          <View style={styles.emptyState} testID="catalog-empty">
+            <AppText variant="stateTitle">
+              {searching ? 'Aucune prestation trouvée' : emptyCategoryTitles[category]}
             </AppText>
+            {searching && otherMatches > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                hitSlop={spacing.sm}
+                onPress={() => setCategory(otherCategory)}
+                style={({ pressed }) => [styles.switchAction, pressed && styles.pressed]}
+                testID="catalog-show-other-category"
+              >
+                <AppText
+                  variant="control"
+                  style={{ color: serviceCategoryColors[otherCategory].strong }}
+                >
+                  {`Voir ${otherMatches} résultat${otherMatches > 1 ? 's' : ''} dans ${categoryLabels[otherCategory]}`}
+                </AppText>
+              </Pressable>
+            ) : (
+              <AppText variant="metadata" style={styles.emptyStateText}>
+                {searching
+                  ? 'Essayez un autre nom.'
+                  : 'Ajoutez une prestation avec le bouton +.'}
+              </AppText>
+            )}
           </View>
         }
       />
@@ -109,9 +211,13 @@ export function ServiceCatalogScreen() {
 
 function ServiceCatalogRow({
   service,
+  first,
+  last,
   onPress,
 }: {
   readonly service: Service;
+  readonly first: boolean;
+  readonly last: boolean;
   readonly onPress: () => void;
 }) {
   const duration = getServiceDurationMinutes(service);
@@ -121,30 +227,43 @@ function ServiceCatalogRow({
       ? `${formatServiceDuration(duration)} · dont ${formatServiceDuration(processing)} de pose`
       : formatServiceDuration(duration);
 
+  // Consecutive rows form ONE grouped surface (the GroupedSurface language),
+  // drawn per row so the SectionList keeps virtualising.
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${service.name}, ${formatServicePrice(service.price)}, ${meta}`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.serviceRow, pressed && styles.serviceRowPressed]}
+    <View
+      style={[styles.groupedRow, first && styles.groupedRowFirst, last && styles.groupedRowLast]}
     >
-      <View style={styles.serviceCopy}>
-        <AppText variant="rowTitle" numberOfLines={1} style={styles.serviceName}>
-          {service.name}
+      {!first && <View style={styles.separator} />}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${service.name}, ${formatServicePrice(service.price)}, ${meta}`}
+        onPress={onPress}
+        style={({ pressed }) => [styles.serviceRow, pressed && styles.serviceRowPressed]}
+        testID={`catalog-service-${service.id}`}
+      >
+        <PrestationIcon
+          prestation={service}
+          size="row"
+          testID={`catalog-service-icon-${service.id}`}
+        />
+        <View style={styles.serviceCopy}>
+          <AppText variant="rowTitle" numberOfLines={2} style={styles.serviceName}>
+            {service.name}
+          </AppText>
+          <AppText variant="metadata" numberOfLines={1} style={styles.serviceMeta}>
+            {meta}
+          </AppText>
+        </View>
+        <AppText variant="control" style={styles.price}>
+          {formatServicePrice(service.price)}
         </AppText>
-        <AppText variant="metadata" numberOfLines={1} style={styles.serviceMeta}>
-          {meta}
-        </AppText>
-      </View>
-      <AppText variant="control" style={styles.price}>
-        {formatServicePrice(service.price)}
-      </AppText>
-      <SymbolView
-        name={{ ios: 'chevron.right', android: 'chevron_right' }}
-        size={14}
-        tintColor={semanticColors.foregroundMuted}
-      />
-    </Pressable>
+        <SymbolView
+          name={{ ios: 'chevron.right', android: 'chevron_right' }}
+          size={14}
+          tintColor={semanticColors.foregroundMuted}
+        />
+      </Pressable>
+    </View>
   );
 }
 
@@ -164,40 +283,59 @@ const styles = StyleSheet.create({
   eyebrow: { color: semanticColors.accent },
   content: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
   intro: {
+    gap: spacing.md,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
-  // No fill of its own (headers are not sticky): the watermark reads through.
-  sectionHeaderBlock: {
-    gap: spacing.sm,
+  sectionHeader: {
     paddingBottom: spacing.sm,
     paddingHorizontal: horizontalGutter,
-    paddingTop: spacing['2xl'],
+    paddingTop: spacing.xl,
   },
-  groupEyebrow: { color: semanticColors.foregroundSoft },
   emptyState: {
     alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing['2xl'],
   },
-  emptyStateText: {
-    color: foregroundSoft,
-    marginTop: spacing.sm,
-    textAlign: 'center',
+  emptyStateText: { color: foregroundSoft, textAlign: 'center' },
+  switchAction: { justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.sm },
+  pressed: { opacity: interaction.pressedOpacity },
+  groupedRow: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.borderSubtle,
+    borderCurve: 'continuous',
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: horizontalGutter,
+    overflow: 'hidden',
+  },
+  groupedRowFirst: {
+    borderTopLeftRadius: radii.large,
+    borderTopRightRadius: radii.large,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  groupedRowLast: {
+    borderBottomLeftRadius: radii.large,
+    borderBottomRightRadius: radii.large,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  separator: {
+    backgroundColor: semanticColors.borderSubtle,
+    height: StyleSheet.hairlineWidth,
+    marginLeft: ROW_SEPARATOR_INSET,
   },
   serviceRow: {
     alignItems: 'center',
-    borderBottomColor: semanticColors.borderSubtle,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginHorizontal: horizontalGutter,
-    minHeight: 64,
+    gap: spacing.md,
+    minHeight: 68,
+    paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm,
   },
   serviceRowPressed: { backgroundColor: semanticColors.surfaceLavender },
   serviceCopy: { flex: 1, gap: 3, minWidth: 0 },
-  serviceName: { color: lavender.lav700 },
+  serviceName: { color: semanticColors.foreground },
   serviceMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
 });
