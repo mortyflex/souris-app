@@ -13,7 +13,7 @@
 // While the editor is open the CTA hides: it would do nothing.
 
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { AppointmentDiscount, AppointmentServicesTotal } from '@/domain/appointments';
 import { BirthdayNotice } from '@/features/clients/birthday/BirthdayNotice';
@@ -33,6 +33,8 @@ interface AppointmentDiscountSectionProps {
   readonly onChange: (discount: AppointmentDiscount | undefined) => void;
   /** True when the Appointment date is the selected Client's birthday. */
   readonly birthdayReminder: boolean;
+  /** Surface override passed to the discount editor. */
+  readonly editorStyle?: StyleProp<ViewStyle>;
 }
 
 export function AppointmentDiscountSection({
@@ -40,6 +42,7 @@ export function AppointmentDiscountSection({
   servicesTotal,
   onChange,
   birthdayReminder,
+  editorStyle,
 }: AppointmentDiscountSectionProps) {
   const [expanded, setExpanded] = useState(discount !== undefined);
   const message = discount ? ALREADY_DISCOUNTED : SUGGESTION;
@@ -74,6 +77,7 @@ export function AppointmentDiscountSection({
         onChange={onChange}
         onExpandedChange={setExpanded}
         servicesTotal={servicesTotal}
+        style={editorStyle}
       />
     </View>
   );

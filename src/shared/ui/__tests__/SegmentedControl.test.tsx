@@ -54,4 +54,27 @@ describe('SegmentedControl', () => {
     expect(segmentedControlOptionHeight).toBeLessThan(touchTarget.ios);
     expect(segmentedControlOptionHeight + top + bottom).toBeGreaterThanOrEqual(touchTarget.ios);
   });
+
+  it('fills the selected option with its own colour and a white label, stretched when asked', async () => {
+    const colored = [
+      { value: 'a', label: 'Services', selectedColor: '#7354C7' },
+      { value: 'b', label: 'Techniques', selectedColor: '#2F6DB8' },
+    ] as const;
+    const view = await render(
+      <SegmentedControl onChange={jest.fn()} options={colored} stretch testID="category" value="b" />,
+    );
+
+    expect(StyleSheet.flatten(view.getByTestId('category').props.style)).toMatchObject({
+      alignSelf: 'stretch',
+    });
+    const selected = view.getByLabelText('Techniques');
+    const unselected = view.getByLabelText('Services');
+    expect(StyleSheet.flatten(selected.props.style)).toMatchObject({
+      backgroundColor: '#2F6DB8',
+      borderColor: '#2F6DB8',
+      flex: 1,
+    });
+    expect(StyleSheet.flatten(unselected.props.style).backgroundColor).toBeUndefined();
+    expect(StyleSheet.flatten(view.getByText('Techniques').props.style).color).toBe('#FFFFFF');
+  });
 });

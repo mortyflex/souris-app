@@ -1,5 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Alert, Pressable, Text } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 
 import { createAppointmentItemSnapshot } from '@/domain/appointments';
 import { AppointmentSessionProvider, useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
@@ -7,6 +7,7 @@ import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session
 import { ClientSessionProvider, useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { haptics } from '@/shared/lib/haptics';
+import { semanticColors, serviceCategoryColors } from '@/shared/ui/theme';
 
 import { AppointmentEditingScreen } from '../AppointmentEditingScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -313,6 +314,10 @@ function renderEditor(appointmentId = 'agenda-sofia') {
   return render(editorTree(appointmentId));
 }
 
+function backgroundOf(element: { readonly props: { readonly style?: unknown } }) {
+  return StyleSheet.flatten(element.props.style as StyleProp<ViewStyle>)?.backgroundColor;
+}
+
 describe('AppointmentEditingScreen', () => {
   beforeAll(() => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
@@ -333,7 +338,7 @@ describe('AppointmentEditingScreen', () => {
 
     expect(view.getByText('RENDEZ-VOUS')).toBeTruthy();
     expect(view.getByRole('header', { name: 'Modifier le rendez-vous' })).toBeTruthy();
-    expect(view.getByText('95,00 €')).toBeTruthy();
+    expect(within(view.getByTestId('appointment-selected-services')).getByText('95,00 €')).toBeTruthy();
     expect(view.queryByLabelText('Prix de Balayage')).toBeNull();
     expect(view.getByText('1 h + 55 min de pose')).toBeTruthy();
     expect(view.queryByLabelText('Retirer Balayage')).toBeNull();
@@ -520,7 +525,7 @@ describe('AppointmentEditingScreen', () => {
       view.rerender(editorTree('catalog-edit-appointment'));
     });
 
-    expect(view.getByText('81,00 €')).toBeTruthy();
+    expect(within(view.getByTestId('appointment-selected-services')).getByText('81,00 €')).toBeTruthy();
     await act(async () => {
       fireEvent.press(view.getByLabelText('Développer Brushing 1'));
     });
@@ -772,7 +777,7 @@ describe('AppointmentEditingScreen', () => {
     });
 
     // The retained snapshot keeps its old price and stays editable.
-    expect(view.getByText('81,00 €')).toBeTruthy();
+    expect(within(view.getByTestId('appointment-selected-services')).getByText('81,00 €')).toBeTruthy();
     expect(view.getByTestId('catalog-brushing-1').props.children).toBe('20:30:false');
 
     await act(async () => {
@@ -797,7 +802,7 @@ describe('AppointmentEditingScreen', () => {
     expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
 
     await act(async () => {
-      fireEvent.press(view.getByLabelText("Changer l'heure"));
+      fireEvent.press(view.getByTestId('edit-time'));
     });
     // Same wheels as Creation, opened on the Appointment's own start time; an
     // existing Appointment may sit anywhere in its day (00 → 23).
@@ -837,7 +842,7 @@ describe('AppointmentEditingScreen', () => {
     const before = Number(view.getByTestId('session-start-at').props.children);
 
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Changer la date'));
+      fireEvent.press(view.getByTestId('edit-date'));
     });
     expect(view.getByText('Date du rendez-vous')).toBeTruthy();
     await act(async () => {
@@ -865,7 +870,7 @@ describe('AppointmentEditingScreen', () => {
     const before = new Date(Number(view.getByTestId('session-start-at').props.children));
 
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Changer la date'));
+      fireEvent.press(view.getByTestId('edit-date'));
     });
     await act(async () => {
       fireEvent.press(view.getByTestId('mock-date-picker'));
@@ -894,7 +899,7 @@ describe('AppointmentEditingScreen', () => {
 
     // Open the focused picker and choose Léa Martin.
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Modifier la cliente'));
+      fireEvent.press(view.getByTestId('edit-client'));
     });
     expect(view.getByText('Choisir la cliente')).toBeTruthy();
     await act(async () => {
@@ -922,7 +927,7 @@ describe('AppointmentEditingScreen', () => {
     const view = await renderEditor();
 
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Modifier la cliente'));
+      fireEvent.press(view.getByTestId('edit-client'));
     });
     await act(async () => {
       fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa');
@@ -941,12 +946,20 @@ describe('AppointmentEditingScreen', () => {
     expect(view.getByTestId('session-client-id').props.children).toBe('client-agenda-sofia');
   });
 
-  it('shows the explicit context actions instead of generic wording', async () => {
+  it('shows Cliente, Date and Heure as whole tappable rows without link labels', async () => {
     const view = await renderEditor();
 
-    expect(view.getByLabelText('Modifier la cliente')).toBeTruthy();
-    expect(view.getByLabelText('Changer la date')).toBeTruthy();
-    expect(view.getByLabelText("Changer l'heure")).toBeTruthy();
+    const clientRow = view.getByTestId('edit-client');
+    expect(clientRow.props.accessibilityRole).toBe('button');
+    expect(clientRow.props.accessibilityHint).toBe('Modifier la cliente');
+    expect(view.getByTestId('edit-client-value').props.children).toBe('Sofia Petit');
+    expect(view.getByTestId('edit-date').props.accessibilityHint).toBe('Changer la date');
+    expect(view.getByTestId('edit-date').props.accessibilityLabel).toMatch(/^Date, /);
+    expect(view.getByTestId('edit-time').props.accessibilityHint).toBe("Changer l'heure");
+    expect(view.getByLabelText(/^Heure, \d{2}:\d{2}$/)).toBeTruthy();
+    expect(view.queryByText('Modifier la cliente')).toBeNull();
+    expect(view.queryByText('Changer la date')).toBeNull();
+    expect(view.queryByText("Changer l'heure")).toBeNull();
     expect(view.queryByText('Modifier')).toBeNull();
   });
 
@@ -957,7 +970,7 @@ describe('AppointmentEditingScreen', () => {
       fireEvent.press(view.getByTestId('archive-lea'));
     });
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Modifier la cliente'));
+      fireEvent.press(view.getByTestId('edit-client'));
     });
     await act(async () => {
       fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
@@ -1113,7 +1126,7 @@ describe('AppointmentEditingScreen', () => {
       expect(view.getByTestId('appointment-birthday-notice')).toBeTruthy();
 
       await act(async () => {
-        fireEvent.press(view.getByLabelText('Changer la date'));
+        fireEvent.press(view.getByTestId('edit-date'));
       });
       await act(async () => {
         fireEvent.press(view.getByTestId('mock-date-picker'));
@@ -1130,7 +1143,7 @@ describe('AppointmentEditingScreen', () => {
       const view = await renderBirthdayEditor();
 
       await act(async () => {
-        fireEvent.press(view.getByLabelText('Modifier la cliente'));
+        fireEvent.press(view.getByTestId('edit-client'));
       });
       await act(async () => {
         fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa');
@@ -1198,6 +1211,149 @@ describe('AppointmentEditingScreen', () => {
       expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
       expect(view.queryByText('Appliquer une réduction')).toBeNull();
       expect(view.queryByTestId('appointment-discount')).toBeNull();
+    });
+  });
+
+  describe('redesigned editing workspace', () => {
+    it('keeps ONE vertical scroll, the header Annuler, and no footer Annuler', async () => {
+      const view = await renderEditor();
+
+      const scrolls = view.container.queryAll(
+        (node) => node.type === 'RCTScrollView' && node.props.horizontal !== true,
+      );
+      expect(scrolls).toHaveLength(1);
+      expect(view.getAllByText('Annuler')).toHaveLength(1);
+      expect(
+        within(view.getByTestId('appointment-edit-footer')).queryByText('Annuler'),
+      ).toBeNull();
+      expect(view.getByText('Prestations sélectionnées')).toBeTruthy();
+      expect(view.getByText('Options')).toBeTruthy();
+      expect(view.getByText('Ajouter des prestations')).toBeTruthy();
+    });
+
+    it('marks each selected prestation with its category, never by colour alone', async () => {
+      const view = await renderEditor();
+
+      const dot = view.getByTestId('draft-category-TECHNIQUE');
+      expect(backgroundOf(dot)).toBe(serviceCategoryColors.TECHNIQUE.accent);
+      expect(view.getByLabelText('Développer Balayage').props.accessibilityHint).toBe('Technique');
+    });
+
+    it('switches Services / Techniques with distinct category colours and selected state', async () => {
+      const view = await renderEditor();
+
+      const services = view.getByTestId('catalog-category-SERVICE');
+      const techniques = view.getByTestId('catalog-category-TECHNIQUE');
+      expect(services.props.accessibilityRole).toBe('tab');
+      expect(services.props.accessibilityState).toEqual({ selected: true });
+      expect(techniques.props.accessibilityState).toEqual({ selected: false });
+      expect(backgroundOf(services)).toBe(serviceCategoryColors.SERVICE.strong);
+      expect(backgroundOf(techniques)).not.toBe(serviceCategoryColors.TECHNIQUE.strong);
+      expect(view.getByTestId('catalog-list-SERVICE')).toBeTruthy();
+      expect(view.queryByText('Balayage 2')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(techniques);
+      });
+
+      expect(view.getByTestId('catalog-category-TECHNIQUE').props.accessibilityState).toEqual({
+        selected: true,
+      });
+      expect(backgroundOf(view.getByTestId('catalog-category-TECHNIQUE'))).toBe(
+        serviceCategoryColors.TECHNIQUE.strong,
+      );
+      expect(backgroundOf(view.getByTestId('catalog-category-SERVICE'))).not.toBe(
+        serviceCategoryColors.SERVICE.strong,
+      );
+      expect(serviceCategoryColors.TECHNIQUE.strong).not.toBe(serviceCategoryColors.SERVICE.strong);
+      expect(view.getByTestId('catalog-list-TECHNIQUE')).toBeTruthy();
+      expect(view.getByText('Balayage 2')).toBeTruthy();
+      expect(view.queryByText('Brushing 1')).toBeNull();
+    });
+
+    it('selects a Technique with the azure check and a Service with the violet one', async () => {
+      const view = await renderEditor();
+
+      await act(async () => {
+        fireEvent.press(view.getByText('Brushing 1'));
+      });
+      const brushingIndicator = view.getByTestId('service-row-service-brushing-brushing-1-selected');
+      expect(backgroundOf(brushingIndicator)).toBe(serviceCategoryColors.SERVICE.accent);
+      expect(
+        view.getByTestId('service-row-service-brushing-brushing-1').props.accessibilityState,
+      ).toEqual({ selected: true });
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('catalog-category-TECHNIQUE'));
+      });
+      const balayage = view.getByLabelText(/^Balayage 2, /);
+      expect(balayage.props.accessibilityState).toEqual({ selected: false });
+      await act(async () => {
+        fireEvent.press(balayage);
+      });
+
+      expect(view.getByLabelText(/^Balayage 2, /).props.accessibilityState).toEqual({
+        selected: true,
+      });
+      const [techniqueCheck] = view.container.queryAll(
+        (node) =>
+          typeof node.props.testID === 'string' &&
+          /^service-row-.*balayage-2-selected$/.test(node.props.testID),
+      );
+      expect(backgroundOf(techniqueCheck)).toBe(serviceCategoryColors.TECHNIQUE.accent);
+      expect(view.getByLabelText('Développer Balayage 2')).toBeTruthy();
+    });
+
+    it('searches inside each category and offers the other one when it holds the matches', async () => {
+      const view = await renderEditor();
+
+      await act(async () => {
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher une prestation'), 'balayage');
+      });
+      expect(view.getByText('Aucune prestation trouvée')).toBeTruthy();
+      expect(view.getByText(/^Voir \d+ résultats? dans Techniques$/)).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('catalog-show-other-category'));
+      });
+      expect(view.getByTestId('catalog-category-TECHNIQUE').props.accessibilityState).toEqual({
+        selected: true,
+      });
+      expect(view.getByText('Balayage 2')).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher une prestation'), 'zzz');
+      });
+      expect(view.getByText('Aucune prestation trouvée')).toBeTruthy();
+      expect(view.getByText('Essayez un autre nom.')).toBeTruthy();
+    });
+
+    it('updates the sticky summary live and keeps the save CTA violet', async () => {
+      const view = await renderEditor();
+
+      expect(view.getByTestId('appointment-edit-summary-label').props.children).toBe(
+        '1 prestation · 1 h 55 min',
+      );
+      expect(view.getByTestId('appointment-edit-summary-total').props.children).toMatch(/^95,00\s€$/);
+      expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('catalog-category-TECHNIQUE'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByTestId('catalog-category-SERVICE'));
+      });
+      await act(async () => {
+        fireEvent.press(view.getByText('Brushing 1'));
+      });
+
+      expect(view.getByTestId('appointment-edit-summary-label').props.children).toBe(
+        '2 prestations · 2 h 25 min',
+      );
+      expect(view.getByTestId('appointment-edit-summary-total').props.children).toMatch(/^115,00\s€$/);
+      const save = view.getByTestId('save-appointment-edit');
+      expect(save.props.accessibilityState.disabled).toBe(false);
+      expect(backgroundOf(save)).toBe(semanticColors.accent);
     });
   });
 });

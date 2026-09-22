@@ -11,6 +11,10 @@
 // serviceId is unique within a creation draft by product rule (the
 // selection toggle prevents duplicates); editing drafts key on their
 // AppointmentItem id, so duplicate retained snapshots stay distinct rows.
+//
+// `grouped` (« Modifier le rendez-vous », DESIGN_OVERRIDES.md §27) joins the
+// rows into ONE white grouped list: no gap, square swipe rows on the white
+// surface, each card after the first drawing its own inset separator.
 
 import type { ReactNode } from 'react';
 
@@ -32,6 +36,10 @@ export interface SortableDraftCardProps {
   readonly onUpdatePrice: (price: number) => void;
   readonly onUpdatePhaseDuration: (phaseId: string, durationMinutes: number) => void;
   readonly dragHandle?: ReactNode;
+  /** Row of a grouped list (white, square, inset separator) instead of a standalone card. */
+  readonly grouped?: boolean;
+  /** Grouped rows only: draws the separator above the row (every row but the first). */
+  readonly separated?: boolean;
 }
 
 interface SortableDraftListProps {
@@ -55,6 +63,8 @@ interface SortableDraftListProps {
   readonly canRemove: boolean;
   /** Card renderer; defaults to the shared appointment editor card. */
   readonly renderCard?: (props: SortableDraftCardProps) => ReactNode;
+  /** One grouped white list instead of separate cards; the caller provides the surface. */
+  readonly grouped?: boolean;
 }
 
 function getDraftKey(entry: SortableDraftEntry): string {
@@ -71,6 +81,7 @@ export function SortableDraftList({
   onRemove,
   canRemove,
   renderCard,
+  grouped = false,
 }: SortableDraftListProps) {
   // The first removable row present when the list mounts plays the swipe
   // hint once; rows added or promoted later never replay it.
@@ -79,6 +90,7 @@ export function SortableDraftList({
   return (
     <SortableRowList
       entries={entries}
+      gap={grouped ? 0 : undefined}
       getKey={getDraftKey}
       getLabel={(entry) => entry.draft.serviceName}
       onReorder={onReorder}
@@ -92,6 +104,8 @@ export function SortableDraftList({
           onUpdatePhaseDuration: (phaseId, durationMinutes) =>
             onUpdatePhaseDuration(draftKey, phaseId, durationMinutes),
           dragHandle,
+          grouped,
+          separated: grouped && entries.indexOf(entry) > 0,
         };
         const card = renderCard ? renderCard(cardProps) : <AppointmentServiceEditorCard {...cardProps} />;
         if (!canRemove) return card;
@@ -100,7 +114,7 @@ export function SortableDraftList({
         // mutates its draft state; nothing is persisted until the edit is saved.
         return (
           <SwipeToDeleteRow
-            borderRadius={radii.large}
+            borderRadius={grouped ? 0 : radii.large}
             deleteAccessibilityLabel={`Retirer ${entry.draft.serviceName} du rendez-vous`}
             deleteTestID={`remove-appointment-draft-${draftKey}`}
             hint={draftKey === hintKey}
@@ -108,7 +122,7 @@ export function SortableDraftList({
               onRemove(draftKey);
               return true;
             }}
-            surfaceColor={semanticColors.surfaceLavender}
+            surfaceColor={grouped ? semanticColors.surfaceElevated : semanticColors.surfaceLavender}
             testID={`appointment-draft-${draftKey}`}
           >
             {card}

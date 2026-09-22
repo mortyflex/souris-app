@@ -9,6 +9,12 @@
 // readable navy-soft labels on the glass. Content-agnostic; labels stay
 // feature-owned.
 //
+// An option may carry its own `selectedColor` when the options ARE a
+// taxonomy (Services / Techniques, DESIGN_OVERRIDES.md §27): selected, it is
+// filled with that colour and its label turns white — the caller passes a
+// colour that holds white text at ≥ 4.5:1. `stretch` spreads the options over
+// the full width.
+//
 // The visible capsule is deliberately lower than the platform touch target;
 // each option's vertical hitSlop gives the missing height back to the finger.
 
@@ -25,12 +31,17 @@ export interface SegmentedControlOption<Value extends string> {
   readonly label: string;
   /** Spoken label when the visible one is a bare symbol (`%`, `€`). */
   readonly accessibilityLabel?: string;
+  /** Solid fill of the selected option (white label); defaults to the glass accent style. */
+  readonly selectedColor?: string;
+  readonly testID?: string;
 }
 
 interface SegmentedControlProps<Value extends string> {
   readonly options: readonly SegmentedControlOption<Value>[];
   readonly value: Value;
   readonly onChange: (value: Value) => void;
+  /** Spreads the options over the full available width. */
+  readonly stretch?: boolean;
   readonly testID?: string;
 }
 
@@ -47,13 +58,19 @@ export function SegmentedControl<Value extends string>({
   options,
   value,
   onChange,
+  stretch = false,
   testID,
 }: SegmentedControlProps<Value>) {
   return (
-    <View accessibilityRole="tablist" style={styles.container} testID={testID}>
+    <View
+      accessibilityRole="tablist"
+      style={[styles.container, stretch && styles.stretchedContainer]}
+      testID={testID}
+    >
       <GlassSurface shape={styles.capsule} testID={testID ? `${testID}-glass` : undefined} />
       {options.map((option) => {
         const selected = option.value === value;
+        const filled = selected && option.selectedColor !== undefined;
         const select = () => {
           if (!selected) haptics.selection();
           onChange(option.value);
@@ -68,11 +85,20 @@ export function SegmentedControl<Value extends string>({
             onPress={select}
             style={({ pressed }) => [
               styles.option,
+              stretch && styles.stretchedOption,
               pressed && styles.pressedOption,
               selected && styles.selectedOption,
+              filled && { backgroundColor: option.selectedColor, borderColor: option.selectedColor },
             ]}
+            testID={option.testID}
           >
-            <AppText variant="control" style={[styles.label, selected ? styles.selectedText : styles.unselectedText]}>
+            <AppText
+              variant="control"
+              style={[
+                styles.label,
+                filled ? styles.filledText : selected ? styles.selectedText : styles.unselectedText,
+              ]}
+            >
               {option.label}
             </AppText>
           </Pressable>
@@ -91,6 +117,8 @@ const styles = StyleSheet.create({
     padding: 3,
     ...nativeShadows.glassCapsule,
   },
+  stretchedContainer: { alignSelf: 'stretch' },
+  stretchedOption: { flex: 1 },
   // Same material as the glass circles, lightened for the capsule's wider area.
   capsule: {
     backgroundColor: gloss.glass.fillCapsule,
@@ -118,5 +146,6 @@ const styles = StyleSheet.create({
   // The control role, one step smaller so the capsule stays light.
   label: { fontSize: 15 },
   selectedText: { color: semanticColors.accent },
+  filledText: { color: semanticColors.surfaceElevated },
   unselectedText: { color: semanticColors.foregroundSoft },
 });

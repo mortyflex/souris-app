@@ -22,7 +22,7 @@
 // `expanded` + `onExpandedChange` and owns that one boolean instead.
 
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import {
@@ -65,6 +65,8 @@ interface AppointmentDiscountEditorProps {
   /** Controlled disclosure; leave both undefined for the self-managed block. */
   readonly expanded?: boolean;
   readonly onExpandedChange?: (expanded: boolean) => void;
+  /** Surface override (the white grouped row of « Modifier le rendez-vous »). */
+  readonly style?: StyleProp<ViewStyle>;
 }
 
 const modeOptions: readonly SegmentedControlOption<AppointmentDiscountMode>[] = [
@@ -92,6 +94,7 @@ export function AppointmentDiscountEditor({
   onChange,
   expanded: controlledExpanded,
   onExpandedChange,
+  style,
 }: AppointmentDiscountEditorProps) {
   const [ownExpanded, setOwnExpanded] = useState(discount !== undefined);
   const expanded = controlledExpanded ?? ownExpanded;
@@ -115,7 +118,7 @@ export function AppointmentDiscountEditor({
   };
 
   return (
-    <View style={styles.container} testID="appointment-discount">
+    <View style={[styles.container, style]} testID="appointment-discount">
       <Pressable
         accessibilityLabel={
           discount

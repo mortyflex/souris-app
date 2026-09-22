@@ -1,20 +1,25 @@
 // Souris — Editable appointment context (Appointment Editing)
 //
-// Light "who + when" surface where the Client and the Date / Heure of the
-// editing draft can be changed. Reuses the current Creation compact controls:
-// the shared start-time wheels (StartTimePicker) and the native date picker pattern from
-// the shared client form (iOS wheel sheet, Android dialog). No giant form,
-// no decorative borders.
+// The « Rendez-vous » group of « Modifier le rendez-vous » (DESIGN_OVERRIDES.md
+// §27): three tappable rows — Cliente, Date, Heure — on the white grouped
+// surface, glyph + label on the left, value + chevron on the right. The whole
+// row is the action; no separate link labels. Reuses the current Creation
+// compact controls: the shared start-time wheels (StartTimePicker), opened
+// inline under the Heure row, and the native date picker pattern from the
+// shared client form (iOS wheel sheet, Android dialog).
 
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
+import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
-import { radii, semanticColors, spacing } from '@/shared/ui/theme';
+import { foregroundSoft, semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
   formatCreationDateShort,
@@ -34,6 +39,12 @@ interface EditableAppointmentContextProps {
 }
 
 const DEFAULT_PICKER_DATE = new Date(2026, 7, 1, 9, 0);
+const clientIcon: SymbolViewProps['name'] = { ios: 'person', android: 'person' };
+const dateIcon: SymbolViewProps['name'] = { ios: 'calendar', android: 'calendar_today' };
+const timeIcon: SymbolViewProps['name'] = { ios: 'clock', android: 'schedule' };
+const ICON_COLUMN = 22;
+/** Separators start under the labels: row padding + glyph column + gap. */
+const SEPARATOR_INSET = spacing.base + ICON_COLUMN + spacing.md;
 
 export function EditableAppointmentContext({
   clientName,
@@ -59,77 +70,51 @@ export function EditableAppointmentContext({
     setDatePickerOpen(false);
   };
 
+  const dateLabel = formatCreationDateShort(startAt);
+  const timeLabel = formatCreationTime(startAt);
+
   return (
-    <View style={styles.context}>
-      <View style={styles.clientRow}>
-        <AppText variant="sheetTitle" numberOfLines={1} style={styles.clientName}>
-          {clientName}
-        </AppText>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Modifier la cliente"
-          hitSlop={spacing.sm}
+    <View>
+      <GroupedSurface testID="appointment-context">
+        <ContextRow
+          accessibilityHint="Modifier la cliente"
+          icon={clientIcon}
+          label="Cliente"
           onPress={onEditClient}
-          style={({ pressed }) => [styles.modifyAction, pressed && styles.modifyPressed]}
           testID="edit-client"
-        >
-          <AppText variant="metadata" style={styles.modifyText}>
-            Modifier la cliente
-          </AppText>
-        </Pressable>
-      </View>
-
-      <View style={styles.fieldRow}>
-        <AppText variant="metadata" style={styles.fieldLabel}>
-          Date
-        </AppText>
-        <AppText variant="control" selectable style={styles.fieldValue}>
-          {formatCreationDateShort(startAt)}
-        </AppText>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Changer la date"
-          hitSlop={spacing.sm}
-          onPress={openDatePicker}
-          style={({ pressed }) => [styles.modifyAction, pressed && styles.modifyPressed]}
-          testID="edit-date"
-        >
-          <AppText variant="metadata" style={styles.modifyText}>
-            Changer la date
-          </AppText>
-        </Pressable>
-      </View>
-
-      {editingTime ? (
-        <StartTimePicker
-          onChange={({ hour, minute }) =>
-            onStartAtChange(setAppointmentLocalTime(startAt, hour, minute))
-          }
-          onDone={() => setEditingTime(false)}
-          startAt={startAt}
+          value={clientName ?? ''}
         />
-      ) : (
-        <View style={styles.fieldRow}>
-          <AppText variant="metadata" style={styles.fieldLabel}>
-            Heure
-          </AppText>
-          <AppText variant="control" selectable style={styles.fieldValue}>
-            {formatCreationTime(startAt)}
-          </AppText>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Changer l'heure"
-            hitSlop={spacing.sm}
-            onPress={() => setEditingTime(true)}
-            style={({ pressed }) => [styles.modifyAction, pressed && styles.modifyPressed]}
-            testID="edit-time"
-          >
-            <AppText variant="metadata" style={styles.modifyText}>
-              Changer l&apos;heure
-            </AppText>
-          </Pressable>
-        </View>
-      )}
+        <GroupedSeparator inset={SEPARATOR_INSET} />
+        <ContextRow
+          accessibilityHint="Changer la date"
+          icon={dateIcon}
+          label="Date"
+          onPress={openDatePicker}
+          testID="edit-date"
+          value={dateLabel}
+        />
+        <GroupedSeparator inset={SEPARATOR_INSET} />
+        <ContextRow
+          accessibilityHint="Changer l'heure"
+          expanded={editingTime}
+          icon={timeIcon}
+          label="Heure"
+          onPress={() => setEditingTime((current) => !current)}
+          testID="edit-time"
+          value={timeLabel}
+        />
+        {editingTime && (
+          <View style={styles.timePicker}>
+            <StartTimePicker
+              onChange={({ hour, minute }) =>
+                onStartAtChange(setAppointmentLocalTime(startAt, hour, minute))
+              }
+              onDone={() => setEditingTime(false)}
+              startAt={startAt}
+            />
+          </View>
+        )}
+      </GroupedSurface>
 
       {Platform.OS === 'android' && datePickerOpen && (
         <DateTimePicker
@@ -186,39 +171,76 @@ export function EditableAppointmentContext({
   );
 }
 
+interface ContextRowProps {
+  readonly icon: SymbolViewProps['name'];
+  readonly label: string;
+  readonly value: string;
+  readonly accessibilityHint: string;
+  readonly onPress: () => void;
+  /** Rows that open inline (Heure) turn their chevron; the others push a picker. */
+  readonly expanded?: boolean;
+  readonly testID: string;
+}
+
+function ContextRow({
+  icon,
+  label,
+  value,
+  accessibilityHint,
+  onPress,
+  expanded,
+  testID,
+}: ContextRowProps) {
+  return (
+    <Pressable
+      accessibilityHint={accessibilityHint}
+      accessibilityLabel={`${label}, ${value}`}
+      accessibilityRole="button"
+      accessibilityState={expanded === undefined ? undefined : { expanded }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      testID={testID}
+    >
+      <View style={styles.iconColumn}>
+        <SymbolView name={icon} size={17} tintColor={semanticColors.accent} />
+      </View>
+      <AppText variant="body" style={styles.rowLabel}>
+        {label}
+      </AppText>
+      <AppText
+        variant="control"
+        numberOfLines={1}
+        style={styles.rowValue}
+        testID={`${testID}-value`}
+      >
+        {value}
+      </AppText>
+      <DisclosureChevron expanded={expanded ?? false} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  context: {
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    gap: spacing.sm,
-    padding: spacing.base,
-  },
-  clientRow: {
+  row: {
     alignItems: 'center',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
+    gap: spacing.md,
+    minHeight: 50,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
   },
-  clientName: { color: semanticColors.foreground, flexShrink: 1 },
-  fieldRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+  rowPressed: { backgroundColor: semanticColors.surfaceLavender },
+  iconColumn: { alignItems: 'center', width: ICON_COLUMN },
+  rowLabel: { color: foregroundSoft },
+  // The value takes the remaining width and truncates: a long client name
+  // never pushes the chevron off screen.
+  rowValue: {
+    color: semanticColors.foreground,
+    flex: 1,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'right',
   },
-  fieldLabel: { color: semanticColors.foregroundSoft, width: 48 },
-  fieldValue: { color: semanticColors.foreground, flex: 1, fontVariant: ['tabular-nums'] },
-  modifyAction: {
-    alignItems: 'center',
-    borderRadius: radii.small,
-    justifyContent: 'center',
-    minHeight: 32,
-    paddingHorizontal: spacing.sm,
-  },
-  modifyPressed: { backgroundColor: semanticColors.surfaceLavenderStrong },
-  modifyText: { color: semanticColors.accent },
+  timePicker: { paddingBottom: spacing.sm, paddingHorizontal: spacing.base },
   pickerFooter: {
     flexDirection: 'row',
     gap: spacing.sm,

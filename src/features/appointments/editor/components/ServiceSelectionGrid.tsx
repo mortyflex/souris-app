@@ -1,6 +1,7 @@
 // Souris — Service selection grid (shared Appointment service picker)
 //
-// Shared by NEW Appointment Creation and existing Appointment Editing: a
+// Used by NEW Appointment Creation (existing Appointment Editing has its own
+// segmented list, ServiceCatalogPicker — DESIGN_OVERRIDES.md §27): a
 // compact wrapping two-column grid grouped by Services / Techniques, with
 // search filtering both sections. Card colour states the service TYPE (mint =
 // simple SERVICE, lavender = any other type — `service-card-palette.ts`,

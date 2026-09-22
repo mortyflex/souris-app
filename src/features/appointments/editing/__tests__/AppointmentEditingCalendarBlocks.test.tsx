@@ -183,7 +183,7 @@ type Rendered = Awaited<ReturnType<typeof renderEditor>>;
 
 async function moveStartTo(view: Rendered, hour: string, minute: string) {
   await act(async () => {
-    fireEvent.press(view.getByLabelText("Changer l'heure"));
+    fireEvent.press(view.getByTestId('edit-time'));
   });
   await settleWheelOn(view, 'start-time-wheel-hour', hour);
   await settleWheelOn(view, 'start-time-wheel-minute', minute);

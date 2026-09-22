@@ -61,6 +61,18 @@ export const mint = {
   mint700: '#0C5C3C', // oklch(0.42 0.09 160) — title on mint (≥ 6.9:1 on mint100)
 } as const;
 
+// Azure — the TECHNIQUE category of « Modifier le rendez-vous »
+// (DESIGN_OVERRIDES.md §27). Taxonomy, never a state: not success, not
+// information, not a client colour. 600 is the approved reference hue
+// (3.4:1 on white: graphics only — dots, checks, hairlines); 700 carries white
+// text (5.3:1) and category-coloured text on the tints.
+export const azure = {
+  azure050: '#F1F6FD', // selected Technique row
+  azure200: '#C9DCF4', // selected Technique hairline
+  azure600: '#4F8EDC', // Technique accent: dot, check
+  azure700: '#2F6DB8', // active Techniques segment fill, text on azure
+} as const;
+
 // Agenda appointment pastels — the fifteen planning-card families
 // (DESIGN_OVERRIDES.md §19). A family identifies a client within the calendar.
 // These are explicit, approved design tokens ("Appointment Card Color Palette"
@@ -189,6 +201,30 @@ export const serviceCardColors = {
     subtitle: foregroundSoft,
     selectedBackground: lavender.lav100,
     selectedBorder: colors.accent,
+  },
+} as const;
+
+// Prestation categories of « Modifier le rendez-vous » (DESIGN_OVERRIDES.md
+// §27) — keyed by the domain `ServiceType`. SERVICE keeps the Souris violet,
+// TECHNIQUE the complementary azure. Colour is never the only cue: the
+// segment label, the list context and the spoken category go with it.
+//   accent — small graphics: leading dot, selection check, hairline
+//   strong — a filled surface carrying white text (≥ 4.5:1)
+//   tint   — the whisper behind a selected row
+//   border — the hairline of a selected row
+// The primary action stays `semanticColors.accent` whatever the category.
+export const serviceCategoryColors = {
+  SERVICE: {
+    accent: colors.accent,
+    strong: colors.accent,
+    tint: lavender.lav050,
+    border: lavender.lav200,
+  },
+  TECHNIQUE: {
+    accent: azure.azure600,
+    strong: azure.azure700,
+    tint: azure.azure050,
+    border: azure.azure200,
   },
 } as const;
 

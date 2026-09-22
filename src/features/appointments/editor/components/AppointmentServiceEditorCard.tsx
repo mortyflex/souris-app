@@ -12,6 +12,11 @@
 // Every adjustment is Appointment-snapshot data: neither Creation nor
 // Editing writes the Service catalog. Official defaults are edited only from
 // Prestations & tarifs.
+//
+// `grouped` (« Modifier le rendez-vous », DESIGN_OVERRIDES.md §27): a row of
+// ONE white grouped list — inset separator, reorder handle leading, and a
+// small category dot (violet Service, azure Technique) whose meaning is also
+// spoken in the row's hint, never colour alone.
 
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -34,8 +39,10 @@ import {
   radii,
   rose,
   semanticColors,
+  serviceCategoryColors,
   spacing,
 } from '@/shared/ui/theme';
+import { GroupedSeparator } from '@/shared/ui/GroupedSurface';
 import type { SortableDraftCardProps } from './SortableDraftList';
 import { AppointmentPhaseTimingEditor } from './AppointmentPhaseTimingEditor';
 import {
@@ -47,6 +54,9 @@ import {
 import { formatCreationDuration, formatCreationPrice } from '../presentation';
 
 const TRANSITION_EASING = Easing.bezier(...easing.out);
+/** Width taken by the leading reorder handle of a grouped row (44 + margin). */
+const LEADING_HANDLE_WIDTH = 44 + spacing.xs;
+const categoryNames = { SERVICE: 'Service', TECHNIQUE: 'Technique' } as const;
 
 
 export function AppointmentServiceEditorCard({
@@ -56,6 +66,8 @@ export function AppointmentServiceEditorCard({
   onUpdatePrice,
   onUpdatePhaseDuration,
   dragHandle,
+  grouped = false,
+  separated = false,
 }: SortableDraftCardProps) {
   const [priceText, setPriceText] = useState(() => formatPriceInput(draft.price));
   const [priceInvalid, setPriceInvalid] = useState(false);
@@ -106,17 +118,38 @@ export function AppointmentServiceEditorCard({
   };
 
   return (
-    <Animated.View layout={layoutTransition} style={styles.card}>
-      <View style={styles.cardHeader}>
+    <Animated.View layout={layoutTransition} style={grouped ? styles.groupedRow : styles.card}>
+      {separated && <GroupedSeparator inset={dragHandle ? LEADING_HANDLE_WIDTH : spacing.base} />}
+      <View
+        style={[
+          styles.cardHeader,
+          grouped && styles.groupedHeader,
+          grouped && dragHandle !== undefined && styles.groupedHeaderWithHandle,
+        ]}
+      >
+        {grouped && dragHandle}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
             expanded ? `Réduire ${draft.serviceName}` : `Développer ${draft.serviceName}`
           }
+          accessibilityHint={grouped ? categoryNames[draft.serviceType] : undefined}
           accessibilityState={{ expanded }}
           onPress={onToggleExpanded}
-          style={({ pressed }) => [styles.headerPressable, pressed && styles.headerPressed]}
+          style={({ pressed }) => [
+            styles.headerPressable,
+            pressed && (grouped ? styles.groupedHeaderPressed : styles.headerPressed),
+          ]}
         >
+          {grouped && (
+            <View
+              style={[
+                styles.categoryDot,
+                { backgroundColor: serviceCategoryColors[draft.serviceType].accent },
+              ]}
+              testID={`draft-category-${draft.serviceType}`}
+            />
+          )}
           <View style={styles.cardCopy}>
             <AppText variant="control" numberOfLines={1} style={styles.serviceName}>
               {draft.serviceName}
@@ -130,14 +163,14 @@ export function AppointmentServiceEditorCard({
           </AppText>
           <DisclosureChevron expanded={expanded} style={styles.disclosure} />
         </Pressable>
-        {dragHandle}
+        {!grouped && dragHandle}
       </View>
 
       {expanded && (
         <Animated.View
           entering={enteringAnimation}
           exiting={exitingAnimation}
-          style={styles.expandedPanel}
+          style={[styles.expandedPanel, grouped && styles.groupedExpandedPanel]}
         >
           <View style={styles.customization}>
             <View style={styles.fieldRow}>
@@ -199,6 +232,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.large,
     overflow: 'hidden',
   },
+  groupedRow: { backgroundColor: semanticColors.surfaceElevated, overflow: 'hidden' },
   cardHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -206,6 +240,10 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.base,
     paddingVertical: spacing.xs,
   },
+  groupedHeader: { minHeight: 60, paddingRight: spacing.md },
+  groupedHeaderWithHandle: { paddingLeft: 0 },
+  groupedHeaderPressed: { backgroundColor: semanticColors.surfaceLavender },
+  categoryDot: { borderRadius: 4, height: 8, marginRight: spacing.sm, width: 8 },
   headerPressable: {
     alignItems: 'center',
     flex: 1,
@@ -231,6 +269,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     marginHorizontal: spacing.xs,
     overflow: 'hidden',
+  },
+  groupedExpandedPanel: {
+    backgroundColor: semanticColors.surfaceLavender,
+    marginBottom: spacing.md,
+    marginHorizontal: spacing.base,
   },
   customization: {
     gap: spacing.sm,

@@ -17,6 +17,13 @@
 // Presented in the canonical Souris sheet shell; swipe-to-dismiss is off
 // (route options). A dirty draft is guarded against « Annuler » and the
 // hardware back by the shared Souris confirmation dialog.
+//
+// Layout (DESIGN_OVERRIDES.md §27): an iOS editing header (« Annuler » leading,
+// title), ONE vertical scroll — Rendez-vous rows, Prestations sélectionnées as
+// one grouped list, Options (Réduction), Ajouter des prestations (search,
+// Services / Techniques segment, dense list) — and a sticky footer outside the
+// scroll: the live « N prestations · durée » summary, the net amount and the
+// violet « Enregistrer les modifications ».
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -44,22 +51,25 @@ import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { isTerminalAppointmentStatus } from '@/features/appointments/presentation';
 import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
+import { formatEuroCents } from '@/shared/lib/money';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
+import { GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { SheetScreen } from '@/shared/ui/SheetScreen';
-import { gutter, semanticColors, spacing } from '@/shared/ui/theme';
+import { foregroundSoft, gutter, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { createNewAppointmentItemId } from '../creation/runtime-ids';
 import { AppointmentDiscountSection } from '../editor/components/AppointmentDiscountSection';
-import { ServiceSelectionGrid } from '../editor/components/ServiceSelectionGrid';
+import { ServiceCatalogPicker } from '../editor/components/ServiceCatalogPicker';
 import { SortableDraftList } from '../editor/components/SortableDraftList';
+import { formatCreationDuration } from '../editor/presentation';
 import {
   areDraftsEqual,
   createSelectedServiceDraft,
+  getDraftDurationMinutes,
   getSelectedServiceDraftKey,
   hydrateAppointmentDrafts,
   reorderDrafts,
@@ -130,6 +140,12 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
       : undefined;
   const draftClient = getClientById(draftClientId);
   const clientName = getResolvedClientDisplayName(draftClient);
+  // The footer reads the SAME derivations as the rest of the editor: the draft
+  // durations and THE domain services total (net of the discount).
+  const servicesTotal = getAppointmentServicesTotal({ items: drafts, discount: draftDiscount });
+  const totalMinutes = drafts.reduce((total, draft) => total + getDraftDurationMinutes(draft), 0);
+  const summaryLabel = `${drafts.length} prestation${drafts.length > 1 ? 's' : ''} · ${formatCreationDuration(totalMinutes)}`;
+  const totalLabel = formatEuroCents(servicesTotal.netCents);
 
   const requestDiscard = () => {
     setDiscardRequested(true);
@@ -248,17 +264,25 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 
   return (
     <SheetScreen keyboardAvoiding testID="appointment-editing-sheet">
-      <View style={styles.headerZone}>
-        <SheetHeader
-          action={{
-            accessibilityLabel: 'Annuler les modifications',
-            label: 'Annuler',
-            onPress: cancel,
-            testID: 'cancel-appointment-edit',
-          }}
-          eyebrow="RENDEZ-VOUS"
-          title="Modifier le rendez-vous"
+      <View style={styles.header}>
+        <AppButton
+          accessibilityLabel="Annuler les modifications"
+          onPress={cancel}
+          style={styles.headerAction}
+          testID="cancel-appointment-edit"
+          title="Annuler"
+          variant="tertiary"
         />
+        <AppText
+          accessibilityRole="header"
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+          numberOfLines={1}
+          style={styles.headerTitle}
+          variant="sectionTitle"
+        >
+          Modifier le rendez-vous
+        </AppText>
       </View>
 
       <ScrollView
@@ -266,76 +290,103 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.editorContent, { paddingHorizontal: horizontalGutter }]}
+        testID="appointment-editing-scroll"
       >
-        <EditableAppointmentContext
-          clientName={clientName}
-          startAt={draftStartAt}
-          onEditClient={() => setClientPickerVisible(true)}
-          onStartAtChange={setDraftStartAt}
-        />
-
-        <View style={styles.selectedSection}>
-          <SectionHeader count={drafts.length} title="Prestations" />
-          <SortableDraftList
-            canRemove={drafts.length > 1}
-            entries={drafts.map((draft) => ({ draft }))}
-            expandedDraftId={expandedDraftId}
-            onRemove={removeDraft}
-            onReorder={reorderSelectedDrafts}
-            onToggleExpanded={(draftKey) =>
-              setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
-            }
-            onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
-              updateDraft(draftKey, (draft) =>
-                updateDraftPhaseDuration(draft, phaseId, durationMinutes),
-              )
-            }
-            onUpdatePrice={(draftKey, price) =>
-              updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
-            }
+        <View style={styles.section}>
+          <AppText variant="eyebrow" style={styles.eyebrow}>
+            RENDEZ-VOUS
+          </AppText>
+          <EditableAppointmentContext
+            clientName={clientName}
+            startAt={draftStartAt}
+            onEditClient={() => setClientPickerVisible(true)}
+            onStartAtChange={setDraftStartAt}
           />
         </View>
 
-        <AppointmentDiscountSection
-          // The DRAFT date and the DRAFT Client decide, derived on every render:
-          // moving the Appointment or changing the Client updates it at once.
-          birthdayReminder={
-            draftClient !== undefined && isClientBirthdayOnDate(draftClient, draftStartAt)
-          }
-          discount={draftDiscount}
-          onChange={setDraftDiscount}
-          servicesTotal={getAppointmentServicesTotal({ items: drafts, discount: draftDiscount })}
-        />
+        <View style={styles.section}>
+          <SectionHeader count={drafts.length} title="Prestations sélectionnées" />
+          <GroupedSurface testID="appointment-selected-services">
+            <SortableDraftList
+              canRemove={drafts.length > 1}
+              entries={drafts.map((draft) => ({ draft }))}
+              expandedDraftId={expandedDraftId}
+              grouped
+              onRemove={removeDraft}
+              onReorder={reorderSelectedDrafts}
+              onToggleExpanded={(draftKey) =>
+                setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
+              }
+              onUpdatePhaseDuration={(draftKey, phaseId, durationMinutes) =>
+                updateDraft(draftKey, (draft) =>
+                  updateDraftPhaseDuration(draft, phaseId, durationMinutes),
+                )
+              }
+              onUpdatePrice={(draftKey, price) =>
+                updateDraft(draftKey, (draft) => updateDraftPrice(draft, price))
+              }
+            />
+          </GroupedSurface>
+        </View>
 
-        <View style={styles.catalogSection}>
-          <ServiceSelectionGrid
+        <View style={styles.section}>
+          <SectionHeader title="Options" />
+          <AppointmentDiscountSection
+            // The DRAFT date and the DRAFT Client decide, derived on every render:
+            // moving the Appointment or changing the Client updates it at once.
+            birthdayReminder={
+              draftClient !== undefined && isClientBirthdayOnDate(draftClient, draftStartAt)
+            }
+            discount={draftDiscount}
+            editorStyle={styles.discountRow}
+            onChange={setDraftDiscount}
+            servicesTotal={servicesTotal}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Ajouter des prestations" />
+          <ServiceCatalogPicker
             services={activeServices}
             selectedServiceIds={drafts.map((draft) => draft.serviceId)}
-            onToggleService={addServiceImmediately}
+            onSelectService={addServiceImmediately}
           />
         </View>
       </ScrollView>
 
-      {blockInTheWay && (
-        <View style={styles.conflictZone}>
+      <SheetActionBar style={styles.footer} testID="appointment-edit-footer">
+        {blockInTheWay && (
           <ScheduleConflictNotice
             conflict={describeCalendarBlockInTheWay(blockInTheWay)}
             testID="appointment-calendar-block-conflict"
           />
+        )}
+        <View
+          accessible
+          accessibilityLabel={`${summaryLabel}, total ${totalLabel}`}
+          style={styles.summary}
+          testID="appointment-edit-summary"
+        >
+          <AppText
+            variant="control"
+            numberOfLines={1}
+            style={styles.summaryLabel}
+            testID="appointment-edit-summary-label"
+          >
+            {summaryLabel}
+          </AppText>
+          <AppText
+            variant="sectionTitle"
+            numberOfLines={1}
+            style={styles.summaryTotal}
+            testID="appointment-edit-summary-total"
+          >
+            {totalLabel}
+          </AppText>
         </View>
-      )}
-
-      <SheetActionBar direction="row">
-        <AppButton
-          onPress={cancel}
-          style={styles.secondaryButton}
-          title="Annuler"
-          variant="secondary"
-        />
         <AppButton
           disabled={!isDirty || blockInTheWay !== undefined}
           onPress={save}
-          style={styles.primaryButton}
           testID="save-appointment-edit"
           title="Enregistrer les modifications"
         />
@@ -372,17 +423,42 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 }
 
 const styles = StyleSheet.create({
-  headerZone: { paddingHorizontal: horizontalGutter },
-  conflictZone: { paddingHorizontal: horizontalGutter, paddingTop: spacing.sm },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: horizontalGutter - spacing.md,
+    paddingTop: spacing.sm,
+  },
+  headerAction: { paddingHorizontal: spacing.md },
+  headerTitle: { color: semanticColors.foreground, flex: 1 },
   editorContent: {
-    gap: spacing.base,
+    gap: spacing.xl,
     paddingBottom: spacing.xl,
     paddingTop: spacing.sm,
   },
-  selectedSection: { gap: spacing.sm },
-  catalogSection: { gap: spacing.sm },
-  secondaryButton: { paddingHorizontal: spacing.base },
-  primaryButton: { flex: 1 },
+  section: { gap: spacing.sm },
+  eyebrow: { color: foregroundSoft },
+  // The discount block as a white grouped row, like the lists around it.
+  discountRow: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.borderSubtle,
+    borderRadius: radii.large,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  footer: {
+    borderTopColor: semanticColors.borderSubtle,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  summary: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  summaryLabel: { color: semanticColors.foreground, flexShrink: 1, fontVariant: ['tabular-nums'] },
+  summaryTotal: { color: semanticColors.accent, fontVariant: ['tabular-nums'] },
   notFound: { alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing['3xl'] },
   notFoundText: { color: semanticColors.foregroundMuted, textAlign: 'center' },
 });

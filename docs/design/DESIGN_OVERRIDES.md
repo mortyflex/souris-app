@@ -1206,3 +1206,41 @@ status; only the data (status pill, available actions, CTA) changes.
   when a discount exists; on the right the primary violet CTA naming the amount — « Encaisser
   95,00 € », or « Enregistrer 95,00 € » on a completed Appointment without payment. No CTA when
   checkout is not allowed; the total stays. The recorded payment summary stays in the body.
+
+---
+
+## 27. Modifier le rendez-vous — Editing Workspace
+
+Supersedes, for « Modifier le rendez-vous » only: the lavender context card, the Prestations editor
+cards, the two-column mint / lavender catalog grid of §22 and the « Annuler | Enregistrer » footer.
+Drafts, dirty-state guard, Calendar Block rule, discount logic, save and discard are unchanged.
+Appointment Creation keeps §22 for now.
+
+- **Header.** « Annuler » (tertiary, leading) then the title « Modifier le rendez-vous »
+  (`sectionTitle`, one line, shrinks slightly before truncating). The grabber stays above. No
+  second « Annuler » in the footer. A dirty draft is still guarded by the shared dialog.
+- **ONE vertical scroll** — Rendez-vous, Prestations sélectionnées, Options, Ajouter des
+  prestations — and the footer outside it. No nested vertical list.
+- **Rendez-vous.** `RENDEZ-VOUS` eyebrow over one white grouped surface (`GroupedSurface`: the §26
+  recipe) with three whole-row actions: accent glyph, label (`body`, soft), value (`control`, right,
+  truncating), chevron. Cliente → client picker, Date → date picker, Heure → the inline wheels
+  under the row (the chevron turns). No « Modifier la cliente » link labels; they are the hints.
+- **Prestations sélectionnées.** Count badge; ONE grouped list with inset separators. Reorder
+  handle leading, a small category dot, name, duration · pose, price column, accordion chevron
+  (price + durations, unchanged). Swipe-to-remove unchanged, square on the white surface.
+- **Options.** « Réduction » as a white grouped row; birthday reminder above it as before.
+- **Ajouter des prestations.** Search, then a full-width Services / Techniques `SegmentedControl`,
+  then ONE dense list of the chosen type — the same row for both categories: category dot, name
+  (two lines max), duration · « dont X de pose », price, and a selection ring (empty) or filled
+  check. Search filters inside the chosen category; when only the other one matches, the empty
+  state offers « Voir N résultats dans Techniques ». Tapping a selected row still adds nothing.
+- **Category colours** (`serviceCategoryColors`, keyed by `ServiceType`) — taxonomy, never state:
+  SERVICE = Souris violet (`colors.accent`); TECHNIQUE = azure (`azure600 #4F8EDC` for dots and
+  checks; `azure700 #2F6DB8` fills the active segment, 5.3:1 with white). Selected rows take a
+  whisper tint of their category. Never green or rose for a category. Never colour alone: segment
+  label and tab state, selection ring vs check with `selected` state, and the spoken category on
+  selected prestations.
+- **Sticky footer.** Hairline on top; « N prestations · durée » (`control`) and the net amount
+  (`sectionTitle`, violet) from the domain services total, live; the Calendar Block notice when
+  relevant; one full-width violet « Enregistrer les modifications », disabled while nothing
+  changed. Always violet, whatever category is shown.
