@@ -1,9 +1,10 @@
 // Souris — Appointment lifecycle sheets (cancellation, no-show)
 //
-// Both use the canonical Souris drawer with the danger-toned header, a
-// keyboard-safe scrollable body and one fixed destructive action. The
-// cancellation reason field never auto-focuses: the keyboard opens only
-// when the professional taps it.
+// Both use the canonical Souris drawer with the shared SheetEditingHeader
+// (« Fermer » leading, one centered title, no eyebrow), a keyboard-safe
+// scrollable body and one fixed destructive action. The cancellation reason
+// field never auto-focuses: the keyboard opens only when the professional
+// taps it.
 
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -13,7 +14,7 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { fontFamilies, radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 interface AppointmentCancellationSheetProps {
@@ -53,11 +54,10 @@ export function AppointmentCancellationSheet({
       confirmTestID="confirm-cancellation"
       confirmTitle="Confirmer l’annulation"
       description={`Le rendez-vous restera visible dans l’historique de ${clientName}.`}
-      eyebrow="ANNULATION"
       onClose={close}
       onConfirm={confirm}
       testID="cancellation-sheet"
-      title="Annuler ce rendez-vous ?"
+      title="Annuler le rendez-vous"
       visible={visible}
     >
       <View style={styles.fieldGroup}>
@@ -101,14 +101,12 @@ export function AppointmentCancellationSheet({
 }
 
 interface AppointmentNoShowSheetProps {
-  readonly clientName: string;
   readonly visible: boolean;
   readonly onClose: () => void;
   readonly onConfirm: () => void;
 }
 
 export function AppointmentNoShowSheet({
-  clientName,
   visible,
   onClose,
   onConfirm,
@@ -116,13 +114,12 @@ export function AppointmentNoShowSheet({
   return (
     <LifecycleSheet
       confirmTestID="confirm-no-show"
-      confirmTitle="Marquer comme absence"
-      description={`Cette absence restera visible dans l’historique de ${clientName}.`}
-      eyebrow="ABSENCE"
+      confirmTitle="Confirmer l’absence"
+      description="Le rendez-vous sera conservé dans l’historique de la cliente comme une absence."
       onClose={onClose}
       onConfirm={onConfirm}
       testID="no-show-sheet"
-      title="Marquer comme absence ?"
+      title="Marquer comme absente"
       visible={visible}
     />
   );
@@ -134,7 +131,6 @@ interface LifecycleSheetProps {
   readonly confirmTestID: string;
   readonly confirmTitle: string;
   readonly description: string;
-  readonly eyebrow: string;
   readonly testID: string;
   readonly title: string;
   readonly visible: boolean;
@@ -148,7 +144,6 @@ function LifecycleSheet({
   confirmTestID,
   confirmTitle,
   description,
-  eyebrow,
   testID,
   title,
   visible,
@@ -170,11 +165,11 @@ function LifecycleSheet({
         </SheetActionBar>
       }
       header={
-        <SheetHeader
-          action={{ label: 'Fermer', onPress: onClose }}
-          eyebrow={eyebrow}
+        <SheetEditingHeader
+          cancelLabel="Fermer"
+          cancelTestID={`${testID}-close`}
+          onCancel={onClose}
           title={title}
-          tone="danger"
         />
       }
       keyboardAvoiding

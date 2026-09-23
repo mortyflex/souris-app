@@ -1105,10 +1105,12 @@ fast — never a technical admin form, never a grey disabled state.
   empiéter le rendez-vous sur un créneau indisponible. » / « Indisponible — Pause, 10:00–11:00 » — with
   ONE `warning` haptic; it is replaced or cleared by the next quick edit. Nothing there is disabled in
   advance: the steppers stay free, the refusal happens on « Enregistrer », the drop or the swipe.
-- **Details sheet.** The canonical content sheet (§16, §20): `SheetHeader` with the accent eyebrow
-  `CRÉNEAU PERSONNEL`, « Indisponible », and the worded « Fermer » — no X icon. A `mauve050` card: badge
-  + Motif, a hairline, then Date and Horaire lines. « Modifier » (secondary `AppButton`), then the
-  `rose600` text action « Supprimer », as in Appointment Details. Swipe-down and outside tap close it;
+- **Details sheet.** The canonical content sheet (§16, §20): `DetailSheetHeader` while reading —
+  « Indisponible » leading, then « ••• » (spoken « Actions ») and × (spoken « Fermer »), as in
+  Appointment Details; `SheetEditingHeader` (§30, « Annuler » + « Modifier le créneau ») while
+  editing. A `mauve050` card: badge + Motif, a hairline, then Date and Horaire lines — and nothing
+  below it. « ••• » opens the shared `DetailActionsSheet`: « Modifier », then « Supprimer »
+  (`rose600`) in its own group, run from `onDismissed`. Swipe-down and outside tap close it;
   « Modifier » slides the form in as a second sheet (`contentKey`) and turns both off while a draft
   exists. Deletion goes through the shared `ConfirmationDialog`.
 - **Haptics.** One interaction = one haptic: the `SegmentedControl`'s own selection tick on a mode
@@ -1204,11 +1206,14 @@ status; only the data (status pill, available actions, CTA) changes.
   each with a 20 pt accent glyph. No amount.
 - **« Ajouter une vente ».** The Revente as a light white row: accent ⊕, accent label, chevron.
   Secondary to checkout; hidden for an archived Client.
-- **« ••• » actions.** A `BottomSheet` action list: Modifier le rendez-vous (navy, accent glyph),
-  Marquer une absence and Annuler le rendez-vous (`rose700`), then « Supprimer le rendez-vous »
+- **« ••• » actions.** A `BottomSheet` action list under `SheetEditingHeader` (« Fermer » leading,
+  « Actions du rendez-vous » centered, no client name). Short visible labels, full spoken ones:
+  Modifier (navy, accent glyph), Annuler and Marquer comme absente (`rose700`), then « Supprimer »
   (`rose600`) in its own group. Only eligible actions are listed. The chosen action runs from
   `onDismissed`, so the next drawer, dialog or route never races the closing list. Deletion keeps
-  the shared `ConfirmationDialog` (confirm / blocked).
+  the shared `ConfirmationDialog` (confirm / blocked). The cancellation and no-show confirmations use the same
+  `SheetEditingHeader` (« Fermer » + « Annuler le rendez-vous » / « Marquer comme absente »), no
+  eyebrow.
 - **Sticky checkout footer.** `SheetActionBar` below the scroll (hairline on top): « Total à
   encaisser » (`metadata`) over the amount (`summaryValue`), then a quiet `Réduction … · -X €` line
   when a discount exists; on the right the primary violet CTA naming the amount — « Encaisser

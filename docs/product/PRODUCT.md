@@ -583,7 +583,7 @@ reason?
 ### No-show
 
 The appointment remains part of history. Once the appointment start time has been reached,
-`Marquer comme absence` requires an explicit confirmation and records:
+`Marquer comme absente` requires an explicit confirmation and records:
 
 ```text
 recordedAt

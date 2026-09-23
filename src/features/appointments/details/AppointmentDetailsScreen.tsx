@@ -699,7 +699,6 @@ export function AppointmentDetailsScreen({
 
       <AppointmentActionsSheet
         available={available}
-        clientName={clientDisplayName}
         onClose={() => setMenuVisible(false)}
         onDismissed={runSecondaryAction}
         onSelect={(action) => {
@@ -726,7 +725,6 @@ export function AppointmentDetailsScreen({
         visible={!isTerminal && activeSheet === "cancellation"}
       />
       <AppointmentNoShowSheet
-        clientName={clientDisplayName}
         onClose={() => setActiveSheet(undefined)}
         onConfirm={markNoShow}
         visible={!isTerminal && activeSheet === "no-show"}

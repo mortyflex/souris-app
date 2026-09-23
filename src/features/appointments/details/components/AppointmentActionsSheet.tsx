@@ -3,17 +3,21 @@
 // The lifecycle and maintenance actions leave the main sheet for ONE action
 // list on the canonical Souris drawer (BottomSheet, DESIGN_OVERRIDES.md §16):
 //
-//   Modifier le rendez-vous      normal
-//   Marquer une absence          status-changing (rose text)
-//   Annuler le rendez-vous       status-changing (rose text)
+//   Modifier                     normal
+//   Annuler                      status-changing (rose text)
+//   Marquer comme absente        status-changing (rose text)
 //   ─────────────────────────
-//   Supprimer le rendez-vous     destructive, in its own group
+//   Supprimer                    destructive, in its own group
 //
 // Each action is offered only when the screen passes its handler, so the
 // existing eligibility rules stay the screen's. Choosing an action only
 // reports it: the screen closes the list and runs it once the list is gone
 // (`onDismissed`), so a second drawer, a dialog or a navigation never races
 // the closing one.
+//
+// Header: the shared SheetEditingHeader (« Fermer » leading, « Actions du
+// rendez-vous » centered). The title already names the object, so the visible
+// labels stay short; each keeps a full spoken label.
 
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Fragment } from 'react';
@@ -21,7 +25,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { radii, rose, semanticColors, spacing, touchTarget } from '@/shared/ui/theme';
 
 export type AppointmentSecondaryAction = 'modify' | 'no-show' | 'cancel' | 'delete';
@@ -29,6 +33,8 @@ export type AppointmentSecondaryAction = 'modify' | 'no-show' | 'cancel' | 'dele
 interface ActionDefinition {
   readonly action: AppointmentSecondaryAction;
   readonly label: string;
+  /** Spoken label: the visible one alone would be ambiguous out of context. */
+  readonly accessibilityLabel: string;
   readonly icon: SymbolViewProps['name'];
   readonly tone: 'normal' | 'warning' | 'destructive';
   readonly testID: string;
@@ -37,30 +43,34 @@ interface ActionDefinition {
 const actionDefinitions: readonly ActionDefinition[] = [
   {
     action: 'modify',
-    label: 'Modifier le rendez-vous',
+    label: 'Modifier',
+    accessibilityLabel: 'Modifier le rendez-vous',
     icon: { ios: 'pencil', android: 'edit' },
     tone: 'normal',
     testID: 'modify-appointment',
   },
   {
-    action: 'no-show',
-    label: 'Marquer une absence',
-    icon: { ios: 'person.crop.circle.badge.xmark', android: 'person_off' },
-    tone: 'warning',
-    testID: 'open-no-show',
-  },
-  {
     action: 'cancel',
-    label: 'Annuler le rendez-vous',
+    label: 'Annuler',
+    accessibilityLabel: 'Annuler le rendez-vous',
     icon: { ios: 'calendar.badge.minus', android: 'event_busy' },
     tone: 'warning',
     testID: 'open-cancellation',
+  },
+  {
+    action: 'no-show',
+    label: 'Marquer comme absente',
+    accessibilityLabel: 'Marquer comme absente',
+    icon: { ios: 'person.crop.circle.badge.xmark', android: 'person_off' },
+    tone: 'warning',
+    testID: 'open-no-show',
   },
 ];
 
 const deleteDefinition: ActionDefinition = {
   action: 'delete',
-  label: 'Supprimer le rendez-vous',
+  label: 'Supprimer',
+  accessibilityLabel: 'Supprimer le rendez-vous',
   icon: { ios: 'trash', android: 'delete' },
   tone: 'destructive',
   testID: 'open-permanent-deletion',
@@ -73,7 +83,6 @@ const toneColors = {
 } as const;
 
 interface AppointmentActionsSheetProps {
-  readonly clientName: string;
   readonly visible: boolean;
   /** The actions currently allowed; « Supprimer » is always offered. */
   readonly available: ReadonlySet<AppointmentSecondaryAction>;
@@ -83,7 +92,6 @@ interface AppointmentActionsSheetProps {
 }
 
 export function AppointmentActionsSheet({
-  clientName,
   visible,
   available,
   onSelect,
@@ -95,7 +103,14 @@ export function AppointmentActionsSheet({
   return (
     <BottomSheet
       backdropLabel="Fermer les actions"
-      header={<SheetHeader eyebrow="RENDEZ-VOUS" title={clientName} titleNumberOfLines={1} />}
+      header={
+        <SheetEditingHeader
+          cancelLabel="Fermer"
+          cancelTestID="close-appointment-actions"
+          onCancel={onClose}
+          title="Actions du rendez-vous"
+        />
+      }
       onClose={onClose}
       onDismissed={onDismissed}
       testID="appointment-actions-sheet"
@@ -138,7 +153,7 @@ function ActionRow({
   return (
     <Pressable
       accessibilityHint={accessibilityHint}
-      accessibilityLabel={definition.label}
+      accessibilityLabel={definition.accessibilityLabel}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}

@@ -651,7 +651,8 @@ async function secondaryActions(view: Awaited<ReturnType<typeof render>>): Promi
   const ids = within(view.getByTestId("appointment-actions-sheet"))
     .getAllByRole("button")
     .map(({ props }) => props.testID as string)
-    .filter((testID) => testID !== undefined);
+    // The header « Fermer » is navigation, not an action of the list.
+    .filter((testID) => testID !== undefined && testID !== "close-appointment-actions");
   await act(async () => {
     fireEvent.press(view.getByLabelText("Fermer les actions"));
   });
@@ -767,7 +768,18 @@ describe("AppointmentDetailsScreen", () => {
 
     await chooseAction(view, "open-cancellation");
 
-    expect(view.getByText("Annuler ce rendez-vous ?")).toBeTruthy();
+    // Canonical header: « Fermer » leading, one centered title, no eyebrow.
+    const cancellationSheet = within(view.getByTestId("cancellation-sheet"));
+    expect(
+      within(cancellationSheet.getByTestId("sheet-editing-header-title")).getByRole("header", {
+        name: "Annuler le rendez-vous",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(cancellationSheet.getByTestId("sheet-editing-header-leading")).getByText("Fermer"),
+    ).toBeTruthy();
+    expect(view.queryByText("ANNULATION")).toBeNull();
+    expect(view.getByText(/Le rendez-vous restera visible dans l’historique de /)).toBeTruthy();
     expect(
       view.getByTestId("confirm-cancellation").props.accessibilityState
         .disabled,
@@ -831,8 +843,8 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.queryByText("Démarrer")).toBeNull();
     expect(await secondaryActions(view)).toEqual([
       "modify-appointment",
-      "open-no-show",
       "open-cancellation",
+      "open-no-show",
       "open-permanent-deletion",
     ]);
 
@@ -950,14 +962,70 @@ describe("AppointmentDetailsScreen", () => {
     const view = await renderDetails();
 
     await chooseAction(view, "open-no-show");
-    expect(view.getByText("Marquer comme absence ?")).toBeTruthy();
+    const noShowSheet = within(view.getByTestId("no-show-sheet"));
+    expect(
+      within(noShowSheet.getByTestId("sheet-editing-header-title")).getByRole("header", {
+        name: "Marquer comme absente",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(noShowSheet.getByTestId("sheet-editing-header-leading")).getByText("Fermer"),
+    ).toBeTruthy();
+    expect(
+      view.getByText("Le rendez-vous sera conservé dans l’historique de la cliente comme une absence."),
+    ).toBeTruthy();
+    expect(within(view.getByTestId("confirm-no-show")).getByText("Confirmer l’absence")).toBeTruthy();
 
     await press(view, "confirm-no-show");
 
     expect(view.getByText("Absence")).toBeTruthy();
+    // The same domain transition the client history and statistics read.
+    expect(view.getByTestId("appointment-status").props.children).toBe("NO_SHOW");
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
     expect(await secondaryActions(view)).toEqual(["open-permanent-deletion"]);
     expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
+  });
+
+  it("presents the « ••• » actions under the canonical header, short labels and no client name", async () => {
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    const view = await renderDetails();
+
+    await press(view, "open-appointment-actions");
+    await settleSheetTransition();
+
+    const sheet = within(view.getByTestId("appointment-actions-sheet"));
+    expect(
+      within(sheet.getByTestId("sheet-editing-header-title")).getByRole("header", {
+        name: "Actions du rendez-vous",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(sheet.getByTestId("sheet-editing-header-leading")).getByTestId("close-appointment-actions"),
+    ).toBeTruthy();
+    expect(sheet.queryByText("RENDEZ-VOUS")).toBeNull();
+    expect(sheet.queryByRole("header", { name: "Sofia Petit" })).toBeNull();
+    expect(sheet.queryByText("Sofia Petit")).toBeNull();
+    const actionIds = ["modify-appointment", "open-cancellation", "open-no-show", "open-permanent-deletion"];
+    // Visible labels stay short under the title…
+    expect(
+      actionIds.map((testID) => within(sheet.getByTestId(testID)).getByText(/./).props.children),
+    ).toEqual(["Modifier", "Annuler", "Marquer comme absente", "Supprimer"]);
+    // …while each spoken label stays unambiguous.
+    expect(actionIds.map((testID) => sheet.getByTestId(testID).props.accessibilityLabel)).toEqual([
+      "Modifier le rendez-vous",
+      "Annuler le rendez-vous",
+      "Marquer comme absente",
+      "Supprimer le rendez-vous",
+    ]);
+
+    // « Fermer » only closes the list: no action runs.
+    await press(view, "close-appointment-actions");
+    await settleSheetTransition();
+    expect(view.queryByTestId("appointment-actions-sheet")).toBeNull();
+    expect(view.queryByTestId("no-show-sheet")).toBeNull();
+    expect(view.queryByTestId("cancellation-sheet")).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(view.getByTestId("appointment-status").props.children).toBe("SCHEDULED");
   });
 
   it("lets previous-local-day completion win over a stale cancellation sheet, without any payment", async () => {
@@ -1727,8 +1795,8 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByTestId("checkout-appointment")).toBeTruthy();
     expect(await secondaryActions(view)).toEqual([
       "modify-appointment",
-      "open-no-show",
       "open-cancellation",
+      "open-no-show",
       "open-permanent-deletion",
     ]);
   });

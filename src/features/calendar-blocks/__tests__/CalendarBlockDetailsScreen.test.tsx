@@ -1,9 +1,10 @@
 // Souris — Calendar Block details, editing and deletion
 //
 // The dedicated sheet a tap on an « Indisponible » block opens: reason, date,
-// time — Modifier, Supprimer, Fermer — and nothing a client Appointment has.
+// time — « ••• » (Modifier, Supprimer) and × — and nothing a client
+// Appointment has.
 
-import { act, fireEvent, render } from "@testing-library/react-native";
+import { act, fireEvent, render, within } from "@testing-library/react-native";
 import { Alert } from "react-native";
 
 import type { CalendarBlock } from "@/domain/calendar-blocks";
@@ -18,6 +19,7 @@ import { openTestDatabase } from "@/persistence/testing/node-sqlite-database";
 import { createDevelopmentSeed } from "@/providers/development-seed";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 import { haptics } from "@/shared/lib/haptics";
+import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 import { settleWheelOn } from "@/shared/ui/testing/wheels";
 
 import { CalendarBlockDetailsScreen } from "../details/CalendarBlockDetailsScreen";
@@ -37,6 +39,32 @@ jest.mock("expo-router", () => ({
 
 // SheetScreen (content fit) holds the route's removal while the sheet slides down.
 jest.mock("expo-router/react-navigation", () => ({ usePreventRemove: jest.fn() }));
+
+// The preset Modal mock never reports dismissal; this one mirrors the iOS
+// contract (onDismiss once `visible` has dropped), so the « ••• » action list
+// chains its action exactly as on device.
+jest.mock("react-native/Libraries/Modal/Modal", () => {
+  const React = jest.requireActual("react") as typeof import("react");
+  const { View } = jest.requireActual("react-native") as typeof import("react-native");
+
+  interface MockModalProps {
+    readonly visible?: boolean;
+    readonly onDismiss?: () => void;
+    readonly children?: React.ReactNode;
+  }
+
+  class MockModal extends React.Component<MockModalProps> {
+    componentDidUpdate(previous: MockModalProps) {
+      if (previous.visible && !this.props.visible) this.props.onDismiss?.();
+    }
+
+    render() {
+      return this.props.visible ? React.createElement(View, null, this.props.children) : null;
+    }
+  }
+
+  return { __esModule: true, default: MockModal };
+});
 
 jest.mock("react-native-reanimated", () => {
   const React = jest.requireActual("react") as typeof import("react");
@@ -169,6 +197,14 @@ async function press(view: Rendered, testID: string) {
   });
 }
 
+/** Opens « ••• », chooses one action and lets the list close so the action runs. */
+async function chooseAction(view: Rendered, testID: string) {
+  await press(view, "open-calendar-block-actions");
+  await settleSheetTransition();
+  await press(view, testID);
+  await settleSheetTransition();
+}
+
 const timeOf = (view: Rendered, testID: string) =>
   view.getByTestId(`${testID}-value`).props.children as string;
 
@@ -202,7 +238,6 @@ describe("Calendar Block details", () => {
     const view = await renderDetails(openDatabase());
 
     expect(view.getByRole("header", { name: "Indisponible" })).toBeTruthy();
-    expect(view.getByText("CRÉNEAU PERSONNEL")).toBeTruthy();
     expect(view.getByText("Motif")).toBeTruthy();
     expect(view.getByText("Déplacement")).toBeTruthy();
     expect(view.getByText("Lundi 15 mars")).toBeTruthy();
@@ -212,20 +247,37 @@ describe("Calendar Block details", () => {
     ).toBeTruthy();
   });
 
-  it("offers Modifier, Supprimer and Fermer — and no client, checkout, discount or sale action", async () => {
+  it("uses the detail header of Appointment Details: « Indisponible » leading, then « ••• » and ×", async () => {
     const view = await renderDetails(openDatabase());
 
-    expect(view.getByTestId("modify-calendar-block")).toBeTruthy();
-    expect(view.getByTestId("open-calendar-block-deletion")).toBeTruthy();
-    expect(view.getByText("Fermer")).toBeTruthy();
+    const header = within(view.getByTestId("calendar-block-detail-header"));
+    expect(header.getByRole("header", { name: "Indisponible" })).toBeTruthy();
+    expect(header.getByTestId("open-calendar-block-actions").props.accessibilityLabel).toBe("Actions");
+    expect(header.getByTestId("close-calendar-block-details").props.accessibilityLabel).toBe("Fermer");
+    expect(view.queryByText("Fermer")).toBeNull();
+    expect(view.queryByText("CRÉNEAU PERSONNEL")).toBeNull();
+  });
+
+  it("keeps Modifier and Supprimer behind « ••• » — and offers no client, checkout, discount or sale action", async () => {
+    const view = await renderDetails(openDatabase());
+
+    // The sheet body is the card alone: no large action below it.
+    expect(view.queryByTestId("modify-calendar-block")).toBeNull();
+    expect(view.queryByTestId("open-calendar-block-deletion")).toBeNull();
     for (const absent of [/Encaisser/, /Réduction/, /Revente/, /Vendre/, /Absence/, /Annuler/, /Prestations/, /Total/, /€/]) {
       expect(view.queryByText(absent)).toBeNull();
     }
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
     expect(view.queryByTestId("appointment-actions")).toBeNull();
+
+    await press(view, "open-calendar-block-actions");
+    await settleSheetTransition();
+    const actions = within(view.getByTestId("calendar-block-actions-sheet"));
+    expect(within(actions.getByTestId("modify-calendar-block")).getByText("Modifier")).toBeTruthy();
+    expect(within(actions.getByTestId("open-calendar-block-deletion")).getByText("Supprimer")).toBeTruthy();
   });
 
-  it("« Fermer » leaves the sheet, without any haptic", async () => {
+  it("× leaves the sheet, without any haptic", async () => {
     const view = await renderDetails(openDatabase());
 
     await press(view, "close-calendar-block-details");
@@ -258,7 +310,7 @@ describe("Calendar Block editing", () => {
     const database = openDatabase();
     const view = await renderDetails(database);
 
-    await press(view, "modify-calendar-block");
+    await chooseAction(view, "modify-calendar-block");
 
     expect(view.getByRole("header", { name: "Modifier le créneau" })).toBeTruthy();
     expect(timeOf(view, "calendar-block-start")).toBe("10:00");
@@ -293,7 +345,7 @@ describe("Calendar Block editing", () => {
   it("reopens a custom reason behind « Autre » without taking the keyboard", async () => {
     const view = await renderDetails(openDatabase([{ ...travel, reason: "Chercher les enfants" }]));
 
-    await press(view, "modify-calendar-block");
+    await chooseAction(view, "modify-calendar-block");
 
     expect(view.getByRole("radio", { name: "Autre" }).props.accessibilityState).toEqual({ selected: true });
     const field = view.getByTestId("calendar-block-custom-reason");
@@ -304,7 +356,7 @@ describe("Calendar Block editing", () => {
   it("protects the draft: no outside-tap or swipe dismissal while editing; « Annuler » returns to the details unchanged", async () => {
     const database = openDatabase();
     const view = await renderDetails(database);
-    await press(view, "modify-calendar-block");
+    await chooseAction(view, "modify-calendar-block");
     await press(view, "calendar-block-reason-Pause");
 
     expect(view.getByTestId("sheet-screen-scrim").props.accessibilityState?.disabled).toBe(true);
@@ -321,7 +373,7 @@ describe("Calendar Block editing", () => {
       { ...travel, id: "block-lunch", startAt: at(12), endAt: at(13), reason: "Pause" },
     ]);
     const view = await renderDetails(database);
-    await press(view, "modify-calendar-block");
+    await chooseAction(view, "modify-calendar-block");
 
     // Shrinking inside its own interval is free.
     await press(view, "calendar-block-end");
@@ -349,7 +401,7 @@ describe("Calendar Block deletion", () => {
     const appointmentsBefore = loadAppointments(database);
     const view = await renderDetails(database);
 
-    await press(view, "open-calendar-block-deletion");
+    await chooseAction(view, "open-calendar-block-deletion");
     expect(view.getByText("Supprimer ce créneau ?")).toBeTruthy();
     expect(loadCalendarBlocks(database)).toHaveLength(1);
 
@@ -370,7 +422,7 @@ describe("Calendar Block deletion", () => {
     const database = openDatabase();
     const view = await renderDetails(database);
 
-    await press(view, "open-calendar-block-deletion");
+    await chooseAction(view, "open-calendar-block-deletion");
     await press(view, "cancel-calendar-block-deletion");
 
     expect(loadCalendarBlocks(database)).toEqual([travel]);

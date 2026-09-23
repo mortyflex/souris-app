@@ -2,18 +2,25 @@
 //
 // What a tap on an « Indisponible » block opens: a dedicated, deliberately
 // small sheet — NOT Appointment Details. It states that the slot is
-// unavailable, why, and when, and offers exactly three things: Modifier,
-// Supprimer, Fermer. There is no client, no service, no total, no discount and
-// no checkout here, because a Calendar Block has none of them.
+// unavailable, why, and when, and offers exactly three things: Modifier and
+// Supprimer (both behind « ••• ») and × (close). There is no client, no
+// service, no total, no discount and no checkout here, because a Calendar
+// Block has none of them.
 //
 // Presented in the canonical content sheet (SheetScreen fit="content"): swipe
 // down, outside tap and the visible « Fermer » all leave through the same
 // close transition. « Modifier » slides the editor in as a second sheet
 // (`contentKey`), on the same form as creation; while it is open a swipe can
 // no longer lose the draft — leaving goes through « Annuler ».
+//
+// Header: while reading, the shared DetailSheetHeader like Appointment
+// Details — « Indisponible » leading, then « ••• » and ×; the actions open the
+// shared DetailActionsSheet and run once it is gone (`onDismissed`), so the
+// deletion dialog never races the closing drawer. While editing, the shared
+// SheetEditingHeader: « Annuler » and « Modifier le créneau ».
 
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 
@@ -21,21 +28,19 @@ import type { CalendarBlock } from '@/domain/calendar-blocks';
 import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { calendarBlockIcon } from '@/shared/icons/calendar-block-icon';
 import { haptics } from '@/shared/lib/haptics';
-import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
-import { SheetHeader } from '@/shared/ui/SheetHeader';
+import { DetailActionsSheet, type DetailAction } from '@/shared/ui/DetailActionsSheet';
+import { DetailSheetHeader } from '@/shared/ui/DetailSheetHeader';
+import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { SheetScreen } from '@/shared/ui/SheetScreen';
 import {
   calendarBlockColors,
   foregroundSoft,
   gutter,
-  interaction,
   radii,
-  rose,
   semanticColors,
   spacing,
-  touchTarget,
 } from '@/shared/ui/theme';
 
 import { CalendarBlockForm, type CalendarBlockFormValues } from '../editor/CalendarBlockForm';
@@ -53,12 +58,38 @@ interface CalendarBlockDetailsScreenProps {
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
+type CalendarBlockAction = 'modify' | 'delete';
+
+const calendarBlockActionGroups: readonly (readonly DetailAction<CalendarBlockAction>[])[] = [
+  [
+    {
+      key: 'modify',
+      label: 'Modifier',
+      icon: { ios: 'pencil', android: 'edit' },
+      tone: 'normal',
+      testID: 'modify-calendar-block',
+    },
+  ],
+  [
+    {
+      key: 'delete',
+      label: 'Supprimer',
+      icon: { ios: 'trash', android: 'delete' },
+      tone: 'destructive',
+      testID: 'open-calendar-block-deletion',
+      accessibilityHint: 'Supprime ce créneau de l’agenda',
+    },
+  ],
+];
+
 export function CalendarBlockDetailsScreen({ calendarBlockId }: CalendarBlockDetailsScreenProps) {
   const router = useRouter();
   const { deleteCalendarBlock, getCalendarBlockById, updateCalendarBlock } =
     useCalendarBlockSession();
   const [editing, setEditing] = useState(false);
   const [deletionRequested, setDeletionRequested] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<CalendarBlockAction>();
   // The block this very screen deleted keeps being shown while the sheet
   // slides away, instead of flashing a « not found » state.
   const [deletedBlock, setDeletedBlock] = useState<CalendarBlock>();
@@ -68,8 +99,9 @@ export function CalendarBlockDetailsScreen({ calendarBlockId }: CalendarBlockDet
     return (
       <SheetScreen fit="content" testID="calendar-block-details-sheet">
         <View style={styles.headerZone}>
-          <SheetHeader
-            action={{ label: 'Fermer', onPress: () => router.back() }}
+          <SheetEditingHeader
+            cancelLabel="Fermer"
+            onCancel={() => router.back()}
             title="Créneau introuvable"
           />
         </View>
@@ -104,6 +136,14 @@ export function CalendarBlockDetailsScreen({ calendarBlockId }: CalendarBlockDet
     router.back();
   };
 
+  // Runs once the « ••• » drawer is gone, so no dialog races its closing.
+  const runSecondaryAction = () => {
+    const action = pendingAction;
+    setPendingAction(undefined);
+    if (action === 'modify') setEditing(true);
+    if (action === 'delete') setDeletionRequested(true);
+  };
+
   return (
     <SheetScreen
       // Details and edition are two sheets: the change slides in, never swaps.
@@ -115,20 +155,24 @@ export function CalendarBlockDetailsScreen({ calendarBlockId }: CalendarBlockDet
       testID="calendar-block-details-sheet"
     >
       <View style={styles.headerZone}>
-        <SheetHeader
-          action={
-            editing
-              ? {
-                  accessibilityLabel: 'Annuler les modifications',
-                  label: 'Annuler',
-                  onPress: () => setEditing(false),
-                  testID: 'cancel-calendar-block-edit',
-                }
-              : { label: 'Fermer', onPress: () => router.back(), testID: 'close-calendar-block-details' }
-          }
-          eyebrow="CRÉNEAU PERSONNEL"
-          title={editing ? 'Modifier le créneau' : CALENDAR_BLOCK_TITLE}
-        />
+        {editing ? (
+          <SheetEditingHeader
+            cancelAccessibilityLabel="Annuler les modifications"
+            cancelTestID="cancel-calendar-block-edit"
+            onCancel={() => setEditing(false)}
+            title="Modifier le créneau"
+          />
+        ) : (
+          <DetailSheetHeader
+            actionsAccessibilityLabel="Actions"
+            actionsTestID="open-calendar-block-actions"
+            closeTestID="close-calendar-block-details"
+            onClose={() => router.back()}
+            onOpenActions={() => setMenuVisible(true)}
+            testID="calendar-block-detail-header"
+            title={CALENDAR_BLOCK_TITLE}
+          />
+        )}
       </View>
 
       {editing ? (
@@ -170,29 +214,21 @@ export function CalendarBlockDetailsScreen({ calendarBlockId }: CalendarBlockDet
             <DetailLine label="Date" value={formatBlockDate(calendarBlock.startAt)} />
             <DetailLine label="Horaire" value={formatBlockTimeRange(calendarBlock)} />
           </View>
-
-          <View style={styles.actions} testID="calendar-block-actions">
-            <AppButton
-              accessibilityLabel="Modifier le créneau"
-              onPress={() => setEditing(true)}
-              testID="modify-calendar-block"
-              title="Modifier"
-              variant="secondary"
-            />
-            <Pressable
-              accessibilityHint="Supprime ce créneau de l’agenda"
-              accessibilityRole="button"
-              onPress={() => setDeletionRequested(true)}
-              style={({ pressed }) => [styles.deleteAction, pressed && styles.deleteActionPressed]}
-              testID="open-calendar-block-deletion"
-            >
-              <AppText variant="control" style={styles.deleteText}>
-                Supprimer
-              </AppText>
-            </Pressable>
-          </View>
         </View>
       )}
+
+      <DetailActionsSheet
+        groups={calendarBlockActionGroups}
+        onClose={() => setMenuVisible(false)}
+        onDismissed={runSecondaryAction}
+        onSelect={(action) => {
+          setPendingAction(action);
+          setMenuVisible(false);
+        }}
+        testID="calendar-block-actions-sheet"
+        title={CALENDAR_BLOCK_TITLE}
+        visible={menuVisible && !editing}
+      />
 
       <ConfirmationDialog
         body="Il sera retiré de l’agenda et le créneau redeviendra disponible. Cette action est irréversible."
@@ -226,7 +262,7 @@ function DetailLine({ label, value }: { readonly label: string; readonly value: 
 
 const styles = StyleSheet.create({
   headerZone: { paddingHorizontal: horizontalGutter },
-  body: { gap: spacing.xl, paddingHorizontal: horizontalGutter, paddingTop: spacing.sm },
+  body: { paddingBottom: spacing.base, paddingHorizontal: horizontalGutter, paddingTop: spacing.sm },
   card: {
     backgroundColor: calendarBlockColors.surface,
     borderCurve: 'continuous',
@@ -254,19 +290,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   detailValue: { color: semanticColors.foreground, flexShrink: 1, fontVariant: ['tabular-nums'] },
-  actions: { gap: spacing.sm, paddingBottom: spacing.sm },
-  deleteAction: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    minHeight: touchTarget[Platform.OS === 'android' ? 'android' : 'ios'],
-    paddingHorizontal: spacing.md,
-  },
-  deleteActionPressed: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
-  },
-  deleteText: { color: rose.rose600 },
   notFoundText: {
     color: foregroundSoft,
     paddingBottom: spacing['3xl'],
