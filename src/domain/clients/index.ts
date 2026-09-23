@@ -1,5 +1,5 @@
 export type { Client } from './types';
-export { getClientDisplayName, getClientInitial } from './presentation';
+export { getClientDisplayName, getClientInitial, getClientInitials } from './presentation';
 export {
   archiveClient,
   canDeleteClientPermanently,

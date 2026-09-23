@@ -1,20 +1,29 @@
 // Souris — Client Profile
 //
-// A compact client dashboard: identity + `Vendre un produit` + today's
-// birthday reminder + next appointment + derived activity + ONE switchable
-// history preview (Rendez-vous | Produits achetés, 3 records at most, the
-// complete histories on their own pushed screens) + contact + notes. Nothing
-// here is stored on the Client — activity is derived from Appointment state
-// and purchases from Sale snapshots through clientId. Modifier opens the SAME
-// Client form used for creation (edit mode). No dashboard KPIs, no fake
+// A compact client dashboard: identity (portrait ClientAvatar beside the
+// name) + ONE white action card (`Nouveau rendez-vous`, `Vendre un produit`,
+// the shared ActionGroup of the « ••• » drawers) + today's birthday
+// reminder + next appointment + derived activity + ONE switchable history
+// preview (Rendez-vous | Produits achetés, 3 records at most, the complete
+// histories on their own pushed screens) + contact + notes. Nothing here is
+// stored on the Client — activity is derived from Appointment state and
+// purchases from Sale snapshots through clientId. No dashboard KPIs, no fake
 // metrics, no edit/delete traps.
 //
-// Lifecycle: an active Client carries a tertiary `Archiver la cliente`
-// management action; an archived Client shows a subtle `Archivée`
-// indicator, `Réactiver la cliente` as her lifecycle action, no new business
-// action (`Vendre un produit` is hidden), and the tertiary destructive
-// `Supprimer définitivement`, which the database refuses while any
-// Appointment or Sale references her. History is never hidden.
+// The two daily actions open the EXISTING flows with this Client preselected
+// (`/appointments/new` and `/sales/new`, `clientId` param): nothing is
+// created until the professional confirms inside them.
+//
+// Administration lives behind « ••• » (the shared DetailActionsSheet, like
+// Product and Calendar Block details) and runs once the drawer is gone:
+// `Modifier` opens the SAME Client form used for creation (edit mode), then
+// the lifecycle action in rose — `Archiver la cliente` on an active Client,
+// `Supprimer définitivement` on an archived one (refused by the database
+// while any Appointment or Sale references her).
+//
+// Lifecycle: an archived Client shows a subtle `Archivée` indicator and
+// `Réactiver la cliente` in place of the daily actions (she is offered for no
+// new appointment or sale). History is never hidden.
 
 import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -25,10 +34,10 @@ import { SymbolView } from 'expo-symbols';
 import {
   formatClientBirthday,
   getClientDisplayName,
-  getClientInitial,
   isClientArchived,
 } from '@/domain/clients';
 import type { Appointment } from '@/domain/appointments';
+import { ClientAvatar } from '@/features/clients/avatar/ClientAvatar';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
@@ -59,6 +68,8 @@ import { saleIcon } from '@/shared/icons/sale-icon';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { ActionGroup, type DetailAction } from '@/shared/ui/ActionGroup';
+import { DetailActionsSheet } from '@/shared/ui/DetailActionsSheet';
 import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
 import { GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
@@ -67,10 +78,8 @@ import {
   gutter,
   interaction,
   radii,
-  rose,
   semanticColors,
   spacing,
-  touchTarget,
 } from '@/shared/ui/theme';
 
 import { ClientDeletionDialog, type ClientDeletionDialogMode } from './components/ClientDeletionDialog';
@@ -83,6 +92,70 @@ const metricIcons = {
   noShow: { ios: 'person.fill.xmark', android: 'person_off' },
   cancelled: { ios: 'xmark.circle', android: 'cancel' },
 } as const satisfies Record<string, PlatformSymbolName>;
+
+/** The profile portrait frame: 96 × 96, room for a real photo later. */
+const profileAvatarSize = spacing['3xl'] * 3;
+
+type ClientDailyAction = 'appointment' | 'sale';
+
+// The operational actions, in the row language of the « ••• » drawers. The
+// calendar glyph is the one of « Nouveau rendez-vous » in the Agenda.
+const dailyActions: readonly DetailAction<ClientDailyAction>[] = [
+  {
+    key: 'appointment',
+    label: 'Nouveau rendez-vous',
+    icon: { ios: 'calendar.badge.plus', android: 'event' },
+    tone: 'normal',
+    testID: 'new-appointment',
+  },
+  {
+    key: 'sale',
+    label: 'Vendre un produit',
+    icon: saleIcon,
+    tone: 'normal',
+    testID: 'sell-product',
+  },
+];
+
+type ClientAdminAction = 'modify' | 'archive' | 'delete';
+
+const modifyAction: DetailAction<ClientAdminAction> = {
+  key: 'modify',
+  label: 'Modifier',
+  icon: { ios: 'pencil', android: 'edit' },
+  tone: 'normal',
+  testID: 'edit-client',
+  accessibilityHint: 'Modifie l’identité, le contact, l’anniversaire et les notes',
+};
+
+const activeClientActionGroups: readonly (readonly DetailAction<ClientAdminAction>[])[] = [
+  [modifyAction],
+  [
+    {
+      key: 'archive',
+      label: 'Archiver la cliente',
+      icon: { ios: 'archivebox', android: 'archive' },
+      tone: 'destructive',
+      testID: 'archive-client',
+      accessibilityHint:
+        'La cliente ne sera plus proposée pour les nouveaux rendez-vous et ventes. Son historique est conservé.',
+    },
+  ],
+];
+
+const archivedClientActionGroups: readonly (readonly DetailAction<ClientAdminAction>[])[] = [
+  [modifyAction],
+  [
+    {
+      key: 'delete',
+      label: 'Supprimer définitivement',
+      icon: { ios: 'trash', android: 'delete' },
+      tone: 'destructive',
+      testID: 'open-client-deletion',
+      accessibilityHint: 'Supprime la cliente si aucun rendez-vous ni aucune vente ne la concerne',
+    },
+  ],
+];
 
 interface ClientProfileScreenProps {
   readonly clientId?: string;
@@ -102,6 +175,8 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   const { appointments } = useAppointmentSession();
   const { sales } = useSaleSession();
   const [editVisible, setEditVisible] = useState(false);
+  const [actionsVisible, setActionsVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<ClientAdminAction>();
   const [deletionMode, setDeletionMode] = useState<ClientDeletionDialogMode>();
   const [deletedByCurrentScreen, setDeletedByCurrentScreen] = useState(false);
   const client = getClientById(clientId);
@@ -128,6 +203,10 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   const purchases = getClientSales(sales, client.id);
   const hasContactInfo = Boolean(client.phone || client.email || client.birthday);
   const archived = isClientArchived(client);
+
+  const openAppointmentCreation = () => {
+    router.push({ pathname: '/appointments/new', params: { clientId: client.id } });
+  };
 
   const openSale = () => {
     router.push({ pathname: '/sales/new', params: { clientId: client.id } });
@@ -183,6 +262,15 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     router.back();
   };
 
+  // Runs once the « ••• » drawer is gone, so no sheet or dialog races it.
+  const runAdminAction = () => {
+    const action = pendingAction;
+    setPendingAction(undefined);
+    if (action === 'modify') setEditVisible(true);
+    if (action === 'archive') archive();
+    if (action === 'delete') openPermanentDeletion();
+  };
+
   const openAppointment = (appointmentId: string) => {
     router.push({
       pathname: '/appointments/[appointmentId]',
@@ -214,13 +302,11 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         >
           Cliente
         </AppText>
-        <AppButton
-          accessibilityLabel="Modifier la cliente"
-          onPress={() => setEditVisible(true)}
-          style={styles.modifyAction}
-          testID="edit-client"
-          title="Modifier"
-          variant="tertiary"
+        <GlassIconButton
+          accessibilityLabel="Actions"
+          icon={glassIcons.more}
+          onPress={() => setActionsVisible(true)}
+          testID="open-client-actions"
         />
       </View>
 
@@ -228,49 +314,48 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
       >
-        <View style={styles.identity}>
-          <View style={styles.avatar}>
-            <AppText variant="screenTitle" style={styles.avatarText}>
-              {getClientInitial(client)}
+        {/* The portrait frame beside the name: initials today, the Client's
+            photo later — in the very same frame, with no layout change. */}
+        <View style={styles.identity} testID="client-identity">
+          <ClientAvatar client={client} shape="portrait" size={profileAvatarSize} />
+          <View style={styles.identityCopy}>
+            <AppText
+              variant="screenTitle"
+              accessibilityRole="header"
+              numberOfLines={3}
+              selectable
+              style={styles.clientName}
+            >
+              {getClientDisplayName(client)}
             </AppText>
-          </View>
-          <AppText
-            variant="screenTitle"
-            accessibilityRole="header"
-            selectable
-            style={styles.clientName}
-          >
-            {getClientDisplayName(client)}
-          </AppText>
-          {archived && (
-            <View style={styles.archivedBadge} testID="client-archived-indicator">
-              <AppText variant="chip" style={styles.archivedBadgeText}>
-                {ARCHIVED_CLIENT_LABEL}
-              </AppText>
-            </View>
-          )}
-          <View style={styles.clientActions}>
-            {archived ? (
-              <AppButton
-                accessibilityLabel="Réactiver la cliente"
-                onPress={restore}
-                style={styles.clientAction}
-                testID="restore-client"
-                title="Réactiver la cliente"
-                variant="secondary"
-              />
-            ) : (
-              <AppButton
-                accessibilityLabel="Vendre un produit"
-                icon={saleIcon}
-                onPress={openSale}
-                style={styles.clientAction}
-                testID="sell-product"
-                title="Vendre un produit"
-                variant="secondary"
-              />
+            {archived && (
+              <View style={styles.archivedBadge} testID="client-archived-indicator">
+                <AppText variant="chip" style={styles.archivedBadgeText}>
+                  {ARCHIVED_CLIENT_LABEL}
+                </AppText>
+              </View>
             )}
           </View>
+        </View>
+
+        <View style={styles.actionsSection}>
+          {archived ? (
+            <AppButton
+              accessibilityLabel="Réactiver la cliente"
+              onPress={restore}
+              testID="restore-client"
+              title="Réactiver la cliente"
+              variant="secondary"
+            />
+          ) : (
+            <ActionGroup
+              actions={dailyActions}
+              onSelect={(action) =>
+                action === 'appointment' ? openAppointmentCreation() : openSale()
+              }
+              testID="client-daily-actions"
+            />
+          )}
         </View>
 
         {birthdayCelebration.isBirthday && (
@@ -367,39 +452,24 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
           </View>
         )}
 
-        <View style={styles.managementSection} testID="client-management">
-          {archived ? (
-            <Pressable
-              accessibilityHint="Supprime la cliente si aucun rendez-vous ni aucune vente ne la concerne"
-              accessibilityRole="button"
-              onPress={openPermanentDeletion}
-              style={({ pressed }) => [styles.textAction, pressed && styles.textActionPressed]}
-              testID="open-client-deletion"
-            >
-              <AppText variant="control" style={styles.destructiveText}>
-                Supprimer définitivement
-              </AppText>
-            </Pressable>
-          ) : (
-            <Pressable
-              accessibilityHint="La cliente ne sera plus proposée pour les nouveaux rendez-vous et ventes. Son historique est conservé."
-              accessibilityRole="button"
-              onPress={archive}
-              style={({ pressed }) => [styles.textAction, pressed && styles.textActionPressed]}
-              testID="archive-client"
-            >
-              <AppText variant="control" style={styles.managementText}>
-                Archiver la cliente
-              </AppText>
-            </Pressable>
-          )}
-        </View>
       </ScrollView>
 
       {birthdayCelebration.confettiVisible && (
         <BirthdayConfetti onFinished={birthdayCelebration.onConfettiFinished} />
       )}
 
+      <DetailActionsSheet
+        groups={archived ? archivedClientActionGroups : activeClientActionGroups}
+        onClose={() => setActionsVisible(false)}
+        onDismissed={runAdminAction}
+        onSelect={(action) => {
+          setPendingAction(action);
+          setActionsVisible(false);
+        }}
+        testID="client-actions-sheet"
+        title={getClientDisplayName(client)}
+        visible={actionsVisible}
+      />
       <ClientFormSheet
         client={client}
         mode="edit"
@@ -517,7 +587,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     paddingTop: spacing.sm,
   },
-  // Centred on the whole bar whatever the width of « Modifier ».
+  // Centred on the whole bar, between « Retour » and « ••• ».
   topBarTitle: {
     color: semanticColors.foreground,
     left: 0,
@@ -526,20 +596,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     zIndex: -1,
   },
-  modifyAction: { paddingHorizontal: spacing.md },
   content: { paddingBottom: spacing['3xl'], paddingTop: spacing.base },
-  identity: { gap: spacing.sm, marginBottom: spacing.xl },
-  clientActions: { flexDirection: 'row', marginTop: spacing.xs },
-  clientAction: { flex: 1 },
-  avatar: {
+  identity: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderRadius: radii.large,
-    height: 52,
-    justifyContent: 'center',
-    width: 52,
+    flexDirection: 'row',
+    gap: spacing.base,
+    marginBottom: spacing.xl,
   },
-  avatarText: { color: semanticColors.accent, fontSize: 24, lineHeight: 28 },
+  identityCopy: { flex: 1, gap: spacing.sm, minWidth: 0 },
+  actionsSection: { marginBottom: spacing.xl },
   clientName: { color: semanticColors.foreground },
   archivedBadge: {
     alignSelf: 'flex-start',
@@ -627,19 +692,6 @@ const styles = StyleSheet.create({
   },
   infoLabel: { color: foregroundSoft, width: 128 },
   infoValue: { color: semanticColors.foreground, flex: 1, fontVariant: ['tabular-nums'] },
-  managementSection: { alignItems: 'center', marginTop: spacing['2xl'] },
-  textAction: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: touchTarget[Platform.OS === 'android' ? 'android' : 'ios'],
-    paddingHorizontal: spacing.md,
-  },
-  textActionPressed: {
-    opacity: interaction.pressedOpacity,
-    transform: [{ scale: interaction.pressedScale }],
-  },
-  managementText: { color: foregroundSoft },
-  destructiveText: { color: rose.rose600 },
   notFound: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
   notFoundText: { color: foregroundSoft, marginTop: spacing.sm, textAlign: 'center' },
 });

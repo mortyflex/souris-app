@@ -18,3 +18,12 @@ export function getClientInitial(client: Pick<Client, 'firstName'>): string {
   const trimmed = client.firstName.trim();
   return trimmed.length > 0 ? trimmed.charAt(0).toUpperCase() : '';
 }
+
+/**
+ * Up to two initials — first name, then last name when present — for the
+ * larger identity avatar, where a single letter would look sparse.
+ */
+export function getClientInitials(client: Pick<Client, 'firstName' | 'lastName'>): string {
+  const lastInitial = client.lastName?.trim().charAt(0).toUpperCase() ?? '';
+  return `${getClientInitial(client)}${lastInitial}`;
+}

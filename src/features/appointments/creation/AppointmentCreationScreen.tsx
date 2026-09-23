@@ -17,6 +17,10 @@
 // step change never replays it, choosing her again after another Client does.
 // The actionable reminder next to « Réduction » stays on the Résumé.
 //
+// Client Profile entry: `initialClientId` opens the SAME flow on the Cliente
+// step with that Client already selected (the Agenda entries pass none).
+// Nothing is created until « Créer le rendez-vous » on the Résumé.
+//
 // Type choice: the sheet opens on « Cliente » — the three-step flow above,
 // unchanged. « Personnel » replaces the WHOLE flow by ONE direct form that
 // blocks the slot as unavailable (a Calendar Block: no client, no service, no
@@ -112,6 +116,11 @@ import { canNavigateTo, type CreationStep } from './steps';
 
 interface AppointmentCreationScreenProps {
   readonly startAt: Date;
+  /**
+   * Client the draft starts with (Client Profile): selected on the Cliente
+   * step, exactly as if chosen there. Unknown or archived ids fall back to none.
+   */
+  readonly initialClientId?: string;
 }
 
 /** What the sheet creates: a client Appointment, or personal unavailability. */
@@ -137,7 +146,10 @@ const startHourRange = getStartHourRange(startTimeBounds);
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
-export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreenProps) {
+export function AppointmentCreationScreen({
+  startAt,
+  initialClientId,
+}: AppointmentCreationScreenProps) {
   const router = useRouter();
   const business = useCurrentBusiness();
   const { addAppointment } = useAppointmentSession();
@@ -147,7 +159,11 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const { activeServices } = useServiceCatalog();
   const [step, setStep] = useState<CreationStep>(0);
   const [clientQuery, setClientQuery] = useState('');
-  const [selectedClientId, setSelectedClientId] = useState<string>();
+  // A preselection is not a selection EVENT: no celebration burst, but the
+  // birthday reminder below still derives from it like any chosen Client.
+  const [selectedClientId, setSelectedClientId] = useState<string | undefined>(() =>
+    activeClients.some((client) => client.id === initialClientId) ? initialClientId : undefined,
+  );
   const [addClientVisible, setAddClientVisible] = useState(false);
   const [selectedDrafts, setSelectedDrafts] = useState<readonly SelectedServiceDraft[]>([]);
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
@@ -161,6 +177,9 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
   const today = useToday();
 
   const selectedClient = activeClients.find((client) => client.id === selectedClientId);
+  // Replaces the « RENDEZ-VOUS » heading on Cliente and Prestations: driven by
+  // the selection itself, never by what the search currently lists.
+  const selectedClientName = selectedClient ? getClientDisplayName(selectedClient) : undefined;
   // THE birthday truth of this draft, derived on every render: the chosen
   // Client against the APPOINTMENT date. Never stale, never today's date.
   const isBirthdayAppointment =
@@ -381,6 +400,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
           header={
             <View style={styles.scheduleHeader}>
               <AppointmentScheduleSection
+                clientName={selectedClientName}
                 maxHour={startHourRange.maxHour}
                 minHour={startHourRange.minHour}
                 onStartTimeChange={chooseDraftStartTime}
@@ -414,6 +434,7 @@ export function AppointmentCreationScreen({ startAt }: AppointmentCreationScreen
           style={styles.catalogScroll}
         >
           <AppointmentScheduleSection
+            clientName={selectedClientName}
             maxHour={startHourRange.maxHour}
             minHour={startHourRange.minHour}
             onStartTimeChange={chooseDraftStartTime}

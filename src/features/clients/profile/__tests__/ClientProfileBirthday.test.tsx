@@ -195,9 +195,9 @@ describe('ClientProfileScreen — birthday', () => {
     await press(view, 'give-lea-birthday');
     expect(successHaptic).toHaveBeenCalledTimes(1);
 
-    // Re-renders of the mounted profile: the edit sheet opens, a data refresh
+    // Re-renders of the mounted profile: the « ••• » drawer opens, a data refresh
     // (the same birthday written again), the burst ends, another refresh.
-    await press(view, 'edit-client');
+    await press(view, 'open-client-actions');
     await press(view, 'give-lea-birthday');
     expect(view.getAllByTestId('birthday-confetti', hidden)).toHaveLength(1);
     await act(async () => {

@@ -21,6 +21,8 @@ import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/Sa
 import { ClientProfileScreen } from '../ClientProfileScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
+import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
+import { semanticColors } from '@/shared/ui/theme';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -42,6 +44,32 @@ jest.mock('react-native-reanimated', () =>
 jest.mock('expo-router/react-navigation', () => ({
   usePreventRemove: jest.fn(),
 }));
+
+// The preset Modal mock never reports dismissal; this one mirrors the iOS
+// contract (onDismiss once `visible` has dropped), so the « ••• » action list
+// chains its action exactly as on device.
+jest.mock('react-native/Libraries/Modal/Modal', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
+
+  interface MockModalProps {
+    readonly visible?: boolean;
+    readonly onDismiss?: () => void;
+    readonly children?: React.ReactNode;
+  }
+
+  class MockModal extends React.Component<MockModalProps> {
+    componentDidUpdate(previous: MockModalProps) {
+      if (previous.visible && !this.props.visible) this.props.onDismiss?.();
+    }
+
+    render() {
+      return this.props.visible ? React.createElement(View, null, this.props.children) : null;
+    }
+  }
+
+  return { __esModule: true, default: MockModal };
+});
 
 // Inspectable stand-in: each glyph renders as a View tagged with its iOS name.
 jest.mock('expo-symbols', () => {
@@ -165,10 +193,10 @@ function saleDraft(id: string, day: number, lines: SaleDraft['lines'], clientId?
 
 function SessionProbe() {
   const { clients, activeClients, addClient } = useClientSession();
-  const { addAppointment } = useAppointmentSession();
+  const { addAppointment, appointments } = useAppointmentSession();
   const { addProduct, deleteProduct, getProductById, setProductStock, updateProduct } =
     useProductCatalog();
-  const { completeSale } = useSaleSession();
+  const { completeSale, sales } = useSaleSession();
   const lea = clients.find((client) => client.id === 'client-agenda-lea');
 
   return (
@@ -176,6 +204,8 @@ function SessionProbe() {
       <Text testID="session-lea-first-name">{lea?.firstName ?? ''}</Text>
       <Text testID="session-lea-id">{lea?.id ?? ''}</Text>
       <Text testID="session-client-count">{clients.length}</Text>
+      <Text testID="session-appointment-count">{appointments.length}</Text>
+      <Text testID="session-sale-count">{sales.length}</Text>
       <Text testID="session-active-count">{activeClients.length}</Text>
       <Text testID="session-lea-archived">{String(lea?.archivedAt !== undefined)}</Text>
       <Pressable
@@ -325,6 +355,22 @@ async function showPurchases(view: Awaited<ReturnType<typeof render>>) {
   });
 }
 
+/** Opens « ••• », chooses one action and lets the list close so the action runs. */
+async function chooseClientAction(view: Awaited<ReturnType<typeof render>>, testID: string) {
+  await openClientActions(view);
+  await act(async () => {
+    fireEvent.press(view.getByTestId(testID));
+  });
+  await settleSheetTransition();
+}
+
+async function openClientActions(view: Awaited<ReturnType<typeof render>>) {
+  await act(async () => {
+    fireEvent.press(view.getByTestId('open-client-actions'));
+  });
+  await settleSheetTransition();
+}
+
 async function seedSales(view: Awaited<ReturnType<typeof render>>) {
   for (const step of ['seed-products', 'sell-lea-1', 'sell-lea-2', 'sell-sofia', 'sell-walk-in']) {
     await act(async () => {
@@ -395,6 +441,105 @@ describe('ClientProfileScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
+  describe('header, identity and actions', () => {
+    it('shows « ••• » in the header instead of Modifier, around the centred Cliente title', async () => {
+      const view = await renderProfile('client-agenda-lea');
+
+      expect(view.getByRole('header', { name: 'Cliente' })).toBeTruthy();
+      expect(view.getByLabelText('Retour')).toBeTruthy();
+      const more = view.getByTestId('open-client-actions');
+      expect(more.props.accessibilityLabel).toBe('Actions');
+      expect(within(more).getByTestId('symbol-ellipsis')).toBeTruthy();
+      expect(view.queryByText('Modifier')).toBeNull();
+      expect(view.queryByLabelText('Modifier la cliente')).toBeNull();
+    });
+
+    it('lists Modifier then the rose Archiver la cliente in the « ••• » drawer, titled by the Client', async () => {
+      const view = await renderProfile('client-agenda-lea');
+      expect(view.queryByTestId('client-actions-sheet')).toBeNull();
+
+      await openClientActions(view);
+
+      const sheet = within(view.getByTestId('client-actions-sheet'));
+      expect(sheet.getByRole('header', { name: 'Léa Martin' })).toBeTruthy();
+      expect(sheet.getByRole('button', { name: 'Modifier' })).toBeTruthy();
+      expect(sheet.getByRole('button', { name: 'Archiver la cliente' })).toBeTruthy();
+      expect(within(sheet.getByTestId('archive-client')).getByTestId('symbol-archivebox')).toBeTruthy();
+      // Only opening the list: nothing was archived, no feedback given.
+      expect(view.getByTestId('session-lea-archived').props.children).toBe('false');
+      expect(selectionHaptic).not.toHaveBeenCalled();
+    });
+
+    it('renders the 96 pt rounded portrait frame with the Client initials, spoken as her name', async () => {
+      const view = await renderProfile('client-agenda-lea');
+
+      const avatar = view.getByTestId('client-avatar');
+      expect(avatar.props.accessibilityLabel).toBe('Léa Martin');
+      expect(avatar.props.accessibilityRole).toBe('image');
+      // A softly rounded square, not a small disc: room for a real portrait.
+      expect(avatar).toHaveStyle({ borderRadius: 24, height: 96, width: 96 });
+      expect(view.getByTestId('client-avatar-initials')).toHaveTextContent('LM');
+      expect(view.queryByTestId('client-avatar-photo')).toBeNull();
+      // No photo feature yet: nothing suggests one can be added.
+      expect(view.queryByTestId('symbol-camera')).toBeNull();
+      expect(view.queryByTestId('symbol-camera.fill')).toBeNull();
+    });
+
+    it('places the portrait and the name side by side in the identity row', async () => {
+      const view = await renderProfile('client-agenda-lea');
+
+      const identity = view.getByTestId('client-identity');
+      expect(identity).toHaveStyle({ alignItems: 'center', flexDirection: 'row' });
+      expect(within(identity).getByTestId('client-avatar')).toBeTruthy();
+      expect(within(identity).getByRole('header', { name: 'Léa Martin' })).toBeTruthy();
+    });
+
+    it('stacks Nouveau rendez-vous then Vendre un produit as two rows of ONE white action card, above Activité', async () => {
+      const view = await renderProfile('client-agenda-lea');
+
+      const card = within(view.getByTestId('client-daily-actions'));
+      const newAppointment = card.getByTestId('new-appointment');
+      const sell = card.getByTestId('sell-product');
+      expect(newAppointment.props.accessibilityLabel).toBe('Nouveau rendez-vous');
+      expect(within(newAppointment).getByTestId('symbol-calendar.badge.plus')).toBeTruthy();
+      expect(sell.props.accessibilityLabel).toBe('Vendre un produit');
+      // The white surface of the « ••• » drawers, never a coloured CTA.
+      expect(view.getByTestId('client-daily-actions')).toHaveStyle({
+        backgroundColor: semanticColors.surfaceElevated,
+      });
+      for (const row of [newAppointment, sell]) {
+        expect(row).not.toHaveStyle({ backgroundColor: semanticColors.accent });
+        expect(row).not.toHaveStyle({ backgroundColor: semanticColors.surfaceLavender });
+      }
+      // Navy labels, same weight for both: no primary / secondary pair.
+      for (const label of ['Nouveau rendez-vous', 'Vendre un produit']) {
+        expect(card.getByText(label)).toHaveStyle({ color: semanticColors.foreground });
+      }
+      const ordered = view.getAllByText(/^(Nouveau rendez-vous|Vendre un produit|Activité)$/);
+      expect(ordered.map((node) => node.props.children)).toEqual([
+        'Nouveau rendez-vous',
+        'Vendre un produit',
+        'Activité',
+      ]);
+    });
+
+    it('opens the existing appointment creation with this Client preselected, creating nothing', async () => {
+      const view = await renderProfile('client-agenda-camille');
+      const before = view.getByTestId('session-appointment-count').props.children;
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Nouveau rendez-vous'));
+      });
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/appointments/new',
+        params: { clientId: 'client-agenda-camille' },
+      });
+      expect(view.getByTestId('session-appointment-count').props.children).toBe(before);
+    });
+  });
+
   it('shows contact information and a day + month birthday, never a year', async () => {
     const view = await renderProfile('client-birthday');
 
@@ -448,9 +593,7 @@ describe('ClientProfileScreen', () => {
       fireEvent.press(view.getByTestId('add-notes-client'));
     });
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId('edit-client'));
-    });
+    await chooseClientAction(view, 'edit-client');
     expect(view.getByTestId('client-notes-input').props.value).toBe(
       'Allergie au PPD.\n\nPréfère le matin\n— cuir chevelu sensible',
     );
@@ -462,9 +605,7 @@ describe('ClientProfileScreen', () => {
     });
     expect(view.getByTestId('client-notes').props.children).toBe('Allergie au PPD.\nCafé sans sucre');
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId('edit-client'));
-    });
+    await chooseClientAction(view, 'edit-client');
     await act(async () => {
       fireEvent.changeText(view.getByTestId('client-notes-input'), '');
     });
@@ -556,6 +697,9 @@ describe('ClientProfileScreen', () => {
     // Simulates the pushed Sale screen opened with the profile Client.
     const view = await renderProfile('client-agenda-camille', 'client-agenda-camille');
 
+    // Opening the flow selects her and creates nothing: the draft starts empty.
+    expect(view.getByTestId('session-sale-count').props.children).toBe(0);
+
     expect(within(view.getByTestId('sale-client')).getByText('Camille Durand')).toBeTruthy();
     await showPurchases(view);
     expect(view.getByText('Aucun achat enregistré.')).toBeTruthy();
@@ -620,9 +764,7 @@ describe('ClientProfileScreen', () => {
   it('opens the shared edit form prefilled and saves the updated identity', async () => {
     const view = await renderProfile('client-agenda-lea');
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId('edit-client'));
-    });
+    await chooseClientAction(view, 'edit-client');
 
     expect(view.getByRole('header', { name: 'Modifier la cliente' })).toBeTruthy();
     expect(view.queryByText('CLIENTE')).toBeNull();
@@ -646,9 +788,7 @@ describe('ClientProfileScreen', () => {
   it('discards edit changes on close', async () => {
     const view = await renderProfile('client-agenda-lea');
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId('edit-client'));
-    });
+    await chooseClientAction(view, 'edit-client');
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prénom'), 'Léana');
     });
@@ -661,13 +801,23 @@ describe('ClientProfileScreen', () => {
   });
 
   describe('lifecycle', () => {
-    it('offers a tertiary archive action on an active Client and no permanent deletion', async () => {
+    it('offers Archiver la cliente behind « ••• » on an active Client and no permanent deletion', async () => {
       const view = await renderProfile('client-agenda-lea');
 
-      expect(view.getByTestId('archive-client')).toBeTruthy();
-      expect(view.getByText('Archiver la cliente')).toBeTruthy();
+      // Nothing administrative in the page itself: the old bottom action is gone.
+      expect(view.queryByTestId('client-management')).toBeNull();
+      expect(view.queryByTestId('archive-client')).toBeNull();
+      expect(view.queryByText('Archiver la cliente')).toBeNull();
       expect(view.getByTestId('sell-product')).toBeTruthy();
-      expect(view.queryByTestId('open-client-deletion')).toBeNull();
+      expect(view.getByTestId('new-appointment')).toBeTruthy();
+
+      await openClientActions(view);
+      const actions = within(view.getByTestId('client-actions-sheet'));
+      expect(actions.getByText('Archiver la cliente')).toBeTruthy();
+      expect(actions.getByTestId('archive-client').props.accessibilityHint).toBe(
+        'La cliente ne sera plus proposée pour les nouveaux rendez-vous et ventes. Son historique est conservé.',
+      );
+      expect(actions.queryByTestId('open-client-deletion')).toBeNull();
       expect(view.queryByTestId('restore-client')).toBeNull();
       expect(view.queryByTestId('client-archived-indicator')).toBeNull();
     });
@@ -678,9 +828,7 @@ describe('ClientProfileScreen', () => {
       const total = Number(view.getByTestId('session-client-count').props.children);
       const active = Number(view.getByTestId('session-active-count').props.children);
 
-      await act(async () => {
-        fireEvent.press(view.getByTestId('archive-client'));
-      });
+      await chooseClientAction(view, 'archive-client');
 
       expect(selectionHaptic).toHaveBeenCalledTimes(1);
       expect(view.getByTestId('client-archived-indicator')).toBeTruthy();
@@ -689,9 +837,19 @@ describe('ClientProfileScreen', () => {
       expect(view.getByTestId('restore-client')).toBeTruthy();
       expect(view.queryByTestId('sell-product')).toBeNull();
       expect(view.queryByLabelText('Vendre un produit')).toBeNull();
-      expect(view.queryByTestId('archive-client')).toBeNull();
-      expect(view.getByTestId('open-client-deletion')).toBeTruthy();
-      expect(view.getByText('Supprimer définitivement')).toBeTruthy();
+      expect(view.queryByTestId('new-appointment')).toBeNull();
+      expect(view.queryByLabelText('Nouveau rendez-vous')).toBeNull();
+      await openClientActions(view);
+      const archivedActions = within(view.getByTestId('client-actions-sheet'));
+      expect(archivedActions.queryByTestId('archive-client')).toBeNull();
+      expect(archivedActions.getByTestId('edit-client')).toBeTruthy();
+      expect(archivedActions.getByTestId('open-client-deletion')).toBeTruthy();
+      expect(archivedActions.getByText('Supprimer définitivement')).toBeTruthy();
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Fermer les actions'));
+      });
+      await settleSheetTransition();
+      expect(view.queryByTestId('client-actions-sheet')).toBeNull();
       // History and metrics are untouched.
       expect(view.getByText('Coloration')).toBeTruthy();
       await showPurchases(view);
@@ -709,6 +867,8 @@ describe('ClientProfileScreen', () => {
       expect(successHaptic).toHaveBeenCalledTimes(1);
       expect(view.queryByTestId('client-archived-indicator')).toBeNull();
       expect(view.getByTestId('sell-product')).toBeTruthy();
+      expect(view.getByTestId('new-appointment')).toBeTruthy();
+      await openClientActions(view);
       expect(view.getByTestId('archive-client')).toBeTruthy();
       expect(view.queryByTestId('open-client-deletion')).toBeNull();
       expect(view.getByTestId('session-lea-archived').props.children).toBe('false');
@@ -718,12 +878,8 @@ describe('ClientProfileScreen', () => {
     it('keeps the archived state through an identity edit', async () => {
       const view = await renderProfile('client-agenda-lea');
 
-      await act(async () => {
-        fireEvent.press(view.getByTestId('archive-client'));
-      });
-      await act(async () => {
-        fireEvent.press(view.getByTestId('edit-client'));
-      });
+      await chooseClientAction(view, 'archive-client');
+      await chooseClientAction(view, 'edit-client');
       await act(async () => {
         fireEvent.changeText(view.getByLabelText('Prénom'), 'Léana');
       });
@@ -741,12 +897,8 @@ describe('ClientProfileScreen', () => {
       const view = await renderProfile(disposable.id);
       const total = Number(view.getByTestId('session-client-count').props.children);
 
-      await act(async () => {
-        fireEvent.press(view.getByTestId('archive-client'));
-      });
-      await act(async () => {
-        fireEvent.press(view.getByTestId('open-client-deletion'));
-      });
+      await chooseClientAction(view, 'archive-client');
+      await chooseClientAction(view, 'open-client-deletion');
 
       expect(view.getByTestId('client-deletion-dialog')).toBeTruthy();
       expect(view.getByText('Supprimer définitivement cette cliente ?')).toBeTruthy();
@@ -759,9 +911,7 @@ describe('ClientProfileScreen', () => {
       expect(view.queryByTestId('client-deletion-dialog')).toBeNull();
       expect(Number(view.getByTestId('session-client-count').props.children)).toBe(total);
 
-      await act(async () => {
-        fireEvent.press(view.getByTestId('open-client-deletion'));
-      });
+      await chooseClientAction(view, 'open-client-deletion');
       await act(async () => {
         fireEvent.press(view.getByTestId('confirm-client-deletion'));
       });
@@ -776,12 +926,8 @@ describe('ClientProfileScreen', () => {
       const view = await renderProfile('client-agenda-lea');
       const total = Number(view.getByTestId('session-client-count').props.children);
 
-      await act(async () => {
-        fireEvent.press(view.getByTestId('archive-client'));
-      });
-      await act(async () => {
-        fireEvent.press(view.getByTestId('open-client-deletion'));
-      });
+      await chooseClientAction(view, 'archive-client');
+      await chooseClientAction(view, 'open-client-deletion');
 
       expect(view.getByTestId('client-deletion-blocked')).toBeTruthy();
       expect(view.getByText('Suppression impossible')).toBeTruthy();
@@ -819,12 +965,8 @@ describe('ClientProfileScreen', () => {
       await showPurchases(view);
       expect(view.getByTestId('client-sale-sale-legacy')).toBeTruthy();
 
-      await act(async () => {
-        fireEvent.press(view.getByTestId('archive-client'));
-      });
-      await act(async () => {
-        fireEvent.press(view.getByTestId('open-client-deletion'));
-      });
+      await chooseClientAction(view, 'archive-client');
+      await chooseClientAction(view, 'open-client-deletion');
 
       expect(view.getByTestId('client-deletion-blocked')).toBeTruthy();
       expect(view.queryByTestId('confirm-client-deletion')).toBeNull();

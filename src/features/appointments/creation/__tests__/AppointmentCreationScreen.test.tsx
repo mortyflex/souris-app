@@ -196,14 +196,23 @@ function SessionProbe() {
 
 type TestDatabase = ReturnType<typeof openTestDatabase>;
 
-function creationTree(screenKey: number, database?: TestDatabase, appointmentStartAt: Date = startAt) {
+function creationTree(
+  screenKey: number,
+  database?: TestDatabase,
+  appointmentStartAt: Date = startAt,
+  initialClientId?: string,
+) {
   return (
     <TestPersistenceProvider database={database}>
       <ClientSessionProvider>
       <ServiceCatalogProvider>
         <AppointmentSessionProvider>
           <CalendarBlockSessionProvider>
-            <AppointmentCreationScreen key={screenKey} startAt={appointmentStartAt} />
+            <AppointmentCreationScreen
+              initialClientId={initialClientId}
+              key={screenKey}
+              startAt={appointmentStartAt}
+            />
             <SessionProbe />
           </CalendarBlockSessionProvider>
         </AppointmentSessionProvider>
@@ -569,10 +578,13 @@ describe('AppointmentCreationScreen', () => {
     expect(view.getByTestId('time-modifier-value')).toHaveTextContent('10:15');
     await selectClientBeyond60(view);
 
-    // Prestations repeats the Date / Heure group, not the Client.
+    // Prestations repeats the Date / Heure group; the Client only replaces the
+    // « RENDEZ-VOUS » heading, never a row of its own.
     expect(view.getByTestId('appointment-date-value')).toHaveTextContent('Mar. 25 août');
     expect(view.getByTestId('time-modifier-value')).toHaveTextContent('10:15');
-    expect(view.queryByText('Constance Chevalier')).toBeNull();
+    expect(view.getAllByText('Constance Chevalier')).toEqual([
+      view.getByTestId('appointment-schedule-heading'),
+    ]);
     expect(view.queryByText("Changer l'horaire")).toBeNull();
 
     await searchService(view, 'balayage 1');
@@ -1117,6 +1129,142 @@ describe('AppointmentCreationScreen', () => {
 
     expect(view.queryByText('Léa Martin')).toBeNull();
     expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+  });
+
+  describe('selected Client as the « RENDEZ-VOUS » heading', () => {
+    function heading(view: Rendered) {
+      return view.getByTestId('appointment-schedule-heading');
+    }
+
+    it('reads RENDEZ-VOUS before a selection, then the chosen name in the very same heading', async () => {
+      const view = await renderCreation();
+
+      expect(heading(view)).toHaveTextContent('RENDEZ-VOUS');
+      const labelStyle = StyleSheet.flatten(heading(view).props.style);
+      expect(view.getByText('Continuer')).toBeDisabled();
+
+      await tapClient(view, 'Léa Martin');
+
+      // Only the string changes: same element, same eyebrow style (uppercase included).
+      expect(heading(view)).toHaveTextContent('Léa Martin');
+      expect(StyleSheet.flatten(heading(view).props.style)).toEqual(labelStyle);
+      expect(labelStyle).toMatchObject({ textTransform: 'uppercase' });
+      expect(view.queryByText('RENDEZ-VOUS')).toBeNull();
+      // The list selection is untouched: row selected, Continuer enabled.
+      expect(view.getByRole('button', { name: /Léa Martin/ })).toBeSelected();
+      expect(view.getByText('Continuer')).toBeEnabled();
+    });
+
+    it('stays driven by the selection, whatever the search lists', async () => {
+      const view = await renderCreation();
+      await tapClient(view, 'Léa Martin');
+
+      await act(async () => {
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Constance Chevalier');
+      });
+      expect(view.queryByRole('button', { name: /Léa Martin/ })).toBeNull();
+      expect(view.getAllByText('Léa Martin')).toEqual([heading(view)]);
+
+      await act(async () => {
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), '');
+      });
+      expect(heading(view)).toHaveTextContent('Léa Martin');
+    });
+
+    it('follows a changed selection at once', async () => {
+      const view = await renderCreation();
+      await tapClient(view, 'Léa Martin');
+      await tapClient(view, 'Constance Chevalier');
+
+      expect(heading(view)).toHaveTextContent('Constance Chevalier');
+      expect(view.queryByText('Léa Martin')).toBeNull();
+    });
+
+    it('restores RENDEZ-VOUS when the selection empties (the chosen Client is archived)', async () => {
+      const view = await renderCreation();
+      await tapClient(view, 'Léa Martin');
+      expect(heading(view)).toHaveTextContent('Léa Martin');
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('archive-lea'));
+      });
+      expect(heading(view)).toHaveTextContent('RENDEZ-VOUS');
+      expect(view.getByText('Continuer')).toBeDisabled();
+    });
+
+    it('stays the heading on Prestations and follows a change made after Précédent', async () => {
+      const view = await renderCreation();
+      await selectClientByName(view, 'Léa Martin');
+
+      expect(view.getByPlaceholderText('Rechercher une prestation')).toBeTruthy();
+      expect(heading(view)).toHaveTextContent('Léa Martin');
+
+      await act(async () => {
+        fireEvent.press(view.getByText('Précédent'));
+      });
+      await selectClientByName(view, 'Constance Chevalier');
+      expect(heading(view)).toHaveTextContent('Constance Chevalier');
+    });
+
+    it('keeps a long name to one truncated line', async () => {
+      const view = await renderCreation();
+      await tapClient(view, 'Léa Martin');
+
+      expect(heading(view).props.numberOfLines).toBe(1);
+      expect(heading(view).props.ellipsizeMode).toBe('tail');
+    });
+  });
+
+  describe('opened from a Client Profile (initialClientId)', () => {
+    it('starts on Cliente with her selected, the Agenda date kept, and creates nothing', async () => {
+      const view = await render(creationTree(0, undefined, startAt, 'client-agenda-lea'));
+      const before = view.getByTestId('appointments-probe').props.children;
+
+      expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+      expect(view.getByTestId('appointment-schedule-heading')).toHaveTextContent('Léa Martin');
+      expect(view.getByTestId('appointment-date-value')).toHaveTextContent('Mar. 25 août');
+      expect(view.getByTestId('time-modifier-value')).toHaveTextContent('10:15');
+      expect(view.getByText('Continuer')).toBeEnabled();
+      expect(view.getByTestId('appointments-probe').props.children).toBe(before);
+
+      // Her row in the (virtualised) list is the selected one.
+      await act(async () => {
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa Martin');
+      });
+      expect(view.getByRole('button', { name: /Léa Martin/ })).toBeSelected();
+    });
+
+    it('continues through the normal flow and books the preselected Client', async () => {
+      const view = await render(creationTree(0, undefined, startAt, 'client-agenda-lea'));
+
+      await act(async () => {
+        fireEvent.press(view.getByText('Continuer'));
+      });
+      expect(view.getByPlaceholderText('Rechercher une prestation')).toBeTruthy();
+      await searchService(view, 'balayage 1');
+      await selectService(view, 'Balayage 1');
+      await continueToSummary(view);
+      await act(async () => {
+        fireEvent.press(view.getByText('Créer le rendez-vous'));
+      });
+
+      expect(view.getByTestId('last-appointment-client-id')).toHaveTextContent('client-agenda-lea');
+    });
+
+    it('still lets her be replaced on the Cliente step', async () => {
+      const view = await render(creationTree(0, undefined, startAt, 'client-agenda-lea'));
+
+      await tapClient(view, 'Constance Chevalier');
+
+      expect(view.getByTestId('appointment-schedule-heading')).toHaveTextContent('Constance Chevalier');
+    });
+
+    it('falls back to no selection for an unknown or archived Client', async () => {
+      const view = await render(creationTree(0, undefined, startAt, 'client-missing'));
+
+      expect(view.getByTestId('appointment-schedule-heading')).toHaveTextContent('RENDEZ-VOUS');
+      expect(view.getByText('Continuer')).toBeDisabled();
+    });
   });
 
   describe('birthday discount suggestion', () => {

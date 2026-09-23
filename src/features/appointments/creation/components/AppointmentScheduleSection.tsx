@@ -7,6 +7,9 @@
 // gives one selection haptic and opens the shared start-time wheels inline.
 // No Cliente row: the Client is chosen in the search + list right below.
 // The Résumé reuses the same group and passes `endAt` to show the range.
+// Cliente and Prestations pass the selected Client name: it simply replaces
+// « RENDEZ-VOUS » in the same eyebrow, so the choice stays visible whatever
+// the search shows. The Résumé has its own CLIENTE group.
 
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -33,6 +36,8 @@ interface AppointmentScheduleSectionProps {
   readonly startAt: Date;
   /** Résumé only: the Heure row then reads the whole range `11:00 – 11:45`. */
   readonly endAt?: Date;
+  /** Cliente / Prestations only: the selected Client, shown as the eyebrow. */
+  readonly clientName?: string;
   /** Called with the time of day chosen on the wheels. */
   readonly onStartTimeChange: (time: StartTimeOfDay) => void;
   /** Hours offered by the wheels, both inclusive. */
@@ -46,6 +51,7 @@ const timeIcon: SymbolViewProps['name'] = { ios: 'clock', android: 'schedule' };
 export function AppointmentScheduleSection({
   startAt,
   endAt,
+  clientName,
   onStartTimeChange,
   minHour,
   maxHour,
@@ -56,8 +62,14 @@ export function AppointmentScheduleSection({
 
   return (
     <View style={styles.section}>
-      <AppText variant="eyebrow" style={styles.eyebrow}>
-        RENDEZ-VOUS
+      <AppText
+        ellipsizeMode="tail"
+        numberOfLines={1}
+        style={styles.eyebrow}
+        testID="appointment-schedule-heading"
+        variant="eyebrow"
+      >
+        {clientName ?? 'RENDEZ-VOUS'}
       </AppText>
       <GroupedSurface testID="appointment-schedule">
         <GroupedDataRow
