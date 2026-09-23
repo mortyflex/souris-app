@@ -895,14 +895,21 @@ entry remains possible and offers a direct route to device settings.
 
 ### Sales V1 — completed Product sales
 
-Product sales primarily happen from the Client context. Three entry points open the SAME
+Product sales primarily happen from the Client context. Four entry points open the SAME
 `Nouvelle vente` flow:
 
 ```text
 Client Profile        → Vendre un produit   (primary — Client preselected)
 Appointment Details   → Revente             (primary — the Appointment's Client preselected)
+Product Details       → Vendre ce produit   (primary — one unit of that Product already in the draft)
 Produits              → Nouvelle vente      (secondary — walk-in, no Client)
 ```
+
+`Vendre ce produit` is the main action of Product Details (`Modifier`, `Désactiver` / `Réactiver`
+and `Supprimer` live in its `•••` menu). The Product joins the draft through the same rule as a
+search or a scan, so an inactive Product or one without stock is never offered (the action is
+disabled). Opening the flow sells nothing: the Sale stays a draft, and stock only moves when it is
+validated. Cancelling returns to Product Details.
 
 From the Client Profile and Appointment Details the Client is resolved on the first render — the
 professional never selects them again and never sees a transient « Aucune cliente ». A Sale opened
@@ -944,8 +951,8 @@ lifecycle actions (`Absence` / `Annuler` / `Modifier`); it is never presented as
 outcome. When the Client is archived, `Revente` is withheld and `Encaisser` takes the row. The Produits tab keeps `Nouvelle vente` beside
 `Ajouter un produit` as the walk-in entry.
 
-The flow is one focused native form sheet (`Nouvelle vente`), presented like the other Souris
-creation flows; a draft holding lines asks « Abandonner la vente ? » before `Annuler`, swipe, or
+The flow is one focused content-fit sheet (`Nouvelle vente`), presented like the Product editor:
+an empty sale opens compact and the sheet grows with its lines; a draft holding lines asks « Abandonner la vente ? » before `Annuler`, swipe, or
 back can discard it. The flow itself:
 
 - `Cliente` is optional — `Aucune cliente` when opened from Produits (a walk-in sale).

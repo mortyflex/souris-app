@@ -23,9 +23,14 @@
 //   down and the scrim fades, then lets the very same navigation action through —
 //   screens need no special close call, and the route never vanishes instantly.
 //   `dismissible` is the swipe / outside-tap policy (off while a draft is
-//   edited); leaving through « Annuler » / « Fermer » always works.
+//   edited); leaving through « Annuler » / « Fermer » always works. A screen
+//   that guards a draft passes `onLeaveAttempt` instead of its own
+//   `usePreventRemove`: two guards on one route would both fire, and the sheet
+//   would slide away under the screen's confirmation. A route that is not the
+//   focused one (another sheet route presented over it: « Vendre ce produit »
+//   over Product details) ignores the keyboard of the route above it.
 
-import { useNavigation, useRouter } from 'expo-router';
+import { useIsFocused, useNavigation, useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -38,6 +43,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { SheetLayer, useSheetLayer } from './sheet-layers';
 import { SheetGrabber, SheetPresentation } from './SheetPresentation';
 import { SurfaceGloss } from './SurfaceGloss';
 import { overlayMaterial, radii } from './theme';
@@ -58,6 +64,12 @@ interface SheetScreenProps {
    * previous one instead of an instant swap.
    */
   readonly contentKey?: string;
+  /**
+   * `fit="content"` only: a draft is at stake. A way out the screen did not
+   * start itself (hardware back, a reset) calls this INSTEAD of closing the
+   * sheet — the screen confirms, then leaves with `router.back()`.
+   */
+  readonly onLeaveAttempt?: () => void;
   readonly style?: StyleProp<ViewStyle>;
   readonly testID?: string;
 }
@@ -73,20 +85,24 @@ function NativeSheetShell({
   keyboardAvoiding = false,
   style,
   testID,
-}: Omit<ShellProps, 'dismissible' | 'contentKey'>) {
+}: Omit<ShellProps, 'dismissible' | 'contentKey' | 'onLeaveAttempt'>) {
   const Body = keyboardAvoiding ? KeyboardAvoidingView : View;
+  // A drawer presented from this sheet takes the keyboard: the sheet stays put.
+  const layer = useSheetLayer(true);
 
   return (
-    <SafeAreaView edges={['bottom']} style={[styles.root, styles.fill, style]} testID={testID}>
-      <SurfaceGloss shape={styles.shape} testID="sheet-screen-gloss" />
-      <SheetGrabber />
-      <Body
-        behavior={keyboardAvoiding && Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.fill}
-      >
-        {children}
-      </Body>
-    </SafeAreaView>
+    <SheetLayer cover={layer.cover}>
+      <SafeAreaView edges={['bottom']} style={[styles.root, styles.fill, style]} testID={testID}>
+        <SurfaceGloss shape={styles.shape} testID="sheet-screen-gloss" />
+        <SheetGrabber />
+        <Body
+          behavior={keyboardAvoiding && !layer.covered && Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.fill}
+        >
+          {children}
+        </Body>
+      </SafeAreaView>
+    </SheetLayer>
   );
 }
 
@@ -95,11 +111,13 @@ function RouteSheet({
   keyboardAvoiding = false,
   dismissible = true,
   contentKey,
+  onLeaveAttempt,
   style,
   testID,
 }: ShellProps) {
   const router = useRouter();
   const navigation = useNavigation();
+  const focused = useIsFocused();
   type RemovalAction = Parameters<typeof navigation.dispatch>[0];
   // held → the close transition plays → released → the action goes through.
   const [removal, setRemoval] = useState<{ action: RemovalAction; released: boolean }>();
@@ -107,6 +125,10 @@ function RouteSheet({
   // Every way out of the route (back, a reset, hardware back) first plays the
   // close transition; the held action then goes through untouched.
   usePreventRemove(!removal?.released, ({ data }) => {
+    if (onLeaveAttempt) {
+      onLeaveAttempt();
+      return;
+    }
     setRemoval({ action: data.action, released: false });
   });
 
@@ -123,6 +145,7 @@ function RouteSheet({
       backdropLabel="Fermer la fiche"
       contentKey={contentKey}
       contentStyle={style}
+      covered={!focused}
       dismissOnBackdropPress={dismissible}
       dismissOnPanDown={dismissible}
       keyboardAvoiding={keyboardAvoiding}

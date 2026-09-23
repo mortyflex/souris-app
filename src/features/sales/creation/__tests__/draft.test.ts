@@ -2,6 +2,7 @@ import type { SaleDraftLine } from '@/domain/sales';
 
 import {
   addProductToDraft,
+  getAddProductRefusal,
   getDraftQuantity,
   getRemainingStock,
   removeDraftLine,
@@ -49,6 +50,13 @@ describe('Sale draft rules', () => {
   it('refuses inactive Products', () => {
     const result = addProductToDraft([], { ...shampoo, active: false }, nextId);
     expect(result).toEqual({ lines: [], outcome: 'inactive' });
+  });
+
+  it('states the same refusal the add applies, before anything is added', () => {
+    expect(getAddProductRefusal([], shampoo)).toBeUndefined();
+    expect(getAddProductRefusal([], { ...shampoo, active: false })).toBe('inactive');
+    expect(getAddProductRefusal([], { ...shampoo, stockQuantity: 0 })).toBe('out-of-stock');
+    expect(getAddProductRefusal([{ id: 'line-1', productId: 'p-a', quantity: 2 }], shampoo)).toBe('out-of-stock');
   });
 
   it('keeps distinct Products as distinct lines in addition order', () => {

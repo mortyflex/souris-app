@@ -6,7 +6,9 @@
 // is charged.
 //
 // - opens with the keyboard CLOSED (no autoFocus); a decimal keyboard opens
-//   only when an amount is tapped, inside the keyboard-safe scroll;
+//   only when an amount is tapped, inside the keyboard-safe scroll; every
+//   amount field carries the same compact « OK » (KeyboardDismissAccessory),
+//   which only closes the keyboard;
 // - amounts are French decimal entries normalized to integer cents by the
 //   pure form module; the raw text never reaches persistence;
 // - the expected total is a helper: the received total may differ, the
@@ -31,7 +33,7 @@
 //   without inventing a payment.
 
 import { SymbolView } from 'expo-symbols';
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import {
@@ -43,6 +45,7 @@ import { formatCentsAsInput, formatEuroCents, formatSignedEuroCents } from '@/sh
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { KeyboardDismissAccessory } from '@/shared/ui/KeyboardDismissAccessory';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
 import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import {
@@ -293,8 +296,20 @@ interface PaymentMethodFieldProps {
   readonly remainingCents: number;
 }
 
-function PaymentMethodField({ method, value, onChangeText, error, remainingCents }: PaymentMethodFieldProps) {
+function PaymentMethodField({
+  method,
+  value,
+  onChangeText,
+  error,
+  remainingCents,
+}: PaymentMethodFieldProps) {
   const [focused, setFocused] = useState(false);
+  // iOS binds one accessory view to ONE text input, once, when it mounts
+  // (React Native looks up the first input carrying its `nativeID`). Each
+  // amount field therefore binds its own instance of the shared « OK », with
+  // a stable id: both pads have it before either is focused, and moving
+  // Carte ⇄ Espèces swaps two identical pills without closing the keyboard.
+  const keyboardAccessoryID = useId();
   const label = paymentMethodLabels[method];
   const key = method.toLowerCase();
   const showRemaining = value.trim().length === 0 && remainingCents > 0;
@@ -335,17 +350,15 @@ function PaymentMethodField({ method, value, onChangeText, error, remainingCents
       <View style={styles.amountShell}>
         <TextInput
           accessibilityLabel={`Montant ${label.toLowerCase()}`}
-          // The decimal pad has no return key, so iOS shows React Native's own
-          // accessory button — hardcoded « Done » unless labelled. It only
-          // dismisses the keyboard.
-          inputAccessoryViewButtonLabel="OK"
+          // The decimal pad has no return key: the compact Souris « OK »
+          // replaces React Native's full-width system toolbar.
+          inputAccessoryViewID={keyboardAccessoryID}
           keyboardType="decimal-pad"
           onBlur={() => setFocused(false)}
           onChangeText={onChangeText}
           onFocus={() => setFocused(true)}
           placeholder="0,00"
           placeholderTextColor={semanticColors.foregroundMuted}
-          returnKeyType="done"
           selectTextOnFocus
           style={styles.amountInput}
           testID={`checkout-amount-${key}`}
@@ -356,6 +369,8 @@ function PaymentMethodField({ method, value, onChangeText, error, remainingCents
           €
         </AppText>
       </View>
+      {/* Absolutely positioned by React Native: never part of the row layout. */}
+      <KeyboardDismissAccessory nativeID={keyboardAccessoryID} testID={`checkout-keyboard-dismiss-${key}`} />
     </View>
   );
 }

@@ -30,6 +30,9 @@ const warningHaptic = jest.spyOn(haptics, 'warning').mockImplementation();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
+  // The Sale sheet is a content-fit route: its shell reads the navigation.
+  useNavigation: () => ({ dispatch: jest.fn() }),
+  useIsFocused: () => true,
 }));
 
 jest.mock('react-native-reanimated', () =>

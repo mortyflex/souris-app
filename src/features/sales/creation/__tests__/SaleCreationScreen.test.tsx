@@ -15,9 +15,13 @@ import { haptics } from '@/shared/lib/haptics';
 import { SaleSessionProvider, useSaleSession } from '../../session/SaleSessionProvider';
 import { SaleCreationScreen } from '../SaleCreationScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { avoidsKeyboard, captureKeyboardEvents, keyboardTopGap } from '@/shared/ui/testing/sheet-keyboard';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 const mockBack = jest.fn();
+const mockDispatch = jest.fn();
+// The latest removal guard of the route (the sheet shell's): [prevent, onHeld].
+const mockGuard: { prevent?: boolean; onHeld?: (event: { data: { action: object } }) => void } = {};
 let mockScannedBarcode = '';
 const successHaptic = jest.spyOn(haptics, 'success').mockImplementation();
 const selectionHaptic = jest.spyOn(haptics, 'selection').mockImplementation();
@@ -25,10 +29,15 @@ const warningHaptic = jest.spyOn(haptics, 'warning').mockImplementation();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack }),
+  useNavigation: () => ({ dispatch: mockDispatch }),
+  useIsFocused: () => true,
 }));
 
 jest.mock('expo-router/react-navigation', () => ({
-  usePreventRemove: jest.fn(),
+  usePreventRemove: (prevent: boolean, onHeld: (event: { data: { action: object } }) => void) => {
+    mockGuard.prevent = prevent;
+    mockGuard.onHeld = onHeld;
+  },
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
@@ -195,6 +204,34 @@ function renderSale(initialClientId?: string, createSeed?: () => ReturnType<type
   );
 }
 
+/**
+ * The Product Details entry (« Vendre ce produit »): the screen receives the
+ * Product id. Stock is part of the seed, so it is known when the draft starts.
+ */
+function renderSaleForProduct(initialProductId: string, stock: Readonly<Record<string, number>>) {
+  const createSeed = () => {
+    const seed = createDevelopmentSeed(new Date());
+    return {
+      ...seed,
+      products: seed.products.map((product) =>
+        product.id in stock ? { ...product, stockQuantity: stock[product.id] } : product,
+      ),
+    };
+  };
+  return render(
+    <TestPersistenceProvider createSeed={createSeed}>
+      <ClientSessionProvider>
+        <ProductCatalogProvider>
+          <SaleSessionProvider>
+            <SaleCreationScreen initialProductId={initialProductId} />
+            <Probe />
+          </SaleSessionProvider>
+        </ProductCatalogProvider>
+      </ClientSessionProvider>
+    </TestPersistenceProvider>,
+  );
+}
+
 /** The Appointment Details entry (« Revente »): the screen also receives the Appointment id. */
 function renderSaleFromAppointment(initialAppointmentId: string, initialClientId = 'client-agenda-sofia') {
   return render(
@@ -255,6 +292,7 @@ async function search(view: Awaited<ReturnType<typeof render>>, text: string) {
 describe('SaleCreationScreen', () => {
   beforeEach(() => {
     mockBack.mockClear();
+    mockDispatch.mockClear();
     mockScannedBarcode = '';
     successHaptic.mockClear();
     selectionHaptic.mockClear();
@@ -654,6 +692,211 @@ describe('SaleCreationScreen', () => {
     expect(view.getAllByText('Annuler')).toHaveLength(1);
     expect(view.getByRole('button', { name: 'Annuler la vente' })).toBeTruthy();
     expect(view.getByPlaceholderText('Rechercher un produit').props.autoFocus).toBeFalsy();
+  });
+
+  it('opens an empty sale as a compact content-fit sheet, its summary right below the search', async () => {
+    const view = await renderSale();
+
+    // Sized by its content (no fill, no fixed height), capped at the shared detent.
+    const surface = StyleSheet.flatten(view.getByTestId('sheet-screen-surface').props.style);
+    expect(surface.flex).toBeUndefined();
+    expect(surface.height).toBeUndefined();
+    expect(surface.maxHeight).toBeGreaterThan(0);
+
+    // ONE body scroll holding client, empty cart and search; the summary and
+    // « Valider la vente » sit below it, never inside it.
+    const body = within(view.getByTestId('sale-body'));
+    expect(body.getByTestId(CLIENT_ROW)).toBeTruthy();
+    expect(body.getByTestId('sale-lines-empty')).toBeTruthy();
+    expect(body.getByPlaceholderText('Rechercher un produit')).toBeTruthy();
+    expect(body.getByTestId('sale-open-barcode-scanner')).toBeTruthy();
+    expect(body.queryByTestId('sale-summary')).toBeNull();
+    expect(body.queryByTestId('validate-sale')).toBeNull();
+    const tree = JSON.stringify(view.toJSON());
+    const order = [CLIENT_ROW, 'sale-lines-empty', 'sale-open-barcode-scanner', 'sale-summary', 'validate-sale'].map(
+      (testID) => tree.indexOf(`"${testID}"`),
+    );
+    expect(order.every((position) => position >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('keeps several lines in the one body scroll with the summary and validation pinned below', async () => {
+    const view = await renderSale('client-agenda-camille');
+    await press(view, 'stock-masque-2');
+    await press(view, 'stock-concentrate-3');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+    await press(view, `sale-line-increment-${MASQUE_ID}`);
+    await search(view, 'concentrate');
+    await press(view, `sale-product-${CONCENTRATE_ID}`);
+
+    const body = within(view.getByTestId('sale-body'));
+    expect(body.getByTestId(`sale-line-${MASQUE_ID}`)).toBeTruthy();
+    expect(body.getByTestId(`sale-line-${CONCENTRATE_ID}`)).toBeTruthy();
+    expect(body.getByTestId('sale-search-results')).toBeTruthy();
+    expect(body.queryByTestId('validate-sale')).toBeNull();
+    // The body shrinks (and scrolls) once the sheet reaches the detent.
+    expect(StyleSheet.flatten(view.getByTestId('sale-body').props.style)).toMatchObject({ flexShrink: 1 });
+    expect(view.getByTestId('sale-unit-count').props.children).toBe('3 produits · ');
+    expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(112));
+    expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('keeps the sale sheet still behind the checkout while a payment amount is typed', async () => {
+    const keyboard = captureKeyboardEvents();
+    const view = await renderSale('client-agenda-camille');
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+    await press(view, 'validate-sale');
+    expect(view.getByTestId('sale-payment-sheet')).toBeTruthy();
+
+    await act(async () => fireEvent(view.getByTestId('checkout-amount-card'), 'focus'));
+    await keyboard.show();
+
+    // Only the checkout rises above the keyboard; the covered sale sheet neither
+    // lifts nor shrinks, so its « Valider la vente » stays under the keyboard.
+    expect(avoidsKeyboard(view.getByTestId('checkout-amount-card'))).toBe(true);
+    expect(keyboardTopGap(view.getByTestId('checkout-amount-card'))).toBeGreaterThan(0);
+    expect(avoidsKeyboard(view.getByTestId('validate-sale'))).toBe(false);
+    expect(keyboardTopGap(view.getByTestId('validate-sale'))).toBeUndefined();
+
+    // Carte → Espèces → Carte with the keyboard up, then « OK »: the sale sheet never moves.
+    const saleFooterHidden = () => {
+      expect(avoidsKeyboard(view.getByTestId('validate-sale'))).toBe(false);
+      expect(keyboardTopGap(view.getByTestId('validate-sale'))).toBeUndefined();
+    };
+    for (const [from, to] of [['card', 'cash'], ['cash', 'card']] as const) {
+      await act(async () => fireEvent(view.getByTestId(`checkout-amount-${from}`), 'blur'));
+      await act(async () => fireEvent(view.getByTestId(`checkout-amount-${to}`), 'focus'));
+      expect(view.getByTestId(`checkout-keyboard-dismiss-${to}`)).toBeTruthy();
+      saleFooterHidden();
+    }
+    await press(view, 'checkout-keyboard-dismiss-card');
+    await keyboard.hide();
+    saleFooterHidden();
+    expect(view.getByTestId('sale-payment-sheet')).toBeTruthy();
+    expect(view.getByTestId('sales-count').props.children).toBe(0);
+
+    await press(view, 'cancel-checkout');
+    await settleSheetTransition();
+    // Back on top: the sale sheet avoids the keyboard again.
+    expect(avoidsKeyboard(view.getByTestId('validate-sale'))).toBe(true);
+    keyboard.restore();
+  });
+
+  describe('from Product details (« Vendre ce produit »)', () => {
+    it('starts the usual draft with that Product, one unit, and sells nothing yet', async () => {
+      const view = await renderSaleForProduct(MASQUE_ID, { [MASQUE_ID]: 2 });
+
+      const cart = within(view.getByTestId('sale-lines'));
+      expect(cart.getByTestId(`sale-line-${MASQUE_ID}`)).toBeTruthy();
+      expect(view.getByTestId(`sale-line-quantity-${MASQUE_ID}`).props.children).toBe(1);
+      expect(view.queryByTestId('sale-lines-empty')).toBeNull();
+      expect(view.getByTestId('sale-unit-count').props.children).toBe('1 produit · ');
+      expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(50));
+      // The Produits entry: a Client still has to be chosen before validating.
+      expect(clientValue(view)).toBe('Choisir une cliente');
+      expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(true);
+      // Only a draft: no Sale, no stock movement.
+      expect(view.getByTestId('sales-count').props.children).toBe(0);
+      expect(view.getByTestId('masque-stock').props.children).toBe(2);
+      expect(view.queryByTestId('sale-notice')).toBeNull();
+    });
+
+    it('lets the prefilled draft change like any other: quantity, another Product, removal', async () => {
+      const view = await renderSaleForProduct(MASQUE_ID, { [MASQUE_ID]: 2, [CONCENTRATE_ID]: 3 });
+
+      await press(view, `sale-line-increment-${MASQUE_ID}`);
+      // Bounded by stock, like any line.
+      expect(view.getByTestId(`sale-line-increment-${MASQUE_ID}`).props.accessibilityState.disabled).toBe(true);
+      await search(view, 'concentrate');
+      await press(view, `sale-product-${CONCENTRATE_ID}`);
+
+      expect(view.getByTestId('sale-unit-count').props.children).toBe('3 produits · ');
+      expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(112));
+
+      await press(view, `sale-line-remove-${MASQUE_ID}`);
+      expect(view.queryByTestId(`sale-line-${MASQUE_ID}`)).toBeNull();
+      expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(12));
+    });
+
+    it('sells nothing and moves no stock when the prefilled sale is cancelled', async () => {
+      const view = await renderSaleForProduct(MASQUE_ID, { [MASQUE_ID]: 2 });
+
+      // A draft holding a line: the usual confirmation guards it.
+      await act(async () => fireEvent.press(view.getByLabelText('Annuler la vente')));
+      expect(view.getByTestId('discard-sale-dialog')).toBeTruthy();
+      await press(view, 'discard-sale');
+
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(view.getByTestId('sales-count').props.children).toBe(0);
+      expect(view.getByTestId('masque-stock').props.children).toBe(2);
+    });
+
+    it('completes through the existing payment step: Sale recorded, stock decremented once', async () => {
+      const view = await renderSaleForProduct(MASQUE_ID, { [MASQUE_ID]: 2 });
+      await chooseClient(view, 'Camille', 'Camille Durand');
+
+      await press(view, 'validate-sale');
+      await payAndConfirm(view, '50');
+
+      expect(view.getByTestId('sales-count').props.children).toBe(1);
+      expect(view.getByTestId('last-sale').props.children).toBe(
+        'client-agenda-camille|Masque réparateur 5 min:50:1',
+      );
+      expect(view.getByTestId('last-sale-payment').props.children).toBe('5000/0');
+      expect(view.getByTestId('masque-stock').props.children).toBe(1);
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts empty with the usual notice when the draft refuses the Product', async () => {
+      const view = await renderSaleForProduct(MASQUE_ID, { [MASQUE_ID]: 0 });
+
+      expect(view.getByTestId('sale-lines-empty')).toBeTruthy();
+      expect(view.getByTestId('sale-notice').props.children).toBe(
+        'Stock insuffisant pour Masque réparateur 5 min.',
+      );
+      expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(0));
+    });
+  });
+
+  it('never leaves on an outside tap', async () => {
+    const view = await renderSale();
+
+    await press(view, 'sheet-screen-scrim');
+
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(view.getByTestId('sale-creation-sheet')).toBeTruthy();
+  });
+
+  it('lets the hardware back close an empty sale, through the sheet close transition', async () => {
+    await renderSale();
+
+    const action = { type: 'GO_BACK' };
+    await act(async () => mockGuard.onHeld?.({ data: { action } }));
+    await settleSheetTransition();
+
+    expect(mockDispatch).toHaveBeenCalledWith(action);
+  });
+
+  it('asks before the hardware back abandons a draft with lines, and keeps the sheet open', async () => {
+    const view = await renderSale();
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+
+    await act(async () => mockGuard.onHeld?.({ data: { action: { type: 'GO_BACK' } } }));
+    await settleSheetTransition();
+
+    expect(view.getByTestId('discard-sale-dialog')).toBeTruthy();
+    expect(mockDispatch).not.toHaveBeenCalled();
+    expect(view.getByTestId(`sale-line-quantity-${MASQUE_ID}`).props.children).toBe(1);
+
+    await press(view, 'discard-sale');
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('sales-count').props.children).toBe(0);
   });
 
   it('closes directly when the draft is empty', async () => {

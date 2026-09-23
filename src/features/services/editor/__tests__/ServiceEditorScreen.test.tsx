@@ -15,6 +15,7 @@ const mockBack = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({ back: mockBack }),
   useNavigation: () => ({ dispatch: jest.fn() }),
+  useIsFocused: () => true,
 }));
 
 // SheetScreen (content fit) holds the route's removal while the sheet slides down.

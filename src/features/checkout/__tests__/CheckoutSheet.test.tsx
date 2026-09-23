@@ -1,4 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { Keyboard, StyleSheet } from 'react-native';
 
 import { formatEuroCents } from '@/shared/lib/money';
 
@@ -38,6 +39,15 @@ async function renderSheet(props: Partial<React.ComponentProps<typeof CheckoutSh
   return { view, onConfirm, onClose };
 }
 
+/** The native accessory host carrying `nativeID` (the view iOS attaches above the keyboard). */
+function accessoryFor(view: Awaited<ReturnType<typeof render>>, nativeID: string) {
+  const [accessory] = view.container.queryAll(
+    (node) => node.type === 'RCTInputAccessoryView' && node.props.nativeID === nativeID,
+  );
+  if (!accessory) throw new Error(`No keyboard accessory for ${nativeID}`);
+  return accessory;
+}
+
 async function type(view: Awaited<ReturnType<typeof render>>, method: 'card' | 'cash', text: string) {
   await act(async () => {
     fireEvent.changeText(view.getByTestId(`checkout-amount-${method}`), text);
@@ -64,8 +74,9 @@ describe('CheckoutSheet', () => {
       const input = view.getByTestId(`checkout-amount-${method}`);
       expect(input.props.autoFocus).toBeFalsy();
       expect(input.props.keyboardType).toBe('decimal-pad');
-      // The pad's iOS accessory button is labelled in French, never the default « Done ».
-      expect(input.props.inputAccessoryViewButtonLabel).toBe('OK');
+      // The pad gets the compact Souris « OK », never React Native's « Done » toolbar.
+      expect(input.props.inputAccessoryViewID).toBeTruthy();
+      expect(input.props.inputAccessoryViewButtonLabel).toBeUndefined();
       expect(input.props.value).toBe('');
     }
     expect(view.getByText('Prestations')).toBeTruthy();
@@ -80,6 +91,83 @@ describe('CheckoutSheet', () => {
     expect(view.getByTestId('checkout-entered-total').props.children).toBe(formatEuroCents(0));
     expect(view.getByTestId('confirm-checkout').props.accessibilityState.disabled).toBe(true);
     expect(view.getByText('Encaisser')).toBeTruthy();
+  });
+
+  it('gives both amount pads the same compact « OK », each bound to its own input', async () => {
+    const { view } = await renderSheet();
+
+    const ids = (['card', 'cash'] as const).map((method) => {
+      const id = view.getByTestId(`checkout-amount-${method}`).props.inputAccessoryViewID as string;
+      expect(id).toBeTruthy();
+      // The accessory carrying that id is mounted with the sheet, before any focus.
+      const accessory = accessoryFor(view, id);
+      const ok = within(accessory).getByLabelText('Fermer le clavier');
+      expect(ok.props.accessibilityRole).toBe('button');
+      expect(within(ok).getByText('OK')).toBeTruthy();
+      return id;
+    });
+    // iOS binds one accessory view to ONE input: never a shared id.
+    expect(ids[0]).not.toBe(ids[1]);
+    // One component, one look: the two pills are styled identically.
+    const [cardPill, cashPill] = ids.map((id) =>
+      StyleSheet.flatten(within(accessoryFor(view, id)).getByLabelText('Fermer le clavier').props.style),
+    );
+    expect(cardPill).toEqual(cashPill);
+  });
+
+  it('keeps both « OK » accessories mounted and bound through every focus change', async () => {
+    const { view } = await renderSheet();
+    const card = () => view.getByTestId('checkout-amount-card');
+    const cash = () => view.getByTestId('checkout-amount-cash');
+    const cardID = card().props.inputAccessoryViewID;
+    const cashID = cash().props.inputAccessoryViewID;
+    const cardAccessory = accessoryFor(view, cardID);
+    const cashAccessory = accessoryFor(view, cashID);
+    const expectStable = () => {
+      expect(card().props.inputAccessoryViewID).toBe(cardID);
+      expect(cash().props.inputAccessoryViewID).toBe(cashID);
+      // Same native instances: never remounted, so never unbound from their input.
+      expect(accessoryFor(view, cardID)).toBe(cardAccessory);
+      expect(accessoryFor(view, cashID)).toBe(cashAccessory);
+    };
+
+    // Carte, then straight to Espèces, back to Carte, then away and back.
+    const sequence: [ReturnType<typeof card> | null, ReturnType<typeof card> | null][] = [
+      [null, card()],
+      [card(), cash()],
+      [cash(), card()],
+      [card(), null],
+      [null, cash()],
+    ];
+    for (const [blurred, focused] of sequence) {
+      if (blurred) await act(async () => fireEvent(blurred, 'blur'));
+      if (focused) await act(async () => fireEvent(focused, 'focus'));
+      expectStable();
+    }
+  });
+
+  it('closes the keyboard with « OK » and nothing else: both amounts kept, nothing confirmed', async () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
+    const { view, onConfirm, onClose } = await renderSheet();
+
+    await type(view, 'card', '75');
+    await type(view, 'cash', '20');
+    for (const method of ['card', 'cash'] as const) {
+      await act(async () => fireEvent(view.getByTestId(`checkout-amount-${method}`), 'focus'));
+      await act(async () => fireEvent.press(view.getByTestId(`checkout-keyboard-dismiss-${method}`)));
+
+      expect(onConfirm).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(view.getByTestId('checkout-sheet')).toBeTruthy();
+      expect(view.getByTestId('checkout-amount-card').props.value).toBe('75');
+      expect(view.getByTestId('checkout-amount-cash').props.value).toBe('20');
+      expect(view.getByTestId('checkout-entered-total').props.children).toBe(formatEuroCents(9500));
+    }
+    expect(dismiss).toHaveBeenCalledTimes(2);
+    // Reopening a pad finds its « OK » again.
+    await act(async () => fireEvent(view.getByTestId('checkout-amount-card'), 'focus'));
+    expect(view.getByTestId('checkout-keyboard-dismiss-card')).toBeTruthy();
+    dismiss.mockRestore();
   });
 
   it('records a card-only checkout with normalized cents', async () => {

@@ -360,10 +360,15 @@ introducing a POS visual language:
 
 - `Nouvelle vente` is a primary action beside a secondary `Ajouter un produit` on the Produits
   tab — no new tab, no KPI, no cash-register surface;
-- Sale creation is one native form sheet in the canonical Souris shell (§16: white surface,
-  Souris grabber, the §30 editing header « Annuler | Nouvelle vente » (no eyebrow), sticky
-  `SheetActionBar` with `Valider la vente`, no swipe-to-dismiss), like the Product editor — never
-  a full-screen modal that would collide with the status bar;
+- Sale creation is one content-fit sheet route in the canonical Souris shell (§16, §20
+  `<SheetScreen fit="content">`: Souris grabber, the §30 editing header « Annuler | Nouvelle
+  vente » (no eyebrow), sticky `SheetActionBar` with the summary and `Valider la vente`, no
+  swipe-to-dismiss, no outside tap), like the Product editor — never a full-screen modal that
+  would collide with the status bar. An empty sale opens COMPACT, sized by its content (client,
+  a small « Aucun produit ajouté » note, search + scan, then the summary right below); the sheet
+  grows with lines and results up to `sheet.detent`, where the ONE body scroll takes over and the
+  action bar stays pinned. With the keyboard up the sheet shrinks above it; the hardware back of
+  a draft with lines asks « Abandonner la vente ? » (the shell's `onLeaveAttempt`);
 - Product selection is operational: tapping a search or scan result adds the Product IMMEDIATELY
   (or increments its single line) with a selection haptic and no intermediate confirmation. The
   scroll position stays stable so several additions can follow each other;
@@ -379,7 +384,11 @@ introducing a POS visual language:
   shopping-bag symbol and violet label, placed ABOVE `Terminer` and the lifecycle row, without a
   heading or divider — a contextual business action that never competes with the primary
   lifecycle action and is never grouped beside `Absence` / `Annuler`. Produits keeps
-  `Nouvelle vente`.
+  `Nouvelle vente`. Product Details ends with ONE primary `Vendre ce produit` (bag glyph) in its
+  sticky action bar — the draft starts with one unit of that Product; the button is disabled when
+  the Sale draft would refuse it (inactive, no stock). `Modifier` moved into the `•••` drawer,
+  first, above `Désactiver` / `Réactiver` and `Supprimer`. A sheet route under another route (these
+  details under « Nouvelle vente ») ignores the keyboard: only the focused route reacts.
 
 ---
 
@@ -848,17 +857,24 @@ scrim, motion, gestures and dismissal policies of §16 are unchanged.
   the system: iOS 26 floats every sheet below the large detent as an inset card (side margins,
   gap below, four rounded corners) and UIKit offers no opt-out in portrait
   (`prefersEdgeAttachedInCompactHeight` is landscape-only). Therefore:
-  - **workflow routes** (Appointment creation / editing, Sale creation) stay NATIVE form sheets
+  - **workflow routes** (Appointment creation / editing) stay NATIVE form sheets
     on the large detent, the one detent iOS 26 keeps attached (`<SheetScreen fit="fill">`);
-  - **content-fit routes** (Appointment details, Product / Service details and creation) are
-    TRANSPARENT-MODAL routes whose sheet Souris draws itself (`<SheetScreen fit="content">`),
+  - **content-fit routes** (Appointment details, Product / Service details and creation, Sale
+    creation) are TRANSPARENT-MODAL routes whose sheet Souris draws itself (`<SheetScreen fit="content">`),
     with the very same `SheetPresentation` as every `BottomSheet` — scrim, slide, material,
     grabber-zone pan, safe area. They are identical to a drawer on every iOS version.
 - **Leaving a content-fit route** — nothing special in the screens: `router.back()`, a hardware
   back or a reset is HELD (`usePreventRemove`) while the sheet slides down and the scrim fades,
   then the same action goes through; the route never vanishes instantly. Swipe-down and
   outside-tap follow `dismissible` (off while a Product / Service draft is edited — the former
-  `gestureEnabled` rule). A native workflow sheet pushed from a content-fit route (« Modifier »)
+  `gestureEnabled` rule). A screen guarding a draft against the hardware back (Sale creation)
+  passes `onLeaveAttempt` to the shell rather than a second `usePreventRemove` — both would fire,
+  and the sheet would slide away under the confirmation. While the keyboard is up, a tall sheet
+  keeps the detent's top gap and shrinks above the keyboard (its body scrolls) instead of pushing
+  its header off the screen. Only the TOP sheet reacts to the keyboard (`sheet-layers.tsx`): a
+  sheet covered by a drawer presented from inside it (« Encaisser la vente » over « Nouvelle
+  vente », a picker over an Appointment form) stays exactly where it is, so its fixed actions
+  never surface behind the active sheet. A native workflow sheet pushed from a content-fit route (« Modifier »)
   presents above it normally. Error states of a NATIVE route use the native shell
   (`fit="fill"`), never a sheet inside the sheet.
 - **Every appearance is a transition** (`SheetPresentation`, so drawers and sheet routes alike):
@@ -881,9 +897,18 @@ scrim, motion, gestures and dismissal policies of §16 are unchanged.
   sheet allows: a flexible spacer (never less than `spacing.xl`) separates it from the primary
   actions, the content container grows with the sheet, and the breathing room sits ABOVE it, not
   under it. It stays in the scroll flow, so a tall appointment simply scrolls to it.
-- **Keyboard accessory** — a pad keyboard with `returnKeyType="done"` gets React Native's own iOS
-  accessory button, hardcoded « Done »; any such input must set
-  `inputAccessoryViewButtonLabel="OK"` (Checkout amounts). No English string in Souris-owned UI.
+- **Keyboard accessory** — the decimal / number pad has no return key. Checkout amounts use the
+  shared `KeyboardDismissAccessory`: the native `InputAccessoryView`, drawn on the sheet's own
+  overlay material (so the strip reads as the bottom of the active sheet and never uncovers what
+  lies beneath), holding ONE compact right-aligned pill « OK » (≥ 44 pt, `surfaceLavenderStrong`
+  fill, lavender hairline, plum label, « Fermer le clavier » for assistive tech). It only
+  dismisses the keyboard: values stay, nothing is submitted. iOS binds one accessory view to ONE
+  input (React Native attaches it to the first input carrying its `nativeID`, once, at mount), so
+  every amount field (Carte, Espèces) renders its own instance with its own stable id — same
+  component, same look; moving Carte ⇄ Espèces swaps two identical pills and never closes the
+  keyboard. An input still relying on React
+  Native's own accessory (`returnKeyType="done"`, hardcoded « Done ») must set
+  `inputAccessoryViewButtonLabel="OK"` (Appointment deposit). No English string in Souris-owned UI.
 - **Not part of the material** — main screens, cards, fields, the camera / scanner full-screen
   modals and the floating-create menu keep their own surfaces: not everything is glass.
 

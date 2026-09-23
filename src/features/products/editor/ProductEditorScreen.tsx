@@ -5,8 +5,11 @@
 // - existing read mode (Product Details): the detail-sheet header of
 //   Appointment Details (name + « ••• » + ×), price + state pill, ONE grouped
 //   Informations surface, the Stock surface with the direct [−] n [+]
-//   adjustment, and the sticky « Modifier le produit ». Désactiver /
-//   Réactiver and Supprimer live in the « ••• » drawer;
+//   adjustment, and the sticky « Vendre ce produit » — the daily action: it
+//   opens the ONE Sale flow (« Nouvelle vente ») with one unit of this
+//   Product already in the draft. Modifier, Désactiver / Réactiver and
+//   Supprimer live in the « ••• » drawer. A Product the Sale draft would
+//   refuse (inactive, no stock) keeps the action disabled;
 // - existing edit mode: the SAME form hydrated with current values,
 //   "Annuler" / "Enregistrer les modifications".
 //
@@ -35,10 +38,12 @@ import {
 } from "react-native";
 
 import type { Product } from "@/domain/products";
-import { ProductImage } from "@/features/products/components/ProductImage";
 import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
+import { ProductImage } from "@/features/products/components/ProductImage";
+import { getAddProductRefusal } from "@/features/sales/creation/draft";
 import { formatServicePrice } from "@/features/services/presentation";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
+import { saleIcon } from "@/shared/icons/sale-icon";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
 import { AppText } from "@/shared/ui/AppText";
@@ -90,7 +95,7 @@ interface ProductEditorScreenProps {
 }
 
 type ProductConfirmation = "deactivate" | "delete";
-type ProductSecondaryAction = "toggle-active" | "delete";
+type ProductSecondaryAction = "edit" | "toggle-active" | "delete";
 
 function productActionGroups(
   active: boolean,
@@ -98,8 +103,15 @@ function productActionGroups(
   return [
     [
       {
+        key: "edit",
+        label: "Modifier",
+        icon: { ios: "pencil", android: "edit" },
+        tone: "normal",
+        testID: "edit-product",
+      },
+      {
         key: "toggle-active",
-        label: active ? "Désactiver le produit" : "Réactiver le produit",
+        label: active ? "Désactiver" : "Réactiver le produit",
         icon: active
           ? { ios: "eye.slash", android: "visibility_off" }
           : { ios: "eye", android: "visibility" },
@@ -110,7 +122,7 @@ function productActionGroups(
     [
       {
         key: "delete",
-        label: "Supprimer le produit",
+        label: "Supprimer",
         icon: { ios: "trash", android: "delete" },
         tone: "destructive",
         testID: "open-product-deletion",
@@ -265,6 +277,7 @@ export function ProductEditorScreen({
   const runSecondaryAction = () => {
     const action = pendingAction;
     setPendingAction(undefined);
+    if (action === "edit") startEditing();
     if (action === "toggle-active") changeActiveState();
     if (action === "delete") setConfirmation("delete");
   };
@@ -280,6 +293,12 @@ export function ProductEditorScreen({
     }
     haptics.selection();
     return true;
+  };
+
+  // The ONE Sale flow, its draft starting with one unit of this Product.
+  const sellProduct = () => {
+    if (!product) return;
+    router.push({ pathname: "/sales/new", params: { productId: product.id } });
   };
 
   const startEditing = () => {
@@ -377,9 +396,11 @@ export function ProductEditorScreen({
         // Outside the scroll: always visible; SheetScreen clears the home indicator.
         <SheetActionBar testID="product-read-actions">
           <AppButton
-            onPress={startEditing}
-            testID="edit-product"
-            title="Modifier le produit"
+            disabled={getAddProductRefusal([], product) !== undefined}
+            icon={saleIcon}
+            onPress={sellProduct}
+            testID="sell-product"
+            title="Vendre ce produit"
           />
         </SheetActionBar>
       )}

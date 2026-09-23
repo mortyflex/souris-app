@@ -27,6 +27,20 @@ export function getRemainingStock(
 }
 
 /**
+ * Why one more unit of the Product cannot join the draft — inactive, or no
+ * remaining stock — or `undefined` when it can. THE rule of `addProductToDraft`,
+ * also read by entry points that offer to sell a Product (Product details).
+ */
+export function getAddProductRefusal(
+  lines: readonly SaleDraftLine[],
+  product: Pick<Product, 'id' | 'stockQuantity' | 'active'>,
+): 'inactive' | 'out-of-stock' | undefined {
+  if (!product.active) return 'inactive';
+  if (getRemainingStock(lines, product) < 1) return 'out-of-stock';
+  return undefined;
+}
+
+/**
  * Adds one unit of the Product: a new line the first time, an increment
  * afterwards. Inactive Products and Products without remaining stock leave
  * the draft unchanged with an explicit outcome.
@@ -36,11 +50,9 @@ export function addProductToDraft(
   product: Pick<Product, 'id' | 'stockQuantity' | 'active'>,
   createLineId: () => string,
 ): AddProductResult {
-  if (!product.active) {
-    return { lines, outcome: 'inactive' };
-  }
-  if (getRemainingStock(lines, product) < 1) {
-    return { lines, outcome: 'out-of-stock' };
+  const refusal = getAddProductRefusal(lines, product);
+  if (refusal) {
+    return { lines, outcome: refusal };
   }
 
   const existing = lines.find((line) => line.productId === product.id);

@@ -12,6 +12,7 @@ import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProv
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 
 const mockBack = jest.fn();
+const mockPush = jest.fn();
 let mockScannedBarcode = "";
 let mockPhotoResult:
   | { readonly status: "selected"; readonly uri: string }
@@ -38,8 +39,9 @@ function createDeferred<Value>() {
 }
 
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ back: mockBack }),
+  useRouter: () => ({ back: mockBack, push: mockPush }),
   useNavigation: () => ({ dispatch: jest.fn() }),
+  useIsFocused: () => true,
 }));
 
 // SheetScreen (content fit) holds the route's removal while the sheet slides down.
@@ -244,7 +246,7 @@ async function pressTimes(
 /** Opens « ••• », picks an action, and lets the drawer close so the action runs. */
 async function openProductAction(
   view: Awaited<ReturnType<typeof render>>,
-  testID: "toggle-product-active" | "open-product-deletion",
+  testID: "edit-product" | "toggle-product-active" | "open-product-deletion",
 ) {
   await act(async () => {
     fireEvent.press(view.getByTestId("open-product-actions"));
@@ -327,6 +329,7 @@ function renderEditor(screen: React.ReactNode) {
 describe("ProductEditorScreen", () => {
   beforeEach(() => {
     mockBack.mockClear();
+    mockPush.mockClear();
     mockScannedBarcode = "";
     mockPhotoResult = { status: "selected", uri: "file:///products/raw.jpg" };
     mockCapturedUri = "file:///products/raw.jpg";
@@ -506,7 +509,7 @@ describe("ProductEditorScreen", () => {
     expect(view.getByLabelText("Stock, 30 unités, en stock")).toBeTruthy();
 
     // The full edit form starts from the adjusted stock.
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     expect(view.getByTestId("stock-value").props.children).toBe(30);
   });
 
@@ -519,7 +522,7 @@ describe("ProductEditorScreen", () => {
     expect(within(view.getByTestId("product-read-view")).getByText("47")).toBeTruthy();
 
     // Saving an unrelated field preserves the exact quantity.
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     expect(view.getByTestId("stock-value").props.children).toBe(47);
     expect(view.getByTestId("stock-increment").props.accessibilityState).toMatchObject({ disabled: true });
     await act(async () => {
@@ -529,11 +532,75 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("legacy-stock").props.children).toBe(47);
 
     // Lowering it is an intentional change, one unit at a time.
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     await pressTimes(view, "stock-decrement", 1);
     expect(view.getByTestId("stock-value").props.children).toBe(46);
     await act(async () => fireEvent.press(view.getByTestId("save-product")));
     expect(view.getByTestId("legacy-stock").props.children).toBe(46);
+  });
+
+  it("makes « Vendre ce produit » the one action: the Sale flow opens with this Product, nothing sold yet", async () => {
+    const view = await renderEditor(
+      <ProductEditorScreen mode="existing" productId="6974bff937a5d89c2d9afbd0" />,
+    );
+    const sell = () => view.getByTestId("sell-product");
+    const stored = () => view.getByTestId("managed-product").props.children as string;
+
+    expect(within(view.getByTestId("product-read-actions")).getByText("Vendre ce produit")).toBeTruthy();
+    // The Sale draft would refuse it (no stock): the action waits.
+    expect(sell().props.accessibilityState.disabled).toBe(true);
+
+    await pressTimes(view, "product-stock-increment", 2);
+    expect(sell().props.accessibilityState.disabled).toBe(false);
+    await act(async () => fireEvent.press(sell()));
+
+    // The ONE « Nouvelle vente » route, its draft seeded with this Product.
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/sales/new",
+      params: { productId: "6974bff937a5d89c2d9afbd0" },
+    });
+    // Nothing is sold by opening the flow: stock unchanged, details still open.
+    expect(stored()).toMatch(/:2:true$/);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(view.getByTestId("product-read-view")).toBeTruthy();
+  });
+
+  it("keeps « Modifier » in « ••• » with the other management actions", async () => {
+    const view = await renderEditor(
+      <ProductEditorScreen mode="existing" productId="6974bff937a5d89c2d9afbd0" />,
+    );
+
+    await act(async () => fireEvent.press(view.getByTestId("open-product-actions")));
+    await settleSheetTransition();
+    const menu = within(view.getByTestId("product-actions-sheet"));
+    // Modifier first, next to the existing management actions — none lost.
+    expect(menu.getAllByRole("button").map((row) => row.props.testID)).toEqual([
+      "edit-product",
+      "toggle-product-active",
+      "open-product-deletion",
+    ]);
+    expect(within(menu.getByTestId("edit-product")).getByText("Modifier")).toBeTruthy();
+
+    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await settleSheetTransition();
+    expect(view.getByRole("header", { name: "Modifier le produit" })).toBeTruthy();
+    expect(view.getByTestId("save-product")).toBeTruthy();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("never offers to sell an inactive Product", async () => {
+    const view = await renderEditor(
+      <ProductEditorScreen mode="existing" productId="6974bff937a5d89c2d9afbd0" />,
+    );
+    await pressTimes(view, "product-stock-increment", 2);
+    expect(view.getByTestId("sell-product").props.accessibilityState.disabled).toBe(false);
+
+    await openProductAction(view, "toggle-product-active");
+    await act(async () => fireEvent.press(view.getByTestId("confirm-product-deactivation")));
+
+    expect(view.getByTestId("masque-active").props.children).toBe("false");
+    expect(view.getByTestId("sell-product").props.accessibilityState.disabled).toBe(true);
   });
 
   it("sizes the details to their content and disables the swipe only while editing", async () => {
@@ -558,14 +625,16 @@ describe("ProductEditorScreen", () => {
     // Management actions are no longer permanent buttons.
     expect(view.queryByText("Désactiver")).toBeNull();
     expect(view.queryByText("Supprimer")).toBeNull();
-    expect(within(view.getByTestId("edit-product")).getByText("Modifier le produit")).toBeTruthy();
-    expect(view.getByTestId("product-read-actions")).toBeTruthy();
+    // The one commercial action; editing lives in « ••• ».
+    expect(within(view.getByTestId("product-read-actions")).getByText("Vendre ce produit")).toBeTruthy();
+    expect(view.queryByText("Modifier le produit")).toBeNull();
+    expect(view.queryByTestId("edit-product")).toBeNull();
     // Reading may be dismissed by a swipe or an outside tap; a draft may not.
     const outsideTapAllowed = () =>
       view.getByTestId("sheet-screen-scrim").props.accessibilityState?.disabled !== true;
     expect(outsideTapAllowed()).toBe(true);
 
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     expect(outsideTapAllowed()).toBe(false);
     await act(async () => fireEvent.press(view.getByTestId("cancel-product-edit")));
     expect(outsideTapAllowed()).toBe(true);
@@ -593,7 +662,7 @@ describe("ProductEditorScreen", () => {
       />,
     );
 
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
 
     // Header: « Annuler » leading, the edit title, no eyebrow nor product name.
     expect(view.getByRole("header", { name: "Modifier le produit" })).toBeTruthy();
@@ -660,9 +729,7 @@ describe("ProductEditorScreen", () => {
     expect(information.getByText("3474637152000")).toBeTruthy();
     expect(view.getAllByText("Stock").length).toBeGreaterThan(0);
 
-    await act(async () => {
-      fireEvent.press(view.getByTestId("edit-product"));
-    });
+    await openProductAction(view, "edit-product");
     await act(async () => {
       fireEvent.changeText(view.getByLabelText("Prix du produit"), "29");
     });
@@ -704,7 +771,7 @@ describe("ProductEditorScreen", () => {
     expect(view.queryByLabelText("Modifier la photo")).toBeNull();
     expect(view.queryByTestId("product-photo-source-sheet")).toBeNull();
     // Photo editing stays in « Modifier le produit ».
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     expect(view.getByTestId("product-photo-tile")).toBeTruthy();
   });
 
@@ -727,7 +794,7 @@ describe("ProductEditorScreen", () => {
     // A plain photograph keeps the flat presentation (no sticker contour).
     expect(view.queryByTestId("product-detail-image-sticker")).toBeNull();
 
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     expect(view.getByTestId("product-form-image-source").props.source).toEqual({
       uri: ORIGINAL_IMAGE_URI,
     });
@@ -762,7 +829,7 @@ describe("ProductEditorScreen", () => {
       uri: ORIGINAL_IMAGE_URI,
     });
 
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     await act(async () =>
       fireEvent.press(view.getByLabelText("Modifier la photo")),
     );
@@ -794,7 +861,7 @@ describe("ProductEditorScreen", () => {
     await act(async () =>
       fireEvent.press(view.getByTestId("open-seeded-image-product")),
     );
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     await act(async () =>
       fireEvent.press(view.getByLabelText("Modifier la photo")),
     );
@@ -841,7 +908,7 @@ describe("ProductEditorScreen", () => {
     await act(async () =>
       fireEvent.press(view.getByTestId("open-seeded-image-product")),
     );
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     await act(async () =>
       fireEvent.press(view.getByLabelText("Modifier la photo")),
     );
@@ -851,7 +918,7 @@ describe("ProductEditorScreen", () => {
     await act(async () =>
       fireEvent.press(view.getByTestId("cancel-product-edit")),
     );
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
 
     await act(async () => preparation.resolve(REPLACEMENT_IMAGE_URI));
     expect(view.getByTestId("managed-image").props.children).toBe(
@@ -869,7 +936,7 @@ describe("ProductEditorScreen", () => {
     await act(async () =>
       fireEvent.press(view.getByTestId("open-seeded-image-product")),
     );
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     await act(async () =>
       fireEvent.press(view.getByLabelText("Modifier la photo")),
     );
@@ -898,7 +965,7 @@ describe("ProductEditorScreen", () => {
       uri: ORIGINAL_IMAGE_URI,
     });
 
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     await act(async () =>
       fireEvent.press(view.getByLabelText("Modifier la photo")),
     );
@@ -1086,7 +1153,7 @@ describe("ProductEditorScreen", () => {
       />,
     );
 
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     await act(async () =>
       fireEvent.press(view.getByLabelText("Scanner un code-barres")),
     );
@@ -1109,7 +1176,7 @@ describe("ProductEditorScreen", () => {
     );
     expect(view.getByText("3474637152000")).toBeTruthy();
 
-    await act(async () => fireEvent.press(view.getByTestId("edit-product")));
+    await openProductAction(view, "edit-product");
     await act(async () =>
       fireEvent.press(view.getByLabelText("Scanner un code-barres")),
     );

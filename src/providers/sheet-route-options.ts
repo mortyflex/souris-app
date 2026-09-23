@@ -6,13 +6,13 @@
 //
 //   workflowSheet  NATIVE form sheet on the system's large detent (the only one
 //                  iOS 26 keeps attached to the screen edges), swipe-to-dismiss
-//                  DISABLED — long scrolling bodies (Client list, catalog grid,
-//                  Sale lines) must never abandon a draft; leaving goes through
-//                  « Annuler ». Paired with `<SheetScreen fit="fill">`.
+//                  DISABLED — long scrolling bodies (Client list, catalog grid)
+//                  must never abandon a draft; leaving goes through « Annuler ».
+//                  Paired with `<SheetScreen fit="fill">`.
 //
 //   editorSheet    content-sized sheets (Product / Service details, creation
-//   contentSheet   choosers and forms, Appointment details). A native sheet
-//                  below the large detent is floated by iOS 26 as an inset card
+//   contentSheet   choosers and forms, Sale creation, Appointment details). A
+//                  native sheet below the large detent is floated by iOS 26 as an inset card
 //                  (side margins, gap below, four rounded corners), so these
 //                  routes are TRANSPARENT MODALS and `<SheetScreen
 //                  fit="content">` draws the shared SheetPresentation itself:

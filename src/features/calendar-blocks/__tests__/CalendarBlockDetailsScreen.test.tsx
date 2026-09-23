@@ -35,6 +35,7 @@ const mockAlert = jest.spyOn(Alert, "alert").mockImplementation();
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
   useNavigation: () => ({ dispatch: jest.fn() }),
+  useIsFocused: () => true,
 }));
 
 // SheetScreen (content fit) holds the route's removal while the sheet slides down.

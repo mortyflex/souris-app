@@ -7,15 +7,17 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 }
 
 export default function NewSaleRoute() {
-  const { clientId, appointmentId } = useLocalSearchParams<{
+  const { clientId, appointmentId, productId } = useLocalSearchParams<{
     clientId?: string | string[];
     appointmentId?: string | string[];
+    productId?: string | string[];
   }>();
 
   return (
     <SaleCreationScreen
       initialAppointmentId={firstParam(appointmentId)}
       initialClientId={firstParam(clientId)}
+      initialProductId={firstParam(productId)}
     />
   );
 }

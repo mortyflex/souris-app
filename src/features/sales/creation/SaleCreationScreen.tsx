@@ -9,10 +9,14 @@
 // Live Product values (name, price, image, stock) feed the draft UI; the
 // completed Sale keeps its own snapshot.
 //
-// Presented as a native form sheet in the canonical Souris shell like every
-// other Souris creation flow (swipe-to-dismiss off; explicit « Annuler »). A
-// draft with lines is guarded against « Annuler » and the hardware back by
-// the shared Souris confirmation dialog.
+// Presented as a content-fit sheet route (`SheetScreen fit="content"`, like
+// the Product editor): an empty sale opens compact, sized by its content; the
+// sheet grows with the lines and results up to the shared detent, where the
+// ONE body scroll takes over while the summary and « Valider la vente » stay
+// pinned below it. With the keyboard up the sheet shrinks above it. Swipe and
+// outside tap are off; leaving is an explicit « Annuler ». A draft with lines
+// is guarded against « Annuler » and the hardware back (through the shell's
+// `onLeaveAttempt`) by the shared Souris confirmation dialog.
 //
 // Entry contexts (docs/domain/SALES.md §4), decided by the resolved
 // Appointment id, never by UI state:
@@ -26,6 +30,11 @@
 //   selection replaces the current Client. A Client is required to validate;
 //   there is no walk-in sale and no « Retirer ».
 // An Appointment is never inferred from the Client.
+// - Product Details (« Vendre ce produit ») passes a Product id: the draft
+//   STARTS with one unit of it, added by the same rule as a search or a scan
+//   (`addProductToDraft`). A refused Product (inactive, no stock) leaves the
+//   draft empty with the usual notice. It is still only a draft: nothing is
+//   persisted and no stock moves before « Valider la vente ».
 //
 // Header: the shared editing header (« Annuler » leading, « Nouvelle vente »),
 // like « Nouveau rendez-vous » — no eyebrow.
@@ -41,7 +50,6 @@
 // whole amount received.
 
 import { useRouter } from "expo-router";
-import { usePreventRemove } from "expo-router/react-navigation";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -138,6 +146,18 @@ interface SaleCreationScreenProps {
   readonly initialClientId?: string;
   /** Appointment the Sale is sold during (Revente); unknown ids fall back to none. */
   readonly initialAppointmentId?: string;
+  /** Product the draft starts with, one unit (Product Details); unknown ids fall back to none. */
+  readonly initialProductId?: string;
+}
+
+/** The notice of a Product the draft refused. */
+function describeRefusedProduct(
+  outcome: "inactive" | "out-of-stock",
+  product: Product,
+): string {
+  return outcome === "inactive"
+    ? "Ce produit est inactif."
+    : `Stock insuffisant pour ${product.name}.`;
 }
 
 /** An archived Client is historical: she is never attached to a NEW Sale. */
@@ -148,6 +168,7 @@ function activeClientId(client: Client | undefined): string | undefined {
 export function SaleCreationScreen({
   initialClientId,
   initialAppointmentId,
+  initialProductId,
 }: SaleCreationScreenProps) {
   const router = useRouter();
   const business = useCurrentBusiness();
@@ -166,8 +187,26 @@ export function SaleCreationScreen({
   const clientLocked = linkedAppointment !== undefined;
 
   const [saleId] = useState(() => createSaleId());
-  const lineSequence = useRef(0);
-  const [lines, setLines] = useState<readonly SaleDraftLine[]>([]);
+  // The entry Product (if any) joins the draft once, exactly like a tap on a
+  // search result.
+  const [initialDraft] = useState(() => {
+    const product = getProductById(initialProductId);
+    if (!product) return { lines: [], notice: null };
+    const result = addProductToDraft([], product, () =>
+      createSaleItemId(saleId, 1),
+    );
+    if (result.outcome === "inactive" || result.outcome === "out-of-stock") {
+      return {
+        lines: [],
+        notice: describeRefusedProduct(result.outcome, product),
+      };
+    }
+    return { lines: result.lines, notice: null };
+  });
+  const lineSequence = useRef(initialDraft.lines.length);
+  const [lines, setLines] = useState<readonly SaleDraftLine[]>(
+    initialDraft.lines,
+  );
   const [clientId, setClientId] = useState<string | undefined>(() =>
     activeClientId(
       getClientById(
@@ -179,7 +218,7 @@ export function SaleCreationScreen({
   const [query, setQuery] = useState("");
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scanResult, setScanResult] = useState<SaleScanResult | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(initialDraft.notice);
   const [discardRequested, setDiscardRequested] = useState(false);
   const [paymentVisible, setPaymentVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
@@ -236,11 +275,7 @@ export function SaleCreationScreen({
     }
 
     haptics.warning();
-    setNotice(
-      result.outcome === "inactive"
-        ? "Ce produit est inactif."
-        : `Stock insuffisant pour ${product.name}.`,
-    );
+    setNotice(describeRefusedProduct(result.outcome, product));
   };
 
   const handleScanned = (barcode: string) => {
@@ -279,9 +314,6 @@ export function SaleCreationScreen({
   const requestDiscard = () => {
     setDiscardRequested(true);
   };
-
-  // Guards the hardware back while a draft holds lines.
-  usePreventRemove(lines.length > 0 && !isLeaving, requestDiscard);
 
   useEffect(() => {
     if (isLeaving) {
@@ -351,7 +383,14 @@ export function SaleCreationScreen({
   );
 
   return (
-    <SheetScreen keyboardAvoiding testID="sale-creation-sheet">
+    <SheetScreen
+      dismissible={false}
+      fit="content"
+      keyboardAvoiding
+      // Guards the hardware back while a draft holds lines.
+      onLeaveAttempt={lines.length > 0 && !isLeaving ? requestDiscard : undefined}
+      testID="sale-creation-sheet"
+    >
       <View style={styles.headerZone}>
         <SheetEditingHeader
           cancelAccessibilityLabel="Annuler la vente"
@@ -365,6 +404,8 @@ export function SaleCreationScreen({
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        style={styles.scroll}
+        testID="sale-body"
       >
         <View style={styles.section}>
           <GroupedSurface testID="sale-client">
@@ -574,9 +615,11 @@ export function SaleCreationScreen({
 
 const styles = StyleSheet.create({
   headerZone: { paddingHorizontal: horizontalGutter },
+  // Content-sized up to the detent, then the ONE scroll of the sheet.
+  scroll: { flexShrink: 1 },
   content: {
-    gap: spacing.xl,
-    paddingBottom: spacing["3xl"],
+    gap: spacing.lg,
+    paddingBottom: spacing.xs,
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
   },
@@ -598,10 +641,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: semanticColors.surface,
     borderCurve: "continuous",
-    borderRadius: radii.large,
+    borderRadius: radii.medium,
     gap: 2,
     paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
   },
   emptyLinesTitle: { color: semanticColors.foreground },
   emptyLinesText: { color: foregroundSoft, textAlign: "center" },

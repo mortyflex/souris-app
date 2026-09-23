@@ -38,7 +38,10 @@
 //   only ever raising it;
 // - optional canonical header, scrollable body, fixed action area and
 //   keyboard-safe layout (the bottom safe-area inset is dropped while the
-//   keyboard is up, so no double inset).
+//   keyboard is up, so no double inset; a tall surface shrinks to the space
+//   left above the keyboard, below the detent's top gap). Only the TOP sheet
+//   reacts: a sheet covered by another one presented from inside it (a
+//   drawer over a sheet route) stays where it is (`sheet-layers.tsx`).
 //
 // Motion uses the core Animated API on the native driver (transform + opacity
 // only) and a PanResponder for the grabber drag: this keeps the shared
@@ -63,6 +66,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context';
 
+import { SheetLayer, useSheetLayer } from './sheet-layers';
 import { SurfaceGloss } from './SurfaceGloss';
 import {
   duration,
@@ -116,6 +120,11 @@ export interface SheetPresentationOptions {
 interface SheetPresentationProps extends SheetPresentationOptions {
   /** `false` starts the close transition; the host stays mounted until it ends. */
   readonly visible: boolean;
+  /**
+   * The host knows the sheet is covered by something outside its React tree
+   * (a sheet route under another route): it then ignores the keyboard.
+   */
+  readonly covered?: boolean;
   /** Every dismissal request: backdrop, pan-down, accessibility escape. */
   readonly onClose: () => void;
   /** The close transition has finished: the host may unmount now. */
@@ -175,12 +184,16 @@ export function SheetPresentation({
   dismissOnBackdropPress = true,
   dismissOnPanDown = true,
   keyboardAvoiding = false,
+  covered = false,
   contentKey,
   scrimTestID = 'bottom-sheet-scrim',
   ...content
 }: SheetPresentationProps) {
   const reduceMotion = useReduceMotion();
-  const keyboardVisible = useKeyboardVisible(keyboardAvoiding);
+  // A covered sheet lets the keyboard of the sheet above it pass it by.
+  const layer = useSheetLayer(visible);
+  const avoidsKeyboard = keyboardAvoiding && !layer.covered && !covered;
+  const keyboardVisible = useKeyboardVisible(keyboardAvoiding) && avoidsKeyboard;
   const { height: windowHeight } = useWindowDimensions();
   const [sheetHeight, setSheetHeight] = useState(windowHeight);
   // 1 = closed (surface below the screen, scrim clear), 0 = open.
@@ -281,67 +294,73 @@ export function SheetPresentation({
   const Anchor = keyboardAvoiding ? KeyboardAvoidingView : View;
 
   return (
-    <View style={styles.root}>
-      <Animated.View pointerEvents="none" style={[styles.scrim, { opacity: scrimOpacity }]} />
-      <Pressable
-        accessibilityLabel={backdropLabel}
-        accessibilityRole="button"
-        disabled={!dismissOnBackdropPress}
-        onPress={onClose}
-        style={StyleSheet.absoluteFill}
-        testID={scrimTestID}
-      />
-      {/* Resting probe: an empty safe-area view is exactly as tall as the inset. */}
-      <SafeAreaView
-        edges={['bottom']}
-        onLayout={(event) => {
-          const measured = Math.round(event.nativeEvent.layout.height);
-          setProbedInset((current) => (current === measured ? current : measured));
-        }}
-        pointerEvents="none"
-        style={styles.insetProbe}
-      />
-      <Anchor
-        behavior={keyboardAvoiding && Platform.OS === 'ios' ? 'padding' : undefined}
-        pointerEvents="box-none"
-        style={styles.anchor}
-      >
-        {/* ONE keyed list: a surface keeps its identity (and its mounted
-            content) when it goes from active to leaving. */}
-        {[...stack.leavingIds, stack.activeId].map((id) =>
-          id === stack.activeId ? (
-            <SheetSurface
-              key={id}
-              content={content}
-              bottomInset={keyboardVisible ? 0 : bottomInset}
-              onClose={onClose}
-              onMeasured={(measured) => {
-                setSheetHeight((current) => (current === measured ? current : measured));
-                setSurfaceLaidOut(true);
-              }}
-              onSlideInStart={() => setEnteredId(id)}
-              panHandlers={panResponder.panHandlers}
-              presentationProgress={progress}
-              slidesIn={stack.slidesIn}
-            />
-          ) : (
-            <SheetSurface
-              key={id}
-              bottomInset={keyboardVisible ? 0 : bottomInset}
-              leaving
-              released={enteredId === stack.activeId}
-              onLeft={() =>
-                setStack((current) => ({
-                  ...current,
-                  leavingIds: current.leavingIds.filter((leavingId) => leavingId !== id),
-                }))
-              }
-              presentationProgress={progress}
-            />
-          ),
-        )}
-      </Anchor>
-    </View>
+    <SheetLayer cover={layer.cover}>
+      <View style={styles.root}>
+        <Animated.View pointerEvents="none" style={[styles.scrim, { opacity: scrimOpacity }]} />
+        <Pressable
+          accessibilityLabel={backdropLabel}
+          accessibilityRole="button"
+          disabled={!dismissOnBackdropPress}
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+          testID={scrimTestID}
+        />
+        {/* Resting probe: an empty safe-area view is exactly as tall as the inset. */}
+        <SafeAreaView
+          edges={['bottom']}
+          onLayout={(event) => {
+            const measured = Math.round(event.nativeEvent.layout.height);
+            setProbedInset((current) => (current === measured ? current : measured));
+          }}
+          pointerEvents="none"
+          style={styles.insetProbe}
+        />
+        <Anchor
+          behavior={avoidsKeyboard && Platform.OS === 'ios' ? 'padding' : undefined}
+          pointerEvents="box-none"
+          // While the keyboard is up the detent's top gap is kept too: a tall
+          // surface shrinks above the keyboard (its body scrolls) instead of
+          // pushing its header off the top of the screen. Without the keyboard
+          // `maxHeight` already bounds it (and percentage heights keep their base).
+          style={[styles.anchor, keyboardVisible && { paddingTop: windowHeight * (1 - sheet.detent) }]}
+        >
+          {/* ONE keyed list: a surface keeps its identity (and its mounted
+              content) when it goes from active to leaving. */}
+          {[...stack.leavingIds, stack.activeId].map((id) =>
+            id === stack.activeId ? (
+              <SheetSurface
+                key={id}
+                content={content}
+                bottomInset={keyboardVisible ? 0 : bottomInset}
+                onClose={onClose}
+                onMeasured={(measured) => {
+                  setSheetHeight((current) => (current === measured ? current : measured));
+                  setSurfaceLaidOut(true);
+                }}
+                onSlideInStart={() => setEnteredId(id)}
+                panHandlers={panResponder.panHandlers}
+                presentationProgress={progress}
+                slidesIn={stack.slidesIn}
+              />
+            ) : (
+              <SheetSurface
+                key={id}
+                bottomInset={keyboardVisible ? 0 : bottomInset}
+                leaving
+                released={enteredId === stack.activeId}
+                onLeft={() =>
+                  setStack((current) => ({
+                    ...current,
+                    leavingIds: current.leavingIds.filter((leavingId) => leavingId !== id),
+                  }))
+                }
+                presentationProgress={progress}
+              />
+            ),
+          )}
+        </Anchor>
+      </View>
+    </SheetLayer>
   );
 }
 
@@ -523,6 +542,7 @@ const styles = StyleSheet.create({
   anchor: { flex: 1, justifyContent: 'flex-end' },
   insetProbe: { bottom: 0, left: 0, position: 'absolute', right: 0 },
   sheet: {
+    flexShrink: 1,
     backgroundColor: overlayMaterial.surface,
     borderCurve: 'continuous',
     borderTopLeftRadius: radii.ios.sheet,
