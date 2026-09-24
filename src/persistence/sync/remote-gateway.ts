@@ -9,7 +9,7 @@
 //
 // Payloads use the REMOTE column names and types (CLOUD_SYNC.md §3): integer
 // cents copied as they are stored, real booleans, ISO-8601 instants, NULL for
-// absent optionals. `products.image_uri` and `clients.birth_date` have no
+// absent optionals. `products.image_uri` (the legacy device-local image) and `clients.birth_date` have no
 // remote column and are never part of a payload. `business_id`, the
 // aggregate id and the parent ids of children are NOT in the payload: the
 // remote stamps them from the request, so a child can never be pushed under
@@ -24,6 +24,8 @@ export interface RemoteClientPayload {
   readonly email: string | null;
   readonly birthday: string | null;
   readonly notes: string | null;
+  /** Stable object path of the Client photo in the Business media storage, or null. */
+  readonly photo_path: string | null;
   readonly archived_at: string | null;
 }
 
@@ -79,6 +81,8 @@ export interface RemoteProductPayload {
   readonly brand: string | null;
   readonly category: string | null;
   readonly barcode: string | null;
+  /** Stable object path of the Product photo in the Business media storage, or null. */
+  readonly photo_path: string | null;
   readonly price_cents: number;
   readonly stock_quantity: number;
   readonly active: boolean;

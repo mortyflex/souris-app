@@ -545,6 +545,33 @@ ALTER TABLE sync_state_v12 RENAME TO sync_state;
 DELETE FROM souris_metadata WHERE key = 'sync_pull_cursor';
 `;
 
+/**
+ * Schema v13 — Client photo. One nullable text column holding the STABLE
+ * object path of the Client's photo in the remote Business media storage
+ * (`<business_id>/clients/<client_id>/<photo_id>.jpg`). NULL means "no
+ * photo", which is what every existing Client keeps. Never a device file
+ * path, never a signed URL, never image bytes: the displayable file is a
+ * local cache derived from the path. Purely additive — no row rewritten, no
+ * wipe, no reseed, no id or sync bookkeeping touched.
+ */
+const SCHEMA_V13 = `
+ALTER TABLE clients ADD COLUMN photo_path TEXT;
+`;
+
+/**
+ * Schema v14 — Product photo reference. One nullable text column holding the
+ * STABLE object path of the Product photo in the Business media storage
+ * (`<business_id>/products/<product_id>/<photo_id>.<jpg|png>`). NULL means
+ * "no shared photo", which is what every existing Product keeps. The legacy
+ * device-local `image_uri` column and its files are left exactly as they are:
+ * they stay a display-only fallback on the device that holds them, and are
+ * never uploaded by this migration or by sync. Purely additive — no row
+ * rewritten, no wipe, no reseed, no id or sync bookkeeping touched.
+ */
+const SCHEMA_V14 = `
+ALTER TABLE products ADD COLUMN photo_path TEXT;
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -558,6 +585,8 @@ export const migrations: readonly Migration[] = [
   { version: 10, up: (db) => db.execSync(SCHEMA_V10) },
   { version: 11, up: (db) => db.execSync(SCHEMA_V11) },
   { version: 12, up: (db) => db.execSync(SCHEMA_V12) },
+  { version: 13, up: (db) => db.execSync(SCHEMA_V13) },
+  { version: 14, up: (db) => db.execSync(SCHEMA_V14) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;

@@ -24,6 +24,11 @@ export interface ClientSessionValue {
   readonly addClient: (client: Client) => void;
   /** Replaces the identity of the Client with the same id; the id and lifecycle never change. */
   readonly updateClient: (client: Client) => void;
+  /**
+   * Sets the stable storage path of the Client photo, or clears it
+   * (undefined). Nothing else of the Client changes. Throws when the write fails.
+   */
+  readonly setClientPhoto: (clientId: string, photoPath: string | undefined) => void;
   readonly archiveClient: (clientId: string) => void;
   readonly restoreClient: (clientId: string) => void;
   /** Reads the stored references so the UI never offers a confirmation that cannot succeed. */

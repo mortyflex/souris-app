@@ -30,6 +30,7 @@ import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useState } from "react";
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -42,6 +43,8 @@ import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessP
 import { ProductImage } from "@/features/products/components/ProductImage";
 import { getAddProductRefusal } from "@/features/sales/creation/draft";
 import { formatServicePrice } from "@/features/services/presentation";
+import { ProductPhotoSaveError } from "@/features/products/images/product-photo-storage";
+import { useProductImageUri } from "@/features/products/images/use-product-image-uri";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { saleIcon } from "@/shared/icons/sale-icon";
 import { haptics } from "@/shared/lib/haptics";
@@ -80,7 +83,10 @@ import { StockStepper } from "./components/StockStepper";
 import {
   buildProductFromForm,
   EMPTY_PRODUCT_FORM,
+  getDraftPhotoUri,
   toProductFormValues,
+  toProductPhotoChange,
+  toProductPhotoDraft,
   validateProductForm,
   type ProductFormValues,
 } from "./product-form";
@@ -168,6 +174,9 @@ export function ProductEditorScreen({
   const [confirmation, setConfirmation] = useState<ProductConfirmation>();
   const [menuVisible, setMenuVisible] = useState(false);
   const [pendingAction, setPendingAction] = useState<ProductSecondaryAction>();
+  // The image the Product shows on this device (shared photo first, legacy
+  // local image only without one) — the form's « current » photo.
+  const currentImageUri = useProductImageUri(product);
 
   if (mode === "existing" && !product) {
     return (
@@ -226,22 +235,32 @@ export function ProductEditorScreen({
       values,
     });
 
+    const photo = toProductPhotoChange(values.photo);
     setSaving(true);
     try {
       if (mode === "create") {
-        await addProduct(nextProduct);
+        await addProduct(nextProduct, photo);
         haptics.success();
         router.back();
         return;
       }
 
-      await updateProduct(nextProduct);
+      await updateProduct(nextProduct, photo);
       setValues(toProductFormValues(nextProduct));
       setAttempted(false);
       setEditing(false);
       haptics.success();
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      // A photo that could not be stored refuses the whole Save: the form
+      // stays open with its draft, and the Product keeps its previous photo.
+      if (error instanceof ProductPhotoSaveError) {
+        Alert.alert(
+          "Impossible d’enregistrer la photo.",
+          "Vérifiez votre connexion, puis réessayez. Le produit n’a pas été modifié.",
+        );
+      } else {
+        alertPersistenceFailure();
+      }
     } finally {
       setSaving(false);
     }
@@ -369,6 +388,7 @@ export function ProductEditorScreen({
       {editing && values && validation ? (
         <ProductForm
           attempted={attempted}
+          currentImageUri={currentImageUri}
           duplicateBarcodeProduct={duplicateBarcodeProduct}
           validation={validation}
           values={values}
@@ -453,6 +473,8 @@ export function ProductEditorScreen({
 
 interface ProductFormProps {
   readonly values: ProductFormValues;
+  /** The Product's current image on this device (shared photo first). */
+  readonly currentImageUri: string | undefined;
   readonly attempted: boolean;
   readonly validation: ReturnType<typeof validateProductForm>;
   readonly duplicateBarcodeProduct?: Product;
@@ -464,6 +486,7 @@ interface ProductFormProps {
 
 function ProductForm({
   values,
+  currentImageUri,
   attempted,
   validation,
   duplicateBarcodeProduct,
@@ -501,8 +524,10 @@ function ProductForm({
         style={styles.scroll}
       >
         <ProductPhotoField
-          imageUri={values.imageUri}
-          onChangeImageUri={(imageUri) => onChangeField("imageUri", imageUri)}
+          imageUri={getDraftPhotoUri(values.photo, currentImageUri)}
+          onChangeImageUri={(imageUri) =>
+            onChangeField("photo", toProductPhotoDraft(imageUri))
+          }
           productName={values.name}
         />
         <View style={styles.formSection} testID="product-form-information">
@@ -596,6 +621,7 @@ interface ProductReadViewProps {
 }
 
 function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
+  const imageUri = useProductImageUri(product);
   const informationRows = [
     { label: "Marque", value: product.brand },
     { label: "Catégorie", value: product.category },
@@ -617,7 +643,7 @@ function ProductReadView({ product, onAdjustStock }: ProductReadViewProps) {
           the photo is changed in « Modifier le produit ». */}
       <View style={styles.productIdentity} testID="product-identity">
         <ProductImage
-          imageUri={product.imageUri}
+          imageUri={imageUri}
           productName={product.name}
           testID="product-detail-image"
           variant="detail"

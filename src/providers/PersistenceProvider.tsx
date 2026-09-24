@@ -27,6 +27,7 @@ import {
 } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { getClientPhotoCacheDirectoryUri } from '@/features/clients/photo/client-photo-storage';
 import { getProductImagesDirectoryUri } from '@/features/products/images/product-image-storage';
 import { bootstrapPersistence, loadSnapshot, type PersistedSnapshot } from '@/persistence/bootstrap';
 import type { SourisDatabase } from '@/persistence/database';
@@ -41,7 +42,11 @@ import { semanticColors, spacing } from '@/shared/ui/theme';
 export interface PersistenceValue {
   readonly database: SourisDatabase;
   readonly files: LocalFiles;
-  /** Canonical state loaded at bootstrap; providers hydrate from it once. */
+  /**
+   * Canonical state read from SQLite: at bootstrap, then again — IN PLACE —
+   * whenever the cloud sync runner applied remote rows. Providers hydrate
+   * from it on mount and adopt every later re-read through `useSnapshotRefresh`.
+   */
   readonly snapshot: PersistedSnapshot;
   /**
    * Development-only: wipes every persisted record and owned image (the
@@ -51,12 +56,14 @@ export interface PersistenceValue {
    */
   readonly resetForDevelopment: () => void;
   /**
-   * Re-hydrates the snapshot from SQLite and remounts the feature providers
-   * (same mechanism as the development reset, without touching any row). The
-   * ONLY caller is the cloud sync runner, after a run that wrote operational
-   * rows on behalf of the remote (a new-device restore, an applied pull):
-   * providers hydrate once, so they would otherwise keep showing — and keep
-   * editing from — the state that preceded it. A push-only run never calls it.
+   * Re-reads the snapshot from SQLite IN PLACE: nothing is remounted — the
+   * navigation, open sheets, scroll positions and every draft (a Sale being
+   * composed, an Appointment being created or edited, a form being filled)
+   * stay exactly as they are, while the session providers adopt the fresh
+   * persisted state (`useSnapshotRefresh`). The ONLY caller is the cloud sync
+   * runner, after a run that wrote operational rows on behalf of the remote
+   * (a new-device restore, an applied pull). A run that changed nothing never
+   * calls it, so an idle periodic pull re-renders nothing.
    */
   readonly reloadSnapshot: () => void;
 }
@@ -154,7 +161,8 @@ export function PersistenceProvider({
     if (!database) return;
     try {
       const snapshot = loadSnapshot(database);
-      generation.current += 1;
+      // Same generation: the keyed subtree is NOT remounted (unlike the
+      // development reset and a retry, which start over on purpose).
       setState({ status: 'ready', database, snapshot, generation: generation.current });
     } catch (error) {
       closeQuietly(databaseRef.current);
@@ -168,6 +176,8 @@ export function PersistenceProvider({
     if (!__DEV__ || !database) return;
     clearPersistedDataForDevelopment(database);
     files.deleteDirectory(getProductImagesDirectoryUri(files));
+    // Local copies only: the remote objects belong to the Business, not to this reset.
+    files.deleteDirectory(getClientPhotoCacheDirectoryUri(files));
     // The account binding survives the reset; fixtures adopt its Business id.
     const context: DevelopmentSeedContext = { businessId: readBusinessProfile(database)?.id };
     bootstrap(
@@ -236,3 +246,24 @@ const styles = StyleSheet.create({
   },
   failureText: { color: semanticColors.foregroundSoft, textAlign: 'center' },
 });
+
+/**
+ * Lets a session provider adopt a snapshot re-read in place (`reloadSnapshot`):
+ * `adopt` runs with the fresh snapshot each time it changes after mount —
+ * never on mount, where the provider already hydrated from it. Providers
+ * replace their PERSISTED collections only; drafts live in screens and are
+ * never touched.
+ */
+export function useSnapshotRefresh(adopt: (snapshot: PersistedSnapshot) => void): void {
+  const { snapshot } = usePersistence();
+  const adopted = useRef(snapshot);
+  const latestAdopt = useRef(adopt);
+  useEffect(() => {
+    latestAdopt.current = adopt;
+  });
+  useEffect(() => {
+    if (adopted.current === snapshot) return;
+    adopted.current = snapshot;
+    latestAdopt.current(snapshot);
+  }, [snapshot]);
+}

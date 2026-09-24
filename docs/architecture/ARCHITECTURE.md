@@ -210,6 +210,18 @@ supported retail formats, torch presentation, and the one-result-per-opening loc
 the scanned string through a callback. It imports no Product catalog, routing, stock, or Sales state;
 Product-specific exact lookup and navigation remain under `src/features/products`.
 
+`PhotoSourceFlow` is the reusable photo-selection boundary shared by Product and Client photos:
+source sheet (`PhotoSourceSheet`), camera permission resolved on the « Prendre une photo » tap
+(`src/shared/lib/photo-acquisition.ts`), the photo camera (`PhotoCameraModal`) and the system
+picker. It returns a local file URI and knows nothing about Products or Clients; what happens to the
+photo (Product draft, Client photo upload) stays in each feature.
+
+Photos that must reach every device (Client photos, Product photos) share ONE storage lifecycle,
+`src/persistence/media/business-media.ts` (upload → commit the stable path → clean up, local cache
+under the app documents), ONE normalization pipeline, `src/shared/lib/photo-normalization.ts`
+(configurable crop / size / format), and ONE remote boundary provided by
+`src/providers/BusinessMediaProvider.tsx` (bound to the private `business-media` Supabase bucket).
+
 Client selection is owned by the Client feature under `src/features/clients/selection`:
 `ClientPickerStep` (search + virtualized directory over the single Client source) and
 `ClientPickerSheet` (the same step inside the shared `BottomSheet`, with on-the-fly Client

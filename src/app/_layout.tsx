@@ -17,6 +17,7 @@ import { createAccountGateways, type AccountGateways } from '@/infrastructure/su
 import { openSourisDatabase } from '@/persistence/expo-database';
 import { createExpoLocalFiles } from '@/persistence/files/expo-local-files';
 import { readBusinessProfile } from '@/persistence/stores/business-profile';
+import { BusinessMediaProvider } from '@/providers/BusinessMediaProvider';
 import { CloudSyncRunner } from '@/providers/CloudSyncRunner';
 import { createFirstRunSeed } from '@/providers/first-run-seed';
 import {
@@ -111,7 +112,9 @@ function AccountSession({ gateways }: { readonly gateways: AccountGateways }) {
       <BusinessSessionProvider gateway={gateways.business}>
         {/* Renders nothing of its own; pushes local data only once the live session is bound to its Business. */}
         <CloudSyncRunner gateway={gateways.sync}>
-          <RootNavigator />
+          <BusinessMediaProvider remote={gateways.media}>
+            <RootNavigator />
+          </BusinessMediaProvider>
         </CloudSyncRunner>
       </BusinessSessionProvider>
     </AuthProvider>

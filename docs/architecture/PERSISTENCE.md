@@ -84,7 +84,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
 Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
@@ -97,7 +97,8 @@ their parent id and are unique inside that parent only (CLOUD_SYNC.md §5).
 souris_metadata     key PK, value                                   seed marker and future flags
 
 clients             id PK, first_name, last_name?, phone?, email?, birth_date? (legacy, ≤ v3),
-                    archived_at? (v2), birthday? (v4, MM-DD), notes? (v9)
+                    archived_at? (v2), birthday? (v4, MM-DD), notes? (v9),
+                    photo_path? (v13, storage object path — never a file URI or image bytes)
 services            id PK, business_id, name, type, price_cents (v8, CHECK >= 0), active
 service_phases      (service_id FK→services CASCADE, position) PK, id, name, duration_minutes, requires_staff
 appointments        id PK, business_id, client_id, staff_member_id, start_at, status, notes?,
@@ -109,7 +110,9 @@ appointment_items   (appointment_id FK→appointments CASCADE, id) PK, item_orde
                     service_option_id?, service_name, service_type, price_cents (v8, CHECK >= 0)
 appointment_phases  (appointment_id, appointment_item_id, position) PK
                     FK→appointment_items CASCADE, id, name, duration_minutes, requires_staff
-products            id PK, business_id, name, brand?, category?, barcode?, image_uri?,
+products            id PK, business_id, name, brand?, category?, barcode?,
+                    image_uri? (LEGACY device-local image, never synced),
+                    photo_path? (v14, shared photo storage path),
                     price_cents (v8, CHECK >= 0), stock_quantity (CHECK >= 0), active
 sales               id PK, business_id, client_id?, appointment_id? (v5), completed_at,
                     paid_at? (v6), card_amount_cents? (v6, CHECK >= 0), cash_amount_cents? (v6, CHECK >= 0)
@@ -214,6 +217,37 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v14 — Product photo reference
+
+```text
+ALTER TABLE products ADD COLUMN photo_path TEXT;
+```
+
+Purely additive: one nullable column, no default, no backfill. An existing v13 database goes
+`v13 → v14` in one transaction; every Product keeps its row, id, stock, activation AND its legacy
+`image_uri` (and the file it names) byte for byte, and has `photo_path = NULL` ("no shared photo").
+Nothing is written to `sync_outbox` or `sync_state`: no legacy image is ever promoted to the shared
+photo by the migration (§9). Covered by `product-photo-migration.test.ts`. The remote counterpart
+is `supabase/migrations/20260926120000_add_product_photos.sql` (`CLOUD_SYNC.md` §23).
+
+### Schema v13 — Client photo reference
+
+```text
+ALTER TABLE clients ADD COLUMN photo_path TEXT;
+```
+
+Purely additive: one nullable column, no default, no backfill. An existing v12 database goes
+`v12 → v13` in one transaction; every Client keeps its row, id, birthday, notes and lifecycle byte
+for byte and has `photo_path = NULL` ("no photo"). Nothing is written to `sync_outbox` or
+`sync_state`. The column holds the STABLE object path of the Client photo in the Business media
+storage (`<business_id>/clients/<client_id>/<photo_id>.jpg`, `docs/domain/CLIENTS.md`) — never a
+device file URI, a signed URL or image bytes. It is written ONLY by `setClientPhotoPath` (and by
+insertion / remote apply): `updateClient` never touches it, so the Client form can never erase a
+photo. Each device keeps a derived cached copy under `<documents>/client-photos/` (deleted by the
+development reset, §10; the remote objects are not). Covered by `client-photo-migration.test.ts`.
+The remote counterpart is `supabase/migrations/20260925120000_add_client_photos.sql`
+(`CLOUD_SYNC.md` §22).
 
 ### Schema v12 — Appointment deposits
 
@@ -573,15 +607,16 @@ Provider public APIs are unchanged except:
 Derived values (activity, totals, purchase history, Agenda layout, search, drafts, UI state) are
 never persisted; they are recomputed from the hydrated source entities.
 
-**Re-hydration (Cloud Sync V1D).** Providers hydrate once, and until V1D every operational write
-came from a provider, so memory and SQLite could not diverge. A new-device restore or an applied pull
-writes operational rows BELOW the providers (§7e). `PersistenceValue.reloadSnapshot()` closes that
-gap: it reloads the snapshot from the open database and bumps the provider generation, remounting
-the feature providers on the fresh state — the development reset's mechanism, without touching a
-row. Its ONLY caller is `CloudSyncRunner`, after a run for which `didSyncRunChangeLocalData` is true
-(`RESTORED`, or a pull that applied or removed at least one aggregate); a push-only run never
-remounts anything. A load failure lands in the same recoverable `failed` state as any bootstrap
-failure. Known limit: the remount resets navigation and open drafts (CLOUD_SYNC.md §16.8).
+**Re-hydration (Cloud Sync V1D, in place since CLOUD_SYNC.md §24).** Until V1D every operational
+write came from a provider, so memory and SQLite could not diverge. A new-device restore or an
+applied pull writes operational rows BELOW the providers (§7e). `PersistenceValue.reloadSnapshot()`
+closes that gap: it re-reads the snapshot from the open database IN PLACE — same provider
+generation, nothing remounted — and every session provider adopts its fresh persisted collection
+through `useSnapshotRefresh` (drafts live in screens and are untouched; navigation and open sheets
+stay). Its ONLY caller is `CloudSyncRunner`, after a run for which `didSyncRunChangeLocalData` is
+true (`RESTORED`, or a pull that applied or removed at least one aggregate); a run that changed
+nothing calls nothing. A load failure lands in the same recoverable `failed` state as any bootstrap
+failure. The development reset and the failure retry still remount (a fresh start, on purpose).
 
 ---
 
@@ -958,36 +993,32 @@ carry everything the transaction reads.
 
 ---
 
-## 9. Product Image Persistence
+## 9. Product Photo Persistence
 
-Draft images (camera capture, library copy, Vision PNG) are temporary. They become canonical only
-when the Product is saved:
-
-```text
-draft URI ──(Save)──► copy to <documents>/products/<productId>-<timestamp>-<n>.<ext>
-                     ──► persist the durable URI ──► clean up
-```
-
-`prepareProductImageCommit` (`src/features/products/images/product-image-storage.ts`) is a
-two-phase commit over the `LocalFiles` boundary:
+Since schema v14 a Product photo is the ONE shared photo of the Business: `products.photo_path`
+holds the stable object path in the private Business media storage
+(`<business_id>/products/<product_id>/<photo_id>.<jpg|png>`), synced with the PRODUCT aggregate
+(`docs/domain/PRODUCTS.md` §11, `CLOUD_SYNC.md` §23). The Business media lifecycle is shared with
+Client photos (`src/persistence/media/business-media.ts`):
 
 ```text
-prepare   copy the draft into the owned directory (nothing else changes)
-rollback  delete the copy (database write failed)
-finalize  delete the replaced Souris-owned image and the temporary cache source
-          (database write succeeded); best effort, never throws
+new photo  normalize → copy into <documents>/product-photos/ (the local cache) → upload a NEW object
+           → write the row with photo_path (ONE transaction, outbox included)
+           → remove the replaced object and its cache, best effort
+failure    upload: nothing written, cache copy removed · row write: the new object removed
 ```
 
-Rules:
+The cache is never authoritative: `photo_path` is. A device that never downloaded the object shows
+the no-photo placeholder until it can; once cached, the photo shows offline.
 
-- Cancel never reaches the provider, so the canonical image is untouched;
-- an unchanged image is a no-op commit;
-- replacement gets a NEW file name, so image caches never show a stale picture;
-- removal clears `image_uri` and deletes the owned file after the write;
-- Product deletion deletes the owned file after the row is gone;
-- only files under `<documents>/products/` or the app cache are ever deleted — external
-  photo-library assets never are;
-- image bytes are never stored in SQLite.
+`products.image_uri` is the LEGACY device-local image of builds before v14 (a file under
+`<documents>/products/`). Schema v14 leaves both the column and the files exactly as they are; the
+column is never synced and its file is never uploaded. It is a display-only fallback while the
+Product has no `photo_path`, never over one. It is cleared — and its Souris-owned file deleted, best
+effort (a failure never affects the Product) — when this device gives the Product a new shared
+photo or removes its photo, and its file is deleted with the Product. Only files under
+`<documents>/products/` or the app cache are ever deleted; external photo-library assets never are.
+Image bytes are never stored in SQLite.
 
 ---
 

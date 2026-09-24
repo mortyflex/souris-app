@@ -21,7 +21,8 @@ Product
 ├── brand?         optional simple text (no Brand entity in V1)
 ├── category?      optional normalized text (no Category entity in V1)
 ├── barcode?       optional STRING — leading zeroes preserved, never numeric-only
-├── imageUri?      optional local primary-image URI for the current session
+├── photoPath?     the ONE shared Product photo: a stable Storage object path (§11)
+├── imageUri?      LEGACY device-local image, display-only fallback, never synced (§11)
 ├── price          Souris money convention: finite number >= 0
 ├── stockQuantity  integer >= 0 (whole units, no fractional inventory)
 └── active         current catalog availability
@@ -80,8 +81,9 @@ legacy-products ── pure adapter ──> Product[] ──> ProductCatalogProv
 
 API: `products`, `activeProducts`, `getProductById`, `addProduct`, `updateProduct`,
 `setProductActive`, `setProductStock`, `applyCommittedStockDecrements`, `deleteProduct`.
-`addProduct` and `updateProduct` are asynchronous: the draft image is promoted into durable app
-storage, then the row is written, then state changes. `applyCommittedStockDecrements` only mirrors
+`addProduct` and `updateProduct` are asynchronous: a new photo (an explicit `ProductPhotoChange`)
+is normalized and uploaded, then the row is written, then state changes; a photo that cannot be
+stored refuses the whole save with `ProductPhotoSaveError` and writes nothing. `applyCommittedStockDecrements` only mirrors
 in memory a batch already committed by the Sale completion transaction; it throws before any
 change when a Product is missing or stock would become negative. The legacy module feeds the
 database once, on first launch, and is never mutated. New runtime identities follow the
@@ -142,30 +144,56 @@ unchanged; saving follows the existing Product form boundary. Scanning never mod
 `stockQuantity` or creates stock movement. Inside a Sale draft, the same lookup adds an active
 Product to the draft; stock still changes only at Sale completion.
 
-## 11. Product Image Semantics
+## 11. Product Photo Semantics
 
-`imageUri` represents one optional primary Product image. It is a simple URI string: the Product
-domain does not know about Expo, camera permissions, files, Apple Vision, MIME types, thumbnails,
-or remote storage, and it does not impose a URI-format rule beyond the existing optional-text
-normalization at the form boundary.
+A Product has ONE authoritative photo for the whole Business, identified by the Product `id` —
+never by its barcode, a SKU or its name. Two devices showing the same Product id end up showing
+the same photo.
 
-Image acquisition is draft-owned. Selecting, taking, replacing, processing, or removing a photo
-does not call `ProductCatalogProvider`. Create commits the draft image only with `addProduct`; Edit
-commits it only with `updateProduct`. Cancel restores the original canonical image. All other
-Product fields, including stable `id`/`businessId`, stock, and active state, follow their existing
-rules.
+- `photoPath` is that photo: the stable object path of the image in the private Business media
+  storage, `<business_id>/products/<product_id>/<photo_id>.<jpg|png>` (the same `business-media`
+  bucket and owner-only rules as Client photos, `docs/architecture/CLOUD_SYNC.md` §23). Never a
+  device file URI, a signed URL or image bytes. It is synced with the PRODUCT aggregate. Every new
+  photo is a NEW object, so the path changes with the photo.
+- `imageUri` is LEGACY: a device-local file under `<documents>/products/` written by builds that
+  predate `photoPath`. It is never synced and NEVER uploaded — two devices may hold two different
+  legacy images for the same Product, and promoting either would be an arbitrary race. It survives
+  (untouched by schema v14) only as a display-only fallback on the device that holds it.
 
-The picker/camera/processed URI is a temporary draft artifact. On a successful Save it is copied
-into the app-owned documents directory (`products/<productId>-<timestamp>-<n>.<ext>`) and the
-durable URI is what the Product persists; a replaced or removed Souris-owned image is deleted
-after the write succeeds, and external photo-library assets are never deleted (see
-`docs/architecture/PERSISTENCE.md` §9). The image therefore survives normal app restarts; it does
-not survive reinstall. Apple Vision background removal is an optional presentation/infrastructure
-enhancement and does not change the canonical Product model; failure keeps the original URI.
+Display precedence — ONE rule, `selectProductImageUri`, used by every Product image (catalogue,
+details, form, Sale rows):
+
+```text
+photoPath set   → the shared photo (the device's cached copy, or one download); while it cannot
+                  be had, the no-photo placeholder — a legacy image NEVER overrides it
+no photoPath    → the legacy local `imageUri`, if this device has one
+neither         → the no-photo placeholder
+```
+
+Photo acquisition is draft-owned and shared with Client photos (`PhotoSourceFlow`: camera
+permission on « Prendre une photo », the system picker, the photo camera). Selecting, taking,
+processing (optional Apple Vision cut-out) or removing a photo only changes the form draft
+(`current` / `new` / `removed`). Cancel changes nothing. Save applies an explicit change:
+
+```text
+new photo  normalize (orientation, ≤ 1080 px longest side, aspect kept, no crop; JPEG 0.85, or PNG
+           for a transparent cut-out) → upload a new object → write the Product with its photoPath
+           (legacy imageUri cleared) → remove the replaced object and the obsolete legacy file,
+           best effort
+removal    write the Product without photoPath / imageUri → remove the object and the legacy file,
+           best effort
+none       both photo fields are kept exactly as they are
+```
+
+A photo that cannot be prepared or uploaded (offline, no cloud) refuses the whole Save: nothing is
+written, the previous photo stays, and the form keeps its draft with « Impossible d’enregistrer la
+photo. ». A failed row write after the upload removes the new object. Deleting a Product removes
+its object. A legacy image becomes irrelevant the moment the Product has a shared photo: only an
+explicit new photo creates one.
 
 ## 12. Non-Goals
 
 Not in this phase: checkout, payments, suppliers, purchase orders, stock-movement history,
-cost/margin, VAT, variants, ecommerce, image galleries, remote image storage,
-image synchronization. Completed Sales, their stock decrement, and Client purchase history live
+cost/margin, VAT, variants, ecommerce, image galleries, several photos per Product, automatic
+migration of legacy local images. Completed Sales, their stock decrement, and Client purchase history live
 in the Sale domain (`docs/domain/SALES.md`).

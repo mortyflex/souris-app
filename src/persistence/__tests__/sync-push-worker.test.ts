@@ -224,7 +224,7 @@ describe('bootstrap — first sync of a bound Business', () => {
     const db = openEmptyBoundDatabase();
     const { remote, run } = setup(db);
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-remote', {
-      first_name: 'Zoé', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null,
+      first_name: 'Zoé', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null,
     });
 
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'RESTORE_REQUIRED' });
@@ -244,7 +244,7 @@ describe('bootstrap — first sync of a bound Business', () => {
     const db = openPopulatedBoundDatabase();
     const { remote, run } = setup(db);
     const version = remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id, {
-      first_name: 'Test', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null,
+      first_name: 'Test', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null,
     });
 
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'RECONCILIATION_REQUIRED' });
@@ -275,7 +275,7 @@ describe('bootstrap — first sync of a bound Business', () => {
     ]);
     const { remote, run } = setup(db);
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'PRODUCT', 'product-remote', {
-      name: 'x', brand: null, category: null, barcode: null, price_cents: 1, stock_quantity: 0, active: true,
+      name: 'x', brand: null, category: null, barcode: null, photo_path: null, price_cents: 1, stock_quantity: 0, active: true,
     });
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'RESTORE_REQUIRED' });
   });
@@ -393,7 +393,7 @@ describe('initial upload — never automatic, one explicit Business-scoped appro
     const db = openApprovedPopulatedDatabase();
     const { remote, run } = setup(db);
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'PRODUCT', 'product-remote', {
-      name: 'x', brand: null, category: null, barcode: null, price_cents: 1, stock_quantity: 0, active: true,
+      name: 'x', brand: null, category: null, barcode: null, photo_path: null, price_cents: 1, stock_quantity: 0, active: true,
     });
 
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'RECONCILIATION_REQUIRED' });
@@ -518,7 +518,7 @@ describe('EMPTY is not a synchronization acknowledgement (E2E regression)', () =
 
     insertClient(db, clientLea);
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'PRODUCT', 'product-remote', {
-      name: 'x', brand: null, category: null, barcode: null, price_cents: 1, stock_quantity: 0, active: true,
+      name: 'x', brand: null, category: null, barcode: null, photo_path: null, price_cents: 1, stock_quantity: 0, active: true,
     });
 
     expect(await run()).toEqual({ status: 'BLOCKED', decision: 'RECONCILIATION_REQUIRED' });
@@ -694,6 +694,7 @@ describe('incremental push — current aggregate state', () => {
     const mask = remote.find(REMOTE_BUSINESS_ID, 'PRODUCT', productMask.id)?.payload as RemoteProductPayload;
     expect(mask).toEqual({
       name: 'Masque réparateur', brand: 'Redken', category: 'hair-care', barcode: '00884486453280',
+      photo_path: null,
       price_cents: 5000, stock_quantity: 3, active: true,
     });
     expect(JSON.stringify(remote.requests)).not.toContain('file://');
@@ -859,7 +860,7 @@ describe('conflicts — a changed remote aggregate is never overwritten', () => 
     await run();
 
     const elsewhere: RemoteClientPayload = {
-      first_name: 'Léa', last_name: 'Martin-Durand', phone: null, email: null, birthday: '02-29', notes: null, archived_at: null,
+      first_name: 'Léa', last_name: 'Martin-Durand', phone: null, email: null, birthday: '02-29', notes: null, photo_path: null, archived_at: null,
     };
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id, elsewhere);
     updateClient(db, { ...clientLea, phone: '07 11 11 11 11' });
@@ -885,7 +886,7 @@ describe('conflicts — a changed remote aggregate is never overwritten', () => 
     insertProduct(db, { ...productSerum, businessId: REMOTE_BUSINESS_ID });
     await run();
     remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'PRODUCT', productSerum.id, {
-      name: 'Sérum', brand: null, category: null, barcode: null, price_cents: 3200, stock_quantity: 7, active: true,
+      name: 'Sérum', brand: null, category: null, barcode: null, photo_path: null, price_cents: 3200, stock_quantity: 7, active: true,
     });
     deleteProduct(db, productSerum.id);
 

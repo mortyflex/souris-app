@@ -29,6 +29,7 @@ interface ProductRow {
   readonly category: string | null;
   readonly barcode: string | null;
   readonly image_uri: string | null;
+  readonly photo_path: string | null;
   readonly price_cents: number;
   readonly stock_quantity: number;
   readonly active: number;
@@ -39,6 +40,7 @@ function toProduct(row: ProductRow): Product {
   const category = fromSqlOptional(row.category);
   const barcode = fromSqlOptional(row.barcode);
   const imageUri = fromSqlOptional(row.image_uri);
+  const photoPath = fromSqlOptional(row.photo_path);
   return {
     id: row.id,
     businessId: row.business_id,
@@ -46,6 +48,7 @@ function toProduct(row: ProductRow): Product {
     ...(brand !== undefined ? { brand } : {}),
     ...(category !== undefined ? { category } : {}),
     ...(barcode !== undefined ? { barcode } : {}),
+    ...(photoPath !== undefined ? { photoPath } : {}),
     ...(imageUri !== undefined ? { imageUri } : {}),
     price: fromSqlPriceCents(row.price_cents),
     stockQuantity: row.stock_quantity,
@@ -54,7 +57,7 @@ function toProduct(row: ProductRow): Product {
 }
 
 const SELECT_PRODUCT =
-  'SELECT id, business_id, name, brand, category, barcode, image_uri, price_cents, stock_quantity, active FROM products';
+  'SELECT id, business_id, name, brand, category, barcode, image_uri, photo_path, price_cents, stock_quantity, active FROM products';
 
 export function loadProducts(db: SourisDatabase): readonly Product[] {
   return db.getAllSync<ProductRow>(`${SELECT_PRODUCT} ORDER BY rowid`).map(toProduct);
@@ -68,7 +71,7 @@ export function findProduct(db: SourisDatabase, productId: string): Product | un
 export function insertProduct(db: SourisDatabase, product: Product): void {
   runInTransaction(db, () => {
     db.runSync(
-      'INSERT INTO products (id, business_id, name, brand, category, barcode, image_uri, price_cents, stock_quantity, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO products (id, business_id, name, brand, category, barcode, image_uri, photo_path, price_cents, stock_quantity, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         product.id,
         product.businessId,
@@ -77,6 +80,7 @@ export function insertProduct(db: SourisDatabase, product: Product): void {
         toSqlOptional(product.category),
         toSqlOptional(product.barcode),
         toSqlOptional(product.imageUri),
+        toSqlOptional(product.photoPath),
         toSqlPriceCents(product.price, 'products.price_cents'),
         product.stockQuantity,
         toSqlBoolean(product.active),
@@ -90,13 +94,14 @@ export function insertProduct(db: SourisDatabase, product: Product): void {
 export function updateProduct(db: SourisDatabase, product: Product): void {
   runInTransaction(db, () => {
     const result = db.runSync(
-      'UPDATE products SET name = ?, brand = ?, category = ?, barcode = ?, image_uri = ?, price_cents = ?, stock_quantity = ?, active = ? WHERE id = ?',
+      'UPDATE products SET name = ?, brand = ?, category = ?, barcode = ?, image_uri = ?, photo_path = ?, price_cents = ?, stock_quantity = ?, active = ? WHERE id = ?',
       [
         product.name,
         toSqlOptional(product.brand),
         toSqlOptional(product.category),
         toSqlOptional(product.barcode),
         toSqlOptional(product.imageUri),
+        toSqlOptional(product.photoPath),
         toSqlPriceCents(product.price, 'products.price_cents'),
         product.stockQuantity,
         toSqlBoolean(product.active),

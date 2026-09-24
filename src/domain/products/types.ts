@@ -18,7 +18,17 @@ export interface Product {
    * preserved and barcodes are always stored as text.
    */
   readonly barcode?: string;
-  /** Optional local primary image for the current in-memory Product session. */
+  /**
+   * AUTHORITATIVE Product photo: the stable object path of the image in the
+   * Business media storage (opaque). Shared by every device of the Business;
+   * never a device file URI, a signed URL or image bytes.
+   */
+  readonly photoPath?: string;
+  /**
+   * LEGACY device-local image (a file under this device's documents), from
+   * builds that predate `photoPath`. Never synced, never uploaded, display-only
+   * while the Product has no `photoPath` — a `photoPath` always wins.
+   */
   readonly imageUri?: string;
   /** Souris money convention: finite number >= 0. */
   readonly price: number;

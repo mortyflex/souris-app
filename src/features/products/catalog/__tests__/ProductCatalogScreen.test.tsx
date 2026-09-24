@@ -1,14 +1,37 @@
-import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { Pressable, Text } from 'react-native';
 
 import { ProductCatalogProvider, useProductCatalog } from '../../session/ProductCatalogProvider';
 import { ProductCatalogScreen } from '../ProductCatalogScreen';
-import { createMemoryLocalFiles } from '@/persistence/testing/memory-local-files';
+import { bootstrapPersistence } from '@/persistence/bootstrap';
+import type { SourisDatabase } from '@/persistence/database';
+import { getMediaCacheUri } from '@/persistence/media/business-media';
+import {
+  createFakeBusinessMediaRemote,
+  type FakeBusinessMediaRemote,
+} from '@/persistence/testing/fake-business-media-remote';
+import { createMemoryLocalFiles, type MemoryLocalFiles } from '@/persistence/testing/memory-local-files';
+import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
+import { BusinessMediaProvider } from '@/providers/BusinessMediaProvider';
+import { createDevelopmentSeed } from '@/providers/development-seed';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+
+import { PRODUCT_PHOTO_CACHE_DIRECTORY } from '../../images/product-photo-storage';
 import { settleFloatingReveal, settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 const mockPush = jest.fn();
 let mockScannedBarcode = '';
+let mockFiles: MemoryLocalFiles;
+
+// The shared normalization is covered by its own tests: here it only hands a file on.
+jest.mock('../../images/product-photo-processing', () => ({
+  prepareProductPhoto: async (uri: string) => {
+    const png = uri.endsWith('.png');
+    const prepared = `${uri}.prepared.${png ? 'png' : 'jpg'}`;
+    mockFiles.addFile(prepared, `normalized ${uri}`);
+    return { uri: prepared, format: png ? 'png' : 'jpg' };
+  },
+}));
 
 jest.mock('expo-router', () => ({
   useFocusEffect: (effect: () => void | (() => void)) => {
@@ -67,11 +90,10 @@ function CatalogProbe() {
             businessId: 'business-test',
             name: 'Autre masque',
             barcode: '3474637152000',
-            imageUri: 'file:///products/autre-masque.jpg',
             price: 18,
             stockQuantity: 3,
             active: true,
-          })
+          }, { kind: 'replace', uri: 'file:///caches/Camera/autre-masque.jpg' })
         }
       />
       <Pressable
@@ -81,35 +103,43 @@ function CatalogProbe() {
             id: 'isolated-product',
             businessId: 'business-test',
             name: 'Sérum détouré',
-            imageUri: 'file:///caches/ProductImages/product-1.png',
             price: 32,
             stockQuantity: 1,
             active: true,
-          })
+          }, { kind: 'replace', uri: 'file:///caches/ProductImages/product-1.png' })
         }
       />
     </>
   );
 }
 
-// file:///products/ is the Souris-owned image directory here (document
-// directory file:///), so owned URIs stay verbatim; the cache PNG is a real
-// temporary artifact that gets promoted on save.
-function renderCatalog() {
-  const files = createMemoryLocalFiles({
-    documentDirectoryUri: 'file:///',
-    cacheDirectoryUri: 'file:///caches/',
-  });
+// Documents are file:///, temporary captures live under file:///caches/; a
+// photo explicitly added on Save is uploaded to the (fake) Business media
+// storage and shown from its local cached copy.
+function renderCatalog(
+  options: { readonly database?: SourisDatabase; readonly remote?: FakeBusinessMediaRemote; readonly files?: MemoryLocalFiles } = {},
+) {
+  const files =
+    options.files ??
+    createMemoryLocalFiles({ documentDirectoryUri: 'file:///', cacheDirectoryUri: 'file:///caches/' });
+  mockFiles = files;
   files.addFile('file:///caches/ProductImages/product-1.png');
+  files.addFile('file:///caches/Camera/autre-masque.jpg');
+  const remote = options.remote ?? createFakeBusinessMediaRemote(files);
   return render(
-    <TestPersistenceProvider files={files}>
-      <ProductCatalogProvider>
-      <ProductCatalogScreen />
-      <CatalogProbe />
-      </ProductCatalogProvider>
+    <TestPersistenceProvider database={options.database} files={files}>
+      <BusinessMediaProvider remote={remote}>
+        <ProductCatalogProvider>
+          <ProductCatalogScreen />
+          <CatalogProbe />
+        </ProductCatalogProvider>
+      </BusinessMediaProvider>
     </TestPersistenceProvider>,
   );
 }
+
+const cachedUri = (files: MemoryLocalFiles, path: string) =>
+  getMediaCacheUri(files, PRODUCT_PHOTO_CACHE_DIRECTORY, path);
 
 describe('ProductCatalogScreen', () => {
   beforeEach(() => {
@@ -151,9 +181,10 @@ describe('ProductCatalogScreen', () => {
     await act(async () => fireEvent.press(view.getByTestId('add-duplicate-barcode')));
 
     expect(view.getByLabelText('Photo de Autre masque')).toBeTruthy();
+    // The shared photo, from this device's cached copy of its storage object.
     expect(
-      view.getByTestId('catalog-product-image-duplicate-barcode-product-source').props.source,
-    ).toEqual({ uri: 'file:///products/autre-masque.jpg' });
+      view.getByTestId('catalog-product-image-duplicate-barcode-product-source').props.source.uri,
+    ).toMatch(/^file:\/\/\/product-photos\/business-test_products_duplicate-barcode-product_[0-9a-f-]{36}\.jpg$/);
     expect(
       view.getByTestId('catalog-product-image-duplicate-barcode-product-source').props.contentFit,
     ).toBe('cover');
@@ -178,6 +209,71 @@ describe('ProductCatalogScreen', () => {
     ).toBe('contain');
     expect(view.getByText('Sérum détouré')).toBeTruthy();
     expect(view.getByText('32,00 €')).toBeTruthy();
+  });
+
+  describe('shared photo vs legacy local image — one deterministic precedence', () => {
+    const LEGACY = 'file:///products/masque-legacy-B.jpg';
+    const SHARED = 'fixture-business/products/6974bff937a5d89c2d9afbd0/photo-C.jpg';
+
+    /** Device B: an old local photo B, and the Product now synced with the shared photo C. */
+    function deviceB(sharedPath: string | null) {
+      const files = createMemoryLocalFiles({ documentDirectoryUri: 'file:///', cacheDirectoryUri: 'file:///caches/' });
+      files.addFile(LEGACY, 'photo B');
+      const database = openTestDatabase();
+      bootstrapPersistence(database, () => createDevelopmentSeed(new Date()));
+      database.runSync('UPDATE products SET image_uri = ?, photo_path = ? WHERE id = ?', [
+        LEGACY,
+        sharedPath,
+        '6974bff937a5d89c2d9afbd0',
+      ]);
+      return { files, database };
+    }
+
+    const masqueImage = (view: Awaited<ReturnType<typeof render>>) =>
+      view.queryByTestId('catalog-product-image-6974bff937a5d89c2d9afbd0-source')?.props.source?.uri;
+
+    it('without a shared photo, the legacy local image is still shown on its own device', async () => {
+      const { files, database } = deviceB(null);
+      const view = await renderCatalog({ files, database });
+
+      expect(masqueImage(view)).toBe(LEGACY);
+    });
+
+    it('a shared photo always wins: downloaded once, then shown instead of the legacy image', async () => {
+      const { files, database } = deviceB(SHARED);
+      const remote = createFakeBusinessMediaRemote(files);
+      remote.objects.set(SHARED, 'photo C');
+      const view = await renderCatalog({ files, database, remote });
+
+      await waitFor(() => expect(masqueImage(view)).toBe(cachedUri(files, SHARED)));
+      expect(files.readFile(cachedUri(files, SHARED))).toBe('photo C');
+      expect(view.getByLabelText('Photo de Masque réparateur 5 min')).toBeTruthy();
+    });
+
+    it('an unreachable shared photo shows the placeholder — never the legacy image', async () => {
+      const { files, database } = deviceB(SHARED);
+      const remote = createFakeBusinessMediaRemote(files);
+      remote.failDownloads = true;
+      const view = await renderCatalog({ files, database, remote });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(masqueImage(view)).toBeUndefined();
+      expect(view.getByLabelText('Aucune photo pour Masque réparateur 5 min')).toBeTruthy();
+    });
+
+    it('offline, a shared photo already cached on the device still shows', async () => {
+      const { files, database } = deviceB(SHARED);
+      files.ensureDirectory('file:///product-photos/');
+      files.addFile(cachedUri(files, SHARED), 'photo C');
+      const remote = createFakeBusinessMediaRemote(files);
+      remote.failDownloads = true;
+      const view = await renderCatalog({ files, database, remote });
+
+      expect(masqueImage(view)).toBe(cachedUri(files, SHARED));
+      expect(remote.downloadCount).toBe(0);
+    });
   });
 
   it('searches by name, brand, category, and barcode', async () => {

@@ -20,7 +20,7 @@ const request: RemotePushRequest = {
   aggregateId: 'product-1',
   operation: 'UPSERT',
   expectedVersion: 3,
-  payload: { name: 'Masque', brand: null, category: null, barcode: '0088', price_cents: 99, stock_quantity: 2, active: true },
+  payload: { name: 'Masque', brand: null, category: null, barcode: '0088', photo_path: null, price_cents: 99, stock_quantity: 2, active: true },
 };
 
 describe('mapSyncPostgrestError', () => {

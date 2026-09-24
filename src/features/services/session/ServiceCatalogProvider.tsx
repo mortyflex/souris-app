@@ -7,7 +7,7 @@ import {
   setServiceActive as persistServiceActive,
   updateService as persistService,
 } from '@/persistence/stores/services';
-import { usePersistence } from '@/providers/PersistenceProvider';
+import { usePersistence, useSnapshotRefresh } from '@/providers/PersistenceProvider';
 
 import type { ServiceCatalogSessionValue } from './types';
 
@@ -30,6 +30,8 @@ export function ServiceCatalogProvider({ children }: PropsWithChildren) {
   const [services, setServices] = useState<readonly Service[]>(() =>
     snapshot.services.map(copyService),
   );
+  // Remote changes applied by the sync runner, adopted in place.
+  useSnapshotRefresh((fresh) => setServices(fresh.services.map(copyService)));
 
   const getServiceById = (serviceId: string | undefined) => {
     if (!serviceId) return undefined;

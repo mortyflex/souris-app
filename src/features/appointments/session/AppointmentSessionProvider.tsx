@@ -49,7 +49,7 @@ import {
   updateAppointmentItemPhaseDurations as persistItemPhaseDurations,
   updateAppointmentPayment as persistPaymentCorrection,
 } from '@/persistence/stores/appointments';
-import { usePersistence } from '@/providers/PersistenceProvider';
+import { usePersistence, useSnapshotRefresh } from '@/providers/PersistenceProvider';
 
 import { reconcileAppointmentEntriesForLocalDay } from './reconciliation';
 import { removeAppointmentEntryById } from './deletion';
@@ -140,6 +140,21 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     committed.current = next;
     setAppointments(next);
   }, []);
+
+  // Remote changes applied by the sync runner, adopted in place — through the
+  // same previous-day reconciliation as the hydration at mount.
+  useSnapshotRefresh((fresh) => {
+    const now = new Date();
+    lastReconciledDayKey.current = getLocalDateKey(now);
+    commit(
+      reconcileAndPersist(
+        database,
+        fresh.appointments.map((appointment) => ({ appointment })),
+        now,
+      ),
+    );
+    commitDeposits(fresh.appointmentDeposits);
+  });
 
   const reconcile = useCallback(() => {
     const now = new Date();

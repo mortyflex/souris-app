@@ -12,7 +12,7 @@ import {
   insertCalendarBlock,
   updateCalendarBlock as persistCalendarBlock,
 } from '@/persistence/stores/calendar-blocks';
-import { usePersistence } from '@/providers/PersistenceProvider';
+import { usePersistence, useSnapshotRefresh } from '@/providers/PersistenceProvider';
 
 /** The interval is taken for that staff member. Nothing was written. */
 export class CalendarBlockConflictError extends Error {
@@ -68,6 +68,8 @@ export function CalendarBlockSessionProvider({ children }: PropsWithChildren) {
     committed.current = next;
     setCalendarBlocks(next);
   };
+  // Remote changes applied by the sync runner, adopted in place.
+  useSnapshotRefresh((fresh) => commit(fresh.calendarBlocks));
 
   const scheduledAppointments = appointments.map(({ appointment }) => appointment);
 

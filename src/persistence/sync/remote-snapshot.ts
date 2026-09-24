@@ -218,6 +218,8 @@ function parseClient(row: Json, field: string): RemoteClientPayload {
     birthday,
     // Absent on a remote that predates the column: no note, never a failure.
     notes: optionalText(row, 'notes', field),
+    // Absent on a remote that predates the column: no photo, never a failure.
+    photo_path: optionalText(row, 'photo_path', field),
     archived_at: optionalInstant(row, 'archived_at', field),
   };
 }
@@ -238,6 +240,8 @@ function parseProduct(row: Json, field: string): RemoteProductPayload {
     brand: optionalText(row, 'brand', field),
     category: optionalText(row, 'category', field),
     barcode: optionalText(row, 'barcode', field),
+    // Absent on a remote that predates the column: no shared photo, never a failure.
+    photo_path: optionalText(row, 'photo_path', field),
     price_cents: integer(row, 'price_cents', field, 0),
     stock_quantity: integer(row, 'stock_quantity', field, 0),
     active: flag(row, 'active', field),

@@ -1,39 +1,22 @@
 // Souris — Product photo field
 //
-// The image area is the interaction: tapping the tile opens the Product photo
-// source sheet (camera / library / remove). Acquisition and processing update
-// only the draft through `onChangeImageUri`; Save/Cancel semantics belong to
-// the Product editor.
-//
-// Presentation state machine — one modal at a time, never stacked:
-//
-//   none → source → (dismissed) → camera → none
-//                 → library picker (system, over the sheet) → none
-//                 → remove → none
-//
-// The camera is presented only from the source sheet's `onDismissed`
-// callback, i.e. after its Modal is completely gone.
+// The image area is the interaction: tapping the tile opens the shared photo
+// source flow (camera / library / remove — shared/ui/PhotoSourceFlow.tsx,
+// which also owns the camera permission: asked on « Prendre une photo »,
+// before the camera is presented). Acquisition and processing update only
+// the draft through `onChangeImageUri`; Save/Cancel semantics belong to the
+// Product editor.
 
 import { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import { productImageHeights } from '@/features/products/components/ProductImage';
 import { ProductImageReveal } from '@/features/products/components/ProductImageReveal';
-import { pickProductPhotoFromLibrary } from '@/features/products/images/product-photo-acquisition';
 import { removeImageBackground } from '@/features/products/images/remove-image-background';
 import { AppText } from '@/shared/ui/AppText';
+import { PhotoSourceFlow } from '@/shared/ui/PhotoSourceFlow';
 import { interaction, nativeShadows, radii, semanticColors, spacing } from '@/shared/ui/theme';
-
-import { ProductCameraModal } from './ProductCameraModal';
-import { ProductPhotoSourceSheet } from './ProductPhotoSourceSheet';
 
 interface ProductPhotoFieldProps {
   readonly imageUri?: string;
@@ -41,8 +24,7 @@ interface ProductPhotoFieldProps {
   readonly onChangeImageUri: (imageUri: string | undefined) => void;
 }
 
-type PhotoState = 'idle' | 'acquiring' | 'processing';
-type PhotoPresentation = 'none' | 'source' | 'camera';
+type PhotoState = 'idle' | 'processing';
 
 export function ProductPhotoField({
   imageUri,
@@ -50,8 +32,7 @@ export function ProductPhotoField({
   onChangeImageUri,
 }: ProductPhotoFieldProps) {
   const [state, setState] = useState<PhotoState>('idle');
-  const [presentation, setPresentation] = useState<PhotoPresentation>('none');
-  const cameraRequested = useRef(false);
+  const [sourceVisible, setSourceVisible] = useState(false);
   const activeOperation = useRef(0);
 
   useEffect(
@@ -60,21 +41,6 @@ export function ProductPhotoField({
     },
     [],
   );
-
-  const showLibraryPermissionError = (canAskAgain: boolean) => {
-    Alert.alert(
-      'Accès à la photothèque refusé',
-      canAskAgain
-        ? 'La photo n’a pas été ajoutée. Vous pouvez réessayer ou continuer sans photo.'
-        : 'Autorisez l’accès à la photothèque dans les réglages, ou continuez sans photo.',
-      canAskAgain
-        ? [{ text: 'OK' }]
-        : [
-            { text: 'Annuler', style: 'cancel' },
-            { text: 'Ouvrir les réglages', onPress: () => void Linking.openSettings() },
-          ],
-    );
-  };
 
   // Vision is optional: the selected original is immediately usable while a
   // transparent, subject-cropped version is prepared in the background.
@@ -89,55 +55,17 @@ export function ProductPhotoField({
     setState('idle');
   };
 
-  const requestCamera = () => {
-    cameraRequested.current = true;
-    setPresentation('none');
-  };
-
-  const handleSourceSheetDismissed = () => {
-    if (!cameraRequested.current) return;
-    cameraRequested.current = false;
-    setPresentation('camera');
-  };
-
-  const closeCamera = () => {
-    setPresentation((current) => (current === 'camera' ? 'none' : current));
-  };
-
-  const handleCaptured = (uri: string) => {
-    setPresentation('none');
-    void prepareSelectedPhoto(uri);
-  };
-
-  const chooseFromLibrary = async () => {
-    const operation = activeOperation.current + 1;
-    activeOperation.current = operation;
-    setState('acquiring');
-    const result = await pickProductPhotoFromLibrary();
-    if (operation !== activeOperation.current) return;
-    setPresentation('none');
-
-    if (result.status === 'selected') {
-      await prepareSelectedPhoto(result.uri);
-      return;
-    }
-
-    setState('idle');
-    if (result.status === 'permission-denied') {
-      showLibraryPermissionError(result.canAskAgain);
-    } else if (result.status === 'error') {
-      Alert.alert(
-        'Impossible d’ajouter la photo',
-        'La photo n’a pas pu être préparée. Réessayez ou continuez sans photo.',
-      );
-    }
-  };
-
   const removePhoto = () => {
     activeOperation.current += 1;
-    setPresentation('none');
     setState('idle');
     onChangeImageUri(undefined);
+  };
+
+  const showPickError = () => {
+    Alert.alert(
+      'Impossible d’ajouter la photo',
+      'La photo n’a pas pu être préparée. Réessayez ou continuez sans photo.',
+    );
   };
 
   const busy = state !== 'idle';
@@ -150,7 +78,7 @@ export function ProductPhotoField({
         accessibilityLabel={tileLabel}
         accessibilityState={{ busy, disabled: busy }}
         disabled={busy}
-        onPress={() => setPresentation('source')}
+        onPress={() => setSourceVisible(true)}
         style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
         testID="product-photo-tile"
       >
@@ -205,19 +133,19 @@ export function ProductPhotoField({
           Préparation de la photo…
         </AppText>
       )}
-      <ProductPhotoSourceSheet
+      <PhotoSourceFlow
+        cameraHint="Placez le produit au centre"
+        cameraTestID="product-camera"
+        cameraTitle="Photo du produit"
         hasImage={Boolean(imageUri)}
-        onChooseCamera={requestCamera}
-        onChooseLibrary={() => void chooseFromLibrary()}
-        onClose={() => setPresentation('none')}
-        onDismissed={handleSourceSheetDismissed}
+        libraryLabel="Choisir dans la photothèque"
+        onClose={() => setSourceVisible(false)}
+        onPickError={showPickError}
         onRemove={removePhoto}
-        visible={presentation === 'source'}
-      />
-      <ProductCameraModal
-        onCaptured={handleCaptured}
-        onClose={closeCamera}
-        visible={presentation === 'camera'}
+        onSelected={(uri) => void prepareSelectedPhoto(uri)}
+        testID="product-photo"
+        title="Photo du produit"
+        visible={sourceVisible}
       />
     </View>
   );

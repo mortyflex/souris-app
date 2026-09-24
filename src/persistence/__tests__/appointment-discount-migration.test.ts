@@ -65,8 +65,8 @@ describe('schema v10 migration on an existing v9 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(12);
-    expect(CURRENT_SCHEMA_VERSION).toBe(12);
+    expect(readSchemaVersion(db)).toBe(14);
+    expect(CURRENT_SCHEMA_VERSION).toBe(14);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
 
@@ -112,18 +112,20 @@ describe('schema v10 migration on an existing v9 database', () => {
 
   // The bootstrap runs every later migration too: schema v11 creates
   // `calendar_blocks` and rebuilds the two sync bookkeeping tables for the new
-  // aggregate type (covered by calendar-blocks-migration.test.ts).
+  // aggregate type (covered by calendar-blocks-migration.test.ts), and schema
+  // v13 adds `clients.photo_path` (client-photo-migration.test.ts) and schema
+  // v14 `products.photo_path` (product-photo-migration.test.ts).
   it('changes no other table definition', () => {
     const db = openSchemaV9Database();
     const tablesBefore = db.getAllSync<{ name: string; sql: string }>(
-      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state') ORDER BY name",
+      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'clients', 'products') ORDER BY name",
     );
 
     bootstrapPersistence(db, createTestSeed);
 
     expect(
       db.getAllSync<{ name: string; sql: string }>(
-        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state') ORDER BY name",
+        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'clients', 'products') ORDER BY name",
       ),
     ).toEqual(tablesBefore);
   });
@@ -132,7 +134,7 @@ describe('schema v10 migration on an existing v9 database', () => {
     const db = openSchemaV9Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(12);
+    expect(migrateDatabase(db)).toBe(14);
     updateAppointmentDiscount(db, 'appointment-upcoming', { type: 'PERCENT', percent: 20 });
 
     const reloaded = loadSnapshot(db).appointments.find(

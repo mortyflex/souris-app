@@ -30,6 +30,7 @@ import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
 import { loadAppointments } from '@/persistence/stores/appointments';
 import { loadServices } from '@/persistence/stores/services';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
+import { usePersistence } from '@/providers/PersistenceProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 import { settleWheelOn, wheelRowKeys, wheelValue } from '@/shared/ui/testing/wheels';
@@ -196,6 +197,25 @@ function SessionProbe() {
 
 type TestDatabase = ReturnType<typeof openTestDatabase>;
 
+/**
+ * What the cloud sync runner does after a pull that applied other devices'
+ * changes: rows already in SQLite, then `reloadSnapshot()` IN PLACE (the
+ * runner → reloadSnapshot link is covered by CloudSyncRunner.test.tsx).
+ */
+function RemoteChangeProbe() {
+  const { database, reloadSnapshot } = usePersistence();
+  return (
+    <Pressable
+      testID="apply-remote-change"
+      onPress={() => {
+        database.runSync("UPDATE services SET price_cents = 6000 WHERE id = 'technique-balayage-balayage-1'");
+        database.runSync("UPDATE clients SET notes = 'Notée ailleurs' WHERE first_name = 'Constance' AND last_name = 'Chevalier'");
+        reloadSnapshot();
+      }}
+    />
+  );
+}
+
 function creationTree(
   screenKey: number,
   database?: TestDatabase,
@@ -214,6 +234,7 @@ function creationTree(
               startAt={appointmentStartAt}
             />
             <SessionProbe />
+            <RemoteChangeProbe />
           </CalendarBlockSessionProvider>
         </AppointmentSessionProvider>
       </ServiceCatalogProvider>
@@ -640,6 +661,43 @@ describe('AppointmentCreationScreen', () => {
     const appointments = view.getByTestId('appointments-probe').props.children as string;
     expect(appointments).toContain('Balayage 1:50:90/45');
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the whole creation draft — step, Client, services, time, adjustments — when remote changes are applied in place', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+    await searchService(view, 'balayage 1');
+    await selectService(view, 'Balayage 1');
+    await continueToSummary(view);
+    await expandService(view, 'Balayage 1');
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '50');
+    });
+    await stepPhase(view, BALAYAGE_POSE, -3);
+    const clientMentions = view.queryAllByText(/Constance Chevalier/).length;
+    const summaryBefore = view.getByText('10:15 – 12:30');
+    expect(summaryBefore).toBeTruthy();
+
+    await act(async () => fireEvent.press(view.getByTestId('apply-remote-change')));
+
+    // The persisted catalog adopted the remote price underneath…
+    expect(view.getByTestId('catalog-balayage').props.children).toMatch(/^60:/);
+    // …while the open Summary step keeps every draft value.
+    expect(view.getByText('Créer le rendez-vous')).toBeTruthy();
+    expect(view.queryAllByText(/Constance Chevalier/)).toHaveLength(clientMentions);
+    expect(view.getByText('10:15 – 12:30')).toBeTruthy();
+    // The open editor keeps the typed price, not the remote catalog one.
+    expect(view.getByLabelText('Prix de Balayage 1').props.value).toBe('50');
+    expect(view.getAllByText('50,00 €').length).toBeGreaterThanOrEqual(1);
+    expect(view.queryByText('60,00 €')).toBeNull();
+    expect(phaseValue(view, BALAYAGE_POSE)).toBe('45 min');
+    expect(mockBack).not.toHaveBeenCalled();
+
+    // The draft still creates exactly what the professional prepared.
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+    expect(view.getByTestId('appointments-probe').props.children).toContain('Balayage 1:50:90/45');
   });
 
   it('keeps only one Summary editor expanded and values survive collapse', async () => {

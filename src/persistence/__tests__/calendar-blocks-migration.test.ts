@@ -96,7 +96,11 @@ const OPERATIONAL_TABLES = [
 ] as const;
 
 function dump(db: ReturnType<typeof openTestDatabase>, table: string) {
-  return db.getAllSync(`SELECT rowid AS row_id, * FROM ${table} ORDER BY rowid`);
+  const rows = db.getAllSync<Record<string, unknown>>(`SELECT rowid AS row_id, * FROM ${table} ORDER BY rowid`);
+  // The bootstrap runs every later migration too: schema v13 adds
+  // `clients.photo_path` and v14 `products.photo_path` (NULL; covered by
+  // client-photo-migration.test.ts and product-photo-migration.test.ts).
+  return rows.map(({ photo_path: _photoPath, ...row }) => row);
 }
 
 describe('schema v11 migration on an existing v10 database', () => {
@@ -107,8 +111,8 @@ describe('schema v11 migration on an existing v10 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(12);
-    expect(CURRENT_SCHEMA_VERSION).toBe(12);
+    expect(readSchemaVersion(db)).toBe(14);
+    expect(CURRENT_SCHEMA_VERSION).toBe(14);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     for (const table of OPERATIONAL_TABLES) expect(dump(db, table)).toEqual(before[table]);
@@ -240,7 +244,7 @@ describe('schema v11 migration on an existing v10 database', () => {
     const db = openSchemaV10Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(12);
+    expect(migrateDatabase(db)).toBe(14);
     insertCalendarBlock(db, {
       id: 'block-1',
       businessId: BUSINESS_ID,

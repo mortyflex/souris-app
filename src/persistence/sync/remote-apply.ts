@@ -93,15 +93,16 @@ function applyClient(db: SourisDatabase, id: string, client: RemoteClientPayload
     client.email,
     client.birthday,
     client.notes,
+    client.photo_path,
     client.archived_at,
   ];
   const updated = db.runSync(
-    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ?, notes = ?, archived_at = ? WHERE id = ?',
+    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ?, notes = ?, photo_path = ?, archived_at = ? WHERE id = ?',
     [...params, id],
   ).changes;
   if (updated === 1) return;
   db.runSync(
-    'INSERT INTO clients (first_name, last_name, phone, email, birthday, notes, archived_at, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO clients (first_name, last_name, phone, email, birthday, notes, photo_path, archived_at, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [...params, id],
   );
 }
@@ -133,23 +134,26 @@ function applyProduct(db: SourisDatabase, businessId: string, ref: SyncAggregate
     product.brand,
     product.category,
     product.barcode,
+    product.photo_path,
     product.price_cents,
     product.stock_quantity,
     toSqlBoolean(product.active),
   ];
-  // `image_uri` is absent from both statements: kept on update, NULL on insert.
+  // `image_uri` (the legacy device-local image) is absent from both
+  // statements: kept on update, NULL on insert. It never overrides a pulled
+  // `photo_path` — presentation gives the shared photo precedence.
   if (
     !updateScoped(
       db,
       businessId,
       ref,
       'products',
-      'name = ?, brand = ?, category = ?, barcode = ?, price_cents = ?, stock_quantity = ?, active = ?',
+      'name = ?, brand = ?, category = ?, barcode = ?, photo_path = ?, price_cents = ?, stock_quantity = ?, active = ?',
       params,
     )
   ) {
     db.runSync(
-      'INSERT INTO products (name, brand, category, barcode, price_cents, stock_quantity, active, id, business_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO products (name, brand, category, barcode, photo_path, price_cents, stock_quantity, active, id, business_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [...params, ref.aggregateId, businessId],
     );
   }

@@ -185,8 +185,43 @@ are never stored on the Client. They are always DERIVED from Souris
 Appointment state through `clientId`.
 
 Purchased products are derived from Sales through `clientId` and never
-stored on the Client. Future fields (formulas, photos, visit frequency) are
-separate future features and must not be added speculatively.
+stored on the Client. Future fields (formulas, before/after photos, visit
+frequency) are separate future features and must not be added speculatively.
+
+### photoPath
+
+One optional portrait per Client, taken or chosen in Souris
+(`src/features/clients/photo`):
+
+- the Client carries only `photoPath?: string` — the STABLE object path of
+  the image in the private Business media storage,
+  `<business_id>/clients/<client_id>/<photo_id>.jpg`. Never a device file
+  URI, never a signed URL, never image bytes (not in the domain, not in
+  SQLite, not in Postgres);
+- every new photo is a NEW object (new `photo_id`), so the path changes with
+  the photo; a replaced object is removed once the new path is committed;
+- the Client Profile avatar (the 96 pt portrait `ClientAvatar`) is the
+  control: a small camera badge, one tap opens the shared photo sheet —
+  `Prendre une photo` / `Prendre une nouvelle photo`, `Choisir dans Photos`,
+  `Supprimer la photo` when a photo exists, `Annuler`. Camera permission is
+  asked on `Prendre une photo` only (shared with Product photos,
+  `src/shared/lib/photo-acquisition.ts`);
+- every photo is normalized the same way: orientation applied, centered
+  square crop, at most 720 × 720, JPEG 0.8;
+- save order: upload the object → commit the path on the Client → remove the
+  replaced object. A failed upload or commit leaves the Client and its
+  previous photo untouched (`Impossible d’enregistrer la photo.`). Saving
+  needs the cloud: without it nothing is saved, and a photo is never
+  local-only;
+- removal clears the path at once (local-first, synced like any Client
+  change), then removes the object; no confirmation — another photo can
+  always be added back;
+- each device keeps a cached copy under `<documents>/client-photos/`,
+  derived from the path: shown offline once seen, downloaded once on
+  another device, initials whenever it cannot be had;
+- identity edits, archive and restore never touch the photo; photos are
+  never imported from legacy data (§3) and appear only on the Client Profile
+  (the directory keeps its initials).
 
 ---
 
@@ -401,8 +436,9 @@ Deletion is offered only from an ARCHIVED Client — the deliberate path is
 
 ## 8. Future Client Capabilities
 
-Photos, technical formulas, and statistics are separate future features and
-remain outside the Client domain. The birthday experience of §2 is
+Before/after photos, technical formulas, and statistics are separate future
+features and remain outside the Client domain (the Client portrait of §2,
+`photoPath`, is implemented). The birthday experience of §2 is
 implemented; advance birthday reminders, automatic birthday discounts and
 marketing automation remain future features built on the existing `birthday`
 field.

@@ -16,6 +16,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { Product } from '@/domain/products';
 import { ProductImage, productImageHeights } from '@/features/products/components/ProductImage';
+import { useProductImageUri } from '@/features/products/images/use-product-image-uri';
 import { formatServicePrice } from '@/features/services/presentation';
 import { AppText } from '@/shared/ui/AppText';
 import {
@@ -49,6 +50,8 @@ export function SaleProductRow({ product, draftQuantity, onPress }: SaleProductR
       ? `${product.name}, déjà ajouté, quantité ${draftQuantity}`
       : `${product.name}, ${price}, stock ${product.stockQuantity}, ajouter`;
 
+  const imageUri = useProductImageUri(product);
+
   return (
     <Pressable
       accessibilityHint={added && !soldOut ? 'Ajoute une unité à la vente' : undefined}
@@ -61,7 +64,7 @@ export function SaleProductRow({ product, draftQuantity, onPress }: SaleProductR
       testID={`sale-product-${product.id}`}
     >
       <ProductImage
-        imageUri={product.imageUri}
+        imageUri={imageUri}
         productName={product.name}
         testID={`sale-product-image-${product.id}`}
         variant="thumbnail"

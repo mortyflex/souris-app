@@ -18,8 +18,11 @@ V1D.1  Seamless Bootstrap                   done — automatic initial upload an
        Appointment discount                 done — two additive nullable columns carried by the APPOINTMENT aggregate (§19)
        Calendar Blocks                      done — a NEW aggregate type, CALENDAR_BLOCK, through the same engine (§20)
        Appointment deposits                 done — a NEW aggregate type, APPOINTMENT_DEPOSIT, through the same engine (§21)
+       Client photos                        done — one additive CLIENT column (a Storage path) + private business-media bucket (§22)
+       Product photos                       done — one additive PRODUCT column in the SAME bucket; legacy local images never uploaded (§23)
+       Foreground refresh                   done — an idle open device pulls on the 2-min tick; pulled data refreshes the UI IN PLACE (§24)
 V1E    Conflict / Retry Hardening
-V1F    Product Image Sync
+V1F    Product Image Sync                   superseded by Product photos (§23): one shared photo, no legacy upload
 ```
 
 State after V1A: the remote operational tables, constraints, triggers, RLS and grants exist in
@@ -98,7 +101,7 @@ duplicated). Column names follow SQLite; types are the Postgres-native equivalen
 
 ```text
 clients             (business_id, id) PK, first_name, last_name?, phone?, email?, birthday? (MM-DD),
-                    notes? (§18), archived_at?, + sync metadata
+                    notes? (§18), photo_path? (§22), archived_at?, + sync metadata
 services            (business_id, id) PK, name, type SERVICE|TECHNIQUE, price_cents, active, + sync metadata
 service_phases      (business_id, service_id, id) PK, position (unique per service, deferrable),
                     name, duration_minutes >= 0, requires_staff
@@ -111,7 +114,7 @@ appointment_items   (business_id, appointment_id, id) PK, item_order (unique per
 appointment_phases  (business_id, appointment_id, appointment_item_id, id) PK, position (unique per item,
                     deferrable), name, duration_minutes >= 0, requires_staff
 products            (business_id, id) PK, name, brand?, category?, barcode?, price_cents,
-                    stock_quantity >= 0, active, + sync metadata            (NO image column)
+                    photo_path? (§23), stock_quantity >= 0, active, + sync metadata
 sales               (business_id, id) PK, client_id? → clients, appointment_id? → appointments,
                     completed_at, paid_at?, card_amount_cents?, cash_amount_cents?, + sync metadata
 sale_items          (business_id, sale_id, id) PK, position (unique per sale, deferrable),
@@ -140,7 +143,7 @@ price_cents / unit_price_cents INTEGER   price_cents / unit_price_cents    none 
                                                                            the euro view exists only in the row mappers (values.ts)
 booleans INTEGER 0/1                     boolean                           values.ts helpers
 instants ISO-8601 TEXT                   timestamptz                       Date ⇄ ISO string
-products.image_uri (device file path)    — (absent)                        never uploaded; V1F adds a Storage reference
+products.image_uri (legacy device path)  — (absent)                        never uploaded; the shared photo is photo_path (§23)
 birth_date (legacy, unused)              — (absent)                        never uploaded
 business_id TEXT                         business_id uuid                  must be the remote Business UUID (bound device)
 ```
@@ -732,8 +735,12 @@ DEVICE_ACCOUNT_CONFLICT behavior (AUTH.md §6).
 
 ## 12. Image boundary
 
-`products.image_uri` is a device-local file path under the app's documents directory
-(PERSISTENCE.md §9). It is never canonical cloud data and has no remote column in V1A.
+`products.image_uri` is a LEGACY device-local file path under the app's documents directory
+(PERSISTENCE.md §9). It is never canonical cloud data, has no remote column, and is never
+uploaded. Shared Product photos are `products.photo_path` (§23), implemented with the plan below
+(one object per photo, Storage RLS on the path prefix, image bytes never in Postgres or SQLite) —
+except that nothing maps or migrates legacy files: a Product gets a shared photo only from an
+explicit new photo.
 
 V1F will add: a Supabase Storage object per Product image, addressed by a stable object path
 (e.g. `<business_id>/products/<product_id>/<hash>.<ext>`) stored in a remote column, with the
@@ -947,9 +954,9 @@ nothing, owns no state a screen reads). A run is allowed only while Supabase is 
 Auth session is `live` (not the offline fallback: there is no valid token) AND the Business session
 is `ready` (the device is bound). Triggers: those conditions becoming true (launch, sign-in, Business
 setup, reconnection), the app returning to the foreground, and a 2-minute foreground tick that first
-runs a LOCAL check (`isSyncRunDue`: a current push decision + an eligible entry, OR a first sync that
-a run can still settle — §17.2) — an idle device, or one waiting for a reconciliation, makes no
-request at all. Since V1D.1 a run that answers one of the two one-sided STOPs is followed, within the
+runs a LOCAL check (`isForegroundSyncTickDue`: an eligible entry, a first sync that a run can still
+settle, OR — since §24 — a device that already synchronizes, which then makes one incremental pull)
+— a device waiting for a reconciliation makes no request at all. Since V1D.1 a run that answers one of the two one-sided STOPs is followed, within the
 same trigger, by the automatic approval and ONE more run (§17.1). Runs are fire-and-forget: a screen never waits on one, a
 failure never surfaces as an error, and SQLite stays the source of truth whatever happens. There is
 no background task, no retry loop, and no network listener.
@@ -1050,7 +1057,8 @@ V1D.1: both one-sided first syncs are automatic (§17). Still open: the explicit
 point (`RECONCILIATION_REQUIRED` exit), conflict records and resolution (§9, V1E), a user-visible
 pending / failed / conflict state,
 batching of the initial upload and pagination of the restore read if their size ever matters, an
-in-place refresh of the screens after a pull (§16.8), and product image sync (V1F).
+and product image sync (V1F — superseded by §23). The in-place refresh of the screens after a pull is
+done (§24).
 
 ### 15.9 Development sync control (`__DEV__` only — not product UI)
 
@@ -1068,8 +1076,8 @@ Approbation / Restauration
 Run sync now            useCloudSyncControl().runNow — the runner's OWN single-flight orchestration (automatic
                         approval included), under the same live-session + bound-Business conditions as an
                         automatic run (disabled otherwise). Its last result line (RESTORED · counts, or
-                        PUSHED · … · pull …) is kept at module level, because a restore remounts the tree —
-                        this sheet included (§16.8)
+                        PUSHED · … · pull …) is kept at module level (a restore used to remount the tree;
+                        since §24 nothing is remounted, and the module-level line is simply kept)
 ```
 
 Production boundary: the module is `require`d inside a `__DEV__` branch of `PlusScreen` (never a
@@ -1295,13 +1303,13 @@ A removal never records an outbox entry: a pulled deletion is not echoed back as
 restore or a pull the outbox holds exactly the user's own pending intents, and an idle follow-up run
 sends no push request (tested for restore, upsert and tombstone).
 
-The feature providers hydrate ONCE from the persisted snapshot (PERSISTENCE.md §6). A run that wrote
+The feature providers hydrate from the persisted snapshot (PERSISTENCE.md §6). A run that wrote
 operational rows (`didSyncRunChangeLocalData`: `RESTORED`, or a pull with `applied + deleted > 0`)
-is therefore followed by `PersistenceProvider.reloadSnapshot()` — the development reset's remount
-mechanism without touching a row — called by `CloudSyncRunner` and by nothing else. A push-only run
-never remounts anything, which is every run of a single-device Business once restored. Known
-limit: the remount resets navigation and any open draft; with two active devices it can interrupt
-the user. An in-place provider refresh is deliberately deferred (§15.8).
+is followed by `PersistenceProvider.reloadSnapshot()`, called by `CloudSyncRunner` and by nothing
+else. Since §24 it re-reads SQLite IN PLACE: nothing is remounted, navigation, sheets and drafts
+stay as they are, and each session provider adopts the fresh persisted state. (Before §24 it
+remounted the whole tree, resetting navigation and open drafts.) A run that changed nothing never
+calls it.
 
 ### 16.9 Security review (V1D)
 
@@ -1441,8 +1449,11 @@ isSyncBootstrapPending(db, businessId)                  src/persistence/sync/boo
   a current push decision              false   → hasEligiblePushWork decides (eligible entry, backoff respected)
 ```
 
-An idle device, a device whose entries are all backing off, and a device waiting for a
-reconciliation still make no request from the tick. `hasEligiblePushWork` itself is unchanged.
+Since §24 the tick asks `isForegroundSyncTickDue = isSyncRunDue || isIncrementalPullAvailable`:
+a device that already synchronizes (a CURRENT `ALREADY_SYNCED` / `INITIAL_UPLOAD` decision) runs on
+every foreground tick even when idle — its run pushes nothing and makes ONE incremental pull. A
+device waiting for a reconciliation still makes no request from the tick; an EMPTY device and a
+pending first sync keep the rules above. `hasEligiblePushWork` itself is unchanged.
 
 ### 17.3 First-sync gate — an empty device waits for its data
 
@@ -1495,8 +1506,8 @@ unavailable  → 'data-unavailable': DataUnavailableScreen. The attempt ended wi
   sheet — so no Client, Service, Product, Appointment or Sale can be created, and the outbox stays
   empty. It is a route-level state like the account conflict, not a sheet over the app.
 - The gate is decided again after every orchestration and opens in the same render as its result:
-  at once when the remote was counted empty; after a restore, with the usual `reloadSnapshot()`
-  remount (§16.8), which finds a populated device and lands directly in the app.
+  at once when the remote was counted empty; after a restore, with the usual in-place
+  `reloadSnapshot()` (§16.8, §24), which finds a populated device and lands directly in the app.
 - « Réessayer » is the SAME orchestration (`runNow`) — or, without a live session, the Auth
   session retry, since no fetch is possible before that. Automatic retries: launch, return to the
   foreground, and the tick — which always runs while the gate is closed, even when `isSyncRunDue`
@@ -1913,3 +1924,161 @@ upload and push order, retry without duplicate, a refused push kept pending, Bus
 local with no echo, fresh-device restore (history, ACTIVE totals, VOIDED state, Cash Register and remaining
 identical), invalid remote deposits and dangling references, the Appointment tombstone guard, the conflict
 contract, an older remote, an older build, and the upgrade gap.
+
+---
+
+## 22. Client photos — a Storage path on the CLIENT aggregate (schema v13)
+
+A Client portrait (`docs/domain/CLIENTS.md`, `photoPath`) is user data: it must survive a reinstall
+and reach every device. Its bytes live in Supabase Storage; the CLIENT aggregate carries only the
+stable object path. No new aggregate type, no second sync mechanism.
+
+```text
+supabase/migrations/20260925120000_add_client_photos.sql
+
+alter table public.clients add column if not exists photo_path text;   nullable, no default
+storage bucket business-media                                          private, image/jpeg, 5 MB
+public.is_business_media_owner(object_name)                            first folder = an owned Business
+storage.objects policies (business-media only)                         select / insert / delete, owner only;
+                                                                       NO update, nothing for anon
+create or replace function public.sync_push_aggregate(...)             CLIENT branch reads / writes photo_path
+create or replace function public.sync_pull_business_aggregates(..)    clients[] objects carry photo_path
+```
+
+- **Object path.** `<business_id>/clients/<client_id>/<photo_id>.jpg`. The first folder is the
+  Business: the Storage policies admit an object only when it names a Business the signed-in user
+  owns (a non-UUID first folder is refused without ever being cast), so one Business can never
+  read, list, write or remove another's photos. A new photo is a new object; an object is never
+  overwritten (`upsert: false`, no update policy).
+- **Lifecycle (device).** Upload the normalized JPEG → commit the path on the Client (SQLite +
+  outbox, like any Client edit) → remove the replaced object, best effort. A failed upload or
+  commit changes nothing; a removal clears the path first (local-first) and removes the object
+  best effort. A leftover object never fails a committed change.
+- **Reading.** A device resolves the path into its cached copy under
+  `<documents>/client-photos/`, or downloads it once through a 60-second signed URL that is used
+  for that download only and never stored. Unavailable → initials.
+- **Payload.** `RemoteClientPayload.photo_path: string | null`, always sent by a build that knows
+  it; clearing is an explicit `null` and follows the ordinary conflict contract (§9).
+- **Older builds / older remotes.** A payload without the key keeps the stored path (the same
+  `case when p_payload ? … end` rule as notes, §18); a pulled row without the key parses as "no
+  photo".
+- **Order of deployment: apply the migration BEFORE shipping the build that sets photos.** Against
+  the previous functions a pushed path is silently dropped by `jsonb_to_record`; without the
+  bucket every upload is refused (the app keeps the previous photo and says so).
+- **Not covered.** Permanently deleting a Client does not remove its photo object yet (an orphan
+  object, invisible to every device). Product photos use the same bucket (§23).
+
+Verified in the out-of-repo PGlite harness (§13 policy, a stubbed `storage` schema): the migration
+applied on a POPULATED database written by the previous functions — existing rows byte-identical,
+`photo_path` NULL everywhere, re-run harmless, incremental pull empty — then set / replace / clear
+through the push RPC, an older-build payload keeping the photo, CONFLICT on a stale version, a
+non-owner push refused, and the Storage policies (own prefix only, non-UUID and root paths refused,
+another bucket untouched, anon nothing, no update, cross-Business delete impossible). Local
+coverage: `sync-pull-restore.test.ts` (« Client photo »), `client-photo-migration.test.ts`,
+`client-photo-storage.test.ts`, `ClientProfilePhoto.test.tsx`.
+
+---
+
+## 23. Product photos — ONE shared photo per Product id (schema v14)
+
+Before: a Product image was a device-local file (`products.image_uri`), never synced. The same
+Product could show photo A on one device, photo B on another, nothing on a third. Now a Product has
+ONE authoritative photo, identified by the Product id, in the SAME private `business-media` bucket
+as Client photos (§22) and through the same lifecycle (`src/persistence/media/business-media.ts`).
+
+```text
+supabase/migrations/20260926120000_add_product_photos.sql   (builds on 20260925120000)
+
+alter table public.products add column if not exists photo_path text;   nullable, no default
+update storage.buckets … 'business-media'                              allowed types: jpeg + png
+create or replace function public.sync_push_aggregate(...)             PRODUCT branch reads / writes photo_path
+create or replace function public.sync_pull_business_aggregates(..)    products[] objects carry photo_path
+```
+
+- **Object path.** `<business_id>/products/<product_id>/<photo_id>.<jpg|png>` — PNG for a
+  transparent cut-out (it keeps its sticker presentation). The bucket is reused, not recreated.
+  **No Storage policy change**: the policies of §22 already scope every object of the bucket by its
+  first folder, the Business id — Product objects get exactly the isolation of Client photos.
+- **Legacy images are never promoted.** Neither the migrations, nor sync, nor any unrelated edit
+  uploads `image_uri`: two devices with different legacy images would otherwise race over which one
+  becomes authoritative. A Product receives a shared photo ONLY when the professional explicitly
+  takes or chooses one (then saves). From then on every device shows it; a legacy image never
+  overrides a `photo_path` (one precedence rule, `selectProductImageUri`, PRODUCTS.md §11).
+- **Lifecycle.** Save with a new photo: normalize → upload a new object → write the Product with its
+  path → remove the replaced object and the obsolete legacy file, best effort. Upload failure: the
+  whole Save is refused and nothing is written. Removal: the path is cleared (synced as `null`), then
+  the object is removed. Deleting the Product removes its object.
+- **Reading.** Each device caches the object under `<documents>/product-photos/`, downloaded once
+  through a 60-second signed URL; offline and never cached → the no-photo placeholder.
+- **Payload.** `RemoteProductPayload.photo_path: string | null`, always sent by a build that knows it.
+- **Older builds / older remotes.** A PRODUCT payload without the key keeps the stored path, so an
+  older device changing a price or a stock count never erases the shared photo; an older build
+  ignores the pulled key (and keeps showing its own legacy image, which only it can see). A pulled
+  row without the key parses as "no shared photo".
+- **Order of deployment: apply the migration BEFORE shipping the build that sets Product photos.**
+  Against the previous functions a pushed path is silently dropped; without the PNG type a cut-out
+  upload is refused (the Save is then refused and nothing is lost).
+
+Verified in the out-of-repo PGlite harness: the migration applied on a POPULATED database written
+by the previous functions — existing rows byte-identical, `photo_path` NULL on every Product, Client
+photos untouched, Storage policies untouched, the bucket reused (private, 5 MB, jpeg + png), re-run
+harmless — then set / replace / remove through the push RPC, another device pulling the path, an
+older-build payload keeping the photo, CONFLICT on a stale version, a non-owner push refused, and
+Product objects isolated per Business (own prefix only, anon nothing, no update, cross-Business
+delete impossible). Local coverage: `sync-pull-restore.test.ts` (« Product photo », including two
+devices with different legacy images), `product-photo-migration.test.ts`,
+`ProductCatalogProvider.test.tsx`, `ProductCatalogScreen.test.tsx` (display precedence),
+`ProductEditorScreen.test.tsx`.
+
+---
+
+## 24. Foreground refresh — idle devices pull, the UI refreshes in place
+
+Before: an idle, already-synchronized device only pulled at launch and on return to the foreground;
+the 2-minute tick ran only for its OWN pending writes (§17.2). Two open devices therefore did not
+see each other's changes — stock, photos, Clients, Appointments alike — until one of them was
+relaunched, backgrounded, or edited something. And when a pull did apply rows, `reloadSnapshot()`
+remounted the whole tree (§16.8): navigation reset, sheets closed, drafts lost.
+
+Now — no second mechanism, no Supabase Realtime, no new timer:
+
+```text
+foreground tick (the existing 2 min, foreground only, single-flight)
+  isForegroundSyncTickDue = isSyncRunDue || isIncrementalPullAvailable
+    local writes    → the existing run: push the outbox, then the incremental pull
+    idle            → the same run: nothing to push, ONE incremental pull since the stored cursor
+    reconciliation  → nothing (no request)
+  pull applied nothing   → nothing else: no re-read, no re-render
+  pull applied rows      → reloadSnapshot(): SQLite re-read IN PLACE
+                             → each session provider adopts its fresh collection (useSnapshotRefresh)
+                             → mounted screens re-render with the new persisted values
+```
+
+- **Guards.** Unchanged: Supabase configured, a LIVE session (never the offline fallback, never
+  signed out), a bound Business, the app in the foreground, the first-sync gate settled, the worker
+  and its orchestration single-flight (a tick during a run makes no second request). There is no
+  connectivity probe: an unreachable remote fails the run harmlessly (`FAILED`, nothing written,
+  no dialog) and the next tick tries again.
+- **Cursor.** The idle pull is the ordinary incremental pull (§16.5): changes since the stored
+  cursor, then the cursor advances. Never a full restore.
+- **In place.** `reloadSnapshot()` keeps the persistence subtree's key: nothing is remounted. The
+  Client, Service, Product, Sale, Appointment (with deposits, through the same previous-day
+  reconciliation as at mount) and Calendar Block sessions replace their PERSISTED collections only.
+  Drafts live in the screens (a Sale being composed, an Appointment being created or edited, a
+  checkout, a Product or Client form, a search query, an open sheet) and are never touched; a draft
+  refers to records by id, so it shows the synced name / stock / photo of what it references while
+  keeping its own values (typed price, quantities, selected Client, step). Pulls never overwrite an
+  aggregate with pending local changes (§16.6), so memory and SQLite cannot diverge.
+- **Propagation delay.** A change made on one device reaches another open device within roughly
+  two ticks at most: the writer pushes on its next tick (or at once on foreground), the reader pulls
+  on its next tick — about 2 minutes each in the worst case.
+- **Cost.** One small RPC per foreground tick for a synchronizing device; nothing in the background.
+
+Coverage: `CloudSyncRunner.test.tsx` (idle tick pulls once with a cursor and pushes nothing; no
+pull in the background; no overlapping run; no request under reconciliation; a remote change
+applied in place with the same mounted screen and its local state; a no-change pull re-renders
+nothing; a Product's stock 4 / photo C → stock 3 / photo D through ONE idle tick),
+`SaleCreationScreen.test.tsx` (an unsaved Sale draft survives), `AppointmentCreationScreen.test.tsx`
+(the whole creation draft survives), `ProductEditorScreen.test.tsx` (an open detail stays open and
+updates; an unsaved edit form is never replaced), `ClientProfilePhoto.test.tsx` (a Client photo
+from another device appears on the mounted profile, an open sheet stays open).

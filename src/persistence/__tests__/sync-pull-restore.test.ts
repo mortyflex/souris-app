@@ -5,6 +5,7 @@
 import type { Appointment } from '@/domain/appointments';
 import type { Client } from '@/domain/clients';
 import type { Sale } from '@/domain/sales';
+import { selectProductImageUri } from '@/features/products/images/product-photo-storage';
 
 import { bootstrapPersistence, loadSnapshot, type PersistedSnapshot } from '../bootstrap';
 import type { SourisDatabase } from '../database';
@@ -17,7 +18,13 @@ import {
   updateAppointmentDiscount,
 } from '../stores/appointments';
 import { bindLocalDatabaseToBusiness } from '../stores/business-profile';
-import { archiveClient, deleteClientPermanently, insertClient, updateClient } from '../stores/clients';
+import {
+  archiveClient,
+  deleteClientPermanently,
+  insertClient,
+  setClientPhotoPath,
+  updateClient,
+} from '../stores/clients';
 import { deleteProduct, insertProduct, setProductStock, updateProduct } from '../stores/products';
 import { completeSale } from '../stores/sales';
 import { updateService } from '../stores/services';
@@ -34,6 +41,7 @@ import {
   SyncRemoteError,
   type RemoteAppointmentPayload,
   type RemoteClientPayload,
+  type RemoteProductPayload,
   type RemoteServicePayload,
 } from '../sync/remote-gateway';
 import { parseRemoteBusinessSnapshot, RemoteSnapshotInvalidError } from '../sync/remote-snapshot';
@@ -515,11 +523,11 @@ describe('Business isolation', () => {
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID, OTHER_BUSINESS_ID]);
     await openUploadedSource(remote);
     remote.writeFromElsewhere(OTHER_BUSINESS_ID, 'CLIENT', 'client-other-salon', {
-      first_name: 'Autre', last_name: 'Salon', phone: null, email: null, birthday: null, notes: null, archived_at: null,
+      first_name: 'Autre', last_name: 'Salon', phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null,
     });
     // The SAME id exists in both Businesses with different content.
     remote.writeFromElsewhere(OTHER_BUSINESS_ID, 'CLIENT', clientLea.id, {
-      first_name: 'Homonyme', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null,
+      first_name: 'Homonyme', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null,
     });
 
     const { db } = await restoreFreshDevice(remote);
@@ -653,7 +661,7 @@ describe('incremental pull', () => {
 
     // Only what changes afterwards comes back.
     remote.advanceClock(PULL_OVERLAP_MS * 3);
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-later', { first_name: 'Plus tard', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-later', { first_name: 'Plus tard', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null });
     expect(await runB()).toMatchObject({ pull: { status: 'PULLED', fetched: 1, applied: 1 } });
   });
 
@@ -693,7 +701,7 @@ describe('incremental pull', () => {
     expect(readAcknowledgedRemoteVersion(a, REMOTE_BUSINESS_ID, { aggregateType: 'APPOINTMENT', aggregateId: 'appointment-orphan' })).toBeUndefined();
 
     // Once the Client exists remotely too, the same pull window brings both.
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-nowhere', { first_name: 'Enfin', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-nowhere', { first_name: 'Enfin', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null });
     expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 2, failed: 0, cursorAdvanced: true } });
   });
 });
@@ -760,6 +768,190 @@ describe('Client birthday + notes — synced like every other Client property', 
     const zoe = loadSnapshot(restored).clients.find((client) => client.id === clientZoe.id);
     expect(zoe).toEqual(loadSnapshot(source).clients.find((client) => client.id === clientZoe.id));
     expect('notes' in zoe!).toBe(false);
+  });
+});
+
+describe('Client photo — a stable storage path synced with the CLIENT aggregate', () => {
+  const PHOTO = `${REMOTE_BUSINESS_ID}/clients/client-lea/photo-1.jpg`;
+  const NEXT_PHOTO = `${REMOTE_BUSINESS_ID}/clients/client-lea/photo-2.jpg`;
+  const clientPayload = (remote: FakeSyncRemote, id: string) =>
+    remote.find(REMOTE_BUSINESS_ID, 'CLIENT', id)?.payload as RemoteClientPayload | undefined;
+  const findClient = (db: SourisDatabase, id: string) =>
+    loadSnapshot(db).clients.find((client) => client.id === id);
+
+  it('a photo set locally reaches the cloud as its path, then restores identically on a fresh device', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = await openUploadedSource(remote);
+    const run = worker(source, remote);
+
+    setClientPhotoPath(source, clientLea.id, PHOTO);
+    expect(await run()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(clientPayload(remote, clientLea.id)).toMatchObject({ photo_path: PHOTO, notes: null });
+
+    const { db: restored } = await restoreFreshDevice(remote);
+    expect(findClient(restored, clientLea.id)).toEqual({ ...clientLea, photoPath: PHOTO });
+    expect(loadSnapshot(restored).clients).toEqual(loadSnapshot(source).clients);
+  });
+
+  it('a replacement and a removal on one device are pulled by the other; nothing else moves', async () => {
+    const { remote, a, b, runA, runB } = await openTwoDevices();
+
+    setClientPhotoPath(b, clientLea.id, PHOTO);
+    expect(await runB()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    expect(findClient(a, clientLea.id)).toEqual({ ...clientLea, photoPath: PHOTO });
+    expect(countSyncOutboxRows(a)).toBe(0);
+
+    setClientPhotoPath(a, clientLea.id, NEXT_PHOTO);
+    expect(await runA()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(await runB()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    expect(findClient(b, clientLea.id)?.photoPath).toBe(NEXT_PHOTO);
+
+    setClientPhotoPath(b, clientLea.id, undefined);
+    expect(await runB()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(clientPayload(remote, clientLea.id)).toMatchObject({ photo_path: null });
+    expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    const pulled = findClient(a, clientLea.id);
+    expect(pulled).toEqual(clientLea);
+    expect('photoPath' in pulled!).toBe(false);
+  });
+
+  it('an identity edit keeps the photo on both devices', async () => {
+    const { remote, a, b, runA, runB } = await openTwoDevices();
+
+    setClientPhotoPath(a, clientLea.id, PHOTO);
+    await runA();
+    await runB();
+    // The Client form knows nothing about photos: its Client has no photoPath.
+    updateClient(b, { ...clientLea, phone: '07 00 00 00 00' });
+    expect(await runB()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(clientPayload(remote, clientLea.id)).toMatchObject({ photo_path: PHOTO, phone: '07 00 00 00 00' });
+    await runA();
+    expect(findClient(a, clientLea.id)).toEqual({ ...clientLea, phone: '07 00 00 00 00', photoPath: PHOTO });
+  });
+
+  it('a remote that predates the column (no photo_path key) parses as "no photo"', () => {
+    const snapshot = parseRemoteBusinessSnapshot({
+      pulled_at: '2026-09-25T08:00:00.000Z',
+      clients: [
+        {
+          id: 'client-old',
+          sync_version: 1,
+          deleted_at: null,
+          first_name: 'Ancienne',
+          last_name: null,
+          phone: null,
+          email: null,
+          birthday: null,
+          notes: null,
+          archived_at: null,
+        },
+      ],
+      services: [],
+      products: [],
+      appointments: [],
+      sales: [],
+    });
+    expect(snapshot.clients[0]?.payload).toMatchObject({ photo_path: null });
+  });
+});
+
+describe('Product photo — ONE shared photo per Product id, legacy local images never promoted', () => {
+  const PHOTO_C = `${REMOTE_BUSINESS_ID}/products/${productMask.id}/photo-c.jpg`;
+  const LEGACY_A = productMask.imageUri!;
+  const LEGACY_B = 'file:///device-b/Documents/products/product-mask-1600000000000-9.jpg';
+  const productPayload = (remote: FakeSyncRemote, id: string) =>
+    remote.find(REMOTE_BUSINESS_ID, 'PRODUCT', id)?.payload as RemoteProductPayload | undefined;
+  const findProductIn = (db: SourisDatabase, id: string) =>
+    loadSnapshot(db).products.find((product) => product.id === id);
+  const shownOn = (db: SourisDatabase, sharedPhotoUri: string | undefined) =>
+    selectProductImageUri(findProductIn(db, productMask.id), sharedPhotoUri);
+
+  it('same Product id, legacy photo A on device A and B on device B, no server photo: sync uploads NEITHER', async () => {
+    const { remote, a, b, runA, runB } = await openTwoDevices();
+    b.runSync('UPDATE products SET image_uri = ? WHERE id = ?', [LEGACY_B, productMask.id]);
+
+    // Unrelated edits on both devices push the Product — never its local image.
+    setProductStock(a, productMask.id, 9);
+    await runA();
+    await runB();
+    expect(productPayload(remote, productMask.id)).toMatchObject({ photo_path: null, stock_quantity: 9 });
+    expect(JSON.stringify(productPayload(remote, productMask.id))).not.toContain('file://');
+    expect(findProductIn(b, productMask.id)?.stockQuantity).toBe(9);
+
+    // Each device still shows its own legacy image, and only locally.
+    expect(findProductIn(a, productMask.id)).toMatchObject({ imageUri: LEGACY_A });
+    expect(findProductIn(b, productMask.id)).toMatchObject({ imageUri: LEGACY_B });
+    expect(findProductIn(a, productMask.id)?.photoPath).toBeUndefined();
+    expect(shownOn(a, undefined)).toBe(LEGACY_A);
+    expect(shownOn(b, undefined)).toBe(LEGACY_B);
+  });
+
+  it('device A explicitly takes photo C: the server gets it, device B receives it, and B\'s legacy photo no longer wins', async () => {
+    const { remote, a, b, runA, runB } = await openTwoDevices();
+    b.runSync('UPDATE products SET image_uri = ? WHERE id = ?', [LEGACY_B, productMask.id]);
+
+    // What the catalog writes once photo C is uploaded (ProductCatalogProvider).
+    const onA = findProductIn(a, productMask.id)!;
+    const { imageUri: _legacyA, ...withoutLegacy } = onA;
+    updateProduct(a, { ...withoutLegacy, photoPath: PHOTO_C });
+    expect(await runA()).toMatchObject({ pushed: 1, conflicts: [] });
+    expect(productPayload(remote, productMask.id)).toMatchObject({ photo_path: PHOTO_C });
+
+    expect(await runB()).toMatchObject({ pull: { status: 'PULLED', applied: 1, conflicts: [] } });
+    const onB = findProductIn(b, productMask.id)!;
+    expect(onB.photoPath).toBe(PHOTO_C);
+    // B's old local image is still on disk and in its row — but it never wins.
+    expect(onB.imageUri).toBe(LEGACY_B);
+    const cachedC = 'file:///device-b/Documents/product-photos/photo-c.jpg';
+    expect(shownOn(b, cachedC)).toBe(cachedC);
+    expect(shownOn(b, undefined)).toBeUndefined();
+    expect(shownOn(a, 'file:///a/photo-c.jpg')).toBe('file:///a/photo-c.jpg');
+  });
+
+  it('photoPath survives SQLite, push, pull and a fresh-device restore; removal propagates as absent', async () => {
+    const { remote, a, b, runA, runB } = await openTwoDevices();
+    updateProduct(b, { ...findProductIn(b, productMask.id)!, photoPath: PHOTO_C });
+    await runB();
+    await runA();
+    expect(findProductIn(a, productMask.id)?.photoPath).toBe(PHOTO_C);
+
+    const { db: restored } = await restoreFreshDevice(remote);
+    expect(findProductIn(restored, productMask.id)?.photoPath).toBe(PHOTO_C);
+    // A restored device never receives anyone's legacy local image.
+    expect(findProductIn(restored, productMask.id)?.imageUri).toBeUndefined();
+
+    const { photoPath: _photo, ...removed } = findProductIn(a, productMask.id)!;
+    updateProduct(a, removed);
+    await runA();
+    expect(productPayload(remote, productMask.id)).toMatchObject({ photo_path: null });
+    await runB();
+    expect('photoPath' in findProductIn(b, productMask.id)!).toBe(false);
+  });
+
+  it('a remote that predates the column (no photo_path key) parses as "no shared photo"', () => {
+    const snapshot = parseRemoteBusinessSnapshot({
+      pulled_at: '2026-09-26T08:00:00.000Z',
+      clients: [],
+      services: [],
+      products: [
+        {
+          id: 'product-old',
+          sync_version: 1,
+          deleted_at: null,
+          name: 'Ancien',
+          brand: null,
+          category: null,
+          barcode: null,
+          price_cents: 100,
+          stock_quantity: 1,
+          active: true,
+        },
+      ],
+      appointments: [],
+      sales: [],
+    });
+    expect(snapshot.products[0]?.payload).toMatchObject({ photo_path: null });
   });
 });
 
@@ -953,7 +1145,7 @@ describe('remote tombstones', () => {
 
   it('a tombstone of an aggregate this device never held is simply acknowledged', async () => {
     const { remote, a, runA } = await openTwoDevices();
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief', { first_name: 'Bref', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief', { first_name: 'Bref', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null });
     const version = remote.tombstoneFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief');
 
     expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 0, deleted: 0, skipped: expect.any(Number), failed: 0 } });
@@ -1004,7 +1196,7 @@ describe('remote snapshot validation', () => {
     expect(snapshot.clients[0]).toEqual({
       id: 'c',
       syncVersion: 3,
-      payload: { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: null, notes: null, archived_at: '2026-09-13T08:00:00.500Z' },
+      payload: { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: '2026-09-13T08:00:00.500Z' },
     });
   });
 
@@ -1026,8 +1218,8 @@ describe('remote snapshot validation', () => {
     });
 
     expect(snapshot.clients.map((client) => client.payload)).toEqual([
-      { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: '02-29', notes: null, archived_at: null },
-      { first_name: 'Nour', last_name: null, phone: null, email: null, birthday: null, notes: 'Ligne 1\nLigne 2', archived_at: null },
+      { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: '02-29', notes: null, photo_path: null, archived_at: null },
+      { first_name: 'Nour', last_name: null, phone: null, email: null, birthday: null, notes: 'Ligne 1\nLigne 2', photo_path: null, archived_at: null },
     ]);
   });
 

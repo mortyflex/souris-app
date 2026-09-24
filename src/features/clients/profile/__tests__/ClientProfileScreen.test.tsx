@@ -470,19 +470,20 @@ describe('ClientProfileScreen', () => {
       expect(selectionHaptic).not.toHaveBeenCalled();
     });
 
-    it('renders the 96 pt rounded portrait frame with the Client initials, spoken as her name', async () => {
+    it('renders the 96 pt rounded portrait frame with the Client initials, inside ONE photo button spoken with her name', async () => {
       const view = await renderProfile('client-agenda-lea');
 
       const avatar = view.getByTestId('client-avatar');
-      expect(avatar.props.accessibilityLabel).toBe('Léa Martin');
-      expect(avatar.props.accessibilityRole).toBe('image');
       // A softly rounded square, not a small disc: room for a real portrait.
       expect(avatar).toHaveStyle({ borderRadius: 24, height: 96, width: 96 });
       expect(view.getByTestId('client-avatar-initials')).toHaveTextContent('LM');
       expect(view.queryByTestId('client-avatar-photo')).toBeNull();
-      // No photo feature yet: nothing suggests one can be added.
-      expect(view.queryByTestId('symbol-camera')).toBeNull();
-      expect(view.queryByTestId('symbol-camera.fill')).toBeNull();
+      // The frame is the photo control (Client photos): one element, named after her.
+      const button = view.getByTestId('client-photo-button');
+      expect(button.props.accessibilityRole).toBe('button');
+      expect(button.props.accessibilityLabel).toBe('Ajouter une photo pour Léa Martin');
+      expect(avatar.props.accessible).toBe(false);
+      expect(within(view.getByTestId('client-photo-badge')).getByTestId('symbol-camera.fill')).toBeTruthy();
     });
 
     it('places the portrait and the name side by side in the identity row', async () => {

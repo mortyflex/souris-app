@@ -861,10 +861,16 @@ draft: cancelling keeps the canonical Product unchanged, while Save commits the 
 together with the other Product fields. Photo actions never create a Product, change stock, or
 change activation state.
 
-Camera and photo-library permissions are requested only from the corresponding user action. Both
-paths return a local URI suitable for the current in-memory session; Souris does not persist,
-upload, synchronize, or fabricate Product images in V1. Legacy Products therefore start without
-images.
+The camera permission is checked — and, when the system can still ask, requested — the moment
+`Prendre une photo` is tapped, BEFORE the camera sheet is presented; already granted opens the camera
+at once, a permanent denial shows a Souris explanation (`Accès à l’appareil photo` · `Ouvrir les
+réglages` / `Annuler`). The library uses the system picker, which needs no photo-library permission.
+This flow is shared with Client photos (`src/shared/ui/PhotoSourceFlow.tsx`,
+`src/shared/lib/photo-acquisition.ts`). A photo explicitly taken or chosen becomes, on Save, the
+ONE shared photo of the Product for every device of the Business (uploaded, then referenced by
+`photoPath`, `docs/domain/PRODUCTS.md` §11). Images stored only on a device by earlier builds are
+never uploaded: they stay visible on that device until the Product receives a shared photo, which
+always wins. Legacy imported Products start without photos.
 
 On iOS 17 and later, a small local Apple Vision enhancement automatically attempts foreground
 subject extraction (`VNGenerateForegroundInstanceMaskRequest`) after acquisition, crops the result

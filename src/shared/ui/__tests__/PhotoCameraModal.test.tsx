@@ -1,17 +1,11 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Linking } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 
-import { ProductCameraModal } from '../components/ProductCameraModal';
+import { PhotoCameraModal } from '../PhotoCameraModal';
 
-interface MockPermission {
-  readonly granted: boolean;
-  readonly canAskAgain: boolean;
-}
-
-let mockPermission: MockPermission | null = { granted: true, canAskAgain: true };
-const mockRequestPermission = jest.fn(() => Promise.resolve(mockPermission));
+const mockUseCameraPermissions = jest.fn();
+const mockRequestPermission = jest.fn();
 const mockTakePicture = jest.fn(() => Promise.resolve({ uri: 'file:///camera/product.jpg' }));
 
 jest.mock('expo-camera', () => {
@@ -25,7 +19,8 @@ jest.mock('expo-camera', () => {
 
   return {
     CameraView,
-    useCameraPermissions: () => [mockPermission, mockRequestPermission, jest.fn()],
+    Camera: { requestCameraPermissionsAsync: mockRequestPermission },
+    useCameraPermissions: mockUseCameraPermissions,
   };
 });
 
@@ -44,10 +39,16 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-describe('ProductCameraModal', () => {
+const copy = {
+  hint: 'Placez le produit au centre',
+  testID: 'product-camera',
+  title: 'Photo du produit',
+};
+
+describe('PhotoCameraModal', () => {
   beforeEach(() => {
-    mockPermission = { granted: true, canAskAgain: true };
     mockRequestPermission.mockClear();
+    mockUseCameraPermissions.mockClear();
     mockTakePicture.mockClear();
     mockTakePicture.mockResolvedValue({ uri: 'file:///camera/product.jpg' });
     jest.mocked(haptics.selection).mockClear();
@@ -56,7 +57,7 @@ describe('ProductCameraModal', () => {
   it('presents a full camera preview with one shutter and no scrim', async () => {
     const onCaptured = jest.fn();
     const view = await render(
-      <ProductCameraModal onCaptured={onCaptured} onClose={jest.fn()} visible />,
+      <PhotoCameraModal {...copy} onCaptured={onCaptured} onClose={jest.fn()} visible />,
     );
 
     expect(view.getByTestId('camera-view')).toBeTruthy();
@@ -75,14 +76,14 @@ describe('ProductCameraModal', () => {
   it('closes from the header and renders nothing while hidden', async () => {
     const onClose = jest.fn();
     const view = await render(
-      <ProductCameraModal onCaptured={jest.fn()} onClose={onClose} visible />,
+      <PhotoCameraModal {...copy} onCaptured={jest.fn()} onClose={onClose} visible />,
     );
 
     await act(async () => fireEvent.press(view.getByLabelText('Fermer la caméra')));
     expect(onClose).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      view.rerender(<ProductCameraModal onCaptured={jest.fn()} onClose={onClose} visible={false} />);
+      view.rerender(<PhotoCameraModal {...copy} onCaptured={jest.fn()} onClose={onClose} visible={false} />);
     });
     expect(view.queryByTestId('camera-view')).toBeNull();
   });
@@ -91,7 +92,7 @@ describe('ProductCameraModal', () => {
     mockTakePicture.mockRejectedValueOnce(new Error('camera busy'));
     const onCaptured = jest.fn();
     const view = await render(
-      <ProductCameraModal onCaptured={onCaptured} onClose={jest.fn()} visible />,
+      <PhotoCameraModal {...copy} onCaptured={onCaptured} onClose={jest.fn()} visible />,
     );
 
     await act(async () => fireEvent.press(view.getByLabelText('Prendre la photo')));
@@ -102,30 +103,41 @@ describe('ProductCameraModal', () => {
     });
   });
 
-  it('requests camera permission only when presented', async () => {
-    mockPermission = null;
+  it('never asks for the camera permission itself: the flow resolved it before presenting', async () => {
     const view = await render(
-      <ProductCameraModal onCaptured={jest.fn()} onClose={jest.fn()} visible={false} />,
+      <PhotoCameraModal {...copy} onCaptured={jest.fn()} onClose={jest.fn()} visible />,
     );
-    expect(mockRequestPermission).not.toHaveBeenCalled();
 
-    await act(async () => {
-      view.rerender(<ProductCameraModal onCaptured={jest.fn()} onClose={jest.fn()} visible />);
-    });
-    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
-    expect(view.getByText('Préparation de la caméra…')).toBeTruthy();
+    expect(view.getByTestId('camera-view')).toBeTruthy();
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+    expect(mockUseCameraPermissions).not.toHaveBeenCalled();
+    expect(view.queryByText('Préparation de la caméra…')).toBeNull();
   });
 
-  it('opens settings after permanent denial', async () => {
-    mockPermission = { granted: false, canAskAgain: false };
-    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
+  it('closes instead of showing a dead preview when the camera cannot start', async () => {
+    const onClose = jest.fn();
     const view = await render(
-      <ProductCameraModal onCaptured={jest.fn()} onClose={jest.fn()} visible />,
+      <PhotoCameraModal {...copy} onCaptured={jest.fn()} onClose={onClose} visible />,
     );
 
-    expect(view.queryByTestId('camera-view')).toBeNull();
-    await act(async () => fireEvent.press(view.getByText('Ouvrir les réglages')));
-    expect(openSettings).toHaveBeenCalledTimes(1);
-    openSettings.mockRestore();
+    await act(async () => view.getByTestId('camera-view').props.onMountError({ message: 'x' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries the caller wording and testIDs', async () => {
+    const view = await render(
+      <PhotoCameraModal
+        hint="Cadrez le visage au centre"
+        onCaptured={jest.fn()}
+        onClose={jest.fn()}
+        testID="client-camera"
+        title="Photo de la cliente"
+        visible
+      />,
+    );
+
+    expect(view.getByText('Photo de la cliente')).toBeTruthy();
+    expect(view.getByText('Cadrez le visage au centre')).toBeTruthy();
+    expect(view.getByTestId('client-camera-shutter')).toBeTruthy();
   });
 });

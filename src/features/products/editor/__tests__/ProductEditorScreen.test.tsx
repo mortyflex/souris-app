@@ -7,7 +7,17 @@ import {
   useProductCatalog,
 } from "../../session/ProductCatalogProvider";
 import { ProductEditorScreen } from "../ProductEditorScreen";
-import { createMemoryLocalFiles } from "@/persistence/testing/memory-local-files";
+import { useProductImageUri } from "../../images/use-product-image-uri";
+import {
+  createFakeBusinessMediaRemote,
+  type FakeBusinessMediaRemote,
+} from "@/persistence/testing/fake-business-media-remote";
+import {
+  createMemoryLocalFiles,
+  type MemoryLocalFiles,
+} from "@/persistence/testing/memory-local-files";
+import { BusinessMediaProvider } from "@/providers/BusinessMediaProvider";
+import { usePersistence } from "@/providers/PersistenceProvider";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 
@@ -17,8 +27,10 @@ let mockScannedBarcode = "";
 let mockPhotoResult:
   | { readonly status: "selected"; readonly uri: string }
   | { readonly status: "cancelled" }
-  | { readonly status: "permission-denied"; readonly canAskAgain: boolean }
   | { readonly status: "error" };
+let mockCameraAccess: "granted" | "denied" | "blocked" = "granted";
+const mockEnsureCameraAccess = jest.fn(() => Promise.resolve(mockCameraAccess));
+const mockOpenAppSettings = jest.fn();
 let mockCapturedUri = "file:///products/raw.jpg";
 const mockPickProductPhotoFromLibrary = jest.fn(() =>
   Promise.resolve(mockPhotoResult),
@@ -26,6 +38,18 @@ const mockPickProductPhotoFromLibrary = jest.fn(() =>
 const mockRemoveImageBackground = jest.fn((uri: string) =>
   Promise.resolve(uri),
 );
+
+let mockFiles: MemoryLocalFiles;
+let mockRemote: FakeBusinessMediaRemote;
+
+// The shared normalization is covered by its own tests: here it hands the
+// file on unchanged, so a stored photo keeps the content of its source.
+jest.mock("../../images/product-photo-processing", () => ({
+  prepareProductPhoto: async (uri: string) => ({
+    uri,
+    format: uri.endsWith(".png") ? "png" : "jpg",
+  }),
+}));
 
 const ORIGINAL_IMAGE_URI = "file:///products/original.jpg";
 const REPLACEMENT_IMAGE_URI = "file:///products/replacement.png";
@@ -88,19 +112,22 @@ jest.mock("expo-image", () => {
   return { Image: (props: object) => React.createElement(View, props) };
 });
 
-jest.mock("@/features/products/images/product-photo-acquisition", () => ({
-  pickProductPhotoFromLibrary: () => mockPickProductPhotoFromLibrary(),
+// The ONE shared permission / media boundary (also used by Client photos).
+jest.mock("@/shared/lib/photo-acquisition", () => ({
+  ensureCameraAccess: () => mockEnsureCameraAccess(),
+  pickPhotoFromLibrary: () => mockPickProductPhotoFromLibrary(),
+  openAppSettings: () => mockOpenAppSettings(),
 }));
 
-// The camera is covered by ProductCameraModal tests; here it only emits a capture.
-jest.mock("../components/ProductCameraModal", () => {
+// The camera is covered by PhotoCameraModal tests; here it only emits a capture.
+jest.mock("@/shared/ui/PhotoCameraModal", () => {
   const React = jest.requireActual("react") as typeof import("react");
   const { Pressable: MockPressable } = jest.requireActual(
     "react-native",
   ) as typeof import("react-native");
 
   return {
-    ProductCameraModal: ({
+    PhotoCameraModal: ({
       visible,
       onCaptured,
     }: {
@@ -187,11 +214,50 @@ jest.mock("react-native-safe-area-context", () => {
   };
 });
 
+/**
+ * What a displayed image file holds. Memory files hold their own original URI
+ * and copies keep it, so the draft file and the shared photo's cached copy of
+ * « original.jpg » both read "file:///products/original.jpg".
+ */
+function shownContent(uri: string | undefined): string {
+  return uri === undefined ? "-" : (mockFiles.readFile(uri) ?? uri);
+}
+
+function shownImage(
+  view: Awaited<ReturnType<typeof render>>,
+  testID: string,
+): string {
+  return shownContent(view.getByTestId(testID).props.source?.uri);
+}
+
+/**
+ * What the cloud sync runner does after a pull that applied another device's
+ * change to this Product: the row is already in SQLite, then
+ * `reloadSnapshot()` re-reads it IN PLACE (the runner → reloadSnapshot link
+ * is covered by CloudSyncRunner.test.tsx on a real pull).
+ */
+function RemoteChangeProbe() {
+  const { database, reloadSnapshot } = usePersistence();
+  return (
+    <Pressable
+      testID="apply-remote-change"
+      onPress={() => {
+        database.runSync(
+          "UPDATE products SET stock_quantity = 3, price_cents = 5500 WHERE id = '6974bff937a5d89c2d9afbd0'",
+        );
+        reloadSnapshot();
+      }}
+    />
+  );
+}
+
 function CatalogProbe() {
   const { addProduct, products } = useProductCatalog();
   const managed =
     products.find((product) => product.name === "Shampooing Test") ??
     products.find((product) => product.id === "6974bff937a5d89c2d9afbd0");
+  // The image the Product shows on this device (shared photo first).
+  const managedImageUri = useProductImageUri(managed);
 
   return (
     <>
@@ -200,7 +266,7 @@ function CatalogProbe() {
           ? `${managed.id}:${managed.name}:${managed.brand ?? "-"}:${managed.category ?? "-"}:${managed.barcode ?? "-"}:${managed.price}:${managed.stockQuantity}:${managed.active}`
           : ""}
       </Text>
-      <Text testID="managed-image">{managed?.imageUri ?? "-"}</Text>
+      <Text testID="managed-image">{shownContent(managedImageUri)}</Text>
       <Text testID="masque-active">
         {products.find((product) => product.id === "6974bff937a5d89c2d9afbd0")
           ? String(
@@ -302,26 +368,34 @@ function SeededImageEditor() {
       onPress={() => {
         const product = getProductById("6974bff937a5d89c2d9afbd0");
         if (!product) return;
-        updateProduct({ ...product, imageUri: ORIGINAL_IMAGE_URI });
-        setOpen(true);
+        // The Product already has a shared photo: « original.jpg ».
+        void updateProduct(product, {
+          kind: "replace",
+          uri: ORIGINAL_IMAGE_URI,
+        }).then(() => setOpen(true));
       }}
     />
   );
 }
 
-// Every image URI in this file lives under file:///products/, which is the
-// Souris-owned image directory when the document directory is file:///. The
-// catalog therefore keeps the URIs verbatim; promotion itself is covered by
-// the product-image-storage and ProductCatalogProvider tests.
+// Photos taken or chosen are local files; on Save the catalog uploads the
+// new one to the (fake) Business media storage and shows it from its cached
+// copy (the lifecycle itself is covered by the ProductCatalogProvider tests).
 function renderEditor(screen: React.ReactNode) {
+  mockFiles = createMemoryLocalFiles({ documentDirectoryUri: "file:///" });
+  for (const uri of [ORIGINAL_IMAGE_URI, REPLACEMENT_IMAGE_URI, "file:///products/raw.jpg"]) {
+    mockFiles.addFile(uri);
+  }
+  mockRemote = createFakeBusinessMediaRemote(mockFiles);
   return render(
-    <TestPersistenceProvider
-      files={createMemoryLocalFiles({ documentDirectoryUri: "file:///" })}
-    >
-      <ProductCatalogProvider>
-      {screen}
-      <CatalogProbe />
-      </ProductCatalogProvider>
+    <TestPersistenceProvider files={mockFiles}>
+      <BusinessMediaProvider remote={mockRemote}>
+        <ProductCatalogProvider>
+          {screen}
+          <CatalogProbe />
+          <RemoteChangeProbe />
+        </ProductCatalogProvider>
+      </BusinessMediaProvider>
     </TestPersistenceProvider>,
   );
 }
@@ -334,6 +408,9 @@ describe("ProductEditorScreen", () => {
     mockPhotoResult = { status: "selected", uri: "file:///products/raw.jpg" };
     mockCapturedUri = "file:///products/raw.jpg";
     mockPickProductPhotoFromLibrary.mockClear();
+    mockCameraAccess = "granted";
+    mockEnsureCameraAccess.mockClear();
+    mockOpenAppSettings.mockClear();
     mockRemoveImageBackground.mockReset();
     mockRemoveImageBackground.mockImplementation((uri: string) =>
       Promise.resolve(uri),
@@ -410,9 +487,7 @@ describe("ProductEditorScreen", () => {
     expect(mockRemoveImageBackground).toHaveBeenCalledWith(
       "file:///products/raw.jpg",
     );
-    expect(view.getByTestId("product-form-image-source").props.source).toEqual({
-      uri: REPLACEMENT_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-form-image-source")).toBe(REPLACEMENT_IMAGE_URI);
     expect(view.getByTestId("product-form-image-source").props.contentFit).toBe(
       "contain",
     );
@@ -440,6 +515,46 @@ describe("ProductEditorScreen", () => {
     );
     expect(mockBack).toHaveBeenCalledTimes(1);
     alertSpy.mockRestore();
+  });
+
+  it("keeps an open Product detail open and shows another device's changes in place", async () => {
+    const view = await renderEditor(
+      <ProductEditorScreen mode="existing" productId="6974bff937a5d89c2d9afbd0" />,
+    );
+    expect(view.getByTestId("product-read-view")).toBeTruthy();
+    expect(view.getByText("50,00 €")).toBeTruthy();
+
+    await act(async () =>
+      fireEvent.press(view.getByTestId("apply-remote-change")),
+    );
+
+    expect(view.getByTestId("product-read-view")).toBeTruthy();
+    expect(view.getByText("55,00 €")).toBeTruthy();
+    expect(view.getByLabelText(/^Stock, 3 unités/)).toBeTruthy();
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it("never replaces an unsaved edit form with remote data; Cancel then shows the synced Product", async () => {
+    const view = await renderEditor(
+      <ProductEditorScreen mode="existing" productId="6974bff937a5d89c2d9afbd0" />,
+    );
+    await openProductAction(view, "edit-product");
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText("Prix du produit"), "61");
+    });
+
+    await act(async () =>
+      fireEvent.press(view.getByTestId("apply-remote-change")),
+    );
+
+    // Still editing, with the professional's own value.
+    expect(view.getByLabelText("Prix du produit").props.value).toBe("61");
+    expect(view.getByTestId("save-product")).toBeTruthy();
+
+    await act(async () =>
+      fireEvent.press(view.getByTestId("cancel-product-edit")),
+    );
+    expect(view.getByText("55,00 €")).toBeTruthy();
   });
 
   it("rejects an invalid price and bounds the stock selector to 0–30", async () => {
@@ -755,9 +870,7 @@ describe("ProductEditorScreen", () => {
     const identity = within(view.getByTestId("product-identity"));
     const image = identity.getByTestId("product-detail-image");
     // The same Product.imageUri and component the catalogue row renders.
-    expect(identity.getByTestId("product-detail-image-source").props.source).toEqual({
-      uri: ORIGINAL_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-detail-image-source")).toBe(ORIGINAL_IMAGE_URI);
     expect(image.props.accessibilityLabel).toBe("Photo de Masque réparateur 5 min");
     expect(image.props.accessibilityRole).toBe("image");
     const imageStyle = StyleSheet.flatten(image.props.style);
@@ -773,6 +886,57 @@ describe("ProductEditorScreen", () => {
     // Photo editing stays in « Modifier le produit ».
     await openProductAction(view, "edit-product");
     expect(view.getByTestId("product-photo-tile")).toBeTruthy();
+    // Opening the details, the edit form or the photo menu asks for nothing.
+    await act(async () =>
+      fireEvent.press(view.getByLabelText("Modifier la photo")),
+    );
+    await settleSheetTransition();
+    expect(mockEnsureCameraAccess).not.toHaveBeenCalled();
+  });
+
+  it("refuses the Save with one concise message when the new photo cannot be stored, keeping the draft and the previous photo", async () => {
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const view = await renderEditor(<SeededImageEditor />);
+    await act(async () =>
+      fireEvent.press(view.getByTestId("open-seeded-image-product")),
+    );
+    const previousObjects = [...mockRemote.objects.keys()];
+    expect(previousObjects).toHaveLength(1);
+
+    await openProductAction(view, "edit-product");
+    await act(async () =>
+      fireEvent.changeText(view.getByLabelText("Prix du produit"), "29"),
+    );
+    await act(async () =>
+      fireEvent.press(view.getByLabelText("Modifier la photo")),
+    );
+    await act(async () =>
+      fireEvent.press(view.getByLabelText("Choisir dans la photothèque")),
+    );
+    await settleSheetTransition();
+    mockRemote.failUploads = true;
+    await act(async () => fireEvent.press(view.getByTestId("save-product")));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Impossible d’enregistrer la photo.",
+      "Vérifiez votre connexion, puis réessayez. Le produit n’a pas été modifié.",
+    );
+    // Still editing, with the chosen photo in the draft.
+    expect(view.getByTestId("save-product")).toBeTruthy();
+    expect(shownImage(view, "product-form-image-source")).toBe("file:///products/raw.jpg");
+    // Nothing was written: previous photo, previous price.
+    expect(view.getByTestId("managed-image").props.children).toBe(ORIGINAL_IMAGE_URI);
+    expect(view.getByTestId("managed-product").props.children).toContain(":50:");
+    expect([...mockRemote.objects.keys()]).toEqual(previousObjects);
+
+    // Back online: the same draft saves, and the new photo replaces the old object.
+    mockRemote.failUploads = false;
+    await act(async () => fireEvent.press(view.getByTestId("save-product")));
+    expect(view.getByTestId("managed-image").props.children).toBe("file:///products/raw.jpg");
+    expect(view.getByTestId("managed-product").props.children).toContain(":29:");
+    expect([...mockRemote.objects.keys()]).not.toEqual(previousObjects);
+    expect(mockRemote.objects.size).toBe(1);
+    alertSpy.mockRestore();
   });
 
   it("keeps an image replacement in the edit draft until Save and discards it on Cancel", async () => {
@@ -783,11 +947,7 @@ describe("ProductEditorScreen", () => {
     await act(async () =>
       fireEvent.press(view.getByTestId("open-seeded-image-product")),
     );
-    expect(
-      view.getByTestId("product-detail-image-source").props.source,
-    ).toEqual({
-      uri: ORIGINAL_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-detail-image-source")).toBe(ORIGINAL_IMAGE_URI);
     expect(
       view.getByTestId("product-detail-image-source").props.contentFit,
     ).toBe("contain");
@@ -795,9 +955,7 @@ describe("ProductEditorScreen", () => {
     expect(view.queryByTestId("product-detail-image-sticker")).toBeNull();
 
     await openProductAction(view, "edit-product");
-    expect(view.getByTestId("product-form-image-source").props.source).toEqual({
-      uri: ORIGINAL_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-form-image-source")).toBe(ORIGINAL_IMAGE_URI);
     await act(async () =>
       fireEvent.press(view.getByLabelText("Modifier la photo")),
     );
@@ -810,9 +968,7 @@ describe("ProductEditorScreen", () => {
     expect(mockPickProductPhotoFromLibrary).toHaveBeenCalledTimes(1);
     await settleSheetTransition();
     expect(view.queryByTestId("product-photo-sheet")).toBeNull();
-    expect(view.getByTestId("product-form-image-source").props.source).toEqual({
-      uri: REPLACEMENT_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-form-image-source")).toBe(REPLACEMENT_IMAGE_URI);
     expect(view.getByTestId("managed-image").props.children).toBe(
       ORIGINAL_IMAGE_URI,
     );
@@ -823,11 +979,7 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("managed-image").props.children).toBe(
       ORIGINAL_IMAGE_URI,
     );
-    expect(
-      view.getByTestId("product-detail-image-source").props.source,
-    ).toEqual({
-      uri: ORIGINAL_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-detail-image-source")).toBe(ORIGINAL_IMAGE_URI);
 
     await openProductAction(view, "edit-product");
     await act(async () =>
@@ -844,11 +996,7 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("managed-image").props.children).toBe(
       REPLACEMENT_IMAGE_URI,
     );
-    expect(
-      view.getByTestId("product-detail-image-source").props.source,
-    ).toEqual({
-      uri: REPLACEMENT_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-detail-image-source")).toBe(REPLACEMENT_IMAGE_URI);
     alertSpy.mockRestore();
   });
 
@@ -869,9 +1017,7 @@ describe("ProductEditorScreen", () => {
       fireEvent.press(view.getByLabelText("Choisir dans la photothèque")),
     );
 
-    expect(view.getByTestId("product-form-image-source").props.source).toEqual({
-      uri: "file:///products/raw.jpg",
-    });
+    expect(shownImage(view, "product-form-image-source")).toBe("file:///products/raw.jpg");
     expect(
       view.getByLabelText("Modifier la photo").props.accessibilityState,
     ).toEqual({
@@ -891,11 +1037,7 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("managed-image").props.children).toBe(
       "file:///products/raw.jpg",
     );
-    expect(
-      view.getByTestId("product-detail-image-source").props.source,
-    ).toEqual({
-      uri: "file:///products/raw.jpg",
-    });
+    expect(shownImage(view, "product-detail-image-source")).toBe("file:///products/raw.jpg");
     alertSpy.mockRestore();
   });
 
@@ -924,9 +1066,7 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("managed-image").props.children).toBe(
       ORIGINAL_IMAGE_URI,
     );
-    expect(view.getByTestId("product-form-image-source").props.source).toEqual({
-      uri: ORIGINAL_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-form-image-source")).toBe(ORIGINAL_IMAGE_URI);
     alertSpy.mockRestore();
   });
 
@@ -959,11 +1099,7 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("managed-image").props.children).toBe(
       ORIGINAL_IMAGE_URI,
     );
-    expect(
-      view.getByTestId("product-detail-image-source").props.source,
-    ).toEqual({
-      uri: ORIGINAL_IMAGE_URI,
-    });
+    expect(shownImage(view, "product-detail-image-source")).toBe(ORIGINAL_IMAGE_URI);
 
     await openProductAction(view, "edit-product");
     await act(async () =>
@@ -986,9 +1122,27 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("product-stock")).toBeTruthy();
   });
 
-  it("keeps the Product form usable when photo permission is denied", async () => {
-    const alertSpy = jest.spyOn(Alert, "alert");
-    mockPhotoResult = { status: "permission-denied", canAskAgain: false };
+  it("asks for the camera permission on « Prendre une photo », before the camera, never earlier", async () => {
+    mockCameraAccess = "granted";
+    const view = await renderEditor(<ProductEditorScreen mode="create" />);
+    expect(mockEnsureCameraAccess).not.toHaveBeenCalled();
+
+    await act(async () =>
+      fireEvent.press(view.getByLabelText("Ajouter une photo")),
+    );
+    // Opening the photo menu asks for nothing.
+    expect(mockEnsureCameraAccess).not.toHaveBeenCalled();
+
+    await act(async () =>
+      fireEvent.press(view.getByLabelText("Prendre une photo")),
+    );
+    expect(mockEnsureCameraAccess).toHaveBeenCalledTimes(1);
+    await settleSheetTransition();
+    expect(view.getByTestId("mock-camera-capture")).toBeTruthy();
+  });
+
+  it("keeps the Product form usable when camera access is blocked", async () => {
+    mockCameraAccess = "blocked";
     const view = await renderEditor(<ProductEditorScreen mode="create" />);
 
     await act(async () =>
@@ -998,20 +1152,20 @@ describe("ProductEditorScreen", () => {
       fireEvent.press(view.getByLabelText("Ajouter une photo")),
     );
     await act(async () =>
-      fireEvent.press(view.getByLabelText("Choisir dans la photothèque")),
+      fireEvent.press(view.getByLabelText("Prendre une photo")),
     );
 
     await settleSheetTransition();
     expect(view.queryByTestId("product-photo-sheet")).toBeNull();
-    expect(alertSpy).toHaveBeenLastCalledWith(
-      "Accès à la photothèque refusé",
-      expect.stringContaining("réglages"),
-      expect.anything(),
+    expect(view.queryByTestId("mock-camera-capture")).toBeNull();
+    expect(view.getByText("Accès à l’appareil photo")).toBeTruthy();
+    await act(async () =>
+      fireEvent.press(view.getByText("Ouvrir les réglages")),
     );
+    expect(mockOpenAppSettings).toHaveBeenCalledTimes(1);
     expect(view.getByLabelText("Nom du produit").props.value).toBe("Soin Test");
     expect(view.getByLabelText("Ajouter une photo")).toBeTruthy();
     expect(view.getByTestId("managed-image").props.children).toBe("-");
-    alertSpy.mockRestore();
   });
 
   it("deactivates through the shared Souris dialog and reactivates, closing each time", async () => {

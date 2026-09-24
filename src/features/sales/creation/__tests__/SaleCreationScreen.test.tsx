@@ -14,6 +14,7 @@ import { haptics } from '@/shared/lib/haptics';
 
 import { SaleSessionProvider, useSaleSession } from '../../session/SaleSessionProvider';
 import { SaleCreationScreen } from '../SaleCreationScreen';
+import { usePersistence } from '@/providers/PersistenceProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { avoidsKeyboard, captureKeyboardEvents, keyboardTopGap } from '@/shared/ui/testing/sheet-keyboard';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
@@ -85,6 +86,27 @@ jest.mock('@/shared/ui/BarcodeScannerModal', () => {
 // Real legacy catalog identities (stock starts at 0 — the probe sets real counts).
 const MASQUE_ID = '6974bff937a5d89c2d9afbd0'; // Masque réparateur 5 min · 50 € · 3474637152000
 const CONCENTRATE_ID = '68d802c055b09988d663415f'; // Acidic bonding concentrate · 12 € · 30163508
+
+/**
+ * What the cloud sync runner does after a pull that applied other devices'
+ * changes: the rows are already in SQLite, then `reloadSnapshot()` re-reads
+ * them IN PLACE (the runner → reloadSnapshot link is covered by
+ * CloudSyncRunner.test.tsx on a real pull).
+ */
+function RemoteChangeProbe() {
+  const { database, reloadSnapshot } = usePersistence();
+  return (
+    <Pressable
+      testID="apply-remote-change"
+      onPress={() => {
+        database.runSync('UPDATE products SET stock_quantity = 7 WHERE id = ?', [MASQUE_ID]);
+        database.runSync("UPDATE clients SET first_name = 'Camille-Rose' WHERE id = 'client-agenda-camille'");
+        database.runSync("UPDATE products SET name = 'Concentré (renommé)' WHERE id = ?", [CONCENTRATE_ID]);
+        reloadSnapshot();
+      }}
+    />
+  );
+}
 
 function Probe() {
   const { addProduct, getProductById, setProductActive, setProductStock, deleteProduct } =
@@ -197,6 +219,7 @@ function renderSale(initialClientId?: string, createSeed?: () => ReturnType<type
         <SaleSessionProvider>
           <SaleCreationScreen initialClientId={initialClientId} />
           <Probe />
+          <RemoteChangeProbe />
         </SaleSessionProvider>
       </ProductCatalogProvider>
       </ClientSessionProvider>
@@ -404,6 +427,37 @@ describe('SaleCreationScreen', () => {
 
     expect(view.getByTestId('last-sale-appointment').props.children).toBe('standalone');
     expect(view.getByTestId('last-sale-payment').props.children).toBe('5000/0');
+  });
+
+  it('keeps an unsaved Sale draft intact when another device\'s changes are applied in place', async () => {
+    const view = await renderSale();
+    await chooseClient(view, 'Camille', 'Camille Durand');
+    await press(view, 'stock-masque-2');
+    await search(view, 'masque');
+    await press(view, `sale-product-${MASQUE_ID}`);
+    await press(view, `sale-line-increment-${MASQUE_ID}`);
+    expect(view.getByTestId(`sale-line-quantity-${MASQUE_ID}`)).toHaveTextContent('2');
+    const query = view.getByPlaceholderText('Rechercher un produit').props.value;
+
+    await press(view, 'apply-remote-change');
+
+    // Persisted state underneath is fresh…
+    expect(view.getByTestId('masque-stock').props.children).toBe(7);
+    // …the draft is untouched: same screen, same selected Client (her synced
+    // name shows through), same line and quantity, same query.
+    expect(clientValue(view)).toBe('Camille-Rose Durand');
+    expect(view.getByTestId(`sale-line-${MASQUE_ID}`)).toBeTruthy();
+    expect(view.getByTestId(`sale-line-quantity-${MASQUE_ID}`)).toHaveTextContent('2');
+    expect(view.getByPlaceholderText('Rechercher un produit').props.value).toBe(query);
+    // Nothing was created or abandoned.
+    expect(view.getByTestId('sales-count').props.children).toBe(0);
+    expect(mockBack).not.toHaveBeenCalled();
+
+    // …and it still completes normally, against the fresh stock.
+    await press(view, 'validate-sale');
+    await payAndConfirm(view, '100');
+    expect(view.getByTestId('last-sale').props.children).toBe('client-agenda-camille|Masque réparateur 5 min:50:2');
+    expect(view.getByTestId('masque-stock').props.children).toBe(5);
   });
 
   it('keeps a Sale opened from Produits standalone and records its payment', async () => {

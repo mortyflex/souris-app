@@ -16,14 +16,18 @@
 //
 //   the conditions become true      (launch, sign-in, Business setup, reconnect)
 //   the app returns to foreground   (AppState → active)
-//   a slow foreground tick          ONLY when the first-sync gate is still closed,
-//                                   or a local check finds a run due
-//                                   (`isSyncRunDue`): an eligible pending
-//                                   entry, or a first sync that is not settled
-//                                   yet — typically the first aggregate created
-//                                   after an EMPTY classification. An idle
-//                                   device, or one that needs a reconciliation,
-//                                   makes no request at all
+//   the foreground tick (2 min)     when the first-sync gate is still closed,
+//                                   when a local check finds a run due
+//                                   (`isSyncRunDue`: an eligible pending entry,
+//                                   or a first sync not settled yet), OR when
+//                                   the device already synchronizes
+//                                   (`isForegroundSyncTickDue`): an idle open
+//                                   device then makes ONE incremental pull
+//                                   (nothing to push) and receives what other
+//                                   devices changed within one tick. A device
+//                                   that needs a reconciliation makes no
+//                                   request. Never in the background, never a
+//                                   second timer, never overlapping runs
 //
 // The first sync is SEAMLESS (V1D.1, CLOUD_SYNC.md §17): the user never sees,
 // approves or triggers it. The worker still refuses to upload a device's
@@ -44,9 +48,11 @@
 //
 // A run that WROTE operational rows on behalf of the remote — a restore, a
 // pull that applied or removed an aggregate — is followed by
-// `reloadSnapshot()`: the feature providers hydrate once, so they are
-// remounted on the fresh SQLite state. A push-only run (every run of a
-// single-device Business once restored) never remounts anything.
+// `reloadSnapshot()`, which re-reads SQLite IN PLACE: the session providers
+// adopt the fresh persisted state and nothing is remounted — navigation,
+// open sheets and drafts stay as they are. A run that changed nothing
+// (every idle tick without remote changes) calls nothing and re-renders
+// nothing below this component.
 //
 // The worker is single-flight and so is the orchestration around it, so
 // overlapping triggers collapse into one run.
@@ -96,7 +102,7 @@ import {
 import {
   createSyncPushWorker,
   didSyncRunChangeLocalData,
-  isSyncRunDue,
+  isForegroundSyncTickDue,
   type SyncRunResult,
 } from '@/persistence/sync/push-worker';
 import type { SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
@@ -272,7 +278,7 @@ export function CloudSyncRunner({ gateway, children }: PropsWithChildren<CloudSy
     const tick = setInterval(() => {
       if (!foreground) return;
       try {
-        if (!gateOpenNow.current || isSyncRunDue(database, businessId, new Date())) run();
+        if (!gateOpenNow.current || isForegroundSyncTickDue(database, businessId, new Date())) run();
       } catch {
         // The database was closed by a reset; the next mount starts over.
       }
@@ -291,9 +297,12 @@ export function CloudSyncRunner({ gateway, children }: PropsWithChildren<CloudSy
     : gate.attemptEnded || !worker || businessId === undefined
       ? 'unavailable'
       : 'resolving';
+  // `running` matters to readers only while the gate is unavailable: an idle
+  // periodic run of an open app must not hand the tree a new context value.
+  const retrying = gateStatus === 'unavailable' && running;
   const control = useMemo<CloudSyncControl>(
-    () => ({ runNow: runOnce, firstSync: { status: gateStatus, retrying: gateStatus === 'unavailable' && running } }),
-    [runOnce, gateStatus, running],
+    () => ({ runNow: runOnce, firstSync: { status: gateStatus, retrying } }),
+    [runOnce, gateStatus, retrying],
   );
 
   return (

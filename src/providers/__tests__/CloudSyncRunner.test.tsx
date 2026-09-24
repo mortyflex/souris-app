@@ -1,5 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react-native';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState, Text, type AppStateStatus } from 'react-native';
 
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
@@ -15,20 +15,28 @@ import { useClientSession, ClientSessionProvider } from '@/features/clients/sess
 import { bootstrapPersistence, loadSnapshot } from '@/persistence/bootstrap';
 import type { SourisDatabase } from '@/persistence/database';
 import { bindLocalDatabaseToBusiness, readBusinessProfile } from '@/persistence/stores/business-profile';
-import { insertProduct } from '@/persistence/stores/products';
 import { updateClient } from '@/persistence/stores/clients';
 import {
   approveInitialUpload,
   readInitialRestoreApproval,
   readInitialUploadApproval,
   readSyncBootstrapRecord,
+  writeSyncBootstrapRecord,
 } from '@/persistence/sync/bootstrap';
 import { countSyncOutboxRows } from '@/persistence/sync/outbox';
 import { createSyncPushWorker } from '@/persistence/sync/push-worker';
 import { SyncRemoteError, type SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
 import { createFakeSyncRemote } from '@/persistence/testing/fake-sync-remote';
-import { clientLea, createTestSeed, productSerum } from '@/persistence/testing/fixtures';
+import { clientLea, createTestSeed, productMask, productSerum } from '@/persistence/testing/fixtures';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
+import { useProductImageUri } from '@/features/products/images/use-product-image-uri';
+import { PRODUCT_PHOTO_CACHE_DIRECTORY } from '@/features/products/images/product-photo-storage';
+import { ProductCatalogProvider, useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
+import { getMediaCacheUri } from '@/persistence/media/business-media';
+import { findProduct, insertProduct, updateProduct } from '@/persistence/stores/products';
+import { createFakeBusinessMediaRemote } from '@/persistence/testing/fake-business-media-remote';
+import { createMemoryLocalFiles } from '@/persistence/testing/memory-local-files';
+import { BusinessMediaProvider } from '@/providers/BusinessMediaProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
 import { CloudSyncRunner, SYNC_FOREGROUND_TICK_MS, useCloudSyncControl, type CloudSyncControl } from '../CloudSyncRunner';
@@ -88,6 +96,8 @@ function openFreshBoundDevice(): SourisDatabase {
   return database;
 }
 
+let renderCount = 0;
+
 /** What a screen sees: the Client session, hydrated from the persisted snapshot. */
 function ClientNamesProbe({
   onControl,
@@ -98,9 +108,20 @@ function ClientNamesProbe({
 }) {
   const { clients } = useClientSession();
   const control = useCloudSyncControl();
+  // Local, never-persisted UI state: a stand-in for a draft, a query, a step.
+  const [draft] = useState(() => `draft-${Math.random()}`);
+  // Every committed render of this screen (an effect without dependencies).
+  useEffect(() => {
+    renderCount += 1;
+  });
   useEffect(() => onControl(control), [control, onControl]);
   useEffect(() => onMount(), [onMount]);
-  return <Text testID="client-names">{clients.map((client) => client.firstName).join(',')}</Text>;
+  return (
+    <>
+      <Text testID="client-names">{clients.map((client) => client.firstName).join(',')}</Text>
+      <Text testID="local-draft">{draft}</Text>
+    </>
+  );
 }
 
 async function renderApp(database: SourisDatabase, remote: SyncRemoteGateway) {
@@ -309,7 +330,7 @@ describe('CloudSyncRunner', () => {
     expect(remote.requests).toEqual([]);
   });
 
-  it('re-hydrates the screens after a pull applied a remote change — and never remounts them for a push-only run', async () => {
+  it('refreshes the screens IN PLACE after a pull applied a remote change — never remounting them, drafts intact', async () => {
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
     const other = await uploadFromAnotherDevice(remote);
     const database = openFreshBoundDevice();
@@ -322,6 +343,7 @@ describe('CloudSyncRunner', () => {
     await runNow();
     await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
     const mountedBefore = mounts();
+    const draftBefore = view.getByTestId('local-draft').props.children;
 
     // The other device first receives that phone number (editing a stale copy would be a real
     // conflict), then renames the Client; this one pulls it and shows it.
@@ -331,11 +353,16 @@ describe('CloudSyncRunner', () => {
     expect(view.getByTestId('client-names').props.children).toBe('Léa');
     await runNow();
     await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa-Rose'));
-    expect(mounts()).toBe(mountedBefore + 1);
+    // Refreshed in place: the same mounted screen, its local state untouched.
+    expect(mounts()).toBe(mountedBefore);
+    expect(view.getByTestId('local-draft').props.children).toBe(draftBefore);
     expect(countSyncOutboxRows(database)).toBe(0); // no echo
 
+    // A pull that brings nothing: nothing is re-read, nothing re-renders.
+    const rendersBefore = renderCount;
     await runNow();
-    expect(mounts()).toBe(mountedBefore + 1);
+    expect(mounts()).toBe(mountedBefore);
+    expect(renderCount).toBe(rendersBefore);
   });
 
   it('never runs on the offline session fallback: no valid token, no request', async () => {
@@ -359,7 +386,7 @@ describe('CloudSyncRunner', () => {
     expect(view.toJSON()).toBeNull();
   });
 
-  it('runs again when the app returns to the foreground, and the slow tick only fires when a run is due', async () => {
+  it('runs again when the app returns to the foreground; the foreground tick pushes only when there is local work, and otherwise pulls', async () => {
     const triggers = captureTriggers();
     const database = openDatabase({ bound: true });
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
@@ -368,8 +395,12 @@ describe('CloudSyncRunner', () => {
     await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
     const settled = remote.requests.length;
 
-    // Idle tick: a local check only — no request.
+    // Idle tick of a synchronizing device: ONE incremental pull since the
+    // stored cursor, and no push (there is nothing to push).
+    const pullsBefore = remote.pulls.length;
     await act(async () => triggers.tick?.());
+    await waitFor(() => expect(remote.pulls).toHaveLength(pullsBefore + 1));
+    expect(remote.pulls[remote.pulls.length - 1]).toBeInstanceOf(Date);
     expect(remote.requests).toHaveLength(settled);
 
     insertProduct(database, { ...productSerum, id: 'product-new', businessId: REMOTE_BUSINESS_ID });
@@ -380,9 +411,143 @@ describe('CloudSyncRunner', () => {
     insertProduct(database, { ...productSerum, id: 'product-later', businessId: REMOTE_BUSINESS_ID });
     await act(async () => triggers.appState?.('background'));
     const beforeBackgroundTick = remote.requests.length;
+    const pullsBeforeBackgroundTick = remote.pulls.length;
     await act(async () => triggers.tick?.());
     expect(remote.requests).toHaveLength(beforeBackgroundTick);
+    expect(remote.pulls).toHaveLength(pullsBeforeBackgroundTick);
     await act(async () => triggers.appState?.('active'));
     await waitFor(() => expect(remote.find(REMOTE_BUSINESS_ID, 'PRODUCT', 'product-later')?.syncVersion).toBe(1));
+  });
+
+  it('an idle foreground device receives another device\'s change within ONE tick, in place', async () => {
+    const triggers = captureTriggers();
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const other = await uploadFromAnotherDevice(remote);
+    const database = openFreshBoundDevice();
+    const { view, mounts } = await renderApp(database, remote);
+    await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa'));
+    await waitFor(() => expect(readSyncBootstrapRecord(database, REMOTE_BUSINESS_ID)?.decision).toBe('ALREADY_SYNCED'));
+    const mountedBefore = mounts();
+    const draftBefore = view.getByTestId('local-draft').props.children;
+
+    updateClient(other.source, { ...clientLea, firstName: 'Léa-Rose' });
+    expect(await other.run()).toMatchObject({ pushed: 1 });
+    // This device has no local work at all.
+    expect(countSyncOutboxRows(database)).toBe(0);
+
+    await act(async () => triggers.tick?.());
+    await waitFor(() => expect(view.getByTestId('client-names').props.children).toBe('Léa-Rose'));
+    expect(mounts()).toBe(mountedBefore);
+    expect(view.getByTestId('local-draft').props.children).toBe(draftBefore);
+  });
+
+  it('never overlaps runs: ticks while a pull is in flight make no second request', async () => {
+    const triggers = captureTriggers();
+    const database = openDatabase({ bound: true });
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    await renderRunner({ database, restore: live, sync: remote });
+    await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    await waitFor(() => expect(remote.pulls.length).toBeGreaterThan(0));
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pull = remote.pullBusinessAggregates.bind(remote);
+    const slow = remote as { pullBusinessAggregates: typeof pull };
+    slow.pullBusinessAggregates = async (...args) => {
+      await gate;
+      return pull(...args);
+    };
+    const pullsBefore = remote.pulls.length;
+    await act(async () => triggers.tick?.());
+    await act(async () => triggers.tick?.());
+    await act(async () => triggers.tick?.());
+    await act(async () => release());
+    await waitFor(() => expect(remote.pulls).toHaveLength(pullsBefore + 1));
+    expect(remote.pulls).toHaveLength(pullsBefore + 1);
+  });
+
+  it('a device that needs a reconciliation makes no request from the tick', async () => {
+    const triggers = captureTriggers();
+    const database = openDatabase({ bound: true });
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    await renderRunner({ database, restore: live, sync: remote });
+    await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    writeSyncBootstrapRecord(database, {
+      businessId: REMOTE_BUSINESS_ID,
+      decision: 'RECONCILIATION_REQUIRED',
+      decidedAt: new Date(),
+    });
+    const pullsBefore = remote.pulls.length;
+    const requestsBefore = remote.requests.length;
+    const countsBefore = remote.countCalls;
+
+    await act(async () => triggers.tick?.());
+    expect(remote.pulls).toHaveLength(pullsBefore);
+    expect(remote.requests).toHaveLength(requestsBefore);
+    expect(remote.countCalls).toBe(countsBefore);
+  });
+
+  it('Product: stock 4 / photo C on this idle open device becomes stock 3 / photo D after ONE tick — same mounted screen', async () => {
+    const triggers = captureTriggers();
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const other = await uploadFromAnotherDevice(remote);
+    const files = createMemoryLocalFiles();
+    const media = createFakeBusinessMediaRemote(files);
+    const PHOTO_C = `${REMOTE_BUSINESS_ID}/products/${productMask.id}/photo-c.jpg`;
+    const PHOTO_D = `${REMOTE_BUSINESS_ID}/products/${productMask.id}/photo-d.jpg`;
+    media.objects.set(PHOTO_C, 'photo C');
+    media.objects.set(PHOTO_D, 'photo D');
+    const setOnOther = async (stockQuantity: number, photoPath: string) => {
+      const { imageUri: _legacy, ...current } = findProduct(other.source, productMask.id)!;
+      updateProduct(other.source, { ...current, stockQuantity, photoPath });
+      expect(await other.run()).toMatchObject({ pushed: 1, conflicts: [] });
+    };
+    await setOnOther(4, PHOTO_C);
+
+    let productMounts = 0;
+    function ProductProbe() {
+      const { getProductById } = useProductCatalog();
+      const mask = getProductById(productMask.id);
+      const shown = useProductImageUri(mask);
+      useEffect(() => {
+        productMounts += 1;
+      }, []);
+      return <Text testID="mask">{`${mask?.stockQuantity ?? '-'}|${shown ?? 'placeholder'}`}</Text>;
+    }
+
+    const database = openFreshBoundDevice();
+    const auth = createFakeAuthGateway({ restore: async () => live });
+    const view = await render(
+      <TestPersistenceProvider createSeed={emptySeed} database={database} files={files}>
+        <AuthProvider gateway={auth}>
+          <BusinessSessionProvider gateway={createFakeBusinessGateway([createRemoteBusiness()])}>
+            <CloudSyncRunner gateway={remote}>
+              <BusinessMediaProvider remote={media}>
+                <ProductCatalogProvider>
+                  <ProductProbe />
+                </ProductCatalogProvider>
+              </BusinessMediaProvider>
+            </CloudSyncRunner>
+          </BusinessSessionProvider>
+        </AuthProvider>
+      </TestPersistenceProvider>,
+    );
+    const cached = (path: string) => getMediaCacheUri(files, PRODUCT_PHOTO_CACHE_DIRECTORY, path);
+    await waitFor(() => expect(view.getByTestId('mask')).toHaveTextContent(`4|${cached(PHOTO_C)}`));
+    const mountedBefore = productMounts;
+
+    // Device A: photo D and stock 3. This device stays open, idle, untouched.
+    await setOnOther(3, PHOTO_D);
+    expect(countSyncOutboxRows(database)).toBe(0);
+    await act(async () => triggers.tick?.());
+
+    await waitFor(() => expect(view.getByTestId('mask')).toHaveTextContent(`3|${cached(PHOTO_D)}`));
+    expect(database.getFirstSync('SELECT stock_quantity, photo_path FROM products WHERE id = ?', [productMask.id])).toEqual({
+      stock_quantity: 3,
+      photo_path: PHOTO_D,
+    });
+    expect(productMounts).toBe(mountedBefore);
   });
 });

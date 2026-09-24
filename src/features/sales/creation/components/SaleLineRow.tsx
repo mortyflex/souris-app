@@ -13,6 +13,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import type { Product } from '@/domain/products';
 import { getSaleItemTotal, type SaleDraftLine } from '@/domain/sales';
 import { ProductImage } from '@/features/products/components/ProductImage';
+import { useProductImageUri } from '@/features/products/images/use-product-image-uri';
 import { formatServicePrice } from '@/features/services/presentation';
 import { AppText } from '@/shared/ui/AppText';
 import {
@@ -35,6 +36,7 @@ interface SaleLineRowProps {
 
 export function SaleLineRow({ line, product, onIncrement, onDecrement, onRemove }: SaleLineRowProps) {
   const name = product?.name ?? 'Produit indisponible';
+  const imageUri = useProductImageUri(product);
   const canIncrement = product !== undefined && product.active && line.quantity < product.stockQuantity;
   const canDecrement = line.quantity > 1;
   const overStock = product !== undefined && line.quantity > product.stockQuantity;
@@ -45,7 +47,7 @@ export function SaleLineRow({ line, product, onIncrement, onDecrement, onRemove 
     <View style={styles.row} testID={`sale-line-${line.productId}`}>
       <View style={styles.summary}>
         <ProductImage
-          imageUri={product?.imageUri}
+          imageUri={imageUri}
           productName={product?.name}
           testID={`sale-line-image-${line.productId}`}
           variant="thumbnail"

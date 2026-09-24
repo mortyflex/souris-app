@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 
-import { ProductPhotoSourceSheet } from '../components/ProductPhotoSourceSheet';
+import { PhotoSourceSheet } from '../PhotoSourceSheet';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
@@ -16,26 +16,30 @@ jest.mock('react-native-safe-area-context', () => {
 async function renderSheet(hasImage: boolean) {
   const props = {
     hasImage,
+    libraryLabel: 'Choisir dans Photos',
     onChooseCamera: jest.fn(),
     onChooseLibrary: jest.fn(),
     onClose: jest.fn(),
     onRemove: jest.fn(),
+    testID: 'client-photo',
+    title: 'Audrey Tarmis',
     visible: true,
   };
-  return { props, view: await render(<ProductPhotoSourceSheet {...props} />) };
+  return { props, view: await render(<PhotoSourceSheet {...props} />) };
 }
 
-describe('ProductPhotoSourceSheet', () => {
+describe('PhotoSourceSheet', () => {
   it('lists camera and library without removal when there is no image', async () => {
     const { view, props } = await renderSheet(false);
 
-    expect(view.getByText('Photo du produit')).toBeTruthy();
+    expect(view.getByText('Audrey Tarmis')).toBeTruthy();
+    expect(view.getByTestId('client-photo-sheet')).toBeTruthy();
     expect(view.getAllByTestId('bottom-sheet-scrim')).toHaveLength(1);
     expect(view.queryByLabelText('Supprimer la photo')).toBeNull();
 
     await act(async () => fireEvent.press(view.getByLabelText('Prendre une photo')));
     expect(props.onChooseCamera).toHaveBeenCalledTimes(1);
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans la photothèque')));
+    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans Photos')));
     expect(props.onChooseLibrary).toHaveBeenCalledTimes(1);
     await act(async () => fireEvent.press(view.getByText('Annuler')));
     expect(props.onClose).toHaveBeenCalledTimes(1);
@@ -45,6 +49,8 @@ describe('ProductPhotoSourceSheet', () => {
     const { view, props } = await renderSheet(true);
 
     expect(view.getByLabelText('Prendre une nouvelle photo')).toBeTruthy();
+    expect(view.queryByLabelText('Prendre une photo')).toBeNull();
+    expect(view.getByLabelText('Choisir dans Photos')).toBeTruthy();
     await act(async () => fireEvent.press(view.getByLabelText('Supprimer la photo')));
     expect(props.onRemove).toHaveBeenCalledTimes(1);
   });

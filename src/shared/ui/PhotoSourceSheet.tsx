@@ -1,9 +1,10 @@
-// Souris — Product photo source sheet
+// Souris — photo source sheet
 //
 // Compact action list on the shared BottomSheet: camera, library, and remove
-// when a photo exists. It never touches Product state and never presents the
-// camera itself — ProductPhotoField opens the camera only after this sheet
-// has been fully dismissed, so one modal is active at a time.
+// when a photo exists. It never touches business state, never asks for a
+// permission and never presents the camera itself — PhotoSourceFlow opens
+// the camera only after this sheet has been fully dismissed, so one modal is
+// active at a time. Wording of the title and library row is caller-owned.
 
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
@@ -14,32 +15,39 @@ import { BottomSheet } from '@/shared/ui/BottomSheet';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
-interface ProductPhotoSourceSheetProps {
+interface PhotoSourceSheetProps {
   readonly visible: boolean;
+  readonly title: string;
   readonly hasImage: boolean;
+  readonly libraryLabel: string;
   readonly onChooseCamera: () => void;
   readonly onChooseLibrary: () => void;
   readonly onRemove: () => void;
   readonly onClose: () => void;
   readonly onDismissed?: () => void;
+  /** Prefix of every testID: `<prefix>-sheet`, `<prefix>-source-camera`, … */
+  readonly testID: string;
 }
 
-export function ProductPhotoSourceSheet({
+export function PhotoSourceSheet({
   visible,
+  title,
   hasImage,
+  libraryLabel,
   onChooseCamera,
   onChooseLibrary,
   onRemove,
   onClose,
   onDismissed,
-}: ProductPhotoSourceSheetProps) {
+  testID,
+}: PhotoSourceSheetProps) {
   return (
     <BottomSheet
       backdropLabel="Fermer"
-      header={<SheetHeader eyebrow="PHOTO" title="Photo du produit" />}
+      header={<SheetHeader eyebrow="PHOTO" title={title} />}
       onClose={onClose}
       onDismissed={onDismissed}
-      testID="product-photo-sheet"
+      testID={`${testID}-sheet`}
       visible={visible}
     >
       <View style={styles.options}>
@@ -47,13 +55,13 @@ export function ProductPhotoSourceSheet({
           icon={{ ios: 'camera.fill', android: 'photo_camera' }}
           label={hasImage ? 'Prendre une nouvelle photo' : 'Prendre une photo'}
           onPress={onChooseCamera}
-          testID="product-photo-source-camera"
+          testID={`${testID}-source-camera`}
         />
         <SourceOption
           icon={{ ios: 'photo.on.rectangle', android: 'photo_library' }}
-          label="Choisir dans la photothèque"
+          label={libraryLabel}
           onPress={onChooseLibrary}
-          testID="product-photo-source-library"
+          testID={`${testID}-source-library`}
         />
         {hasImage && (
           <SourceOption
@@ -61,7 +69,7 @@ export function ProductPhotoSourceSheet({
             icon={{ ios: 'trash', android: 'delete' }}
             label="Supprimer la photo"
             onPress={onRemove}
-            testID="product-photo-source-remove"
+            testID={`${testID}-source-remove`}
           />
         )}
       </View>

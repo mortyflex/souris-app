@@ -9,12 +9,11 @@
 // softly rounded `portrait` of the Client Profile, large enough for a real
 // photo (its corners scale with the size, like a continuous-curve card).
 //
-// Client photos do not exist yet, so every caller renders the initials today.
-// `photoUri` is the seam for that later feature: once a portrait has a stable
-// reference, passing it swaps the content inside the SAME frame — no caller
-// layout changes. A portrait that fails to load falls back to the initials.
-// Nothing here picks, stores or uploads an image, and nothing suggests the
-// user can add one: an edit affordance belongs to the future photo feature.
+// `photoUri` is a displayable local file resolved from the Client's stable
+// photo reference (features/clients/photo): passing it swaps the content
+// inside the SAME frame — no caller layout changes. A portrait that fails to
+// load falls back to the initials. Nothing here picks, stores or uploads an
+// image; the Client Profile wraps this frame in ClientPhotoControl for that.
 //
 // Spoken as the Client's name, never as a decorative « image ».
 
@@ -38,6 +37,11 @@ interface ClientAvatarProps {
   /** Side of the square frame in dp; the initials and corners scale with it. */
   readonly size?: number;
   readonly shape?: ClientAvatarShape;
+  /**
+   * False when a parent control already speaks for the Client (the Profile's
+   * photo button): the frame is then not a separate accessibility element.
+   */
+  readonly accessible?: boolean;
   readonly testID?: string;
 }
 
@@ -46,6 +50,7 @@ export function ClientAvatar({
   photoUri,
   size = 72,
   shape = 'circle',
+  accessible = true,
   testID = 'client-avatar',
 }: ClientAvatarProps) {
   // The failed URI, not a flag: a new portrait gets its own chance to load.
@@ -55,9 +60,9 @@ export function ClientAvatar({
 
   return (
     <View
-      accessible
-      accessibilityLabel={showsPhoto ? `Photo de ${displayName}` : displayName}
-      accessibilityRole="image"
+      accessible={accessible}
+      accessibilityLabel={accessible ? (showsPhoto ? `Photo de ${displayName}` : displayName) : undefined}
+      accessibilityRole={accessible ? 'image' : undefined}
       style={[
         styles.frame,
         {

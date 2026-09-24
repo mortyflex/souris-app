@@ -9,6 +9,11 @@
 // notes (schema v9) is the free-text Client note, stored exactly as the
 // normalized domain text (line breaks included) or NULL when absent.
 //
+// photo_path (schema v13) is the stable object path of the Client photo in
+// the Business media storage, or NULL. It is written ONLY by
+// `setClientPhotoPath` (and by insertion): identity edits never touch it, so
+// a form that knows nothing about photos can never erase one.
+//
 // archived_at (schema v2) is an ISO instant or NULL. NULL is the active
 // state; the domain value is a Date, restored exactly. Permanent deletion
 // verifies Appointment and Sale references INSIDE its transaction, so the
@@ -39,6 +44,7 @@ interface ClientRow {
   readonly email: string | null;
   readonly birthday: string | null;
   readonly notes: string | null;
+  readonly photo_path: string | null;
   readonly archived_at: string | null;
 }
 
@@ -63,6 +69,7 @@ function toClient(row: ClientRow): Client {
   const email = fromSqlOptional(row.email);
   const birthday = row.birthday === null ? undefined : parseBirthdayKey(row.birthday);
   const notes = normalizeClientNotes(row.notes);
+  const photoPath = fromSqlOptional(row.photo_path);
   const archivedAt = row.archived_at === null ? undefined : fromSqlInstant(row.archived_at);
   return {
     id: row.id,
@@ -72,6 +79,7 @@ function toClient(row: ClientRow): Client {
     ...(email !== undefined ? { email } : {}),
     ...(birthday !== undefined ? { birthday } : {}),
     ...(notes !== undefined ? { notes } : {}),
+    ...(photoPath !== undefined ? { photoPath } : {}),
     ...(archivedAt !== undefined ? { archivedAt } : {}),
   };
 }
@@ -87,7 +95,7 @@ function toNotesColumn(client: Client) {
 export function loadClients(db: SourisDatabase): readonly Client[] {
   return db
     .getAllSync<ClientRow>(
-      'SELECT id, first_name, last_name, phone, email, birthday, notes, archived_at FROM clients ORDER BY rowid',
+      'SELECT id, first_name, last_name, phone, email, birthday, notes, photo_path, archived_at FROM clients ORDER BY rowid',
     )
     .map(toClient);
 }
@@ -95,7 +103,7 @@ export function loadClients(db: SourisDatabase): readonly Client[] {
 export function insertClient(db: SourisDatabase, client: Client): void {
   runInTransaction(db, () => {
     db.runSync(
-      'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, notes, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, notes, photo_path, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         client.id,
         client.firstName,
@@ -104,6 +112,7 @@ export function insertClient(db: SourisDatabase, client: Client): void {
         toSqlOptional(client.email),
         toBirthdayColumn(client),
         toNotesColumn(client),
+        toSqlOptional(client.photoPath),
         client.archivedAt === undefined ? null : toSqlInstant(client.archivedAt),
       ],
     );
@@ -113,7 +122,8 @@ export function insertClient(db: SourisDatabase, client: Client): void {
 
 /**
  * Replaces every identity field of the Client with the same id. The
- * lifecycle column is untouched: identity edits never archive or restore.
+ * lifecycle and photo columns are untouched: identity edits never archive,
+ * restore, or change the photo.
  */
 export function updateClient(db: SourisDatabase, client: Client): void {
   runInTransaction(db, () => {
@@ -133,6 +143,27 @@ export function updateClient(db: SourisDatabase, client: Client): void {
       throw new Error(`updateClient: Client "${client.id}" not found`);
     }
     markAggregateUpserted(db, 'CLIENT', client.id);
+  });
+}
+
+/**
+ * Sets (a stable storage object path) or clears (undefined) the Client
+ * photo reference. Nothing else of the Client changes.
+ */
+export function setClientPhotoPath(
+  db: SourisDatabase,
+  clientId: string,
+  photoPath: string | undefined,
+): void {
+  runInTransaction(db, () => {
+    const result = db.runSync('UPDATE clients SET photo_path = ? WHERE id = ?', [
+      toSqlOptional(photoPath),
+      clientId,
+    ]);
+    if (result.changes !== 1) {
+      throw new Error(`setClientPhotoPath: Client "${clientId}" not found`);
+    }
+    markAggregateUpserted(db, 'CLIENT', clientId);
   });
 }
 

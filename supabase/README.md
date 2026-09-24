@@ -41,6 +41,21 @@ migrations/20260924120000_create_appointment_deposits.sql       (Appointment dep
                                                                  the push one also enforces the deposit
                                                                  invariant, CLOUD_SYNC.md §21 / §21.2. Apply
                                                                  BEFORE shipping the build that records deposits)
+migrations/20260925120000_add_client_photos.sql                 (Client photos — BY HAND, after the deposits
+                                                                 one; adds clients.photo_path, creates the
+                                                                 private `business-media` Storage bucket, its
+                                                                 owner-only storage.objects policies and the
+                                                                 is_business_media_owner helper, and replaces
+                                                                 the two Client-listing sync RPCs in place,
+                                                                 CLOUD_SYNC.md §22. Apply BEFORE shipping the
+                                                                 build that sets Client photos)
+migrations/20260926120000_add_product_photos.sql                (Product photos — BY HAND, after the Client
+                                                                 photos one; adds products.photo_path, lets the
+                                                                 EXISTING business-media bucket accept image/png
+                                                                 (no new bucket, no policy change), and replaces
+                                                                 the two Product-listing sync RPCs in place,
+                                                                 CLOUD_SYNC.md §23. Apply BEFORE shipping the
+                                                                 build that sets Product photos)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);

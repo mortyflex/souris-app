@@ -86,8 +86,12 @@ function readClient(db: SourisDatabase, id: string): RemoteClientPayload | undef
     readonly email: string | null;
     readonly birthday: string | null;
     readonly notes: string | null;
+    readonly photo_path: string | null;
     readonly archived_at: string | null;
-  }>('SELECT first_name, last_name, phone, email, birthday, notes, archived_at FROM clients WHERE id = ?', [id]);
+  }>(
+    'SELECT first_name, last_name, phone, email, birthday, notes, photo_path, archived_at FROM clients WHERE id = ?',
+    [id],
+  );
   if (!row) return undefined;
   return {
     first_name: row.first_name,
@@ -96,6 +100,7 @@ function readClient(db: SourisDatabase, id: string): RemoteClientPayload | undef
     email: row.email,
     birthday: row.birthday,
     notes: row.notes,
+    photo_path: row.photo_path,
     archived_at: toOptionalInstant(row.archived_at),
   };
 }
@@ -218,18 +223,20 @@ function readProduct(
   businessId: string,
   ref: SyncAggregateRef,
 ): RemoteProductPayload | undefined {
-  // `image_uri` is a device-local path: never selected, never uploaded (V1F).
+  // `image_uri` is the LEGACY device-local path: never selected, never
+  // uploaded. `photo_path` is the shared Storage reference (CLOUD_SYNC.md §23).
   const row = db.getFirstSync<{
     readonly business_id: string;
     readonly name: string;
     readonly brand: string | null;
     readonly category: string | null;
     readonly barcode: string | null;
+    readonly photo_path: string | null;
     readonly price_cents: number;
     readonly stock_quantity: number;
     readonly active: number;
   }>(
-    'SELECT business_id, name, brand, category, barcode, price_cents, stock_quantity, active FROM products WHERE id = ?',
+    'SELECT business_id, name, brand, category, barcode, photo_path, price_cents, stock_quantity, active FROM products WHERE id = ?',
     [ref.aggregateId],
   );
   assertScoped(row, businessId, ref);
@@ -239,6 +246,7 @@ function readProduct(
     brand: row.brand,
     category: row.category,
     barcode: row.barcode,
+    photo_path: row.photo_path,
     price_cents: assertAmountCents(row.price_cents, 'products.price_cents'),
     stock_quantity: row.stock_quantity,
     active: fromSqlBoolean(row.active),

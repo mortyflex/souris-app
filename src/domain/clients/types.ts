@@ -6,9 +6,8 @@
 // No React, React Native, Expo, or persistence imports.
 //
 // Relationships from other domains (e.g. Appointments) use clientId only.
-// Commercial history, formulas, photos, statistics, and product purchases
-// are separate future concerns and are intentionally absent from the
-// canonical model. Activity statistics are always DERIVED from Souris
+// Commercial history, formulas, statistics, and product purchases are
+// separate concerns and are intentionally absent from the canonical model. Activity statistics are always DERIVED from Souris
 // Appointment state — never stored on the Client.
 
 import type { ClientBirthday } from './birthday';
@@ -29,6 +28,12 @@ export interface Client {
    * line breaks preserved, absent when blank. Never imported from legacy data.
    */
   readonly notes?: string;
+  /**
+   * Stable reference of the Client photo in the Business media storage (an
+   * opaque object path). Absent when the Client has no photo. Never a device
+   * file URI, a signed URL or image bytes: presentation resolves it.
+   */
+  readonly photoPath?: string;
   /**
    * Lifecycle marker. Absent for an active Client; the exact instant of the
    * archive otherwise. Archiving never deletes anything and never touches

@@ -1,7 +1,7 @@
 // Souris — Client Profile
 //
 // A compact client dashboard: identity (portrait ClientAvatar beside the
-// name) + ONE white action card (`Nouveau rendez-vous`, `Vendre un produit`,
+// name, editable in place through ClientPhotoControl) + ONE white action card (`Nouveau rendez-vous`, `Vendre un produit`,
 // the shared ActionGroup of the « ••• » drawers) + today's birthday
 // reminder + next appointment + derived activity + ONE switchable history
 // preview (Rendez-vous | Produits achetés, 3 records at most, the complete
@@ -37,7 +37,7 @@ import {
   isClientArchived,
 } from '@/domain/clients';
 import type { Appointment } from '@/domain/appointments';
-import { ClientAvatar } from '@/features/clients/avatar/ClientAvatar';
+import { ClientPhotoControl } from '@/features/clients/photo/ClientPhotoControl';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
@@ -314,10 +314,10 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
       >
-        {/* The portrait frame beside the name: initials today, the Client's
-            photo later — in the very same frame, with no layout change. */}
+        {/* The portrait frame beside the name: the Client's photo or her
+            initials in the very same frame; tapping it manages the photo. */}
         <View style={styles.identity} testID="client-identity">
-          <ClientAvatar client={client} shape="portrait" size={profileAvatarSize} />
+          <ClientPhotoControl client={client} size={profileAvatarSize} />
           <View style={styles.identityCopy}>
             <AppText
               variant="screenTitle"

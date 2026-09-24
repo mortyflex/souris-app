@@ -13,9 +13,10 @@ import {
   deleteClientPermanently as persistDelete,
   insertClient,
   restoreClient as persistRestore,
+  setClientPhotoPath as persistPhotoPath,
   updateClient as persistClient,
 } from '@/persistence/stores/clients';
-import { usePersistence } from '@/providers/PersistenceProvider';
+import { usePersistence, useSnapshotRefresh } from '@/providers/PersistenceProvider';
 
 import type { ClientSessionValue } from './types';
 
@@ -33,6 +34,8 @@ const ClientSessionContext = createContext<ClientSessionValue | null>(null);
 export function ClientSessionProvider({ children }: PropsWithChildren) {
   const { database, snapshot } = usePersistence();
   const [clients, setClients] = useState<readonly Client[]>(snapshot.clients);
+  // Remote changes applied by the sync runner, adopted in place.
+  useSnapshotRefresh((fresh) => setClients(fresh.clients));
 
   const activeClients = useMemo(
     () => clients.filter((client) => !isClientArchived(client)),
@@ -63,11 +66,25 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
 
   const updateClient = (client: Client) => {
     persistClient(database, client);
-    // Identity edits never touch the lifecycle: the stored archived_at is
-    // left as-is, so the in-memory record keeps its current archivedAt too.
-    replaceClient(client.id, (current) =>
-      current.archivedAt === undefined ? client : { ...client, archivedAt: current.archivedAt },
-    );
+    // Identity edits never touch the lifecycle nor the photo: the stored
+    // archived_at and photo_path are left as-is, so the in-memory record
+    // keeps its current values too.
+    replaceClient(client.id, (current) => {
+      const { archivedAt: _archivedAt, photoPath: _photoPath, ...identity } = client;
+      return {
+        ...identity,
+        ...(current.photoPath !== undefined ? { photoPath: current.photoPath } : {}),
+        ...(current.archivedAt !== undefined ? { archivedAt: current.archivedAt } : {}),
+      };
+    });
+  };
+
+  const setClientPhoto = (clientId: string, photoPath: string | undefined) => {
+    persistPhotoPath(database, clientId, photoPath);
+    replaceClient(clientId, (current) => {
+      const { photoPath: _previous, ...rest } = current;
+      return photoPath === undefined ? rest : { ...rest, photoPath };
+    });
   };
 
   const archiveClient = (clientId: string) => {
@@ -100,6 +117,7 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
         getClientById,
         addClient,
         updateClient,
+        setClientPhoto,
         archiveClient,
         restoreClient,
         getClientDeletionEligibility,

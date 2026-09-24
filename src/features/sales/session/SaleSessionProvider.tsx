@@ -12,7 +12,7 @@ import {
   completeSale as persistSaleCompletion,
   deleteAppointmentProduct as persistAppointmentProductDeletion,
 } from '@/persistence/stores/sales';
-import { usePersistence } from '@/providers/PersistenceProvider';
+import { usePersistence, useSnapshotRefresh } from '@/providers/PersistenceProvider';
 
 import type { SaleSessionValue } from './types';
 
@@ -51,6 +51,8 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
     committed.current = next;
     setSales(next);
   };
+  // Remote changes applied by the sync runner, adopted in place.
+  useSnapshotRefresh((fresh) => commit(fresh.sales));
 
   const getSaleById = (saleId: string | undefined) => {
     if (!saleId) return undefined;

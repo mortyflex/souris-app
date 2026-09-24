@@ -6,12 +6,15 @@
 
 import { AuthGatewayError, type AuthGateway } from '@/features/auth/gateway';
 import { BusinessGatewayError, type BusinessGateway } from '@/features/business/gateway';
+import type { BusinessMediaRemote } from '@/persistence/media/business-media';
 import type { SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
 
 import { createSupabaseAuthGateway } from './auth-gateway';
 import { createSupabaseBusinessGateway } from './business-gateway';
+import { createSupabaseBusinessMediaGateway } from './business-media-gateway';
 import { getSupabaseClient } from './client';
 import { SupabaseConfigurationError } from './config';
+import { expoPhotoFileIO } from './photo-file-io';
 import { createSupabaseSyncGateway } from './sync-gateway';
 
 export interface AccountGateways {
@@ -19,6 +22,8 @@ export interface AccountGateways {
   readonly business: BusinessGateway;
   /** Undefined when Supabase is not configured: cloud sync then never runs. */
   readonly sync: SyncRemoteGateway | undefined;
+  /** Undefined when Supabase is not configured: no Client or Product photo can be saved. */
+  readonly media: BusinessMediaRemote | undefined;
 }
 
 function createUnconfiguredGateways(): AccountGateways {
@@ -37,6 +42,7 @@ function createUnconfiguredGateways(): AccountGateways {
       createBusiness: () => Promise.reject(new BusinessGatewayError('UNKNOWN')),
     },
     sync: undefined,
+    media: undefined,
   };
 }
 
@@ -47,6 +53,7 @@ export function createAccountGateways(): AccountGateways {
       auth: createSupabaseAuthGateway(client.auth),
       business: createSupabaseBusinessGateway(client),
       sync: createSupabaseSyncGateway(client),
+      media: createSupabaseBusinessMediaGateway(client, expoPhotoFileIO),
     };
   } catch (error) {
     if (error instanceof SupabaseConfigurationError) {

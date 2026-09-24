@@ -19,16 +19,31 @@ import {
   parseServicePriceInput,
 } from '@/features/services/editor/service-form';
 
+import type { ProductPhotoChange } from '../session/types';
+
 /** Largest quantity the stock selector offers for normal Souris use. */
 export const STOCK_SELECTOR_MAX = 30;
 export const STOCK_SELECTOR_MIN = 0;
+
+/**
+ * The photo decision of the form, applied only on Save:
+ *
+ *   current  the Product keeps its photo as it is (shared or legacy, or none)
+ *   new      a LOCAL file explicitly taken or chosen — uploaded on Save, it
+ *            becomes the ONE shared photo of the Product
+ *   removed  the Product will have no photo
+ */
+export type ProductPhotoDraft =
+  | { readonly kind: 'current' }
+  | { readonly kind: 'new'; readonly uri: string }
+  | { readonly kind: 'removed' };
 
 export interface ProductFormValues {
   readonly name: string;
   readonly brand: string;
   readonly category: string;
   readonly barcode: string;
-  readonly imageUri?: string;
+  readonly photo: ProductPhotoDraft;
   readonly price: string;
   readonly stockQuantity: number;
 }
@@ -38,7 +53,7 @@ export const EMPTY_PRODUCT_FORM: ProductFormValues = {
   brand: '',
   category: '',
   barcode: '',
-  imageUri: undefined,
+  photo: { kind: 'current' },
   price: '',
   stockQuantity: 0,
 };
@@ -56,7 +71,7 @@ export function toProductFormValues(product: Product): ProductFormValues {
     brand: product.brand ?? '',
     category: product.category ?? '',
     barcode: product.barcode ?? '',
-    imageUri: product.imageUri,
+    photo: { kind: 'current' },
     stockQuantity: product.stockQuantity,
     price: formatServicePriceInput(product.price),
   };
@@ -116,9 +131,30 @@ export function buildProductFromForm(input: BuildProductFromFormInput): Product 
     brand: normalizeOptionalText(input.values.brand),
     category: normalizeOptionalText(input.values.category),
     barcode: normalizeBarcode(input.values.barcode),
-    imageUri: normalizeOptionalText(input.values.imageUri),
     price,
     stockQuantity: input.values.stockQuantity,
     active: input.active,
   };
+}
+
+/** The draft photo shown by the form: a new local file, nothing, or the Product's current image. */
+export function getDraftPhotoUri(
+  photo: ProductPhotoDraft,
+  currentImageUri: string | undefined,
+): string | undefined {
+  if (photo.kind === 'new') return photo.uri;
+  if (photo.kind === 'removed') return undefined;
+  return currentImageUri;
+}
+
+/** The form's photo edit as the draft change of a field (a new file, or removal). */
+export function toProductPhotoDraft(uri: string | undefined): ProductPhotoDraft {
+  return uri === undefined ? { kind: 'removed' } : { kind: 'new', uri };
+}
+
+/** The catalog change to apply on Save; undefined keeps the Product's photo as it is. */
+export function toProductPhotoChange(photo: ProductPhotoDraft): ProductPhotoChange | undefined {
+  if (photo.kind === 'new') return { kind: 'replace', uri: photo.uri };
+  if (photo.kind === 'removed') return { kind: 'remove' };
+  return undefined;
 }

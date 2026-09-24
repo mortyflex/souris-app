@@ -207,6 +207,33 @@ export function isSyncRunDue(db: SourisDatabase, businessId: string, now: Date):
   return isSyncBootstrapPending(db, businessId) || hasEligiblePushWork(db, businessId, now);
 }
 
+/**
+ * Whether this device already synchronizes with the Business under a CURRENT
+ * push decision (ALREADY_SYNCED / INITIAL_UPLOAD) — the only state in which a
+ * run is a plain incremental exchange: push the outbox (nothing when idle),
+ * then pull what changed since the stored cursor. Never true while the first
+ * sync is pending, for an EMPTY device, or while a reconciliation is required.
+ * Local reads only.
+ */
+export function isIncrementalPullAvailable(db: SourisDatabase, businessId: string): boolean {
+  const stored = readSyncBootstrapRecord(db, businessId);
+  if (!stored || (stored.decision !== 'ALREADY_SYNCED' && stored.decision !== 'INITIAL_UPLOAD')) {
+    return false;
+  }
+  return isStoredPushDecisionCurrent(db, businessId, stored.decision);
+}
+
+/**
+ * THE rule of the foreground sync tick (CLOUD_SYNC.md §17.2): a run is due
+ * (`isSyncRunDue`: a pending first sync, or eligible local writes) OR the
+ * device synchronizes and may pull what other devices changed — so an idle,
+ * open device receives remote changes within one tick. Local reads only; the
+ * tick itself stays foreground-only and at its existing cadence.
+ */
+export function isForegroundSyncTickDue(db: SourisDatabase, businessId: string, now: Date): boolean {
+  return isSyncRunDue(db, businessId, now) || isIncrementalPullAvailable(db, businessId);
+}
+
 export function createSyncPushWorker({
   database: db,
   gateway,

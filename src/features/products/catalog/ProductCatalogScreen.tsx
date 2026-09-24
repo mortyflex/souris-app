@@ -22,6 +22,7 @@ import {
 
 import type { Product } from '@/domain/products';
 import { ProductImage } from '@/features/products/components/ProductImage';
+import { useProductImageUri } from '@/features/products/images/use-product-image-uri';
 import { formatServicePrice } from '@/features/services/presentation';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -279,6 +280,7 @@ function ProductRow({
   readonly onPress: () => void;
 }) {
   const meta = [product.brand, product.category].filter(Boolean).join(' · ');
+  const imageUri = useProductImageUri(product);
   const stockLabel =
     product.stockQuantity > 0
       ? `Stock ${product.stockQuantity}`
@@ -292,7 +294,7 @@ function ProductRow({
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
       <ProductImage
-        imageUri={product.imageUri}
+        imageUri={imageUri}
         productName={product.name}
         testID={`catalog-product-image-${product.id}`}
         variant="thumbnail"
