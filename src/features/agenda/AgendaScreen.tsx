@@ -4,6 +4,7 @@ import { AppState, Platform, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { daySummaryIcon } from "@/shared/icons/day-summary-icon";
+import { estimationIcon } from "@/shared/icons/estimation-icon";
 import { insightsIcon } from "@/shared/icons/insights-icon";
 import { DateNavigator } from "@/shared/ui/DateNavigator";
 import { FloatingCreateButton } from "@/shared/ui/FloatingCreateButton";
@@ -193,6 +194,14 @@ export function AgendaScreen() {
             label: "Nouveau rendez-vous",
             onPress: createAppointment,
             testID: "agenda-new-appointment",
+          },
+          // A price estimate for a Client: independent of the Day / Week mode
+          // and of the day shown — it is never scheduled.
+          {
+            icon: estimationIcon,
+            label: "Estimation",
+            onPress: () => router.push("/estimations/new"),
+            testID: "agenda-estimation",
           },
           // The summary follows the mode: the day shown in Jour, the week
           // shown in Semaine — never both.

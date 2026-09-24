@@ -162,6 +162,51 @@ visible block needs (plus a small margin), and the whole block remains scrollabl
 20:00. An appointment running past midnight stays one block on its start day, with clock labels continuing
 as 23:00, 00:00, 01:00. Ordinary days keep their compact height; the initial scroll position does not change.
 
+### Estimation tarifaire
+
+A lightweight, recipient-agnostic price estimation based on the professional's configured services.
+
+The need: someone — often a prospect — asks roughly how much a combination of prestations would
+cost. The professional answers in a few taps and, if she wishes, shares a clean image with anyone.
+The estimation is addressed to nobody in particular: no Client is selected, named or created.
+
+```text
+Estimation
+≠ client record
+≠ appointment
+≠ formal devis
+≠ invoice
+```
+
+- **Entry.** « Estimation » in the Agenda + menu, in Jour and in Semaine alike. It is never tied to
+  the day shown: nothing is scheduled.
+- **Flow.** Two steps in the appointment-creation sheet and stepper language — Prestations →
+  Résumé — opening straight on the shared Services / Techniques catalogue. The heading stays
+  « ESTIMATION » throughout. There is no Client step, search, list or « Ajouter une cliente ».
+- **Prices.** The CURRENT catalog price of each selected Service (Prestations & tarifs), nothing
+  copied. A Technique is one commercial line: its phases never appear. « Total estimé » is the sum
+  of the selected prices, in exact cents.
+- **Résumé.** Generation date, one line per prestation with its price, « Total estimé ». Then
+  « Générer l’estimation ».
+- **Document.** Printed by the Souris receipt printer as an « ESTIMATION TARIFAIRE » share
+  document, in the « Tops & tendances » share-card family: Business name, the generation date (the local day, no time — document metadata only, never an
+  appointment, booking or validity date), the lines, « Total estimé », the line « Estimation
+  indicative basée sur les prestations sélectionnées. », « Créé avec » + the Souris wordmark. No
+  Client name and no recipient section: the same image suits any potential client.
+  Design: `docs/design/DESIGN_OVERRIDES.md` §37.
+- **Actions.** Fermer · Enregistrer (Photos) · Partager (native share sheet) — the export flow of
+  « Tops & tendances ».
+
+It writes NOTHING: no Client, Appointment, Sale, payment, deposit, stock movement, Caisse amount or
+Client history — and no estimation record. The flow has no path able to create, edit, select or
+attach a Client. There is no estimation table, sync, history or status.
+
+It is deliberately NOT a formal quote (devis), an invoice, accounting, or a legally binding
+acceptance. It carries no validity period, no signature, no acceptance, and no tax wording: Souris
+stores no HT / TVA model and no legal business identity (address, SIRET, legal form, VAT status),
+so the stored service price is the one amount shown. Not implemented: quote history,
+acceptance / signature, conversion to an appointment or an invoice.
+
 ---
 
 ## 6. Real Service Timing

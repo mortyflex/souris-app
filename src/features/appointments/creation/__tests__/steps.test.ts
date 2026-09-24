@@ -47,4 +47,9 @@ describe('getStepProgressLabel', () => {
     expect(getStepProgressLabel(0)).toBe('Étape 1 sur 3');
     expect(getStepProgressLabel(2)).toBe('Étape 3 sur 3');
   });
+
+  it('counts the steps of a shorter flow when given', () => {
+    expect(getStepProgressLabel(0, 2)).toBe('Étape 1 sur 2');
+    expect(getStepProgressLabel(1, 2)).toBe('Étape 2 sur 2');
+  });
 });

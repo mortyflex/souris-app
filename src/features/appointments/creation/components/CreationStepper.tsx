@@ -8,6 +8,9 @@
 // The current node is accent-filled; future nodes stay muted.
 // Completed steps are tappable to navigate back; forward jumps are
 // never possible.
+//
+// The labels default to the appointment flow. A shorter flow built on the
+// same step rules (« Estimation »: Prestations → Résumé) passes its own.
 
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
@@ -32,21 +35,27 @@ import {
 interface CreationStepperProps {
   readonly step: CreationStep;
   readonly onStepPress: (step: CreationStep) => void;
+  /** The step names, in order. Defaults to Cliente → Prestations → Résumé. */
+  readonly labels?: readonly string[];
 }
 
 const NODE_SIZE = 22;
 const CONNECTOR_HEIGHT = 2;
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
-export function CreationStepper({ step, onStepPress }: CreationStepperProps) {
+export function CreationStepper({
+  step,
+  onStepPress,
+  labels = stepLabels,
+}: CreationStepperProps) {
   return (
-    <View style={styles.stepper} accessibilityLabel={getStepProgressLabel(step)}>
-      {stepLabels.map((label, index) => {
+    <View style={styles.stepper} accessibilityLabel={getStepProgressLabel(step, labels.length)}>
+      {labels.map((label, index) => {
         const state = getStepState(step, index);
         const reachable = canNavigateTo(step, index);
         const leftConnectorAccent = index > 0 && index <= step;
-        const rightConnectorAccent = index < step && index < stepLabels.length - 1;
-        const isLast = index === stepLabels.length - 1;
+        const rightConnectorAccent = index < step && index < labels.length - 1;
+        const isLast = index === labels.length - 1;
 
         return (
           <Pressable

@@ -1752,3 +1752,70 @@ moves it; only the row content differs:
 - subtle hairline separators (`borderSubtle`) under every row, spanning the row from the
   thumbnail to the chevron; decorative, never read by assistive technology;
 - no card around any row.
+
+---
+
+## 37. Estimation tarifaire — Sheet and Document
+
+Product: `docs/product/PRODUCT.md` §5 « Estimation tarifaire ».
+
+**Sheet.** The workflow sheet of « Nouveau rendez-vous » (§27), unchanged in language: the shared
+editing header (« Annuler » · « Estimation »), the shared `CreationStepper` given two labels
+(Prestations → Résumé, « Étape 1 sur 2 »), the shared `ServiceCatalogPicker` as the FIRST step (a
+tap toggles; a selected card says « Retirer de l’estimation »), the selection footer (count +
+names), « Précédent » / « Continuer ». The eyebrow above the catalogue always reads « ESTIMATION »
+— never a person's name. No Client picker, no Date / Heure group: the estimation has no recipient
+and nothing is scheduled.
+
+**Résumé.** Grouped rows: Date (the generation date, read-only) ; « Prestations
+sélectionnées » with « Modifier », one « name — price » row each ; the lavender final summary
+« Total estimé ». Primary action « Générer l’estimation ».
+
+**Presentation.** The receipt printer of §25 — capsule, feed, one print haptic, reduced-motion
+fade — with Fermer · Enregistrer l’image · Partager as in §34. Fermer lets the paper leave, then
+closes the sheet back to the Agenda.
+
+**Interior.** The visual language of the « Tops & tendances » share card (§35) — the same Souris
+family, structurally simpler, with no analytics (no podium, medal, chart or KPI), never an
+administrative form:
+
+```text
+            [logo-mark 56 pt]             decorative, restrained
+          ESTIMATION TARIFAIRE            eyebrow, accent
+               Maison Léa                 screenTitle, plum, wraps
+            24 septembre 2026             metadata, soft — generation date, no time
+- - - - - - - - - - - - - - - - - - - - - ReceiptTearLine
+Prestations                               rowTitle, plum, header
+Coupe brushing                      45 €  body ↔ control tabular
+───────────────────────────────────────── subtle hairline between lines
+Balayage 1                          70 €
+╭───────────────────────────────────────╮
+│             TOTAL ESTIMÉ              │ ShareHighlightPanel (lav050, radii.large):
+│                 115 €                 │ eyebrow accent over display, plum
+╰───────────────────────────────────────╯
+Estimation indicative basée sur les prestations sélectionnées.   metadata, soft, centred
+          Créé avec [Souris wordmark]     CreatedWithSouris (64 pt, 85 %)
+```
+
+- **Two presentations, one interior** — exactly the « Tops & tendances » pipeline (§34, §35).
+  `EstimationDocument` is the interior only, with no surface of its own:
+  - **printer:** inside `ReceiptPaper`, the torn-edge ticket every Souris receipt feeds out of the
+    printer (as `BusinessInsightsReceipt`). The whole interior scrolls inside the room the printer
+    leaves; its text follows the device text size.
+  - **export:** `ImageExportFrame` on `SHARE_CARD_BACKGROUND` holding the shared `ShareCardCanvas`
+    (as `BusinessInsightsShareCard`): flat warm paper FULL-BLEED — never a rounded card on another
+    ground — 360 dp wide, the share-card margins (52 pt top, 48 pt bottom, 24 pt sides), every
+    text `allowFontScaling={false}`, exported at 3×. Tops & tendances uses the canvas `fixed`
+    (360 × 640 dp → 1080 × 1920 px); Estimation uses it `growable`: at least that same 9:16 story
+    — an ordinary estimation IS a 1080 × 1920 image, its footer at the bottom edge — and taller
+    only when a long one needs it (1080 × measured height × 3), never cut.
+  No gradient, no texture.
+- **Total.** « Total estimé » is the focal point: the lavender panel shared with « Encaissé sur la
+  période » — an estimated price, never an amount due.
+- **Shared primitives** (`src/shared/ui`), also used by the « Tops & tendances » card with its
+  rendering unchanged: `ShareCardCanvas` (the share canvas: ground, width, margins, 9:16, 3×),
+  `ShareHighlightPanel` (the lavender panel container) and `CreatedWithSouris` (« Créé avec » +
+  wordmark, spoken « Créé avec Souris » once).
+- No recipient: no Client name, no « Cliente » / « Pour » line, no blank placeholder. No height is
+  fixed: a long name wraps, no line or amount is ever truncated or shrunk, and a long estimation is
+  simply taller.

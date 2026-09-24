@@ -13,7 +13,7 @@
 //   tear line
 //   highlight  the podium of the category on screen, as the ticket shows it
 //            (prestations, produits, clientes) · a calm line (empty period)
-//   footer   « Créé avec » + the Souris wordmark
+//   footer   « Créé avec » + the Souris wordmark (shared CreatedWithSouris)
 //
 // The professional's result, powered by Souris: the brand frames the card,
 // the figures carry it. The warm paper runs full-bleed, edge to edge of the
@@ -29,12 +29,19 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
 import { BrandMark } from '@/shared/ui/BrandMark';
+import { CreatedWithSouris } from '@/shared/ui/CreatedWithSouris';
 import { ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
+import {
+  SHARE_CARD_BACKGROUND,
+  SHARE_CARD_SIZE,
+  ShareCardCanvas,
+  getShareImagePixelSize,
+} from '@/shared/ui/ShareCardCanvas';
+import { ShareHighlightPanel } from '@/shared/ui/ShareHighlightPanel';
 import {
   foregroundSoft,
   lavender,
   radii,
-  receiptPaper,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
@@ -42,12 +49,12 @@ import {
 import { InsightsPodium } from './components/InsightsPodium';
 import type { InsightsShareCardModel, InsightsShareHighlight } from './insights-share-card';
 
-/** Logical layout of the card (dp): a 9:16 story. */
-export const INSIGHTS_SHARE_CARD_SIZE = { width: 360, height: 640 } as const;
+/** Logical layout of the card (dp): the shared 9:16 share canvas. */
+export const INSIGHTS_SHARE_CARD_SIZE = SHARE_CARD_SIZE;
 /** The exported image (px): the same 9:16 at story resolution. */
-export const INSIGHTS_SHARE_IMAGE_SIZE = { width: 1080, height: 1920 } as const;
+export const INSIGHTS_SHARE_IMAGE_SIZE = getShareImagePixelSize(SHARE_CARD_SIZE.height);
 /** The full-bleed ground of the whole image. */
-export const INSIGHTS_SHARE_BACKGROUND = receiptPaper.surface;
+export const INSIGHTS_SHARE_BACKGROUND = SHARE_CARD_BACKGROUND;
 
 const FIXED = { allowFontScaling: false } as const;
 
@@ -58,7 +65,7 @@ interface BusinessInsightsShareCardProps {
 
 export function BusinessInsightsShareCard({ model, testID }: BusinessInsightsShareCardProps) {
   return (
-    <View style={styles.card} testID={testID}>
+    <ShareCardCanvas testID={testID}>
       <View style={styles.header}>
         <BrandMark decorative size={56} variant="mark" />
         <AppText {...FIXED} style={styles.kicker} variant="eyebrow">
@@ -75,7 +82,7 @@ export function BusinessInsightsShareCard({ model, testID }: BusinessInsightsSha
         </AppText>
       </View>
 
-      <View style={styles.summary}>
+      <ShareHighlightPanel style={styles.summary} testID={testID ? `${testID}-summary` : undefined}>
         <AppText {...FIXED} style={styles.totalLabel} variant="eyebrow">
           Encaissé sur la période
         </AppText>
@@ -91,7 +98,7 @@ export function BusinessInsightsShareCard({ model, testID }: BusinessInsightsSha
             <PrivateAmount size="small" testID={testID ? `${testID}-average` : undefined} />
           </View>
         </View>
-      </View>
+      </ShareHighlightPanel>
 
       <ReceiptTearLine />
 
@@ -99,13 +106,8 @@ export function BusinessInsightsShareCard({ model, testID }: BusinessInsightsSha
         <Highlight highlight={model.highlight} />
       </View>
 
-      <View style={styles.footer}>
-        <AppText {...FIXED} style={styles.footerText} variant="metadata">
-          Créé avec
-        </AppText>
-        <BrandMark decorative size={64} variant="wordmark" />
-      </View>
-    </View>
+      <CreatedWithSouris {...FIXED} testID={testID ? `${testID}-footer` : undefined} />
+    </ShareCardCanvas>
   );
 }
 
@@ -146,27 +148,10 @@ function Highlight({ highlight }: { readonly highlight: InsightsShareHighlight }
 }
 
 const styles = StyleSheet.create({
-  // Flat warm paper, full-bleed: no radius, no frame, no other ground.
-  card: {
-    backgroundColor: INSIGHTS_SHARE_BACKGROUND,
-    height: INSIGHTS_SHARE_CARD_SIZE.height,
-    paddingBottom: spacing['3xl'] + spacing.base,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing['3xl'] + spacing.lg,
-    width: INSIGHTS_SHARE_CARD_SIZE.width,
-  },
   header: { alignItems: 'center' },
   kicker: { color: semanticColors.accent, marginTop: spacing.xs },
   period: { color: semanticColors.brandForeground, marginTop: 2, textAlign: 'center' },
-  summary: {
-    alignItems: 'center',
-    backgroundColor: lavender.lav050,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-  },
+  summary: { marginTop: spacing.lg },
   totalLabel: { color: semanticColors.accent },
   // Frosted private amount: soft lilac, no border, no gradient.
   private: {
@@ -197,12 +182,4 @@ const styles = StyleSheet.create({
   // to the summary: a short podium and a tall one sit at the same optical place.
   highlight: { flex: 1, justifyContent: 'center', paddingBottom: spacing.xl },
   calm: { color: foregroundSoft, textAlign: 'center' },
-  footer: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    justifyContent: 'center',
-    opacity: 0.85,
-  },
-  footerText: { color: foregroundSoft },
 });

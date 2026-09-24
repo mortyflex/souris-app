@@ -5,7 +5,8 @@ import type { Client } from '@/domain/clients';
 import { getInsightsPeriod, type BusinessInsights } from '@/domain/insights';
 import { formatCompactEuroCents, formatEuroCents } from '@/shared/lib/money';
 
-import { receiptPaper } from '@/shared/ui/theme';
+import { CREATED_WITH_SOURIS_LABEL } from '@/shared/ui/CreatedWithSouris';
+import { lavender, radii, receiptPaper, spacing } from '@/shared/ui/theme';
 
 import {
   BusinessInsightsShareCard,
@@ -91,6 +92,27 @@ describe('BusinessInsightsShareCard', () => {
     expect(view.queryByRole('button')).toBeNull();
   });
 
+  it('keeps its summary panel and footer through the shared share-image primitives', async () => {
+    const view = await renderCard('services');
+
+    // The summary panel: exactly the former lavender panel.
+    const summary = view.getByTestId('card-summary');
+    expect(within(summary).getByText('Encaissé sur la période')).toBeTruthy();
+    expect(StyleSheet.flatten(summary.props.style)).toMatchObject({
+      alignItems: 'center',
+      backgroundColor: lavender.lav050,
+      borderRadius: radii.large,
+      marginTop: spacing.lg,
+      paddingHorizontal: spacing.base,
+      paddingVertical: spacing.md,
+    });
+    // The footer: « Créé avec » + the 64 pt wordmark at 85 %, fixed text size.
+    const footer = view.getByTestId('card-footer');
+    expect(footer.props.accessibilityLabel).toBe(CREATED_WITH_SOURIS_LABEL);
+    expect(StyleSheet.flatten(footer.props.style)).toMatchObject({ flexDirection: 'row', opacity: 0.85 });
+    expect(within(footer).getByText('Créé avec').props.allowFontScaling).toBe(false);
+  });
+
   it('keeps a long service name on two lines at most, with its metric', async () => {
     const view = await renderCard('services');
     const winner = within(view.getByTestId('card-highlight'));
@@ -166,7 +188,13 @@ describe('BusinessInsightsShareCard', () => {
       backgroundColor: receiptPaper.surface,
       width: INSIGHTS_SHARE_CARD_SIZE.width,
       height: INSIGHTS_SHARE_CARD_SIZE.height,
+      // The share-card margins, now owned by the shared ShareCardCanvas: unchanged.
+      paddingBottom: spacing['3xl'] + spacing.base,
+      paddingHorizontal: spacing.xl,
+      paddingTop: spacing['3xl'] + spacing.lg,
     });
+    expect(INSIGHTS_SHARE_CARD_SIZE).toEqual({ width: 360, height: 640 });
+    expect(card.minHeight).toBeUndefined();
     expect(card.borderRadius).toBeUndefined();
     expect(card.margin ?? card.marginHorizontal ?? card.marginVertical).toBeUndefined();
   });

@@ -29,7 +29,13 @@ export function canNavigateTo(current: CreationStep, target: number): boolean {
   return target >= 0 && target < current;
 }
 
-/** Human-readable label for the current progress, e.g. "Étape 2 sur 3". */
-export function getStepProgressLabel(current: CreationStep): string {
-  return `Étape ${current + 1} sur ${stepLabels.length}`;
+/**
+ * Human-readable label for the current progress, e.g. "Étape 2 sur 3".
+ * `stepCount` defaults to the appointment flow; a shorter flow passes its own.
+ */
+export function getStepProgressLabel(
+  current: CreationStep,
+  stepCount: number = stepLabels.length,
+): string {
+  return `Étape ${current + 1} sur ${stepCount}`;
 }

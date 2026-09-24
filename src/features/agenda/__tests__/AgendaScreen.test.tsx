@@ -116,7 +116,7 @@ describe('AgendaScreen', () => {
     expect(timelines[0].props.contentInsetAdjustmentBehavior).toBe('automatic');
   });
 
-  it('offers « Nouveau rendez-vous », « Résumé du jour » and « Tops & tendances » from the floating +', async () => {
+  it('offers « Nouveau rendez-vous », « Estimation », « Résumé du jour » and « Tops & tendances » from the floating +', async () => {
     const view = await renderAgenda();
     await settleFloatingReveal();
 
@@ -126,9 +126,21 @@ describe('AgendaScreen', () => {
     const options = view.getAllByRole('menuitem');
     expect(options.map((option) => option.props.accessibilityLabel)).toEqual([
       'Nouveau rendez-vous',
+      'Estimation',
       'Résumé du jour',
       'Tops & tendances',
     ]);
+  });
+
+  it('opens the « Estimation » flow from the + menu, with no schedule attached', async () => {
+    const view = await renderAgenda();
+    await settleFloatingReveal();
+
+    await act(async () => fireEvent.press(view.getByTestId('agenda-create')));
+    await act(async () => fireEvent.press(view.getByTestId('agenda-estimation')));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/estimations/new');
   });
 
   it('opens the existing Appointment creation flow from the + menu', async () => {
@@ -492,8 +504,8 @@ describe('AgendaScreen — day navigation', () => {
   describe('« Résumé de la semaine »', () => {
     it('follows the Jour / Semaine mode in the + menu, never both', async () => {
       const view = await renderAgenda();
-      const day = ['Nouveau rendez-vous', 'Résumé du jour', 'Tops & tendances'];
-      const week = ['Nouveau rendez-vous', 'Résumé de la semaine', 'Tops & tendances'];
+      const day = ['Nouveau rendez-vous', 'Estimation', 'Résumé du jour', 'Tops & tendances'];
+      const week = ['Nouveau rendez-vous', 'Estimation', 'Résumé de la semaine', 'Tops & tendances'];
 
       expect(await menuLabels(view)).toEqual(day);
       await switchToWeek(view);
