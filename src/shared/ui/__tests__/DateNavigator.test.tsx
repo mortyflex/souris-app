@@ -163,6 +163,32 @@ describe('DateNavigator', () => {
     expect(handlers.onGoToToday).not.toHaveBeenCalled();
   });
 
+  it('makes the date itself a control only for a caller that asks for it', async () => {
+    const { view: pending } = renderNavigator();
+    const view = await pending;
+    // Caisse: the date stays plain text.
+    expect(view.queryByTestId('date-navigator-date-button')).toBeNull();
+    expect(view.queryByRole('button', { name: 'Mercredi 16 sept.' })).toBeNull();
+  });
+
+  it('opens the caller’s calendar from a pressable date, still read in full', async () => {
+    const onPressDate = jest.fn();
+    const { view: pending, handlers } = renderNavigator({ onPressDate });
+    const view = await pending;
+
+    const date = view.getByRole('button', { name: 'Mercredi 16 sept.' });
+    expect(date.props.testID).toBe('date-navigator-date-button');
+    expect(date.props.accessibilityHint).toBe('Ouvre le calendrier du mois');
+    // Same text, same size: the date only became tappable.
+    expect(within(date).getByTestId('date-navigator-date').props.children).toBe('Mercredi 16 sept.');
+
+    await act(async () => {
+      fireEvent.press(date);
+    });
+    expect(onPressDate).toHaveBeenCalledTimes(1);
+    expect(handlers.onOpenCalendar).not.toHaveBeenCalled();
+  });
+
   it('indicates « Aujourd’hui » only on today, as plain text rather than a control', async () => {
     const { view: pending } = renderNavigator({ isToday: true });
     const view = await pending;

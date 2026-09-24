@@ -1,9 +1,10 @@
 // Souris — DayPickerSheet
 //
 // Direct selection of one local day: the calendar button of the shared
-// DateNavigator (Agenda Jour, Caisse Jour). It reuses the canonical Souris
-// date picker pattern (Appointment editing): the native wheel inside the
-// shared BottomSheet on iOS, the native dialog on Android. No new picker.
+// DateNavigator in Caisse Jour (Agenda Jour has its month calendar). It
+// reuses the canonical Souris date picker pattern (Appointment editing): the
+// native wheel inside the shared BottomSheet on iOS, the native dialog on
+// Android. No new picker.
 // The sheet is headed by ONE violet uppercase eyebrow that the wheel completes
 // (« AGENDA DU », « CAISSE DU » + the date) — the eyebrow of every Souris sheet
 // header, without a « Choisir un jour » title under it. It is the sheet's

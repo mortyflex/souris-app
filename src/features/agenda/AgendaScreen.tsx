@@ -1,12 +1,11 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { daySummaryIcon } from "@/shared/icons/day-summary-icon";
 import { insightsIcon } from "@/shared/icons/insights-icon";
 import { DateNavigator } from "@/shared/ui/DateNavigator";
-import { DayPickerSheet } from "@/shared/ui/DayPickerSheet";
 import { FloatingCreateButton } from "@/shared/ui/FloatingCreateButton";
 import { MainScreenHeader } from "@/shared/ui/MainScreenHeader";
 import { agenda, gutter, semanticColors, spacing } from "@/shared/ui/theme";
@@ -26,9 +25,11 @@ import {
   type AgendaViewMode,
 } from "./components/AgendaViewSwitcher";
 import { DayTimeline } from "./components/DayTimeline";
+import { MonthCalendarSheet } from "./components/MonthCalendarSheet";
 import { DaySummaryTicket } from "./day-summary/DaySummaryTicket";
 import { WeekView } from "./components/WeekView";
 import { getCalendarBlocksOfLocalDay } from "./calendar/week-appointments";
+import { getAppointmentDayKeys } from "./calendar/month";
 import { getOperationalAgendaEntries } from "./operational-visibility";
 
 export function AgendaScreen() {
@@ -38,13 +39,22 @@ export function AgendaScreen() {
   const [today, setToday] = useState<Date>(() => startOfLocalDay(new Date()));
   const [selectedDay, setSelectedDay] = useState<Date>(today);
   const [mode, setMode] = useState<AgendaViewMode>("day");
-  const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [monthCalendarVisible, setMonthCalendarVisible] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [daySummaryVisible, setDaySummaryVisible] = useState(false);
   const [insightsVisible, setInsightsVisible] = useState(false);
   const { appointments: allAppointments } = useAppointmentSession();
   const { calendarBlocks } = useCalendarBlockSession();
-  const operationalAppointments = getOperationalAgendaEntries(allAppointments);
+  const operationalAppointments = useMemo(
+    () => getOperationalAgendaEntries(allAppointments),
+    [allAppointments],
+  );
+  // The month calendar's dots: the SAME entries and local-day keys as the
+  // Day view, so both always agree. Calendar Blocks are never part of them.
+  const appointmentDayKeys = useMemo(
+    () => getAppointmentDayKeys(operationalAppointments),
+    [operationalAppointments],
+  );
   const previousTodayRef = useRef(today);
   const horizontalGutter =
     Platform.OS === "android" ? gutter.android : gutter.ios;
@@ -129,7 +139,8 @@ export function AgendaScreen() {
             isToday={isSameLocalDay(selectedDay, today)}
             onGoToToday={goToToday}
             onNext={() => shiftSelectedDay(1)}
-            onOpenCalendar={() => setDayPickerVisible(true)}
+            onOpenCalendar={() => setMonthCalendarVisible(true)}
+            onPressDate={() => setMonthCalendarVisible(true)}
             onPrevious={() => shiftSelectedDay(-1)}
             style={[
               styles.periodNavigation,
@@ -153,16 +164,17 @@ export function AgendaScreen() {
           onShiftWeek={shiftSelectedWeek}
         />
       )}
-      <DayPickerSheet
+      <MonthCalendarSheet
+        appointmentDayKeys={appointmentDayKeys}
         day={selectedDay}
-        eyebrow="AGENDA DU"
-        onClose={() => setDayPickerVisible(false)}
+        onClose={() => setMonthCalendarVisible(false)}
         onSelect={(day) => {
           setSelectedDay(day);
-          setDayPickerVisible(false);
+          setMonthCalendarVisible(false);
         }}
-        testID="agenda-day-picker"
-        visible={dayPickerVisible}
+        testID="agenda-month-calendar"
+        today={today}
+        visible={monthCalendarVisible}
       />
       <FloatingCreateButton
         accessibilityLabel="Actions de l'agenda"

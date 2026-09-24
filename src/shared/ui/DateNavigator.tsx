@@ -18,14 +18,16 @@
 // Presentation only — the caller owns the selected day and what each control
 // does. « Aujourd’hui » is a quiet violet indication shown only on today;
 // elsewhere the same line offers the way back when the caller provides one.
+// A caller may also make the date itself a control (`onPressDate`): Agenda
+// Jour opens its month calendar from it.
 
 import { useState } from 'react';
-import { StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 
 import { AppText } from './AppText';
 import { GlassIconButton, glassIcons } from './GlassIconButton';
 import { PeriodNavigator, PeriodNavigatorLink, PeriodNavigatorNote } from './PeriodNavigator';
-import { semanticColors, typography } from './theme';
+import { interaction, semanticColors, spacing, typography } from './theme';
 
 interface DateNavigatorProps {
   readonly date: Date;
@@ -33,6 +35,8 @@ interface DateNavigatorProps {
   readonly onPrevious: () => void;
   readonly onNext: () => void;
   readonly onOpenCalendar: () => void;
+  /** Makes the date itself a control (Agenda: open the month calendar). */
+  readonly onPressDate?: () => void;
   /** Way back to today, offered only while another day is selected. */
   readonly onGoToToday?: () => void;
   readonly style?: StyleProp<ViewStyle>;
@@ -81,6 +85,7 @@ export function DateNavigator({
   onPrevious,
   onNext,
   onOpenCalendar,
+  onPressDate,
   onGoToToday,
   style,
   testID = 'date-navigator',
@@ -91,6 +96,22 @@ export function DateNavigator({
   const fullDate = formatNavigatorDate(date);
   const fits = copyWidth === undefined || navigatorDateFits(fullDate, copyWidth, fontScale);
   const shownDate = fits ? fullDate : formatNavigatorDate(date, 'compact');
+
+  const dateText = (
+    <AppText
+      // Read aloud in full whatever the visible format.
+      accessibilityLabel={fullDate}
+      // No `adjustsFontSizeToFit`: it shrank a date that fitted (see
+      // DESIGN_OVERRIDES.md §21). The size is fixed; only growth is capped.
+      maxFontSizeMultiplier={navigatorDateMaxFontScale}
+      numberOfLines={1}
+      style={styles.date}
+      testID={`${testID}-date`}
+      variant="sectionTitle"
+    >
+      {shownDate}
+    </AppText>
+  );
 
   return (
     <PeriodNavigator
@@ -110,19 +131,21 @@ export function DateNavigator({
         />
       }
     >
-      {/* Read aloud in full whatever the visible format. */}
-      <AppText
-        accessibilityLabel={fullDate}
-        // No `adjustsFontSizeToFit`: it shrank a date that fitted (see
-        // DESIGN_OVERRIDES.md §21). The size is fixed; only growth is capped.
-        maxFontSizeMultiplier={navigatorDateMaxFontScale}
-        numberOfLines={1}
-        style={styles.date}
-        testID={`${testID}-date`}
-        variant="sectionTitle"
-      >
-        {shownDate}
-      </AppText>
+      {onPressDate ? (
+        <Pressable
+          accessibilityHint="Ouvre le calendrier du mois"
+          accessibilityLabel={fullDate}
+          accessibilityRole="button"
+          hitSlop={spacing.sm}
+          onPress={onPressDate}
+          style={({ pressed }) => [styles.datePress, pressed && styles.pressed]}
+          testID={`${testID}-date-button`}
+        >
+          {dateText}
+        </Pressable>
+      ) : (
+        dateText
+      )}
       {isToday ? (
         <PeriodNavigatorNote testID={`${testID}-today`}>Aujourd’hui</PeriodNavigatorNote>
       ) : (
@@ -142,4 +165,6 @@ const styles = StyleSheet.create({
   // Stretched to the measured width between the controls: the text is centred
   // inside a definite box instead of being sized by its own content.
   date: { alignSelf: 'stretch', color: semanticColors.foreground, textAlign: 'center' },
+  datePress: { alignSelf: 'stretch' },
+  pressed: { opacity: interaction.pressedOpacity },
 });

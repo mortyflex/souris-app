@@ -8,15 +8,21 @@ import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
-import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import type { SourisDatabase } from '@/persistence/database';
+import { TestPersistenceProvider, testBusiness } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
+import { insertCalendarBlock } from '@/persistence/stores/calendar-blocks';
+import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
+import { bootstrapPersistence } from '@/persistence/bootstrap';
+import { createDevelopmentSeed } from '@/providers/development-seed';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { settleFloatingReveal, settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
 import { INSIGHTS_SAVED_NOTICE_DURATION } from '@/features/insights/BusinessInsightsTicket';
 
 import { AgendaScreen } from '../AgendaScreen';
+import { formatCalendarMonth } from '../components/MonthCalendarSheet';
 
 const mockPush = jest.fn();
 
@@ -52,25 +58,6 @@ jest.mock('react-native-reanimated', () =>
   jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'),
 );
 
-// The canonical date picker is native; the mock exposes its value change so a
-// test can pick any day.
-let mockPickerDate: Date | undefined;
-jest.mock('@expo/ui/community/datetime-picker', () => {
-  const React = jest.requireActual('react') as typeof import('react');
-  const { Pressable: MockPressable } = jest.requireActual('react-native') as typeof import('react-native');
-  return {
-    DateTimePicker: ({
-      onValueChange,
-    }: {
-      readonly onValueChange: (event: unknown, date?: Date) => void;
-    }) =>
-      React.createElement(MockPressable, {
-        onPress: () => onValueChange({}, mockPickerDate),
-        testID: 'mock-date-picker',
-      }),
-  };
-});
-
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -80,9 +67,9 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-function renderAgenda() {
+function renderAgenda(database?: SourisDatabase) {
   return render(
-    <TestPersistenceProvider>
+    <TestPersistenceProvider database={database}>
       <ClientSessionProvider>
         <AppointmentSessionProvider>
           <ProductCatalogProvider>
@@ -164,6 +151,20 @@ describe('AgendaScreen — day navigation', () => {
   };
   const selectedDate = (view: AgendaView) =>
     view.getByTestId('agenda-date-date').props.children as string;
+  const calendarMonth = (view: AgendaView) =>
+    view.getByTestId('agenda-month-calendar-month').props.children as string;
+  const formatDayId = (day: Date) =>
+    `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+  /** Opens the month calendar, browses forward to the month of `day`, taps it. */
+  const pickAgendaDay = async (view: AgendaView, day: Date) => {
+    await press(view, 'agenda-date-date-button');
+    for (let step = 0; calendarMonth(view) !== formatCalendarMonth(day); step += 1) {
+      if (step > 24) throw new Error(`Month of ${day.toDateString()} not reached`);
+      await press(view, 'agenda-month-calendar-navigation-next');
+    }
+    await press(view, `agenda-month-calendar-day-${formatDayId(day)}`);
+    await settleSheetTransition();
+  };
 
   beforeAll(() => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
@@ -172,7 +173,6 @@ describe('AgendaScreen — day navigation', () => {
   beforeEach(() => {
     // Wednesday: the fixtures put Julie on Tuesday 15 and Anaïs on Thursday 17.
     jest.setSystemTime(new Date(2026, 8, 16, 15, 0));
-    mockPickerDate = undefined;
   });
 
   afterAll(() => {
@@ -253,35 +253,123 @@ describe('AgendaScreen — day navigation', () => {
     expect(view.getByTestId('agenda-date-today')).toBeTruthy();
   });
 
-  it('jumps to any date through the calendar, and leaves it unchanged on cancel', async () => {
+  it('opens the month calendar from the date itself, instead of the old date wheel', async () => {
+    const view = await renderAgenda();
+    for (let day = 0; day < 7; day += 1) await press(view, 'agenda-date-next');
+    expect(selectedDate(view)).toBe('Mercredi 23 sept.');
+
+    const date = view.getByTestId('agenda-date-date-button');
+    expect(date.props.accessibilityRole).toBe('button');
+    expect(date.props.accessibilityLabel).toBe('Mercredi 23 sept.');
+    await press(view, 'agenda-date-date-button');
+
+    expect(view.getByTestId('agenda-month-calendar')).toBeTruthy();
+    expect(calendarMonth(view)).toBe('Septembre 2026');
+    expect(view.getByTestId('agenda-month-calendar-day-2026-09-23').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    // The wheel sheet and its « AGENDA DU » eyebrow are gone from the Agenda.
+    expect(view.queryByTestId('agenda-day-picker')).toBeNull();
+    expect(view.queryByText('AGENDA DU')).toBeNull();
+    expect(view.queryByText(/valider|confirmer/i)).toBeNull();
+  });
+
+  it('opens the same month calendar from the calendar button', async () => {
     const view = await renderAgenda();
 
     await press(view, 'agenda-date-calendar');
-    expect(view.getByTestId('agenda-day-picker')).toBeTruthy();
-    // Headed by the violet « AGENDA DU » eyebrow alone: no « Choisir un jour » title.
-    const heading = view.getByRole('header', { name: 'AGENDA DU' });
-    expect(heading.props.testID).toBe('agenda-day-picker-heading');
-    expect(StyleSheet.flatten(heading.props.style)).toMatchObject({ color: semanticColors.accent });
-    expect(view.queryByText('Choisir un jour')).toBeNull();
-    expect(view.queryByText('Choisir une date')).toBeNull();
-    mockPickerDate = new Date(2026, 8, 17, 23, 59);
-    await press(view, 'mock-date-picker');
-    await press(view, 'agenda-day-picker-confirm');
+    expect(calendarMonth(view)).toBe('Septembre 2026');
+    expect(
+      within(view.getByTestId('agenda-month-calendar-weekdays'))
+        .getAllByText(/^[A-Z][a-z]{2}$/)
+        .map((header) => header.props.children),
+    ).toEqual(['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']);
+  });
+
+  it('browses months without moving the Agenda, then opens a tapped day and keeps the arrows in step', async () => {
+    const view = await renderAgenda();
+    await press(view, 'agenda-date-date-button');
+
+    await press(view, 'agenda-month-calendar-navigation-next');
+    expect(calendarMonth(view)).toBe('Octobre 2026');
+    await press(view, 'agenda-month-calendar-navigation-previous');
+    await press(view, 'agenda-month-calendar-navigation-previous');
+    expect(calendarMonth(view)).toBe('Août 2026');
+    // Browsing is not selecting: the Agenda still shows today.
+    expect(selectedDate(view)).toBe('Mercredi 16 sept.');
+
+    await press(view, 'agenda-month-calendar-navigation-next');
+    await press(view, 'agenda-month-calendar-navigation-next');
+    await press(view, 'agenda-month-calendar-day-2026-10-07');
     await settleSheetTransition();
 
+    expect(view.queryByTestId('agenda-month-calendar')).toBeNull();
+    expect(selectedDate(view)).toBe('Mercredi 7 oct.');
+    await press(view, 'agenda-date-previous');
+    expect(selectedDate(view)).toBe('Mardi 6 oct.');
+    await press(view, 'agenda-date-next');
+    await press(view, 'agenda-date-next');
+    expect(selectedDate(view)).toBe('Jeudi 8 oct.');
+
+    // Reopened after the arrows moved: the month of the day now shown.
+    await press(view, 'agenda-date-date-button');
+    expect(calendarMonth(view)).toBe('Octobre 2026');
+    expect(view.getByTestId('agenda-month-calendar-day-2026-10-08').props.accessibilityState).toEqual({
+      selected: true,
+    });
+  });
+
+  it('shows the tapped day on the timeline, adjacent-month days included', async () => {
+    const view = await renderAgenda();
+    expect(view.getByLabelText(/^Nadia/)).toBeTruthy();
+
+    await pickAgendaDay(view, new Date(2026, 8, 17));
     expect(selectedDate(view)).toBe('Jeudi 17 sept.');
     expect(view.getByLabelText(/^Anaïs/)).toBeTruthy();
+    expect(view.queryByLabelText(/^Nadia/)).toBeNull();
 
-    // A cancelled pick — even after scrolling the wheel — changes nothing.
-    await press(view, 'agenda-date-calendar');
-    mockPickerDate = new Date(2027, 0, 1);
-    await press(view, 'mock-date-picker');
-    await act(async () => {
-      fireEvent.press(view.getAllByText('Annuler')[0]!);
-    });
+    // The September grid ends on Sunday 11 October: a real October day.
+    await press(view, 'agenda-date-date-button');
+    await press(view, 'agenda-month-calendar-day-2026-10-01');
     await settleSheetTransition();
+    expect(view.queryByTestId('agenda-month-calendar')).toBeNull();
+    expect(selectedDate(view)).toBe('Jeudi 1 oct.');
+  });
 
-    expect(selectedDate(view)).toBe('Jeudi 17 sept.');
+  it('dots the days of the Agenda appointments only — never a personal block', async () => {
+    const database = openTestDatabase();
+    bootstrapPersistence(database, () => createDevelopmentSeed(new Date()));
+    // Friday 18 holds no appointment, only personal unavailability.
+    insertCalendarBlock(database, {
+      id: 'block-friday',
+      businessId: testBusiness.id,
+      staffMemberId: 'staff-amelie',
+      startAt: new Date(2026, 8, 18, 12),
+      endAt: new Date(2026, 8, 18, 13),
+      reason: 'Pause',
+    });
+    const view = await renderAgenda(database);
+    await press(view, 'agenda-date-date-button');
+
+    const dot = (id: string) => view.queryByTestId(`agenda-month-calendar-day-${id}-dot`);
+    // The fixtures: Julie on the 15th, several on the 16th, Anaïs on the 17th — one dot each.
+    for (const id of ['2026-09-15', '2026-09-16', '2026-09-17']) {
+      expect(dot(id)).toBeTruthy();
+      expect(view.getByTestId(`agenda-month-calendar-day-${id}`).props.accessibilityLabel).toMatch(
+        /rendez-vous prévus$/,
+      );
+    }
+    expect(view.getAllByTestId(/^agenda-month-calendar-day-2026-09-16-dot$/)).toHaveLength(1);
+    expect(dot('2026-09-18')).toBeNull();
+    expect(view.getByTestId('agenda-month-calendar-day-2026-09-18').props.accessibilityLabel).toBe(
+      'Vendredi 18 septembre',
+    );
+    expect(dot('2026-09-21')).toBeNull();
+
+    // The Day view does show the block on the 18th: only the calendar ignores it.
+    await press(view, 'agenda-month-calendar-day-2026-09-18');
+    await settleSheetTransition();
+    expect(view.getAllByLabelText(/Indisponible/).length).toBeGreaterThan(0);
   });
 
   const openDaySummary = async (view: AgendaView) => {
@@ -342,11 +430,7 @@ describe('AgendaScreen — day navigation', () => {
 
   it('still prints a neutral summary on a free day', async () => {
     const view = await renderAgenda();
-    await press(view, 'agenda-date-calendar');
-    mockPickerDate = new Date(2026, 10, 3);
-    await press(view, 'mock-date-picker');
-    await press(view, 'agenda-day-picker-confirm');
-    await settleSheetTransition();
+    await pickAgendaDay(view, new Date(2026, 10, 3));
 
     await openDaySummary(view);
 
@@ -366,13 +450,6 @@ describe('AgendaScreen — day navigation', () => {
   const periodLabel = (view: AgendaView) =>
     view.getByTestId('business-insights-period-label').props.children as string;
   const receipt = (view: AgendaView) => within(view.getByTestId('business-insights-receipt'));
-  const pickAgendaDay = async (view: AgendaView, day: Date) => {
-    await press(view, 'agenda-date-calendar');
-    mockPickerDate = day;
-    await press(view, 'mock-date-picker');
-    await press(view, 'agenda-day-picker-confirm');
-    await settleSheetTransition();
-  };
 
   it('prints « Tops & tendances » on the month of the Agenda date, with ONE print haptic', async () => {
     const print = jest.spyOn(haptics, 'print');
