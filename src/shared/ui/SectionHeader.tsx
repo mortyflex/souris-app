@@ -14,18 +14,23 @@ interface SectionHeaderProps {
   readonly count?: number;
   readonly children?: ReactNode;
   readonly style?: StyleProp<ViewStyle>;
+  readonly testID?: string;
 }
 
-export function SectionHeader({ title, count, children, style }: SectionHeaderProps) {
+export function SectionHeader({ title, count, children, style, testID }: SectionHeaderProps) {
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, style]} testID={testID}>
       <AppText variant="sectionTitle" numberOfLines={1} style={styles.title}>
         {title}
       </AppText>
       <View style={styles.trailing}>
         {count !== undefined && (
           <View style={styles.countChip}>
-            <AppText variant="chip" style={styles.countText}>
+            <AppText
+              variant="chip"
+              style={styles.countText}
+              testID={testID === undefined ? undefined : `${testID}-count`}
+            >
               {count}
             </AppText>
           </View>

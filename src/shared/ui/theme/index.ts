@@ -56,6 +56,15 @@ export {
   tabAndroid,
 } from './typography';
 export { duration, easing, interaction, receiptPrint } from './motion';
-export { agenda, dialog, floatingAction, receiptPrinter, sheet, touchTarget, watermark } from './layout';
+export {
+  agenda,
+  dialog,
+  floatingAction,
+  listThumbnail,
+  receiptPrinter,
+  sheet,
+  touchTarget,
+  watermark,
+} from './layout';
 export { nativeShadows, shadows } from './shadows';
 export { gloss } from './gloss';

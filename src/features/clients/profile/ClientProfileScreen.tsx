@@ -19,7 +19,9 @@
 // `Modifier` opens the SAME Client form used for creation (edit mode), then
 // the lifecycle action in rose — `Archiver la cliente` on an active Client,
 // `Supprimer définitivement` on an archived one (refused by the database
-// while any Appointment or Sale references her).
+// while any Appointment or Sale references her). Both ask first on the shared
+// ConfirmationDialog: archiving is reversible (accent `neutral` tone, like
+// Product « Désactiver »), permanent deletion stays destructive.
 //
 // Lifecycle: an archived Client shows a subtle `Archivée` indicator and
 // `Réactiver la cliente` in place of the daily actions (she is offered for no
@@ -68,6 +70,7 @@ import { saleIcon } from '@/shared/icons/sale-icon';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
 import { ActionGroup, type DetailAction } from '@/shared/ui/ActionGroup';
 import { DetailActionsSheet } from '@/shared/ui/DetailActionsSheet';
 import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
@@ -178,6 +181,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   const [actionsVisible, setActionsVisible] = useState(false);
   const [pendingAction, setPendingAction] = useState<ClientAdminAction>();
   const [deletionMode, setDeletionMode] = useState<ClientDeletionDialogMode>();
+  const [archiveConfirmationVisible, setArchiveConfirmationVisible] = useState(false);
   const [deletedByCurrentScreen, setDeletedByCurrentScreen] = useState(false);
   const client = getClientById(clientId);
   // Today's birthday: a static reminder card, plus ONE short celebration per
@@ -225,6 +229,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   };
 
   const archive = () => {
+    setArchiveConfirmationVisible(false);
     if (!persist(() => archiveClient(client.id))) return;
     haptics.selection();
   };
@@ -267,7 +272,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     const action = pendingAction;
     setPendingAction(undefined);
     if (action === 'modify') setEditVisible(true);
-    if (action === 'archive') archive();
+    if (action === 'archive') setArchiveConfirmationVisible(true);
     if (action === 'delete') openPermanentDeletion();
   };
 
@@ -476,6 +481,20 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         onClose={() => setEditVisible(false)}
         onSubmitted={() => setEditVisible(false)}
         visible={editVisible}
+      />
+      <ConfirmationDialog
+        body="La cliente restera dans votre répertoire mais sera déplacée dans les clientes archivées. Vous pourrez la restaurer plus tard."
+        cancelLabel="Annuler"
+        cancelTestID="cancel-client-archive"
+        confirmLabel="Archiver"
+        confirmTestID="confirm-client-archive"
+        eyebrow="ARCHIVAGE"
+        onCancel={() => setArchiveConfirmationVisible(false)}
+        onConfirm={archive}
+        testID="client-archive-dialog"
+        title="Archiver cette cliente ?"
+        tone="neutral"
+        visible={archiveConfirmationVisible}
       />
       <ClientDeletionDialog
         mode={deletionMode}

@@ -1,7 +1,12 @@
 // Souris — Products catalog screen (Produits tab)
 //
-// Light operational product catalog: search, Actifs/Inactifs groups,
-// deterministic French alphabetical order. The shared floating + is the
+// Light operational product catalog: search, Actifs/Inactifs, deterministic
+// French alphabetical order. With no inactive Product the list is the plain
+// « Actifs » section (count pill of its rows). With at least one, the shared
+// SegmentedControl (the Services / Techniques look: stretched, filled when
+// selected, counts of the whole collections) switches between the two lists
+// — one at a time, no section heading repeating the tab — and search narrows
+// only the selected one. The same pattern as the Clientes directory. The shared floating + is the
 // single creation entry: it expands into « Nouvelle vente » (the single Sale
 // entry point) and « Ajouter un produit ». No dashboard KPIs, no sales
 // metrics. Stock is visible but restrained. This screen's header is the
@@ -33,6 +38,7 @@ import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
 import { Screen } from '@/shared/ui/Screen';
 import { SearchField } from '@/shared/ui/SearchField';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
+import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
 import {
   bottomClearance,
@@ -51,11 +57,18 @@ import { useProductCatalog } from '../session/ProductCatalogProvider';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
+type CatalogTab = 'active' | 'inactive';
+
 interface CatalogSection {
-  readonly key: 'active' | 'inactive';
+  readonly key: CatalogTab;
   readonly title: string;
   readonly data: readonly Product[];
 }
+
+const catalogTabTitles: Readonly<Record<CatalogTab, string>> = {
+  active: 'Actifs',
+  inactive: 'Inactifs',
+};
 
 interface ScanResult {
   readonly barcode: string;
@@ -73,14 +86,40 @@ export function ProductCatalogScreen() {
   // Leaving the tab never leaves a detached open menu behind.
   useFocusEffect(useCallback(() => () => setCreateMenuOpen(false), []));
 
+  const [tab, setTab] = useState<CatalogTab>('active');
+
+  // Tab counts are the whole collections, never the search results.
+  const activeCount = products.filter((product) => product.active).length;
+  const inactiveCount = products.length - activeCount;
+  const showsTabs = inactiveCount > 0;
+  // No inactive Product → no tab to be on: back to the active list, so the
+  // next deactivation reopens on Actifs (adjusted while rendering).
+  if (!showsTabs && tab !== 'active') setTab('active');
+  const shownTab: CatalogTab = showsTabs ? tab : 'active';
+
   const searching = query.trim().length > 0;
-  const directory = prepareProductDirectory(products, query);
-  const actives = directory.filter((product) => product.active);
-  const inactives = directory.filter((product) => !product.active);
+  const shown = prepareProductDirectory(products, query).filter(
+    (product) => product.active === (shownTab === 'active'),
+  );
 
   const sections: readonly SectionListData<Product, CatalogSection>[] = [
-    { key: 'active', title: 'Actifs', data: actives },
-    { key: 'inactive', title: 'Inactifs', data: inactives },
+    { key: shownTab, title: catalogTabTitles[shownTab], data: shown },
+  ];
+  const tabOptions: readonly SegmentedControlOption<CatalogTab>[] = [
+    {
+      value: 'active',
+      label: catalogTabTitles.active,
+      count: activeCount,
+      selectedColor: semanticColors.accent,
+      testID: 'product-tab-active',
+    },
+    {
+      value: 'inactive',
+      label: catalogTabTitles.inactive,
+      count: inactiveCount,
+      selectedColor: semanticColors.accent,
+      testID: 'product-tab-inactive',
+    },
   ];
 
   const openProduct = (productId: string) => {
@@ -131,6 +170,18 @@ export function ProductCatalogScreen() {
         />
       </View>
 
+      {showsTabs && (
+        <View style={styles.tabsArea}>
+          <SegmentedControl
+            onChange={setTab}
+            options={tabOptions}
+            stretch
+            testID="product-tabs"
+            value={shownTab}
+          />
+        </View>
+      )}
+
       {products.length === 0 ? (
         <View style={styles.emptyState}>
           <AppText variant="stateTitle">Aucun produit enregistré.</AppText>
@@ -138,7 +189,7 @@ export function ProductCatalogScreen() {
             Ajoutez votre premier produit pour préparer vos ventes.
           </AppText>
         </View>
-      ) : searching && directory.length === 0 ? (
+      ) : searching && shown.length === 0 ? (
         <View style={styles.emptyState}>
           <AppText variant="stateTitle">Aucun produit trouvé</AppText>
           <AppText variant="metadata" style={styles.emptyStateText}>
@@ -159,13 +210,16 @@ export function ProductCatalogScreen() {
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.listContent}
-          renderSectionHeader={({ section }) => (
-            <SectionHeader
-              count={section.data.length}
-              style={styles.sectionHeader}
-              title={section.title}
-            />
-          )}
+          // With tabs, the selected tab already names the list.
+          renderSectionHeader={({ section }) =>
+            showsTabs ? null : (
+              <SectionHeader
+                count={section.data.length}
+                style={styles.sectionHeader}
+                title={section.title}
+              />
+            )
+          }
           renderSectionFooter={({ section }) =>
             section.data.length === 0 ? (
               <AppText variant="metadata" style={styles.emptySection}>
@@ -330,6 +384,7 @@ function ProductRow({
 
 const styles = StyleSheet.create({
   searchArea: { paddingTop: spacing.base },
+  tabsArea: { paddingBottom: spacing.xs, paddingTop: spacing.md },
   scanAction: {
     alignItems: 'center',
     borderRadius: radii.small,

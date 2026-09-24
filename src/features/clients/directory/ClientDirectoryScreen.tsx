@@ -1,10 +1,20 @@
 // Souris — Client directory (Clientes tab)
 //
 // The complete Client directory: search + SectionList over the shared Client
-// session source, grouped into Actives / Archivées (archived Clients stay
-// discoverable, visually secondary, never error-like). Rows stay clean and
-// light (initial avatar, strong name, soft phone) — no per-client cards, no
-// fake metrics. A recorded birthday shows as a compact trailing « 21 sept. »
+// session source, split into Actives / Archivées (archived Clients stay
+// discoverable, visually secondary, never error-like). With no archived
+// Client the list is the plain « Actives » section. With at least one, the
+// shared SegmentedControl — the Produits Actifs / Inactifs switcher (the
+// Services / Techniques look, counts of the session's whole collections) —
+// shows one group at a time, without a heading repeating the tab, and search
+// narrows only the selected group. Rows stay clean and
+// light (ClientAvatar thumbnail: her photo, or her initials, in the same
+// rounded square as the Produits list thumbnail, resolved per mounted row
+// from the shared media cache; strong name, soft phone) — no per-client cards, no
+// fake metrics. Without tabs, « Actives » opens with the shared SectionHeader
+// of the Produits list (count pill of the rows it heads: search narrows it,
+// exactly like « Actifs »); the screen title is identity only.
+// A recorded birthday shows as a compact trailing « 21 sept. »
 // with a cake glyph: secondary, never a placeholder when absent, and the row
 // keeps its height either way. When TODAY is her birthday the same slot
 // becomes a static blush « Aujourd'hui » badge (cake glyph + word, never
@@ -12,7 +22,7 @@
 // says so to assistive technology. Notes never appear in the list. The
 // shared floating + opens the shared creation sheet, the single way to add a
 // Client. The header follows the Produits reference:
-// large title, no eyebrow, search right below (MainScreenHeader).
+// large title, no eyebrow, no count, search right below (MainScreenHeader).
 
 import { useMemo, useState } from 'react';
 import {
@@ -31,30 +41,35 @@ import {
   formatClientBirthday,
   formatClientBirthdayCompact,
   getClientDisplayName,
-  getClientInitial,
   isClientArchived,
   isClientBirthdayOnDate,
   type Client,
 } from '@/domain/clients';
+import { ClientAvatar } from '@/features/clients/avatar/ClientAvatar';
 import { DIRECTORY_BIRTHDAY_TODAY_LABEL } from '@/features/clients/birthday/presentation';
 import { useToday } from '@/features/clients/birthday/use-today';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import {
   buildClientDirectorySections,
+  type ClientDirectoryGroup,
   type ClientDirectorySection,
 } from '@/features/clients/directory/directory-sections';
+import { useClientPhotoUri } from '@/features/clients/photo/use-client-photo-uri';
 import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
 import { birthdayIcon } from '@/shared/icons/birthday-icon';
 import { AppText } from '@/shared/ui/AppText';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
 import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
 import { SearchField } from '@/shared/ui/SearchField';
+import { SectionHeader } from '@/shared/ui/SectionHeader';
+import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import {
   bottomClearance,
   foregroundSoft,
   gutter,
   interaction,
+  listThumbnail,
   radii,
   rose,
   semanticColors,
@@ -63,24 +78,43 @@ import {
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
-function formatActiveClientCountLabel(count: number): string {
-  const plural = count > 1 ? 's' : '';
-  return `${count} cliente${plural} active${plural}`;
-}
-
 export function ClientDirectoryScreen() {
   const router = useRouter();
-  // `activeClients` is derived by the session from the same `clients`: the
-  // header total can never drift from the list, and search never touches it.
-  const { clients, activeClients } = useClientSession();
+  const { clients, activeClients, archivedClients } = useClientSession();
   const [query, setQuery] = useState('');
+  const [group, setGroup] = useState<ClientDirectoryGroup>('ACTIVE');
   const [addClientVisible, setAddClientVisible] = useState(false);
   const today = useToday();
 
+  const showsTabs = archivedClients.length > 0;
+  // No archived Client → no tab to be on: back to Actives, so the next
+  // archive reopens on Actives (adjusted while rendering).
+  if (!showsTabs && group !== 'ACTIVE') setGroup('ACTIVE');
+  const shownGroup: ClientDirectoryGroup = showsTabs ? group : 'ACTIVE';
+
+  const searching = query.trim().length > 0;
   const sections: readonly SectionListData<Client, ClientDirectorySection>[] = useMemo(
-    () => buildClientDirectorySections(clients, query),
-    [clients, query],
+    () =>
+      buildClientDirectorySections(clients, query).filter((section) => section.key === shownGroup),
+    [clients, query, shownGroup],
   );
+  // Tab counts are the session's whole collections, never the search results.
+  const tabOptions: readonly SegmentedControlOption<ClientDirectoryGroup>[] = [
+    {
+      value: 'ACTIVE',
+      label: 'Actives',
+      count: activeClients.length,
+      selectedColor: semanticColors.accent,
+      testID: 'client-tab-active',
+    },
+    {
+      value: 'ARCHIVED',
+      label: 'Archivées',
+      count: archivedClients.length,
+      selectedColor: semanticColors.accent,
+      testID: 'client-tab-archived',
+    },
+  ];
 
   const openProfile = (clientId: string) => {
     router.push({
@@ -92,8 +126,6 @@ export function ClientDirectoryScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <MainScreenHeader
-        count={activeClients.length}
-        countAccessibilityLabel={formatActiveClientCountLabel(activeClients.length)}
         testID="clients-header"
         title="Clientes"
         watermark="clients"
@@ -108,6 +140,18 @@ export function ClientDirectoryScreen() {
         />
       </View>
 
+      {showsTabs && (
+        <View style={styles.tabsWrap}>
+          <SegmentedControl
+            onChange={setGroup}
+            options={tabOptions}
+            stretch
+            testID="client-tabs"
+            value={shownGroup}
+          />
+        </View>
+      )}
+
       <SectionList
         sections={sections}
         keyExtractor={(client) => client.id}
@@ -118,24 +162,29 @@ export function ClientDirectoryScreen() {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         stickySectionHeadersEnabled={false}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <AppText
-              variant="eyebrow"
-              style={section.key === 'ARCHIVED' ? styles.archivedGroupLabel : styles.groupLabel}
+        // The Produits section header: the count is the rows of the group.
+        // With tabs, the selected tab already names the list.
+        renderSectionHeader={({ section }) =>
+          showsTabs ? null : (
+            <SectionHeader
+              count={section.data.length}
+              style={styles.sectionHeader}
               testID={`client-group-${section.key.toLowerCase()}`}
-            >
-              {section.title}
-            </AppText>
-          </View>
-        )}
+              title={section.title}
+            />
+          )
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <AppText variant="stateTitle">
-              {query.trim().length > 0 ? 'Aucune cliente trouvée' : 'Aucune cliente'}
+              {searching
+                ? 'Aucune cliente trouvée'
+                : clients.length > 0
+                  ? 'Aucune cliente active'
+                  : 'Aucune cliente'}
             </AppText>
             <AppText variant="metadata" style={styles.emptyStateText}>
-              {query.trim().length > 0
+              {searching
                 ? 'Essayez un autre nom ou numéro.'
                 : 'Ajoutez votre première cliente pour commencer.'}
             </AppText>
@@ -173,6 +222,9 @@ interface ClientRowProps {
 
 function ClientRow({ client, onPress, today }: ClientRowProps) {
   const archived = isClientArchived(client);
+  // Only this mounted row resolves its own photo (cache first, else one
+  // download); undefined meanwhile → the initials hold the same frame.
+  const photoUri = useClientPhotoUri(client.photoPath);
   const metadata = archived
     ? [ARCHIVED_CLIENT_LABEL, client.phone].filter(Boolean).join(' · ')
     : client.phone;
@@ -195,10 +247,17 @@ function ClientRow({ client, onPress, today }: ClientRowProps) {
       style={({ pressed }) => [styles.row, pressed && styles.pressedRow]}
       testID={`client-row-${client.id}`}
     >
-      <View style={[styles.avatar, archived && styles.archivedAvatar]}>
-        <AppText variant="rowTitle" style={archived ? styles.archivedAvatarText : styles.avatarText}>
-          {getClientInitial(client)}
-        </AppText>
+      <View style={styles.avatar}>
+        {/* The row already speaks for the Client: the avatar stays silent. */}
+        <ClientAvatar
+          accessible={false}
+          client={client}
+          photoUri={photoUri}
+          shape="thumbnail"
+          size={listThumbnail.size}
+          testID={`client-directory-avatar-${client.id}`}
+          tone={archived ? 'muted' : 'default'}
+        />
       </View>
       <View style={styles.rowCopy}>
         <AppText
@@ -247,14 +306,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.base,
   },
-  listContent: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
-  sectionHeader: {
+  tabsWrap: {
     paddingBottom: spacing.xs,
-    paddingHorizontal: horizontalGutter + spacing.md,
+    paddingHorizontal: horizontalGutter,
     paddingTop: spacing.md,
   },
-  groupLabel: { color: foregroundSoft },
-  archivedGroupLabel: { color: semanticColors.foregroundMuted },
+  listContent: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
+  // Produits spacing above/below; aligned with the row content (thumbnail and
+  // birthday edges), as the Produits header is with its rows.
+  sectionHeader: {
+    marginTop: spacing['2xl'],
+    paddingBottom: spacing.sm,
+    paddingHorizontal: horizontalGutter + spacing.md,
+  },
   row: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -268,18 +332,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.medium,
     transform: [{ scale: interaction.cardPressedScale }],
   },
-  avatar: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderRadius: radii.pill,
-    height: 36,
-    justifyContent: 'center',
-    marginRight: spacing.md,
-    width: 36,
-  },
-  archivedAvatar: { backgroundColor: semanticColors.surface },
-  avatarText: { color: semanticColors.accent },
-  archivedAvatarText: { color: foregroundSoft },
+  // The Produits row gap between thumbnail and copy.
+  avatar: { marginRight: spacing.sm },
   rowCopy: { flex: 1, minWidth: 0 },
   clientName: { color: semanticColors.foreground },
   archivedClientName: { color: foregroundSoft },

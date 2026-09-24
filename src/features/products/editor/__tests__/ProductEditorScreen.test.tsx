@@ -20,6 +20,7 @@ import { BusinessMediaProvider } from "@/providers/BusinessMediaProvider";
 import { usePersistence } from "@/providers/PersistenceProvider";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
+import { rose, semanticColors } from "@/shared/ui/theme";
 
 const mockBack = jest.fn();
 const mockPush = jest.fn();
@@ -1181,6 +1182,12 @@ describe("ProductEditorScreen", () => {
     expect(alertSpy).not.toHaveBeenCalled();
     expect(view.getByTestId("product-deactivation-dialog")).toBeTruthy();
     expect(view.getByText("Désactiver ce produit ?")).toBeTruthy();
+    // Reversible: « Annuler » and the accent primary « Désactiver ».
+    const deactivation = within(view.getByTestId("product-deactivation-dialog"));
+    expect(deactivation.getByRole("button", { name: "Annuler" })).toBeTruthy();
+    expect(view.getByTestId("confirm-product-deactivation")).toHaveStyle({
+      backgroundColor: semanticColors.accent,
+    });
     await act(async () => {
       fireEvent.press(view.getByTestId("confirm-product-deactivation"));
     });
@@ -1217,6 +1224,13 @@ describe("ProductEditorScreen", () => {
     expect(view.getByText("SUPPRESSION")).toBeTruthy();
     expect(view.getByText("Supprimer ce produit ?")).toBeTruthy();
     expect(view.getByText(/Cette action est irréversible/)).toBeTruthy();
+    // Irreversible: « Annuler » (never « Retour ») and the rose destructive « Supprimer ».
+    const deletion = within(view.getByTestId("product-deletion-dialog"));
+    expect(deletion.getByRole("button", { name: "Annuler" })).toBeTruthy();
+    expect(deletion.queryByText("Retour")).toBeNull();
+    expect(view.getByTestId("confirm-product-deletion")).toHaveStyle({
+      backgroundColor: rose.rose100,
+    });
 
     await act(async () => {
       fireEvent.press(view.getByTestId("cancel-product-deletion"));

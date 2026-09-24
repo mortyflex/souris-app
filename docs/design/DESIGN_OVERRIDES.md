@@ -222,8 +222,10 @@ d’un rendez-vous. » — followed by a confirmation. Deactivation only removes
 Appointment selection; existing Appointment snapshots are never changed.
 
 Archived records (Clients today) share one restrained treatment: the row keeps its structure,
-name and avatar drop to `foregroundSoft` on the neutral `surface`, metadata gains a leading
-`Archivée` mention, and the group eyebrow uses `foregroundMuted`. Never rose/error styling,
+the name drops to `foregroundSoft`, the initials fallback drops to `foregroundSoft` on the neutral
+`surface` (a Client photo is shown as it is, never greyed), and metadata gains a leading
+`Archivée` mention. *(The muted « Archivées » group eyebrow is superseded by the « Archivées » tab
+of §36.)* Never rose/error styling,
 never strikethrough, never a hidden row — archived is a quiet state, not a failure. The
 lifecycle actions follow the existing hierarchy: reactivate as the secondary action in the
 identity block, archive as tertiary soft text after the history, permanent deletion as tertiary
@@ -294,7 +296,9 @@ Products use one consistent primary-image treatment across catalog, details, and
 - transparent or letterboxed content rests on the approved soft lavender Product surface;
 - Products without images use a quiet lavender square with the existing package symbol in catalog/form;
 - Product Details renders no large placeholder when an image is absent, preserving the textual hierarchy;
-- image surfaces use restrained Souris radii with no decorative outer border.
+- image surfaces use restrained Souris radii with no decorative outer border;
+- the catalog thumbnail geometry (52 pt rounded square, `radii.medium`) is the shared list
+  thumbnail that Clientes rows also use (§36).
 
 ---
 
@@ -519,13 +523,19 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
 - The ONE Souris-owned confirmation: near-full-width centered card (`dialog.maxWidth`),
   `radii.large`, the overlay material with NO outline (§20), `scrim` backdrop, fade in/out. Uppercase eyebrow, large
   navy title, soft body, then full-width stacked actions: soft lavender secondary
-  (« Retour » / « Annuler ») above the confirm.
+  (« Retour » / « Annuler ») above the confirm. For Product and Client administration — deactivate,
+  archive, permanently delete — the secondary that aborts the pending action is always
+  « Annuler ».
 - `tone="destructive"` — rose eyebrow, a whisper-rose surface and a soft rose-FILLED confirm
   (`danger`: `rose100` fill, `rose700` text, no outline) — never an outlined button, never a
   solid danger slab. Used for permanent Client, Product, Service and Appointment
   deletion and for discarding a Sale or Appointment-edit draft.
 - `tone="neutral"` — accent eyebrow and a primary confirm: sign-out, Product / Service
-  deactivation, and explanation-only dialogs (single « Compris »).
+  deactivation, Client archiving (reversible actions always confirm first, never in rose), and
+  explanation-only dialogs (single « Compris »).
+- **Client archiving** — `ARCHIVAGE` · « Archiver cette cliente ? » · « La cliente restera dans
+  votre répertoire mais sera déplacée dans les clientes archivées. Vous pourrez la restaurer plus
+  tard. » · `Annuler` / `Archiver`. Nothing is written before « Archiver »; the profile stays open.
 - Wording stays feature-owned; the primitive never names an entity. React Native `Alert` is
   not used for Souris-owned confirmations — it remains only for error reports
   (`alertPersistenceFailure`), permission explanations, and the development-only reset.
@@ -1018,7 +1028,9 @@ gestures, sheet sizing and card geometry are unchanged.
   price, no type colour), two lines at most with an ellipsis beyond, hidden while nothing is
   selected; the count always stays whole. Appointment Editing needs no such line: its selected
   Services are the named stack above the grid.
-- **Clientes count.** `MainScreenHeader` takes an optional `count`: the number of ACTIVE Clients
+- **Clientes count.** *(Superseded by §36: « Clientes » is a plain title again; the counts live in
+  the « Actives » section header or the Actives / Archivées tabs.)* `MainScreenHeader` takes an
+  optional `count`: the number of ACTIVE Clients
   (the session's `activeClients`, never the search results) sits beside the untouched « Clientes »
   title as white `chip` figures in a small soft-violet pill (`appointmentPastels.lilac.accent` —
   the lightest approved violet that keeps white readable, 4.9:1; same geometry as the
@@ -1640,3 +1652,63 @@ Data: `docs/domain/INSIGHTS.md` §7.
   de préparer le partage. », « Impossible d’enregistrer l’image. », or the Photos permission line.
   The ticket always stays open, on the same period and category. The icon buttons add no haptic of
   their own.
+
+---
+
+## 36. Directory Lists — Produits and Clientes, Actifs / Inactifs
+
+Produits and Clientes browse their active and inactive records the SAME way. Supersedes the
+second, bottom « Inactifs » / « Archivées » section of both lists, and the §22 « Clientes count ».
+
+### Screen title
+
+« Produits » and « Clientes » are identity only: no count beside either title (§17 header).
+
+### Without inactive records — one section
+
+```text
+Actifs                                      [count]
+
+[ active list ]
+```
+
+- the shared `SectionHeader` (`sectionTitle`, sentence case, lavender count pill on the right);
+- its count is the rows it heads: a search narrows it;
+- no segmented control, no empty inactive section.
+
+### With at least one inactive record — tabs
+
+```text
+[ Actifs count | Inactifs count ]
+
+[ currently selected list ]
+```
+
+- the shared `SegmentedControl` right below the search, in the Services / Techniques language:
+  stretched to the full width, the selected option filled with the accent violet and a white
+  label, a count pill in each option;
+- default tab: the active one; the choice lives as long as the screen, never persisted. When the
+  last inactive record goes, the tabs disappear and the active list returns;
+- only ONE collection is rendered at a time; no section heading repeats the selected tab;
+- search applies only to the selected tab and survives a switch; an empty result shows the
+  screen's usual « aucun résultat » state with the tabs still in place;
+- tab counts are the FULL collections and never shrink with search;
+- spoken as tabs, with their selected state and count (« Archivées, 1 »).
+
+### Wording
+
+- Produits: « Actifs » / « Inactifs ».
+- Clientes: « Actives » / « Archivées » — never « Inactives »: archiving is the Client domain's
+  established term (the « Archivée » row mention, archive / restore actions). Archived Clients
+  are searched from the « Archivées » tab.
+
+### Clientes rows — photo or initials
+
+- a Client photo shows directly in the row when one exists, cropped (`cover`), never stretched;
+- the frame is the Produits list thumbnail: the same 52 pt rounded square with the same corners
+  (§11), so the two lists read as one family rather than as an address book;
+- without a photo — or while it is still loading — the two initials (« NH ») fill the SAME frame
+  on the Client lavender: no spinner, skeleton, silhouette or layout shift when the photo arrives;
+- the photo is the Client Profile's photo (same stored reference, same device cache); the list
+  never edits it and the avatar is not a separate button — the whole row opens the profile;
+- the avatar is silent for assistive technology: the row already speaks the Client.

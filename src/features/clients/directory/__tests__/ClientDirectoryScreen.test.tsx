@@ -8,7 +8,7 @@ import { ClientSessionProvider, useClientSession } from '../../session/ClientSes
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleFloatingReveal } from '@/shared/ui/testing/sheet-transitions';
 import { screenWatermarkOptics } from '@/shared/ui/ScreenWatermarkIcon';
-import { appointmentPastels, colors, radii } from '@/shared/ui/theme';
+import { radii, semanticColors } from '@/shared/ui/theme';
 
 const mockPush = jest.fn();
 
@@ -110,53 +110,42 @@ describe('ClientDirectoryScreen', () => {
     expect(create.props.accessibilityLabel).toBe('Ajouter une cliente');
   });
 
-  it('shows the total of ACTIVE clients in a pill next to the title, derived from the session and deaf to search', async () => {
+  it('keeps the « Clientes » title free of any count: the total belongs to the Actives section', async () => {
     const view = await renderDirectory();
-    // The session's own active collection is the one source of the total.
+
+    expect(view.getByRole('header', { name: 'Clientes' })).toBeTruthy();
+    expect(view.queryByTestId('clients-header-count')).toBeNull();
+  });
+
+  it('opens a directory without archives with the Produits section header: « Actives » and the count pill of its rows', async () => {
+    const view = await renderDirectory();
+    // Unsearched, the Actives rows are exactly the session's active Clients.
     const total = Number(view.getByTestId('session-active-count').props.children);
     expect(total).toBeGreaterThan(1);
-    const count = () => view.getByTestId('clients-header-count');
+    const activeCount = () => view.getByTestId('client-group-active-count');
 
-    // Beside the untouched « Clientes » title: white figures in a soft-violet pill.
-    const title = view.getByRole('header', { name: 'Clientes' });
-    const pill = count().parent!;
-    expect(pill.parent).toBe(title.parent);
-    expect(count().props.children).toBe(total);
-    expect(count().props.accessibilityLabel).toBe(`${total} clientes actives`);
-    expect(StyleSheet.flatten(count().props.style)).toMatchObject({ color: colors.background });
-    expect(StyleSheet.flatten(pill.props.style)).toMatchObject({
-      backgroundColor: appointmentPastels.lilac.accent,
+    // No archived Client: no tabs, the shared SectionHeader of Produits.
+    expect(view.queryByTestId('client-tabs')).toBeNull();
+    const header = view.getByTestId('client-group-active');
+    expect(within(header).getByText('Actives')).toBeTruthy();
+    expect(view.queryByText('ACTIVES')).toBeNull();
+    expect(StyleSheet.flatten(header.props.style)).toMatchObject({
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    });
+    expect(activeCount().props.children).toBe(total);
+    expect(StyleSheet.flatten(activeCount().parent!.props.style)).toMatchObject({
+      backgroundColor: semanticColors.surfaceLavenderStrong,
       borderRadius: radii.pill,
     });
-    expect(StyleSheet.flatten(count().props.style).fontSize).toBeLessThan(
-      StyleSheet.flatten(title.props.style).fontSize,
-    );
 
-    // Search narrows the list, never the total.
-    await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'lea');
-    });
-    expect(count().props.children).toBe(total);
-    await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), '');
-    });
-
-    // An archived Client stays listed (Archivées) but leaves the total; restoring brings her back.
-    await act(async () => {
-      fireEvent.press(view.getByTestId('archive-lea'));
-    });
-    expect(count().props.children).toBe(total - 1);
-    // She is still on the screen, under Archivées (searched: the long list is virtualized).
+    // Search narrows the section — and its count — exactly like « Actifs ».
     await act(async () => {
       fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa Martin');
     });
-    expect(view.getByTestId('client-group-archived')).toBeTruthy();
-    expect(count().props.children).toBe(total - 1);
-
-    await act(async () => {
-      fireEvent.press(view.getByTestId('restore-lea'));
-    });
-    expect(count().props.children).toBe(total);
+    const searched = view.getAllByTestId(/^client-row-(?!birthday)/).length;
+    expect(activeCount().props.children).toBe(searched);
+    expect(searched).toBeLessThan(total);
   });
 
   it('lets the list scroll above the native tab bar through the system content inset', async () => {
@@ -362,13 +351,13 @@ describe('ClientDirectoryScreen', () => {
     jest.setSystemTime(new Date(2026, 8, 21, 9, 0));
     const view = await renderDirectory();
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
-    });
-    await act(async () => {
       fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
     });
     await act(async () => {
       fireEvent.press(view.getByTestId('archive-lea'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('client-tab-archived'));
     });
 
     expect(view.queryAllByTestId(/^client-row-birthday-today-/)).toHaveLength(0);
@@ -392,31 +381,52 @@ describe('ClientDirectoryScreen', () => {
     expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
   });
 
-  it('lists every Client under Actives without an Archivées group when nothing is archived', async () => {
+  it('shows no tabs while nothing is archived: every Client under the Actives section', async () => {
     const view = await renderDirectory();
 
+    expect(view.queryByTestId('client-tabs')).toBeNull();
     expect(view.getByTestId('client-group-active')).toBeTruthy();
     expect(view.queryByTestId('client-group-archived')).toBeNull();
     expect(view.queryByText('Archivée')).toBeNull();
   });
 
-  it('moves an archived Client under a secondary Archivées group with a subtle indicator', async () => {
+  it('switches between Actives and Archivées tabs, one list at a time, counts from the session', async () => {
     const view = await renderDirectory();
+    const total = Number(view.getByTestId('session-active-count').props.children);
 
     await act(async () => {
       fireEvent.press(view.getByTestId('archive-lea'));
     });
-    await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
-    });
 
-    expect(view.getByTestId('client-group-active')).toBeTruthy();
-    expect(view.getByTestId('client-group-archived')).toBeTruthy();
+    // Tabs appear; Actives selected by default, no heading repeating the tab.
+    const tabs = view.getByTestId('client-tabs');
+    expect(tabs.props.accessibilityRole).toBe('tablist');
+    const activeTab = view.getByTestId('client-tab-active');
+    const archivedTab = view.getByTestId('client-tab-archived');
+    expect(activeTab.props.accessibilityRole).toBe('tab');
+    expect(activeTab.props.accessibilityState).toMatchObject({ selected: true });
+    expect(archivedTab.props.accessibilityState).toMatchObject({ selected: false });
+    expect(activeTab.props.accessibilityLabel).toBe(`Actives, ${total - 1}`);
+    expect(archivedTab.props.accessibilityLabel).toBe('Archivées, 1');
+    expect(view.getByTestId('client-tab-active-count')).toHaveTextContent(String(total - 1));
+    expect(view.getByTestId('client-tab-archived-count')).toHaveTextContent('1');
+    expect(view.queryByTestId('client-group-active')).toBeNull();
+    expect(view.queryByTestId('client-row-client-agenda-lea')).toBeNull();
+    expect(view.queryByText('Archivée')).toBeNull();
+
+    // Archivées: only archived Clients, with their subtle indicator; the row still opens her profile.
+    await act(async () => {
+      fireEvent.press(archivedTab);
+    });
+    expect(view.getByTestId('client-tab-archived').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+    expect(view.getAllByTestId(/^client-row-(?!birthday)/).map((row) => row.props.testID)).toEqual([
+      'client-row-client-agenda-lea',
+    ]);
     const archivedRow = within(view.getByTestId('client-row-client-agenda-lea'));
-    expect(archivedRow.getByText('Léa Martin')).toBeTruthy();
     expect(archivedRow.getByText('Archivée')).toBeTruthy();
     expect(view.getByLabelText('Ouvrir la fiche de Léa Martin, archivée')).toBeTruthy();
-
     await act(async () => {
       fireEvent.press(view.getByText('Léa Martin'));
     });
@@ -424,28 +434,64 @@ describe('ClientDirectoryScreen', () => {
       pathname: '/clients/[clientId]',
       params: { clientId: 'client-agenda-lea' },
     });
+
+    // Back to Actives: no archived row.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('client-tab-active'));
+    });
+    expect(view.queryByTestId('client-row-client-agenda-lea')).toBeNull();
+    expect(view.getAllByTestId(/^client-row-(?!birthday)/).length).toBeGreaterThan(0);
   });
 
-  it('keeps an archived Client discoverable through search and restores her to Actives', async () => {
+  it('searches only the selected tab, never touching the tab counts', async () => {
     const view = await renderDirectory();
+    const total = Number(view.getByTestId('session-active-count').props.children);
+    await act(async () => {
+      fireEvent.press(view.getByTestId('archive-lea'));
+    });
 
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
+    });
+    // On Actives, the archived Léa is not a result.
+    expect(view.queryByTestId('client-row-client-agenda-lea')).toBeNull();
+    expect(view.getByTestId('client-tab-active-count')).toHaveTextContent(String(total - 1));
+    expect(view.getByTestId('client-tab-archived-count')).toHaveTextContent('1');
+
+    // The query survives the switch: on Archivées she is found.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('client-tab-archived'));
+    });
+    expect(view.getByTestId('client-row-client-agenda-lea')).toBeTruthy();
+
+    // A query with no archived match: the usual search empty state, tabs kept.
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'introuvable');
+    });
+    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+    expect(view.getByTestId('client-tabs')).toBeTruthy();
+  });
+
+  it('drops the tabs when the last archived Client is restored, back on Actives', async () => {
+    const view = await renderDirectory();
+    const total = Number(view.getByTestId('session-active-count').props.children);
     await act(async () => {
       fireEvent.press(view.getByTestId('archive-lea'));
     });
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
+      fireEvent.press(view.getByTestId('client-tab-archived'));
     });
-    expect(view.getByTestId('client-group-archived')).toBeTruthy();
-    expect(view.queryByTestId('client-group-active')).toBeNull();
-    expect(view.getByText('Léa Martin')).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(view.getByTestId('restore-lea'));
     });
 
-    expect(view.getByTestId('client-group-active')).toBeTruthy();
-    expect(view.queryByTestId('client-group-archived')).toBeNull();
+    expect(view.queryByTestId('client-tabs')).toBeNull();
+    expect(view.getByTestId('client-group-active-count').props.children).toBe(total);
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
+    });
+    expect(view.getByTestId('client-row-client-agenda-lea')).toBeTruthy();
     expect(view.queryByText('Archivée')).toBeNull();
-    expect(view.getByText('Léa Martin')).toBeTruthy();
   });
 });

@@ -24,7 +24,14 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View, type StyleProp } from 'react-native';
 
 import { isIsolatedProductImage } from '@/features/products/images/product-image-presentation';
-import { lavender, radii, semanticColors, shadowSource, spacing } from '@/shared/ui/theme';
+import {
+  lavender,
+  listThumbnail,
+  radii,
+  semanticColors,
+  shadowSource,
+  spacing,
+} from '@/shared/ui/theme';
 
 export type ProductImageVariant = 'thumbnail' | 'detail' | 'form';
 
@@ -41,7 +48,7 @@ interface ProductImageProps {
  * catalog thumbnail stays compact.
  */
 export const productImageHeights = {
-  thumbnail: 52,
+  thumbnail: listThumbnail.size,
   form: 200,
   detail: 96,
 } as const satisfies Record<ProductImageVariant, number>;
@@ -223,7 +230,7 @@ const variantStyles = StyleSheet.create({
   // images do not turn catalog rows noisy.
   thumbnail: {
     backgroundColor: semanticColors.surfaceLavender,
-    borderRadius: radii.medium,
+    borderRadius: listThumbnail.radius,
     height: productImageHeights.thumbnail,
     width: productImageHeights.thumbnail,
   },

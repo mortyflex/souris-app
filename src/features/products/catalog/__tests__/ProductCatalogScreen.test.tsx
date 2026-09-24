@@ -366,6 +366,84 @@ describe('ProductCatalogScreen', () => {
     expect(view.getByTestId('masque-active').props.children).toBe('false');
   });
 
+  it('shows no tabs while every Product is active: the plain Actifs section', async () => {
+    const view = await renderCatalog();
+
+    expect(view.queryByTestId('product-tabs')).toBeNull();
+    expect(view.getByText('Actifs')).toBeTruthy();
+    expect(view.queryByText('Inactifs')).toBeNull();
+    expect(view.queryByText('Aucun produit inactif.')).toBeNull();
+  });
+
+  it('switches between Actifs and Inactifs tabs, one list at a time, counts of the whole catalogue', async () => {
+    const view = await renderCatalog();
+    const total = Number(view.getByTestId('catalog-count').props.children);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('deactivate-masque'));
+    });
+
+    // Tabs appear, Actifs selected by default; no heading repeating the tab.
+    expect(view.getByTestId('product-tabs').props.accessibilityRole).toBe('tablist');
+    const activeTab = view.getByTestId('product-tab-active');
+    expect(activeTab.props.accessibilityRole).toBe('tab');
+    expect(activeTab.props.accessibilityState).toMatchObject({ selected: true });
+    expect(activeTab.props.accessibilityLabel).toBe(`Actifs, ${total - 1}`);
+    expect(view.getByTestId('product-tab-inactive').props.accessibilityLabel).toBe('Inactifs, 1');
+    expect(view.getByTestId('product-tab-active-count')).toHaveTextContent(String(total - 1));
+    expect(view.getByTestId('product-tab-inactive-count')).toHaveTextContent('1');
+    expect(view.queryByText('Masque réparateur 5 min')).toBeNull();
+    expect(view.getByText('Sérum nuit')).toBeTruthy();
+
+    // Inactifs: only the inactive Product, still opening its detail.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('product-tab-inactive'));
+    });
+    expect(view.getByTestId('product-tab-inactive').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+    expect(view.getByText('Masque réparateur 5 min')).toBeTruthy();
+    expect(view.queryByText('Sérum nuit')).toBeNull();
+    await act(async () => {
+      fireEvent.press(view.getByText('Masque réparateur 5 min'));
+    });
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/products/[productId]',
+      params: { productId: '6974bff937a5d89c2d9afbd0' },
+    });
+
+    // Back to Actifs.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('product-tab-active'));
+    });
+    expect(view.queryByText('Masque réparateur 5 min')).toBeNull();
+    expect(view.getByText('Sérum nuit')).toBeTruthy();
+  });
+
+  it('searches only the selected tab, never touching the tab counts', async () => {
+    const view = await renderCatalog();
+    const total = Number(view.getByTestId('catalog-count').props.children);
+    await act(async () => {
+      fireEvent.press(view.getByTestId('deactivate-masque'));
+    });
+
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un produit'), 'masque réparateur');
+    });
+    // On Actifs, the inactive Product is not a result: the usual empty search, tabs kept.
+    expect(view.getByText('Aucun produit trouvé')).toBeTruthy();
+    expect(view.getByTestId('product-tabs')).toBeTruthy();
+    expect(view.getByTestId('product-tab-active-count')).toHaveTextContent(String(total - 1));
+    expect(view.getByTestId('product-tab-inactive-count')).toHaveTextContent('1');
+
+    // The query survives the switch: on Inactifs it is found.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('product-tab-inactive'));
+    });
+    expect(view.getByText('Masque réparateur 5 min')).toBeTruthy();
+    expect(view.queryByText('Aucun produit trouvé')).toBeNull();
+  });
+
   it('opens the unique exact barcode match without changing stock', async () => {
     mockScannedBarcode = '3474637152000';
     const view = await renderCatalog();

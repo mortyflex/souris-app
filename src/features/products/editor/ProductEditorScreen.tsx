@@ -456,7 +456,7 @@ export function ProductEditorScreen({
       />
       <ConfirmationDialog
         body="Il sera supprimé du catalogue. Cette action est irréversible."
-        cancelLabel="Retour"
+        cancelLabel="Annuler"
         cancelTestID="cancel-product-deletion"
         confirmLabel="Supprimer"
         confirmTestID="confirm-product-deletion"

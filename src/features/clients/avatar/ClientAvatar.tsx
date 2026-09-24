@@ -5,9 +5,11 @@
 // - photo: a portrait fills the frame (`cover`: cropped, never distorted);
 // - initials: up to two initials on the quiet lavender of Souris.
 //
-// Two shapes of the same square: a `circle` for compact uses, and the
+// Three shapes of the same square: a `circle` for compact uses, the
 // softly rounded `portrait` of the Client Profile, large enough for a real
-// photo (its corners scale with the size, like a continuous-curve card).
+// photo (its corners scale with the size, like a continuous-curve card), and
+// the `thumbnail` of the Clientes list — the rounded square of the Produits
+// list thumbnail (shared `listThumbnail` corners), so both lists match.
 //
 // `photoUri` is a displayable local file resolved from the Client's stable
 // photo reference (features/clients/photo): passing it swaps the content
@@ -16,6 +18,9 @@
 // image; the Client Profile wraps this frame in ClientPhotoControl for that.
 //
 // Spoken as the Client's name, never as a decorative « image ».
+//
+// The `muted` tone is the secondary frame of an archived Client in the
+// directory: quieter initials only — a portrait is shown as it is.
 
 import { useState } from 'react';
 import { Image } from 'expo-image';
@@ -23,9 +28,10 @@ import { StyleSheet, View } from 'react-native';
 
 import { getClientDisplayName, getClientInitials, type Client } from '@/domain/clients';
 import { AppText } from '@/shared/ui/AppText';
-import { semanticColors } from '@/shared/ui/theme';
+import { foregroundSoft, listThumbnail, semanticColors } from '@/shared/ui/theme';
 
-export type ClientAvatarShape = 'circle' | 'portrait';
+export type ClientAvatarShape = 'circle' | 'portrait' | 'thumbnail';
+export type ClientAvatarTone = 'default' | 'muted';
 
 /** Corner radius of the `portrait` frame, relative to its side (24 at 96). */
 const PORTRAIT_CORNER_RATIO = 0.25;
@@ -37,6 +43,7 @@ interface ClientAvatarProps {
   /** Side of the square frame in dp; the initials and corners scale with it. */
   readonly size?: number;
   readonly shape?: ClientAvatarShape;
+  readonly tone?: ClientAvatarTone;
   /**
    * False when a parent control already speaks for the Client (the Profile's
    * photo button): the frame is then not a separate accessibility element.
@@ -50,6 +57,7 @@ export function ClientAvatar({
   photoUri,
   size = 72,
   shape = 'circle',
+  tone = 'default',
   accessible = true,
   testID = 'client-avatar',
 }: ClientAvatarProps) {
@@ -65,8 +73,9 @@ export function ClientAvatar({
       accessibilityRole={accessible ? 'image' : undefined}
       style={[
         styles.frame,
+        tone === 'muted' && styles.mutedFrame,
         {
-          borderRadius: shape === 'circle' ? size / 2 : size * PORTRAIT_CORNER_RATIO,
+          borderRadius: frameRadius(shape, size),
           height: size,
           width: size,
         },
@@ -87,7 +96,11 @@ export function ClientAvatar({
         <AppText
           maxFontSizeMultiplier={1.2}
           numberOfLines={1}
-          style={[styles.initials, { fontSize: size * 0.32, lineHeight: size * 0.4 }]}
+          style={[
+            styles.initials,
+            tone === 'muted' && styles.mutedInitials,
+            { fontSize: size * 0.32, lineHeight: size * 0.4 },
+          ]}
           testID={`${testID}-initials`}
           variant="screenTitle"
         >
@@ -98,6 +111,12 @@ export function ClientAvatar({
   );
 }
 
+function frameRadius(shape: ClientAvatarShape, size: number): number {
+  if (shape === 'circle') return size / 2;
+  if (shape === 'thumbnail') return listThumbnail.radius;
+  return size * PORTRAIT_CORNER_RATIO;
+}
+
 const styles = StyleSheet.create({
   frame: {
     alignItems: 'center',
@@ -106,5 +125,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  mutedFrame: { backgroundColor: semanticColors.surface },
   initials: { color: semanticColors.accent, letterSpacing: 0.5 },
+  mutedInitials: { color: foregroundSoft },
 });

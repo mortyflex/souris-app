@@ -9,6 +9,8 @@
 // Touch targets preserve the iOS/Android platform distinction.
 // These are design tokens only — no runtime Platform abstraction is created here.
 
+import { radii } from './radii';
+
 export const agenda = {
   hourHeight: 68,
   timelineGutter: 62,
@@ -17,6 +19,13 @@ export const agenda = {
   timelineTopInset: 12,
   dayStartHour: 8,
   dayEndHour: 20,
+} as const;
+
+// Rounded-square list thumbnail shared by the Produits and Clientes lists, so
+// both directories read as ONE family (product image, client photo/initials).
+export const listThumbnail = {
+  size: 52,
+  radius: radii.medium,
 } as const;
 
 export const touchTarget = {

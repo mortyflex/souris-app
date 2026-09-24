@@ -22,7 +22,7 @@ import { ClientProfileScreen } from '../ClientProfileScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
-import { semanticColors } from '@/shared/ui/theme';
+import { rose, semanticColors } from '@/shared/ui/theme';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -362,6 +362,14 @@ async function chooseClientAction(view: Awaited<ReturnType<typeof render>>, test
     fireEvent.press(view.getByTestId(testID));
   });
   await settleSheetTransition();
+}
+
+/** « ••• » › Archiver la cliente, then « Archiver » in the confirmation. */
+async function archiveThroughConfirmation(view: Awaited<ReturnType<typeof render>>) {
+  await chooseClientAction(view, 'archive-client');
+  await act(async () => {
+    fireEvent.press(view.getByTestId('confirm-client-archive'));
+  });
 }
 
 async function openClientActions(view: Awaited<ReturnType<typeof render>>) {
@@ -823,13 +831,56 @@ describe('ClientProfileScreen', () => {
       expect(view.queryByTestId('client-archived-indicator')).toBeNull();
     });
 
+    it('asks before archiving: « Annuler » writes nothing, « Archiver » archives in the reversible accent tone', async () => {
+      const view = await renderProfile('client-agenda-lea');
+      const active = Number(view.getByTestId('session-active-count').props.children);
+
+      await chooseClientAction(view, 'archive-client');
+
+      // Nothing archived yet: the shared confirmation asks first.
+      expect(view.getByTestId('session-lea-archived').props.children).toBe('false');
+      expect(view.queryByTestId('client-archived-indicator')).toBeNull();
+      const dialog = within(view.getByTestId('client-archive-dialog'));
+      expect(view.getByTestId('client-archive-dialog').props.accessibilityViewIsModal).toBe(true);
+      expect(dialog.getByText('ARCHIVAGE')).toHaveStyle({ color: semanticColors.accent });
+      expect(dialog.getByRole('header', { name: 'Archiver cette cliente ?' })).toBeTruthy();
+      expect(
+        dialog.getByText(
+          'La cliente restera dans votre répertoire mais sera déplacée dans les clientes archivées. Vous pourrez la restaurer plus tard.',
+        ),
+      ).toBeTruthy();
+      expect(dialog.getByRole('button', { name: 'Annuler' })).toBeTruthy();
+      expect(dialog.getByRole('button', { name: 'Archiver' })).toBeTruthy();
+      expect(dialog.queryByText('Retour')).toBeNull();
+      // Reversible: the accent primary, never the rose destructive confirm.
+      expect(view.getByTestId('confirm-client-archive')).toHaveStyle({
+        backgroundColor: semanticColors.accent,
+      });
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('cancel-client-archive'));
+      });
+      expect(view.queryByTestId('client-archive-dialog')).toBeNull();
+      expect(view.getByTestId('session-lea-archived').props.children).toBe('false');
+      expect(Number(view.getByTestId('session-active-count').props.children)).toBe(active);
+      expect(view.getByTestId('new-appointment')).toBeTruthy();
+      expect(selectionHaptic).not.toHaveBeenCalled();
+
+      await archiveThroughConfirmation(view);
+      expect(view.queryByTestId('client-archive-dialog')).toBeNull();
+      expect(view.getByTestId('session-lea-archived').props.children).toBe('true');
+      expect(Number(view.getByTestId('session-active-count').props.children)).toBe(active - 1);
+      expect(view.getByTestId('client-archived-indicator')).toBeTruthy();
+      expect(mockBack).not.toHaveBeenCalled();
+    });
+
     it('archives with restrained feedback, keeps history, hides new business actions, and restores', async () => {
       const view = await renderProfile('client-agenda-lea');
       await seedSales(view);
       const total = Number(view.getByTestId('session-client-count').props.children);
       const active = Number(view.getByTestId('session-active-count').props.children);
 
-      await chooseClientAction(view, 'archive-client');
+      await archiveThroughConfirmation(view);
 
       expect(selectionHaptic).toHaveBeenCalledTimes(1);
       expect(view.getByTestId('client-archived-indicator')).toBeTruthy();
@@ -879,7 +930,7 @@ describe('ClientProfileScreen', () => {
     it('keeps the archived state through an identity edit', async () => {
       const view = await renderProfile('client-agenda-lea');
 
-      await chooseClientAction(view, 'archive-client');
+      await archiveThroughConfirmation(view);
       await chooseClientAction(view, 'edit-client');
       await act(async () => {
         fireEvent.changeText(view.getByLabelText('Prénom'), 'Léana');
@@ -898,13 +949,18 @@ describe('ClientProfileScreen', () => {
       const view = await renderProfile(disposable.id);
       const total = Number(view.getByTestId('session-client-count').props.children);
 
-      await chooseClientAction(view, 'archive-client');
+      await archiveThroughConfirmation(view);
       await chooseClientAction(view, 'open-client-deletion');
 
       expect(view.getByTestId('client-deletion-dialog')).toBeTruthy();
       expect(view.getByText('Supprimer définitivement cette cliente ?')).toBeTruthy();
       expect(view.getByText('Cette action est irréversible.')).toBeTruthy();
       expect(view.queryByTestId('client-deletion-blocked')).toBeNull();
+      // Irreversible: « Annuler » to abort, the rose destructive « Supprimer ».
+      const deletion = within(view.getByTestId('client-deletion-dialog'));
+      expect(deletion.getByRole('button', { name: 'Annuler' })).toBeTruthy();
+      expect(deletion.queryByText('Retour')).toBeNull();
+      expect(view.getByTestId('confirm-client-deletion')).toHaveStyle({ backgroundColor: rose.rose100 });
 
       await act(async () => {
         fireEvent.press(view.getByTestId('cancel-client-deletion'));
@@ -927,7 +983,7 @@ describe('ClientProfileScreen', () => {
       const view = await renderProfile('client-agenda-lea');
       const total = Number(view.getByTestId('session-client-count').props.children);
 
-      await chooseClientAction(view, 'archive-client');
+      await archiveThroughConfirmation(view);
       await chooseClientAction(view, 'open-client-deletion');
 
       expect(view.getByTestId('client-deletion-blocked')).toBeTruthy();
@@ -966,7 +1022,7 @@ describe('ClientProfileScreen', () => {
       await showPurchases(view);
       expect(view.getByTestId('client-sale-sale-legacy')).toBeTruthy();
 
-      await chooseClientAction(view, 'archive-client');
+      await archiveThroughConfirmation(view);
       await chooseClientAction(view, 'open-client-deletion');
 
       expect(view.getByTestId('client-deletion-blocked')).toBeTruthy();

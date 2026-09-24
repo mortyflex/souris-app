@@ -1,5 +1,7 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 
+import { foregroundSoft, listThumbnail, semanticColors } from '@/shared/ui/theme';
+
 import { ClientAvatar } from '../ClientAvatar';
 
 jest.mock('expo-image', () => {
@@ -79,5 +81,40 @@ describe('ClientAvatar', () => {
     expect(view.queryByTestId('client-avatar-photo')).toBeNull();
     expect(view.getByTestId('client-avatar-initials')).toHaveTextContent('AT');
     expect(view.getByTestId('client-avatar').props.accessibilityLabel).toBe('Audrey Tarmis');
+  });
+
+  it('quiets the initials of the muted tone, never the photo', async () => {
+    const view = await render(<ClientAvatar client={audrey} size={40} tone="muted" />);
+
+    expect(view.getByTestId('client-avatar')).toHaveStyle({
+      backgroundColor: semanticColors.surface,
+      height: 40,
+      width: 40,
+    });
+    expect(view.getByTestId('client-avatar-initials')).toHaveStyle({ color: foregroundSoft });
+  });
+
+  it('draws the list thumbnail as the shared rounded square, photo and initials alike', async () => {
+    const geometry = {
+      borderRadius: listThumbnail.radius,
+      height: listThumbnail.size,
+      width: listThumbnail.size,
+    };
+    const view = await render(
+      <ClientAvatar client={audrey} shape="thumbnail" size={listThumbnail.size} />,
+    );
+    expect(view.getByTestId('client-avatar')).toHaveStyle(geometry);
+    expect(view.getByTestId('client-avatar-initials')).toHaveTextContent('AT');
+
+    await view.rerender(
+      <ClientAvatar
+        client={audrey}
+        photoUri="file:///portrait.jpg"
+        shape="thumbnail"
+        size={listThumbnail.size}
+      />,
+    );
+    expect(view.getByTestId('client-avatar')).toHaveStyle({ ...geometry, overflow: 'hidden' });
+    expect(view.getByTestId('client-avatar-photo').props.contentFit).toBe('cover');
   });
 });

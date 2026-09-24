@@ -4,7 +4,7 @@
 // eligibility check. Two shapes on the shared Souris confirmation dialog,
 // never both:
 //
-//   confirm  → irreversible confirmation (Retour / Supprimer)
+//   confirm  → irreversible confirmation (Annuler / Supprimer)
 //   blocked  → concise explanation: history exists, keep the Client
 //              archived. No destructive control, no cascade option.
 
@@ -38,7 +38,7 @@ export function ClientDeletionDialog({ mode, onClose, onConfirm }: ClientDeletio
   return (
     <ConfirmationDialog
       body="Cette action est irréversible."
-      cancelLabel="Retour"
+      cancelLabel="Annuler"
       cancelTestID="cancel-client-deletion"
       confirmLabel="Supprimer"
       confirmTestID="confirm-client-deletion"
