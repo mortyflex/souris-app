@@ -7,47 +7,38 @@
 // shared SegmentedControl — the Produits Actifs / Inactifs switcher (the
 // Services / Techniques look, counts of the session's whole collections) —
 // shows one group at a time, without a heading repeating the tab, and search
-// narrows only the selected group. Rows stay clean and
+// narrows only the selected group. The grid — gutter, search, tabs,
+// section header, row rhythm, hairline separators — is the Produits one
+// (shared directoryListStyles), so switching tabs never moves it. Rows stay clean and
 // light (ClientAvatar thumbnail: her photo, or her initials, in the same
 // rounded square as the Produits list thumbnail, resolved per mounted row
 // from the shared media cache; strong name, soft phone) — no per-client cards, no
 // fake metrics. Without tabs, « Actives » opens with the shared SectionHeader
 // of the Produits list (count pill of the rows it heads: search narrows it,
 // exactly like « Actifs »); the screen title is identity only.
-// A recorded birthday shows as a compact trailing « 21 sept. »
-// with a cake glyph: secondary, never a placeholder when absent, and the row
-// keeps its height either way. When TODAY is her birthday the same slot
-// becomes a static blush « Aujourd'hui » badge (cake glyph + word, never
-// colour alone, never animated: the list stays light to scroll), and the row
-// says so to assistive technology. Notes never appear in the list. The
+// Every row ends with the Produits NavigationChevron (thumbnail → copy →
+// chevron); the whole row is the one action. Birthdays and notes never appear
+// in the list: the Client Profile shows them. The
 // shared floating + opens the shared creation sheet, the single way to add a
 // Client. The header follows the Produits reference:
 // large title, no eyebrow, no count, search right below (MainScreenHeader).
 
 import { useMemo, useState } from 'react';
 import {
-  Platform,
   Pressable,
   SectionList,
   StyleSheet,
   View,
   type SectionListData,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 
 import {
-  formatClientBirthday,
-  formatClientBirthdayCompact,
   getClientDisplayName,
   isClientArchived,
-  isClientBirthdayOnDate,
   type Client,
 } from '@/domain/clients';
 import { ClientAvatar } from '@/features/clients/avatar/ClientAvatar';
-import { DIRECTORY_BIRTHDAY_TODAY_LABEL } from '@/features/clients/birthday/presentation';
-import { useToday } from '@/features/clients/birthday/use-today';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import {
@@ -57,26 +48,16 @@ import {
 } from '@/features/clients/directory/directory-sections';
 import { useClientPhotoUri } from '@/features/clients/photo/use-client-photo-uri';
 import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
-import { birthdayIcon } from '@/shared/icons/birthday-icon';
 import { AppText } from '@/shared/ui/AppText';
+import { directoryListStyles } from '@/shared/ui/directory-list';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
 import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
+import { NavigationChevron } from '@/shared/ui/NavigationChevron';
+import { Screen } from '@/shared/ui/Screen';
 import { SearchField } from '@/shared/ui/SearchField';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
-import {
-  bottomClearance,
-  foregroundSoft,
-  gutter,
-  interaction,
-  listThumbnail,
-  radii,
-  rose,
-  semanticColors,
-  spacing,
-} from '@/shared/ui/theme';
-
-const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
+import { foregroundSoft, listThumbnail, semanticColors } from '@/shared/ui/theme';
 
 export function ClientDirectoryScreen() {
   const router = useRouter();
@@ -84,7 +65,6 @@ export function ClientDirectoryScreen() {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<ClientDirectoryGroup>('ACTIVE');
   const [addClientVisible, setAddClientVisible] = useState(false);
-  const today = useToday();
 
   const showsTabs = archivedClients.length > 0;
   // No archived Client → no tab to be on: back to Actives, so the next
@@ -124,14 +104,10 @@ export function ClientDirectoryScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <MainScreenHeader
-        testID="clients-header"
-        title="Clientes"
-        watermark="clients"
-      />
-
-      <View style={styles.searchWrap}>
+    <Screen
+      header={<MainScreenHeader testID="clients-header" title="Clientes" watermark="clients" />}
+    >
+      <View style={directoryListStyles.searchArea}>
         <SearchField
           accessibilityLabel="Rechercher une cliente"
           onChangeText={setQuery}
@@ -141,7 +117,7 @@ export function ClientDirectoryScreen() {
       </View>
 
       {showsTabs && (
-        <View style={styles.tabsWrap}>
+        <View style={directoryListStyles.tabsArea}>
           <SegmentedControl
             onChange={setGroup}
             options={tabOptions}
@@ -168,14 +144,14 @@ export function ClientDirectoryScreen() {
           showsTabs ? null : (
             <SectionHeader
               count={section.data.length}
-              style={styles.sectionHeader}
+              style={directoryListStyles.sectionHeader}
               testID={`client-group-${section.key.toLowerCase()}`}
               title={section.title}
             />
           )
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
+          <View style={directoryListStyles.emptyState}>
             <AppText variant="stateTitle">
               {searching
                 ? 'Aucune cliente trouvée'
@@ -183,7 +159,7 @@ export function ClientDirectoryScreen() {
                   ? 'Aucune cliente active'
                   : 'Aucune cliente'}
             </AppText>
-            <AppText variant="metadata" style={styles.emptyStateText}>
+            <AppText variant="metadata" style={directoryListStyles.emptyStateText}>
               {searching
                 ? 'Essayez un autre nom ou numéro.'
                 : 'Ajoutez votre première cliente pour commencer.'}
@@ -191,10 +167,10 @@ export function ClientDirectoryScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <ClientRow client={item} onPress={() => openProfile(item.id)} today={today} />
+          <ClientRow client={item} onPress={() => openProfile(item.id)} />
         )}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={directoryListStyles.listContent}
       />
 
       <FloatingCreateButton
@@ -209,18 +185,16 @@ export function ClientDirectoryScreen() {
         onSubmitted={() => setAddClientVisible(false)}
         visible={addClientVisible}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 interface ClientRowProps {
   readonly client: Client;
   readonly onPress: () => void;
-  /** Today's local date: decides the birthday-today state of the row. */
-  readonly today: Date;
 }
 
-function ClientRow({ client, onPress, today }: ClientRowProps) {
+function ClientRow({ client, onPress }: ClientRowProps) {
   const archived = isClientArchived(client);
   // Only this mounted row resolves its own photo (cache first, else one
   // download); undefined meanwhile → the initials hold the same frame.
@@ -228,38 +202,28 @@ function ClientRow({ client, onPress, today }: ClientRowProps) {
   const metadata = archived
     ? [ARCHIVED_CLIENT_LABEL, client.phone].filter(Boolean).join(' · ')
     : client.phone;
-  const birthday = client.birthday;
-  // An archived Client stays visually secondary: her row never celebrates.
-  const birthdayToday = !archived && isClientBirthdayOnDate(client, today);
-  const birthdayAccessibilityText = !birthday
-    ? ''
-    : birthdayToday
-      ? ", anniversaire aujourd'hui"
-      : `, anniversaire le ${formatClientBirthday(birthday)}`;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Ouvrir la fiche de ${getClientDisplayName(client)}${
         archived ? `, ${ARCHIVED_CLIENT_LABEL.toLowerCase()}` : ''
-      }${birthdayAccessibilityText}`}
+      }`}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressedRow]}
+      style={({ pressed }) => [directoryListStyles.row, pressed && directoryListStyles.rowPressed]}
       testID={`client-row-${client.id}`}
     >
-      <View style={styles.avatar}>
-        {/* The row already speaks for the Client: the avatar stays silent. */}
-        <ClientAvatar
-          accessible={false}
-          client={client}
-          photoUri={photoUri}
-          shape="thumbnail"
-          size={listThumbnail.size}
-          testID={`client-directory-avatar-${client.id}`}
-          tone={archived ? 'muted' : 'default'}
-        />
-      </View>
-      <View style={styles.rowCopy}>
+      {/* The row already speaks for the Client: the avatar stays silent. */}
+      <ClientAvatar
+        accessible={false}
+        client={client}
+        photoUri={photoUri}
+        shape="thumbnail"
+        size={listThumbnail.size}
+        testID={`client-directory-avatar-${client.id}`}
+        tone={archived ? 'muted' : 'default'}
+      />
+      <View style={directoryListStyles.rowCopy}>
         <AppText
           variant="rowTitle"
           numberOfLines={1}
@@ -273,86 +237,13 @@ function ClientRow({ client, onPress, today }: ClientRowProps) {
           </AppText>
         ) : null}
       </View>
-      {birthday && birthdayToday ? (
-        <View
-          style={[styles.birthday, styles.birthdayToday]}
-          testID={`client-row-birthday-today-${client.id}`}
-        >
-          <SymbolView name={birthdayIcon} size={14} tintColor={rose.rose700} />
-          <AppText variant="chip" style={styles.birthdayTodayText}>
-            {DIRECTORY_BIRTHDAY_TODAY_LABEL}
-          </AppText>
-        </View>
-      ) : birthday ? (
-        <View style={styles.birthday} testID={`client-row-birthday-${client.id}`}>
-          <SymbolView
-            name={birthdayIcon}
-            size={14}
-            tintColor={archived ? foregroundSoft : semanticColors.accent}
-          />
-          <AppText variant="metadata" style={styles.birthdayText}>
-            {formatClientBirthdayCompact(birthday)}
-          </AppText>
-        </View>
-      ) : null}
+      <NavigationChevron testID={`client-directory-chevron-${client.id}`} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
-  searchWrap: {
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.base,
-  },
-  tabsWrap: {
-    paddingBottom: spacing.xs,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing.md,
-  },
-  listContent: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
-  // Produits spacing above/below; aligned with the row content (thumbnail and
-  // birthday edges), as the Produits header is with its rows.
-  sectionHeader: {
-    marginTop: spacing['2xl'],
-    paddingBottom: spacing.sm,
-    paddingHorizontal: horizontalGutter + spacing.md,
-  },
-  row: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    marginHorizontal: horizontalGutter,
-    minHeight: 60,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  pressedRow: {
-    backgroundColor: semanticColors.surface,
-    borderRadius: radii.medium,
-    transform: [{ scale: interaction.cardPressedScale }],
-  },
-  // The Produits row gap between thumbnail and copy.
-  avatar: { marginRight: spacing.sm },
-  rowCopy: { flex: 1, minWidth: 0 },
   clientName: { color: semanticColors.foreground },
   archivedClientName: { color: foregroundSoft },
   phoneLine: { color: foregroundSoft },
-  birthday: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginLeft: spacing.sm,
-  },
-  birthdayText: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  // Same slot, same row height: a blush pill instead of the compact date.
-  birthdayToday: {
-    backgroundColor: rose.rose100,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  birthdayTodayText: { color: rose.rose700 },
-  emptyState: { alignItems: 'center', padding: spacing.xl },
-  emptyStateText: { color: foregroundSoft, marginTop: spacing.sm, textAlign: 'center' },
 });

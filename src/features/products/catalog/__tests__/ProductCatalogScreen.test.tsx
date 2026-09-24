@@ -1,5 +1,5 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
-import { Pressable, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { ProductCatalogProvider, useProductCatalog } from '../../session/ProductCatalogProvider';
 import { ProductCatalogScreen } from '../ProductCatalogScreen';
@@ -18,6 +18,8 @@ import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProv
 
 import { PRODUCT_PHOTO_CACHE_DIRECTORY } from '../../images/product-photo-storage';
 import { settleFloatingReveal, settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
+import { directoryListStyles } from '@/shared/ui/directory-list';
+import { semanticColors } from '@/shared/ui/theme';
 
 const mockPush = jest.fn();
 let mockScannedBarcode = '';
@@ -164,6 +166,19 @@ describe('ProductCatalogScreen', () => {
     const lists = view.container.queryAll((node) => node.type === 'RCTScrollView');
     expect(lists).toHaveLength(1);
     expect(lists[0].props.contentInsetAdjustmentBehavior).toBe('automatic');
+  });
+
+  it('lays its rows on the shared directory grid: hairline separators, three-line minimum', async () => {
+    const view = await renderCatalog();
+
+    const row = view.getByLabelText(/^Masque réparateur 5 min, /);
+    const style = StyleSheet.flatten(row.props.style);
+    expect(style).toMatchObject(directoryListStyles.row);
+    expect(style).toMatchObject({
+      borderBottomColor: semanticColors.borderSubtle,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      minHeight: 72,
+    });
   });
 
   it('anchors the decorative products watermark, hidden from accessibility and touches', async () => {

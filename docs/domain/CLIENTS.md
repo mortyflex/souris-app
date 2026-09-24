@@ -82,7 +82,8 @@ Rules (`src/domain/clients/birthday.ts`):
   `{ month: 2, day: 29 }`;
 - presentation is French, day first, through ONE shared formatter pair:
   `formatClientBirthday` (« 1er janvier », profile and form) and
-  `formatClientBirthdayCompact` (« 21 sept. », directory row);
+  `formatClientBirthdayCompact` (« 21 sept. », compact form; no screen shows it
+  at the moment);
 - the birthday is ANNUAL: it recurs every year from day + month alone, so a
   Client whose birth year is unknown — every Client — is fully supported;
 - it is a civil calendar value, never an instant: it is never converted
@@ -100,16 +101,14 @@ Rules (`src/domain/clients/birthday.ts`):
 The value is either a complete day + month pair or absent — there is no
 partial-date model.
 
-The directory row shows a recorded birthday as a compact secondary
-« 21 sept. » with a cake glyph; a Client without a birthday shows nothing —
-no placeholder, no taller row.
+The Clientes directory rows show no birthday: the Client Profile shows it.
 
 #### Birthday experience
 
 Which date is compared depends on the screen:
 
 ```text
-Clientes directory, Client Profile   → TODAY's local date
+Client Profile                       → TODAY's local date
 Appointment creation / editing / Details → the APPOINTMENT date
 ```
 
@@ -118,10 +117,6 @@ gets the birthday suggestion, although today is not the birthday.
 
 Implemented (`src/features/clients/birthday`):
 
-- **birthday-at-a-glance** — on her birthday, the directory row replaces the
-  compact date with a static blush « Aujourd'hui » badge (cake glyph + word)
-  and its label says « anniversaire aujourd'hui ». Same row height, no
-  animation in the list;
 - **profile reminder** — a « Joyeux anniversaire » card near the top of the
   profile (« C'est l'anniversaire de Léa aujourd'hui. » / « Vous pouvez lui
   proposer une réduction sur son rendez-vous. »), always visible that day;
@@ -142,10 +137,10 @@ Implemented (`src/features/clients/birthday`):
   action only opens the generic discount editor.
 
 `today` is refreshed at local midnight and when the app returns to the
-foreground (`useToday`), so a directory left open overnight stays right.
+foreground (`useToday`), so a screen left open overnight stays right.
 
-An archived Client is never celebrated: her row keeps the secondary compact
-date and her profile shows no card, confetti or haptic.
+An archived Client is never celebrated: her profile shows no card, confetti or
+haptic.
 
 Nothing is persisted: no « confetti shown », no « dismissed », no discount
 origin. No migration, no sync change.

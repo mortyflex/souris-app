@@ -7,6 +7,7 @@ import { ClientDirectoryScreen } from '../ClientDirectoryScreen';
 import { ClientSessionProvider, useClientSession } from '../../session/ClientSessionProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleFloatingReveal } from '@/shared/ui/testing/sheet-transitions';
+import { directoryListStyles } from '@/shared/ui/directory-list';
 import { screenWatermarkOptics } from '@/shared/ui/ScreenWatermarkIcon';
 import { radii, semanticColors } from '@/shared/ui/theme';
 
@@ -82,8 +83,8 @@ const initialClients = createInitialClients();
 
 describe('ClientDirectoryScreen', () => {
   beforeAll(() => {
-    // The birthday-today state reads the local date. Léa's test birthday is
-    // 21 septembre: pin an ordinary day, the birthday tests move it themselves.
+    // Léa's test birthday is 21 septembre: pin an ordinary day, the birthday
+    // test moves it itself.
     jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
   });
 
@@ -143,9 +144,47 @@ describe('ClientDirectoryScreen', () => {
     await act(async () => {
       fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa Martin');
     });
-    const searched = view.getAllByTestId(/^client-row-(?!birthday)/).length;
+    const searched = view.getAllByTestId(/^client-row-/).length;
     expect(activeCount().props.children).toBe(searched);
     expect(searched).toBeLessThan(total);
+  });
+
+  it('lays its rows on the Produits directory grid: gutter-flush, hairline separators, same rhythm', async () => {
+    const view = await renderDirectory();
+
+    const rows = view.getAllByTestId(/^client-row-/);
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) {
+      const style = StyleSheet.flatten(row.props.style);
+      expect(style).toMatchObject(directoryListStyles.row);
+      expect(style).toMatchObject({
+        borderBottomColor: semanticColors.borderSubtle,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+      });
+      expect(style.minHeight).toBe(72);
+      // No inset of its own: the row sits on the shared screen gutter.
+      expect(style.marginHorizontal).toBeUndefined();
+      expect(style.paddingHorizontal).toBeUndefined();
+      // Thumbnail → copy → the Produits chevron, decorative and silent.
+      const id = (row.props.testID as string).replace('client-row-', '');
+      const chevron = within(row).getByTestId(`client-directory-chevron-${id}`, {
+        includeHiddenElements: true,
+      });
+      expect(chevron.props.accessibilityElementsHidden).toBe(true);
+      expect(chevron.props.importantForAccessibility).toBe('no-hide-descendants');
+      expect(chevron.props.pointerEvents).toBe('none');
+    }
+    // The chevron is not a button either: the rows are the only stops.
+    expect(view.queryAllByTestId(/^client-directory-chevron-/)).toHaveLength(0);
+    // The separator is a border, never an element: no extra accessibility stop.
+    expect(view.getAllByRole('button', { name: /^Ouvrir la fiche de / })).toHaveLength(rows.length);
+    // The « Actives » header sits on the same gutter as the rows.
+    expect(StyleSheet.flatten(view.getByTestId('client-group-active').props.style)).toMatchObject(
+      directoryListStyles.sectionHeader,
+    );
+    expect(
+      StyleSheet.flatten(view.getByTestId('client-group-active').props.style).paddingHorizontal,
+    ).toBeUndefined();
   });
 
   it('lets the list scroll above the native tab bar through the system content inset', async () => {
@@ -258,18 +297,16 @@ describe('ClientDirectoryScreen', () => {
     expect(view.getByText('Zélie Deville')).toBeTruthy();
   });
 
-  it('shows a compact birthday on the row when one exists — and nothing at all otherwise', async () => {
+  it('keeps birthdays out of the rows — no date, no today badge, nothing spoken — the profile owns them', async () => {
+    // Her birthday, TODAY: the directory still shows the plain row.
+    jest.setSystemTime(new Date(2026, 8, 21, 9, 0));
     const view = await renderDirectory();
     const rowIds = () =>
-      view.getAllByTestId(/^client-row-(?!birthday-)/).map((row) => row.props.testID as string);
+      view.getAllByTestId(/^client-row-/).map((row) => row.props.testID as string);
     // The directory is virtualized: narrow it so the rows under test are mounted.
     await act(async () => {
       fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
     });
-
-    // No Client of the seed has a birthday: no birthday UI, no placeholder.
-    expect(view.queryAllByTestId(/^client-row-birthday-/)).toHaveLength(0);
-    expect(view.queryByText(/anniversaire/i)).toBeNull();
     const countBefore = view.getByTestId('session-active-count').props.children;
     const orderBefore = rowIds();
     expect(orderBefore).toContain('client-row-client-agenda-lea');
@@ -278,90 +315,22 @@ describe('ClientDirectoryScreen', () => {
       fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
     });
 
-    const badge = view.getByTestId('client-row-birthday-client-agenda-lea');
-    expect(within(badge).getByText('21 sept.')).toBeTruthy();
-    expect(view.queryByText(/2026|septembre 20/)).toBeNull();
-    expect(view.getAllByTestId(/^client-row-birthday-/)).toHaveLength(1);
-    expect(view.getByTestId('client-row-client-agenda-lea').props.accessibilityLabel).toBe(
-      'Ouvrir la fiche de Léa Martin, anniversaire le 21 septembre',
-    );
+    expect(view.queryAllByTestId(/^client-(row|directory)-.*birthday/)).toHaveLength(0);
+    expect(view.queryByText('21 sept.')).toBeNull();
+    expect(view.queryByText("Aujourd'hui")).toBeNull();
+    const row = view.getByTestId('client-row-client-agenda-lea');
+    expect(row.props.accessibilityLabel).toBe('Ouvrir la fiche de Léa Martin');
+    // Same row as any other: the shared grid, the Produits chevron.
+    expect(StyleSheet.flatten(row.props.style)).toMatchObject(directoryListStyles.row);
+    expect(within(row).getByTestId('client-directory-chevron-client-agenda-lea', { includeHiddenElements: true })).toBeTruthy();
+    for (const other of view.getAllByTestId(/^client-row-/)) {
+      expect(other.props.accessibilityLabel).not.toMatch(/anniversaire/i);
+    }
 
     // Notes never reach the directory, and neither field moves the count or the order.
     expect(view.queryByText(/Allergie/)).toBeNull();
     expect(view.getByTestId('session-active-count').props.children).toBe(countBefore);
     expect(rowIds()).toEqual(orderBefore);
-  });
-
-  it('marks the row of a Client whose birthday is TODAY — badge, words and accessibility', async () => {
-    jest.setSystemTime(new Date(2026, 8, 21, 9, 0));
-    const view = await renderDirectory();
-    await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
-    });
-    await act(async () => {
-      fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
-    });
-
-    // The birthday slot turns into the « Aujourd'hui » badge: words, not colour alone.
-    const badge = view.getByTestId('client-row-birthday-today-client-agenda-lea');
-    expect(within(badge).getByText("Aujourd'hui")).toBeTruthy();
-    expect(view.queryByTestId('client-row-birthday-client-agenda-lea')).toBeNull();
-    expect(view.queryByText('21 sept.')).toBeNull();
-    // Existing row information is preserved; the birthday is spoken.
-    const row = view.getByTestId('client-row-client-agenda-lea');
-    expect(row.props.accessibilityRole).toBe('button');
-    expect(row.props.accessibilityLabel).toBe(
-      "Ouvrir la fiche de Léa Martin, anniversaire aujourd'hui",
-    );
-    // Same row geometry as any other row.
-    expect(StyleSheet.flatten(row.props.style).minHeight).toBe(60);
-
-    // Every other row stays plain: no badge, no birthday words.
-    expect(view.getAllByTestId(/^client-row-birthday-today-/)).toHaveLength(1);
-    const otherRows = view
-      .getAllByTestId(/^client-row-(?!birthday-)/)
-      .filter((other) => other.props.testID !== 'client-row-client-agenda-lea');
-    expect(otherRows.length).toBeGreaterThan(0);
-    for (const other of otherRows) {
-      expect(other.props.accessibilityLabel).not.toMatch(/anniversaire/i);
-    }
-  });
-
-  it('keeps the normal compact date when the birthday is another day', async () => {
-    jest.setSystemTime(new Date(2026, 8, 22, 9, 0));
-    const view = await renderDirectory();
-    await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'martin');
-    });
-    await act(async () => {
-      fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
-    });
-
-    expect(view.queryAllByTestId(/^client-row-birthday-today-/)).toHaveLength(0);
-    expect(view.queryByText("Aujourd'hui")).toBeNull();
-    expect(
-      within(view.getByTestId('client-row-birthday-client-agenda-lea')).getByText('21 sept.'),
-    ).toBeTruthy();
-    expect(view.getByTestId('client-row-client-agenda-lea').props.accessibilityLabel).toBe(
-      'Ouvrir la fiche de Léa Martin, anniversaire le 21 septembre',
-    );
-  });
-
-  it('never celebrates an archived Client: her row keeps the secondary compact date', async () => {
-    jest.setSystemTime(new Date(2026, 8, 21, 9, 0));
-    const view = await renderDirectory();
-    await act(async () => {
-      fireEvent.press(view.getByTestId('give-lea-birthday-and-notes'));
-    });
-    await act(async () => {
-      fireEvent.press(view.getByTestId('archive-lea'));
-    });
-    await act(async () => {
-      fireEvent.press(view.getByTestId('client-tab-archived'));
-    });
-
-    expect(view.queryAllByTestId(/^client-row-birthday-today-/)).toHaveLength(0);
-    expect(view.getByTestId('client-row-birthday-client-agenda-lea')).toBeTruthy();
   });
 
   it('does not search notes or birthdays', async () => {
@@ -421,7 +390,7 @@ describe('ClientDirectoryScreen', () => {
     expect(view.getByTestId('client-tab-archived').props.accessibilityState).toMatchObject({
       selected: true,
     });
-    expect(view.getAllByTestId(/^client-row-(?!birthday)/).map((row) => row.props.testID)).toEqual([
+    expect(view.getAllByTestId(/^client-row-/).map((row) => row.props.testID)).toEqual([
       'client-row-client-agenda-lea',
     ]);
     const archivedRow = within(view.getByTestId('client-row-client-agenda-lea'));
@@ -440,7 +409,7 @@ describe('ClientDirectoryScreen', () => {
       fireEvent.press(view.getByTestId('client-tab-active'));
     });
     expect(view.queryByTestId('client-row-client-agenda-lea')).toBeNull();
-    expect(view.getAllByTestId(/^client-row-(?!birthday)/).length).toBeGreaterThan(0);
+    expect(view.getAllByTestId(/^client-row-/).length).toBeGreaterThan(0);
   });
 
   it('searches only the selected tab, never touching the tab counts', async () => {

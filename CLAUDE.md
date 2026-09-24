@@ -796,7 +796,7 @@ birthday?: { month, day }
 - it is a calendar value, never an instant: never convert it through a `Date`, a timestamp, or UTC;
 - client creation and editing support it, including clearing it;
 - the client profile displays it;
-- the client directory displays a compact birthday (`21 sept.`) when present, and nothing when absent.
+- the client directory never displays it (see Client directory below).
 
 ### Notes
 
@@ -812,6 +812,27 @@ notes?: string
 - client creation and editing support Notes;
 - the client profile displays Notes when present;
 - notes never appear in the client directory and are not searchable.
+
+### Client directory
+
+Reference: `docs/design/DESIGN_OVERRIDES.md` §36.
+
+```text
+[ rounded-square photo / initials ]  Client name                 >
+```
+
+Client Directory rows:
+
+- use the same directory grid as the Products list;
+- use the 52pt rounded-square `ClientAvatar`: the client photo when available, two initials otherwise;
+- end with the shared navigation chevron; the whole row is the one action;
+- use the shared 72pt minimum row height;
+- use the same subtle row separators as Products;
+- do NOT display birthday dates or the `Aujourd'hui` badge.
+
+The birthday lives on the client profile and in the appointment flows.
+
+Do not restore it in directory rows.
 
 ### Appointment history (derived)
 
@@ -861,14 +882,13 @@ Never duplicate the comparison in a screen.
 
 The compared date depends on the context:
 
-- Clientes directory and client profile: TODAY's local date;
+- client profile: TODAY's local date;
 - appointment creation, editing and Details: the APPOINTMENT date.
 
 A `29 février` birthday is celebrated on the 28th in a year without a 29th.
 
 Implemented:
 
-- directory: a static `Aujourd'hui` badge on the row, spoken in its accessibility label;
 - profile: a `Joyeux anniversaire` reminder card;
 - profile: one short confetti burst and one haptic on EVERY profile entry (per mount), never on a rerender;
 - Reduce Motion: no confetti, the card stays;

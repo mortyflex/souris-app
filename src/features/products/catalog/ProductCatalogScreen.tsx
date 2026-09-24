@@ -16,7 +16,6 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import {
-  Platform,
   Pressable,
   ScrollView,
   SectionList,
@@ -33,17 +32,17 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BarcodeScannerModal } from '@/shared/ui/BarcodeScannerModal';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
+import { directoryListStyles } from '@/shared/ui/directory-list';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
 import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
+import { NavigationChevron } from '@/shared/ui/NavigationChevron';
 import { Screen } from '@/shared/ui/Screen';
 import { SearchField } from '@/shared/ui/SearchField';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
 import {
-  bottomClearance,
   foregroundSoft,
-  gutter,
   interaction,
   lavender,
   radii,
@@ -54,8 +53,6 @@ import {
 
 import { findProductsByBarcode, prepareProductDirectory } from '../search/filter-products';
 import { useProductCatalog } from '../session/ProductCatalogProvider';
-
-const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 type CatalogTab = 'active' | 'inactive';
 
@@ -160,7 +157,7 @@ export function ProductCatalogScreen() {
 
   return (
     <Screen header={<MainScreenHeader title="Produits" watermark="products" />}>
-      <View style={styles.searchArea}>
+      <View style={directoryListStyles.searchArea}>
         <SearchField
           accessibilityLabel="Rechercher un produit"
           onChangeText={setQuery}
@@ -171,7 +168,7 @@ export function ProductCatalogScreen() {
       </View>
 
       {showsTabs && (
-        <View style={styles.tabsArea}>
+        <View style={directoryListStyles.tabsArea}>
           <SegmentedControl
             onChange={setTab}
             options={tabOptions}
@@ -183,16 +180,16 @@ export function ProductCatalogScreen() {
       )}
 
       {products.length === 0 ? (
-        <View style={styles.emptyState}>
+        <View style={directoryListStyles.emptyState}>
           <AppText variant="stateTitle">Aucun produit enregistré.</AppText>
-          <AppText variant="metadata" style={styles.emptyStateText}>
+          <AppText variant="metadata" style={directoryListStyles.emptyStateText}>
             Ajoutez votre premier produit pour préparer vos ventes.
           </AppText>
         </View>
       ) : searching && shown.length === 0 ? (
-        <View style={styles.emptyState}>
+        <View style={directoryListStyles.emptyState}>
           <AppText variant="stateTitle">Aucun produit trouvé</AppText>
-          <AppText variant="metadata" style={styles.emptyStateText}>
+          <AppText variant="metadata" style={directoryListStyles.emptyStateText}>
             Essayez un autre nom, une marque, une catégorie ou un code-barres.
           </AppText>
         </View>
@@ -209,13 +206,13 @@ export function ProductCatalogScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={directoryListStyles.listContent}
           // With tabs, the selected tab already names the list.
           renderSectionHeader={({ section }) =>
             showsTabs ? null : (
               <SectionHeader
                 count={section.data.length}
-                style={styles.sectionHeader}
+                style={directoryListStyles.sectionHeader}
                 title={section.title}
               />
             )
@@ -345,7 +342,7 @@ function ProductRow({
       accessibilityRole="button"
       accessibilityLabel={`${product.name}, ${formatServicePrice(product.price)}, ${stockLabel}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      style={({ pressed }) => [directoryListStyles.row, pressed && directoryListStyles.rowPressed]}
     >
       <ProductImage
         imageUri={imageUri}
@@ -353,7 +350,7 @@ function ProductRow({
         testID={`catalog-product-image-${product.id}`}
         variant="thumbnail"
       />
-      <View style={styles.rowCopy}>
+      <View style={directoryListStyles.rowCopy}>
         <AppText variant="rowTitle" numberOfLines={1} style={styles.productName}>
           {product.name}
         </AppText>
@@ -373,18 +370,12 @@ function ProductRow({
       <AppText variant="control" style={styles.price}>
         {formatServicePrice(product.price)}
       </AppText>
-      <SymbolView
-        name={{ ios: 'chevron.right', android: 'chevron_right' }}
-        size={14}
-        tintColor={semanticColors.foregroundMuted}
-      />
+      <NavigationChevron />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  searchArea: { paddingTop: spacing.base },
-  tabsArea: { paddingBottom: spacing.xs, paddingTop: spacing.md },
   scanAction: {
     alignItems: 'center',
     borderRadius: radii.small,
@@ -396,41 +387,15 @@ const styles = StyleSheet.create({
     backgroundColor: semanticColors.surfaceLavenderStrong,
     opacity: interaction.pressedOpacity,
   },
-  listContent: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
-  sectionHeader: {
-    marginTop: spacing['2xl'],
-    paddingBottom: spacing.sm,
-  },
   emptySection: {
     color: foregroundSoft,
     paddingVertical: spacing.md,
   },
-  row: {
-    alignItems: 'center',
-    borderBottomColor: semanticColors.borderSubtle,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 72,
-    paddingVertical: spacing.sm,
-  },
-  rowPressed: { backgroundColor: semanticColors.surfaceLavender },
-  rowCopy: { flex: 1, gap: 3, minWidth: 0 },
   productName: { color: lavender.lav700 },
   productMeta: { color: foregroundSoft },
   stockLine: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   stockEmpty: { color: rose.rose600 },
   price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
-  emptyState: {
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: horizontalGutter,
-    paddingTop: spacing['2xl'],
-  },
-  emptyStateText: {
-    color: foregroundSoft,
-    textAlign: 'center',
-  },
   resultContent: {
     gap: spacing.md,
     paddingBottom: spacing.base,

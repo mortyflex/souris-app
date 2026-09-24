@@ -42,6 +42,3 @@ export function formatProfileBirthdayAccessibilityLabel(
 ): string {
   return `Anniversaire aujourd'hui. Vous pouvez proposer une réduction à ${client.firstName.trim()}.`;
 }
-
-/** Trailing badge of a directory row whose Client has her birthday today. */
-export const DIRECTORY_BIRTHDAY_TODAY_LABEL = "Aujourd'hui";

@@ -561,18 +561,13 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
   names, February offers 29, a shorter month resolves the day to its last valid one). No year
   column, no typing, no nested overlay; « Effacer » removes it. See §17 and
   `docs/domain/CLIENTS.md` §2.
-- **Directory birthday** — a Client row of the Clientes directory shows a recorded birthday as a
-  trailing, secondary « 21 sept. » (`metadata` text, soft foreground) preceded by a 14 pt cake
-  glyph (`birthday.cake` / `cake`) in the accent violet (soft foreground on an archived row), announced in the row label (« anniversaire le 21 septembre »).
-  The row height is unchanged and a Client without a birthday renders nothing — no placeholder.
-  The Client Profile repeats the SAME glyph (`shared/icons/birthday-icon.ts`, 16 pt, accent
-  violet) before the « Anniversaire » value of the `Informations` surface.
+- **Directory birthday** — *(Superseded by §36: Clientes rows end with the Produits chevron and
+  show no birthday; the Client Profile shows it.)*
+- **Profile birthday glyph** — the Client Profile shows the cake glyph (`shared/icons/birthday-icon.ts`,
+  16 pt, accent violet) before the « Anniversaire » value of the `Informations` surface.
 - **Birthday today** — the birthday identity is BLUSH on lavender: `rose100` fill with `rose700`
   text / glyph (never `rose600`, which stays the error and destructive rose). Never emoji: the shared
   cake glyph carries it.
-  - *Directory row*: the birthday slot becomes a static pill — `rose100`, 14 pt cake glyph and
-    « Aujourd'hui » (`chip` text) in `rose700`. Same row height, no animation, never on an archived
-    row; the row label says « anniversaire aujourd'hui ».
   - *Reminder card* (`BirthdayNotice`, Client Profile and Appointment creation / editing): `lav050`
     surface, no border, large radius, a 36 pt `rose100` badge with the glyph, `lav700`
     title, soft-foreground supporting text; the optional action is a white secondary button, also
@@ -1738,3 +1733,22 @@ Actifs                                      [count]
 - the photo is the Client Profile's photo (same stored reference, same device cache); the list
   never edits it and the avatar is not a separate button — the whole row opens the profile;
 - the avatar is silent for assistive technology: the row already speaks the Client.
+
+### One directory grid
+
+Clientes and Produits share the same directory grid, so switching between the two tabs never
+moves it; only the row content differs:
+
+- the same page: white background, the platform gutter for title, search, tabs, section header,
+  rows and empty states, the same floating + placement;
+- the same rhythm: search right below the title, tabs or « Actifs » header at the same distance,
+  the first row at the same height;
+- the same rows: thumbnail → copy → chevron. The 52 pt rounded-square thumbnail on the gutter,
+  the same gap to the text column, the same vertical padding, the same 72 pt minimum height, the
+  same flat lavender pressed state, and the same small muted chevron at the end — decorative, not
+  a button, silent for assistive technology: the whole row is the one action;
+- Clientes rows show no birthday (neither the date nor the « Aujourd'hui » badge): the birthday
+  lives on the Client Profile and in appointment flows;
+- subtle hairline separators (`borderSubtle`) under every row, spanning the row from the
+  thumbnail to the chevron; decorative, never read by assistive technology;
+- no card around any row.
