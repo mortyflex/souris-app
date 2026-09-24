@@ -1150,6 +1150,28 @@ This is NOT the Cash Register. The Caisse groups money by the day it was RECEIVE
 standalone Sales; the day summary follows the Appointments of a day, whenever their money came in. The two
 legitimately differ.
 
+### Week summary (« Résumé de la semaine »)
+
+`getAppointmentPeriodSummary(sources, { firstDay, lastDay })` applies EXACTLY the rules above to a range of
+device-local civil days, both bounds included (compared as civil dates, never timestamps).
+`getAppointmentDaySummary(sources, day)` is that function with `firstDay = lastDay = day`. The Agenda opens
+the week summary for the seven days of the week it shows (`getWeekDays`: Monday → Sunday), so every weekly
+figure equals the sum of the seven day summaries; `averageBasketCents` is the weekly potential revenue divided
+by the weekly counted Appointments.
+
+`getAppointmentPeriodActivity(appointments, period)` counts outcomes by stored status over the same days:
+
+| Value | Statuses |
+| --- | --- |
+| `completedCount` — « Réalisés » | `COMPLETED` |
+| `plannedCount` — « Prévus » | `SCHEDULED`, `CONFIRMED`, `IN_PROGRESS` |
+| `cancelledCount` — « Annulés » | `CANCELLED`, whoever cancelled |
+| `noShowCount` — « Absences » | `NO_SHOW` |
+
+`completedCount + plannedCount` is the counted Appointments (« N rendez-vous »); cancellations and no-shows
+are reported beside it, never inside it. Deleted Appointments no longer exist; Calendar Blocks are never an
+input.
+
 ## 25d. Deposits (« Acomptes »)
 
 A deposit is money ACTUALLY received in advance for an existing Appointment. It is its own record — never a

@@ -27,6 +27,7 @@ import {
 } from "./components/AgendaViewSwitcher";
 import { DayTimeline } from "./components/DayTimeline";
 import { DaySummaryTicket } from "./day-summary/DaySummaryTicket";
+import { WeekSummaryTicket } from "./day-summary/WeekSummaryTicket";
 import { WeekView } from "./components/WeekView";
 import { getCalendarBlocksOfLocalDay } from "./calendar/week-appointments";
 import {
@@ -45,6 +46,7 @@ export function AgendaScreen() {
   const [monthCalendarVisible, setMonthCalendarVisible] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [daySummaryVisible, setDaySummaryVisible] = useState(false);
+  const [weekSummaryVisible, setWeekSummaryVisible] = useState(false);
   const [insightsVisible, setInsightsVisible] = useState(false);
   const { appointments: allAppointments } = useAppointmentSession();
   const { calendarBlocks } = useCalendarBlockSession();
@@ -192,12 +194,21 @@ export function AgendaScreen() {
             onPress: createAppointment,
             testID: "agenda-new-appointment",
           },
-          {
-            icon: daySummaryIcon,
-            label: "Résumé du jour",
-            onPress: () => setDaySummaryVisible(true),
-            testID: "agenda-day-summary",
-          },
+          // The summary follows the mode: the day shown in Jour, the week
+          // shown in Semaine — never both.
+          mode === "day"
+            ? {
+                icon: daySummaryIcon,
+                label: "Résumé du jour",
+                onPress: () => setDaySummaryVisible(true),
+                testID: "agenda-day-summary",
+              }
+            : {
+                icon: daySummaryIcon,
+                label: "Résumé de la semaine",
+                onPress: () => setWeekSummaryVisible(true),
+                testID: "agenda-week-summary",
+              },
           {
             icon: insightsIcon,
             label: "Tops & tendances",
@@ -213,6 +224,11 @@ export function AgendaScreen() {
         day={selectedDay}
         onClose={() => setDaySummaryVisible(false)}
         visible={daySummaryVisible}
+      />
+      <WeekSummaryTicket
+        day={selectedDay}
+        onClose={() => setWeekSummaryVisible(false)}
+        visible={weekSummaryVisible}
       />
       <BusinessInsightsTicket
         anchor={selectedDay}

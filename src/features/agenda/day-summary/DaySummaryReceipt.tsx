@@ -1,10 +1,12 @@
 // Souris — DaySummaryReceipt
 //
-// The paper of « Résumé du jour » (DESIGN_OVERRIDES.md §25): a warm near-white
-// slip with torn edges, read top to bottom like a receipt —
+// The paper of « Résumé du jour » and « Résumé de la semaine »
+// (DESIGN_OVERRIDES.md §25): a warm near-white slip with torn edges, read top
+// to bottom like a receipt —
 //
-//   header     glyph, « Résumé du jour », the selected date, the count
-//   list       one line per Appointment: time, services + client, amount
+//   header     glyph, the title, the selected date or week, the count
+//   list       day: one line per Appointment: time, services + client, amount
+//              week: the outcome lines (Réalisés · Prévus · Annulés · Absences)
 //   total      « CA potentiel » — THE strongest value of the paper
 //   breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen
 //
@@ -28,17 +30,28 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
-import type { DaySummaryReceiptModel, DaySummaryReceiptRow } from './day-summary-receipt';
+import type {
+  DaySummaryReceiptActivity,
+  DaySummaryReceiptModel,
+  DaySummaryReceiptRow,
+} from './day-summary-receipt';
 
 interface DaySummaryReceiptProps {
   readonly model: DaySummaryReceiptModel;
   readonly width: number;
   readonly maxHeight: number;
+  /** Prefix of every testID: `day-summary` (default) or `week-summary`. */
+  readonly testID?: string;
 }
 
-export function DaySummaryReceipt({ model, width, maxHeight }: DaySummaryReceiptProps) {
+export function DaySummaryReceipt({
+  model,
+  width,
+  maxHeight,
+  testID = 'day-summary',
+}: DaySummaryReceiptProps) {
   return (
-    <ReceiptPaper maxHeight={maxHeight} testID="day-summary-receipt" width={width}>
+    <ReceiptPaper maxHeight={maxHeight} testID={`${testID}-receipt`} width={width}>
       <View style={styles.header}>
         <View
           accessibilityElementsHidden
@@ -48,20 +61,32 @@ export function DaySummaryReceipt({ model, width, maxHeight }: DaySummaryReceipt
           <SymbolView name={daySummaryIcon} size={20} tintColor={semanticColors.accent} />
         </View>
         <AppText accessibilityRole="header" variant="sheetTitle">
-          Résumé du jour
+          {model.title}
         </AppText>
-        <AppText variant="control" style={styles.date} testID="day-summary-date">
+        <AppText variant="control" style={styles.date} testID={`${testID}-date`}>
           {model.dateLabel}
         </AppText>
-        <AppText variant="metadata" testID="day-summary-count">
+        <AppText variant="metadata" testID={`${testID}-count`}>
           {model.countLabel}
         </AppText>
       </View>
 
       <ReceiptTearLine />
 
-      {model.isEmpty ? (
-        <View accessible style={styles.empty} testID="day-summary-empty">
+      {model.activity ? (
+        // Scrolls like the list: at large text sizes the totals still stay on the paper.
+        <ScrollView
+          contentContainerStyle={styles.activity}
+          showsVerticalScrollIndicator={false}
+          style={styles.list}
+          testID={`${testID}-activity`}
+        >
+          {model.activity.map((line) => (
+            <ActivityLine key={line.key} line={line} testID={`${testID}-activity-${line.key}`} />
+          ))}
+        </ScrollView>
+      ) : model.isEmpty ? (
+        <View accessible style={styles.empty} testID={`${testID}-empty`}>
           <AppText variant="stateTitle" style={styles.centered}>
             Cette journée est libre
           </AppText>
@@ -74,7 +99,7 @@ export function DaySummaryReceipt({ model, width, maxHeight }: DaySummaryReceipt
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           style={styles.list}
-          testID="day-summary-list"
+          testID={`${testID}-list`}
         >
           {model.rows.map((row) => (
             <ReceiptRow key={row.key} row={row} />
@@ -88,7 +113,7 @@ export function DaySummaryReceipt({ model, width, maxHeight }: DaySummaryReceipt
         accessible
         accessibilityLabel={`CA potentiel, ${model.potentialRevenue}`}
         style={styles.total}
-        testID="day-summary-total"
+        testID={`${testID}-total`}
       >
         <AppText variant="eyebrow" style={styles.totalLabel}>
           CA potentiel
@@ -105,7 +130,7 @@ export function DaySummaryReceipt({ model, width, maxHeight }: DaySummaryReceipt
             accessibilityLabel={`${metric.label}, ${metric.value}`}
             key={metric.key}
             style={styles.metric}
-            testID={`day-summary-metric-${metric.key}`}
+            testID={`${testID}-metric-${metric.key}`}
           >
             <AppText variant="body" style={styles.metricLabel}>
               {metric.label}
@@ -122,6 +147,25 @@ export function DaySummaryReceipt({ model, width, maxHeight }: DaySummaryReceipt
 
       <BrandMark decorative size={84} style={styles.brand} variant="wordmark" />
     </ReceiptPaper>
+  );
+}
+
+function ActivityLine({
+  line,
+  testID,
+}: {
+  readonly line: DaySummaryReceiptActivity;
+  readonly testID: string;
+}) {
+  return (
+    <View accessible accessibilityLabel={line.accessibilityLabel} style={styles.metric} testID={testID}>
+      <AppText variant="body" style={styles.metricLabel}>
+        {line.label}
+      </AppText>
+      <AppText variant="control" style={styles.metricValue}>
+        {line.value}
+      </AppText>
+    </View>
   );
 }
 
@@ -170,6 +214,7 @@ const styles = StyleSheet.create({
   date: { color: semanticColors.brandForeground, marginTop: 2 },
   centered: { textAlign: 'center' },
   empty: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl },
+  activity: { gap: spacing.sm, paddingVertical: spacing.xs },
   list: { flexGrow: 0, flexShrink: 1 },
   listContent: { gap: spacing.md, paddingVertical: spacing.xs },
   row: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },

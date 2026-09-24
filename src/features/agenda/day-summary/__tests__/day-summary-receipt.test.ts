@@ -61,6 +61,8 @@ describe('day summary receipt', () => {
 
     const model = buildDaySummaryReceipt(summary, day, getClientLabel);
 
+    expect(model.title).toBe('Résumé du jour');
+    expect(model.activity).toBeUndefined();
     expect(model.isEmpty).toBe(false);
     expect(model.countLabel).toBe('2 rendez-vous');
     expect(model.rows).toEqual([

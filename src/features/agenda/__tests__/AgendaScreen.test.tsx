@@ -13,6 +13,10 @@ import { TestPersistenceProvider, testBusiness } from '@/providers/testing/TestP
 import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { insertCalendarBlock } from '@/persistence/stores/calendar-blocks';
+import { loadAppointmentDeposits, insertAppointmentDeposit } from '@/persistence/stores/appointment-deposits';
+import { deleteAppointment, insertAppointment, loadAppointments } from '@/persistence/stores/appointments';
+import { getAppointmentDaySummary, type Appointment } from '@/domain/appointments';
+import { getWeekDays } from '../calendar/week';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { bootstrapPersistence } from '@/persistence/bootstrap';
 import { createDevelopmentSeed } from '@/providers/development-seed';
@@ -458,6 +462,206 @@ describe('AgendaScreen — day navigation', () => {
     expect(view.queryByTestId('day-summary-list')).toBeNull();
     expect(view.getByLabelText(`CA potentiel, ${formatEuroCents(0)}`)).toBeTruthy();
     expect(view.getByLabelText('Temps total, 0 min')).toBeTruthy();
+  });
+
+  const switchToWeek = async (view: AgendaView) => {
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Semaine'));
+    });
+  };
+  const menuLabels = async (view: AgendaView) => {
+    await settleFloatingReveal();
+    await press(view, 'agenda-create');
+    const labels = view.getAllByRole('menuitem').map((option) => option.props.accessibilityLabel);
+    await press(view, 'agenda-create');
+    return labels;
+  };
+  const openWeekSummary = async (view: AgendaView) => {
+    await settleFloatingReveal();
+    await press(view, 'agenda-create');
+    await press(view, 'agenda-week-summary');
+  };
+  const closeWeekSummary = async (view: AgendaView) => {
+    await press(view, 'week-summary-close');
+    await act(async () => {
+      jest.advanceTimersByTime(receiptPrint.dismiss);
+    });
+  };
+  const weekRange = (view: AgendaView) => view.getByTestId('week-summary-date').props.children as string;
+
+  describe('« Résumé de la semaine »', () => {
+    it('follows the Jour / Semaine mode in the + menu, never both', async () => {
+      const view = await renderAgenda();
+      const day = ['Nouveau rendez-vous', 'Résumé du jour', 'Tops & tendances'];
+      const week = ['Nouveau rendez-vous', 'Résumé de la semaine', 'Tops & tendances'];
+
+      expect(await menuLabels(view)).toEqual(day);
+      await switchToWeek(view);
+      expect(await menuLabels(view)).toEqual(week);
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Jour'));
+      });
+      expect(await menuLabels(view)).toEqual(day);
+      expect(view.queryByTestId('agenda-week-summary')).toBeNull();
+    });
+
+    it('prints the week the Agenda shows, and follows the week navigation', async () => {
+      const view = await renderAgenda();
+      await switchToWeek(view);
+
+      await openWeekSummary(view);
+      expect(view.getByRole('header', { name: 'Résumé de la semaine' })).toBeTruthy();
+      expect(weekRange(view)).toBe('14 – 20 septembre 2026');
+      expect(view.queryByTestId('day-summary-receipt')).toBeNull();
+      // The week's big picture: no Appointment list.
+      expect(view.queryByTestId('week-summary-list')).toBeNull();
+      expect(view.getByTestId('week-summary-activity')).toBeTruthy();
+      await closeWeekSummary(view);
+      expect(view.queryByTestId('week-summary-receipt')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Semaine suivante'));
+      });
+      await openWeekSummary(view);
+      expect(weekRange(view)).toBe('21 – 27 septembre 2026');
+      await closeWeekSummary(view);
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Semaine suivante'));
+      });
+      await openWeekSummary(view);
+      expect(weekRange(view)).toBe('28 septembre – 4 octobre 2026');
+    });
+
+    it('adds up a mixed current week with the rules of « Résumé du jour », blocks and deletions left out', async () => {
+      const database = openTestDatabase();
+      bootstrapPersistence(database, () => createDevelopmentSeed(new Date()));
+      const [template] = loadAppointments(database);
+      const extra = (overrides: Partial<Appointment> & Pick<Appointment, 'id' | 'startAt'>): Appointment => ({
+        ...template,
+        status: 'SCHEDULED',
+        payment: undefined,
+        discount: undefined,
+        cancellation: undefined,
+        noShow: undefined,
+        ...overrides,
+      });
+      // Monday 14 → Sunday 20 September; today is Wednesday 16.
+      insertAppointment(
+        database,
+        extra({
+          id: 'week-paid',
+          startAt: new Date(2026, 8, 14, 18, 0),
+          status: 'COMPLETED',
+          discount: { type: 'PERCENT', percent: 20 },
+          payment: { paidAt: new Date(2026, 8, 14, 19, 0), cardAmountCents: 5000, cashAmountCents: 0 },
+        }),
+      );
+      insertAppointment(
+        database,
+        extra({
+          id: 'week-no-show',
+          startAt: new Date(2026, 8, 15, 18, 0),
+          status: 'NO_SHOW',
+          noShow: { recordedAt: new Date(2026, 8, 15, 18, 30) },
+        }),
+      );
+      insertAppointment(
+        database,
+        extra({
+          id: 'week-cancelled',
+          startAt: new Date(2026, 8, 17, 18, 0),
+          status: 'CANCELLED',
+          cancellation: { cancelledAt: new Date(2026, 8, 12), cancelledBy: 'CLIENT' },
+        }),
+      );
+      insertAppointment(database, extra({ id: 'week-deposit', startAt: new Date(2026, 8, 19, 10, 0) }));
+      insertAppointmentDeposit(database, {
+        id: 'deposit-week',
+        businessId: testBusiness.id,
+        appointmentId: 'week-deposit',
+        amountCents: 2000,
+        paymentMethod: 'CASH',
+        paidAt: new Date(2026, 8, 2, 12, 0),
+        status: 'ACTIVE',
+        createdAt: new Date(2026, 8, 2, 12, 0),
+      });
+      insertAppointment(database, extra({ id: 'week-deleted', startAt: new Date(2026, 8, 19, 15, 0) }));
+      deleteAppointment(database, 'week-deleted');
+      insertCalendarBlock(database, {
+        id: 'block-week',
+        businessId: testBusiness.id,
+        staffMemberId: 'staff-amelie',
+        startAt: new Date(2026, 8, 18, 12),
+        endAt: new Date(2026, 8, 18, 13),
+        reason: 'Pause',
+      });
+      // Next week: never part of this one.
+      insertAppointment(database, extra({ id: 'next-week', startAt: new Date(2026, 8, 21, 10, 0) }));
+
+      const view = await renderAgenda(database);
+      await switchToWeek(view);
+      await openWeekSummary(view);
+
+      // The session state at print time (past fixtures auto-completed at mount),
+      // summed day by day with the authoritative day summary.
+      const appointments = loadAppointments(database);
+      const deposits = loadAppointmentDeposits(database);
+      const days = getWeekDays(new Date(2026, 8, 16)).map((day) =>
+        getAppointmentDaySummary({ appointments, sales: [], deposits }, day),
+      );
+      const sum = (pick: (day: (typeof days)[number]) => number) =>
+        days.reduce((total, day) => total + pick(day), 0);
+      const inWeek = appointments.filter(
+        (entry) => entry.startAt >= new Date(2026, 8, 14) && entry.startAt < new Date(2026, 8, 21),
+      );
+      const count = sum((day) => day.appointmentCount);
+      const completed = inWeek.filter((entry) => entry.status === 'COMPLETED').length;
+
+      expect(inWeek.map((entry) => entry.id)).not.toContain('week-deleted');
+      expect(completed).toBeGreaterThanOrEqual(1);
+      expect(view.getByTestId('week-summary-count').props.children).toBe(`${count} rendez-vous`);
+      expect(view.getByLabelText(`CA potentiel, ${formatEuroCents(sum((day) => day.potentialRevenueCents))}`)).toBeTruthy();
+      expect(view.getByLabelText(`Déjà encaissé, ${formatEuroCents(sum((day) => day.collectedCents))}`)).toBeTruthy();
+      expect(
+        view.getByLabelText(`Reste à encaisser, ${formatEuroCents(sum((day) => day.remainingToCollectCents))}`),
+      ).toBeTruthy();
+      // The discounted checkout and the early deposit are in; no-show and cancelled are not.
+      expect(sum((day) => day.collectedCents)).toBe(7000);
+      expect(view.getByLabelText(`Panier moyen, ${formatEuroCents(Math.round(sum((day) => day.potentialRevenueCents) / count))}`)).toBeTruthy();
+
+      const activity = within(view.getByTestId('week-summary-activity'));
+      expect(activity.getByTestId('week-summary-activity-completed')).toHaveProp(
+        'accessibilityLabel',
+        `${completed} rendez-vous réalisé${completed > 1 ? 's' : ''}`,
+      );
+      const planned = count - completed;
+      expect(activity.getByTestId('week-summary-activity-planned')).toHaveProp(
+        'accessibilityLabel',
+        `${planned} rendez-vous prévu${planned > 1 ? 's' : ''}`,
+      );
+      expect(activity.getByLabelText('1 rendez-vous annulé')).toBeTruthy();
+      expect(activity.getByLabelText('1 absence')).toBeTruthy();
+      // Calendar Blocks are never a rendez-vous: the Week view shows the block, the receipt never does.
+      expect(view.getAllByText('Indisponible').length).toBeGreaterThan(0);
+      expect(within(view.getByTestId('week-summary-receipt')).queryByText(/Indisponible/)).toBeNull();
+    });
+
+    it('prints a zero week safely', async () => {
+      const view = await renderAgenda();
+      await pickAgendaDay(view, new Date(2026, 10, 4));
+      await switchToWeek(view);
+
+      await openWeekSummary(view);
+
+      expect(weekRange(view)).toBe('2 – 8 novembre 2026');
+      expect(view.getByTestId('week-summary-count').props.children).toBe('Aucun rendez-vous');
+      expect(view.getByLabelText(`CA potentiel, ${formatEuroCents(0)}`)).toBeTruthy();
+      expect(view.getByLabelText(`Déjà encaissé, ${formatEuroCents(0)}`)).toBeTruthy();
+      expect(view.getByLabelText(`Reste à encaisser, ${formatEuroCents(0)}`)).toBeTruthy();
+      expect(view.getByLabelText('0 rendez-vous réalisé')).toBeTruthy();
+      expect(view.getByLabelText('0 absence')).toBeTruthy();
+    });
   });
 
   const openInsights = async (view: AgendaView) => {

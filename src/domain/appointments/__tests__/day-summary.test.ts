@@ -1,5 +1,10 @@
 import type { Sale } from '../../sales/types';
-import { getAppointmentDaySummary } from '../day-summary';
+import {
+  getAppointmentDaySummary,
+  getAppointmentPeriodActivity,
+  getAppointmentPeriodSummary,
+  type AppointmentDaySummary,
+} from '../day-summary';
 import type { Appointment, AppointmentDeposit, AppointmentItem } from '../types';
 
 const day = new Date(2026, 8, 21);
@@ -238,5 +243,180 @@ describe('Appointment day summary', () => {
       expect(summary.collectedCents).toBe(0);
       expect(summary.remainingToCollectCents).toBe(10000);
     });
+  });
+});
+
+describe('Appointment period summary — the same rules over a range of days', () => {
+  // Monday 21 → Sunday 27 September 2026.
+  const week = { firstDay: new Date(2026, 8, 21), lastDay: new Date(2026, 8, 27) };
+  const weekDays = Array.from({ length: 7 }, (_, index) => new Date(2026, 8, 21 + index));
+
+  const deposit = (overrides: Partial<AppointmentDeposit> & Pick<AppointmentDeposit, 'id' | 'appointmentId'>): AppointmentDeposit => ({
+    businessId: 'business-a',
+    amountCents: 3000,
+    paymentMethod: 'CARD',
+    paidAt: new Date(2026, 8, 10, 11, 0),
+    status: 'ACTIVE',
+    createdAt: new Date(2026, 8, 10, 11, 0),
+    ...overrides,
+  });
+
+  // A realistic current week (today = Wednesday 23): past days settled or not,
+  // today mixed, the rest still to come; plus the records the figures leave out.
+  const appointments: readonly Appointment[] = [
+    appointment({
+      id: 'monday-paid',
+      startAt: new Date(2026, 8, 21, 9, 0),
+      status: 'COMPLETED',
+      payment: { paidAt: new Date(2026, 8, 21, 9, 45), cardAmountCents: 3500, cashAmountCents: 0 },
+    }),
+    appointment({
+      id: 'monday-discounted-paid',
+      startAt: new Date(2026, 8, 21, 14, 0),
+      status: 'COMPLETED',
+      items: [item('color', 80, [[15, true], [35, false], [20, true]])],
+      discount: { type: 'PERCENT', percent: 10 },
+      payment: { paidAt: new Date(2026, 8, 21, 15, 20), cardAmountCents: 0, cashAmountCents: 7200 },
+    }),
+    appointment({ id: 'tuesday-no-show', startAt: new Date(2026, 8, 22, 10, 0), status: 'NO_SHOW' }),
+    appointment({
+      id: 'tuesday-completed-unpaid',
+      startAt: new Date(2026, 8, 22, 11, 0),
+      status: 'COMPLETED',
+    }),
+    appointment({
+      id: 'wednesday-deposit',
+      startAt: new Date(2026, 8, 23, 16, 0),
+      items: [item('color', 100, [[60, true]])],
+    }),
+    appointment({
+      id: 'thursday-cancelled',
+      startAt: new Date(2026, 8, 24, 9, 0),
+      status: 'CANCELLED',
+      cancellation: { cancelledAt: new Date(2026, 8, 20), cancelledBy: 'CLIENT' },
+    }),
+    appointment({ id: 'friday-confirmed', startAt: new Date(2026, 8, 25, 9, 0), status: 'CONFIRMED' }),
+    appointment({ id: 'sunday-late', startAt: new Date(2026, 8, 27, 23, 59) }),
+    // Outside the week, on both sides.
+    appointment({ id: 'sunday-before', startAt: new Date(2026, 8, 20, 23, 59) }),
+    appointment({ id: 'monday-after', startAt: new Date(2026, 8, 28, 0, 0) }),
+  ];
+  const deposits: readonly AppointmentDeposit[] = [
+    deposit({ id: 'deposit-wednesday', appointmentId: 'wednesday-deposit' }),
+    // Counted nowhere: the Appointment was cancelled.
+    deposit({ id: 'deposit-cancelled', appointmentId: 'thursday-cancelled', amountCents: 2000 }),
+    deposit({ id: 'deposit-voided', appointmentId: 'friday-confirmed', status: 'VOIDED', voidedAt: new Date(2026, 8, 11) }),
+  ];
+  const sources = { appointments, sales: noSales, deposits };
+
+  it('keeps the day summary exactly as it was: a day is the period of one day', () => {
+    for (const day of [...weekDays, new Date(2026, 8, 20), new Date(2026, 8, 28)]) {
+      expect(getAppointmentDaySummary(sources, day)).toEqual(
+        getAppointmentPeriodSummary(sources, { firstDay: day, lastDay: day }),
+      );
+    }
+  });
+
+  it('counts the Appointments of the seven local days, first and last day included', () => {
+    const summary = getAppointmentPeriodSummary(sources, week);
+
+    expect(summary.rows.map((row) => row.appointment.id)).toEqual([
+      'monday-paid',
+      'monday-discounted-paid',
+      'tuesday-completed-unpaid',
+      'wednesday-deposit',
+      'friday-confirmed',
+      'sunday-late',
+    ]);
+    expect(summary.appointmentCount).toBe(6);
+  });
+
+  it('only reads the civil date of its bounds', () => {
+    expect(
+      getAppointmentPeriodSummary(sources, {
+        firstDay: new Date(2026, 8, 21, 18, 30),
+        lastDay: new Date(2026, 8, 27, 0, 0),
+      }),
+    ).toEqual(getAppointmentPeriodSummary(sources, week));
+  });
+
+  it('agrees with the seven day summaries, figure by figure', () => {
+    const days: readonly AppointmentDaySummary[] = weekDays.map((day) => getAppointmentDaySummary(sources, day));
+    const sum = (pick: (summary: AppointmentDaySummary) => number) =>
+      days.reduce((total, summary) => total + pick(summary), 0);
+    const summary = getAppointmentPeriodSummary(sources, week);
+
+    expect(summary.appointmentCount).toBe(sum((day) => day.appointmentCount));
+    expect(summary.potentialRevenueCents).toBe(sum((day) => day.potentialRevenueCents));
+    expect(summary.collectedCents).toBe(sum((day) => day.collectedCents));
+    expect(summary.remainingToCollectCents).toBe(sum((day) => day.remainingToCollectCents));
+    expect(summary.totalDurationMinutes).toBe(sum((day) => day.totalDurationMinutes));
+    expect(summary.rows).toEqual(days.flatMap((day) => day.rows));
+  });
+
+  it('adds up the week net of discounts, deposits included, future Appointments still owed', () => {
+    const summary = getAppointmentPeriodSummary(sources, week);
+
+    // 35 + 72 (80 − 10 %) + 35 + 100 + 35 + 35
+    expect(summary.potentialRevenueCents).toBe(31200);
+    // Two checkouts (35 + 72) and the 30 € deposit paid on 10 September.
+    expect(summary.collectedCents).toBe(13700);
+    // 35 (completed, no checkout) + 70 (100 − deposit) + 35 + 35
+    expect(summary.remainingToCollectCents).toBe(17500);
+    expect(summary.averageBasketCents).toBe(5200);
+  });
+
+  it('counts the outcomes of the week by stored status', () => {
+    expect(getAppointmentPeriodActivity(appointments, week)).toEqual({
+      completedCount: 3,
+      plannedCount: 3,
+      cancelledCount: 1,
+      noShowCount: 1,
+    });
+  });
+
+  it('completed and planned always add up to the counted Appointments', () => {
+    const activity = getAppointmentPeriodActivity(appointments, week);
+    expect(activity.completedCount + activity.plannedCount).toBe(
+      getAppointmentPeriodSummary(sources, week).appointmentCount,
+    );
+  });
+
+  it('follows an Appointment moved to another week', () => {
+    const moved = appointments.map((entry) =>
+      entry.id === 'friday-confirmed' ? { ...entry, startAt: new Date(2026, 8, 29, 9, 0) } : entry,
+    );
+    const summary = getAppointmentPeriodSummary({ ...sources, appointments: moved }, week);
+
+    expect(summary.rows.map((row) => row.appointment.id)).not.toContain('friday-confirmed');
+    expect(summary.potentialRevenueCents).toBe(27700);
+    expect(getAppointmentPeriodActivity(moved, week).plannedCount).toBe(2);
+  });
+
+  it('is neutral on an empty week', () => {
+    const empty = { firstDay: new Date(2026, 10, 2), lastDay: new Date(2026, 10, 8) };
+    expect(getAppointmentPeriodSummary(sources, empty)).toEqual(getAppointmentDaySummary({ appointments: [], sales: noSales }, day));
+    expect(getAppointmentPeriodActivity(appointments, empty)).toEqual({
+      completedCount: 0,
+      plannedCount: 0,
+      cancelledCount: 0,
+      noShowCount: 0,
+    });
+  });
+
+  it('crosses a year like any other week', () => {
+    const newYear = { firstDay: new Date(2026, 11, 28), lastDay: new Date(2027, 0, 3) };
+    const summary = getAppointmentPeriodSummary(
+      {
+        appointments: [
+          appointment({ id: 'december', startAt: new Date(2026, 11, 31, 18, 0) }),
+          appointment({ id: 'january', startAt: new Date(2027, 0, 3, 10, 0) }),
+          appointment({ id: 'after', startAt: new Date(2027, 0, 4, 10, 0) }),
+        ],
+        sales: noSales,
+      },
+      newYear,
+    );
+    expect(summary.rows.map((row) => row.appointment.id)).toEqual(['december', 'january']);
   });
 });

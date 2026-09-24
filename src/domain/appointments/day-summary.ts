@@ -1,13 +1,16 @@
-// Souris — Appointment day summary (pure)
+// Souris — Appointment day / period summary (pure)
 //
 // Source: docs/domain/APPOINTMENTS.md §25c
 //
-// What ONE local civil day of Appointments represents for the professional
-// (« Résumé du jour »). Everything is derived on demand from the Appointment
-// snapshots, the recorded checkouts, the deposits and the linked Sales;
-// nothing is stored.
+// What a range of local civil days of Appointments represents for the
+// professional: ONE day (« Résumé du jour ») or the seven days of the Agenda
+// week (« Résumé de la semaine »). The SAME rules for both — a day is simply
+// the period whose first and last day coincide. Everything is derived on
+// demand from the Appointment snapshots, the recorded checkouts, the deposits
+// and the linked Sales; nothing is stored.
 //
-//   counted Appointments     start on the day (DEVICE-LOCAL civil calendar) AND
+//   counted Appointments     start within the period — first and last day
+//                            included (DEVICE-LOCAL civil calendar) — AND
 //                            occupy the schedule — the Agenda's own rule
 //                            (`doesAppointmentOccupySchedule`): CANCELLED and
 //                            NO_SHOW bring nothing in and are left out
@@ -27,7 +30,12 @@
 //   totalDurationMinutes     Σ elapsed durations — booked time, processing
 //                            included; overlapping Appointments both count
 //   averageBasketCents       potentialRevenueCents / counted Appointments,
-//                            rounded to the cent; 0 on an empty day
+//                            rounded to the cent; 0 on an empty period
+//
+// The period activity (`getAppointmentPeriodActivity`) counts outcomes by
+// stored status over the same days: the counted Appointments split into
+// COMPLETED and the others, plus the CANCELLED and NO_SHOW records the
+// figures leave out.
 //
 // This is NOT the Cash Register: the Caisse groups money by the day it was
 // RECEIVED (`paidAt`) and also counts standalone Sales. The day summary
@@ -77,24 +85,50 @@ export interface AppointmentDaySummarySources {
   readonly deposits?: readonly AppointmentDeposit[];
 }
 
-function isSameLocalDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+/** A range of local civil days, both included. Only the civil date of each bound matters. */
+export interface AppointmentSummaryPeriod {
+  readonly firstDay: Date;
+  readonly lastDay: Date;
+}
+
+export interface AppointmentPeriodActivity {
+  /** Counted Appointments (they occupy the schedule) that are `COMPLETED`. */
+  readonly completedCount: number;
+  /** Counted Appointments not `COMPLETED` yet: `SCHEDULED`, `CONFIRMED`, `IN_PROGRESS`. */
+  readonly plannedCount: number;
+  /** `CANCELLED`, whoever cancelled. Not counted in the summary figures. */
+  readonly cancelledCount: number;
+  /** `NO_SHOW`. Not counted in the summary figures. */
+  readonly noShowCount: number;
+}
+
+/** `yyyymmdd` of the device-local civil date: comparable, never a timestamp. */
+function getLocalDayNumber(date: Date): number {
+  return date.getFullYear() * 10_000 + (date.getMonth() + 1) * 100 + date.getDate();
+}
+
+function isWithinPeriod(date: Date, period: AppointmentSummaryPeriod): boolean {
+  const day = getLocalDayNumber(date);
+  return day >= getLocalDayNumber(period.firstDay) && day <= getLocalDayNumber(period.lastDay);
 }
 
 export function getAppointmentDaySummary(
   sources: AppointmentDaySummarySources,
   day: Date,
 ): AppointmentDaySummary {
+  return getAppointmentPeriodSummary(sources, { firstDay: day, lastDay: day });
+}
+
+export function getAppointmentPeriodSummary(
+  sources: AppointmentDaySummarySources,
+  period: AppointmentSummaryPeriod,
+): AppointmentDaySummary {
   const deposits = sources.deposits ?? [];
   const rows: AppointmentDaySummaryRow[] = sources.appointments
     .filter(
       (appointment) =>
         doesAppointmentOccupySchedule(appointment.status) &&
-        isSameLocalDay(appointment.startAt, day),
+        isWithinPeriod(appointment.startAt, period),
     )
     .sort((a, b) => a.startAt.getTime() - b.startAt.getTime() || a.id.localeCompare(b.id))
     .map((appointment) => {
@@ -135,4 +169,36 @@ export function getAppointmentDaySummary(
     averageBasketCents:
       rows.length === 0 ? 0 : Math.round(potentialRevenueCents / rows.length),
   };
+}
+
+export function getAppointmentPeriodActivity(
+  appointments: readonly Appointment[],
+  period: AppointmentSummaryPeriod,
+): AppointmentPeriodActivity {
+  let completedCount = 0;
+  let plannedCount = 0;
+  let cancelledCount = 0;
+  let noShowCount = 0;
+
+  for (const appointment of appointments) {
+    if (!isWithinPeriod(appointment.startAt, period)) continue;
+    switch (appointment.status) {
+      case 'COMPLETED':
+        completedCount += 1;
+        break;
+      case 'CANCELLED':
+        cancelledCount += 1;
+        break;
+      case 'NO_SHOW':
+        noShowCount += 1;
+        break;
+      case 'SCHEDULED':
+      case 'CONFIRMED':
+      case 'IN_PROGRESS':
+        plannedCount += 1;
+        break;
+    }
+  }
+
+  return { completedCount, plannedCount, cancelledCount, noShowCount };
 }

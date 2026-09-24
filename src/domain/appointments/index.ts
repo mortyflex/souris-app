@@ -150,8 +150,14 @@ export type {
   AppointmentDaySummary,
   AppointmentDaySummaryRow,
   AppointmentDaySummarySources,
+  AppointmentPeriodActivity,
+  AppointmentSummaryPeriod,
 } from "./day-summary";
-export { getAppointmentDaySummary } from "./day-summary";
+export {
+  getAppointmentDaySummary,
+  getAppointmentPeriodActivity,
+  getAppointmentPeriodSummary,
+} from "./day-summary";
 
 export type { AppointmentProductIdentity, AppointmentProductLine } from "./linked-products";
 export {

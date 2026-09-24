@@ -657,7 +657,8 @@ Produits                                  [watermark, cropped by the right edge]
   screen closes it. No scrim, no drawer, no native action sheet. Produits: « Nouvelle vente »
   (`bag`) and « Ajouter un produit » (`shippingbox`). Agenda: « Nouveau rendez-vous »
   (`calendar.badge.plus` — Appointment creation on the selected day, unchanged), « Résumé du
-  jour » (`shared/icons/day-summary-icon`, §25) and « Tops & tendances »
+  jour » in Jour or « Résumé de la semaine » in Semaine — the summary follows the mode, never both
+  (`shared/icons/day-summary-icon`, §25) — and « Tops & tendances »
   (`shared/icons/insights-icon`, §34).
 
 ### Short sheets are content-fit
@@ -1232,6 +1233,31 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
   « 09:00, Coloration, Léa Martin, 95,00 €, encaissé » — as are the total and each breakdown line.
   « encaissé » is never colour alone: a check glyph and the spoken word.
 - **Wording.** Souris has no deposit: the line reads « Déjà encaissé », never « Acomptes ».
+
+### 25a. Weekly Summary — « Résumé de la semaine »
+
+The + menu follows the Agenda mode: Jour → « Résumé du jour », Semaine → « Résumé de la semaine »
+(same glyph, same place). The weekly receipt summarises the week THE AGENDA IS SHOWING — the same
+Monday → Sunday as Week mode (`getWeekDays`), following its navigation. It is the SAME object as
+§25: `WeekSummaryTicket` hands `DaySummaryReceipt` to the same `ReceiptPrinter` and `ReceiptPaper`
+— same capsule, motion, haptic, dismissal (« Fermer le résumé de la semaine » on the dimmed page),
+no share or save (the daily receipt has none). Figures: `docs/domain/APPOINTMENTS.md` §25c.
+
+```text
+header     disc + glyph · « Résumé de la semaine » (the header) ·
+           « 21 – 27 septembre 2026 » control, plum · « 18 rendez-vous » metadata
+activity   Réalisés · Prévus · Annulés · Absences — body label ↔ control value,
+           each ONE spoken element (« 14 rendez-vous réalisés »)          in place of the list
+total      « CA POTENTIEL », exactly as §25
+breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen, exactly as §25
+footer     the Souris wordmark
+```
+
+- **Range.** Months written in full, the year once: `21 – 27 septembre 2026`,
+  `28 septembre – 4 octobre 2026`, `28 décembre 2026 – 3 janvier 2027`.
+- **Compact.** No Appointment list, no seven daily sections, no chart. An empty week is the same
+  paper: « Aucun rendez-vous », every line at zero.
+- **Large text.** The activity lines scroll like the daily list; the header and totals stay.
 
 ---
 

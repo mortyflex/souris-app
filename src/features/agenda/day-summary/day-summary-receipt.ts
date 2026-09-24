@@ -1,7 +1,8 @@
 // Souris — « Résumé du jour » receipt model
 //
 // Turns the domain day summary (`getAppointmentDaySummary`) into the French
-// text the receipt renders. Every amount, duration and count comes from the
+// text the receipt renders. « Résumé de la semaine » (`week-summary-receipt.ts`)
+// words the same summary for a week with the same figures (`buildSummaryMetrics`). Every amount, duration and count comes from the
 // domain; this file only words them. No React: the receipt component renders
 // the model as is and computes nothing.
 
@@ -29,13 +30,25 @@ export interface DaySummaryReceiptMetric {
   readonly value: string;
 }
 
+/** One outcome line of « Résumé de la semaine »: `Réalisés  14`. */
+export interface DaySummaryReceiptActivity {
+  readonly key: 'completed' | 'planned' | 'cancelled' | 'noShow';
+  readonly label: string;
+  readonly value: string;
+  readonly accessibilityLabel: string;
+}
+
 export interface DaySummaryReceiptModel {
-  /** `Lundi 21 septembre` */
+  /** `Résumé du jour` / `Résumé de la semaine` — the header of the paper. */
+  readonly title: string;
+  /** `Lundi 21 septembre` / `21 – 27 septembre 2026` */
   readonly dateLabel: string;
   /** `Aucun rendez-vous` / `1 rendez-vous` / `7 rendez-vous` */
   readonly countLabel: string;
   readonly isEmpty: boolean;
   readonly rows: readonly DaySummaryReceiptRow[];
+  /** Weekly only: the outcome lines, printed in place of the Appointment list. */
+  readonly activity?: readonly DaySummaryReceiptActivity[];
   readonly potentialRevenue: string;
   readonly metrics: readonly DaySummaryReceiptMetric[];
 }
@@ -52,6 +65,20 @@ export function formatDaySummaryDate(day: Date): string {
 
 export function formatDaySummaryCount(count: number): string {
   return count === 0 ? 'Aucun rendez-vous' : `${count} rendez-vous`;
+}
+
+/** The breakdown under « CA potentiel »: the same four lines for a day and for a week. */
+export function buildSummaryMetrics(summary: AppointmentDaySummary): readonly DaySummaryReceiptMetric[] {
+  return [
+    { key: 'collected', label: 'Déjà encaissé', value: formatEuroCents(summary.collectedCents) },
+    {
+      key: 'remaining',
+      label: 'Reste à encaisser',
+      value: formatEuroCents(summary.remainingToCollectCents),
+    },
+    { key: 'duration', label: 'Temps total', value: formatDurationMinutes(summary.totalDurationMinutes) },
+    { key: 'averageBasket', label: 'Panier moyen', value: formatEuroCents(summary.averageBasketCents) },
+  ];
 }
 
 export function buildDaySummaryReceipt(
@@ -78,20 +105,12 @@ export function buildDaySummaryReceipt(
   });
 
   return {
+    title: 'Résumé du jour',
     dateLabel: formatDaySummaryDate(day),
     countLabel: formatDaySummaryCount(summary.appointmentCount),
     isEmpty: summary.appointmentCount === 0,
     rows,
     potentialRevenue: formatEuroCents(summary.potentialRevenueCents),
-    metrics: [
-      { key: 'collected', label: 'Déjà encaissé', value: formatEuroCents(summary.collectedCents) },
-      {
-        key: 'remaining',
-        label: 'Reste à encaisser',
-        value: formatEuroCents(summary.remainingToCollectCents),
-      },
-      { key: 'duration', label: 'Temps total', value: formatDurationMinutes(summary.totalDurationMinutes) },
-      { key: 'averageBasket', label: 'Panier moyen', value: formatEuroCents(summary.averageBasketCents) },
-    ],
+    metrics: buildSummaryMetrics(summary),
   };
 }
