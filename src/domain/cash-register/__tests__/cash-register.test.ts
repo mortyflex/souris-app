@@ -9,6 +9,8 @@ import {
 import type { Sale } from '../../sales';
 import {
   EMPTY_CASH_REGISTER_SUMMARY,
+  getCashRegisterDailyTotals,
+  getCashRegisterDayKey,
   getCashRegisterDayEntries,
   getCashRegisterDaySummary,
   getCashRegisterIntervalSummary,
@@ -405,5 +407,59 @@ describe('Cash Register — any local span', () => {
     expect(getCashRegisterIntervalSummary({ appointments, ...noSales }, month)).toEqual(
       getCashRegisterMonthSummary({ appointments, ...noSales }, new Date(2026, 8, 15)),
     );
+  });
+});
+
+describe('Cash Register — daily totals', () => {
+  const deposit = (id: string, paidAt: Date, status: AppointmentDeposit['status'] = 'ACTIVE'): AppointmentDeposit => ({
+    id,
+    businessId: 'business-a',
+    appointmentId: 'booked',
+    amountCents: 3000,
+    paymentMethod: 'CASH',
+    paidAt,
+    status,
+    createdAt: paidAt,
+  });
+  const sources = {
+    appointments: [
+      paid('checkout', new Date(2026, 8, 3, 10, 0), 9500, 0),
+      // Paid late in the local evening: the 3rd, whatever the UTC date.
+      paid('late', new Date(2026, 8, 3, 23, 59), 1, 2),
+      appointment('unpaid', { status: 'COMPLETED', startAt: new Date(2026, 8, 4, 9, 0) }),
+      appointment('booked', { startAt: new Date(2026, 9, 5, 10, 0) }),
+    ],
+    sales: [
+      standaloneSale('standalone', new Date(2026, 8, 4, 0, 0), 1250, 750),
+      sale('linked', {
+        appointmentId: 'checkout',
+        payment: { paidAt: new Date(2026, 8, 4, 12, 0), cardAmountCents: 4000, cashAmountCents: 0 },
+      }),
+      sale('unpaid-sale', { completedAt: new Date(2026, 8, 5, 12, 0) }),
+    ],
+    deposits: [deposit('active', new Date(2026, 8, 22, 11, 0)), deposit('voided', new Date(2026, 8, 23, 11, 0), 'VOIDED')],
+  };
+
+  it('keys a day by its local civil date, zero-padded', () => {
+    expect(getCashRegisterDayKey(new Date(2026, 8, 3, 23, 59))).toBe('2026-09-03');
+    expect(getCashRegisterDayKey(new Date(2026, 11, 31, 0, 0))).toBe('2026-12-31');
+  });
+
+  it('groups checkouts, standalone Sales and ACTIVE deposits on the local day they were received', () => {
+    expect(Object.fromEntries(getCashRegisterDailyTotals(sources))).toEqual({
+      '2026-09-03': 9503,
+      '2026-09-04': 2000,
+      // The deposit counts on its payment day, never on the 5 October Appointment day.
+      '2026-09-22': 3000,
+    });
+  });
+
+  it('agrees with the day summary on every day, counted or not', () => {
+    const totals = getCashRegisterDailyTotals(sources);
+    for (let date = 1; date <= 30; date += 1) {
+      const day = new Date(2026, 8, date, 12, 0);
+      expect(totals.get(getCashRegisterDayKey(day)) ?? 0).toBe(getCashRegisterDaySummary(sources, day).totalCents);
+    }
+    expect(totals.has('2026-10-05')).toBe(false);
   });
 });

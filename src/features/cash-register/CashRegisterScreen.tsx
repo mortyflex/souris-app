@@ -13,11 +13,19 @@
 // from the same domain selection, so a listed payment is always a counted
 // one. Nothing is stored, cached or charted; planned or potential revenue
 // belongs to « Résumé du jour », never here.
+//
+// The day is chosen through the shared month calendar (the Agenda's), each
+// day haloed by the money received on it relative to the best day of the
+// displayed month — from `getCashRegisterDailyTotals`, the same selection
+// and arithmetic as the day summary, so calendar and detail never disagree.
+// On its first opening, a compact card explains the halos (until « Compris »,
+// remembered on this device only); a quiet ⓘ under the grid reopens it.
 
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   Platform,
   ScrollView,
   StyleSheet,
@@ -26,6 +34,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  getCashRegisterDailyTotals,
   getCashRegisterDayEntries,
   getCashRegisterDaySummary,
   getCashRegisterMonthEntries,
@@ -37,6 +46,7 @@ import { useAppointmentSession } from "@/features/appointments/session/Appointme
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
+import { usePersistence } from "@/providers/PersistenceProvider";
 import {
   cashRegisterIcon,
   paymentMethodIcons,
@@ -46,8 +56,8 @@ import {
 import { formatEuroCents } from "@/shared/lib/money";
 import { AppText } from "@/shared/ui/AppText";
 import { DateNavigator } from "@/shared/ui/DateNavigator";
-import { DayPickerSheet } from "@/shared/ui/DayPickerSheet";
 import { GroupedSeparator, GroupedSurface } from "@/shared/ui/GroupedSurface";
+import { MonthCalendarSheet } from "@/shared/ui/MonthCalendarSheet";
 import {
   PeriodNavigator,
   PeriodNavigatorCopy,
@@ -76,6 +86,14 @@ import {
   getCashRegisterEntryKey,
 } from "./components/CashRegisterEntryRow";
 import {
+  RevenueHeatmapHint,
+  RevenueHeatmapInfoButton,
+} from "./components/RevenueHeatmapHint";
+import {
+  hasSeenCashRegisterHeatmapHint,
+  markCashRegisterHeatmapHintSeen,
+} from "./heatmap-hint";
+import {
   formatCashRegisterCaption,
   formatCashRegisterEmptyTitle,
   formatCashRegisterMonth,
@@ -88,6 +106,7 @@ import {
   startOfLocalMonth,
   type CashRegisterPeriod,
 } from "./presentation";
+import { decorateRevenueMonth } from "./revenue-calendar";
 
 const horizontalGutter =
   Platform.OS === "android" ? gutter.android : gutter.ios;
@@ -114,14 +133,54 @@ export function CashRegisterScreen() {
   const [selectedMonth, setSelectedMonth] = useState(() =>
     startOfLocalMonth(new Date()),
   );
-  const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [monthCalendarVisible, setMonthCalendarVisible] = useState(false);
+  const { database } = usePersistence();
+  // Read once per mount; written only by « Compris ».
+  const [heatmapHintSeen, setHeatmapHintSeen] = useState(() =>
+    hasSeenCashRegisterHeatmapHint(database),
+  );
+  const [heatmapHintVisible, setHeatmapHintVisible] = useState(false);
+  const heatmapInfoRef = useRef<View>(null);
+
+  // Every opening shows the hint until it has been understood once.
+  const openMonthCalendar = () => {
+    setHeatmapHintVisible(!heatmapHintSeen);
+    setMonthCalendarVisible(true);
+  };
+  const closeMonthCalendar = () => {
+    setMonthCalendarVisible(false);
+    setHeatmapHintVisible(false);
+  };
+  // Hides the card only: the calendar, its month and the selected day stay.
+  const dismissHeatmapHint = () => {
+    if (!heatmapHintSeen) {
+      markCashRegisterHeatmapHintSeen(database);
+      setHeatmapHintSeen(true);
+    }
+    setHeatmapHintVisible(false);
+    // Focus returns to the control that reopens it.
+    requestAnimationFrame(() => {
+      if (heatmapInfoRef.current) {
+        AccessibilityInfo.sendAccessibilityEvent(heatmapInfoRef.current, "focus");
+      }
+    });
+  };
 
   const now = new Date();
-  const sources = {
-    appointments: appointments.map(({ appointment }) => appointment),
-    sales,
-    deposits,
-  };
+  const sources = useMemo(
+    () => ({
+      appointments: appointments.map(({ appointment }) => appointment),
+      sales,
+      deposits,
+    }),
+    [appointments, sales, deposits],
+  );
+  // ONE pass over the counted payments per data change, never a query per day.
+  const dailyTotals = useMemo(() => getCashRegisterDailyTotals(sources), [sources]);
+  const decorateCalendarMonth = useCallback(
+    (month: Date) => decorateRevenueMonth(dailyTotals, month),
+    [dailyTotals],
+  );
   const summary: CashRegisterSummary =
     period === "day"
       ? getCashRegisterDaySummary(sources, selectedDay)
@@ -205,7 +264,8 @@ export function CashRegisterScreen() {
             isToday={isCurrentPeriod}
             onGoToToday={() => setSelectedDay(startOfLocalDay(new Date()))}
             onNext={() => shiftDay(1)}
-            onOpenCalendar={() => setDayPickerVisible(true)}
+            onOpenCalendar={openMonthCalendar}
+            onPressDate={openMonthCalendar}
             onPrevious={() => shiftDay(-1)}
             testID="cash-register"
           />
@@ -331,16 +391,31 @@ export function CashRegisterScreen() {
         </View>
       </ScrollView>
 
-      <DayPickerSheet
+      <MonthCalendarSheet
         day={selectedDay}
-        eyebrow="CAISSE DU"
-        onClose={() => setDayPickerVisible(false)}
+        decorateMonth={decorateCalendarMonth}
+        footer={
+          <RevenueHeatmapInfoButton
+            onPress={() => setHeatmapHintVisible(true)}
+            ref={heatmapInfoRef}
+            testID="cash-register-heatmap-info"
+          />
+        }
+        gridOverlay={
+          <RevenueHeatmapHint
+            onDismiss={dismissHeatmapHint}
+            testID="cash-register-heatmap-hint"
+            visible={heatmapHintVisible}
+          />
+        }
+        onClose={closeMonthCalendar}
         onSelect={(day) => {
           setSelectedDay(day);
-          setDayPickerVisible(false);
+          closeMonthCalendar();
         }}
-        testID="cash-register-day-picker"
-        visible={dayPickerVisible}
+        testID="cash-register-month-calendar"
+        today={startOfLocalDay(now)}
+        visible={monthCalendarVisible}
       />
     </SafeAreaView>
   );

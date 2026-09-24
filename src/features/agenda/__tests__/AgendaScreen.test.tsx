@@ -22,7 +22,7 @@ import { settleFloatingReveal, settleSheetTransition } from '@/shared/ui/testing
 import { INSIGHTS_SAVED_NOTICE_DURATION } from '@/features/insights/BusinessInsightsTicket';
 
 import { AgendaScreen } from '../AgendaScreen';
-import { formatCalendarMonth } from '../components/MonthCalendarSheet';
+import { formatCalendarMonth } from '@/shared/ui/MonthCalendarSheet';
 
 const mockPush = jest.fn();
 
@@ -284,6 +284,24 @@ describe('AgendaScreen — day navigation', () => {
         .getAllByText(/^[A-Z][a-z]{2}$/)
         .map((header) => header.props.children),
     ).toEqual(['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']);
+  });
+
+  it('keeps its appointment dots on the shared calendar, never a revenue halo', async () => {
+    const view = await renderAgenda();
+    await press(view, 'agenda-date-date-button');
+
+    // Nadia (today) and Anaïs (17 September) hold appointments.
+    expect(view.getByTestId('agenda-month-calendar-day-2026-09-16-dot')).toBeTruthy();
+    expect(view.getByTestId('agenda-month-calendar-day-2026-09-17-dot')).toBeTruthy();
+    expect(view.getByTestId('agenda-month-calendar-day-2026-09-17').props.accessibilityLabel).toBe(
+      'Jeudi 17 septembre, rendez-vous prévus',
+    );
+    expect(view.queryAllByTestId(/-intensity-/)).toHaveLength(0);
+    expect(view.queryByText(/encaiss/)).toBeNull();
+    // The Caisse heatmap hint and its info control never reach the Agenda.
+    expect(view.queryByText('Intensité du chiffre d’affaires')).toBeNull();
+    expect(view.queryByLabelText('À propos des couleurs du chiffre d’affaires')).toBeNull();
+    expect(view.queryByTestId('agenda-month-calendar-overlay')).toBeNull();
   });
 
   it('browses months without moving the Agenda, then opens a tapped day and keeps the arrows in step', async () => {

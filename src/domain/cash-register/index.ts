@@ -218,3 +218,29 @@ export function getCashRegisterIntervalSummary(
   const end = interval.end.getTime();
   return summarize(sources, (paidAt) => paidAt.getTime() >= start && paidAt.getTime() < end);
 }
+
+/**
+ * `2026-09-23`: the local civil day a payment belongs to — the same
+ * device-local year / month / day as `getCashRegisterDaySummary`, never a
+ * UTC date substring.
+ */
+export function getCashRegisterDayKey(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Money received per local civil day, keyed by `getCashRegisterDayKey`, in
+ * ONE pass over the counted payments: the same selection and arithmetic as
+ * the day summary, so `get(key)` always equals that day's `totalCents`.
+ * Days without any counted payment are absent.
+ */
+export function getCashRegisterDailyTotals(sources: CashRegisterSources): ReadonlyMap<string, number> {
+  const totals = new Map<string, number>();
+  for (const payment of getCashRegisterPayments(sources)) {
+    const key = getCashRegisterDayKey(payment.paidAt);
+    totals.set(key, (totals.get(key) ?? 0) + payment.cardAmountCents + payment.cashAmountCents);
+  }
+  return totals;
+}

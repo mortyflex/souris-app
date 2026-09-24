@@ -1,6 +1,7 @@
-// Souris — Agenda month calendar: French Monday-first grid, month browsing
-// through the shared glass PeriodNavigator, one quiet dot per busy day,
-// today vs selected, and a direct tap on any shown day.
+// Souris — shared month calendar: French Monday-first grid, month browsing
+// through the shared glass PeriodNavigator, caller-provided decorations (a
+// quiet dot, an intensity halo), today vs selected, and a direct tap on any
+// shown day.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,14 +10,14 @@ import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 import { glassIconButtonSize } from '@/shared/ui/GlassIconButton';
-import { radii, semanticColors } from '@/shared/ui/theme';
+import { calendarIntensity, radii, semanticColors } from '@/shared/ui/theme';
 
-import { getLocalDateKey } from '../calendar/week';
 import {
   getCalendarDayAccessibilityLabel,
   MonthCalendarSheet,
   MONTH_CALENDAR_WEEKDAYS,
-} from '../components/MonthCalendarSheet';
+  type MonthCalendarDayDecoration,
+} from '../MonthCalendarSheet';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
@@ -28,7 +29,6 @@ type SheetProps = React.ComponentProps<typeof MonthCalendarSheet>;
 async function renderCalendar(props: Partial<SheetProps> = {}) {
   const handlers = { onClose: jest.fn(), onSelect: jest.fn() };
   const baseProps: SheetProps = {
-    appointmentDayKeys: new Set<string>(),
     day: SELECTED,
     today: TODAY,
     testID: 'calendar',
@@ -50,6 +50,17 @@ const press = async (view: View, testID: string) => {
 };
 const markStyle = (view: View, id: string) =>
   StyleSheet.flatten(view.getByTestId(`calendar-day-${id}-mark`).props.style);
+const numberStyle = (view: View, id: string) =>
+  StyleSheet.flatten(within(view.getByTestId(`calendar-day-${id}`)).getByText(String(Number(id.slice(8)))).props.style);
+const dayId = (day: Date) =>
+  `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+
+/** A decorator from explicit presentation data, keyed by `YYYY-MM-DD`. */
+const decorations =
+  (byDay: Record<string, MonthCalendarDayDecoration>) =>
+  () =>
+  (day: Date) =>
+    byDay[dayId(day)];
 
 describe('MonthCalendarSheet', () => {
   it('opens on the month of the selected day, weeks starting on Monday', async () => {
@@ -114,15 +125,17 @@ describe('MonthCalendarSheet', () => {
     }
 
     // Built on the shared PeriodNavigator — no calendar-specific arrow button.
-    const source = readFileSync(join(__dirname, '..', 'components', 'MonthCalendarSheet.tsx'), 'utf8');
-    expect(source).toMatch(/from ['"]@\/shared\/ui\/PeriodNavigator['"]/);
+    const source = readFileSync(join(__dirname, '..', 'MonthCalendarSheet.tsx'), 'utf8');
+    expect(source).toMatch(/from ['"]\.\/PeriodNavigator['"]/);
     expect(source).not.toMatch(/chevron/);
+    // Domain-agnostic: a caller hands it presentation data, never its records.
+    expect(source).not.toMatch(/from ['"]@\/(domain|features)\//);
   });
 
   it('puts ONE dot on busy days and none on free days, announced in words', async () => {
-    const busy = new Date(2026, 8, 3);
+    const busy = { dot: true, accessibilityDetail: 'rendez-vous prévus' };
     const { view } = await renderCalendar({
-      appointmentDayKeys: new Set([getLocalDateKey(busy), getLocalDateKey(SELECTED)]),
+      decorateMonth: decorations({ '2026-09-03': busy, '2026-09-23': busy }),
     });
 
     expect(view.getByTestId('calendar-day-2026-09-03-dot')).toBeTruthy();
@@ -158,7 +171,7 @@ describe('MonthCalendarSheet', () => {
     expect(markStyle(view, '2026-09-24')).toMatchObject({ borderColor: 'transparent' });
     expect(markStyle(view, '2026-09-24').backgroundColor).toBeUndefined();
 
-    expect(getCalendarDayAccessibilityLabel(TODAY, true, true)).toBe(
+    expect(getCalendarDayAccessibilityLabel(TODAY, true, 'rendez-vous prévus')).toBe(
       'Mercredi 16 septembre, aujourd’hui, rendez-vous prévus',
     );
   });
@@ -201,5 +214,82 @@ describe('MonthCalendarSheet', () => {
 
     expect(month(view)).toBe('Octobre 2026');
     expect(view.getByTestId('calendar-day-2026-10-17').props.accessibilityState).toEqual({ selected: true });
+  });
+
+  describe('intensity decoration', () => {
+    const decorateMonth = decorations({
+      '2026-09-03': { intensity: 'low', accessibilityDetail: '20 euros encaissés' },
+      '2026-09-16': { intensity: 'medium', accessibilityDetail: '50 euros encaissés' },
+      '2026-09-23': { intensity: 'high', accessibilityDetail: '245 euros encaissés' },
+    });
+    const haloColor = (view: View, id: string, level: string) =>
+      StyleSheet.flatten(view.getByTestId(`calendar-day-${id}-intensity-${level}`).props.style).backgroundColor;
+
+    it('draws ONE soft halo per level behind the number, no amount written, spoken in words', async () => {
+      const { view } = await renderCalendar({ decorateMonth, day: new Date(2026, 8, 10) });
+
+      expect(haloColor(view, '2026-09-03', 'low')).toBe(calendarIntensity.low);
+      expect(haloColor(view, '2026-09-16', 'medium')).toBe(calendarIntensity.medium);
+      expect(haloColor(view, '2026-09-23', 'high')).toBe(calendarIntensity.high);
+      // A plain day has no halo, no dot, no zero.
+      expect(view.queryByTestId(/calendar-day-2026-09-04-intensity/)).toBeNull();
+      expect(view.queryByTestId('calendar-day-2026-09-04-dot')).toBeNull();
+      expect(within(view.getByTestId('calendar-day-2026-09-23')).queryAllByText(/€|euro/)).toHaveLength(0);
+
+      expect(view.getByTestId('calendar-day-2026-09-23').props.accessibilityLabel).toBe(
+        'Mercredi 23 septembre, 245 euros encaissés',
+      );
+      expect(view.getByTestId('calendar-day-2026-09-16').props.accessibilityLabel).toBe(
+        'Mercredi 16 septembre, aujourd’hui, 50 euros encaissés',
+      );
+    });
+
+    it('keeps the selected fill and the today ring on top of the halo', async () => {
+      const { view } = await renderCalendar({ decorateMonth });
+
+      // Selected + high: the lavender fill, a violet number, the halo behind.
+      expect(markStyle(view, '2026-09-23')).toMatchObject({
+        backgroundColor: semanticColors.surfaceLavenderStrong,
+        borderColor: 'transparent',
+      });
+      expect(numberStyle(view, '2026-09-23')).toMatchObject({ color: semanticColors.accent });
+      expect(view.getByTestId('calendar-day-2026-09-23-intensity-high')).toBeTruthy();
+      expect(view.getByTestId('calendar-day-2026-09-23').props.accessibilityState).toEqual({ selected: true });
+
+      // Today + medium: the violet ring, no fill; the number stays navy on the halo.
+      expect(markStyle(view, '2026-09-16')).toMatchObject({ borderColor: semanticColors.accent });
+      expect(markStyle(view, '2026-09-16').backgroundColor).toBeUndefined();
+      expect(numberStyle(view, '2026-09-16')).toMatchObject({ color: semanticColors.foreground });
+      expect(view.getByTestId('calendar-day-2026-09-16-intensity-medium')).toBeTruthy();
+    });
+
+    it('combines today, selected and intensity on one day', async () => {
+      const { view } = await renderCalendar({ decorateMonth, day: TODAY });
+
+      expect(markStyle(view, '2026-09-16')).toMatchObject({
+        backgroundColor: semanticColors.surfaceLavenderStrong,
+        borderColor: semanticColors.accent,
+      });
+      expect(numberStyle(view, '2026-09-16')).toMatchObject({ color: semanticColors.accent });
+      expect(view.getByTestId('calendar-day-2026-09-16-intensity-medium')).toBeTruthy();
+      expect(view.getByTestId('calendar-day-2026-09-16').props.accessibilityState).toEqual({ selected: true });
+    });
+
+    it('shows a selected day without intensity as the plain selected day', async () => {
+      const { view } = await renderCalendar({ decorateMonth, day: new Date(2026, 8, 24) });
+
+      expect(markStyle(view, '2026-09-24')).toMatchObject({ backgroundColor: semanticColors.surfaceLavenderStrong });
+      expect(view.queryByTestId(/calendar-day-2026-09-24-intensity/)).toBeNull();
+      expect(view.getByTestId('calendar-day-2026-09-24').props.accessibilityLabel).toBe('Jeudi 24 septembre');
+    });
+
+    it('asks the caller for each displayed month as it is browsed', async () => {
+      const decorate = jest.fn(() => () => undefined);
+      const { view } = await renderCalendar({ decorateMonth: decorate });
+
+      expect(decorate).toHaveBeenLastCalledWith(new Date(2026, 8, 1));
+      await press(view, 'calendar-navigation-next');
+      expect(decorate).toHaveBeenLastCalledWith(new Date(2026, 9, 1));
+    });
   });
 });

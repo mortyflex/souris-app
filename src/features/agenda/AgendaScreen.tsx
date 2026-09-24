@@ -7,6 +7,7 @@ import { daySummaryIcon } from "@/shared/icons/day-summary-icon";
 import { insightsIcon } from "@/shared/icons/insights-icon";
 import { DateNavigator } from "@/shared/ui/DateNavigator";
 import { FloatingCreateButton } from "@/shared/ui/FloatingCreateButton";
+import { MonthCalendarSheet } from "@/shared/ui/MonthCalendarSheet";
 import { MainScreenHeader } from "@/shared/ui/MainScreenHeader";
 import { agenda, gutter, semanticColors, spacing } from "@/shared/ui/theme";
 
@@ -25,11 +26,13 @@ import {
   type AgendaViewMode,
 } from "./components/AgendaViewSwitcher";
 import { DayTimeline } from "./components/DayTimeline";
-import { MonthCalendarSheet } from "./components/MonthCalendarSheet";
 import { DaySummaryTicket } from "./day-summary/DaySummaryTicket";
 import { WeekView } from "./components/WeekView";
 import { getCalendarBlocksOfLocalDay } from "./calendar/week-appointments";
-import { getAppointmentDayKeys } from "./calendar/month";
+import {
+  getAppointmentDayDecoration,
+  getAppointmentDayKeys,
+} from "./calendar/month";
 import { getOperationalAgendaEntries } from "./operational-visibility";
 
 export function AgendaScreen() {
@@ -54,6 +57,10 @@ export function AgendaScreen() {
   const appointmentDayKeys = useMemo(
     () => getAppointmentDayKeys(operationalAppointments),
     [operationalAppointments],
+  );
+  const decorateCalendarMonth = useCallback(
+    () => (day: Date) => getAppointmentDayDecoration(appointmentDayKeys, day),
+    [appointmentDayKeys],
   );
   const previousTodayRef = useRef(today);
   const horizontalGutter =
@@ -165,8 +172,8 @@ export function AgendaScreen() {
         />
       )}
       <MonthCalendarSheet
-        appointmentDayKeys={appointmentDayKeys}
         day={selectedDay}
+        decorateMonth={decorateCalendarMonth}
         onClose={() => setMonthCalendarVisible(false)}
         onSelect={(day) => {
           setSelectedDay(day);

@@ -944,12 +944,28 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
   wraps and is never scaled down — no `adjustsFontSizeToFit`; full and compact share the same
   `sectionTitle` size, and text growth is capped (`navigatorDateMaxFontScale`) instead. It replaces the Agenda seven-day strip, which is gone
   from the Day view. Under it, one quiet violet `metadata` line: « Aujourd’hui » as plain text on today,
-  « Revenir à aujourd’hui » as the way back elsewhere. The calendar opens `DayPickerSheet`
-  (`src/shared/ui/`): the canonical date picker of Appointment editing — native wheel in the
-  shared BottomSheet on iOS, native dialog on Android. The sheet is headed by ONE violet uppercase
-  eyebrow that the wheel completes — « AGENDA DU », « CAISSE DU » — with no « Choisir un jour »
-  title under it; then the wheel and its « Annuler » / « Confirmer » actions. Agenda Semaine and Caisse Mois keep their
-  own previous / next rows.
+  « Revenir à aujourd’hui » as the way back elsewhere. The date itself and the calendar button
+  open `MonthCalendarSheet` (`src/shared/ui/`, replacing the former `DayPickerSheet` wheel): the
+  month of the selected day, Monday first, its month row the shared `PeriodNavigator` with the
+  same glass « Mois précédent » / « Mois suivant » arrows; adjacent-month days muted but
+  tappable; a tap selects the day and closes — no « Valider ». Selected = the `lav100` fill and a
+  violet number; today = a violet ring. The calendar is domain-agnostic: each caller decorates
+  the days with presentation data only. Agenda: ONE quiet violet dot on days holding
+  appointments. Caisse: a soft 44 pt halo behind the number (`calendarIntensity` low / medium /
+  high — the Souris violet at 16 / 30 / 48 %, never red / green, never a gradient), relative to
+  the best day of the DISPLAYED month (> ⅔ of it high, > ⅓ medium, otherwise low), none on zero
+  days nor on adjacent-month days; the halo sits behind the selected fill and the today ring,
+  and an unselected today keeps a navy number on a halo. No amount is written in a cell;
+  VoiceOver speaks it (« Samedi 29 août, 115 euros encaissés »). Caisse only: on the first
+  opening, a compact white card (`radii.large`, hairline border, `raised` shadow) floats over the
+  lower part of the days — « Intensité du chiffre d’affaires », one sentence that the tint is
+  relative to the other days of the month, a Faible / Moyen / Élevé legend drawn with the
+  calendar's own halo (`MonthCalendarIntensitySwatch`), and « Compris ». Understood once per
+  device (`souris_metadata`, never synced); a quiet plum ⓘ under the grid, outside the glass
+  month row, reopens it. Every appearance materialises in place (opacity 0 → 1, scale 0.96 → 1,
+  10 pt → 0 on a nearly critically damped spring, the three legend samples fading in 35 ms
+  apart); « Compris » leaves faster (160 ms fade, scale 0.98, 4 pt down). Reduce Motion: a short
+  fade only. Agenda Semaine and Caisse Mois keep their own previous / next rows.
 - **Day timeline top inset** — hour labels are centred on their grid line, so the first one
   (« 08:00 ») rises above the canvas. The scroll content starts `agenda.timelineTopInset` lower so
   it is shown whole; the inset moves the WHOLE canvas, so labels, grid lines, blocks, the

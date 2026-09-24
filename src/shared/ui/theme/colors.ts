@@ -208,6 +208,18 @@ export const semanticColors = {
   foregroundMuted: colors.muted,
 } as const;
 
+// Month calendar intensity (DESIGN_OVERRIDES.md §21) — the soft halo behind a
+// day number, three quiet strengths of the canonical Souris violet
+// (`colors.accent`, rgb 115 84 199) — never a financial red / green, never a
+// gradient. Every step is stronger than the selected fill (`lav100`, about
+// 10 % of the violet), so a selected circle still reads inside its halo. The
+// navy foreground stays ≥ 7:1 on the strongest step.
+export const calendarIntensity = {
+  low: 'rgba(115, 84, 199, 0.16)',
+  medium: 'rgba(115, 84, 199, 0.30)',
+  high: 'rgba(115, 84, 199, 0.48)',
+} as const;
+
 // Calendar Block (personal unavailability) — ONE fixed family for every block
 // (DESIGN_OVERRIDES.md §24): same colour = "the professional is unavailable",
 // while the client pastels keep identifying clients. Painted flat, like the
