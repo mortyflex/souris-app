@@ -25,6 +25,8 @@ interface AppointmentMetaProps {
   readonly timeLabel: string;
   readonly status: AppointmentDisplayStatus;
   readonly isBirthday: boolean;
+  /** The « Rappel cliente » status line (Lot B), when the screen provides one. */
+  readonly reminderLine?: ReactNode;
   readonly cancellation?: AppointmentCancellation;
 }
 
@@ -33,6 +35,7 @@ export function AppointmentMeta({
   timeLabel,
   status,
   isBirthday,
+  reminderLine,
   cancellation,
 }: AppointmentMetaProps) {
   return (
@@ -57,6 +60,7 @@ export function AppointmentMeta({
           </AppText>
         </View>
       )}
+      {reminderLine}
       {cancellation && (
         <View style={styles.outcome}>
           <AppText variant="metadata" style={styles.outcomeActor}>

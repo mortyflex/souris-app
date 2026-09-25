@@ -51,12 +51,14 @@ import {
   fromSqlDiscountColumns,
   fromSqlInstant,
   fromSqlOptional,
+  fromSqlOptionalBoolean,
   fromSqlPaymentColumns,
   fromSqlPriceCents,
   toSqlBoolean,
   toSqlDiscountColumns,
   toSqlInstant,
   toSqlOptional,
+  toSqlOptionalBoolean,
   toSqlPaymentColumns,
   toSqlPriceCents,
 } from '../values';
@@ -78,6 +80,7 @@ interface AppointmentRow {
   readonly cash_amount_cents: number | null;
   readonly discount_percent: number | null;
   readonly discount_amount_cents: number | null;
+  readonly client_reminder_enabled: number | null;
 }
 
 interface AppointmentItemRow {
@@ -119,6 +122,8 @@ function toAppointment(row: AppointmentRow, items: readonly AppointmentItem[]): 
       ? { recordedAt: fromSqlInstant(row.no_show_recorded_at) }
       : undefined;
   const payment: AppointmentPayment | undefined = fromSqlPaymentColumns(row);
+  // NULL = never explicitly set: the domain default (enabled) as an absent property.
+  const clientReminderEnabled = fromSqlOptionalBoolean(row.client_reminder_enabled);
 
   return {
     id: row.id,
@@ -130,6 +135,7 @@ function toAppointment(row: AppointmentRow, items: readonly AppointmentItem[]): 
     items,
     ...(notes !== undefined ? { notes } : {}),
     ...(discount ? { discount } : {}),
+    ...(clientReminderEnabled !== undefined ? { clientReminderEnabled } : {}),
     ...(cancellation ? { cancellation } : {}),
     ...(noShow ? { noShow } : {}),
     ...(payment ? { payment } : {}),
@@ -182,7 +188,7 @@ export function loadAppointments(db: SourisDatabase): readonly Appointment[] {
 
   return db
     .getAllSync<AppointmentRow>(
-      'SELECT id, business_id, client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at, paid_at, card_amount_cents, cash_amount_cents, discount_percent, discount_amount_cents FROM appointments ORDER BY rowid',
+      'SELECT id, business_id, client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at, paid_at, card_amount_cents, cash_amount_cents, discount_percent, discount_amount_cents, client_reminder_enabled FROM appointments ORDER BY rowid',
     )
     .map((row) => toAppointment(row, itemsByAppointment.get(row.id) ?? []));
 }
@@ -232,13 +238,14 @@ function metadataParams(appointment: Appointment) {
     appointment.noShow ? toSqlInstant(appointment.noShow.recordedAt) : null,
     ...toSqlPaymentColumns(appointment.payment),
     ...toSqlDiscountColumns(appointment.discount),
+    toSqlOptionalBoolean(appointment.clientReminderEnabled),
   ] as const;
 }
 
 export function insertAppointment(db: SourisDatabase, appointment: Appointment): void {
   runInTransaction(db, () => {
     db.runSync(
-      'INSERT INTO appointments (id, business_id, client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at, paid_at, card_amount_cents, cash_amount_cents, discount_percent, discount_amount_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO appointments (id, business_id, client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at, paid_at, card_amount_cents, cash_amount_cents, discount_percent, discount_amount_cents, client_reminder_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [appointment.id, appointment.businessId, ...metadataParams(appointment)],
     );
     writeItems(db, appointment);
@@ -254,7 +261,7 @@ export function updateAppointment(db: SourisDatabase, appointment: Appointment):
   runInTransaction(db, () => {
     const before = readAppointmentDepositPosition(db, appointment.id);
     const result = db.runSync(
-      'UPDATE appointments SET client_id = ?, staff_member_id = ?, start_at = ?, status = ?, notes = ?, cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?, no_show_recorded_at = ?, paid_at = ?, card_amount_cents = ?, cash_amount_cents = ?, discount_percent = ?, discount_amount_cents = ? WHERE id = ?',
+      'UPDATE appointments SET client_id = ?, staff_member_id = ?, start_at = ?, status = ?, notes = ?, cancelled_at = ?, cancelled_by = ?, cancellation_reason = ?, no_show_recorded_at = ?, paid_at = ?, card_amount_cents = ?, cash_amount_cents = ?, discount_percent = ?, discount_amount_cents = ?, client_reminder_enabled = ? WHERE id = ?',
       [...metadataParams(appointment), appointment.id],
     );
     if (result.changes !== 1) {

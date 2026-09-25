@@ -93,6 +93,7 @@ import {
   AppointmentNoShowSheet,
 } from "./components/AppointmentLifecycleSheets";
 import { AppointmentMeta } from "./components/AppointmentMeta";
+import { AppointmentReminderRow } from "./components/AppointmentReminderRow";
 import { AppointmentPaymentSummary } from "./components/AppointmentPaymentSummary";
 import { AppointmentProductsSection } from "./components/AppointmentProductsSection";
 import { AppointmentSaleRow } from "./components/AppointmentSaleRow";
@@ -572,6 +573,7 @@ export function AppointmentDetailsScreen({
           cancellation={appointment.cancellation}
           dateLabel={formatAppointmentDate(appointment.startAt)}
           isBirthday={isBirthdayAppointment}
+          reminderLine={<AppointmentReminderRow appointment={appointment} />}
           status={getAppointmentDisplayStatus(appointment, now)}
           timeLabel={`${formatAppointmentTime(appointment.startAt)} – ${formatAppointmentTime(endAt)}`}
         />

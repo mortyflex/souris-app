@@ -73,6 +73,13 @@ export interface RemoteAppointmentPayload {
   readonly discount_percent: number | null;
   /** Fixed discount in integer cents (>= 1), or null. */
   readonly discount_amount_cents: number | null;
+  /**
+   * Per-appointment client reminder override (Lot B). NULL = never explicitly
+   * set, which the domain reads as enabled. Always sent, null included — a
+   * missing key means "a build that predates the field" and keeps the stored
+   * value remotely.
+   */
+  readonly client_reminder_enabled: boolean | null;
   readonly items: readonly RemoteAppointmentItemPayload[];
 }
 

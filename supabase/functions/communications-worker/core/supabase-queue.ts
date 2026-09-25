@@ -11,6 +11,10 @@ import type {
   CommunicationQueue,
   CommunicationStatus,
 } from './queue.ts';
+import type {
+  ClaimedReconciliationJob,
+  ReconciliationRetryQueue,
+} from './reconciliation.ts';
 import type { CommunicationChannel } from './transport.ts';
 
 /** The slice of a supabase-js client this adapter needs (service-role key). */
@@ -96,6 +100,74 @@ export function createSupabaseCommunicationQueue(
 
     async markFailed(id, error) {
       await call('communications_mark_failed', { p_id: id, p_error: error });
+    },
+  };
+}
+
+function asClaimedReconciliationJob(row: unknown): ClaimedReconciliationJob {
+  const record = row as Record<string, unknown>;
+  const scopeType = record.scope_type;
+  if (scopeType !== 'APPOINTMENT' && scopeType !== 'BUSINESS') {
+    throw new Error('communications: unknown scope in claimed reconciliation job');
+  }
+  return {
+    id: String(record.id),
+    businessId: String(record.business_id),
+    scopeType,
+    sourceId: String(record.source_id ?? ''),
+    attemptCount: Number(record.attempt_count),
+    claimedUpdatedAt: String(record.updated_at),
+  };
+}
+
+/**
+ * The reconciliation retry port bound to the Lot B hardening RPCs
+ * (20260928120000_add_communication_reconciliation_retry.sql). Batch size and
+ * lease live in the SQL defaults; the authoritative reminder rules stay in
+ * `communications_run_reconciliation`.
+ */
+export function createSupabaseReconciliationRetryQueue(
+  client: CommunicationsRpcClient,
+): ReconciliationRetryQueue {
+  async function call(fn: string, args?: Record<string, unknown>): Promise<unknown> {
+    const { data, error } = await client.rpc(fn, args);
+    if (error) {
+      throw new Error(`communications: ${fn} failed: ${error.message}`);
+    }
+    return data;
+  }
+
+  return {
+    async claimJobs() {
+      const data = await call('communications_claim_reconciliation_jobs');
+      if (!Array.isArray(data)) {
+        return [];
+      }
+      return data.map(asClaimedReconciliationJob);
+    },
+
+    async runReconciliation(job) {
+      await call('communications_run_reconciliation', {
+        p_business_id: job.businessId,
+        p_scope_type: job.scopeType,
+        p_source_id: job.sourceId,
+      });
+    },
+
+    async completeJob(id, claimedUpdatedAt) {
+      await call('communications_complete_reconciliation_job', {
+        p_id: id,
+        p_claimed_updated_at: claimedUpdatedAt,
+      });
+    },
+
+    async failJob(id, error, delaySeconds, claimedUpdatedAt) {
+      await call('communications_fail_reconciliation_job', {
+        p_id: id,
+        p_claimed_updated_at: claimedUpdatedAt,
+        p_error: error,
+        p_retry_delay_seconds: delaySeconds,
+      });
     },
   };
 }

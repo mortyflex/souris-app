@@ -108,6 +108,12 @@ function flag(row: Json, key: string, field: string): boolean {
   return value as boolean;
 }
 
+function optionalFlag(row: Json, key: string, field: string): boolean | null {
+  const value = row[key];
+  if (value === null || value === undefined) return null;
+  return flag(row, key, field);
+}
+
 function integer(row: Json, key: string, field: string, minimum: number): number {
   const value = row[key];
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) fail(`${field}.${key}`);
@@ -282,6 +288,9 @@ function parseAppointment(row: Json, field: string): RemoteAppointmentPayload {
     no_show_recorded_at: optionalInstant(row, 'no_show_recorded_at', field),
     ...payment(row, field),
     ...discount(row, field),
+    // Absent on a remote whose functions predate the reminder flag: "never
+    // explicitly set" (domain default enabled), never a failure.
+    client_reminder_enabled: optionalFlag(row, 'client_reminder_enabled', field),
     items: children(row.items, `${field}.items`, (item) => item.item_order, parseAppointmentItem),
   };
 }

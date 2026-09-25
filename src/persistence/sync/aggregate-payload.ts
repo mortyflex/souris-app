@@ -153,8 +153,9 @@ function readAppointment(
     readonly cash_amount_cents: number | null;
     readonly discount_percent: number | null;
     readonly discount_amount_cents: number | null;
+    readonly client_reminder_enabled: number | null;
   }>(
-    'SELECT business_id, client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at, paid_at, card_amount_cents, cash_amount_cents, discount_percent, discount_amount_cents FROM appointments WHERE id = ?',
+    'SELECT business_id, client_id, staff_member_id, start_at, status, notes, cancelled_at, cancelled_by, cancellation_reason, no_show_recorded_at, paid_at, card_amount_cents, cash_amount_cents, discount_percent, discount_amount_cents, client_reminder_enabled FROM appointments WHERE id = ?',
     [ref.aggregateId],
   );
   assertScoped(row, businessId, ref);
@@ -214,6 +215,10 @@ function readAppointment(
       row.discount_amount_cents,
       'appointments.discount_amount_cents',
     ),
+    // Always sent, null included: NULL is "never explicitly set" (domain
+    // default enabled); a missing key would read as "an older build".
+    client_reminder_enabled:
+      row.client_reminder_enabled === null ? null : fromSqlBoolean(row.client_reminder_enabled),
     items,
   };
 }

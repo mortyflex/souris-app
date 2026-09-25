@@ -39,6 +39,7 @@ import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import {
   areAppointmentDiscountsEqual,
   canRemoveAppointmentItem,
+  isAppointmentClientReminderEnabled,
   findAppointmentChangeDepositShortfall,
   getAppointmentServicesTotal,
   setAppointmentDiscount,
@@ -49,6 +50,7 @@ import {
 } from '@/domain/appointments';
 import { findAppointmentChangeCalendarBlockConflict } from '@/domain/calendar-blocks';
 import { isClientBirthdayOnDate } from '@/domain/clients';
+import { isUsableCommunicationEmail } from '@/domain/communications';
 import { DepositShortfallNotice } from '@/features/appointments/deposits/DepositShortfallNotice';
 import { describeDepositShortfall } from '@/features/appointments/deposits/presentation';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
@@ -56,6 +58,10 @@ import { ScheduleConflictNotice } from '@/features/calendar-blocks/editor/Schedu
 import { describeCalendarBlockInTheWay } from '@/features/calendar-blocks/presentation';
 import { useCalendarBlockSession } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
+import { MissingEmailNotice } from '@/features/communications/components/MissingEmailNotice';
+import { useOptionalCommunicationPreferences } from '@/features/communications/preferences/CommunicationPreferencesProvider';
+import { APPOINTMENT_REMINDER_ROW_LABEL } from '@/features/communications/presentation';
 import { useOptionalSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
@@ -71,6 +77,7 @@ import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
 import { SheetEditingHeader } from '@/shared/ui/SheetEditingHeader';
 import { SheetScreen } from '@/shared/ui/SheetScreen';
+import { SwitchRow } from '@/shared/ui/SwitchRow';
 import { foregroundSoft, gutter, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { createNewAppointmentItemId } from '../creation/runtime-ids';
@@ -123,6 +130,15 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   const [draftDiscount, setDraftDiscount] = useState<AppointmentDiscount | undefined>(
     initialDiscount,
   );
+  // Per-appointment client reminder (Lot B): shown while the GLOBAL
+  // preference is on; absent (older records) reads as enabled.
+  const remindersGloballyEnabled =
+    useOptionalCommunicationPreferences()?.emailRemindersEnabled ?? false;
+  const [initialReminderEnabled] = useState(() =>
+    appointment ? isAppointmentClientReminderEnabled(appointment) : true,
+  );
+  const [draftReminderEnabled, setDraftReminderEnabled] = useState(initialReminderEnabled);
+  const [editClientEmailVisible, setEditClientEmailVisible] = useState(false);
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
   const [clientPickerVisible, setClientPickerVisible] = useState(false);
   const [discardRequested, setDiscardRequested] = useState(false);
@@ -133,7 +149,8 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
       initialStartAt !== undefined &&
       !isSameStartAt(draftStartAt, initialStartAt)) ||
     draftClientId !== initialClientId ||
-    !areAppointmentDiscountsEqual(draftDiscount, initialDiscount);
+    !areAppointmentDiscountsEqual(draftDiscount, initialDiscount) ||
+    draftReminderEnabled !== initialReminderEnabled;
   const isTerminal = appointment ? isTerminalAppointmentStatus(appointment.status) : false;
   // THE change rule (domain): the DRAFT is judged against the Calendar Blocks of
   // the same staff member only when it moves a staff-required interval — the
@@ -263,6 +280,9 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
 
     // The discount goes through THE domain discount action, never a local rule.
     const updatedAppointment = buildEditedAppointment(appointment);
+    // An untouched toggle keeps the stored field exactly as it was (absent
+    // stays absent); only an actual change stores the explicit choice.
+    const reminderChanged = draftReminderEnabled !== initialReminderEnabled;
     try {
       updateAppointment({
         ...entry,
@@ -270,6 +290,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           ...updatedAppointment,
           clientId: draftClientId ?? appointment.clientId,
           startAt: new Date(draftStartAt),
+          ...(reminderChanged ? { clientReminderEnabled: draftReminderEnabled } : {}),
         },
       });
     } catch {
@@ -356,6 +377,25 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
             onChange={setDraftDiscount}
             servicesTotal={servicesTotal}
           />
+          {remindersGloballyEnabled && (
+            <GroupedSurface testID="appointment-edit-reminder">
+              <SwitchRow
+                description="E-mail 24 h avant le rendez-vous"
+                label={APPOINTMENT_REMINDER_ROW_LABEL}
+                onValueChange={setDraftReminderEnabled}
+                testID="appointment-reminder-toggle"
+                value={draftReminderEnabled}
+              />
+            </GroupedSurface>
+          )}
+          {remindersGloballyEnabled &&
+            draftReminderEnabled &&
+            !isUsableCommunicationEmail(draftClient?.email) && (
+              <MissingEmailNotice
+                onAddEmail={() => setEditClientEmailVisible(true)}
+                testID="editing-missing-email-notice"
+              />
+            )}
         </View>
 
         <View style={styles.section}>
@@ -411,6 +451,18 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           title="Enregistrer les modifications"
         />
       </SheetActionBar>
+
+      {/* « Ajouter l’e-mail » (missing-email warning): the EXISTING Client
+          editing flow, prefilled with the draft Client. */}
+      {draftClient && (
+        <ClientFormSheet
+          client={draftClient}
+          mode="edit"
+          onClose={() => setEditClientEmailVisible(false)}
+          onSubmitted={() => setEditClientEmailVisible(false)}
+          visible={editClientEmailVisible}
+        />
+      )}
 
       <ClientPickerSheet
         selectedClientId={draftClientId}

@@ -211,8 +211,8 @@ describe('schema v8 migration on an existing v7 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(14);
-    expect(CURRENT_SCHEMA_VERSION).toBe(14);
+    expect(readSchemaVersion(db)).toBe(15);
+    expect(CURRENT_SCHEMA_VERSION).toBe(15);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(readBusinessProfile(db)).toEqual(remoteBusinessProfile);
@@ -341,7 +341,7 @@ describe('schema v8 migration on an existing v7 database', () => {
     migrateDatabase(db);
     const before = loadSnapshot(db);
 
-    expect(migrateDatabase(db)).toBe(14);
+    expect(migrateDatabase(db)).toBe(15);
     expect(loadSnapshot(db)).toEqual(before);
     expect(db.getAllSync('SELECT price_cents FROM services ORDER BY rowid')).toEqual([{ price_cents: 1250 }, { price_cents: 99 }]);
   });

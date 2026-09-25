@@ -1404,6 +1404,25 @@ Do not confuse them with:
 
 ---
 
+# 30b. Client Reminder Flag
+
+```text
+clientReminderEnabled?: boolean
+```
+
+The per-appointment override of the automatic client email reminders
+(Communications Lot B, `docs/architecture/COMMUNICATIONS.md` §12).
+
+- absent = ENABLED: only an explicit professional choice stores `false`;
+- ONE domain rule reads it: `isAppointmentClientReminderEnabled(appointment)` —
+  never compare the raw field in a screen;
+- the GLOBAL business preference (server-authoritative, OFF by default) is the
+  master switch: this flag alone never sends anything;
+- scheduling, cancellation and content of the reminder are decided SERVER-side
+  from synced state; the domain stores the intent only.
+
+---
+
 # 31. Domain Independence
 
 Appointment domain code must remain framework-independent.

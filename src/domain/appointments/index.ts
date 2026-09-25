@@ -19,6 +19,7 @@ export type {
   PaymentMethod,
   Appointment,
 } from "./types";
+export { isAppointmentClientReminderEnabled } from "./types";
 
 export type { TimelinePhase, TimelineItem, AppointmentTimeline } from "./timeline";
 export {

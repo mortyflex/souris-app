@@ -5,6 +5,14 @@
 // This is the minimal structural surface the entry actually uses; the SDK's
 // real types apply at deploy time.
 
+/**
+ * The one Deno global the entry uses: Edge Function secrets
+ * (RESEND_API_KEY, RESEND_FROM_EMAIL). Type-only; the runtime provides it.
+ */
+declare const Deno: {
+  readonly env: { get(name: string): string | undefined };
+};
+
 declare module 'npm:@supabase/server' {
   export interface SupabaseServerContext {
     /** Privileged server client (service_role): the RPC slice the worker needs. */

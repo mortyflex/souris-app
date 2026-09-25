@@ -20,6 +20,15 @@ export function fromSqlBoolean(value: number): boolean {
   return value === 1;
 }
 
+/** Optional canonical boolean ↔ nullable 0/1 column. NULL means "absent property". */
+export function toSqlOptionalBoolean(value: boolean | undefined): SqlValue {
+  return value === undefined ? null : toSqlBoolean(value);
+}
+
+export function fromSqlOptionalBoolean(value: number | null): boolean | undefined {
+  return value === null ? undefined : fromSqlBoolean(value);
+}
+
 /** Instants (Appointment startAt, cancelledAt, recordedAt, completedAt) are stored as ISO-8601 UTC strings. */
 export function toSqlInstant(value: Date): string {
   if (Number.isNaN(value.getTime())) {

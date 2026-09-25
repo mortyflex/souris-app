@@ -42,8 +42,8 @@ describe('schema v14 migration on an existing v13 database', () => {
 
     const snapshot = bootstrapPersistence(db, createTestSeed);
 
-    expect(readSchemaVersion(db)).toBe(14);
-    expect(CURRENT_SCHEMA_VERSION).toBe(14);
+    expect(readSchemaVersion(db)).toBe(15);
+    expect(CURRENT_SCHEMA_VERSION).toBe(15);
     expect(db.getAllSync(`SELECT ${COLUMNS} FROM products ORDER BY rowid`)).toEqual(productsBefore);
     expect(db.getAllSync('SELECT photo_path FROM products')).toEqual([{ photo_path: null }, { photo_path: null }]);
     // Nothing is queued: no legacy image is ever promoted by the migration.
@@ -58,7 +58,7 @@ describe('schema v14 migration on an existing v13 database', () => {
   it('is idempotent', () => {
     const db = openSchemaV13Database();
     bootstrapPersistence(db, createTestSeed);
-    expect(migrateDatabase(db)).toBe(14);
+    expect(migrateDatabase(db)).toBe(15);
     expect(loadProducts(db)).toHaveLength(2);
   });
 });

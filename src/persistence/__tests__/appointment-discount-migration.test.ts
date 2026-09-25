@@ -65,8 +65,8 @@ describe('schema v10 migration on an existing v9 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(14);
-    expect(CURRENT_SCHEMA_VERSION).toBe(14);
+    expect(readSchemaVersion(db)).toBe(15);
+    expect(CURRENT_SCHEMA_VERSION).toBe(15);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
 
@@ -134,7 +134,7 @@ describe('schema v10 migration on an existing v9 database', () => {
     const db = openSchemaV9Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(14);
+    expect(migrateDatabase(db)).toBe(15);
     updateAppointmentDiscount(db, 'appointment-upcoming', { type: 'PERCENT', percent: 20 });
 
     const reloaded = loadSnapshot(db).appointments.find(

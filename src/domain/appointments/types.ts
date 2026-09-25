@@ -175,7 +175,29 @@ export interface Appointment {
   readonly notes?: string;
   /** Absent = no discount. */
   readonly discount?: AppointmentDiscount;
+  /**
+   * Per-appointment client reminder override (email reminders, Lot B).
+   * Absent = enabled: only an explicit professional choice stores `false`,
+   * so every Appointment created before the feature stays eligible the day
+   * the Business enables reminders. The GLOBAL business preference (server-
+   * authoritative, `business_communication_preferences`) remains the master
+   * switch — this flag alone never sends anything. Read it through
+   * `isAppointmentClientReminderEnabled`, never by comparing the raw field.
+   */
+  readonly clientReminderEnabled?: boolean;
   readonly cancellation?: AppointmentCancellation;
   readonly noShow?: AppointmentNoShow;
   readonly payment?: AppointmentPayment;
+}
+
+/**
+ * THE per-appointment reminder rule: only an explicit `false` disables the
+ * Appointment's client reminders; absent (older records, defaults) means
+ * enabled. Effective eligibility is decided server-side together with the
+ * global business preference.
+ */
+export function isAppointmentClientReminderEnabled(
+  appointment: Pick<Appointment, "clientReminderEnabled">,
+): boolean {
+  return appointment.clientReminderEnabled !== false;
 }

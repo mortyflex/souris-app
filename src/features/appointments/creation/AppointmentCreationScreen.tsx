@@ -43,6 +43,7 @@ import { useRouter } from 'expo-router';
 
 import type { AppointmentDiscount, Service } from '@/domain/appointments';
 import { findAppointmentCalendarBlockConflict } from '@/domain/calendar-blocks';
+import { isUsableCommunicationEmail } from '@/domain/communications';
 import { getClientDisplayName, isClientBirthdayOnDate, type Client } from '@/domain/clients';
 import { currentStaffMemberId } from '@/features/appointments/current-staff-member';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
@@ -59,6 +60,7 @@ import {
 import { createCalendarBlockId } from '@/features/calendar-blocks/runtime-ids';
 import { useCalendarBlockSession } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { useOptionalCommunicationPreferences } from '@/features/communications/preferences/CommunicationPreferencesProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { BirthdayConfetti } from '@/features/clients/birthday/BirthdayConfetti';
 import { BirthdayNotice } from '@/features/clients/birthday/BirthdayNotice';
@@ -168,6 +170,12 @@ export function AppointmentCreationScreen({
   const [selectedDrafts, setSelectedDrafts] = useState<readonly SelectedServiceDraft[]>([]);
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
   const [draftDiscount, setDraftDiscount] = useState<AppointmentDiscount>();
+  // Per-appointment client reminder (Lot B). ON by default; only shown — and
+  // only stored — while the GLOBAL preference is enabled (fail-safe reading).
+  const remindersGloballyEnabled =
+    useOptionalCommunicationPreferences()?.emailRemindersEnabled ?? false;
+  const [draftReminderEnabled, setDraftReminderEnabled] = useState(true);
+  const [editClientEmailVisible, setEditClientEmailVisible] = useState(false);
   const [draftStartAt, setDraftStartAt] = useState<Date>(() =>
     stepStartAt(new Date(startAt), 0, startTimeBounds),
   );
@@ -293,6 +301,9 @@ export function AppointmentCreationScreen({
       appointmentId,
       businessId: business.id,
       clientId: selectedClient.id,
+      // Stored only when the professional actually saw the control: while the
+      // global preference is off the field stays absent (= default enabled).
+      ...(remindersGloballyEnabled ? { clientReminderEnabled: draftReminderEnabled } : {}),
       discount: draftDiscount,
       itemIds: selectedDrafts.map((_, index) => createAppointmentItemId(appointmentId, index)),
       items: summaryItems,
@@ -454,6 +465,16 @@ export function AppointmentCreationScreen({
           // The Appointment DATE decides, never today's date: derived on every
           // render, so a changed Client or date can never leave a stale reminder.
           birthdayReminder={isBirthdayAppointment}
+          reminder={
+            remindersGloballyEnabled
+              ? {
+                  enabled: draftReminderEnabled,
+                  onChange: setDraftReminderEnabled,
+                  missingClientEmail: !isUsableCommunicationEmail(selectedClient.email),
+                  onAddEmail: () => setEditClientEmailVisible(true),
+                }
+              : undefined
+          }
           discount={draftDiscount}
           onDiscountChange={setDraftDiscount}
           entries={selectedDrafts.map((draft) => ({ draft }))}
@@ -539,6 +560,18 @@ export function AppointmentCreationScreen({
         onSubmitted={handleClientCreated}
         visible={addClientVisible}
       />
+
+      {/* « Ajouter l’e-mail » (missing-email warning): the EXISTING Client
+          editing flow, prefilled with the selected Client. */}
+      {selectedClient && (
+        <ClientFormSheet
+          client={selectedClient}
+          mode="edit"
+          onClose={() => setEditClientEmailVisible(false)}
+          onSubmitted={() => setEditClientEmailVisible(false)}
+          visible={editClientEmailVisible}
+        />
+      )}
     </SheetScreen>
   );
 }

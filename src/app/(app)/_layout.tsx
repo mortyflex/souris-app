@@ -15,6 +15,7 @@ import { Stack } from 'expo-router';
 
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
+import { CommunicationPreferencesProvider } from '@/features/communications/preferences/CommunicationPreferencesProvider';
 import { useBusinessSession } from '@/features/business/session/BusinessSessionProvider';
 import { CurrentBusinessProvider } from '@/features/business/session/CurrentBusinessProvider';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
@@ -42,29 +43,32 @@ export default function AppLayout() {
             <SaleSessionProvider>
               <AppointmentSessionProvider>
                 <CalendarBlockSessionProvider>
-                  <Stack
-                    screenOptions={{
-                      headerShown: false,
-                      contentStyle: { backgroundColor: colors.background },
-                    }}>
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="appointments/[appointmentId]" options={contentSheet} />
-                    <Stack.Screen name="appointments/new" options={workflowSheet} />
-                    <Stack.Screen name="appointments/edit/[appointmentId]" options={workflowSheet} />
-                    <Stack.Screen name="estimations/new" options={workflowSheet} />
-                    <Stack.Screen name="calendar-blocks/[calendarBlockId]" options={contentSheet} />
-                    <Stack.Screen name="clients/[clientId]" options={pushedScreen} />
-                    <Stack.Screen name="clients/appointments/[clientId]" options={pushedScreen} />
-                    <Stack.Screen name="clients/purchases/[clientId]" options={pushedScreen} />
-                    <Stack.Screen name="services/index" options={pushedScreen} />
-                    <Stack.Screen name="cash-register/index" options={pushedScreen} />
-                    <Stack.Screen name="services/new" options={editorSheet} />
-                    <Stack.Screen name="services/[serviceId]" options={editorSheet} />
-                    <Stack.Screen name="products/index" options={pushedScreen} />
-                    <Stack.Screen name="products/new" options={editorSheet} />
-                    <Stack.Screen name="products/[productId]" options={editorSheet} />
-                    <Stack.Screen name="sales/new" options={editorSheet} />
-                  </Stack>
+                  <CommunicationPreferencesProvider>
+                    <Stack
+                      screenOptions={{
+                        headerShown: false,
+                        contentStyle: { backgroundColor: colors.background },
+                      }}>
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="appointments/[appointmentId]" options={contentSheet} />
+                      <Stack.Screen name="appointments/new" options={workflowSheet} />
+                      <Stack.Screen name="appointments/edit/[appointmentId]" options={workflowSheet} />
+                      <Stack.Screen name="estimations/new" options={workflowSheet} />
+                      <Stack.Screen name="calendar-blocks/[calendarBlockId]" options={contentSheet} />
+                      <Stack.Screen name="clients/[clientId]" options={pushedScreen} />
+                      <Stack.Screen name="clients/appointments/[clientId]" options={pushedScreen} />
+                      <Stack.Screen name="clients/purchases/[clientId]" options={pushedScreen} />
+                      <Stack.Screen name="services/index" options={pushedScreen} />
+                      <Stack.Screen name="cash-register/index" options={pushedScreen} />
+                      <Stack.Screen name="reminder-settings" options={pushedScreen} />
+                      <Stack.Screen name="services/new" options={editorSheet} />
+                      <Stack.Screen name="services/[serviceId]" options={editorSheet} />
+                      <Stack.Screen name="products/index" options={pushedScreen} />
+                      <Stack.Screen name="products/new" options={editorSheet} />
+                      <Stack.Screen name="products/[productId]" options={editorSheet} />
+                      <Stack.Screen name="sales/new" options={editorSheet} />
+                    </Stack>
+                  </CommunicationPreferencesProvider>
                 </CalendarBlockSessionProvider>
               </AppointmentSessionProvider>
             </SaleSessionProvider>

@@ -86,6 +86,22 @@ export type Database = {
         Args: { p_business_id: string; p_since: string | null };
         Returns: Json;
       };
+      communications_read_preferences: {
+        Args: { p_business_id: string };
+        Returns: Json;
+      };
+      communications_update_preferences: {
+        Args: {
+          p_business_id: string;
+          p_email_reminders_enabled: boolean;
+          p_reply_to_email: string | null;
+        };
+        Returns: Json;
+      };
+      communications_appointment_reminder_status: {
+        Args: { p_business_id: string; p_appointment_id: string };
+        Returns: Json;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

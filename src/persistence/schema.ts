@@ -572,6 +572,22 @@ const SCHEMA_V14 = `
 ALTER TABLE products ADD COLUMN photo_path TEXT;
 `;
 
+/**
+ * Schema v15 — per-appointment client reminder flag (email reminders, Lot B).
+ * One nullable 0/1 column: NULL means "not explicitly set", which the domain
+ * reads as ENABLED (`isAppointmentClientReminderEnabled`) — the product
+ * default. Every existing Appointment keeps NULL and therefore stays eligible
+ * the day the professional explicitly enables the GLOBAL preference, which is
+ * server-authoritative and defaults OFF: this column alone never sends
+ * anything. Purely additive — no row rewritten, no wipe, no reseed, no id or
+ * sync bookkeeping touched (the migration marks nothing in the outbox:
+ * nothing changed for the remote).
+ */
+const SCHEMA_V15 = `
+ALTER TABLE appointments ADD COLUMN client_reminder_enabled INTEGER
+  CHECK (client_reminder_enabled IS NULL OR client_reminder_enabled IN (0, 1));
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -587,6 +603,7 @@ export const migrations: readonly Migration[] = [
   { version: 12, up: (db) => db.execSync(SCHEMA_V12) },
   { version: 13, up: (db) => db.execSync(SCHEMA_V13) },
   { version: 14, up: (db) => db.execSync(SCHEMA_V14) },
+  { version: 15, up: (db) => db.execSync(SCHEMA_V15) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;

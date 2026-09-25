@@ -21,6 +21,7 @@ V1D.1  Seamless Bootstrap                   done — automatic initial upload an
        Client photos                        done — one additive CLIENT column (a Storage path) + private business-media bucket (§22)
        Product photos                       done — one additive PRODUCT column in the SAME bucket; legacy local images never uploaded (§23)
        Foreground refresh                   done — an idle open device pulls on the 2-min tick; pulled data refreshes the UI IN PLACE (§24)
+       Appointment reminder flag            done — one additive nullable column carried by the APPOINTMENT aggregate (§25)
 V1E    Conflict / Retry Hardening
 V1F    Product Image Sync                   superseded by Product photos (§23): one shared photo, no legacy upload
 ```
@@ -108,7 +109,8 @@ service_phases      (business_id, service_id, id) PK, position (unique per servi
 appointments        (business_id, id) PK, client_id → clients, staff_member_id, start_at, status,
                     notes?, cancelled_at?, cancelled_by?, cancellation_reason?, no_show_recorded_at?,
                     paid_at?, card_amount_cents?, cash_amount_cents?,
-                    discount_percent?, discount_amount_cents? (§19), + sync metadata
+                    discount_percent?, discount_amount_cents? (§19),
+                    client_reminder_enabled? (§25), + sync metadata
 appointment_items   (business_id, appointment_id, id) PK, item_order (unique per appointment, deferrable),
                     service_id (NO FK), service_option_id?, service_name, service_type, price_cents
 appointment_phases  (business_id, appointment_id, appointment_item_id, id) PK, position (unique per item,
@@ -2082,3 +2084,28 @@ nothing; a Product's stock 4 / photo C → stock 3 / photo D through ONE idle ti
 (the whole creation draft survives), `ProductEditorScreen.test.tsx` (an open detail stays open and
 updates; an unsaved edit form is never replaced), `ClientProfilePhoto.test.tsx` (a Client photo
 from another device appears on the mounted profile, an open sheet stays open).
+
+---
+
+## 25. Appointment reminder flag — one additive nullable APPOINTMENT column (Lot B)
+
+`appointments.client_reminder_enabled` (nullable boolean; SQLite schema v15, remote migration
+`20260927120000_add_appointment_email_reminders.sql`) carries the per-appointment client
+reminder override of Communications Lot B (`docs/architecture/COMMUNICATIONS.md` §12). NULL is
+"never explicitly set", which the domain reads as ENABLED; the global, server-authoritative
+Business preference — NOT part of any sync aggregate — remains the master switch.
+
+Through the engine it behaves exactly like the client-notes column (§18):
+
+- carried by the APPOINTMENT aggregate; ALWAYS sent by a build that knows it (true, false, or
+  null), so an explicit choice and its removal both reach the remote;
+- the push keeps the STORED value when the payload has no such key: an older build changing a
+  time or a price never erases an explicit opt-out;
+- the pull carries the key; a device that predates it ignores it, and
+  `parseRemoteBusinessSnapshot` reads a missing key as null (older remote functions);
+- the migration rewrites no row and bumps no `sync_version`: nothing is re-pushed or re-pulled
+  because of it, and no unrelated sync data goes dirty.
+
+The queue side of Lot B (`business_communication_preferences`, the reconciliation triggers, the
+projection RPC) stays OUTSIDE the sync engine, like the whole Communication Core: no aggregate
+type, no outbox entry, no snapshot key.

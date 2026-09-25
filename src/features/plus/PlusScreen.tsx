@@ -83,6 +83,32 @@ export function PlusScreen() {
         </Pressable>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Rappels clientes, rappels par e-mail"
+          onPress={() => router.push('/reminder-settings')}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          testID="plus-reminder-settings"
+        >
+          <View style={styles.iconSurface}>
+            <SymbolView
+              name={{ ios: 'bell', android: 'notifications' }}
+              size={19}
+              tintColor={semanticColors.accent}
+            />
+          </View>
+          <View style={styles.copy}>
+            <AppText variant="rowTitle">Rappels clientes</AppText>
+            <AppText variant="metadata" style={styles.meta}>
+              Rappels par e-mail
+            </AppText>
+          </View>
+          <SymbolView
+            name={{ ios: 'chevron.right', android: 'chevron_right' }}
+            size={15}
+            tintColor={semanticColors.foregroundMuted}
+          />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Caisse, encaissements du jour et du mois"
           onPress={() => router.push('/cash-register')}
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}

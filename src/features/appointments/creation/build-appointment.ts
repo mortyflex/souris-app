@@ -30,6 +30,12 @@ export interface BuildAppointmentInput {
   readonly itemIds: readonly string[];
   /** Optional discount of the whole Appointment; item prices are untouched. */
   readonly discount?: AppointmentDiscount;
+  /**
+   * Explicit per-appointment reminder choice (Lot B). Absent when the global
+   * preference is off (the toggle was never shown): the domain default —
+   * enabled — then applies the day reminders are turned on.
+   */
+  readonly clientReminderEnabled?: boolean;
 }
 
 /**
@@ -65,6 +71,9 @@ export function buildAppointment(input: BuildAppointmentInput): Appointment {
     staffMemberId: input.staffMemberId,
     startAt: new Date(input.startAt),
     status: 'SCHEDULED',
+    ...(input.clientReminderEnabled !== undefined
+      ? { clientReminderEnabled: input.clientReminderEnabled }
+      : {}),
     items: input.items.map((item, index) =>
       createAppointmentItemSnapshot({
         id: input.itemIds[index],

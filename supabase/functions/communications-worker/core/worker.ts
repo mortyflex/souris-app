@@ -1,17 +1,25 @@
 // Souris — Communication Core: the worker pass
 //
-// One invocation = claim a bounded batch of due records, dispatch each one
-// through its channel's transport, settle each one exactly once (sent, retry
-// under the central policy, or failed). Everything time- and
-// concurrency-sensitive is the database's job (communications_claim_due /
-// mark_*): two overlapping invocations can never process the same record,
-// and a record cancelled after being claimed is re-checked immediately
-// before dispatch and skipped.
+// One invocation = FIRST re-run any failed trigger reconciliations
+// (reconciliation.ts — a recovered reconciliation may enqueue an immediate
+// event this same pass then sends), THEN claim a bounded batch of due
+// records, dispatch each one through its channel's transport, and settle
+// each one exactly once (sent, retry under the central policy, or failed).
+// Everything time- and concurrency-sensitive is the database's job
+// (communications_claim_due / mark_* and the reconciliation claim/settle
+// RPCs): two overlapping invocations can never process the same record, and
+// a record cancelled after being claimed is re-checked immediately before
+// dispatch and skipped.
 //
 // Observability rule: summaries carry counts and ids only. Payloads and
 // recipients are business-private and are never logged.
 
 import type { CommunicationQueue } from './queue.ts';
+import {
+  runReconciliationRetries,
+  type ReconciliationRetryQueue,
+  type ReconciliationSummary,
+} from './reconciliation.ts';
 import type { TransportRegistry, TransportResult } from './transport.ts';
 import {
   COMMUNICATION_RETRY_POLICY,
@@ -26,11 +34,15 @@ export interface WorkerSummary {
   readonly failed: number;
   /** Claimed records skipped without dispatch (cancelled between claim and dispatch). */
   readonly skipped: number;
+  /** The reconciliation retry pass that ran before sending (counts only). */
+  readonly reconciliation: ReconciliationSummary;
 }
 
 export interface WorkerDependencies {
   readonly queue: CommunicationQueue;
   readonly transports: TransportRegistry;
+  /** Absent in tests that exercise sending alone: the retry pass then reports zeros. */
+  readonly reconciliation?: ReconciliationRetryQueue;
   readonly retryPolicy?: RetryPolicy;
 }
 
@@ -45,6 +57,14 @@ export async function runCommunicationsWorker(
   deps: WorkerDependencies,
 ): Promise<WorkerSummary> {
   const policy = deps.retryPolicy ?? COMMUNICATION_RETRY_POLICY;
+
+  // Recover FIRST: a reconciliation that failed at trigger time is re-run
+  // from current authoritative state, so anything it (re)schedules or
+  // enqueues immediately is eligible for the send pass below.
+  const reconciliation = deps.reconciliation
+    ? await runReconciliationRetries(deps.reconciliation, policy)
+    : { claimed: 0, reconciled: 0, retried: 0, parked: 0 };
+
   const claimed = await deps.queue.claimDue();
   let sent = 0;
   let retried = 0;
@@ -113,5 +133,5 @@ export async function runCommunicationsWorker(
     }
   }
 
-  return { claimed: claimed.length, sent, retried, failed, skipped };
+  return { claimed: claimed.length, sent, retried, failed, skipped, reconciliation };
 }

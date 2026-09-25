@@ -62,6 +62,8 @@ schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v
                      v9 (clients.notes),
                      v10 (appointments.discount_percent, appointments.discount_amount_cents),
                      v11 (calendar_blocks; sync_outbox / sync_state rebuilt for the CALENDAR_BLOCK type),
+                     v12 (appointment_deposits; sync tables rebuilt), v13 (clients.photo_path),
+                     v14 (products.photo_path), v15 (appointments.client_reminder_enabled),
                      SOURIS_TABLES, BUSINESS_SCOPED_TABLES, SYNC_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
@@ -84,7 +86,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
 Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
@@ -105,7 +107,8 @@ appointments        id PK, business_id, client_id, staff_member_id, start_at, st
                     cancelled_at?, cancelled_by?, cancellation_reason?, no_show_recorded_at?,
                     paid_at? (v5), card_amount_cents? (v5, CHECK >= 0), cash_amount_cents? (v5, CHECK >= 0),
                     discount_percent? (v10, CHECK 1–50), discount_amount_cents? (v10, CHECK >= 1,
-                    never together with discount_percent)
+                    never together with discount_percent),
+                    client_reminder_enabled? (v15, nullable 0/1 — NULL = enabled default)
 appointment_items   (appointment_id FK→appointments CASCADE, id) PK, item_order, service_id,
                     service_option_id?, service_name, service_type, price_cents (v8, CHECK >= 0)
 appointment_phases  (appointment_id, appointment_item_id, position) PK
@@ -217,6 +220,26 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v15 — per-appointment client reminder flag
+
+```text
+ALTER TABLE appointments ADD COLUMN client_reminder_enabled INTEGER
+  CHECK (client_reminder_enabled IS NULL OR client_reminder_enabled IN (0, 1));
+```
+
+Purely additive: one nullable 0/1 column, no default, no backfill. An existing v14 database goes
+`v14 → v15` in one transaction; every Appointment keeps its row byte for byte and has
+`client_reminder_enabled = NULL` — "never explicitly set", which the domain reads as ENABLED
+(`isAppointmentClientReminderEnabled`; the property is simply absent on the hydrated
+Appointment). That default is safe because the GLOBAL reminder preference is server-authoritative
+and OFF by default (`docs/architecture/COMMUNICATIONS.md` §12): this column alone never sends
+anything, and existing future Appointments become eligible the day the professional explicitly
+enables reminders. Nothing is written to `sync_outbox` or `sync_state`: no Appointment changed,
+so nothing is re-pushed. The store writes the column with every insert/update (an explicit
+choice as 0/1, absent as NULL). Covered by `appointment-reminder-migration.test.ts`. The remote
+counterpart is `supabase/migrations/20260927120000_add_appointment_email_reminders.sql`
+(`CLOUD_SYNC.md` §25).
 
 ### Schema v14 — Product photo reference
 

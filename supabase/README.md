@@ -70,6 +70,31 @@ migrations/20260926130000_create_communication_core.sql         (Communication C
                                                                  yet, so there is no shipping deadline. SQL Editor
                                                                  application is sufficient; no extension needed.
                                                                  docs/architecture/COMMUNICATIONS.md)
+migrations/20260927120000_add_appointment_email_reminders.sql   (Appointment email reminders Lot B — BY HAND,
+                                                                 after the Lot A one; adds the nullable
+                                                                 appointments.client_reminder_enabled, creates
+                                                                 business_communication_preferences (OFF by
+                                                                 default, RLS on, ZERO policies, no table grant)
+                                                                 with three owner RPCs, the server-side
+                                                                 reconciliation triggers into the Lot A queue,
+                                                                 and replaces the two sync RPCs in place.
+                                                                 Applying it alone sends NOTHING: no Business is
+                                                                 opted in and reconciliation exits while the
+                                                                 preference is off. Apply BEFORE shipping the
+                                                                 build that shows the reminder settings.
+                                                                 docs/architecture/COMMUNICATIONS.md §Lot B)
+migrations/20260928120000_add_communication_reconciliation_retry.sql
+                                                                (Lot B hardening — BY HAND, after the Lot B one;
+                                                                 creates the server-only
+                                                                 communication_reconciliation_jobs table (RLS on,
+                                                                 ZERO policies, no table grant), replaces the four
+                                                                 reconciliation trigger functions in place so a
+                                                                 swallowed failure records a durable retry, adds
+                                                                 the service_role-only claim/run/settle RPCs, and
+                                                                 adds the temporal guards on post-send emails.
+                                                                 Touches NO sync RPC and NO app surface; applying
+                                                                 it alone sends and enqueues NOTHING.
+                                                                 docs/architecture/COMMUNICATIONS.md §14b, §16)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -245,11 +270,81 @@ from pg_proc p
 where p.pronamespace = 'public'::regnamespace and p.proname like 'communications\_%';
 ```
 
-### Worker deployment and scheduling (NOT required in Lot A)
+## Appointment email reminders (Lot B)
 
-The scheduled worker is `supabase/functions/communications-worker` (fake transport only — it can
-deliver nothing). Nothing needs to be deployed while nothing enqueues records. When Lot B needs
-it running:
+`20260927120000_add_appointment_email_reminders.sql` builds the appointment integration on the
+Lot A queue (`docs/architecture/COMMUNICATIONS.md`). Production safety of the migration alone:
+`business_communication_preferences` starts EMPTY and defaults OFF, no row is rewritten, no
+`sync_version` moves, and reconciliation exits immediately while the preference is off — zero
+records are enqueued by applying it.
+
+Suggested manual check in the SQL Editor after applying:
+
+```sql
+-- the preference table: RLS on, zero policies, no anon/authenticated privilege, zero rows
+select rowsecurity from pg_tables where schemaname = 'public' and tablename = 'business_communication_preferences';
+select count(*) from pg_policies where tablename = 'business_communication_preferences';
+select count(*) from public.business_communication_preferences;
+
+-- nothing was enqueued by the migration
+select count(*) from public.scheduled_communications;
+
+-- the three owner RPCs exist and authenticated may execute them
+select p.proname, has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('anon', p.oid, 'execute') as anon_exec
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and p.proname in ('communications_read_preferences', 'communications_update_preferences',
+                    'communications_appointment_reminder_status');
+```
+
+### Reconciliation retry (Lot B hardening)
+
+`20260928120000_add_communication_reconciliation_retry.sql` makes a failed trigger
+reconciliation durable: the domain write still succeeds, a coalesced retry job is recorded, and
+the SAME worker re-runs the authoritative reconciliation on its next pass (before sending). No
+new cron, function or secret is needed. Suggested check after applying:
+
+```sql
+-- the retry table: RLS on, zero policies, no anon/authenticated privilege, zero rows
+select rowsecurity from pg_tables where schemaname = 'public' and tablename = 'communication_reconciliation_jobs';
+select count(*) from pg_policies where tablename = 'communication_reconciliation_jobs';
+select count(*) from public.communication_reconciliation_jobs;
+
+-- the retry RPCs: service_role only
+select p.proname,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role_exec,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and p.proname in ('communications_run_reconciliation', 'communications_claim_reconciliation_jobs',
+                    'communications_complete_reconciliation_job', 'communications_fail_reconciliation_job');
+```
+
+In production, a non-empty `communication_reconciliation_jobs` with `next_attempt_at =
+'infinity'` is the durable trace of a reconciliation that kept failing (the worker parked it);
+it revives automatically at the next change of the same appointment/Business, and its
+`last_error` (sanitized) says why.
+
+### Resend secrets (Lot B — required before the worker can send)
+
+The EMAIL transport is Resend. Its configuration lives ONLY in Edge Function secrets:
+
+```bash
+npx supabase secrets set RESEND_API_KEY=<the Resend API key>
+npx supabase secrets set RESEND_FROM_EMAIL=<the verified sender, e.g. rappels@votre-domaine.fr>
+```
+
+The sender domain must be added and VERIFIED in the Resend dashboard first (SPF + DKIM). The
+worker refuses the pass (HTTP 500, nothing claimed) while either secret is missing or the sender
+is not a valid address. The API key must never exist in Expo env, the app bundle, SQLite, public
+database rows or source control. The From displays « <business name> via Souris »; replies go to
+the professional's configured Reply-To.
+
+### Worker deployment and scheduling (required for Lot B sending)
+
+The scheduled worker is `supabase/functions/communications-worker` (Lot B: real Resend EMAIL
+transport; SMS fails permanently). To put it in service:
 
 Authentication uses the CURRENT secret-key model (`sb_secret_…`, sent on the `apikey` header) —
 NEVER the legacy `service_role` JWT key, which Supabase is deprecating. The Postgres
@@ -269,8 +364,8 @@ secret key is only the HTTP credential that resolves to it.
    verify_jwt = false
    ```
 
-   Then `npx supabase functions deploy communications-worker`. There is no provider secret to
-   set in Lot A.
+   Then set the two Resend secrets (section above) and
+   `npx supabase functions deploy communications-worker`.
 3. Enable the `pg_cron` and `pg_net` extensions (Dashboard › Database › Extensions). They cannot
    be enabled from a migration on every plan, and the cron job needs project-specific values, so
    this stays manual.
@@ -293,5 +388,29 @@ secret key is only the HTTP credential that resolves to it.
 The secret key must never exist in Expo env, the app bundle, SQLite, public database rows or
 source control. A worker run answers with counts only
 (`claimed / sent / retried / failed / skipped`); payloads and recipients are never logged.
-Verify these instructions against the current Supabase docs when Lot B actually deploys — the
+Verify these instructions against the current Supabase docs when actually deploying — the
 cron → Edge Function invocation pattern is the piece most likely to have evolved.
+
+### Complete Lot B production deployment order
+
+Nothing below runs automatically; each step is deliberate, and real email becomes possible only
+at step 9 — and only for a Business whose owner explicitly enabled reminders (step 11+):
+
+```text
+ 1. Apply migrations/20260926130000_create_communication_core.sql        (Lot A — queue)
+ 2. Apply migrations/20260927120000_add_appointment_email_reminders.sql  (Lot B — sends nothing by itself)
+ 2b. Apply migrations/20260928120000_add_communication_reconciliation_retry.sql
+                                                                         (Lot B hardening — sends nothing)
+ 3. Dashboard › API Keys: create the `communications-worker` secret key  (if not already created)
+ 4. Resend: create the account, add and VERIFY the sending domain (SPF + DKIM)
+ 5. npx supabase secrets set RESEND_API_KEY=…
+ 6. npx supabase secrets set RESEND_FROM_EMAIL=…
+ 7. Deploy the worker (verify_jwt = false) — deploying alone sends nothing without due records
+ 8. Enable pg_cron + pg_net (Dashboard › Extensions)
+ 9. Put the worker secret key in Vault and create the cron job (SQL above)
+10. End-to-end test with a DEDICATED test Business and a test client email:
+    enable reminders in its Settings, create an appointment > 24 h ahead,
+    verify SCHEDULED in the status row, force one send (or wait), verify the email
+11. Only then enable reminders for the real production Business (its Settings)
+12. Ship / keep the app build that shows Rappels clientes
+```

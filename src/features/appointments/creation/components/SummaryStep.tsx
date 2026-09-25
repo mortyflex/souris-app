@@ -41,6 +41,10 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
+import { MissingEmailNotice } from '@/features/communications/components/MissingEmailNotice';
+import { APPOINTMENT_REMINDER_ROW_LABEL } from '@/features/communications/presentation';
+import { SwitchRow } from '@/shared/ui/SwitchRow';
+
 import { AppointmentDiscountSection } from '../../editor/components/AppointmentDiscountSection';
 import { SortableDraftList, type SortableDraftEntry } from '../../editor/components/SortableDraftList';
 import type { StartTimeOfDay } from '../draft-start';
@@ -61,6 +65,17 @@ interface SummaryStepProps {
   readonly onDiscountChange: (discount: AppointmentDiscount | undefined) => void;
   /** True when the Appointment date is the selected Client's birthday. */
   readonly birthdayReminder: boolean;
+  /**
+   * Per-appointment client reminder control (Lot B). Undefined while the
+   * GLOBAL preference is off: the row would toggle nothing and stays away.
+   */
+  readonly reminder?: {
+    readonly enabled: boolean;
+    readonly onChange: (enabled: boolean) => void;
+    /** True when the selected Client has no usable email address. */
+    readonly missingClientEmail: boolean;
+    readonly onAddEmail: () => void;
+  };
   readonly entries: readonly SortableDraftEntry[];
   readonly expandedDraftId: string | null;
   readonly onToggleExpanded: (draftKey: string) => void;
@@ -86,6 +101,7 @@ export function SummaryStep({
   discount,
   onDiscountChange,
   birthdayReminder,
+  reminder,
   entries,
   expandedDraftId,
   onToggleExpanded,
@@ -181,6 +197,23 @@ export function SummaryStep({
               value={formatDiscountAmount(summary.servicesTotal.discountCents)}
             />
           </View>
+        )}
+        {reminder && (
+          <GroupedSurface testID="summary-reminder">
+            <SwitchRow
+              description="E-mail 24 h avant le rendez-vous"
+              label={APPOINTMENT_REMINDER_ROW_LABEL}
+              onValueChange={reminder.onChange}
+              testID="appointment-reminder-toggle"
+              value={reminder.enabled}
+            />
+          </GroupedSurface>
+        )}
+        {reminder?.enabled === true && reminder.missingClientEmail && (
+          <MissingEmailNotice
+            onAddEmail={reminder.onAddEmail}
+            testID="creation-missing-email-notice"
+          />
         )}
       </View>
 

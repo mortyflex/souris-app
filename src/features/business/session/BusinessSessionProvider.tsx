@@ -42,9 +42,25 @@ export type CreateBusinessOutcome =
   | { readonly kind: 'created'; readonly business: BusinessProfile }
   | { readonly kind: 'failed'; readonly failure: BusinessSessionFailure };
 
+export interface CreateBusinessOptions {
+  /**
+   * A successful creation binds the Business but does NOT enter the app yet:
+   * the state stays `setup-required` until the caller finishes with
+   * `enterCreatedBusiness`. Onboarding uses this so its optional reminder
+   * activation can run — and surface its own failure — while the setup
+   * screen is still mounted. The creation itself is never rolled back.
+   */
+  readonly deferEntry?: boolean;
+}
+
 export interface BusinessSessionValue {
   readonly state: BusinessSessionState;
-  readonly createBusiness: (input: BusinessSetupInput) => Promise<CreateBusinessOutcome>;
+  readonly createBusiness: (
+    input: BusinessSetupInput,
+    options?: CreateBusinessOptions,
+  ) => Promise<CreateBusinessOutcome>;
+  /** Enters a Business created with `deferEntry` (state becomes `ready`). */
+  readonly enterCreatedBusiness: (business: BusinessProfile) => void;
   /** Re-runs resolution after an error. */
   readonly retry: () => void;
 }
@@ -106,10 +122,14 @@ export function BusinessSessionProvider({
   }, [ownerUserId, resolve]);
 
   const createBusiness = useCallback(
-    async (input: BusinessSetupInput): Promise<CreateBusinessOutcome> => {
+    async (
+      input: BusinessSetupInput,
+      options?: CreateBusinessOptions,
+    ): Promise<CreateBusinessOutcome> => {
       if (!ownerUserId) return { kind: 'failed', failure: { code: 'UNKNOWN' } };
       generation.current += 1;
       const current = generation.current;
+      const deferEntry = options?.deferEntry === true;
 
       let remote: BusinessProfile;
       try {
@@ -119,10 +139,12 @@ export function BusinessSessionProvider({
           // A previous attempt created it (e.g. local binding failed): reuse it.
           const resolved = await resolveBusinessSession({ database, gateway, ownerUserId, offline });
           if (current !== generation.current) return { kind: 'failed', failure: { code: 'UNKNOWN' } };
+          if (resolved.status === 'ready') {
+            if (!deferEntry) setState(resolved);
+            return { kind: 'created', business: resolved.business };
+          }
           setState(resolved);
-          return resolved.status === 'ready'
-            ? { kind: 'created', business: resolved.business }
-            : { kind: 'failed', failure: resolved.status === 'error' ? resolved.failure : { code: 'UNKNOWN' } };
+          return { kind: 'failed', failure: resolved.status === 'error' ? resolved.failure : { code: 'UNKNOWN' } };
         }
         // Remote creation failed: nothing was bound; the form keeps its draft.
         return { kind: 'failed', failure: toBusinessSessionFailure(error) };
@@ -130,12 +152,21 @@ export function BusinessSessionProvider({
 
       const bound = bindRemoteBusiness(database, ownerUserId, remote);
       if (current !== generation.current) return { kind: 'failed', failure: { code: 'UNKNOWN' } };
+      if (bound.status === 'ready') {
+        if (!deferEntry) setState(bound);
+        return { kind: 'created', business: bound.business };
+      }
       setState(bound);
-      return bound.status === 'ready'
-        ? { kind: 'created', business: bound.business }
-        : { kind: 'failed', failure: bound.status === 'error' ? bound.failure : { code: 'UNKNOWN' } };
+      return { kind: 'failed', failure: bound.status === 'error' ? bound.failure : { code: 'UNKNOWN' } };
     },
     [database, gateway, offline, ownerUserId, setState],
+  );
+
+  const enterCreatedBusiness = useCallback(
+    (business: BusinessProfile) => {
+      setState({ status: 'ready', business });
+    },
+    [setState],
   );
 
   const retry = useCallback(() => {
@@ -144,7 +175,7 @@ export function BusinessSessionProvider({
   }, [resolve, setState]);
 
   return (
-    <BusinessSessionContext.Provider value={{ state, createBusiness, retry }}>
+    <BusinessSessionContext.Provider value={{ state, createBusiness, enterCreatedBusiness, retry }}>
       {children}
     </BusinessSessionContext.Provider>
   );

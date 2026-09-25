@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { BusinessSessionProvider } from '@/features/business/session/BusinessSessionProvider';
+import { CommunicationsGatewayProvider } from '@/features/communications/session/CommunicationsGatewayProvider';
 import { createAccountGateways, type AccountGateways } from '@/infrastructure/supabase';
 import { openSourisDatabase } from '@/persistence/expo-database';
 import { createExpoLocalFiles } from '@/persistence/files/expo-local-files';
@@ -113,7 +114,9 @@ function AccountSession({ gateways }: { readonly gateways: AccountGateways }) {
         {/* Renders nothing of its own; pushes local data only once the live session is bound to its Business. */}
         <CloudSyncRunner gateway={gateways.sync}>
           <BusinessMediaProvider remote={gateways.media}>
-            <RootNavigator />
+            <CommunicationsGatewayProvider gateway={gateways.communications}>
+              <RootNavigator />
+            </CommunicationsGatewayProvider>
           </BusinessMediaProvider>
         </CloudSyncRunner>
       </BusinessSessionProvider>

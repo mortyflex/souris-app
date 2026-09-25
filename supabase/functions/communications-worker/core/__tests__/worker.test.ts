@@ -2,6 +2,12 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { createFakeTransportRegistry, FakeCommunicationTransport } from '../fake-transport';
+import {
+  createProductionTransportRegistry,
+  WorkerConfigurationError,
+} from '../production-transports';
+import { ResendEmailTransport } from '../resend-transport';
+import { UnsupportedChannelTransport } from '../unsupported-transport';
 import { COMMUNICATION_RETRY_POLICY } from '../retry-policy';
 import type { OutgoingCommunication, TransportResult } from '../transport';
 import { runCommunicationsWorker } from '../worker';
@@ -20,7 +26,7 @@ describe('communications worker', () => {
 
     const summary = await runCommunicationsWorker({ queue, transports: registry });
 
-    expect(summary).toEqual({ claimed: 1, sent: 1, retried: 0, failed: 0, skipped: 0 });
+    expect(summary).toEqual({ claimed: 1, sent: 1, retried: 0, failed: 0, skipped: 0, reconciliation: { claimed: 0, reconciled: 0, retried: 0, parked: 0 } });
     const record = queue.read('c-1');
     expect(record.status).toBe('SENT');
     expect(record.attemptCount).toBe(1);
@@ -70,7 +76,7 @@ describe('communications worker', () => {
 
     const summary = await runCommunicationsWorker({ queue, transports: registry });
 
-    expect(summary).toEqual({ claimed: 1, sent: 0, retried: 0, failed: 1, skipped: 0 });
+    expect(summary).toEqual({ claimed: 1, sent: 0, retried: 0, failed: 1, skipped: 0, reconciliation: { claimed: 0, reconciled: 0, retried: 0, parked: 0 } });
     const record = queue.read('c-1');
     expect(record.status).toBe('FAILED');
     expect(record.attemptCount).toBe(1);
@@ -106,7 +112,7 @@ describe('communications worker', () => {
 
     const summary = await runCommunicationsWorker({ queue, transports: registry });
 
-    expect(summary).toEqual({ claimed: 1, sent: 0, retried: 0, failed: 0, skipped: 1 });
+    expect(summary).toEqual({ claimed: 1, sent: 0, retried: 0, failed: 0, skipped: 1, reconciliation: { claimed: 0, reconciled: 0, retried: 0, parked: 0 } });
     expect(queue.read('c-1').status).toBe('CANCELLED');
     expect(transport.deliveries).toHaveLength(0);
   });
@@ -164,7 +170,7 @@ describe('communications worker', () => {
 
     const summary = await runCommunicationsWorker({ queue, transports: registry });
 
-    expect(summary).toEqual({ claimed: 3, sent: 1, retried: 1, failed: 1, skipped: 0 });
+    expect(summary).toEqual({ claimed: 3, sent: 1, retried: 1, failed: 1, skipped: 0, reconciliation: { claimed: 0, reconciled: 0, retried: 0, parked: 0 } });
     expect(queue.read('c-sent').status).toBe('SENT');
     expect(queue.read('c-retry').status).toBe('SCHEDULED');
     expect(queue.read('c-failed').status).toBe('FAILED');
@@ -172,38 +178,77 @@ describe('communications worker', () => {
   });
 });
 
-describe('Lot A contains no real delivery path', () => {
-  it('registers only the fake transport for every channel', () => {
+describe('the delivery surface stays contained (Lot B)', () => {
+  it('the test registry holds only the fake transport for every channel', () => {
     const { registry } = createFakeTransportRegistry();
     for (const transport of Object.values(registry)) {
       expect(transport).toBeInstanceOf(FakeCommunicationTransport);
     }
   });
 
-  it('ships no provider SDK or provider endpoint in the worker sources', () => {
+  it('the production registry binds EMAIL to Resend and refuses SMS — never the fake', () => {
+    const registry = createProductionTransportRegistry((name) =>
+      name === 'RESEND_API_KEY' ? 'test-key' : 'rappels@souris.test',
+    );
+    expect(registry.EMAIL).toBeInstanceOf(ResendEmailTransport);
+    expect(registry.SMS).toBeInstanceOf(UnsupportedChannelTransport);
+    for (const transport of Object.values(registry)) {
+      expect(transport).not.toBeInstanceOf(FakeCommunicationTransport);
+    }
+  });
+
+  it('a missing or invalid provider configuration refuses the pass before anything is claimed', () => {
+    expect(() => createProductionTransportRegistry(() => undefined)).toThrow(
+      WorkerConfigurationError,
+    );
+    expect(() =>
+      createProductionTransportRegistry((name) =>
+        name === 'RESEND_API_KEY' ? 'test-key' : undefined,
+      ),
+    ).toThrow(WorkerConfigurationError);
+    expect(() =>
+      createProductionTransportRegistry((name) =>
+        name === 'RESEND_API_KEY' ? 'test-key' : 'not an address',
+      ),
+    ).toThrow(WorkerConfigurationError);
+  });
+
+  it('keeps every provider call inside the one Resend transport module', () => {
     const workerRoot = join(__dirname, '..', '..');
-    const sources: string[] = [];
+    const sources: { readonly name: string; readonly content: string }[] = [];
     const collect = (directory: string) => {
       for (const name of readdirSync(directory)) {
         const entryPath = join(directory, name);
         if (!statSync(entryPath).isFile()) {
           // The guard covers the shipped worker sources; this test file
-          // itself names the forbidden providers.
+          // itself names the providers.
           if (name !== '__tests__') {
             collect(entryPath);
           }
         } else if (name.endsWith('.ts')) {
-          sources.push(readFileSync(entryPath, 'utf8'));
+          sources.push({ name, content: readFileSync(entryPath, 'utf8') });
         }
       }
     };
     collect(workerRoot);
 
     expect(sources.length).toBeGreaterThan(0);
-    const forbidden = /resend|brevo|twilio|smsmode|sendgrid|mailgun|postmark|nodemailer/i;
+    // No other provider SDK or endpoint exists anywhere.
+    const forbiddenProviders = /brevo|twilio|smsmode|sendgrid|mailgun|postmark|nodemailer/i;
+    // Resend and the network call live ONLY in the transport module (and the
+    // registry/entry that name it).
+    const resendAllowed = new Set(['resend-transport.ts', 'production-transports.ts']);
     for (const source of sources) {
-      expect(source).not.toMatch(forbidden);
-      expect(source).not.toMatch(/fetch\s*\(/);
+      expect(source.content).not.toMatch(forbiddenProviders);
+      if (source.name !== 'resend-transport.ts') {
+        expect(source.content).not.toMatch(/fetch\s*\(\s*['"`]/);
+        expect(source.content).not.toMatch(/api\.resend\.com/i);
+      }
+      if (!resendAllowed.has(source.name) && source.name !== 'index.ts' && source.name !== 'deno.d.ts') {
+        expect(source.content).not.toMatch(/resend/i);
+      }
+      // No credential material anywhere in the sources.
+      expect(source.content).not.toMatch(/sb_secret_[A-Za-z0-9]{8}|re_[A-Za-z0-9]{10,}/);
     }
   });
 });

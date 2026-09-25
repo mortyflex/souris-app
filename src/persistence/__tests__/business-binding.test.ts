@@ -131,8 +131,8 @@ describe('schema v3 migration on an existing v2 database', () => {
     const db = openSchemaV2Database();
     expect(readSchemaVersion(db)).toBe(2);
 
-    expect(migrateDatabase(db)).toBe(14);
-    expect(CURRENT_SCHEMA_VERSION).toBe(14);
+    expect(migrateDatabase(db)).toBe(15);
+    expect(CURRENT_SCHEMA_VERSION).toBe(15);
     // The migrated snapshot is the reference for every later comparison
     // (the v3 → v4 birthday copy is covered by birthday-migration.test.ts).
     const before = snapshotWithoutBusinessIds(db);
@@ -149,7 +149,7 @@ describe('schema v3 migration on an existing v2 database', () => {
     expect(readBusinessProfile(db)).toBeUndefined();
     expect(listLocalBusinessIds(db)).toEqual([BUSINESS_ID]);
 
-    expect(migrateDatabase(db)).toBe(14);
+    expect(migrateDatabase(db)).toBe(15);
     expect(countRows(db, 'business_profile')).toBe(0);
     expect(snapshotWithoutBusinessIds(db)).toEqual(before);
   });
@@ -162,7 +162,7 @@ describe('schema v3 migration on an existing v2 database', () => {
 
     expect(createSeed).not.toHaveBeenCalled();
     expect(snapshot.clients).toHaveLength(1);
-    expect(readSchemaVersion(db)).toBe(14);
+    expect(readSchemaVersion(db)).toBe(15);
   });
 });
 

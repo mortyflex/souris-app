@@ -7,7 +7,12 @@ import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { createFirstRunSeed } from '@/providers/first-run-seed';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
-import { BusinessSessionProvider } from '../../session/BusinessSessionProvider';
+import { Text } from 'react-native';
+
+import { CommunicationsGatewayProvider } from '@/features/communications/session/CommunicationsGatewayProvider';
+import { createFakeCommunicationsGateway } from '@/features/communications/testing/fake-communications-gateway';
+
+import { BusinessSessionProvider, useBusinessSession } from '../../session/BusinessSessionProvider';
 import { createFakeBusinessGateway } from '../../testing/fake-business-gateway';
 import { BusinessSetupScreen } from '../BusinessSetupScreen';
 
@@ -30,21 +35,39 @@ const type = (element: unknown, text: string) =>
     fireEvent.changeText(element as Parameters<typeof fireEvent.changeText>[0], text);
   });
 
+/** The root-gate signal: onboarding ends exactly when the session turns ready. */
+function SessionStatusProbe() {
+  const { state } = useBusinessSession();
+  return <Text testID="business-session-status">{state.status}</Text>;
+}
+
 async function renderSetup() {
   const database = openTestDatabase();
   const business = createFakeBusinessGateway();
+  const communications = createFakeCommunicationsGateway();
   const auth = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
   const view = await render(
     <TestPersistenceProvider createSeed={createFirstRunSeed} database={database}>
       <AuthProvider gateway={auth}>
         <BusinessSessionProvider gateway={business}>
-          <BusinessSetupScreen />
+          <CommunicationsGatewayProvider gateway={communications}>
+            <BusinessSetupScreen />
+            <SessionStatusProbe />
+          </CommunicationsGatewayProvider>
         </BusinessSessionProvider>
       </AuthProvider>
     </TestPersistenceProvider>,
   );
   await act(async () => {});
-  return { view, database, business };
+  return { view, database, business, communications };
+}
+
+/** Fills the details step with a valid draft and moves to the reminders step. */
+async function fillDetailsAndContinue(view: Awaited<ReturnType<typeof renderSetup>>['view']) {
+  await type(view.getByTestId('owner-first-name-input'), 'Sofia');
+  await type(view.getByTestId('business-name-input'), 'Nails by Sofia');
+  await press(view.getByTestId('activity-NAILS'));
+  await press(view.getByTestId('submit-business'));
 }
 
 describe('BusinessSetupScreen', () => {
@@ -70,17 +93,91 @@ describe('BusinessSetupScreen', () => {
     expect(view.getByTestId('activity-HAIRDRESSING').props.accessibilityState.selected).toBe(false);
   });
 
-  it('creates and binds the Business with trimmed values', async () => {
-    const { view, database, business } = await renderSetup();
+  it('creates and binds the Business with trimmed values (« Plus tard » path)', async () => {
+    const { view, database, business, communications } = await renderSetup();
 
     await type(view.getByTestId('owner-first-name-input'), ' Sofia ');
     await type(view.getByTestId('business-name-input'), 'Nails by Sofia');
     await press(view.getByTestId('activity-NAILS'));
     await press(view.getByTestId('submit-business'));
+    // The optional reminders step: « Plus tard » creates without opting in.
+    await press(view.getByTestId('skip-reminders'));
 
     await waitFor(() => expect(business.calls.create).toBe(1));
     expect(business.rows[0]).toMatchObject({ ownerUserId: 'user-lea', ownerFirstName: 'Sofia', name: 'Nails by Sofia', activityType: 'NAILS' });
     expect(readBusinessProfile(database)?.name).toBe('Nails by Sofia');
+    expect(view.getByTestId('business-session-status').props.children).toBe('ready');
+    // Nothing was saved: the server preference keeps its OFF default.
+    expect(communications.calls.update).toBe(0);
+  });
+
+  it('activating reminders enters the app ONLY once the server accepted the preference', async () => {
+    const { view, business, communications } = await renderSetup();
+    await fillDetailsAndContinue(view);
+
+    // Prefilled from the signed-in account email, editable.
+    expect(view.getByTestId('reminder-reply-to-input').props.value).toBe(fakeUser.email);
+    await type(view.getByTestId('reminder-reply-to-input'), 'salon@example.fr');
+    await press(view.getByTestId('activate-reminders'));
+
+    await waitFor(() => expect(business.calls.create).toBe(1));
+    await waitFor(() => expect(communications.calls.update).toBe(1));
+    expect(communications.updates[0]).toEqual({
+      businessId: business.rows[0]!.id,
+      preferences: { emailRemindersEnabled: true, replyToEmail: 'salon@example.fr' },
+    });
+    expect(view.getByTestId('business-session-status').props.children).toBe('ready');
+  });
+
+  it('a failed activation shows the calm notice, keeps the created Business, and never claims ON', async () => {
+    const { view, database, business, communications } = await renderSetup();
+    await fillDetailsAndContinue(view);
+    communications.failNext('NETWORK');
+
+    await press(view.getByTestId('activate-reminders'));
+
+    // The Business exists (never rolled back)…
+    expect(business.calls.create).toBe(1);
+    expect(readBusinessProfile(database)?.name).toBe('Nails by Sofia');
+    // …but the professional has NOT left onboarding believing reminders are on.
+    expect(view.getByText('Impossible d’activer les rappels pour le moment.')).toBeTruthy();
+    expect(view.getByText(/rappels restent désactivés/)).toBeTruthy();
+    expect(view.getByTestId('business-session-status').props.children).toBe('setup-required');
+    expect(communications.updates).toHaveLength(0);
+
+    // Réessayer: no duplicate Business, the preference lands, onboarding ends.
+    await press(view.getByTestId('retry-activate-reminders'));
+    await waitFor(() => expect(communications.updates).toHaveLength(1));
+    expect(business.calls.create).toBe(1);
+    expect(view.getByTestId('business-session-status').props.children).toBe('ready');
+  });
+
+  it('after a failed activation, « Continuer sans les rappels » enters with reminders OFF', async () => {
+    const { view, business, communications } = await renderSetup();
+    await fillDetailsAndContinue(view);
+    communications.failNext('NETWORK');
+
+    await press(view.getByTestId('activate-reminders'));
+    expect(view.getByTestId('business-session-status').props.children).toBe('setup-required');
+
+    await press(view.getByTestId('continue-without-reminders'));
+
+    expect(view.getByTestId('business-session-status').props.children).toBe('ready');
+    expect(business.calls.create).toBe(1);
+    // Nothing was saved: the server OFF default stands.
+    expect(communications.updates).toHaveLength(0);
+  });
+
+  it('refuses to activate with an invalid Reply-To and creates nothing', async () => {
+    const { view, business, communications } = await renderSetup();
+    await fillDetailsAndContinue(view);
+
+    await type(view.getByTestId('reminder-reply-to-input'), 'not-an-email');
+    await press(view.getByTestId('activate-reminders'));
+
+    expect(view.getByText('Adresse e-mail invalide.')).toBeTruthy();
+    expect(business.calls.create).toBe(0);
+    expect(communications.calls.update).toBe(0);
   });
 
   it('keeps the whole draft when the remote creation fails, and succeeds on retry', async () => {
@@ -91,14 +188,19 @@ describe('BusinessSetupScreen', () => {
     await type(view.getByTestId('business-name-input'), 'Maison Léa');
     await press(view.getByTestId('activity-HAIRDRESSING'));
     await press(view.getByTestId('submit-business'));
+    await press(view.getByTestId('skip-reminders'));
 
     expect(view.getByText(/Une connexion internet est nécessaire/)).toBeTruthy();
+    expect(readBusinessProfile(database)).toBeUndefined();
+
+    // The whole details draft survived behind « Retour ».
+    await press(view.getByText('Retour'));
     expect(view.getByTestId('owner-first-name-input').props.value).toBe('Léa');
     expect(view.getByTestId('business-name-input').props.value).toBe('Maison Léa');
     expect(view.getByTestId('activity-HAIRDRESSING').props.accessibilityState.selected).toBe(true);
-    expect(readBusinessProfile(database)).toBeUndefined();
 
     await press(view.getByTestId('submit-business'));
+    await press(view.getByTestId('skip-reminders'));
     await waitFor(() => expect(readBusinessProfile(database)?.name).toBe('Maison Léa'));
     expect(business.rows).toHaveLength(1);
   });
