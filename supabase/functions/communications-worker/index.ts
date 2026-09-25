@@ -7,7 +7,7 @@
 //
 // Authentication — the current Supabase secret-key model, not the legacy
 // service_role JWT: `withSupabase` accepts ONLY the dedicated server-side
-// secret key named `communications-worker` (an `sb_secret_…` key created in
+// secret key named `communications_worker` (an `sb_secret_…` key created in
 // the Dashboard, sent on the `apikey` header). Publishable keys, user JWTs
 // and unauthenticated calls are refused by the wrapper before this handler
 // runs. `verify_jwt` must be disabled for this function (secret keys are not
@@ -37,7 +37,7 @@ import {
 import { runCommunicationsWorker } from './core/worker.ts';
 
 export default {
-  fetch: withSupabase({ auth: 'secret:communications-worker' }, async (_request, ctx) => {
+  fetch: withSupabase({ auth: 'secret:communications_worker' }, async (_request, ctx) => {
     try {
       // Configuration first: a misconfigured worker refuses the pass before
       // claiming, so no record is marked PROCESSING for nothing.

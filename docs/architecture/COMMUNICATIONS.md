@@ -167,8 +167,9 @@ nothing enqueues records in production yet.
 
 Worker authentication uses the CURRENT Supabase secret-key model, not the legacy
 `service_role` JWT (deprecated by Supabase): the entry is wrapped in `withSupabase` from
-`npm:@supabase/server` with `auth: 'secret:communications-worker'`, so the wrapper accepts ONLY
-the dedicated server-side secret key named `communications-worker` (an `sb_secret_…` key
+`npm:@supabase/server` with `auth: 'secret:communications_worker'`, so the wrapper accepts ONLY
+the dedicated server-side secret key named `communications_worker` (an `sb_secret_…` key
+(named Secret Keys allow lowercase letters, digits and underscore only)
 created in the Dashboard, sent on the `apikey` header) and refuses publishable keys, user JWTs
 and unauthenticated calls with a 401 before the handler runs. Secret keys are not JWTs, so
 `verify_jwt` is disabled for this function; the secret-key check replaces it. The handler's

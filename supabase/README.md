@@ -352,7 +352,8 @@ NEVER the legacy `service_role` JWT key, which Supabase is deprecating. The Post
 secret key is only the HTTP credential that resolves to it.
 
 1. Dashboard › Settings › API Keys: create a DEDICATED secret key named exactly
-   `communications-worker`. The worker (`withSupabase({ auth: 'secret:communications-worker' })`)
+   `communications_worker` (named Secret Keys allow lowercase letters, digits and underscore
+   only). The worker (`withSupabase({ auth: 'secret:communications_worker' })`)
    accepts only that named key and refuses publishable keys, user JWTs and unauthenticated
    calls. If one component ever leaks its key, only that key is rotated.
 2. `npx supabase login` and `npx supabase link --project-ref <ref>` (writes `supabase/config.toml`;
@@ -369,11 +370,11 @@ secret key is only the HTTP credential that resolves to it.
 3. Enable the `pg_cron` and `pg_net` extensions (Dashboard › Database › Extensions). They cannot
    be enabled from a migration on every plan, and the cron job needs project-specific values, so
    this stays manual.
-4. Store the `communications-worker` secret key in Vault and schedule the invocation
+4. Store the `communications_worker` secret key in Vault and schedule the invocation
    (SQL Editor), about once per minute. Never inline the key in the cron command or a migration:
 
    ```sql
-   select vault.create_secret('<the sb_secret_… communications-worker key>', 'communications_worker_secret_key');
+   select vault.create_secret('<the sb_secret_… communications_worker key>', 'communications_worker_secret_key');
    select cron.schedule('communications-worker', '* * * * *', $$
      select net.http_post(
        url := 'https://<ref>.supabase.co/functions/v1/communications-worker',
@@ -401,7 +402,7 @@ at step 9 — and only for a Business whose owner explicitly enabled reminders (
  2. Apply migrations/20260927120000_add_appointment_email_reminders.sql  (Lot B — sends nothing by itself)
  2b. Apply migrations/20260928120000_add_communication_reconciliation_retry.sql
                                                                          (Lot B hardening — sends nothing)
- 3. Dashboard › API Keys: create the `communications-worker` secret key  (if not already created)
+ 3. Dashboard › API Keys: create the `communications_worker` secret key   (if not already created)
  4. Resend: create the account, add and VERIFY the sending domain (SPF + DKIM)
  5. npx supabase secrets set RESEND_API_KEY=…
  6. npx supabase secrets set RESEND_FROM_EMAIL=…

@@ -29,7 +29,7 @@ declare module 'npm:@supabase/server' {
   /**
    * Wraps a handler with Supabase credential validation. `auth` names the
    * accepted modes ('user', 'secret', 'publishable', 'none', or a named key
-   * such as 'secret:communications-worker'); anything else is refused with a
+   * such as 'secret:communications_worker'); anything else is refused with a
    * 401 before the handler runs.
    */
   export function withSupabase(
