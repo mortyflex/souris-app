@@ -12,6 +12,10 @@ The app never reads or writes an operational table directly. Contract:
 
 ## Applying the migrations
 
+Naming rule for NEW migrations: use a timestamp strictly greater than the highest existing
+migration timestamp in the repository, regardless of the current wall-clock date. Filename order
+is dependency order, and this holds even if an older migration was accidentally future-dated.
+
 The repository is not linked to a Supabase project (no `supabase/config.toml`, no project ref).
 Apply, in order:
 
@@ -56,6 +60,16 @@ migrations/20260926120000_add_product_photos.sql                (Product photos 
                                                                  the two Product-listing sync RPCs in place,
                                                                  CLOUD_SYNC.md §23. Apply BEFORE shipping the
                                                                  build that sets Product photos)
+migrations/20260926130000_create_communication_core.sql         (Communication Core Lot A — BY HAND, after the
+                                                                 Product photos one; creates ONE new server-owned
+                                                                 table, scheduled_communications (RLS on, ZERO
+                                                                 policies, NO anon/authenticated grant), its
+                                                                 lifecycle trigger and the eight service_role-only
+                                                                 communications_* functions. Touches NO existing
+                                                                 object and NO sync RPC; nothing enqueues records
+                                                                 yet, so there is no shipping deadline. SQL Editor
+                                                                 application is sufficient; no extension needed.
+                                                                 docs/architecture/COMMUNICATIONS.md)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -205,3 +219,79 @@ Behavior checks as the signed-in owner, with your Business id:
 The same checks (41, including cross-Business refusals, the round trip of every pushed payload and
 tombstones) were executed against the four migrations in an isolated in-process Postgres when this
 migration was written (`docs/architecture/CLOUD_SYNC.md` §16.9).
+
+## Communication Core (Lot A)
+
+`20260926130000_create_communication_core.sql` creates the server-owned communications queue
+(`docs/architecture/COMMUNICATIONS.md`). It is additive, touches no existing object, and is safe
+to re-run. The mobile app has NO access to the queue (RLS enabled, zero policies, zero grants to
+`anon` / `authenticated`); only `service_role` operates it, through the `communications_*`
+functions. Nothing enqueues records in Lot A, so applying the migration changes nothing visible.
+
+Suggested manual check in the SQL Editor after applying:
+
+```sql
+-- RLS on, zero policies, no anon/authenticated privilege
+select rowsecurity from pg_tables where schemaname = 'public' and tablename = 'scheduled_communications';
+select count(*) from pg_policies where tablename = 'scheduled_communications';
+select grantee, privilege_type from information_schema.role_table_grants
+ where table_name = 'scheduled_communications' and grantee in ('anon', 'authenticated');
+
+-- the eight functions: SECURITY INVOKER, search_path pinned, service_role-only EXECUTE
+select p.proname, p.prosecdef, p.proconfig,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role_exec
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace and p.proname like 'communications\_%';
+```
+
+### Worker deployment and scheduling (NOT required in Lot A)
+
+The scheduled worker is `supabase/functions/communications-worker` (fake transport only — it can
+deliver nothing). Nothing needs to be deployed while nothing enqueues records. When Lot B needs
+it running:
+
+Authentication uses the CURRENT secret-key model (`sb_secret_…`, sent on the `apikey` header) —
+NEVER the legacy `service_role` JWT key, which Supabase is deprecating. The Postgres
+`service_role` ROLE keeps the EXECUTE grants (that is the database layer and is unchanged); the
+secret key is only the HTTP credential that resolves to it.
+
+1. Dashboard › Settings › API Keys: create a DEDICATED secret key named exactly
+   `communications-worker`. The worker (`withSupabase({ auth: 'secret:communications-worker' })`)
+   accepts only that named key and refuses publishable keys, user JWTs and unauthenticated
+   calls. If one component ever leaks its key, only that key is rotated.
+2. `npx supabase login` and `npx supabase link --project-ref <ref>` (writes `supabase/config.toml`;
+   review before committing). In `supabase/config.toml`, disable JWT verification for this
+   function — secret keys are not JWTs; the named-secret-key check replaces it:
+
+   ```toml
+   [functions.communications-worker]
+   verify_jwt = false
+   ```
+
+   Then `npx supabase functions deploy communications-worker`. There is no provider secret to
+   set in Lot A.
+3. Enable the `pg_cron` and `pg_net` extensions (Dashboard › Database › Extensions). They cannot
+   be enabled from a migration on every plan, and the cron job needs project-specific values, so
+   this stays manual.
+4. Store the `communications-worker` secret key in Vault and schedule the invocation
+   (SQL Editor), about once per minute. Never inline the key in the cron command or a migration:
+
+   ```sql
+   select vault.create_secret('<the sb_secret_… communications-worker key>', 'communications_worker_secret_key');
+   select cron.schedule('communications-worker', '* * * * *', $$
+     select net.http_post(
+       url := 'https://<ref>.supabase.co/functions/v1/communications-worker',
+       headers := jsonb_build_object(
+         'Content-Type', 'application/json',
+         'apikey', (select decrypted_secret from vault.decrypted_secrets
+                     where name = 'communications_worker_secret_key')),
+       body := '{}'::jsonb);
+   $$);
+   ```
+
+The secret key must never exist in Expo env, the app bundle, SQLite, public database rows or
+source control. A worker run answers with counts only
+(`claimed / sent / retried / failed / skipped`); payloads and recipients are never logged.
+Verify these instructions against the current Supabase docs when Lot B actually deploys — the
+cron → Edge Function invocation pattern is the piece most likely to have evolved.
