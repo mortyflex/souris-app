@@ -1,0 +1,45 @@
+-- Souris — Communications: explicit worker table privileges (production fix)
+--
+-- The first deployed smoke test of `communications-worker` failed with
+-- `permission denied for table communication_reconciliation_jobs` (42501).
+-- Root cause: every worker-facing `communications_*` function is SECURITY
+-- INVOKER, so its table statements run with the CALLING role's own table
+-- privileges — and neither 20260926130000 (Lot A) nor 20260928120000
+-- (hardening) ever GRANTED the Postgres `service_role` anything on their
+-- tables. Both migrations only revoked `public` / `anon` / `authenticated`
+-- and RELIED on environment default privileges to cover `service_role`; on
+-- the real project those defaults confer nothing on these tables, so the
+-- very first invoker statement fails. Lot A has the identical latent gap
+-- (`communications_claim_due`, `communications_enqueue`, the settlements):
+-- the smoke test merely reached the reconciliation claim first.
+--
+-- Fix: make the worker's privileges EXPLICIT and NARROW — exactly what the
+-- SECURITY INVOKER function bodies perform, nothing more:
+--
+--   scheduled_communications            SELECT, INSERT, UPDATE
+--     enqueue INSERTs (+ SELECT of the existing record); cancel/reschedule/
+--     claim_due (FOR UPDATE)/mark_sent/mark_retry/mark_failed/update_content
+--     UPDATE with SELECT; read_status SELECTs. NO function ever DELETEs a
+--     communication (cancellation is a status; Business deletion cascades),
+--     so DELETE is deliberately not granted.
+--
+--   communication_reconciliation_jobs   SELECT, UPDATE, DELETE
+--     claim (FOR UPDATE + RETURNING) needs SELECT + UPDATE; fail/park
+--     UPDATE; complete DELETEs the settled job. INSERT is deliberately not
+--     granted: recording a retry is the SECURITY DEFINER
+--     `communications_record_reconciliation_retry` (trigger path), never the
+--     worker directly.
+--
+-- The security model is unchanged: `anon` and `authenticated` (the mobile
+-- app) keep ZERO privileges on both tables (revoked by the original
+-- migrations; both tables also have RLS enabled with zero policies), no
+-- policy is added, no SECURITY setting changes, and the SECURITY DEFINER
+-- functions (reconciliation, preference RPCs, retry recording) are
+-- unaffected. Neither table has a sequence or identity column, so no
+-- sequence grant is needed. Grants are idempotent: safe to run on the
+-- current production database, touches no row, enqueues nothing, sends
+-- nothing.
+
+grant select, insert, update on table public.scheduled_communications to service_role;
+
+grant select, update, delete on table public.communication_reconciliation_jobs to service_role;

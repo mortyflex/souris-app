@@ -95,6 +95,24 @@ migrations/20260928120000_add_communication_reconciliation_retry.sql
                                                                  Touches NO sync RPC and NO app surface; applying
                                                                  it alone sends and enqueues NOTHING.
                                                                  docs/architecture/COMMUNICATIONS.md §14b, §16)
+migrations/20260929120000_grant_worker_table_privileges.sql     (Worker table privileges — BY HAND, after the
+                                                                 hardening one; REQUIRED BEFORE the worker can
+                                                                 run: the communications_* functions are SECURITY
+                                                                 INVOKER and service_role holds no implicit
+                                                                 privileges on their tables, so the first smoke
+                                                                 test failed with 42501. Grants ONLY
+                                                                 select/insert/update on scheduled_communications
+                                                                 and select/update/delete on
+                                                                 communication_reconciliation_jobs to
+                                                                 service_role. No policy, no anon/authenticated
+                                                                 change, no row touched; idempotent)
+migrations/20260930120000_revoke_worker_extra_privileges.sql    (Least-privilege cleanup — BY HAND, after the
+                                                                 grants one; revokes the platform residue
+                                                                 (TRUNCATE, REFERENCES, TRIGGER) service_role
+                                                                 held on the two communications tables since
+                                                                 their creation, and reasserts the exact narrow
+                                                                 worker set. No policy, no anon/authenticated
+                                                                 change, no row touched; idempotent)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -321,6 +339,24 @@ where p.pronamespace = 'public'::regnamespace
                     'communications_complete_reconciliation_job', 'communications_fail_reconciliation_job');
 ```
 
+After applying `20260929120000_grant_worker_table_privileges.sql` AND
+`20260930120000_revoke_worker_extra_privileges.sql`, verify the worker's grants (the project's
+default-privilege behavior leaves a TRUNCATE/REFERENCES/TRIGGER residue on new tables, which
+the cleanup migration revokes):
+
+```sql
+-- exactly: scheduled_communications INSERT,SELECT,UPDATE — communication_reconciliation_jobs DELETE,SELECT,UPDATE
+select table_name, string_agg(privilege_type, ',' order by privilege_type) as privileges
+from information_schema.role_table_grants
+where grantee = 'service_role'
+  and table_name in ('scheduled_communications', 'communication_reconciliation_jobs')
+group by table_name order by table_name;
+-- and still nothing for the API roles
+select count(*) from information_schema.role_table_grants
+ where grantee in ('anon', 'authenticated')
+   and table_name in ('scheduled_communications', 'communication_reconciliation_jobs');
+```
+
 In production, a non-empty `communication_reconciliation_jobs` with `next_attempt_at =
 'infinity'` is the durable trace of a reconciliation that kept failing (the worker parked it);
 it revives automatically at the next change of the same appointment/Business, and its
@@ -402,6 +438,10 @@ at step 9 — and only for a Business whose owner explicitly enabled reminders (
  2. Apply migrations/20260927120000_add_appointment_email_reminders.sql  (Lot B — sends nothing by itself)
  2b. Apply migrations/20260928120000_add_communication_reconciliation_retry.sql
                                                                          (Lot B hardening — sends nothing)
+ 2c. Apply migrations/20260929120000_grant_worker_table_privileges.sql   (worker table grants — required
+                                                                          before any worker pass can run)
+ 2d. Apply migrations/20260930120000_revoke_worker_extra_privileges.sql  (least-privilege cleanup of the
+                                                                          platform residue on those tables)
  3. Dashboard › API Keys: create the `communications_worker` secret key   (if not already created)
  4. Resend: create the account, add and VERIFY the sending domain (SPF + DKIM)
  5. npx supabase secrets set RESEND_API_KEY=…

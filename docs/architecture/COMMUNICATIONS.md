@@ -81,7 +81,14 @@ RLS is enabled with **zero policies**, and every table privilege is revoked from
 `anon` and `authenticated`: there is NO client read or write path at all — a professional can
 never inspect another Business's records because no authenticated path can inspect ANY record.
 `service_role` (BYPASSRLS) operates the queue exclusively through the `communications_*`
-functions, whose EXECUTE is granted to `service_role` only. All functions are SECURITY INVOKER
+functions, whose EXECUTE is granted to `service_role` only. Because those functions are
+SECURITY INVOKER, `service_role` also needs its own NARROW table privileges — granted
+EXPLICITLY by `20260929120000_grant_worker_table_privileges.sql` (SELECT/INSERT/UPDATE on the
+queue; never DELETE), after the first production smoke test proved that relying on environment
+default privileges was wrong: on the real project they confer no DML on these tables — only a
+TRUNCATE/REFERENCES/TRIGGER residue, which `20260930120000_revoke_worker_extra_privileges.sql`
+revokes so the explicit set is EXACTLY the audited one (queue: SELECT/INSERT/UPDATE; retry
+jobs: SELECT/UPDATE/DELETE). All functions are SECURITY INVOKER
 with `search_path = ''`, like the sync RPCs. Payloads and recipients are business-private: the
 worker returns counts only and never logs them.
 
@@ -349,6 +356,9 @@ Properties:
   wins" is structural, not implemented).
 - **Coalesced.** `UNIQUE (business_id, scope_type, source_id)`: a repeated failure for the same
   target updates the one row — attempts reset to 0, due immediately — never unlimited error rows.
+- **Privileges.** The claim/settle functions are SECURITY INVOKER; `service_role`'s explicit
+  table grants (`20260929120000…`) are SELECT/UPDATE/DELETE on the jobs table — INSERT stays
+  impossible for the worker (recording a retry is the SECURITY DEFINER trigger path only).
 - **Concurrency like Lot A.** `communications_claim_reconciliation_jobs` claims atomically
   (`FOR UPDATE SKIP LOCKED`), bumping `attempt_count` and pushing `next_attempt_at` forward by
   the lease — no separate PROCESSING status is needed: a fresh claim is invisible to other
@@ -542,6 +552,15 @@ payload in errors, no provider call for malformed input, SMS refusal), productio
 reconciliation retry pass (success/backoff/park under the central policy, one failing job never
 blocks the others, error sanitization, retries run BEFORE sending, zeros without a retry
 queue), and the unchanged Lot A worker passes.
+
+Privilege regression (43 checks, STRICT role model — service_role receives NO implicit default
+privileges, exactly like the real project): the whole Lot A lifecycle and the whole retry
+lifecycle succeed as `service_role` itself; the narrow grants are exact (no direct queue
+DELETE, no direct job INSERT); `anon` / `authenticated` hold zero access to both tables and to
+every server-only function; the owner RPCs, the DEFINER trigger path and cross-owner refusals
+are unchanged. The earlier harness stubs granted service_role implicit defaults, which is why
+the missing explicit grants only surfaced in production; the Lot B harnesses now run in the
+same strict model.
 
 Hardening database checks (33, `20260928120000…` on top of all previous migrations): a domain
 save succeeds although reconciliation throws while ONE sanitized coalesced job appears; atomic
