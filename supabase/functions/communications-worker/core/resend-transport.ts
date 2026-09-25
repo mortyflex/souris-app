@@ -36,6 +36,8 @@ export interface ResendEmailTransportOptions {
   readonly apiKey: string;
   /** The verified Souris sender address (RESEND_FROM_EMAIL). */
   readonly fromEmail: string;
+  /** Public HTTPS Souris logo for the footer (SOURIS_EMAIL_LOGO_URL), optional. */
+  readonly logoUrl?: string;
   /** Injected in tests; the platform fetch in production. */
   readonly fetchFn?: typeof fetch;
 }
@@ -64,11 +66,13 @@ export function resendIdempotencyKey(communicationId: string): string {
 export class ResendEmailTransport implements CommunicationTransport {
   private readonly apiKey: string;
   private readonly fromEmail: string;
+  private readonly logoUrl: string | undefined;
   private readonly fetchFn: typeof fetch;
 
   constructor(options: ResendEmailTransportOptions) {
     this.apiKey = options.apiKey;
     this.fromEmail = options.fromEmail;
+    this.logoUrl = options.logoUrl;
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
@@ -87,7 +91,7 @@ export class ResendEmailTransport implements CommunicationTransport {
       return { status: 'PERMANENT_FAILURE', error: 'recipient is not a usable email address' };
     }
 
-    const email = renderAppointmentEmail(message.kind, payload);
+    const email = renderAppointmentEmail(message.kind, payload, { logoUrl: this.logoUrl });
     const request: Record<string, unknown> = {
       from: `"${sanitizeSenderDisplayName(payload.businessName)}" <${this.fromEmail}>`,
       to: [message.recipient.trim()],

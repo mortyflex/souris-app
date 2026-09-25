@@ -453,7 +453,9 @@ Templates (`core/email-content.ts`) are FIXED V1 French transactional emails —
 Rappel de votre rendez-vous chez … »), rescheduled (« … a été modifié », with the NEW schedule),
 cancelled (« … a été annulé », date kept for context, no services) — one restrained
 Souris-branded HTML card (email-safe table + inline styles, plum accent, « Envoyé avec Souris »
-footer) plus a plain-text version. Every interpolated value is HTML-escaped. Date/time format in
+footer — with the Souris logo-mark to its left when the optional `SOURIS_EMAIL_LOGO_URL` secret
+names a public HTTPS PNG: a fixed 24×16 `<img>` with alt text, and a clean text-only footer
+whenever the URL is absent, invalid or fails to load) plus a plain-text version. Every interpolated value is HTML-escaped. Date/time format in
 `Europe/Paris` (the V1 single-market constant `APPOINTMENT_EMAIL_TIMEZONE`; a future business
 timezone belongs in the payload).
 

@@ -373,7 +373,20 @@ npx supabase secrets set RESEND_FROM_EMAIL=<the verified sender, e.g. rappels@vo
 
 The sender domain must be added and VERIFIED in the Resend dashboard first (SPF + DKIM). The
 worker refuses the pass (HTTP 500, nothing claimed) while either secret is missing or the sender
-is not a valid address. The API key must never exist in Expo env, the app bundle, SQLite, public
+is not a valid address.
+
+Optional footer branding — the Souris logo next to « Envoyé avec Souris »: email clients only
+load public HTTPS assets (a bundled app asset, file path or data URI never renders), so export
+a small PNG of `assets/brand/logo-mark.png` (3:2 — e.g. 48×32 for crisp 2× rendering at the
+24×16 slot), upload it somewhere public and stable — e.g. a PUBLIC Supabase Storage bucket
+(`brand`), separate from the private `business-media` one:
+
+```bash
+npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage/v1/object/public/brand/logo-mark.png
+```
+
+The URL must be plain `https://`; anything else is ignored. Without the secret (or if the image
+fails to load) the footer stays text-only and clean — sending is never affected. The API key must never exist in Expo env, the app bundle, SQLite, public
 database rows or source control. The From displays « <business name> via Souris »; replies go to
 the professional's configured Reply-To.
 

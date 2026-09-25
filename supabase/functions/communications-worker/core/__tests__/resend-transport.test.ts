@@ -97,6 +97,28 @@ describe('successful dispatch', () => {
     expect(keys[0]).toContain(message.id);
   });
 
+  it('carries the configured footer logo through to the posted HTML', async () => {
+    const { fetchFn, requests } = createFetchMock([json(200, { id: 'x' })]);
+    const transport = new ResendEmailTransport({
+      apiKey: API_KEY,
+      fromEmail: 'rappels@souris.test',
+      logoUrl: 'https://cdn.souris.test/brand/logo-mark.png',
+      fetchFn,
+    });
+    await transport.send(message);
+    const body = JSON.parse(String(requests[0].init.body));
+    expect(body.html).toContain('<img src="https://cdn.souris.test/brand/logo-mark.png" width="24" height="16" alt="Souris"');
+    expect(body.text).not.toContain('<img');
+  });
+
+  it('sends the text-only footer when no logo is configured', async () => {
+    const { transport, requests } = createTransport([json(200, { id: 'x' })]);
+    await transport.send(message);
+    const body = JSON.parse(String(requests[0].init.body));
+    expect(body.html).not.toContain('<img');
+    expect(body.html).toContain('Envoyé avec Souris');
+  });
+
   it('omits reply_to when the payload has none', async () => {
     const { transport, requests } = createTransport([json(200, { id: 'x' })]);
     await transport.send({ ...message, payload: { ...message.payload, reply_to: null } });

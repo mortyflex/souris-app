@@ -135,6 +135,49 @@ describe('the cancelled template', () => {
   });
 });
 
+describe('the footer logo', () => {
+  const LOGO = 'https://example.supabase.co/storage/v1/object/public/brand/logo-mark.png';
+
+  it('renders the Souris logo before « Envoyé avec Souris », email-safe and sized', () => {
+    const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, { logoUrl: LOGO });
+    const footer = email.html.slice(email.html.indexOf('Envoyé avec Souris') - 400);
+    expect(footer).toContain(`<img src="${LOGO}" width="24" height="16" alt="Souris"`);
+    expect(email.html.indexOf('<img')).toBeLessThan(email.html.indexOf('Envoyé avec Souris'));
+    // Layout, colors and content are otherwise unchanged.
+    expect(email.html).toContain('Bonjour Léa,');
+    expect(email.text).toContain('Envoyé avec Souris');
+    expect(email.text).not.toContain('<img');
+  });
+
+  it('keeps the clean text-only footer without a configured logo', () => {
+    const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload);
+    expect(email.html).not.toContain('<img');
+    expect(email.html).toContain('Envoyé avec Souris');
+  });
+
+  it('ignores anything that is not a plain HTTPS URL', () => {
+    for (const bad of [
+      'http://insecure.example/logo.png',
+      'data:image/png;base64,AAAA',
+      'file:///assets/brand/logo-mark.png',
+      '   ',
+      'https://bad url/logo.png',
+    ]) {
+      const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, { logoUrl: bad });
+      expect(email.html).not.toContain('<img');
+      expect(email.html).toContain('Envoyé avec Souris');
+    }
+  });
+
+  it('escapes a hostile URL so it cannot break out of the attribute', () => {
+    const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, {
+      logoUrl: 'https://x.test/a.png"onerror="alert(1)',
+    });
+    expect(email.html).not.toContain('"onerror="');
+    expect(email.html).toContain('&quot;onerror=&quot;');
+  });
+});
+
 describe('escaping', () => {
   it('escapes hostile business, client and service names in the HTML', () => {
     const hostile = renderAppointmentEmail('APPOINTMENT_REMINDER', {

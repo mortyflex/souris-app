@@ -36,8 +36,10 @@ export function createProductionTransportRegistry(
   if (!fromEmail || !isUsableEmailAddress(fromEmail)) {
     throw new WorkerConfigurationError('RESEND_FROM_EMAIL is not a configured, valid sender address');
   }
+  // Optional footer branding: absent, emails simply keep the text-only footer.
+  const logoUrl = readSecret('SOURIS_EMAIL_LOGO_URL')?.trim() || undefined;
   return {
-    EMAIL: new ResendEmailTransport({ apiKey, fromEmail, fetchFn }),
+    EMAIL: new ResendEmailTransport({ apiKey, fromEmail, logoUrl, fetchFn }),
     SMS: new UnsupportedChannelTransport('SMS'),
   };
 }

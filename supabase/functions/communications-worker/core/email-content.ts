@@ -130,6 +130,25 @@ export interface RenderedEmail {
   readonly text: string;
 }
 
+export interface RenderAppointmentEmailOptions {
+  /**
+   * Public HTTPS URL of the small Souris logo PNG shown in the footer
+   * (SOURIS_EMAIL_LOGO_URL). Email clients can only load public HTTPS
+   * assets — never a bundled app asset, a file path or a data URI. Absent
+   * or non-HTTPS, the footer stays text-only and equally clean.
+   */
+  readonly logoUrl?: string;
+}
+
+/** 3:2, matching the intrinsic ratio of the Souris logo-mark artwork. */
+const FOOTER_LOGO_WIDTH = 24;
+const FOOTER_LOGO_HEIGHT = 16;
+
+function footerLogoHtml(logoUrl: string | undefined): string {
+  if (logoUrl === undefined || !/^https:\/\/\S+$/.test(logoUrl.trim())) return '';
+  return `<img src="${escapeHtml(logoUrl.trim())}" width="${FOOTER_LOGO_WIDTH}" height="${FOOTER_LOGO_HEIGHT}" alt="Souris" style="border:0;display:inline-block;vertical-align:-3px;margin-right:6px;" />`;
+}
+
 interface EmailCopy {
   readonly subject: string;
   readonly intro: string;
@@ -163,6 +182,7 @@ function copyFor(kind: AppointmentEmailKind, businessName: string): EmailCopy {
 export function renderAppointmentEmail(
   kind: AppointmentEmailKind,
   payload: AppointmentEmailPayload,
+  options: RenderAppointmentEmailOptions = {},
 ): RenderedEmail {
   const copy = copyFor(kind, payload.businessName);
   const date = formatAppointmentEmailDate(payload.appointmentStartAt);
@@ -227,7 +247,7 @@ export function renderAppointmentEmail(
               </td>
             </tr>
           </table>
-          <p style="margin:16px 0 0;font-size:12px;color:${EMAIL_SOFT};font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Envoyé avec Souris</p>
+          <p style="margin:16px 0 0;font-size:12px;color:${EMAIL_SOFT};font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${footerLogoHtml(options.logoUrl)}Envoyé avec Souris</p>
         </td>
       </tr>
     </table>
