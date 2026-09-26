@@ -132,17 +132,27 @@ export interface RenderedEmail {
 
 export interface RenderAppointmentEmailOptions {
   /**
-   * Public HTTPS URL of the small Souris logo PNG shown in the footer
-   * (SOURIS_EMAIL_LOGO_URL). Email clients can only load public HTTPS
-   * assets — never a bundled app asset, a file path or a data URI. Absent
-   * or non-HTTPS, the footer stays text-only and equally clean.
+   * Public HTTPS URL of the Souris brand image shown in the footer
+   * (SOURIS_EMAIL_LOGO_URL — the variable name is stable even though the
+   * asset is the WORDMARK: a public PNG copy of
+   * `assets/brand/logo-wordmark.png`, the visual source of truth). Email
+   * clients can only load public HTTPS assets — never a bundled app asset,
+   * a file path or a data URI. Absent or non-HTTPS, the footer falls back
+   * to the plain « Envoyé avec Souris » text.
    */
   readonly logoUrl?: string;
 }
 
-/** 3:2, matching the intrinsic ratio of the Souris logo-mark artwork. */
-const FOOTER_LOGO_WIDTH = 24;
-const FOOTER_LOGO_HEIGHT = 16;
+/**
+ * The Souris WORDMARK (`assets/brand/logo-wordmark.png`, intrinsic
+ * 2172×724 = exactly 3:1): 120×40 keeps that ratio to the pixel and reads
+ * comfortably on a phone without zooming. The wordmark IS the brand name in
+ * the footer — never the small logo-mark, never a redrawn logo.
+ */
+export const FOOTER_WORDMARK_WIDTH = 120;
+export const FOOTER_WORDMARK_HEIGHT = 40;
+/** « Envoyé avec » stays discreet and light next to the wordmark. */
+export const FOOTER_TEXT_SIZE_PX = 12;
 
 /**
  * THE canonicalization of the configured logo URL, used by the production
@@ -165,10 +175,32 @@ export function normalizeEmailLogoUrl(raw: string | undefined): string | undefin
   return /^https:\/\/\S+$/.test(candidate) ? candidate : undefined;
 }
 
-function footerLogoHtml(logoUrl: string | undefined): string {
+/**
+ * The ONE shared footer of every appointment email kind:
+ *
+ *   image configured   « Envoyé avec [Souris wordmark] » — the wordmark IS
+ *                      the brand name; « Souris » is never duplicated as
+ *                      plain text next to it (it survives only as alt text
+ *                      for blocked images)
+ *   image unavailable  « Envoyé avec Souris » — the clean text fallback
+ *
+ * One centered horizontal row, built as a small presentation table so the
+ * wording and the wordmark stay vertically centered in every mail client
+ * (flexbox and inline-block baseline tricks are not reliable in email).
+ * The discreet 12px wording sits left, the 120×40 wordmark right, 8px
+ * apart. Branding only: no appointment information lives in the image.
+ */
+function footerHtml(logoUrl: string | undefined): string {
   const canonical = normalizeEmailLogoUrl(logoUrl);
-  if (canonical === undefined) return '';
-  return `<img src="${escapeHtml(canonical)}" width="${FOOTER_LOGO_WIDTH}" height="${FOOTER_LOGO_HEIGHT}" alt="Souris" style="border:0;display:inline-block;vertical-align:-3px;margin-right:6px;" />`;
+  const textStyle = `vertical-align:middle;font-size:${FOOTER_TEXT_SIZE_PX}px;color:${EMAIL_SOFT};font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;`;
+  if (canonical === undefined) {
+    return `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:20px auto 0;border-collapse:collapse;">
+            <tr><td style="${textStyle}">Envoyé avec Souris</td></tr>
+          </table>`;
+  }
+  return `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:20px auto 0;border-collapse:collapse;">
+            <tr><td style="${textStyle}padding-right:8px;">Envoyé avec</td><td style="vertical-align:middle;"><img src="${escapeHtml(canonical)}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="Souris" style="display:block;border:0;outline:none;text-decoration:none;" /></td></tr>
+          </table>`;
 }
 
 interface EmailCopy {
@@ -269,7 +301,7 @@ export function renderAppointmentEmail(
               </td>
             </tr>
           </table>
-          <p style="margin:16px 0 0;font-size:12px;color:${EMAIL_SOFT};font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${footerLogoHtml(options.logoUrl)}Envoyé avec Souris</p>
+          ${footerHtml(options.logoUrl)}
         </td>
       </tr>
     </table>

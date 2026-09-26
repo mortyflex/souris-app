@@ -2,6 +2,9 @@
 
 import {
   escapeHtml,
+  FOOTER_TEXT_SIZE_PX,
+  FOOTER_WORDMARK_HEIGHT,
+  FOOTER_WORDMARK_WIDTH,
   normalizeEmailLogoUrl,
   formatAppointmentEmailDate,
   formatAppointmentEmailTime,
@@ -142,14 +145,41 @@ describe('the footer logo', () => {
   const PRODUCTION_LOGO =
     'https://oxfqcgbtihczubisjyek.supabase.co/storage/v1/object/public/brand/logo-mark.png';
 
-  it('accepts the exact production URL verbatim and renders the exact img markup', () => {
+  it('accepts the exact production URL verbatim and renders the exact wordmark markup', () => {
     expect(normalizeEmailLogoUrl(PRODUCTION_LOGO)).toBe(PRODUCTION_LOGO);
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, {
       logoUrl: PRODUCTION_LOGO,
     });
     expect(email.html).toContain(
-      `<img src="${PRODUCTION_LOGO}" width="24" height="16" alt="Souris" style="border:0;display:inline-block;vertical-align:-3px;margin-right:6px;" />Envoyé avec Souris`,
+      `<img src="${PRODUCTION_LOGO}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="Souris" style="display:block;border:0;outline:none;text-decoration:none;" />`,
     );
+  });
+
+  it('reads « Envoyé avec [wordmark] » — one centered row, the wordmark carrying the brand', () => {
+    const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, {
+      logoUrl: PRODUCTION_LOGO,
+    });
+    const footer = email.html.slice(email.html.lastIndexOf('<table'));
+    // One presentation table row: the discreet wording, THEN the wordmark.
+    expect(footer).toContain('role="presentation"');
+    expect(footer).toContain('align="center"');
+    expect((footer.match(/<tr>/g) ?? []).length).toBe(1);
+    expect(footer).toContain('Envoyé avec');
+    expect(footer.indexOf('Envoyé avec')).toBeLessThan(footer.indexOf('<img'));
+    expect((footer.match(/vertical-align:middle/g) ?? []).length).toBe(2);
+    expect(footer).toContain('padding-right:8px');
+    // The brand name is the IMAGE: « Souris » never doubles as plain text
+    // next to the wordmark — it survives only as the alt attribute.
+    expect(footer).not.toContain('Envoyé avec Souris');
+    expect(footer.replace('alt="Souris"', '')).not.toContain('Souris');
+    // Balance lock: 120×40 wordmark (the exact 3:1 intrinsic ratio of
+    // assets/brand/logo-wordmark.png) over discreet, non-bold 12px wording.
+    expect(FOOTER_WORDMARK_WIDTH).toBe(120);
+    expect(FOOTER_WORDMARK_HEIGHT).toBe(40);
+    expect(FOOTER_WORDMARK_WIDTH / FOOTER_WORDMARK_HEIGHT).toBeCloseTo(2172 / 724);
+    expect(footer).toContain(`font-size:${FOOTER_TEXT_SIZE_PX}px`);
+    expect(FOOTER_WORDMARK_HEIGHT).toBeGreaterThan(2 * FOOTER_TEXT_SIZE_PX);
+    expect(footer).not.toContain('font-weight');
   });
 
   it('canonicalizes the Dashboard paste artifacts: whitespace, newlines, surrounding quotes', () => {
@@ -178,18 +208,28 @@ describe('the footer logo', () => {
     }
   });
 
-  it('renders the Souris logo before « Envoyé avec Souris », email-safe and sized', () => {
+  it('renders the wordmark after « Envoyé avec », email-safe and sized', () => {
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, { logoUrl: LOGO });
-    const footer = email.html.slice(email.html.indexOf('Envoyé avec Souris') - 400);
-    expect(footer).toContain(`<img src="${LOGO}" width="24" height="16" alt="Souris"`);
-    expect(email.html.indexOf('<img')).toBeLessThan(email.html.indexOf('Envoyé avec Souris'));
-    // Layout, colors and content are otherwise unchanged.
+    expect(email.html).toContain(
+      `<img src="${LOGO}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="Souris"`,
+    );
+    // Layout, colors and content are otherwise unchanged; the plain-text
+    // version keeps its own textual footer.
     expect(email.html).toContain('Bonjour Léa,');
     expect(email.text).toContain('Envoyé avec Souris');
     expect(email.text).not.toContain('<img');
   });
 
-  it('keeps the clean text-only footer without a configured logo', () => {
+  it('every appointment kind shares the same wordmark footer', () => {
+    for (const kind of ['APPOINTMENT_REMINDER', 'APPOINTMENT_RESCHEDULED', 'APPOINTMENT_CANCELLED'] as const) {
+      const email = renderAppointmentEmail(kind, payload, { logoUrl: LOGO });
+      expect(email.html).toContain(`<img src="${LOGO}" width="${FOOTER_WORDMARK_WIDTH}"`);
+      const footer = email.html.slice(email.html.lastIndexOf('<table'));
+      expect(footer).not.toContain('Envoyé avec Souris');
+    }
+  });
+
+  it('keeps the clean « Envoyé avec Souris » text fallback without a configured image', () => {
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload);
     expect(email.html).not.toContain('<img');
     expect(email.html).toContain('Envoyé avec Souris');

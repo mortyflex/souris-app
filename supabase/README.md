@@ -375,14 +375,16 @@ The sender domain must be added and VERIFIED in the Resend dashboard first (SPF 
 worker refuses the pass (HTTP 500, nothing claimed) while either secret is missing or the sender
 is not a valid address.
 
-Optional footer branding — the Souris logo next to « Envoyé avec Souris »: email clients only
-load public HTTPS assets (a bundled app asset, file path or data URI never renders), so export
-a small PNG of `assets/brand/logo-mark.png` (3:2 — e.g. 48×32 for crisp 2× rendering at the
-24×16 slot), upload it somewhere public and stable — e.g. a PUBLIC Supabase Storage bucket
-(`brand`), separate from the private `business-media` one:
+Optional footer branding — the footer reads « Envoyé avec [Souris wordmark] »: the visual
+source of truth is `assets/brand/logo-wordmark.png` (the EMAIL footer never uses the small
+`logo-mark.png`). Email clients only load public HTTPS assets (a bundled app asset, file path
+or data URI never renders), so upload a public PNG copy of that exact wordmark (intrinsic
+2172×724 = 3:1 — e.g. a 240×80 export for crisp 2× rendering at the 120×40 footer slot; the
+full-resolution export also works, just heavier) to the PUBLIC Supabase Storage bucket
+(`brand`), separate from the private `business-media` one, and point the SAME variable at it:
 
 ```bash
-npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage/v1/object/public/brand/logo-mark.png
+npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage/v1/object/public/brand/logo-wordmark.png
 ```
 
 The URL must be plain `https://`; surrounding whitespace, a trailing newline or ONE layer of
