@@ -167,7 +167,7 @@ describe('the footer logo', () => {
     expect(footer).toContain('Envoyé avec');
     expect(footer.indexOf('Envoyé avec')).toBeLessThan(footer.indexOf('<img'));
     expect((footer.match(/vertical-align:middle/g) ?? []).length).toBe(2);
-    expect(footer).toContain('padding-right:8px');
+    expect(footer).toContain('padding-right:4px');
     // The brand name is the IMAGE: « Souris » never doubles as plain text
     // next to the wordmark — it survives only as the alt attribute.
     expect(footer).not.toContain('Envoyé avec Souris');

@@ -187,8 +187,8 @@ export function normalizeEmailLogoUrl(raw: string | undefined): string | undefin
  * One centered horizontal row, built as a small presentation table so the
  * wording and the wordmark stay vertically centered in every mail client
  * (flexbox and inline-block baseline tricks are not reliable in email).
- * The discreet 12px wording sits left, the 120×40 wordmark right, 8px
- * apart. Branding only: no appointment information lives in the image.
+ * The discreet 12px wording sits left, the 120×40 wordmark right, a tight
+ * 4px apart. Branding only: no appointment information lives in the image.
  */
 function footerHtml(logoUrl: string | undefined): string {
   const canonical = normalizeEmailLogoUrl(logoUrl);
@@ -199,7 +199,7 @@ function footerHtml(logoUrl: string | undefined): string {
           </table>`;
   }
   return `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:20px auto 0;border-collapse:collapse;">
-            <tr><td style="${textStyle}padding-right:8px;">Envoyé avec</td><td style="vertical-align:middle;"><img src="${escapeHtml(canonical)}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="Souris" style="display:block;border:0;outline:none;text-decoration:none;" /></td></tr>
+            <tr><td style="${textStyle}padding-right:4px;">Envoyé avec</td><td style="vertical-align:middle;"><img src="${escapeHtml(canonical)}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="Souris" style="display:block;border:0;outline:none;text-decoration:none;" /></td></tr>
           </table>`;
 }
 
