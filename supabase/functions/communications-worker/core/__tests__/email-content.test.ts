@@ -2,6 +2,7 @@
 
 import {
   escapeHtml,
+  normalizeEmailLogoUrl,
   formatAppointmentEmailDate,
   formatAppointmentEmailTime,
   isAppointmentEmailKind,
@@ -137,6 +138,45 @@ describe('the cancelled template', () => {
 
 describe('the footer logo', () => {
   const LOGO = 'https://example.supabase.co/storage/v1/object/public/brand/logo-mark.png';
+  // The EXACT public production asset, byte for byte.
+  const PRODUCTION_LOGO =
+    'https://oxfqcgbtihczubisjyek.supabase.co/storage/v1/object/public/brand/logo-mark.png';
+
+  it('accepts the exact production URL verbatim and renders the exact img markup', () => {
+    expect(normalizeEmailLogoUrl(PRODUCTION_LOGO)).toBe(PRODUCTION_LOGO);
+    const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, {
+      logoUrl: PRODUCTION_LOGO,
+    });
+    expect(email.html).toContain(
+      `<img src="${PRODUCTION_LOGO}" width="24" height="16" alt="Souris" style="border:0;display:inline-block;vertical-align:-3px;margin-right:6px;" />Envoyé avec Souris`,
+    );
+  });
+
+  it('canonicalizes the Dashboard paste artifacts: whitespace, newlines, surrounding quotes', () => {
+    for (const pasted of [
+      `  ${PRODUCTION_LOGO}  `,
+      `${PRODUCTION_LOGO}\n`,
+      `"${PRODUCTION_LOGO}"`,
+      `'${PRODUCTION_LOGO}'`,
+      ` "${PRODUCTION_LOGO}" \n`,
+    ]) {
+      expect(normalizeEmailLogoUrl(pasted)).toBe(PRODUCTION_LOGO);
+      const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, { logoUrl: pasted });
+      expect(email.html).toContain(`<img src="${PRODUCTION_LOGO}"`);
+    }
+  });
+
+  it('still refuses internal whitespace and non-HTTPS schemes after normalization', () => {
+    for (const bad of [
+      'https://bad url/logo.png',
+      '"http://insecure.example/logo.png"',
+      '""',
+      '"',
+      undefined,
+    ]) {
+      expect(normalizeEmailLogoUrl(bad)).toBeUndefined();
+    }
+  });
 
   it('renders the Souris logo before « Envoyé avec Souris », email-safe and sized', () => {
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, { logoUrl: LOGO });

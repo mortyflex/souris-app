@@ -10,7 +10,7 @@
 // malformed configuration throws BEFORE anything is claimed, so a
 // misconfigured deployment marks nothing PROCESSING and loses nothing.
 
-import { isUsableEmailAddress } from './email-content.ts';
+import { isUsableEmailAddress, normalizeEmailLogoUrl } from './email-content.ts';
 import { ResendEmailTransport } from './resend-transport.ts';
 import type { TransportRegistry } from './transport.ts';
 import { UnsupportedChannelTransport } from './unsupported-transport.ts';
@@ -24,6 +24,14 @@ export class WorkerConfigurationError extends Error {
 
 export type SecretReader = (name: string) => string | undefined;
 
+/**
+ * Safe runtime diagnostic: whether the configured SOURIS_EMAIL_LOGO_URL is
+ * present AND survives canonicalization — a boolean only, never the value.
+ */
+export function isEmailLogoConfigured(readSecret: SecretReader): boolean {
+  return normalizeEmailLogoUrl(readSecret('SOURIS_EMAIL_LOGO_URL')) !== undefined;
+}
+
 export function createProductionTransportRegistry(
   readSecret: SecretReader,
   fetchFn?: typeof fetch,
@@ -36,8 +44,9 @@ export function createProductionTransportRegistry(
   if (!fromEmail || !isUsableEmailAddress(fromEmail)) {
     throw new WorkerConfigurationError('RESEND_FROM_EMAIL is not a configured, valid sender address');
   }
-  // Optional footer branding: absent, emails simply keep the text-only footer.
-  const logoUrl = readSecret('SOURIS_EMAIL_LOGO_URL')?.trim() || undefined;
+  // Optional footer branding: absent or unusable, emails simply keep the
+  // text-only footer. Canonicalized by the ONE rule the renderer applies.
+  const logoUrl = normalizeEmailLogoUrl(readSecret('SOURIS_EMAIL_LOGO_URL'));
   return {
     EMAIL: new ResendEmailTransport({ apiKey, fromEmail, logoUrl, fetchFn }),
     SMS: new UnsupportedChannelTransport('SMS'),

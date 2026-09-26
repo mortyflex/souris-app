@@ -144,9 +144,31 @@ export interface RenderAppointmentEmailOptions {
 const FOOTER_LOGO_WIDTH = 24;
 const FOOTER_LOGO_HEIGHT = 16;
 
+/**
+ * THE canonicalization of the configured logo URL, used by the production
+ * registry and by the renderer alike. A Dashboard-pasted secret may carry
+ * surrounding whitespace, a trailing newline or one layer of surrounding
+ * quotes ("https://…"): all are stripped before validation. What remains
+ * must be a plain HTTPS URL with no internal whitespace — anything else
+ * (http:, data:, file:, blank) is refused and the footer stays text-only.
+ */
+export function normalizeEmailLogoUrl(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  let candidate = raw.trim();
+  if (
+    candidate.length >= 2 &&
+    ((candidate.startsWith('"') && candidate.endsWith('"')) ||
+      (candidate.startsWith("'") && candidate.endsWith("'")))
+  ) {
+    candidate = candidate.slice(1, -1).trim();
+  }
+  return /^https:\/\/\S+$/.test(candidate) ? candidate : undefined;
+}
+
 function footerLogoHtml(logoUrl: string | undefined): string {
-  if (logoUrl === undefined || !/^https:\/\/\S+$/.test(logoUrl.trim())) return '';
-  return `<img src="${escapeHtml(logoUrl.trim())}" width="${FOOTER_LOGO_WIDTH}" height="${FOOTER_LOGO_HEIGHT}" alt="Souris" style="border:0;display:inline-block;vertical-align:-3px;margin-right:6px;" />`;
+  const canonical = normalizeEmailLogoUrl(logoUrl);
+  if (canonical === undefined) return '';
+  return `<img src="${escapeHtml(canonical)}" width="${FOOTER_LOGO_WIDTH}" height="${FOOTER_LOGO_HEIGHT}" alt="Souris" style="border:0;display:inline-block;vertical-align:-3px;margin-right:6px;" />`;
 }
 
 interface EmailCopy {

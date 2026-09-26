@@ -385,8 +385,13 @@ a small PNG of `assets/brand/logo-mark.png` (3:2 — e.g. 48×32 for crisp 2× r
 npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage/v1/object/public/brand/logo-mark.png
 ```
 
-The URL must be plain `https://`; anything else is ignored. Without the secret (or if the image
-fails to load) the footer stays text-only and clean — sending is never affected. The API key must never exist in Expo env, the app bundle, SQLite, public
+The URL must be plain `https://`; surrounding whitespace, a trailing newline or ONE layer of
+surrounding quotes (a manual Dashboard paste artifact) are stripped, anything else is ignored.
+Without a usable value (or if the image fails to load) the footer stays text-only and clean —
+sending is never affected. Each worker run answers with `emailLogoConfigured: true|false` — a
+boolean only, never the value — so a smoke call shows at once whether the RUNNING instance
+reads a usable logo URL; `false` means the secret is absent from that instance's environment
+(re-set it and redeploy/restart the function) or its value fails validation. The API key must never exist in Expo env, the app bundle, SQLite, public
 database rows or source control. The From displays « <business name> via Souris »; replies go to
 the professional's configured Reply-To.
 

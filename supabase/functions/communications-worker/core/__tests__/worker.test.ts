@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createFakeTransportRegistry, FakeCommunicationTransport } from '../fake-transport';
 import {
   createProductionTransportRegistry,
+  isEmailLogoConfigured,
   WorkerConfigurationError,
 } from '../production-transports';
 import { ResendEmailTransport } from '../resend-transport';
@@ -195,6 +196,52 @@ describe('the delivery surface stays contained (Lot B)', () => {
     for (const transport of Object.values(registry)) {
       expect(transport).not.toBeInstanceOf(FakeCommunicationTransport);
     }
+  });
+
+  it('PRODUCTION PATH: env → registry → EMAIL transport → mocked Resend body carries the logo', async () => {
+    // The exact deployed chain: the same factory the Edge entry calls, fed by
+    // the same secret names, down to the HTML posted to the (mocked) provider.
+    const PRODUCTION_LOGO =
+      'https://oxfqcgbtihczubisjyek.supabase.co/storage/v1/object/public/brand/logo-mark.png';
+    const env: Record<string, string> = {
+      RESEND_API_KEY: 'test-key',
+      RESEND_FROM_EMAIL: 'rappels@souris.test',
+      SOURIS_EMAIL_LOGO_URL: PRODUCTION_LOGO,
+    };
+    const requests: { body: string }[] = [];
+    const fetchFn = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ body: String(init?.body) });
+      return new Response(JSON.stringify({ id: 'resend-1' }), { status: 200 });
+    }) as typeof fetch;
+
+    const registry = createProductionTransportRegistry((name) => env[name], fetchFn);
+    expect(isEmailLogoConfigured((name) => env[name])).toBe(true);
+
+    const result = await registry.EMAIL.send({
+      id: 'c-logo',
+      businessId: 'biz-1',
+      kind: 'APPOINTMENT_REMINDER',
+      channel: 'EMAIL',
+      recipient: 'lea@example.test',
+      payload: {
+        business_name: 'Salon Amélie',
+        client_first_name: 'Léa',
+        appointment_start_at: '2027-03-26T13:30:00.000Z',
+        services: ['Coloration'],
+        reply_to: 'amelie@salon.test',
+      },
+    });
+
+    expect(result.status).toBe('SENT');
+    const html = (JSON.parse(requests[0].body) as { html: string }).html;
+    expect(html).toContain('logo-mark.png');
+    expect(html).toContain(`<img src="${PRODUCTION_LOGO}"`);
+  });
+
+  it('the logo diagnostic is a boolean that never leaks the value', () => {
+    expect(isEmailLogoConfigured(() => undefined)).toBe(false);
+    expect(isEmailLogoConfigured(() => 'not-a-url')).toBe(false);
+    expect(isEmailLogoConfigured(() => '"https://cdn.souris.test/logo.png"\n')).toBe(true);
   });
 
   it('a missing or invalid provider configuration refuses the pass before anything is claimed', () => {

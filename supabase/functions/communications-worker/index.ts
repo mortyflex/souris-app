@@ -28,6 +28,7 @@
 import { withSupabase } from 'npm:@supabase/server';
 import {
   createProductionTransportRegistry,
+  isEmailLogoConfigured,
   WorkerConfigurationError,
 } from './core/production-transports.ts';
 import {
@@ -45,8 +46,14 @@ export default {
       const queue = createSupabaseCommunicationQueue(ctx.supabaseAdmin);
       const reconciliation = createSupabaseReconciliationRetryQueue(ctx.supabaseAdmin);
       const summary = await runCommunicationsWorker({ queue, transports, reconciliation });
-      // Counts only: payloads and recipients are business-private (never logged).
-      return Response.json({ ok: true, ...summary });
+      // Counts and booleans only: payloads, recipients and secret VALUES are
+      // never logged. `emailLogoConfigured` says whether SOURIS_EMAIL_LOGO_URL
+      // is present and valid in THIS running instance.
+      return Response.json({
+        ok: true,
+        emailLogoConfigured: isEmailLogoConfigured((name) => Deno.env.get(name)),
+        ...summary,
+      });
     } catch (error) {
       if (error instanceof WorkerConfigurationError) {
         return Response.json({ ok: false, error: error.message }, { status: 500 });
