@@ -5,6 +5,7 @@ import { CommunicationsGatewayError } from '@/features/communications/gateway';
 import {
   createSupabaseCommunicationsGateway,
   mapCommunicationsPostgrestError,
+  toAppointmentChannelReminderStatuses,
   toAppointmentReminderStatus,
   type SupabaseCommunicationsApi,
 } from '../communications-gateway';
@@ -33,7 +34,11 @@ describe('readPreferences', () => {
     const preferences = await gateway.readPreferences('biz-1');
 
     expect(calls[0]).toEqual({ fn: 'communications_read_preferences', args: { p_business_id: 'biz-1' } });
-    expect(preferences).toEqual({ emailRemindersEnabled: true, replyToEmail: 'a@b.test' });
+    expect(preferences).toEqual({
+      emailRemindersEnabled: true,
+      smsRemindersEnabled: false,
+      replyToEmail: 'a@b.test',
+    });
   });
 
   it('a null Reply-To hydrates as an absent property', async () => {
@@ -43,7 +48,7 @@ describe('readPreferences', () => {
       },
     });
     const preferences = await createSupabaseCommunicationsGateway(client).readPreferences('biz-1');
-    expect(preferences).toEqual({ emailRemindersEnabled: false });
+    expect(preferences).toEqual({ emailRemindersEnabled: false, smsRemindersEnabled: false });
     expect('replyToEmail' in preferences).toBe(false);
   });
 
@@ -72,7 +77,11 @@ describe('updatePreferences', () => {
     });
     expect(result).toEqual({
       status: 'UPDATED',
-      preferences: { emailRemindersEnabled: true, replyToEmail: 'a@b.test' },
+      preferences: {
+        emailRemindersEnabled: true,
+        smsRemindersEnabled: false,
+        replyToEmail: 'a@b.test',
+      },
     });
   });
 
@@ -111,6 +120,68 @@ describe('readAppointmentReminderStatus', () => {
     expect(toAppointmentReminderStatus({ status: 'SENT', sent_at: '2026-09-25T10:00:00.000Z' }).sentAt).toBeDefined();
     expect(() => toAppointmentReminderStatus({ status: 'WHATEVER' })).toThrow(CommunicationsGatewayError);
     expect(() => toAppointmentReminderStatus('SENT')).toThrow(CommunicationsGatewayError);
+  });
+});
+
+describe('readAppointmentReminderStatuses (Lot C1)', () => {
+  it('maps the per-channel projection', async () => {
+    const { client, calls } = createRpcMock({
+      communications_appointment_reminder_statuses: {
+        data: [
+          { channel: 'EMAIL', status: 'SENT', sent_at: '2026-09-25T10:00:00.000Z' },
+          { channel: 'SMS', status: 'SCHEDULED', scheduled_for: '2027-03-25T13:30:00.000Z' },
+        ],
+      },
+    });
+    const statuses = await createSupabaseCommunicationsGateway(
+      client,
+    ).readAppointmentReminderStatuses('biz-1', 'apt-1');
+    expect(calls[0]).toEqual({
+      fn: 'communications_appointment_reminder_statuses',
+      args: { p_business_id: 'biz-1', p_appointment_id: 'apt-1' },
+    });
+    expect(statuses).toHaveLength(2);
+    expect(statuses[0]).toMatchObject({ channel: 'EMAIL', status: 'SENT' });
+    expect(statuses[1]?.channel).toBe('SMS');
+    expect(statuses[1]?.scheduledFor?.toISOString()).toBe('2027-03-25T13:30:00.000Z');
+  });
+
+  it('accepts the SMS recipient states and refuses anything malformed', () => {
+    expect(
+      toAppointmentChannelReminderStatuses([
+        { channel: 'SMS', status: 'MISSING_PHONE' },
+        { channel: 'SMS', status: 'INVALID_PHONE' },
+      ]),
+    ).toEqual([
+      { channel: 'SMS', status: 'MISSING_PHONE' },
+      { channel: 'SMS', status: 'INVALID_PHONE' },
+    ]);
+    expect(() => toAppointmentChannelReminderStatuses({ status: 'SENT' })).toThrow(
+      CommunicationsGatewayError,
+    );
+    expect(() =>
+      toAppointmentChannelReminderStatuses([{ channel: 'FAX', status: 'SENT' }]),
+    ).toThrow(CommunicationsGatewayError);
+    expect(() =>
+      toAppointmentChannelReminderStatuses([{ channel: 'EMAIL', status: 'WHATEVER' }]),
+    ).toThrow(CommunicationsGatewayError);
+  });
+});
+
+describe('SMS preference parsing (Lot C1)', () => {
+  it('a server answer with the SMS switch on hydrates it', async () => {
+    const { client } = createRpcMock({
+      communications_read_preferences: {
+        data: {
+          email_reminders_enabled: true,
+          sms_reminders_enabled: true,
+          reply_to_email: 'a@b.test',
+          updated_at: null,
+        },
+      },
+    });
+    const preferences = await createSupabaseCommunicationsGateway(client).readPreferences('biz-1');
+    expect(preferences.smsRemindersEnabled).toBe(true);
   });
 });
 

@@ -66,6 +66,7 @@ describe('loading', () => {
     expect(value().emailRemindersEnabled).toBe(true);
     expect(readCachedCommunicationPreferences(database, testBusiness.id)).toEqual({
       emailRemindersEnabled: true,
+      smsRemindersEnabled: false,
       replyToEmail: 'salon@example.test',
     });
   });

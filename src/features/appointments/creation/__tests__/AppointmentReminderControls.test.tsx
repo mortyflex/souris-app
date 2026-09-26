@@ -133,6 +133,28 @@ function Probe() {
           })
         }
       />
+      <Pressable
+        testID="give-lea-landline"
+        onPress={() =>
+          updateClient({
+            id: 'client-agenda-lea',
+            firstName: 'Léa',
+            lastName: 'Martin',
+            phone: '01 42 00 00 00',
+          })
+        }
+      />
+      <Pressable
+        testID="give-lea-mobile"
+        onPress={() =>
+          updateClient({
+            id: 'client-agenda-lea',
+            firstName: 'Léa',
+            lastName: 'Martin',
+            phone: '06 12 34 56 78',
+          })
+        }
+      />
     </>
   );
 }
@@ -240,6 +262,56 @@ describe('with the global preference enabled', () => {
     expect(view.queryByTestId('creation-missing-email-notice')).toBeNull();
     await press(view.getByText('Créer le rendez-vous'));
     expect(view.getByTestId('last-appointment-reminder').props.children).toBe('false');
+  });
+});
+
+// Lot C1: SMS is globally OFF for every real user — these states exist only
+// for the dedicated test Business. The warning never blocks the creation.
+function smsEnabledGateway() {
+  const gateway = createFakeCommunicationsGateway();
+  gateway.seedPreferences(testBusiness.id, {
+    emailRemindersEnabled: true,
+    smsRemindersEnabled: true,
+    replyToEmail: 'salon@example.test',
+  });
+  return gateway;
+}
+
+describe('with SMS reminders enabled (Lot C1, test Business only)', () => {
+  it('shows the channel-neutral toggle copy and warns about a missing phone', async () => {
+    const view = await renderCreation(smsEnabledGateway());
+    await reachSummary(view);
+
+    expect(view.getByText('Rappel automatique 24 h avant le rendez-vous')).toBeTruthy();
+    // Léa Martin has neither email nor phone in the fixtures.
+    expect(view.getByTestId('creation-missing-phone-notice')).toBeTruthy();
+    expect(view.getByText('Aucun numéro de téléphone renseigné')).toBeTruthy();
+    expect(view.getByText('Le rappel SMS ne pourra pas être envoyé.')).toBeTruthy();
+
+    await press(view.getByText('Créer le rendez-vous'));
+    expect(view.getByTestId('last-appointment-reminder').props.children).toBe('true');
+  });
+
+  it('a landline shows the invalid-number variant; a mobile clears it', async () => {
+    const view = await renderCreation(smsEnabledGateway());
+    await reachSummary(view);
+
+    await press(view.getByTestId('give-lea-landline'));
+    expect(view.getByText('Numéro de téléphone non reconnu')).toBeTruthy();
+    expect(view.getByText('Modifier le numéro')).toBeTruthy();
+
+    await press(view.getByTestId('give-lea-mobile'));
+    expect(view.queryByTestId('creation-missing-phone-notice')).toBeNull();
+  });
+});
+
+describe('with only email enabled (every real user in C1)', () => {
+  it('never shows a phone notice', async () => {
+    const view = await renderCreation(enabledGateway());
+    await reachSummary(view);
+
+    expect(view.queryByTestId('creation-missing-phone-notice')).toBeNull();
+    expect(view.queryByText(/téléphone/)).toBeNull();
   });
 });
 

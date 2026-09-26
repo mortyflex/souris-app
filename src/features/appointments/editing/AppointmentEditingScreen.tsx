@@ -50,7 +50,10 @@ import {
 } from '@/domain/appointments';
 import { findAppointmentChangeCalendarBlockConflict } from '@/domain/calendar-blocks';
 import { isClientBirthdayOnDate } from '@/domain/clients';
-import { isUsableCommunicationEmail } from '@/domain/communications';
+import {
+  communicationSmsPhoneIssue,
+  isUsableCommunicationEmail,
+} from '@/domain/communications';
 import { DepositShortfallNotice } from '@/features/appointments/deposits/DepositShortfallNotice';
 import { describeDepositShortfall } from '@/features/appointments/deposits/presentation';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
@@ -60,8 +63,12 @@ import { useCalendarBlockSession } from '@/features/calendar-blocks/session/Cale
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { MissingEmailNotice } from '@/features/communications/components/MissingEmailNotice';
+import { MissingPhoneNotice } from '@/features/communications/components/MissingPhoneNotice';
 import { useOptionalCommunicationPreferences } from '@/features/communications/preferences/CommunicationPreferencesProvider';
-import { APPOINTMENT_REMINDER_ROW_LABEL } from '@/features/communications/presentation';
+import {
+  APPOINTMENT_REMINDER_ROW_LABEL,
+  APPOINTMENT_REMINDER_TOGGLE_DESCRIPTION,
+} from '@/features/communications/presentation';
 import { useOptionalSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
@@ -130,10 +137,14 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
   const [draftDiscount, setDraftDiscount] = useState<AppointmentDiscount | undefined>(
     initialDiscount,
   );
-  // Per-appointment client reminder (Lot B): shown while the GLOBAL
-  // preference is on; absent (older records) reads as enabled.
-  const remindersGloballyEnabled =
-    useOptionalCommunicationPreferences()?.emailRemindersEnabled ?? false;
+  // Per-appointment client reminder (Lots B/C1): ONE master toggle for
+  // every channel, shown while at least one GLOBAL channel is on; absent
+  // (older records) reads as enabled. SMS stays globally off for every
+  // real user in C1.
+  const communicationPreferences = useOptionalCommunicationPreferences();
+  const emailRemindersGloballyEnabled = communicationPreferences?.emailRemindersEnabled ?? false;
+  const smsRemindersGloballyEnabled = communicationPreferences?.smsRemindersEnabled ?? false;
+  const reminderAutomationEnabled = emailRemindersGloballyEnabled || smsRemindersGloballyEnabled;
   const [initialReminderEnabled] = useState(() =>
     appointment ? isAppointmentClientReminderEnabled(appointment) : true,
   );
@@ -377,10 +388,10 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
             onChange={setDraftDiscount}
             servicesTotal={servicesTotal}
           />
-          {remindersGloballyEnabled && (
+          {reminderAutomationEnabled && (
             <GroupedSurface testID="appointment-edit-reminder">
               <SwitchRow
-                description="E-mail 24 h avant le rendez-vous"
+                description={APPOINTMENT_REMINDER_TOGGLE_DESCRIPTION}
                 label={APPOINTMENT_REMINDER_ROW_LABEL}
                 onValueChange={setDraftReminderEnabled}
                 testID="appointment-reminder-toggle"
@@ -388,12 +399,22 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
               />
             </GroupedSurface>
           )}
-          {remindersGloballyEnabled &&
+          {emailRemindersGloballyEnabled &&
             draftReminderEnabled &&
             !isUsableCommunicationEmail(draftClient?.email) && (
               <MissingEmailNotice
                 onAddEmail={() => setEditClientEmailVisible(true)}
                 testID="editing-missing-email-notice"
+              />
+            )}
+          {smsRemindersGloballyEnabled &&
+            draftReminderEnabled &&
+            draftClient !== undefined &&
+            communicationSmsPhoneIssue(draftClient.phone) !== undefined && (
+              <MissingPhoneNotice
+                onEditPhone={() => setEditClientEmailVisible(true)}
+                testID="editing-missing-phone-notice"
+                variant={communicationSmsPhoneIssue(draftClient.phone) ?? 'missing'}
               />
             )}
         </View>

@@ -86,7 +86,11 @@ describe('ReminderSettingsScreen', () => {
     expect(gateway.updates).toEqual([
       {
         businessId: testBusiness.id,
-        preferences: { emailRemindersEnabled: true, replyToEmail: fakeUser.email },
+        preferences: {
+          emailRemindersEnabled: true,
+          smsRemindersEnabled: false,
+          replyToEmail: fakeUser.email,
+        },
       },
     ]);
     expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(true);
@@ -119,7 +123,11 @@ describe('ReminderSettingsScreen', () => {
 
     expect(gateway.updates.at(-1)).toEqual({
       businessId: testBusiness.id,
-      preferences: { emailRemindersEnabled: false, replyToEmail: 'salon@example.test' },
+      preferences: {
+        emailRemindersEnabled: false,
+        smsRemindersEnabled: false,
+        replyToEmail: 'salon@example.test',
+      },
     });
     expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(false);
   });
@@ -141,6 +149,7 @@ describe('ReminderSettingsScreen', () => {
 
     expect(gateway.updates.at(-1)?.preferences).toEqual({
       emailRemindersEnabled: true,
+      smsRemindersEnabled: false,
       replyToEmail: 'nouvelle@example.test',
     });
   });

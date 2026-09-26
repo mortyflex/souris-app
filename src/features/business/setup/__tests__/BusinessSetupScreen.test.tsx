@@ -124,7 +124,11 @@ describe('BusinessSetupScreen', () => {
     await waitFor(() => expect(communications.calls.update).toBe(1));
     expect(communications.updates[0]).toEqual({
       businessId: business.rows[0]!.id,
-      preferences: { emailRemindersEnabled: true, replyToEmail: 'salon@example.fr' },
+      preferences: {
+        emailRemindersEnabled: true,
+        smsRemindersEnabled: false,
+        replyToEmail: 'salon@example.fr',
+      },
     });
     expect(view.getByTestId('business-session-status').props.children).toBe('ready');
   });

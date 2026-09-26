@@ -11,8 +11,11 @@ import type { PostgrestError } from '@supabase/supabase-js';
 
 import {
   CommunicationsGatewayError,
+  type AppointmentChannelReminderStatus,
+  type AppointmentChannelReminderStatusKind,
   type AppointmentReminderStatus,
   type AppointmentReminderStatusKind,
+  type CommunicationChannel,
   type CommunicationPreferences,
   type CommunicationsGateway,
   type UpdateCommunicationPreferencesResult,
@@ -51,6 +54,8 @@ function toPreferences(data: unknown): CommunicationPreferences {
   const replyTo = row.reply_to_email;
   return {
     emailRemindersEnabled: row.email_reminders_enabled,
+    // Absent on answers from a server that predates Lot C1: fail-safe false.
+    smsRemindersEnabled: row.sms_reminders_enabled === true,
     ...(typeof replyTo === 'string' && replyTo.length > 0 ? { replyToEmail: replyTo } : {}),
   };
 }
@@ -70,6 +75,43 @@ const STATUS_KINDS: readonly AppointmentReminderStatusKind[] = [
   'TOO_LATE',
   'NONE',
 ];
+
+const CHANNEL_STATUS_KINDS: readonly AppointmentChannelReminderStatusKind[] = [
+  ...STATUS_KINDS,
+  'MISSING_PHONE',
+  'INVALID_PHONE',
+];
+const CHANNELS: readonly CommunicationChannel[] = ['EMAIL', 'SMS'];
+
+/** Exported for tests: jsonb per-channel projection → validated statuses. */
+export function toAppointmentChannelReminderStatuses(
+  data: unknown,
+): readonly AppointmentChannelReminderStatus[] {
+  if (!Array.isArray(data)) {
+    throw new CommunicationsGatewayError('UNKNOWN', 'BADRESULT');
+  }
+  return data.map((entry) => {
+    const row = asObject(entry);
+    const channel = row.channel;
+    const status = row.status;
+    if (
+      typeof channel !== 'string' ||
+      !CHANNELS.includes(channel as CommunicationChannel) ||
+      typeof status !== 'string' ||
+      !CHANNEL_STATUS_KINDS.includes(status as AppointmentChannelReminderStatusKind)
+    ) {
+      throw new CommunicationsGatewayError('UNKNOWN', 'BADRESULT');
+    }
+    const scheduledFor = toOptionalInstant(row.scheduled_for);
+    const sentAt = toOptionalInstant(row.sent_at);
+    return {
+      channel: channel as CommunicationChannel,
+      status: status as AppointmentChannelReminderStatusKind,
+      ...(scheduledFor !== undefined ? { scheduledFor } : {}),
+      ...(sentAt !== undefined ? { sentAt } : {}),
+    };
+  });
+}
 
 /** Exported for tests: jsonb projection → validated reminder status. */
 export function toAppointmentReminderStatus(data: unknown): AppointmentReminderStatus {
@@ -125,6 +167,18 @@ export function createSupabaseCommunicationsGateway(
       });
       if (error) throw mapCommunicationsPostgrestError(error);
       return toAppointmentReminderStatus(data);
+    },
+
+    async readAppointmentReminderStatuses(
+      businessId,
+      appointmentId,
+    ): Promise<readonly AppointmentChannelReminderStatus[]> {
+      const { data, error } = await client.rpc('communications_appointment_reminder_statuses', {
+        p_business_id: businessId,
+        p_appointment_id: appointmentId,
+      });
+      if (error) throw mapCommunicationsPostgrestError(error);
+      return toAppointmentChannelReminderStatuses(data);
     },
   };
 }

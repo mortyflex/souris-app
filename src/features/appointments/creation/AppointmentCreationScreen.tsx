@@ -43,7 +43,10 @@ import { useRouter } from 'expo-router';
 
 import type { AppointmentDiscount, Service } from '@/domain/appointments';
 import { findAppointmentCalendarBlockConflict } from '@/domain/calendar-blocks';
-import { isUsableCommunicationEmail } from '@/domain/communications';
+import {
+  communicationSmsPhoneIssue,
+  isUsableCommunicationEmail,
+} from '@/domain/communications';
 import { getClientDisplayName, isClientBirthdayOnDate, type Client } from '@/domain/clients';
 import { currentStaffMemberId } from '@/features/appointments/current-staff-member';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
@@ -170,10 +173,14 @@ export function AppointmentCreationScreen({
   const [selectedDrafts, setSelectedDrafts] = useState<readonly SelectedServiceDraft[]>([]);
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
   const [draftDiscount, setDraftDiscount] = useState<AppointmentDiscount>();
-  // Per-appointment client reminder (Lot B). ON by default; only shown — and
-  // only stored — while the GLOBAL preference is enabled (fail-safe reading).
-  const remindersGloballyEnabled =
-    useOptionalCommunicationPreferences()?.emailRemindersEnabled ?? false;
+  // Per-appointment client reminder (Lots B/C1). ON by default; ONE master
+  // toggle for every channel — only shown, and only stored, while at least
+  // one global channel is enabled (fail-safe reading). SMS stays globally
+  // off for every real user in C1.
+  const communicationPreferences = useOptionalCommunicationPreferences();
+  const emailRemindersGloballyEnabled = communicationPreferences?.emailRemindersEnabled ?? false;
+  const smsRemindersGloballyEnabled = communicationPreferences?.smsRemindersEnabled ?? false;
+  const reminderAutomationEnabled = emailRemindersGloballyEnabled || smsRemindersGloballyEnabled;
   const [draftReminderEnabled, setDraftReminderEnabled] = useState(true);
   const [editClientEmailVisible, setEditClientEmailVisible] = useState(false);
   const [draftStartAt, setDraftStartAt] = useState<Date>(() =>
@@ -303,7 +310,7 @@ export function AppointmentCreationScreen({
       clientId: selectedClient.id,
       // Stored only when the professional actually saw the control: while the
       // global preference is off the field stays absent (= default enabled).
-      ...(remindersGloballyEnabled ? { clientReminderEnabled: draftReminderEnabled } : {}),
+      ...(reminderAutomationEnabled ? { clientReminderEnabled: draftReminderEnabled } : {}),
       discount: draftDiscount,
       itemIds: selectedDrafts.map((_, index) => createAppointmentItemId(appointmentId, index)),
       items: summaryItems,
@@ -466,12 +473,17 @@ export function AppointmentCreationScreen({
           // render, so a changed Client or date can never leave a stale reminder.
           birthdayReminder={isBirthdayAppointment}
           reminder={
-            remindersGloballyEnabled
+            reminderAutomationEnabled
               ? {
                   enabled: draftReminderEnabled,
                   onChange: setDraftReminderEnabled,
-                  missingClientEmail: !isUsableCommunicationEmail(selectedClient.email),
+                  missingClientEmail:
+                    emailRemindersGloballyEnabled &&
+                    !isUsableCommunicationEmail(selectedClient.email),
                   onAddEmail: () => setEditClientEmailVisible(true),
+                  phoneNotice: smsRemindersGloballyEnabled
+                    ? communicationSmsPhoneIssue(selectedClient.phone)
+                    : undefined,
                 }
               : undefined
           }

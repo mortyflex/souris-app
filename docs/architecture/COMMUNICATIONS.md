@@ -13,7 +13,11 @@ the real Resend EMAIL transport and the app's narrow status projection.
 ```text
 Lot A   Communication Core                 done — queue, worker, fake transport (§2–§11)
 Lot B   Appointment email reminders        done — preference, reconciliation, templates, Resend (§12–§20)
-Lot C   SMS provider                       future — SMS transport, quotas
+Lot C1  SMS reminder architecture          done — SMS preference, phone rules, channel-generic
+                                           reconciliation, per-channel projection (§22–§27);
+                                           NO provider, NO user-facing activation
+Lot C2  SMS provider                       future — real SMS transport, controlled test-Business send
+Lot C3  SMS quota / paywall                future — entitlement, user-facing SMS switch
         Paywall / entitlements             future — separate from the core
         Inactive-client campaigns          future — reuse the same engine (source_type CLIENT)
 ```
@@ -389,7 +393,9 @@ time of the event — never from `start_at` alone:
 ```text
 appointment:<id>:reminder:email:<sync_version>          initial reminder (per scheduling act)
 appointment:<id>:rescheduled:email:<sync_version>       one per genuinely saved date/time change
-appointment:<id>:cancelled:email:<sync_version>         the post-send cancellation notice
+appointment:<id>:cancelled:email                        the post-send cancellation notice
+                                                        (FIXED once-ever key — a cancellation
+                                                        is a once-per-appointment event; §16)
 ```
 
 The same synced revision processed any number of times maps to the same key → one record, one
@@ -603,3 +609,145 @@ inactive-client campaigns, no reminder timing customization, no custom templates
 delivery/bounce webhooks or open tracking (SENT = provider acceptance), no push notifications on
 failure, no manual retry-after-FAILED, no business timezone setting (Europe/Paris constant,
 documented), no automatic activation of anything, and still no app access to the queue.
+
+---
+
+# Lot C1 — SMS reminder architecture
+
+Migration `supabase/migrations/20261001120000_add_sms_reminder_architecture.sql`. Structural
+preparation ONLY: no provider, no SMS copy, no quota, and **no user-facing activation** — the
+migration alone sends nothing and enables nobody, and no app UI can turn SMS on before Lot C3.
+
+## 22. The SMS switch
+
+```text
+business_communication_preferences.sms_reminders_enabled   boolean NOT NULL DEFAULT FALSE
+```
+
+- **Transactional appointment SMS only** (reminders + their reschedule/cancellation notices).
+  It is NEVER consent for campaign/marketing SMS: future campaigns require their own explicit
+  preference model. The transactional/marketing boundary is architectural, not a setting.
+- Channels are INDEPENDENT: email ON + SMS ON sends BOTH when each channel is independently
+  eligible. No preferred channel, no fallback routing, no email-as-baseline coupling.
+- `appointments.client_reminder_enabled` stays the ONE per-appointment master switch: OFF means
+  no email AND no SMS. There are no per-appointment channel switches.
+- Owner RPCs: `communications_update_preferences` keeps its exact signature and updates ONLY
+  the email fields (an old build can never reset the SMS switch); its answer and
+  `communications_read_preferences` carry `sms_reminders_enabled` additively (absent reads
+  false in the app and its Business-scoped cache). `communications_update_sms_preferences`
+  (business, enabled) is the narrow SMS sibling — same DEFINER/owner-check/search_path model.
+- **C1 exposure: none.** No Settings row, no onboarding change (onboarding stays email-only
+  until C3). Enabling SMS is a controlled server-side operation on the dedicated test Business
+  (the C2 seam). No hidden app gesture, no debug UI.
+
+## 23. Phone canonicalization and SMS eligibility
+
+`clients.phone` is NEVER rewritten and no canonical value is stored — no SQLite migration, no
+sync payload change, no CLIENT aggregate change. The canonical destination is DERIVED at
+reconciliation time, exactly like the client email:
+
+```text
+communications_client_phone_e164(text) → '+33612345678' | NULL
+  strip separators (spaces . - parentheses); then ONE of:
+    +[1-9][0-9]{6,14}          already E.164-like        → as-is
+    00[1-9][0-9]{6,14}         international 00 prefix   → +…
+    0[1-9][0-9]{8}             FRENCH national           → +33…   (the V1 single-market
+                                                          fallback, like Europe/Paris; nothing
+                                                          stored, so per-Business regions later
+                                                          are a change to this ONE function)
+  anything else (letters, malformed +, wrong lengths)     → NULL
+
+communications_is_sms_eligible_phone(text) → boolean     DISTINCT from canonical:
+    +33…   must be MOBILE (+336/+337) — a landline is canonical but never texted
+    other  valid E.164 passes (provider-level destination validation is Lot C2)
+```
+
+The app mirrors both rules for UX only (`src/domain/communications/phone.ts`,
+`isUsableCommunicationSmsPhone`, `communicationSmsPhoneIssue` → 'missing' | 'invalid'); the
+server stays authoritative. Missing or invalid phone behaves like a missing email: **nothing is
+enqueued — never a FAILED record.**
+
+## 24. Channel-generic reconciliation
+
+The Lot B decision tables now live ONCE, parameterized by channel — never copied:
+
+```text
+communications_reconcile_appointment(business, id)          same name/signature as Lot B
+  → shared facts loaded ONCE (appointment, prefs, H-24 target, master flag)
+  → communications_reconcile_appointment_channel(…, 'EMAIL', switch, email recipient, email payload)
+  → communications_reconcile_appointment_channel(…, 'SMS',   switch, E.164 recipient, SMS payload)
+
+communications_reconcile_appointment_events(business, id)   post-send notices, same shape
+  → communications_reconcile_appointment_events_channel(…)  per channel
+```
+
+- EMAIL behavior is unchanged (same rules, same `:email:` keys, same payloads); SMS keys use
+  the `:sms:` token (`appointment:<id>:reminder:sms:<sync_version>`, `…:cancelled:sms`,
+  `…:rescheduled:sms:<sync_version>`). Both channels share the exact H-24 timing.
+- The SMS payload (`communications_appointment_sms_payload`) is the email payload MINUS
+  `reply_to`: business_name, client_first_name, appointment_start_at, services. Postgres never
+  renders provider text; SMS copy/length/encoding is C2 worker code.
+- **Per-channel gating everywhere**: a channel mints RESCHEDULED/CANCELLED notices only when
+  ITS OWN initial reminder was SENT (a SENT email alone never produces an SMS event); "what the
+  client was last told" is read per channel; terminal divergence is legal (EMAIL SENT + SMS
+  FAILED and the inverse are two independent records).
+- The cancellation notice goes out for BOTH origins — `cancelled_by` BUSINESS and CLIENT — per
+  channel (the client-origin message confirms the cancellation was recorded); the temporal
+  guards are unchanged, so historical corrections stay silent. NO_SHOW stays silent.
+- `communications_cancel_business_appointment_pending(business, channel)` is channel-scoped:
+  turning one channel off cancels THAT channel's pending records only (the unscoped Lot B
+  helper is dropped). The client trigger now also watches `phone` (recipient refresh in place,
+  cancel on unusable, schedule on restored — without disturbing EMAIL), and the retry
+  executor's BUSINESS pass converges per channel.
+- Reconciliation error scrubbing redacts phone-shaped tokens next to emails
+  (`communications_scrub_error`).
+
+## 25. Per-channel status projection
+
+`communications_appointment_reminder_status` is UNTOUCHED (deployed builds parse its exact
+shape; it stays EMAIL-only). The NEW owner RPC:
+
+```text
+communications_appointment_reminder_statuses(business, id) →
+  [ { channel: EMAIL, status, scheduled_for?/sent_at? },
+    { channel: SMS,   status, … } ]
+
+SMS vocabulary: SCHEDULED SENT FAILED DISABLED MISSING_PHONE INVALID_PHONE TOO_LATE NONE
+  MISSING_PHONE  no number at all            (derived — never a queue row)
+  INVALID_PHONE  a number SMS cannot reach   (derived — never a queue row)
+  QUOTA_UNAVAILABLE is RESERVED for Lot C3 and not implemented.
+```
+
+Never exposes recipient, payload, provider id, attempts, errors or dedupe keys; owner-scoped.
+
+App side: while SMS is globally OFF (every real user in C1) the Details row renders EXACTLY
+the Lot B single email line through the legacy projection. With SMS enabled (test Business),
+it lists one compact line per channel under « Rappels cliente » (« E-mail · Envoyé »,
+« SMS · Programmé · … »; « Aucun numéro de téléphone » / « Numéro non reconnu »). The
+per-appointment toggle copy is channel-neutral (« Rappel automatique 24 h avant le
+rendez-vous »), and `MissingPhoneNotice` (missing/invalid variants, opening the existing
+Client editor) appears in creation/editing only when SMS is globally enabled — invisible in
+production.
+
+## 26. Future quota seam (Lot C3 — NOT implemented)
+
+Enforcement will live server-side in PostgreSQL, in the SMS branch of
+`communications_reconcile_appointment_channel`, between channel eligibility and the enqueue
+(the marked seam):
+
+```text
+SMS eligibility → atomic quota reservation → SMS enqueue
+```
+
+One reservation per LOGICAL communication: retries re-use the claimed record and never consume
+again; concurrent devices/workers cannot overspend (row-locked DB operation); email is
+structurally unaffected. No quota tables, counters, reservations or RevenueCat exist in C1.
+
+## 27. Explicit non-goals of Lot C1
+
+No SMS provider, SDK, endpoint or secret (the production registry still binds
+`SMS → UnsupportedChannelTransport`: even a hand-enqueued SMS fails permanently and
+explicitly); no SMS renderer; no worker changes at all; no Settings SMS switch; no onboarding
+change; no quota/entitlement/paywall; no marketing consent; no per-appointment channel
+switches; no timing customization; no stored canonical phone; no phone backfill; no new sync
+aggregate or payload change.

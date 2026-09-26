@@ -9,6 +9,7 @@ import { isUsableCommunicationEmail } from '@/domain/communications';
 
 import {
   CommunicationsGatewayError,
+  type AppointmentChannelReminderStatus,
   type AppointmentReminderStatus,
   type CommunicationPreferences,
   type CommunicationsGateway,
@@ -23,6 +24,11 @@ export interface FakeCommunicationsGateway extends CommunicationsGateway {
   failNext(code: CommunicationsGatewayFailureCode): void;
   /** Scripts the projection answer of one appointment. */
   setReminderStatus(appointmentId: string, status: AppointmentReminderStatus): void;
+  /** Scripts the PER-CHANNEL projection answer of one appointment. */
+  setReminderChannelStatuses(
+    appointmentId: string,
+    statuses: readonly AppointmentChannelReminderStatus[],
+  ): void;
   /** Seeds the stored preference of a Business. */
   seedPreferences(businessId: string, preferences: CommunicationPreferences): void;
 }
@@ -30,6 +36,10 @@ export interface FakeCommunicationsGateway extends CommunicationsGateway {
 export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
   const preferencesByBusiness = new Map<string, CommunicationPreferences>();
   const statusByAppointment = new Map<string, AppointmentReminderStatus>();
+  const channelStatusesByAppointment = new Map<
+    string,
+    readonly AppointmentChannelReminderStatus[]
+  >();
   const calls = { read: 0, update: 0, status: 0 };
   const updates: { businessId: string; preferences: CommunicationPreferences }[] = [];
   let nextFailure: CommunicationsGatewayFailureCode | undefined;
@@ -50,6 +60,9 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
     setReminderStatus(appointmentId, status) {
       statusByAppointment.set(appointmentId, status);
     },
+    setReminderChannelStatuses(appointmentId, statuses) {
+      channelStatusesByAppointment.set(appointmentId, statuses);
+    },
     seedPreferences(businessId, preferences) {
       preferencesByBusiness.set(businessId, preferences);
     },
@@ -68,8 +81,11 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
       if (next.emailRemindersEnabled && replyTo === undefined) {
         return { status: 'INVALID_REPLY_TO' };
       }
+      // Like the server: the email update never touches the SMS switch.
       const preferences: CommunicationPreferences = {
         emailRemindersEnabled: next.emailRemindersEnabled,
+        smsRemindersEnabled:
+          preferencesByBusiness.get(businessId)?.smsRemindersEnabled === true,
         ...(replyTo !== undefined ? { replyToEmail: replyTo } : {}),
       };
       preferencesByBusiness.set(businessId, preferences);
@@ -80,6 +96,16 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
       calls.status += 1;
       takeFailure();
       return statusByAppointment.get(appointmentId) ?? { status: 'NONE' };
+    },
+    async readAppointmentReminderStatuses(_businessId, appointmentId) {
+      calls.status += 1;
+      takeFailure();
+      return (
+        channelStatusesByAppointment.get(appointmentId) ?? [
+          { channel: 'EMAIL', status: 'NONE' },
+          { channel: 'SMS', status: 'NONE' },
+        ]
+      );
     },
   };
 }
