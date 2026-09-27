@@ -15,12 +15,14 @@
 // privileged server client — it still resolves to the Postgres service_role
 // role, which is the only role holding EXECUTE on the communications_* RPCs.
 //
-// Lot B pass order: failed trigger reconciliations are re-run FIRST (durable
+// Pass order: failed trigger reconciliations are re-run FIRST (durable
 // retry jobs — docs/architecture/COMMUNICATIONS.md §14b), then due records
-// are claimed and sent. EMAIL is real (Resend), SMS remains unsupported and
-// fails permanently. The registry is built BEFORE anything is claimed, so a
-// deployment missing RESEND_API_KEY / RESEND_FROM_EMAIL answers 500 and
-// touches no record. Provider secrets live in Edge Function secrets only —
+// are claimed and sent. EMAIL is real (Resend); SMS remains unsupported and
+// fails permanently — the reusable SMS transport is deliberately unbound
+// until the client-lifecycle SMS phase. The registry is built BEFORE
+// anything is claimed, so a deployment missing RESEND_API_KEY /
+// RESEND_FROM_EMAIL answers 500 and touches no record. Provider secrets
+// live in Edge Function secrets only —
 // never in the app bundle, Expo public env, SQLite or a public table — and
 // are never logged; summaries carry counts only (payloads and recipients are
 // business-private).
@@ -48,7 +50,9 @@ export default {
       const summary = await runCommunicationsWorker({ queue, transports, reconciliation });
       // Counts and booleans only: payloads, recipients and secret VALUES are
       // never logged. `emailLogoConfigured` says whether SOURIS_EMAIL_LOGO_URL
-      // is present and valid in THIS running instance.
+      // is present and valid in THIS running instance. No SMS capability
+      // indicator exists yet: production SMS is deliberately unbound until
+      // the client-lifecycle SMS phase.
       return Response.json({
         ok: true,
         emailLogoConfigured: isEmailLogoConfigured((name) => Deno.env.get(name)),

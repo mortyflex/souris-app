@@ -46,11 +46,6 @@ export interface CommunicationPreferencesValue {
    * when the latest known preference says so.
    */
   readonly emailRemindersEnabled: boolean;
-  /**
-   * Transactional appointment SMS (Lot C1). False for every real user in C1:
-   * no app UI can enable it, and an absent/older value reads as false.
-   */
-  readonly smsRemindersEnabled: boolean;
   /** Persists on the server (which reconciles), then mirrors locally. */
   readonly update: (preferences: {
     readonly emailRemindersEnabled: boolean;
@@ -129,7 +124,6 @@ export function CommunicationPreferencesProvider({ children }: PropsWithChildren
   const value: CommunicationPreferencesValue = {
     state,
     emailRemindersEnabled: state.preferences?.emailRemindersEnabled ?? false,
-    smsRemindersEnabled: state.preferences?.smsRemindersEnabled ?? false,
     update,
     refresh,
   };

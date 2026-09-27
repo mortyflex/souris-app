@@ -1,13 +1,18 @@
-// Souris — Communication Core (Lot B): the production transport registry
+// Souris — Communication Core: the production transport registry
 //
-// EMAIL → ResendEmailTransport, SMS → UnsupportedChannelTransport (Lot C).
+// EMAIL → ResendEmailTransport. SMS → UnsupportedChannelTransport,
+// DELIBERATELY (SMS pivot Phase 1): appointment SMS reminders are retired,
+// and the reusable SMS provider transport is intentionally NOT bound here
+// until the client-lifecycle SMS product ships in Phase 2 — even if the
+// provider's secrets happened to exist, the deployed worker could not send
+// an SMS.
 // The fake transport NEVER appears here: production either has its real
 // provider configuration or refuses to run — it never silently pretends to
 // send.
 //
 // Secrets are read through an injected reader (Deno.env in the entry, plain
 // stubs in tests) and live only inside the transport instance. Missing or
-// malformed configuration throws BEFORE anything is claimed, so a
+// malformed EMAIL configuration throws BEFORE anything is claimed, so a
 // misconfigured deployment marks nothing PROCESSING and loses nothing.
 
 import { isUsableEmailAddress, normalizeEmailLogoUrl } from './email-content.ts';

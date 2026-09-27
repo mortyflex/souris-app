@@ -16,7 +16,10 @@ const CACHE_KEY = 'communication_preferences_cache';
 interface CachedPreferences {
   readonly businessId: string;
   readonly emailRemindersEnabled: boolean;
-  /** Absent in caches written before Lot C1: reads as false (fail-safe). */
+  /**
+   * Deprecated dormant field (retired appointment-SMS preference), kept for
+   * cache-shape compatibility. Absent reads as false; nothing displays it.
+   */
   readonly smsRemindersEnabled?: boolean;
   readonly replyToEmail: string | null;
   readonly cachedAt: string;

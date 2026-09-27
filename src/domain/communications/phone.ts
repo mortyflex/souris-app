@@ -1,12 +1,14 @@
-// Souris — communication phone rules (Lot C1)
+// Souris — communication phone rules
 //
 // THE phone-usability rules of client SMS communications, mirroring the
 // server (`communications_client_phone_e164` and
-// `communications_is_sms_eligible_phone` in the Lot C1 migration). The
-// server remains authoritative: it derives the canonical destination at
-// reconciliation time and never trusts the device. This mirror exists ONLY
-// so screens can tell apart a missing, an invalid and a usable number —
-// it never decides whether a communication is enqueued.
+// `communications_is_sms_eligible_phone`). The server remains
+// authoritative: it derives the canonical destination at reconciliation
+// time and never trusts the device. This mirror exists ONLY so screens can
+// tell apart a missing, an invalid and a usable number — it never decides
+// whether a communication is enqueued. Appointment SMS is retired (SMS
+// pivot Phase 1); these rules are kept for the future client-lifecycle SMS
+// automations.
 //
 // `clients.phone` itself stays exactly what the professional typed; nothing
 // canonical is ever stored. The bare-national fallback assumes France, the

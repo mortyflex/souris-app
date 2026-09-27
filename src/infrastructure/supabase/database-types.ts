@@ -102,10 +102,6 @@ export type Database = {
         Args: { p_business_id: string; p_appointment_id: string };
         Returns: Json;
       };
-      communications_appointment_reminder_statuses: {
-        Args: { p_business_id: string; p_appointment_id: string };
-        Returns: Json;
-      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

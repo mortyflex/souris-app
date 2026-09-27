@@ -42,11 +42,7 @@ import {
 } from '@/shared/ui/theme';
 
 import { MissingEmailNotice } from '@/features/communications/components/MissingEmailNotice';
-import { MissingPhoneNotice } from '@/features/communications/components/MissingPhoneNotice';
-import {
-  APPOINTMENT_REMINDER_ROW_LABEL,
-  APPOINTMENT_REMINDER_TOGGLE_DESCRIPTION,
-} from '@/features/communications/presentation';
+import { APPOINTMENT_REMINDER_ROW_LABEL } from '@/features/communications/presentation';
 import { SwitchRow } from '@/shared/ui/SwitchRow';
 
 import { AppointmentDiscountSection } from '../../editor/components/AppointmentDiscountSection';
@@ -79,11 +75,6 @@ interface SummaryStepProps {
     /** True when the selected Client has no usable email address. */
     readonly missingClientEmail: boolean;
     readonly onAddEmail: () => void;
-    /**
-     * The SMS destination problem to surface (Lot C1), or undefined while
-     * SMS is globally off — every real user in C1 — or the number is usable.
-     */
-    readonly phoneNotice?: 'missing' | 'invalid';
   };
   readonly entries: readonly SortableDraftEntry[];
   readonly expandedDraftId: string | null;
@@ -210,7 +201,7 @@ export function SummaryStep({
         {reminder && (
           <GroupedSurface testID="summary-reminder">
             <SwitchRow
-              description={APPOINTMENT_REMINDER_TOGGLE_DESCRIPTION}
+              description="E-mail 24 h avant le rendez-vous"
               label={APPOINTMENT_REMINDER_ROW_LABEL}
               onValueChange={reminder.onChange}
               testID="appointment-reminder-toggle"
@@ -222,13 +213,6 @@ export function SummaryStep({
           <MissingEmailNotice
             onAddEmail={reminder.onAddEmail}
             testID="creation-missing-email-notice"
-          />
-        )}
-        {reminder?.enabled === true && reminder.phoneNotice !== undefined && (
-          <MissingPhoneNotice
-            onEditPhone={reminder.onAddEmail}
-            testID="creation-missing-phone-notice"
-            variant={reminder.phoneNotice}
           />
         )}
       </View>

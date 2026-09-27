@@ -8,6 +8,7 @@ import {
   WorkerConfigurationError,
 } from '../production-transports';
 import { ResendEmailTransport } from '../resend-transport';
+import { TwilioSmsTransport } from '../twilio-transport';
 import { UnsupportedChannelTransport } from '../unsupported-transport';
 import { COMMUNICATION_RETRY_POLICY } from '../retry-policy';
 import type { OutgoingCommunication, TransportResult } from '../transport';
@@ -187,15 +188,41 @@ describe('the delivery surface stays contained (Lot B)', () => {
     }
   });
 
+  // Obviously fake credentials only; nothing here may look like a real secret.
+  const RESEND_ENV: Record<string, string> = {
+    RESEND_API_KEY: 'test-key',
+    RESEND_FROM_EMAIL: 'rappels@souris.test',
+  };
+  const TWILIO_ENV: Record<string, string> = {
+    TWILIO_ACCOUNT_SID: 'AC-fake-account-sid',
+    TWILIO_AUTH_TOKEN: 'fake-auth-token',
+    TWILIO_FROM_NUMBER: '+15005550006',
+  };
+
   it('the production registry binds EMAIL to Resend and refuses SMS — never the fake', () => {
-    const registry = createProductionTransportRegistry((name) =>
-      name === 'RESEND_API_KEY' ? 'test-key' : 'rappels@souris.test',
-    );
+    const registry = createProductionTransportRegistry((name) => RESEND_ENV[name]);
     expect(registry.EMAIL).toBeInstanceOf(ResendEmailTransport);
     expect(registry.SMS).toBeInstanceOf(UnsupportedChannelTransport);
     for (const transport of Object.values(registry)) {
       expect(transport).not.toBeInstanceOf(FakeCommunicationTransport);
     }
+  });
+
+  it('SMS PIVOT PHASE 1: even a FULL Twilio configuration binds NOTHING — SMS stays unsupported', () => {
+    // The reusable TwilioSmsTransport is deliberately not production-bound
+    // until the client-lifecycle SMS phase: secrets alone must never make
+    // the deployed worker able to send an SMS.
+    const env = { ...RESEND_ENV, ...TWILIO_ENV };
+    const registry = createProductionTransportRegistry((name) => env[name]);
+    expect(registry.EMAIL).toBeInstanceOf(ResendEmailTransport);
+    expect(registry.SMS).toBeInstanceOf(UnsupportedChannelTransport);
+    expect(registry.SMS).not.toBeInstanceOf(TwilioSmsTransport);
+  });
+
+  it('Twilio configuration never rescues a missing email configuration', () => {
+    expect(() => createProductionTransportRegistry((name) => TWILIO_ENV[name])).toThrow(
+      WorkerConfigurationError,
+    );
   });
 
   it('PRODUCTION PATH: env → registry → EMAIL transport → mocked Resend body carries the logo', async () => {
@@ -280,22 +307,34 @@ describe('the delivery surface stays contained (Lot B)', () => {
     collect(workerRoot);
 
     expect(sources.length).toBeGreaterThan(0);
-    // No other provider SDK or endpoint exists anywhere.
-    const forbiddenProviders = /brevo|twilio|smsmode|sendgrid|mailgun|postmark|nodemailer/i;
-    // Resend and the network call live ONLY in the transport module (and the
-    // registry/entry that name it).
+    // No provider other than Resend (EMAIL) and Twilio (SMS, Lot C2) exists
+    // anywhere — no other SDK, brand or endpoint.
+    const forbiddenProviders = /brevo|smsmode|sendgrid|mailgun|postmark|nodemailer|vonage|messagebird/i;
+    // Each provider and its network call live ONLY in its own transport
+    // module (and the registry/entry that name it).
     const resendAllowed = new Set(['resend-transport.ts', 'production-transports.ts']);
+    const twilioAllowed = new Set(['twilio-transport.ts']);
     for (const source of sources) {
       expect(source.content).not.toMatch(forbiddenProviders);
       if (source.name !== 'resend-transport.ts') {
-        expect(source.content).not.toMatch(/fetch\s*\(\s*['"`]/);
         expect(source.content).not.toMatch(/api\.resend\.com/i);
+      }
+      if (source.name !== 'twilio-transport.ts') {
+        expect(source.content).not.toMatch(/api\.twilio\.com/i);
+      }
+      if (source.name !== 'resend-transport.ts' && source.name !== 'twilio-transport.ts') {
+        expect(source.content).not.toMatch(/fetch\s*\(\s*['"`]/);
       }
       if (!resendAllowed.has(source.name) && source.name !== 'index.ts' && source.name !== 'deno.d.ts') {
         expect(source.content).not.toMatch(/resend/i);
       }
-      // No credential material anywhere in the sources.
+      if (!twilioAllowed.has(source.name) && source.name !== 'index.ts' && source.name !== 'deno.d.ts') {
+        expect(source.content).not.toMatch(/twilio/i);
+      }
+      // No credential material anywhere in the sources (Supabase secret
+      // keys, Resend API keys, Twilio Account SIDs / API keys).
       expect(source.content).not.toMatch(/sb_secret_[A-Za-z0-9]{8}|re_[A-Za-z0-9]{10,}/);
+      expect(source.content).not.toMatch(/\bAC[0-9a-f]{32}\b|\bSK[0-9a-f]{32}\b/);
     }
   });
 });

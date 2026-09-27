@@ -5,7 +5,6 @@ import { CommunicationsGatewayError } from '@/features/communications/gateway';
 import {
   createSupabaseCommunicationsGateway,
   mapCommunicationsPostgrestError,
-  toAppointmentChannelReminderStatuses,
   toAppointmentReminderStatus,
   type SupabaseCommunicationsApi,
 } from '../communications-gateway';
@@ -123,53 +122,8 @@ describe('readAppointmentReminderStatus', () => {
   });
 });
 
-describe('readAppointmentReminderStatuses (Lot C1)', () => {
-  it('maps the per-channel projection', async () => {
-    const { client, calls } = createRpcMock({
-      communications_appointment_reminder_statuses: {
-        data: [
-          { channel: 'EMAIL', status: 'SENT', sent_at: '2026-09-25T10:00:00.000Z' },
-          { channel: 'SMS', status: 'SCHEDULED', scheduled_for: '2027-03-25T13:30:00.000Z' },
-        ],
-      },
-    });
-    const statuses = await createSupabaseCommunicationsGateway(
-      client,
-    ).readAppointmentReminderStatuses('biz-1', 'apt-1');
-    expect(calls[0]).toEqual({
-      fn: 'communications_appointment_reminder_statuses',
-      args: { p_business_id: 'biz-1', p_appointment_id: 'apt-1' },
-    });
-    expect(statuses).toHaveLength(2);
-    expect(statuses[0]).toMatchObject({ channel: 'EMAIL', status: 'SENT' });
-    expect(statuses[1]?.channel).toBe('SMS');
-    expect(statuses[1]?.scheduledFor?.toISOString()).toBe('2027-03-25T13:30:00.000Z');
-  });
-
-  it('accepts the SMS recipient states and refuses anything malformed', () => {
-    expect(
-      toAppointmentChannelReminderStatuses([
-        { channel: 'SMS', status: 'MISSING_PHONE' },
-        { channel: 'SMS', status: 'INVALID_PHONE' },
-      ]),
-    ).toEqual([
-      { channel: 'SMS', status: 'MISSING_PHONE' },
-      { channel: 'SMS', status: 'INVALID_PHONE' },
-    ]);
-    expect(() => toAppointmentChannelReminderStatuses({ status: 'SENT' })).toThrow(
-      CommunicationsGatewayError,
-    );
-    expect(() =>
-      toAppointmentChannelReminderStatuses([{ channel: 'FAX', status: 'SENT' }]),
-    ).toThrow(CommunicationsGatewayError);
-    expect(() =>
-      toAppointmentChannelReminderStatuses([{ channel: 'EMAIL', status: 'WHATEVER' }]),
-    ).toThrow(CommunicationsGatewayError);
-  });
-});
-
-describe('SMS preference parsing (Lot C1)', () => {
-  it('a server answer with the SMS switch on hydrates it', async () => {
+describe('dormant SMS preference field (retired appointment-SMS switch)', () => {
+  it('a server answer carrying the deprecated field parses tolerantly', async () => {
     const { client } = createRpcMock({
       communications_read_preferences: {
         data: {

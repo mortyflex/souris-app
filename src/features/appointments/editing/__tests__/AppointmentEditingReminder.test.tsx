@@ -193,27 +193,3 @@ describe('with the global preference disabled (the default)', () => {
     expect(view.queryByTestId('editing-missing-email-notice')).toBeNull();
   });
 });
-
-// Lot C1: SMS stays globally OFF for every real user; this state exists
-// only for the dedicated test Business.
-describe('with SMS reminders enabled (Lot C1, test Business only)', () => {
-  it('warns about the missing phone with the channel-neutral toggle copy', async () => {
-    const gateway = createFakeCommunicationsGateway();
-    gateway.seedPreferences(testBusiness.id, {
-      emailRemindersEnabled: true,
-      smsRemindersEnabled: true,
-      replyToEmail: 'salon@example.test',
-    });
-    const view = await renderEditor(gateway);
-
-    expect(view.getByText('Rappel automatique 24 h avant le rendez-vous')).toBeTruthy();
-    // Sofia Petit has neither email nor phone in the fixtures.
-    expect(view.getByTestId('editing-missing-phone-notice')).toBeTruthy();
-    expect(view.getByText('Aucun numéro de téléphone renseigné')).toBeTruthy();
-  });
-
-  it('email-only (every real user in C1) never shows a phone notice', async () => {
-    const view = await renderEditor(enabledGateway());
-    expect(view.queryByTestId('editing-missing-phone-notice')).toBeNull();
-  });
-});

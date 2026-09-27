@@ -13,13 +13,15 @@ the real Resend EMAIL transport and the app's narrow status projection.
 ```text
 Lot A   Communication Core                 done — queue, worker, fake transport (§2–§11)
 Lot B   Appointment email reminders        done — preference, reconciliation, templates, Resend (§12–§20)
-Lot C1  SMS reminder architecture          done — SMS preference, phone rules, channel-generic
-                                           reconciliation, per-channel projection (§22–§27);
-                                           NO provider, NO user-facing activation
-Lot C2  SMS provider                       future — real SMS transport, controlled test-Business send
-Lot C3  SMS quota / paywall                future — entitlement, user-facing SMS switch
-        Paywall / entitlements             future — separate from the core
-        Inactive-client campaigns          future — reuse the same engine (source_type CLIENT)
+Lot C1  SMS reminder architecture          applied, then RETIRED (§22–§27, §31) — appointment
+                                           reminders are EMAIL ONLY; the generic channel
+                                           infrastructure and phone rules remain
+Pivot   SMS = client lifecycle channel     Phase 1 done (§31) — appointment SMS retired, the
+                                           Twilio transport preserved as UNBOUND infrastructure
+        Client lifecycle SMS               Phase 2, future — CLIENT_BIRTHDAY_OFFER and
+                                           INACTIVE_CLIENT_FOLLOWUP automations, consent model,
+                                           lifecycle preferences, daily reconciliation
+        Quota / entitlements               future — separate from the core
 ```
 
 **Global safety rule, unchanged by Lot B:** everything defaults OFF. No existing Business is
@@ -612,7 +614,14 @@ documented), no automatic activation of anything, and still no app access to the
 
 ---
 
-# Lot C1 — SMS reminder architecture
+# Lot C1 — SMS reminder architecture (RETIRED — historical)
+
+> **SMS product pivot (§31):** appointment reminders are now **EMAIL only**. The Lot C1
+> appointment-SMS behavior below (§22–§25) is RETIRED by
+> `20261002120000_retire_appointment_sms.sql` and kept here as the historical record of the
+> applied migration. What survives of C1: the channel-generic Communication Core, the phone
+> canonicalization/eligibility rules (§23), the channel primitives, and the additive
+> projections — all reused by the future client-lifecycle SMS automations.
 
 Migration `supabase/migrations/20261001120000_add_sms_reminder_architecture.sql`. Structural
 preparation ONLY: no provider, no SMS copy, no quota, and **no user-facing activation** — the
@@ -751,3 +760,79 @@ explicitly); no SMS renderer; no worker changes at all; no Settings SMS switch; 
 change; no quota/entitlement/paywall; no marketing consent; no per-appointment channel
 switches; no timing customization; no stored canonical phone; no phone backfill; no new sync
 aggregate or payload change.
+
+---
+
+# SMS product pivot — Phase 1 (appointment SMS retired, Twilio preserved)
+
+## 31. The pivot and the retirement
+
+Product decision: **SMS is a retention/loyalty channel, not an appointment-notification
+channel.** Appointment reminders are EMAIL H-24 only. The planned SMS use is the future
+client-lifecycle automations — `CLIENT_BIRTHDAY_OFFER` (a new kind, Phase 2) and the existing
+Lot A kind `INACTIVE_CLIENT_FOLLOWUP` (win-back), over `source_type = CLIENT`. **Neither is
+implemented yet**; Phase 2 will add its own explicit promotional-consent model, Business
+lifecycle preferences and a daily server-side reconciliation.
+
+Migration `supabase/migrations/20261002120000_retire_appointment_sms.sql`:
+
+```text
+communications_reconcile_appointment          EMAIL only — structurally unable to enqueue SMS,
+communications_reconcile_appointment_events   even if sms_reminders_enabled were true
+preference/client triggers, BUSINESS retry    the SMS switch is ignored entirely
+pending APPOINTMENT SMS rows                  defensively CANCELLED (production held zero);
+                                              SENT/FAILED history and CLIENT rows untouched
+```
+
+`business_communication_preferences.sms_reminders_enabled` and
+`communications_update_sms_preferences` are **kept, dormant, DEPRECATED** — backwards/schema
+compatibility only: writing them reconciles nothing and can never create an SMS, and the field
+must never be repurposed as lifecycle/marketing consent (that will be a separate, explicit,
+client-level model). The additive per-channel projection stays server-side but the app uses
+only the legacy EMAIL projection. Deliberately kept for Phase 2: the channel-generic queue
+(`channel = SMS`, `source_type = CLIENT`), the channel primitives,
+`communications_client_phone_e164` / `communications_is_sms_eligible_phone` /
+`communications_client_sms_recipient`, their app mirror (`src/domain/communications/phone.ts`)
+and the client trigger's `phone` watch. The app returned to the exact validated email-only
+reminder UX (single « Rappel cliente » line, « E-mail 24 h avant le rendez-vous » toggle,
+MissingEmailNotice).
+
+## 32. The Twilio SMS transport — implemented, deliberately UNBOUND
+
+`core/twilio-transport.ts` is reusable provider infrastructure, fully unit-tested and **not
+bound into the production registry**: `createProductionTransportRegistry` maps SMS to
+`UnsupportedChannelTransport` unconditionally, so even with `TWILIO_ACCOUNT_SID` /
+`TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` secrets present the deployed worker cannot send an
+SMS (locked by a registry test). No SMS capability indicator is exposed in the worker smoke
+response until Phase 2 binds the transport.
+
+The transport is content-blind: the caller injects a provider-neutral
+`SmsContentRenderer (communication → body | undefined)`; a refusal is a PERMANENT failure with
+no provider request. It knows only the recipient (sent exactly as the server snapshotted it —
+E.164 shape-checked, never re-normalized), the rendered body and the Twilio configuration:
+
+```text
+POST https://api.twilio.com/2010-04-01/Accounts/<AccountSid>/Messages.json
+application/x-www-form-urlencoded (To, From, Body) · HTTP Basic (SID/token) · no SDK
+
+2xx + valid Message SID (SM + 32 hex)  → SENT (SID = provider message id)
+2xx without a usable SID               → PERMANENT (protocol failure)
+429 / 5xx / network                    → RETRYABLE (central 60 s/5 min/15 min policy)
+other 4xx                              → PERMANENT (HTTP class decides, never Twilio's message)
+```
+
+**SENT = Twilio accepted the message** (typically `queued`) — never a delivery claim; no
+StatusCallback. Errors carry the HTTP status and Twilio's numeric `code` only. Operational
+caveats unchanged: no provider idempotency key (the narrow ambiguous-network window can
+theoretically duplicate one SMS — reassess before broad rollout); the trial account brands its
+messages and delivers only to verified recipients; the provider stays replaceable behind
+`CommunicationTransport`. The source guard still confines Twilio and every network call to the
+transport modules and forbids all other providers.
+
+## 33. Explicit non-goals of Phase 1
+
+No client-lifecycle automation (birthday/win-back reconciliation, copy, kinds beyond the
+existing vocabulary), no promotional consent model, no Business lifecycle preferences, no
+daily cron, no discount payloads, no inbound STOP handling, no stored `phone_e164`, no
+unsubscribe URL, no quota/RevenueCat, no Settings « SMS fidélisation », no client consent UI —
+and no real SMS can be enabled or sent by the deployed product.

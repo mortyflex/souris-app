@@ -9,13 +9,12 @@ import { act, render } from '@testing-library/react-native';
 
 import type { Appointment } from '@/domain/appointments';
 import { CurrentBusinessProvider } from '@/features/business/session/CurrentBusinessProvider';
-import { CommunicationPreferencesProvider } from '@/features/communications/preferences/CommunicationPreferencesProvider';
 import { CommunicationsGatewayProvider } from '@/features/communications/session/CommunicationsGatewayProvider';
 import {
   createFakeCommunicationsGateway,
   type FakeCommunicationsGateway,
 } from '@/features/communications/testing/fake-communications-gateway';
-import { testBusiness, TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { testBusiness } from '@/providers/testing/TestPersistenceProvider';
 
 import { AppointmentReminderRow } from '../components/AppointmentReminderRow';
 
@@ -99,88 +98,5 @@ describe('status rendering', () => {
   it('no gateway (unconfigured Supabase) renders nothing', async () => {
     const view = await renderRow(undefined);
     expect(view.queryByTestId('appointment-reminder-status')).toBeNull();
-  });
-});
-
-// Lot C1: with the SMS preference known, the row reads the per-channel
-// projection. While SMS is globally OFF — every real user in C1 — the row
-// renders EXACTLY the single legacy email line.
-async function renderRowWithPreferences(
-  gateway: FakeCommunicationsGateway,
-  subject: Appointment = appointment,
-) {
-  const view = await render(
-    <TestPersistenceProvider>
-      <CommunicationsGatewayProvider gateway={gateway}>
-        <CommunicationPreferencesProvider>
-          <AppointmentReminderRow appointment={subject} />
-        </CommunicationPreferencesProvider>
-      </CommunicationsGatewayProvider>
-    </TestPersistenceProvider>,
-  );
-  await act(async () => {});
-  return view;
-}
-
-describe('per-channel rendering (Lot C1)', () => {
-  it('SMS globally OFF keeps the exact single email line', async () => {
-    const gateway = createFakeCommunicationsGateway();
-    gateway.seedPreferences(testBusiness.id, {
-      emailRemindersEnabled: true,
-      replyToEmail: 'salon@example.test',
-    });
-    gateway.setReminderStatus('apt-1', { status: 'SENT', sentAt: new Date() });
-    const view = await renderRowWithPreferences(gateway);
-    expect(view.getByText('Rappel cliente · Envoyé')).toBeTruthy();
-    expect(view.queryByText('Rappels cliente')).toBeNull();
-    expect(view.queryByText(/E-mail ·|SMS ·/)).toBeNull();
-  });
-
-  it('SMS enabled lists one compact line per channel', async () => {
-    const gateway = createFakeCommunicationsGateway();
-    gateway.seedPreferences(testBusiness.id, {
-      emailRemindersEnabled: true,
-      smsRemindersEnabled: true,
-      replyToEmail: 'salon@example.test',
-    });
-    gateway.setReminderChannelStatuses('apt-1', [
-      { channel: 'EMAIL', status: 'SENT', sentAt: new Date() },
-      { channel: 'SMS', status: 'SCHEDULED', scheduledFor: new Date(2026, 8, 26, 14, 30) },
-    ]);
-    const view = await renderRowWithPreferences(gateway);
-    expect(view.getByText('Rappels cliente')).toBeTruthy();
-    expect(view.getByText('E-mail · Envoyé')).toBeTruthy();
-    expect(view.getByText('SMS · Programmé · 26 septembre à 14:30')).toBeTruthy();
-  });
-
-  it('renders the SMS recipient states without technical language', async () => {
-    const gateway = createFakeCommunicationsGateway();
-    gateway.seedPreferences(testBusiness.id, {
-      emailRemindersEnabled: true,
-      smsRemindersEnabled: true,
-      replyToEmail: 'salon@example.test',
-    });
-    gateway.setReminderChannelStatuses('apt-1', [
-      { channel: 'EMAIL', status: 'SCHEDULED', scheduledFor: new Date(2026, 8, 26, 14, 30) },
-      { channel: 'SMS', status: 'MISSING_PHONE' },
-    ]);
-    const view = await renderRowWithPreferences(gateway);
-    expect(view.getByText('SMS · Aucun numéro de téléphone')).toBeTruthy();
-  });
-
-  it('a channel with nothing to show (NONE) is simply absent', async () => {
-    const gateway = createFakeCommunicationsGateway();
-    gateway.seedPreferences(testBusiness.id, {
-      emailRemindersEnabled: true,
-      smsRemindersEnabled: true,
-      replyToEmail: 'salon@example.test',
-    });
-    gateway.setReminderChannelStatuses('apt-1', [
-      { channel: 'EMAIL', status: 'SENT', sentAt: new Date() },
-      { channel: 'SMS', status: 'NONE' },
-    ]);
-    const view = await renderRowWithPreferences(gateway);
-    expect(view.getByText('E-mail · Envoyé')).toBeTruthy();
-    expect(view.queryByText(/^SMS ·/)).toBeNull();
   });
 });
