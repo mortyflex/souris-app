@@ -41,6 +41,27 @@ export interface AppointmentReminderStatus {
   readonly sentAt?: Date;
 }
 
+/**
+ * The Business lifecycle SMS automations (SMS pivot Phase 2): the birthday
+ * offer and the inactive-client win-back. Server-authoritative, both OFF by
+ * default; the numeric knobs are the V1 defaults the server returns. This
+ * is deliberately NOT the deprecated appointment-SMS preference.
+ */
+export interface LifecycleSmsPreferences {
+  readonly birthdaySmsEnabled: boolean;
+  readonly birthdayDiscountPercent: number;
+  readonly birthdayValidityDays: number;
+  readonly winbackSmsEnabled: boolean;
+  readonly winbackAfterDays: number;
+  readonly winbackDiscountPercent: number;
+  readonly winbackValidityDays: number;
+}
+
+export type UpdateLifecycleSmsPreferencesResult =
+  | { readonly status: 'UPDATED'; readonly preferences: LifecycleSmsPreferences }
+  /** The server refused an out-of-range value. */
+  | { readonly status: 'INVALID_VALUE' };
+
 export type CommunicationsGatewayFailureCode = 'NETWORK' | 'FORBIDDEN' | 'UNKNOWN';
 
 export class CommunicationsGatewayError extends Error {
@@ -66,4 +87,18 @@ export interface CommunicationsGateway {
     businessId: string,
     appointmentId: string,
   ): Promise<AppointmentReminderStatus>;
+  /** The lifecycle SMS automations; the V1 defaults (both OFF) when never configured. */
+  readLifecycleSmsPreferences(businessId: string): Promise<LifecycleSmsPreferences>;
+  /**
+   * Persists the two automation switches; the SERVER cancels the disabled
+   * automation's pending offers, and the daily server reconciliation is the
+   * only thing that ever schedules one. V1 never edits the numeric knobs.
+   */
+  updateLifecycleSmsPreferences(
+    businessId: string,
+    preferences: {
+      readonly birthdaySmsEnabled: boolean;
+      readonly winbackSmsEnabled: boolean;
+    },
+  ): Promise<UpdateLifecycleSmsPreferencesResult>;
 }

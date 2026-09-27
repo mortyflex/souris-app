@@ -102,6 +102,17 @@ function oneOf(row: Json, key: string, field: string, vocabulary: readonly strin
   return value;
 }
 
+function optionalOneOf(
+  row: Json,
+  key: string,
+  field: string,
+  vocabulary: readonly string[],
+): string | null {
+  const value = optionalText(row, key, field);
+  if (value !== null && !vocabulary.includes(value)) fail(`${field}.${key}`);
+  return value;
+}
+
 function flag(row: Json, key: string, field: string): boolean {
   const value = row[key];
   if (typeof value !== 'boolean') fail(`${field}.${key}`);
@@ -226,6 +237,18 @@ function parseClient(row: Json, field: string): RemoteClientPayload {
     notes: optionalText(row, 'notes', field),
     // Absent on a remote that predates the column: no photo, never a failure.
     photo_path: optionalText(row, 'photo_path', field),
+    // Absent on a remote that predates the consent: UNKNOWN, never a failure.
+    // Out-of-vocabulary values are refused — the local CHECKs could not
+    // store them.
+    sms_marketing_consent: optionalOneOf(row, 'sms_marketing_consent', field, [
+      'OPTED_IN',
+      'OPTED_OUT',
+    ]),
+    sms_marketing_consent_updated_at: optionalInstant(row, 'sms_marketing_consent_updated_at', field),
+    sms_marketing_consent_source: optionalOneOf(row, 'sms_marketing_consent_source', field, [
+      'PROFESSIONAL',
+      'CLIENT_STOP',
+    ]),
     archived_at: optionalInstant(row, 'archived_at', field),
   };
 }

@@ -361,4 +361,58 @@ describe('ClientFormSheet', () => {
       expect.objectContaining({ id: 'client-agenda-lea', firstName: 'Léana', birthday: { month: 10, day: 12 } }),
     );
   });
+
+  it('offers SMS promotionnels with « Non renseigné » selected by default — a created Client stays UNKNOWN', async () => {
+    const submitted = jest.fn();
+    const view = await renderSheet('create', submitted);
+
+    expect(view.getByTestId('sms-consent-unknown').props.accessibilityState).toMatchObject({ selected: true });
+
+    await act(async () => fireEvent.changeText(view.getByLabelText('Prénom'), 'Nora'));
+    await press(view, 'submit-client');
+
+    expect('smsMarketingConsent' in submitted.mock.calls[0][0]).toBe(false);
+  });
+
+  it('records an expressed choice as a PROFESSIONAL capture', async () => {
+    const submitted = jest.fn();
+    const view = await renderSheet('create', submitted);
+
+    await act(async () => fireEvent.changeText(view.getByLabelText('Prénom'), 'Nora'));
+    await press(view, 'sms-consent-opted-in');
+    await press(view, 'submit-client');
+
+    expect(submitted.mock.calls[0][0].smsMarketingConsent).toEqual({
+      status: 'OPTED_IN',
+      updatedAt: expect.any(Date),
+      source: 'PROFESSIONAL',
+    });
+  });
+
+  it('edit mode round-trips the consent: record, save, and the session Client carries it', async () => {
+    const submitted = jest.fn();
+    const view = await renderSheet('edit', submitted);
+
+    expect(view.getByTestId('sms-consent-unknown').props.accessibilityState).toMatchObject({ selected: true });
+
+    await press(view, 'sms-consent-opted-out');
+    await press(view, 'submit-client');
+
+    expect(submitted.mock.calls[0][0].smsMarketingConsent).toMatchObject({
+      status: 'OPTED_OUT',
+      source: 'PROFESSIONAL',
+    });
+  });
+
+  it('accepting SMS without a texting-capable number shows the concise informational note, never a blocker', async () => {
+    const view = await renderSheet('create');
+
+    await act(async () => fireEvent.changeText(view.getByLabelText('Prénom'), 'Nora'));
+    await press(view, 'sms-consent-opted-in');
+    expect(view.getByTestId('sms-consent-phone-notice')).toBeTruthy();
+    expect(view.getByTestId('submit-client').props.accessibilityState).toMatchObject({ disabled: false });
+
+    await act(async () => fireEvent.changeText(view.getByLabelText('Téléphone'), '06 12 34 56 78'));
+    expect(view.queryByTestId('sms-consent-phone-notice')).toBeNull();
+  });
 });

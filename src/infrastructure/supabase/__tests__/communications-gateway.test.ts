@@ -157,3 +157,82 @@ describe('error mapping', () => {
     });
   });
 });
+
+describe('lifecycle SMS preferences (SMS pivot Phase 2)', () => {
+  const SERVER_DEFAULTS = {
+    birthday_sms_enabled: false,
+    birthday_discount_percent: 15,
+    birthday_validity_days: 7,
+    winback_sms_enabled: false,
+    winback_after_days: 60,
+    winback_discount_percent: 10,
+    winback_validity_days: 7,
+    updated_at: null,
+  };
+
+  it('reads the V1 defaults, both automations OFF', async () => {
+    const { client, calls } = createRpcMock({
+      communications_read_lifecycle_sms_preferences: { data: SERVER_DEFAULTS },
+    });
+
+    const preferences = await createSupabaseCommunicationsGateway(client).readLifecycleSmsPreferences('biz-1');
+
+    expect(calls[0]).toEqual({
+      fn: 'communications_read_lifecycle_sms_preferences',
+      args: { p_business_id: 'biz-1' },
+    });
+    expect(preferences).toEqual({
+      birthdaySmsEnabled: false,
+      birthdayDiscountPercent: 15,
+      birthdayValidityDays: 7,
+      winbackSmsEnabled: false,
+      winbackAfterDays: 60,
+      winbackDiscountPercent: 10,
+      winbackValidityDays: 7,
+    });
+  });
+
+  it('refuses a malformed lifecycle answer', async () => {
+    const { client } = createRpcMock({
+      communications_read_lifecycle_sms_preferences: { data: { birthday_sms_enabled: 'yes' } },
+    });
+    await expect(
+      createSupabaseCommunicationsGateway(client).readLifecycleSmsPreferences('biz-1'),
+    ).rejects.toThrow(CommunicationsGatewayError);
+  });
+
+  it('updates the two switches only and returns the accepted state', async () => {
+    const { client, calls } = createRpcMock({
+      communications_update_lifecycle_sms_preferences: {
+        data: { status: 'UPDATED', ...SERVER_DEFAULTS, birthday_sms_enabled: true },
+      },
+    });
+
+    const result = await createSupabaseCommunicationsGateway(client).updateLifecycleSmsPreferences('biz-1', {
+      birthdaySmsEnabled: true,
+      winbackSmsEnabled: false,
+    });
+
+    // V1 never edits the numeric knobs: they are simply not sent.
+    expect(calls[0]).toEqual({
+      fn: 'communications_update_lifecycle_sms_preferences',
+      args: { p_business_id: 'biz-1', p_birthday_sms_enabled: true, p_winback_sms_enabled: false },
+    });
+    expect(result.status).toBe('UPDATED');
+    if (result.status === 'UPDATED') {
+      expect(result.preferences.birthdaySmsEnabled).toBe(true);
+      expect(result.preferences.winbackSmsEnabled).toBe(false);
+    }
+  });
+
+  it('maps the INVALID_VALUE refusal', async () => {
+    const { client } = createRpcMock({
+      communications_update_lifecycle_sms_preferences: { data: { status: 'INVALID_VALUE' } },
+    });
+    const result = await createSupabaseCommunicationsGateway(client).updateLifecycleSmsPreferences('biz-1', {
+      birthdaySmsEnabled: true,
+      winbackSmsEnabled: true,
+    });
+    expect(result).toEqual({ status: 'INVALID_VALUE' });
+  });
+});

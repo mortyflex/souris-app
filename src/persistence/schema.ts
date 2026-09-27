@@ -588,6 +588,28 @@ ALTER TABLE appointments ADD COLUMN client_reminder_enabled INTEGER
   CHECK (client_reminder_enabled IS NULL OR client_reminder_enabled IN (0, 1));
 `;
 
+/**
+ * Schema v16 — Client promotional SMS consent (SMS pivot Phase 2). Three
+ * nullable columns travelling together: the explicit consent
+ * (OPTED_IN / OPTED_OUT, NULL = UNKNOWN), the instant it was recorded and
+ * the recording source (PROFESSIONAL; CLIENT_STOP reserved for a future
+ * unsubscribe mechanism). Every existing Client keeps NULL — UNKNOWN, never
+ * eligible for lifecycle SMS; no backfill to OPTED_IN, ever. Purely
+ * additive — no row rewritten, no wipe, no reseed, no id or sync
+ * bookkeeping touched (the migration marks nothing in the outbox: nothing
+ * changed for the remote).
+ */
+const SCHEMA_V16 = `
+ALTER TABLE clients ADD COLUMN sms_marketing_consent TEXT
+  CHECK (sms_marketing_consent IS NULL OR sms_marketing_consent IN ('OPTED_IN', 'OPTED_OUT'));
+ALTER TABLE clients ADD COLUMN sms_marketing_consent_updated_at TEXT;
+ALTER TABLE clients ADD COLUMN sms_marketing_consent_source TEXT
+  CHECK (
+    sms_marketing_consent_source IS NULL
+    OR sms_marketing_consent_source IN ('PROFESSIONAL', 'CLIENT_STOP')
+  );
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -604,6 +626,7 @@ export const migrations: readonly Migration[] = [
   { version: 13, up: (db) => db.execSync(SCHEMA_V13) },
   { version: 14, up: (db) => db.execSync(SCHEMA_V14) },
   { version: 15, up: (db) => db.execSync(SCHEMA_V15) },
+  { version: 16, up: (db) => db.execSync(SCHEMA_V16) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;

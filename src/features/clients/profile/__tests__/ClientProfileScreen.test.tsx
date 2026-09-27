@@ -221,6 +221,21 @@ function SessionProbe() {
         }
       />
       <Pressable
+        testID="add-consent-client"
+        onPress={() =>
+          addClient({
+            id: 'client-consent',
+            firstName: 'Prisca',
+            phone: '06 99 88 77 66',
+            smsMarketingConsent: {
+              status: 'OPTED_OUT',
+              updatedAt: new Date('2026-09-27T10:00:00.000Z'),
+              source: 'PROFESSIONAL',
+            },
+          })
+        }
+      />
+      <Pressable
         testID="add-notes-client"
         onPress={() =>
           addClient({
@@ -588,12 +603,25 @@ describe('ClientProfileScreen', () => {
     expect(notes.props.numberOfLines).toBeUndefined();
   });
 
+  it('shows the recorded SMS promotional consent, and no row while it stays « Non renseigné »', async () => {
+    const view = await renderProfile('client-consent');
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-consent-client'));
+    });
+
+    expect(view.getByText('SMS promotionnels')).toBeTruthy();
+    expect(view.getByText('Refusés')).toBeTruthy();
+  });
+
   it('renders no Notes section — no empty card, no placeholder — for a Client without notes', async () => {
     const view = await renderProfile('client-agenda-lea');
 
     expect(view.getByText('Léa Martin')).toBeTruthy();
     expect(view.queryByTestId('client-notes-section')).toBeNull();
     expect(view.queryByText('Notes')).toBeNull();
+    // UNKNOWN consent shows nothing: the choice lives in the edit form.
+    expect(view.queryByText('SMS promotionnels')).toBeNull();
   });
 
   it('edits the notes from the profile: pre-filled, saved, shown, then cleared', async () => {

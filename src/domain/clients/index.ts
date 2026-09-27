@@ -22,3 +22,13 @@ export {
   type ClientBirthday,
 } from './birthday';
 export { CLIENT_NOTES_MAX_LENGTH, normalizeClientNotes } from './notes';
+export {
+  CLIENT_SMS_CONSENT_SOURCES,
+  CLIENT_SMS_CONSENT_STATUSES,
+  isClientSmsMarketingConsentSource,
+  isClientSmsMarketingConsentStatus,
+  resolveClientSmsMarketingConsent,
+  type ClientSmsMarketingConsent,
+  type ClientSmsMarketingConsentSource,
+  type ClientSmsMarketingConsentStatus,
+} from './sms-consent';

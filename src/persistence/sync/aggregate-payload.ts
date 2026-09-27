@@ -87,9 +87,12 @@ function readClient(db: SourisDatabase, id: string): RemoteClientPayload | undef
     readonly birthday: string | null;
     readonly notes: string | null;
     readonly photo_path: string | null;
+    readonly sms_marketing_consent: string | null;
+    readonly sms_marketing_consent_updated_at: string | null;
+    readonly sms_marketing_consent_source: string | null;
     readonly archived_at: string | null;
   }>(
-    'SELECT first_name, last_name, phone, email, birthday, notes, photo_path, archived_at FROM clients WHERE id = ?',
+    'SELECT first_name, last_name, phone, email, birthday, notes, photo_path, sms_marketing_consent, sms_marketing_consent_updated_at, sms_marketing_consent_source, archived_at FROM clients WHERE id = ?',
     [id],
   );
   if (!row) return undefined;
@@ -101,6 +104,9 @@ function readClient(db: SourisDatabase, id: string): RemoteClientPayload | undef
     birthday: row.birthday,
     notes: row.notes,
     photo_path: row.photo_path,
+    sms_marketing_consent: row.sms_marketing_consent,
+    sms_marketing_consent_updated_at: toOptionalInstant(row.sms_marketing_consent_updated_at),
+    sms_marketing_consent_source: row.sms_marketing_consent_source,
     archived_at: toOptionalInstant(row.archived_at),
   };
 }

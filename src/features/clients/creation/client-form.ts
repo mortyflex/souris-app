@@ -7,12 +7,18 @@
 // day + month pair chosen with the selector, or nothing — never a year.
 // Notes are free multiline text: trimmed at the edges, line breaks kept, a
 // blank note becomes undefined (normalizeClientNotes).
+// The promotional SMS consent is optional and defaults to « Non renseigné »
+// (UNKNOWN): the professional records the client's expressed choice, and an
+// unchanged choice keeps its original audit record
+// (resolveClientSmsMarketingConsent).
 
 import {
   isValidClientBirthday,
   normalizeClientNotes,
+  resolveClientSmsMarketingConsent,
   type Client,
   type ClientBirthday,
+  type ClientSmsMarketingConsentStatus,
 } from '@/domain/clients';
 
 export interface ClientFormValues {
@@ -22,6 +28,8 @@ export interface ClientFormValues {
   readonly email: string;
   readonly birthday: ClientBirthday | undefined;
   readonly notes: string;
+  /** Undefined = « Non renseigné » (UNKNOWN), the default. */
+  readonly smsMarketingConsent: ClientSmsMarketingConsentStatus | undefined;
 }
 
 export const EMPTY_CLIENT_FORM: ClientFormValues = {
@@ -31,6 +39,7 @@ export const EMPTY_CLIENT_FORM: ClientFormValues = {
   email: '',
   birthday: undefined,
   notes: '',
+  smsMarketingConsent: undefined,
 };
 
 /** Hydrates the shared form with an existing Client (edit mode). */
@@ -42,6 +51,7 @@ export function toClientFormValues(client: Client): ClientFormValues {
     email: client.email ?? '',
     birthday: client.birthday,
     notes: client.notes ?? '',
+    smsMarketingConsent: client.smsMarketingConsent?.status,
   };
 }
 
@@ -65,13 +75,22 @@ export function isValidClientForm(values: ClientFormValues): boolean {
 
 /**
  * Builds the canonical Client from form values.
- * Optional empty strings become undefined.
+ * Optional empty strings become undefined. `previous` is the edited Client
+ * (edit mode): an unchanged consent selection keeps its stored audit
+ * record; a changed one is a fresh PROFESSIONAL capture at `now`.
  */
 export function buildClientFromForm(
   id: string,
   values: ClientFormValues,
+  previous?: Client,
+  now: Date = new Date(),
 ): Client {
   const notes = normalizeClientNotes(values.notes);
+  const smsMarketingConsent = resolveClientSmsMarketingConsent(
+    previous?.smsMarketingConsent,
+    values.smsMarketingConsent,
+    now,
+  );
   return {
     id,
     firstName: values.firstName.trim(),
@@ -80,5 +99,6 @@ export function buildClientFromForm(
     email: values.email.trim() || undefined,
     ...(values.birthday !== undefined ? { birthday: values.birthday } : {}),
     ...(notes !== undefined ? { notes } : {}),
+    ...(smsMarketingConsent !== undefined ? { smsMarketingConsent } : {}),
   };
 }

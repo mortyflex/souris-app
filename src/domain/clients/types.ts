@@ -11,6 +11,7 @@
 // Appointment state — never stored on the Client.
 
 import type { ClientBirthday } from './birthday';
+import type { ClientSmsMarketingConsent } from './sms-consent';
 
 export interface Client {
   readonly id: string;
@@ -28,6 +29,12 @@ export interface Client {
    * line breaks preserved, absent when blank. Never imported from legacy data.
    */
   readonly notes?: string;
+  /**
+   * Explicit promotional SMS consent (see sms-consent.ts). Absent = UNKNOWN:
+   * never asked or never recorded — and never eligible for lifecycle SMS.
+   * A phone number by itself is never consent.
+   */
+  readonly smsMarketingConsent?: ClientSmsMarketingConsent;
   /**
    * Stable reference of the Client photo in the Business media storage (an
    * opaque object path). Absent when the Client has no photo. Never a device

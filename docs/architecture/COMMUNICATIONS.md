@@ -18,10 +18,14 @@ Lot C1  SMS reminder architecture          applied, then RETIRED (§22–§27, �
                                            infrastructure and phone rules remain
 Pivot   SMS = client lifecycle channel     Phase 1 done (§31) — appointment SMS retired, the
                                            Twilio transport preserved as UNBOUND infrastructure
-        Client lifecycle SMS               Phase 2, future — CLIENT_BIRTHDAY_OFFER and
-                                           INACTIVE_CLIENT_FOLLOWUP automations, consent model,
-                                           lifecycle preferences, daily reconciliation
-        Quota / entitlements               future — separate from the core
+        Client lifecycle SMS               Phase 2 done (§34–§44) — CLIENT_BIRTHDAY_OFFER and
+                                           INACTIVE_CLIENT_FOLLOWUP automations, explicit
+                                           consent model, lifecycle preferences, daily
+                                           reconciliation, conditional Twilio binding. NOT
+                                           deployed / enabled: migration + cron + secrets are
+                                           controlled manual steps
+        Opt-out (STOP / unsubscribe)       future — REQUIRED before any real-client rollout
+        Quota / entitlements               future (C3) — separate from the core
 ```
 
 **Global safety rule, unchanged by Lot B:** everything defaults OFF. No existing Business is
@@ -799,12 +803,9 @@ MissingEmailNotice).
 
 ## 32. The Twilio SMS transport — implemented, deliberately UNBOUND
 
-`core/twilio-transport.ts` is reusable provider infrastructure, fully unit-tested and **not
-bound into the production registry**: `createProductionTransportRegistry` maps SMS to
-`UnsupportedChannelTransport` unconditionally, so even with `TWILIO_ACCOUNT_SID` /
-`TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` secrets present the deployed worker cannot send an
-SMS (locked by a registry test). No SMS capability indicator is exposed in the worker smoke
-response until Phase 2 binds the transport.
+`core/twilio-transport.ts` is reusable provider infrastructure, fully unit-tested. (Historical
+Phase 1 state: not bound into the production registry, no SMS capability indicator. Phase 2
+binds it CONDITIONALLY and adds the `smsConfigured` smoke boolean — §42.)
 
 The transport is content-blind: the caller injects a provider-neutral
 `SmsContentRenderer (communication → body | undefined)`; a refusal is a PERMANENT failure with
@@ -836,3 +837,235 @@ existing vocabulary), no promotional consent model, no Business lifecycle prefer
 daily cron, no discount payloads, no inbound STOP handling, no stored `phone_e164`, no
 unsubscribe URL, no quota/RevenueCat, no Settings « SMS fidélisation », no client consent UI —
 and no real SMS can be enabled or sent by the deployed product.
+
+---
+
+# SMS product pivot — Phase 2 (client lifecycle SMS)
+
+## 34. The client lifecycle SMS engine
+
+Migration `supabase/migrations/20261003120000_add_client_lifecycle_sms.sql` + worker renderer
++ app surfaces. The server-authoritative engine for EXACTLY two automations over
+`source_type = CLIENT`, `channel = SMS`, reusing the ONE Lot A queue (no second queue, no
+campaign builder, no broadcast, no marketing list import):
+
+```text
+CLIENT_BIRTHDAY_OFFER       a birthday offer on the client's birthday (NEW kind — additive
+                            CHECK replacement)
+INACTIVE_CLIENT_FOLLOWUP    a win-back offer after a period of inactivity (the existing Lot A
+                            kind, unrenamed)
+```
+
+Appointment reminders remain EMAIL-only forever (§31); the appointment engine stays
+structurally unable to enqueue SMS.
+
+## 35. Consent model — explicit, client-level, never implied
+
+`public.clients` gains three additive nullable columns, travelling together
+(`sms_marketing_consent`, `sms_marketing_consent_updated_at`, `sms_marketing_consent_source`):
+
+```text
+UNKNOWN    NULL — never asked / never recorded      → NEVER receives lifecycle SMS
+OPTED_IN   the client expressly accepts             → the ONLY eligible state
+OPTED_OUT  the client expressly refuses             → NEVER receives lifecycle SMS
+```
+
+**UNKNOWN consent = no promotional SMS.** A phone number by itself is never consent. Existing
+and imported clients are UNKNOWN (the migration backfills NOTHING), and the legacy import
+still never carries consent. Sources: `PROFESSIONAL` (Phase 2 — the professional records the
+client's expressed choice in the Client form) and `CLIENT_STOP` (RESERVED for the future
+unsubscribe mechanism; no inbound STOP handling exists yet). The consent travels with the
+CLIENT aggregate through the normal sync (SQLite schema v16; both sync RPCs replaced in place)
+under the usual missing-key rule: an app build that predates the consent can never erase it,
+and a knowing build always sends the three keys together. The deprecated
+`business_communication_preferences.sms_reminders_enabled` is NOT the consent and stays
+dormant.
+
+## 36. Business lifecycle preferences
+
+`public.business_lifecycle_sms_preferences` — its own table, NEVER the deprecated
+appointment-SMS field. RLS zero-policy zero-grant like the other communication tables;
+server-owned timestamps; the app goes through two narrow owner RPCs
+(`communications_read_lifecycle_sms_preferences`, `communications_update_lifecycle_sms_preferences`
+— DEFINER, `is_business_owner` first, pinned search_path, stable INVALID_VALUE refusals):
+
+```text
+birthday_sms_enabled   false     winback_sms_enabled   false
+birthday_discount      15 %      winback_after         60 days
+birthday_validity      7 days    winback_discount      10 %
+                                 winback_validity      7 days
+```
+
+A missing row reads as these V1 defaults, both automations OFF. Disabling one automation
+cancels ITS pending offers only (table trigger → kind-scoped cancellation; never the other
+automation, never appointment EMAIL communications, never SENT/FAILED history). ENABLING
+schedules nothing by itself: the daily reconciliation is the one derivation mechanism, so a
+settings toggle can never fire an SMS from stale eligibility. The 30-day promotional cooldown
+is a V1 product CONSTANT, not a setting.
+
+## 37. Eligibility rules
+
+Shared base rule (`communications_client_lifecycle_recipient`): client exists, live (not
+tombstoned), active (not archived), consent = OPTED_IN, usable SMS destination (the Phase 1
+phone rules — `communications_client_phone_e164` / `communications_is_sms_eligible_phone`;
+still no stored `phone_e164`). The canonical E.164 destination is snapshotted into
+`scheduled_communications.recipient` at enqueue time.
+
+**Birthday** (`communications_is_birthday_on_civil_date`, mirroring
+`src/domain/clients/birthday.ts` exactly): the client's `MM-DD` birthday matches TODAY's
+Europe/Paris CIVIL date — never the UTC date — and a `02-29` birthday is celebrated on `02-28`
+in a year without a 29th. Identity: `client:<id>:birthday:<Paris civil year>` — annual dedupe
+(one logical offer per client per year, whatever its outcome; FAILED is terminal for the
+year; the next year is a new logical event).
+
+**Win-back**: the authoritative completed visit is `appointments.status = 'COMPLETED' AND
+deleted_at IS NULL`, latest by `start_at DESC, id DESC` — never derived from `start_at <
+now()`, `paid_at`, sales or checkout. Required: at least one completed visit (a client with
+ZERO completed appointments — an imported address book — is NEVER eligible), the latest one
+older than `winback_after_days`, and NO future valid appointment (`deleted_at IS NULL AND
+status IN (SCHEDULED, CONFIRMED) AND start_at > now()`). Episode identity:
+`client:<id>:winback:<last completed appointment id>` — one completed visit yields at most one
+win-back episode ever (FAILED terminal for the episode); a new episode requires a new
+completed visit. The daily run never mints fresh keys for the same episode.
+
+## 38. Collision and cooldown — birthday wins
+
+Daily order: birthday FIRST, then win-back. Win-back is blocked while ANY lifecycle
+promotional SMS of the client is SCHEDULED/PROCESSING, was SENT within the last 30 days, or a
+birthday offer was created TODAY (whatever its outcome) — so a same-day birthday DEFERS the
+win-back without consuming its episode key. The birthday automation itself is annual-dedupe
+driven ONLY: a recent win-back never suppresses a birthday.
+
+## 39. The offer snapshot and its expiry
+
+Payload frozen at enqueue time — exactly four keys, nothing else (no phone, appointment id,
+services, notes, financial history, consent detail or provider data):
+
+```text
+{ business_name, client_first_name, discount_percent, valid_until }
+valid_until = Europe/Paris civil enqueue date + validity_days   (inclusive: 27/09 + 7 → 04/10)
+```
+
+Later Business setting changes never mutate an already-enqueued offer. There is NO coupon,
+promo code, voucher or redemption table: the communication row is the audit record of the
+promise, and the professional applies the existing appointment/checkout discount manually
+when the client redeems it.
+
+## 40. Daily reconciliation and cancellations
+
+`communications_reconcile_client_lifecycle(business)` — idempotent, server state only:
+cancel stale pending lifecycle rows (client became ineligible, automation disabled, the
+birthday is no longer today, the episode is no longer current), then birthday pass, then
+win-back pass, enqueued due immediately (the existing worker sends on its next minute pass).
+`communications_reconcile_client_lifecycle_all()` sweeps every Business with an enabled
+automation or leftover pending lifecycle rows. No device timer, no background task, no new
+Edge Function; `communication_reconciliation_jobs` gains NO CLIENT scope (the daily sweep IS
+the re-derivation mechanism).
+
+Immediate trigger cancellations (never touching SENT/FAILED/CANCELLED history):
+
+```text
+client change       OPTED_OUT / back to UNKNOWN / archived / tombstoned / phone unusable
+                    → both pending lifecycle kinds cancelled at once
+appointment write   a FUTURE VALID appointment (live, SCHEDULED/CONFIRMED, upcoming)
+                    → pending INACTIVE_CLIENT_FOLLOWUP cancelled; birthday offers are NEVER
+                      cancelled by a booking
+preferences         disabling one automation cancels ITS pending rows only
+```
+
+**Scheduling (NOT installed by the migration):** the production cron target is 08:30 UTC
+daily — `30 8 * * *` — calling `communications_reconcile_client_lifecycle_all()` as
+`service_role` (09:30 Paris in winter, 10:30 in summer; the seasonal drift is accepted in V1,
+no DST-aware cron logic). Installing it is a manual, controlled step (supabase/README.md),
+exactly like the worker cron.
+
+## 41. SMS content — `core/sms-content.ts`
+
+The provider-neutral renderer injected into the SMS transport, supporting EXACTLY the two
+lifecycle kinds (appointment SMS kinds render nothing → the transport fails permanently with
+no provider request). Fixed V1 French copy, no emoji, no link, no STOP text yet:
+
+```text
+Joyeux anniversaire {prénom} ! {salon} vous offre -{d}% sur votre prochaine prestation,
+valable jusqu'au {date}.
+Bonjour {prénom}, ça fait un moment ! {salon} vous offre -{d}% sur votre prochaine
+prestation, valable jusqu'au {date}.
+```
+
+Each with a no-name fallback (« Joyeux anniversaire ! … », « Bonjour, ça fait un moment !
+… »). `valid_until` is formatted `DD/MM/YYYY` as pure text — a civil date, never converted
+through a Date or a timezone. Target ≤ 160 characters; 200 is the deterministic HARD ceiling:
+overflow compacts PRESENTATION text only (business name first, then first name, then the
+no-name fallback) with an ASCII `...` — the discount and the date are never touched, and
+legitimate Unicode names are never transliterated (UCS-2 is accepted).
+
+## 42. Twilio production binding and `smsConfigured`
+
+`createProductionTransportRegistry` binds `SMS → TwilioSmsTransport` (with the lifecycle
+renderer injected) ONLY when all three of `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+`TWILIO_FROM_NUMBER` are present and valid (the sender must be canonical E.164); anything
+less binds `UnsupportedChannelTransport`. EMAIL stays independent and still refuses the pass
+without its Resend secrets. The worker smoke response gains `smsConfigured` — TRUE exactly
+when the registry bound the real transport; a boolean only, never an SID, token, sender or
+recipient. **No Twilio secret exists in production yet: the deployed worker still cannot send
+an SMS, and the Twilio Trial recipient remains developer-only.**
+
+## 43. The app surfaces
+
+- **Plus › SMS fidélisation** (`/lifecycle-sms-settings`,
+  `LifecycleSmsSettingsScreen`) — two switches (Anniversaires, Clientes inactives) over the
+  read-only V1 knobs, separate from « Rappels clientes » (EMAIL). Server-persisted before the
+  UI claims anything; fail-safe disabled when the server cannot answer. **Exposure strategy
+  (fail-safe): the app cannot know the server transport capability, so the Plus entry is
+  compiled for DEVELOPMENT builds only (`__DEV__`) until the controlled deployment step —
+  production users cannot reach the screen, and server-side both automations default OFF for
+  every Business anyway.**
+- **Client form** — « SMS promotionnels » (Non renseigné / Autorisés / Refusés, defaulting to
+  Non renseigné) on the shared create/edit form; an unchanged choice keeps its audit record
+  (`resolveClientSmsMarketingConsent`), OPTED_IN with no texting-capable number shows a
+  concise note and never blocks the save. The profile `Informations` section shows a recorded
+  choice; UNKNOWN shows no row.
+- No consent onboarding flow, no legal jargon, no campaign editor.
+
+## 44. Explicit non-goals of Phase 2 (deferred, in order)
+
+- **Opt-out before real clients**: no inbound Twilio STOP, no unsubscribe URL, no public web
+  route, no signed opt-out token yet. A production-appropriate opt-out mechanism for the
+  final French sender model is REQUIRED before any lifecycle SMS reaches a real client.
+- **Quota / entitlements (C3)**: no monthly quota, allowance, RevenueCat, billing, segment
+  accounting or overage. The seam is unchanged: eligibility → consent → future quota
+  reservation → enqueue (between the cooldown check and `communications_enqueue` in the
+  win-back/birthday passes).
+- No automatic re-send after FAILED (terminal per episode/year; manual retry may come later),
+  no marketing lists, no arbitrary broadcast, no per-client send history UI, no delivery
+  webhooks.
+- **Deployment safety**: applying the migration alone enables zero automations, changes zero
+  consent, enqueues zero rows and sends zero SMS. Real enablement is the controlled test plan
+  on the developer test Business only (one OPTED_IN test client → the developer's verified
+  Twilio phone) — never the production Business.
+
+## 45. Verification (Phase 2)
+
+Worker: Jest — the lifecycle renderer (locked copy, fallbacks, accents kept, DD/MM/YYYY,
+hard ceiling with structural values untouched, refusals for appointment kinds/non-SMS/
+malformed snapshots), the conditional Twilio binding (complete config → TwilioSmsTransport;
+partial/absent/malformed → UnsupportedChannelTransport; EMAIL independent), `isSmsConfigured`,
+the Twilio transport suite over lifecycle fixtures, and the source guard extended to the
+registry naming the transport.
+
+Database: 84 checks against ALL migrations on a populated PGlite — migration safety (re-run
+harmless, zero rewrites, zero enablement, zero enqueues, UNKNOWN preserved), consent sync
+compatibility both ways, the kind vocabulary, the Feb-29 birthday matcher grid (century rules
+included), the preference RPCs (defaults, isolation, INVALID_VALUE, zero client access), the
+full birthday and win-back eligibility grids, idempotent re-runs, episode/annual dedupe,
+FAILED terminality, new-episode-after-new-visit, stale-episode replacement, collision/cooldown
+semantics, all trigger cancellations, payload minimality and appointment-EMAIL regression.
+The existing harnesses (Lot A 73, Lot B 66, retry 33, privileges 49, retirement 23,
+push/pull regressions) still pass with the migration appended (the pull harness keeps its one
+historical by-design CLIENT exact-shape mismatch, now over the consent keys).
+
+App: Jest — the v16 migration and store round-trip (UNKNOWN default, triple integrity,
+tolerant loading), sync payload compatibility (old-build/old-remote never erases or fails),
+the consent form round-trip and phone notice, the profile row, the lifecycle settings screen
+(defaults OFF, independent switches, fail-safe), and the gateway mapping including
+INVALID_VALUE.

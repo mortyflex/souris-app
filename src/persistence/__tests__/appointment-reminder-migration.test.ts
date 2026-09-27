@@ -57,8 +57,8 @@ describe('schema v15 migration on an existing v14 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(15);
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+    expect(readSchemaVersion(db)).toBe(16);
+    expect(CURRENT_SCHEMA_VERSION).toBe(16);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
 
@@ -87,7 +87,7 @@ describe('schema v15 migration on an existing v14 database', () => {
     const db = openSchemaV14Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(15);
+    expect(migrateDatabase(db)).toBe(16);
     const upcoming = loadAppointments(db).find(
       (appointment) => appointment.id === 'appointment-upcoming',
     )!;

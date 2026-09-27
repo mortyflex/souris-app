@@ -3,7 +3,8 @@
 // The ONE Client form, shared by the Clientes directory, the Appointment
 // Creation picker (create mode), and the Client Profile (edit mode).
 //
-// Prénom required; Nom / Téléphone / Email / Anniversaire / Notes optional.
+// Prénom required; Nom / Téléphone / Email / Anniversaire / SMS
+// promotionnels / Notes optional.
 // The birthday is a day + month chosen inline with the shared selector — no
 // year, no keyboard. Notes is a quiet multiline field at the end of the form. The sheet is the canonical Souris drawer: it opens in
 // its resting position with the keyboard CLOSED (no autofocus), the fields
@@ -33,6 +34,7 @@ import {
   type ClientFormValues,
 } from './client-form';
 import { BirthdayField } from './components/BirthdayField';
+import { SmsConsentField } from './components/SmsConsentField';
 import { createClientId } from './runtime-ids';
 
 export type ClientFormMode = 'create' | 'edit';
@@ -77,7 +79,7 @@ export function ClientFormSheet({
 
     const nextClient =
       mode === 'edit' && client
-        ? buildClientFromForm(client.id, values)
+        ? buildClientFromForm(client.id, values, client)
         : buildClientFromForm(createClientId(), values);
 
     try {
@@ -163,6 +165,11 @@ export function ClientFormSheet({
         <BirthdayField
           onChange={(birthday) => updateField('birthday', birthday)}
           value={values.birthday}
+        />
+        <SmsConsentField
+          onChange={(consent) => updateField('smsMarketingConsent', consent)}
+          phone={values.phone}
+          value={values.smsMarketingConsent}
         />
         <TextField
           accessibilityLabel="Notes"

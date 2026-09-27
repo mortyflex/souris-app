@@ -107,12 +107,21 @@ const OPERATIONAL_TABLES = [
 function dump(db: ReturnType<typeof openTestDatabase>, table: string) {
   const rows = db.getAllSync<Record<string, unknown>>(`SELECT rowid AS row_id, * FROM ${table} ORDER BY rowid`);
   // The bootstrap runs every later migration too: schema v13 adds
-  // `clients.photo_path`, v14 `products.photo_path` and v15
-  // `appointments.client_reminder_enabled` (all NULL; covered by
-  // client-photo-migration.test.ts, product-photo-migration.test.ts and
-  // appointment-reminder-migration.test.ts).
+  // `clients.photo_path`, v14 `products.photo_path`, v15
+  // `appointments.client_reminder_enabled` and v16 the three
+  // `clients.sms_marketing_consent*` columns (all NULL; covered by
+  // client-photo-migration.test.ts, product-photo-migration.test.ts,
+  // appointment-reminder-migration.test.ts and
+  // client-sms-consent-migration.test.ts).
   return rows.map(
-    ({ photo_path: _photoPath, client_reminder_enabled: _clientReminder, ...row }) => row,
+    ({
+      photo_path: _photoPath,
+      client_reminder_enabled: _clientReminder,
+      sms_marketing_consent: _smsConsent,
+      sms_marketing_consent_updated_at: _smsConsentUpdatedAt,
+      sms_marketing_consent_source: _smsConsentSource,
+      ...row
+    }) => row,
   );
 }
 
@@ -124,8 +133,8 @@ describe('schema v12 migration on an existing v11 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(15);
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+    expect(readSchemaVersion(db)).toBe(16);
+    expect(CURRENT_SCHEMA_VERSION).toBe(16);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     for (const table of OPERATIONAL_TABLES) expect(dump(db, table)).toEqual(before[table]);
@@ -212,7 +221,7 @@ describe('schema v12 migration on an existing v11 database', () => {
     const db = openSchemaV11Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(15);
+    expect(migrateDatabase(db)).toBe(16);
     insertAppointmentDeposit(db, {
       id: 'deposit-1',
       businessId: BUSINESS_ID,

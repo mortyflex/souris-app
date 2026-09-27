@@ -523,11 +523,11 @@ describe('Business isolation', () => {
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID, OTHER_BUSINESS_ID]);
     await openUploadedSource(remote);
     remote.writeFromElsewhere(OTHER_BUSINESS_ID, 'CLIENT', 'client-other-salon', {
-      first_name: 'Autre', last_name: 'Salon', phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null,
+      first_name: 'Autre', last_name: 'Salon', phone: null, email: null, birthday: null, notes: null, photo_path: null, sms_marketing_consent: null, sms_marketing_consent_updated_at: null, sms_marketing_consent_source: null, archived_at: null,
     });
     // The SAME id exists in both Businesses with different content.
     remote.writeFromElsewhere(OTHER_BUSINESS_ID, 'CLIENT', clientLea.id, {
-      first_name: 'Homonyme', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null,
+      first_name: 'Homonyme', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, sms_marketing_consent: null, sms_marketing_consent_updated_at: null, sms_marketing_consent_source: null, archived_at: null,
     });
 
     const { db } = await restoreFreshDevice(remote);
@@ -661,7 +661,7 @@ describe('incremental pull', () => {
 
     // Only what changes afterwards comes back.
     remote.advanceClock(PULL_OVERLAP_MS * 3);
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-later', { first_name: 'Plus tard', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-later', { first_name: 'Plus tard', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, sms_marketing_consent: null, sms_marketing_consent_updated_at: null, sms_marketing_consent_source: null, archived_at: null });
     expect(await runB()).toMatchObject({ pull: { status: 'PULLED', fetched: 1, applied: 1 } });
   });
 
@@ -701,7 +701,7 @@ describe('incremental pull', () => {
     expect(readAcknowledgedRemoteVersion(a, REMOTE_BUSINESS_ID, { aggregateType: 'APPOINTMENT', aggregateId: 'appointment-orphan' })).toBeUndefined();
 
     // Once the Client exists remotely too, the same pull window brings both.
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-nowhere', { first_name: 'Enfin', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-nowhere', { first_name: 'Enfin', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, sms_marketing_consent: null, sms_marketing_consent_updated_at: null, sms_marketing_consent_source: null, archived_at: null });
     expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 2, failed: 0, cursorAdvanced: true } });
   });
 });
@@ -1145,7 +1145,7 @@ describe('remote tombstones', () => {
 
   it('a tombstone of an aggregate this device never held is simply acknowledged', async () => {
     const { remote, a, runA } = await openTwoDevices();
-    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief', { first_name: 'Bref', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: null });
+    remote.writeFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief', { first_name: 'Bref', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, sms_marketing_consent: null, sms_marketing_consent_updated_at: null, sms_marketing_consent_source: null, archived_at: null });
     const version = remote.tombstoneFromElsewhere(REMOTE_BUSINESS_ID, 'CLIENT', 'client-brief');
 
     expect(await runA()).toMatchObject({ pull: { status: 'PULLED', applied: 0, deleted: 0, skipped: expect.any(Number), failed: 0 } });
@@ -1196,7 +1196,7 @@ describe('remote snapshot validation', () => {
     expect(snapshot.clients[0]).toEqual({
       id: 'c',
       syncVersion: 3,
-      payload: { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, archived_at: '2026-09-13T08:00:00.500Z' },
+      payload: { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: null, notes: null, photo_path: null, sms_marketing_consent: null, sms_marketing_consent_updated_at: null, sms_marketing_consent_source: null, archived_at: '2026-09-13T08:00:00.500Z' },
     });
   });
 
@@ -1218,8 +1218,8 @@ describe('remote snapshot validation', () => {
     });
 
     expect(snapshot.clients.map((client) => client.payload)).toEqual([
-      { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: '02-29', notes: null, photo_path: null, archived_at: null },
-      { first_name: 'Nour', last_name: null, phone: null, email: null, birthday: null, notes: 'Ligne 1\nLigne 2', photo_path: null, archived_at: null },
+      { first_name: 'Léa', last_name: null, phone: null, email: null, birthday: '02-29', notes: null, photo_path: null, sms_marketing_consent: null, sms_marketing_consent_updated_at: null, sms_marketing_consent_source: null, archived_at: null },
+      { first_name: 'Nour', last_name: null, phone: null, email: null, birthday: null, notes: 'Ligne 1\nLigne 2', photo_path: null, sms_marketing_consent: null, sms_marketing_consent_updated_at: null, sms_marketing_consent_source: null, archived_at: null },
     ]);
   });
 

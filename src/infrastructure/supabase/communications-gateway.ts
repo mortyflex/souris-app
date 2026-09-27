@@ -15,7 +15,9 @@ import {
   type AppointmentReminderStatusKind,
   type CommunicationPreferences,
   type CommunicationsGateway,
+  type LifecycleSmsPreferences,
   type UpdateCommunicationPreferencesResult,
+  type UpdateLifecycleSmsPreferencesResult,
 } from '@/features/communications/gateway';
 
 import type { SourisSupabaseClient } from './client';
@@ -55,6 +57,30 @@ function toPreferences(data: unknown): CommunicationPreferences {
     // parsed tolerantly (absent = false), controls nothing.
     smsRemindersEnabled: row.sms_reminders_enabled === true,
     ...(typeof replyTo === 'string' && replyTo.length > 0 ? { replyToEmail: replyTo } : {}),
+  };
+}
+
+/** Exported for tests: jsonb result → validated lifecycle preferences. */
+export function toLifecycleSmsPreferences(data: unknown): LifecycleSmsPreferences {
+  const row = asObject(data);
+  const flag = (value: unknown): boolean => {
+    if (typeof value !== 'boolean') throw new CommunicationsGatewayError('UNKNOWN', 'BADRESULT');
+    return value;
+  };
+  const count = (value: unknown): number => {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+      throw new CommunicationsGatewayError('UNKNOWN', 'BADRESULT');
+    }
+    return value;
+  };
+  return {
+    birthdaySmsEnabled: flag(row.birthday_sms_enabled),
+    birthdayDiscountPercent: count(row.birthday_discount_percent),
+    birthdayValidityDays: count(row.birthday_validity_days),
+    winbackSmsEnabled: flag(row.winback_sms_enabled),
+    winbackAfterDays: count(row.winback_after_days),
+    winbackDiscountPercent: count(row.winback_discount_percent),
+    winbackValidityDays: count(row.winback_validity_days),
   };
 }
 
@@ -128,6 +154,32 @@ export function createSupabaseCommunicationsGateway(
       });
       if (error) throw mapCommunicationsPostgrestError(error);
       return toAppointmentReminderStatus(data);
+    },
+
+    async readLifecycleSmsPreferences(businessId): Promise<LifecycleSmsPreferences> {
+      const { data, error } = await client.rpc('communications_read_lifecycle_sms_preferences', {
+        p_business_id: businessId,
+      });
+      if (error) throw mapCommunicationsPostgrestError(error);
+      return toLifecycleSmsPreferences(data);
+    },
+
+    async updateLifecycleSmsPreferences(
+      businessId,
+      preferences,
+    ): Promise<UpdateLifecycleSmsPreferencesResult> {
+      // V1 only edits the two switches; the numeric knobs keep their stored
+      // values (the RPC's optional parameters are simply not sent).
+      const { data, error } = await client.rpc('communications_update_lifecycle_sms_preferences', {
+        p_business_id: businessId,
+        p_birthday_sms_enabled: preferences.birthdaySmsEnabled,
+        p_winback_sms_enabled: preferences.winbackSmsEnabled,
+      });
+      if (error) throw mapCommunicationsPostgrestError(error);
+      const row = asObject(data);
+      if (row.status === 'INVALID_VALUE') return { status: 'INVALID_VALUE' };
+      if (row.status !== 'UPDATED') throw new CommunicationsGatewayError('UNKNOWN', 'BADRESULT');
+      return { status: 'UPDATED', preferences: toLifecycleSmsPreferences(data) };
     },
   };
 }

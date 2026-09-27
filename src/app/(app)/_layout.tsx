@@ -61,6 +61,7 @@ export default function AppLayout() {
                       <Stack.Screen name="services/index" options={pushedScreen} />
                       <Stack.Screen name="cash-register/index" options={pushedScreen} />
                       <Stack.Screen name="reminder-settings" options={pushedScreen} />
+                      <Stack.Screen name="lifecycle-sms-settings" options={pushedScreen} />
                       <Stack.Screen name="services/new" options={editorSheet} />
                       <Stack.Screen name="services/[serviceId]" options={editorSheet} />
                       <Stack.Screen name="products/index" options={pushedScreen} />

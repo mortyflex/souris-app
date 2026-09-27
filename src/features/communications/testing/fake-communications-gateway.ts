@@ -13,25 +13,49 @@ import {
   type CommunicationPreferences,
   type CommunicationsGateway,
   type CommunicationsGatewayFailureCode,
+  type LifecycleSmsPreferences,
 } from '../gateway';
 
+/** The server's V1 defaults: both automations OFF. */
+export const DEFAULT_LIFECYCLE_SMS_PREFERENCES: LifecycleSmsPreferences = {
+  birthdaySmsEnabled: false,
+  birthdayDiscountPercent: 15,
+  birthdayValidityDays: 7,
+  winbackSmsEnabled: false,
+  winbackAfterDays: 60,
+  winbackDiscountPercent: 10,
+  winbackValidityDays: 7,
+};
+
 export interface FakeCommunicationsGateway extends CommunicationsGateway {
-  readonly calls: { read: number; update: number; status: number };
+  readonly calls: {
+    read: number;
+    update: number;
+    status: number;
+    readLifecycle: number;
+    updateLifecycle: number;
+  };
   /** Arguments of every accepted update, in order. */
   readonly updates: { businessId: string; preferences: CommunicationPreferences }[];
+  /** Arguments of every accepted lifecycle update, in order. */
+  readonly lifecycleUpdates: { businessId: string; preferences: LifecycleSmsPreferences }[];
   /** Makes the NEXT call fail with the given code. */
   failNext(code: CommunicationsGatewayFailureCode): void;
   /** Scripts the projection answer of one appointment. */
   setReminderStatus(appointmentId: string, status: AppointmentReminderStatus): void;
   /** Seeds the stored preference of a Business. */
   seedPreferences(businessId: string, preferences: CommunicationPreferences): void;
+  /** Seeds the stored lifecycle SMS preferences of a Business. */
+  seedLifecycleSmsPreferences(businessId: string, preferences: LifecycleSmsPreferences): void;
 }
 
 export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
   const preferencesByBusiness = new Map<string, CommunicationPreferences>();
+  const lifecycleByBusiness = new Map<string, LifecycleSmsPreferences>();
   const statusByAppointment = new Map<string, AppointmentReminderStatus>();
-  const calls = { read: 0, update: 0, status: 0 };
+  const calls = { read: 0, update: 0, status: 0, readLifecycle: 0, updateLifecycle: 0 };
   const updates: { businessId: string; preferences: CommunicationPreferences }[] = [];
+  const lifecycleUpdates: { businessId: string; preferences: LifecycleSmsPreferences }[] = [];
   let nextFailure: CommunicationsGatewayFailureCode | undefined;
 
   const takeFailure = () => {
@@ -44,6 +68,7 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
   return {
     calls,
     updates,
+    lifecycleUpdates,
     failNext(code) {
       nextFailure = code;
     },
@@ -52,6 +77,9 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
     },
     seedPreferences(businessId, preferences) {
       preferencesByBusiness.set(businessId, preferences);
+    },
+    seedLifecycleSmsPreferences(businessId, preferences) {
+      lifecycleByBusiness.set(businessId, preferences);
     },
     async readPreferences(businessId) {
       calls.read += 1;
@@ -83,6 +111,24 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
       calls.status += 1;
       takeFailure();
       return statusByAppointment.get(appointmentId) ?? { status: 'NONE' };
+    },
+    async readLifecycleSmsPreferences(businessId) {
+      calls.readLifecycle += 1;
+      takeFailure();
+      return lifecycleByBusiness.get(businessId) ?? DEFAULT_LIFECYCLE_SMS_PREFERENCES;
+    },
+    async updateLifecycleSmsPreferences(businessId, next) {
+      calls.updateLifecycle += 1;
+      takeFailure();
+      // Like the server: the switches change, the numeric knobs stay stored.
+      const preferences: LifecycleSmsPreferences = {
+        ...(lifecycleByBusiness.get(businessId) ?? DEFAULT_LIFECYCLE_SMS_PREFERENCES),
+        birthdaySmsEnabled: next.birthdaySmsEnabled,
+        winbackSmsEnabled: next.winbackSmsEnabled,
+      };
+      lifecycleByBusiness.set(businessId, preferences);
+      lifecycleUpdates.push({ businessId, preferences });
+      return { status: 'UPDATED', preferences };
     },
   };
 }

@@ -26,6 +26,15 @@ export interface RemoteClientPayload {
   readonly notes: string | null;
   /** Stable object path of the Client photo in the Business media storage, or null. */
   readonly photo_path: string | null;
+  /**
+   * Promotional SMS consent (SMS pivot Phase 2): OPTED_IN | OPTED_OUT, null
+   * = UNKNOWN. The three consent keys travel together — always sent, nulls
+   * included: a missing `sms_marketing_consent` key means "a build that
+   * predates the consent" and keeps the stored value remotely.
+   */
+  readonly sms_marketing_consent: string | null;
+  readonly sms_marketing_consent_updated_at: string | null;
+  readonly sms_marketing_consent_source: string | null;
   readonly archived_at: string | null;
 }
 

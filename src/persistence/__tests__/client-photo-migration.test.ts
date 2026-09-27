@@ -47,8 +47,8 @@ describe('schema v13 migration on an existing v12 database', () => {
 
     const snapshot = bootstrapPersistence(db, createTestSeed);
 
-    expect(readSchemaVersion(db)).toBe(15);
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+    expect(readSchemaVersion(db)).toBe(16);
+    expect(CURRENT_SCHEMA_VERSION).toBe(16);
     expect(db.getAllSync(`SELECT ${columns} FROM clients ORDER BY rowid`)).toEqual(clientsBefore);
     expect(db.getAllSync('SELECT photo_path FROM clients')).toEqual([{ photo_path: null }, { photo_path: null }]);
     expect(db.getAllSync('SELECT * FROM sync_outbox ORDER BY id')).toEqual(outboxBefore);
@@ -63,7 +63,7 @@ describe('schema v13 migration on an existing v12 database', () => {
   it('is idempotent', () => {
     const db = openSchemaV12Database();
     bootstrapPersistence(db, createTestSeed);
-    expect(migrateDatabase(db)).toBe(15);
+    expect(migrateDatabase(db)).toBe(16);
     expect(loadClients(db)).toHaveLength(2);
   });
 });

@@ -42,7 +42,11 @@ import type { Appointment } from '@/domain/appointments';
 import { ClientPhotoControl } from '@/features/clients/photo/ClientPhotoControl';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
-import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
+import {
+  ARCHIVED_CLIENT_LABEL,
+  formatClientSmsConsentStatus,
+  SMS_CONSENT_FIELD_LABEL,
+} from '@/features/clients/presentation';
 import { BirthdayConfetti } from '@/features/clients/birthday/BirthdayConfetti';
 import { BirthdayNotice } from '@/features/clients/birthday/BirthdayNotice';
 import {
@@ -205,7 +209,9 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
 
   const activity = getClientActivitySummary(appointments, client.id);
   const purchases = getClientSales(sales, client.id);
-  const hasContactInfo = Boolean(client.phone || client.email || client.birthday);
+  const hasContactInfo = Boolean(
+    client.phone || client.email || client.birthday || client.smsMarketingConsent,
+  );
   const archived = isClientArchived(client);
 
   const openAppointmentCreation = () => {
@@ -441,6 +447,15 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
                 icon={birthdayIcon}
                 label="Anniversaire"
                 value={client.birthday ? formatClientBirthday(client.birthday) : undefined}
+              />
+              {/* Shown once a choice was RECORDED; « Non renseigné » stays in the edit form. */}
+              <InfoRow
+                label={SMS_CONSENT_FIELD_LABEL}
+                value={
+                  client.smsMarketingConsent
+                    ? formatClientSmsConsentStatus(client.smsMarketingConsent.status)
+                    : undefined
+                }
               />
             </View>
           </View>

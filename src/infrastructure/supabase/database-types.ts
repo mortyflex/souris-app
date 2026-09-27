@@ -102,6 +102,19 @@ export type Database = {
         Args: { p_business_id: string; p_appointment_id: string };
         Returns: Json;
       };
+      communications_read_lifecycle_sms_preferences: {
+        Args: { p_business_id: string };
+        Returns: Json;
+      };
+      communications_update_lifecycle_sms_preferences: {
+        /** The numeric knobs are optional server-side; V1 sends the switches only. */
+        Args: {
+          p_business_id: string;
+          p_birthday_sms_enabled: boolean;
+          p_winback_sms_enabled: boolean;
+        };
+        Returns: Json;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

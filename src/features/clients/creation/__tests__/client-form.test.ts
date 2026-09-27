@@ -28,6 +28,7 @@ describe('Client form', () => {
       email: ' ',
       birthday: undefined,
       notes: '  \n ',
+      smsMarketingConsent: undefined,
     });
 
     expect(result).toEqual({ id: 'c1', firstName: 'Léa' });
@@ -41,6 +42,7 @@ describe('Client form', () => {
       email: ' lea@example.com ',
       birthday: { month: 10, day: 12 },
       notes: '',
+      smsMarketingConsent: undefined,
     });
 
     expect(result).toEqual({
@@ -166,5 +168,62 @@ describe('Client form', () => {
       expect(isAcceptableEmail('@example.com')).toBe(false);
       expect(isAcceptableEmail('lea @example.com')).toBe(false);
     });
+  });
+});
+
+describe('promotional SMS consent in the form', () => {
+  const NOW = new Date('2026-09-27T10:00:00.000Z');
+  const previous = {
+    id: 'c1',
+    firstName: 'Léa',
+    smsMarketingConsent: {
+      status: 'OPTED_IN',
+      updatedAt: new Date('2026-09-01T08:00:00.000Z'),
+      source: 'PROFESSIONAL',
+    },
+  } as const;
+
+  it('defaults to « Non renseigné »: no consent key on the built Client', () => {
+    const result = buildClientFromForm('c1', { ...EMPTY_CLIENT_FORM, firstName: 'Léa' });
+    expect('smsMarketingConsent' in result).toBe(false);
+  });
+
+  it('a recorded choice is a PROFESSIONAL capture at now', () => {
+    const result = buildClientFromForm(
+      'c1',
+      { ...EMPTY_CLIENT_FORM, firstName: 'Léa', smsMarketingConsent: 'OPTED_OUT' },
+      undefined,
+      NOW,
+    );
+    expect(result.smsMarketingConsent).toEqual({
+      status: 'OPTED_OUT',
+      updatedAt: NOW,
+      source: 'PROFESSIONAL',
+    });
+  });
+
+  it('an unchanged selection keeps the stored audit record (edit mode)', () => {
+    const result = buildClientFromForm(
+      'c1',
+      { ...EMPTY_CLIENT_FORM, firstName: 'Léa', smsMarketingConsent: 'OPTED_IN' },
+      previous,
+      NOW,
+    );
+    expect(result.smsMarketingConsent).toBe(previous.smsMarketingConsent);
+  });
+
+  it('clearing back to « Non renseigné » removes the consent entirely', () => {
+    const result = buildClientFromForm(
+      'c1',
+      { ...EMPTY_CLIENT_FORM, firstName: 'Léa', smsMarketingConsent: undefined },
+      previous,
+      NOW,
+    );
+    expect('smsMarketingConsent' in result).toBe(false);
+  });
+
+  it('hydrates the form with the stored status only', () => {
+    expect(toClientFormValues(previous).smsMarketingConsent).toBe('OPTED_IN');
+    expect(toClientFormValues({ id: 'c2', firstName: 'Uma' }).smsMarketingConsent).toBeUndefined();
   });
 });

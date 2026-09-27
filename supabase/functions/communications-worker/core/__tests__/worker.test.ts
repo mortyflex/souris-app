@@ -5,6 +5,7 @@ import { createFakeTransportRegistry, FakeCommunicationTransport } from '../fake
 import {
   createProductionTransportRegistry,
   isEmailLogoConfigured,
+  isSmsConfigured,
   WorkerConfigurationError,
 } from '../production-transports';
 import { ResendEmailTransport } from '../resend-transport';
@@ -199,24 +200,50 @@ describe('the delivery surface stays contained (Lot B)', () => {
     TWILIO_FROM_NUMBER: '+15005550006',
   };
 
-  it('the production registry binds EMAIL to Resend and refuses SMS — never the fake', () => {
+  it('without Twilio configuration the registry binds EMAIL to Resend and refuses SMS — never the fake', () => {
     const registry = createProductionTransportRegistry((name) => RESEND_ENV[name]);
     expect(registry.EMAIL).toBeInstanceOf(ResendEmailTransport);
     expect(registry.SMS).toBeInstanceOf(UnsupportedChannelTransport);
+    expect(isSmsConfigured((name) => RESEND_ENV[name])).toBe(false);
     for (const transport of Object.values(registry)) {
       expect(transport).not.toBeInstanceOf(FakeCommunicationTransport);
     }
   });
 
-  it('SMS PIVOT PHASE 1: even a FULL Twilio configuration binds NOTHING — SMS stays unsupported', () => {
-    // The reusable TwilioSmsTransport is deliberately not production-bound
-    // until the client-lifecycle SMS phase: secrets alone must never make
-    // the deployed worker able to send an SMS.
+  it('SMS PIVOT PHASE 2: a COMPLETE Twilio configuration binds the real SMS transport', () => {
     const env = { ...RESEND_ENV, ...TWILIO_ENV };
     const registry = createProductionTransportRegistry((name) => env[name]);
     expect(registry.EMAIL).toBeInstanceOf(ResendEmailTransport);
+    expect(registry.SMS).toBeInstanceOf(TwilioSmsTransport);
+    expect(isSmsConfigured((name) => env[name])).toBe(true);
+    for (const transport of Object.values(registry)) {
+      expect(transport).not.toBeInstanceOf(FakeCommunicationTransport);
+    }
+  });
+
+  it.each([['TWILIO_ACCOUNT_SID'], ['TWILIO_AUTH_TOKEN'], ['TWILIO_FROM_NUMBER']])(
+    'a PARTIAL Twilio configuration (missing %s) binds UnsupportedChannelTransport',
+    (missing) => {
+      const env: Record<string, string | undefined> = { ...RESEND_ENV, ...TWILIO_ENV, [missing]: undefined };
+      const registry = createProductionTransportRegistry((name) => env[name]);
+      expect(registry.SMS).toBeInstanceOf(UnsupportedChannelTransport);
+      expect(registry.SMS).not.toBeInstanceOf(TwilioSmsTransport);
+      expect(isSmsConfigured((name) => env[name])).toBe(false);
+      // EMAIL stays independent and real.
+      expect(registry.EMAIL).toBeInstanceOf(ResendEmailTransport);
+    },
+  );
+
+  it('a non-canonical Twilio sender number reads as not configured', () => {
+    const env: Record<string, string> = { ...RESEND_ENV, ...TWILIO_ENV, TWILIO_FROM_NUMBER: '06 12 34 56 78' };
+    const registry = createProductionTransportRegistry((name) => env[name]);
     expect(registry.SMS).toBeInstanceOf(UnsupportedChannelTransport);
-    expect(registry.SMS).not.toBeInstanceOf(TwilioSmsTransport);
+    expect(isSmsConfigured((name) => env[name])).toBe(false);
+  });
+
+  it('the smsConfigured indicator is a boolean that never leaks a value', () => {
+    expect(isSmsConfigured(() => undefined)).toBe(false);
+    expect(isSmsConfigured((name) => TWILIO_ENV[name])).toBe(true);
   });
 
   it('Twilio configuration never rescues a missing email configuration', () => {
@@ -313,7 +340,9 @@ describe('the delivery surface stays contained (Lot B)', () => {
     // Each provider and its network call live ONLY in its own transport
     // module (and the registry/entry that name it).
     const resendAllowed = new Set(['resend-transport.ts', 'production-transports.ts']);
-    const twilioAllowed = new Set(['twilio-transport.ts']);
+    // Phase 2: the registry names the Twilio transport to bind it; the
+    // provider endpoint and every network call still live in the transport.
+    const twilioAllowed = new Set(['twilio-transport.ts', 'production-transports.ts']);
     for (const source of sources) {
       expect(source.content).not.toMatch(forbiddenProviders);
       if (source.name !== 'resend-transport.ts') {

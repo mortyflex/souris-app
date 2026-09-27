@@ -44,6 +44,7 @@ phone?      string
 email?      string
 birthday?   { month, day }   day + month only, never a year
 notes?      string           free-text professional note written in Souris
+smsMarketingConsent? record  explicit promotional SMS consent + audit pair, absent = UNKNOWN
 archivedAt? Date             lifecycle marker, absent while active
 ```
 
@@ -182,6 +183,35 @@ Appointment state through `clientId`.
 Purchased products are derived from Sales through `clientId` and never
 stored on the Client. Future fields (formulas, before/after photos, visit
 frequency) are separate future features and must not be added speculatively.
+
+### smsMarketingConsent
+
+Explicit promotional SMS consent (SMS pivot Phase 2 —
+`docs/architecture/COMMUNICATIONS.md` §34, `src/domain/clients/sms-consent.ts`):
+
+```text
+smsMarketingConsent?: { status: OPTED_IN | OPTED_OUT, updatedAt: Date,
+                        source: PROFESSIONAL | CLIENT_STOP }
+```
+
+- ABSENT = UNKNOWN: never asked or never recorded. UNKNOWN and OPTED_OUT
+  never receive a promotional lifecycle SMS; only OPTED_IN is eligible. A
+  phone number by itself is never consent;
+- the professional records the client's EXPRESSED choice in the shared
+  Client form (« SMS promotionnels » — Non renseigné / Autorisés / Refusés,
+  defaulting to Non renseigné). An unchanged choice keeps its original audit
+  record; clearing back to Non renseigné removes the record entirely
+  (`resolveClientSmsMarketingConsent`);
+- Phase 2 captures are always `PROFESSIONAL`; `CLIENT_STOP` is reserved for
+  a future inbound unsubscribe mechanism;
+- the profile `Informations` section shows the recorded state (« Autorisés »
+  / « Refusés »); UNKNOWN shows no row. The directory never shows consent
+  and it is not searchable;
+- never imported from legacy data (§3 still applies) and never backfilled:
+  existing clients are UNKNOWN until the professional records a choice;
+- persisted as three SQLite/remote columns travelling together
+  (PERSISTENCE.md schema v16) and carried by the CLIENT aggregate through
+  the normal sync with the usual missing-key rule.
 
 ### photoPath
 

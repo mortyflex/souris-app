@@ -64,6 +64,7 @@ schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v
                      v11 (calendar_blocks; sync_outbox / sync_state rebuilt for the CALENDAR_BLOCK type),
                      v12 (appointment_deposits; sync tables rebuilt), v13 (clients.photo_path),
                      v14 (products.photo_path), v15 (appointments.client_reminder_enabled),
+                     v16 (clients.sms_marketing_consent + _updated_at + _source),
                      SOURIS_TABLES, BUSINESS_SCOPED_TABLES, SYNC_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
@@ -86,7 +87,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15 + v16)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
 Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
@@ -100,7 +101,9 @@ souris_metadata     key PK, value                                   seed marker 
 
 clients             id PK, first_name, last_name?, phone?, email?, birth_date? (legacy, ≤ v3),
                     archived_at? (v2), birthday? (v4, MM-DD), notes? (v9),
-                    photo_path? (v13, storage object path — never a file URI or image bytes)
+                    photo_path? (v13, storage object path — never a file URI or image bytes),
+                    sms_marketing_consent? (v16, OPTED_IN | OPTED_OUT — NULL = UNKNOWN),
+                    sms_marketing_consent_updated_at? (v16), sms_marketing_consent_source? (v16)
 services            id PK, business_id, name, type, price_cents (v8, CHECK >= 0), active
 service_phases      (service_id FK→services CASCADE, position) PK, id, name, duration_minutes, requires_staff
 appointments        id PK, business_id, client_id, staff_member_id, start_at, status, notes?,
@@ -220,6 +223,29 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v16 — Client promotional SMS consent
+
+```text
+ALTER TABLE clients ADD COLUMN sms_marketing_consent TEXT
+  CHECK (sms_marketing_consent IS NULL OR sms_marketing_consent IN ('OPTED_IN', 'OPTED_OUT'));
+ALTER TABLE clients ADD COLUMN sms_marketing_consent_updated_at TEXT;
+ALTER TABLE clients ADD COLUMN sms_marketing_consent_source TEXT
+  CHECK (
+    sms_marketing_consent_source IS NULL
+    OR sms_marketing_consent_source IN ('PROFESSIONAL', 'CLIENT_STOP')
+  );
+```
+
+Purely additive (SMS pivot Phase 2 — COMMUNICATIONS.md §34): the explicit promotional SMS
+consent with its audit pair. The three columns travel together — a recorded consent always
+carries the instant and the source (`PROFESSIONAL`; `CLIENT_STOP` is reserved for a future
+unsubscribe path), and clearing back to « Non renseigné » clears all three. Every existing
+Client keeps NULL — UNKNOWN, never eligible for lifecycle SMS; nothing is ever backfilled to
+OPTED_IN. The domain value is ONE optional record (`Client.smsMarketingConsent`); an incomplete
+or out-of-vocabulary stored triple loads as UNKNOWN. The triple is carried by the CLIENT
+aggregate through the normal sync with the usual missing-key rule (an older build can never
+erase a consent).
 
 ### Schema v15 — per-appointment client reminder flag
 

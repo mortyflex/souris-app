@@ -17,9 +17,9 @@
 //
 // Pass order: failed trigger reconciliations are re-run FIRST (durable
 // retry jobs — docs/architecture/COMMUNICATIONS.md §14b), then due records
-// are claimed and sent. EMAIL is real (Resend); SMS remains unsupported and
-// fails permanently — the reusable SMS transport is deliberately unbound
-// until the client-lifecycle SMS phase. The registry is built BEFORE
+// are claimed and sent. EMAIL is real (Resend); SMS binds the real client
+// lifecycle transport ONLY when all three Twilio secrets are valid (Phase
+// 2) and stays unsupported otherwise. The registry is built BEFORE
 // anything is claimed, so a deployment missing RESEND_API_KEY /
 // RESEND_FROM_EMAIL answers 500 and touches no record. Provider secrets
 // live in Edge Function secrets only —
@@ -31,6 +31,7 @@ import { withSupabase } from 'npm:@supabase/server';
 import {
   createProductionTransportRegistry,
   isEmailLogoConfigured,
+  isSmsConfigured,
   WorkerConfigurationError,
 } from './core/production-transports.ts';
 import {
@@ -50,12 +51,14 @@ export default {
       const summary = await runCommunicationsWorker({ queue, transports, reconciliation });
       // Counts and booleans only: payloads, recipients and secret VALUES are
       // never logged. `emailLogoConfigured` says whether SOURIS_EMAIL_LOGO_URL
-      // is present and valid in THIS running instance. No SMS capability
-      // indicator exists yet: production SMS is deliberately unbound until
-      // the client-lifecycle SMS phase.
+      // is present and valid in THIS running instance; `smsConfigured` says
+      // whether the registry bound the real SMS transport (all three Twilio
+      // values present and valid — Phase 2). Booleans only: never an SID, a
+      // token, a sender number or a recipient.
       return Response.json({
         ok: true,
         emailLogoConfigured: isEmailLogoConfigured((name) => Deno.env.get(name)),
+        smsConfigured: isSmsConfigured((name) => Deno.env.get(name)),
         ...summary,
       });
     } catch (error) {

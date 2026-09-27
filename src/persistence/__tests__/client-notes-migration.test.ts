@@ -65,8 +65,8 @@ describe('schema v9 migration on an existing v8 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(15);
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+    expect(readSchemaVersion(db)).toBe(16);
+    expect(CURRENT_SCHEMA_VERSION).toBe(16);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
 
@@ -105,7 +105,7 @@ describe('schema v9 migration on an existing v8 database', () => {
     const db = openSchemaV8Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(15);
+    expect(migrateDatabase(db)).toBe(16);
     expect(countRows(db, 'clients')).toBe(3);
 
     const felix = loadClients(db).find((client) => client.id === 'client-felix');

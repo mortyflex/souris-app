@@ -107,6 +107,42 @@ export function PlusScreen() {
             tintColor={semanticColors.foregroundMuted}
           />
         </Pressable>
+        {/*
+          SMS fidélisation (SMS pivot Phase 2) — DEVELOPMENT builds only for
+          now: the app cannot know whether the server SMS transport is
+          configured, so the entry stays invisible in production until the
+          controlled deployment step (fail-safe, §38 of the Phase 2 plan).
+          The screen and its server surface are fully functional; server-side
+          both automations default OFF for every Business.
+        */}
+        {__DEV__ && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="SMS fidélisation, offres anniversaires et clientes inactives"
+            onPress={() => router.push('/lifecycle-sms-settings')}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            testID="plus-lifecycle-sms-settings"
+          >
+            <View style={styles.iconSurface}>
+              <SymbolView
+                name={{ ios: 'gift', android: 'featured_seasonal_and_gifts' }}
+                size={19}
+                tintColor={semanticColors.accent}
+              />
+            </View>
+            <View style={styles.copy}>
+              <AppText variant="rowTitle">SMS fidélisation</AppText>
+              <AppText variant="metadata" style={styles.meta}>
+                Anniversaires et clientes inactives
+              </AppText>
+            </View>
+            <SymbolView
+              name={{ ios: 'chevron.right', android: 'chevron_right' }}
+              size={15}
+              tintColor={semanticColors.foregroundMuted}
+            />
+          </Pressable>
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Caisse, encaissements du jour et du mois"

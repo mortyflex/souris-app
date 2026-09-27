@@ -113,6 +113,28 @@ migrations/20260930120000_revoke_worker_extra_privileges.sql    (Least-privilege
                                                                  their creation, and reasserts the exact narrow
                                                                  worker set. No policy, no anon/authenticated
                                                                  change, no row touched; idempotent)
+migrations/20261001120000_add_sms_reminder_architecture.sql     (SMS reminder architecture C1 — ALREADY APPLIED;
+                                                                 superseded by the retirement below, kept as the
+                                                                 historical record)
+migrations/20261002120000_retire_appointment_sms.sql            (SMS pivot Phase 1 — ALREADY APPLIED; appointment
+                                                                 reminders are EMAIL-only, the channel
+                                                                 infrastructure and phone rules remain)
+migrations/20261003120000_add_client_lifecycle_sms.sql          (Client lifecycle SMS Phase 2 — BY HAND, after the
+                                                                 retirement one; adds the three clients consent
+                                                                 columns (NULL = UNKNOWN, nothing backfilled),
+                                                                 the CLIENT_BIRTHDAY_OFFER kind, the
+                                                                 business_lifecycle_sms_preferences table (both
+                                                                 automations OFF, RLS on, ZERO policies, no
+                                                                 grant) with two owner RPCs, the daily lifecycle
+                                                                 reconciliation functions, the trigger
+                                                                 cancellations, and replaces the two sync RPCs
+                                                                 in place. Applying it alone enables ZERO
+                                                                 automations, changes ZERO consent and enqueues
+                                                                 ZERO rows. Apply BEFORE shipping the build that
+                                                                 writes the consent — against the previous
+                                                                 functions a pushed consent would be silently
+                                                                 dropped. docs/architecture/COMMUNICATIONS.md
+                                                                 §34–§44)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -447,6 +469,39 @@ source control. A worker run answers with counts only
 (`claimed / sent / retried / failed / skipped`); payloads and recipients are never logged.
 Verify these instructions against the current Supabase docs when actually deploying — the
 cron → Edge Function invocation pattern is the piece most likely to have evolved.
+
+### Client lifecycle SMS (Phase 2) — Twilio secrets and the daily cron (NOT installed yet)
+
+`20261003120000_add_client_lifecycle_sms.sql` prepares the engine; nothing sends until every
+controlled step below is taken deliberately. The SMS transport binds ONLY when ALL THREE
+Twilio values are valid — anything less keeps SMS unsupported (records fail permanently and
+explicitly), and each worker run answers `smsConfigured: true|false` (a boolean only, never a
+value):
+
+```bash
+npx supabase secrets set TWILIO_ACCOUNT_SID=<AC…>
+npx supabase secrets set TWILIO_AUTH_TOKEN=<the auth token>
+npx supabase secrets set TWILIO_FROM_NUMBER=<the E.164 sender, e.g. +33756000000>
+```
+
+The DAILY lifecycle reconciliation cron (separate from the per-minute worker cron) calls
+`communications_reconcile_client_lifecycle_all()` as `service_role` at **08:30 UTC —
+`30 8 * * *`** (09:30 Paris in winter, 10:30 in summer; the seasonal drift is accepted in V1).
+It is deliberately NOT created by the migration. When the controlled deployment step comes
+(pg_cron already enabled for the worker):
+
+```sql
+select cron.schedule('communications-client-lifecycle', '30 8 * * *', $$
+  select public.communications_reconcile_client_lifecycle_all();
+$$);
+```
+
+Controlled real-SMS test (developer test Business ONLY — the production Business keeps both
+automations OFF and every real client stays UNKNOWN): one test client → OPTED_IN → the
+developer's Twilio-verified phone → enable ONE automation on the test Business → force
+eligibility → run the reconciliation (manually or via the cron) → the worker sends the real
+SMS. Before ANY real client ever receives a lifecycle SMS, a production-appropriate opt-out
+mechanism (STOP / unsubscribe) MUST ship first — COMMUNICATIONS.md §44.
 
 ### Complete Lot B production deployment order
 

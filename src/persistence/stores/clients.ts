@@ -14,6 +14,12 @@
 // `setClientPhotoPath` (and by insertion): identity edits never touch it, so
 // a form that knows nothing about photos can never erase one.
 //
+// sms_marketing_consent + _updated_at + _source (schema v16) travel
+// together: the explicit promotional SMS consent (OPTED_IN / OPTED_OUT) with
+// its audit pair, or three NULLs for UNKNOWN. The domain value is one
+// optional record (ClientSmsMarketingConsent); a row whose triple is
+// incomplete or out of vocabulary reads as UNKNOWN rather than crashing.
+//
 // archived_at (schema v2) is an ISO instant or NULL. NULL is the active
 // state; the domain value is a Date, restored exactly. Permanent deletion
 // verifies Appointment and Sale references INSIDE its transaction, so the
@@ -26,10 +32,13 @@
 import {
   canDeleteClientPermanently,
   formatBirthdayKey,
+  isClientSmsMarketingConsentSource,
+  isClientSmsMarketingConsentStatus,
   normalizeClientNotes,
   parseBirthdayKey,
   type Client,
   type ClientReferences,
+  type ClientSmsMarketingConsent,
 } from '@/domain/clients';
 
 import { runInTransaction, type SourisDatabase } from '../database';
@@ -45,6 +54,9 @@ interface ClientRow {
   readonly birthday: string | null;
   readonly notes: string | null;
   readonly photo_path: string | null;
+  readonly sms_marketing_consent: string | null;
+  readonly sms_marketing_consent_updated_at: string | null;
+  readonly sms_marketing_consent_source: string | null;
   readonly archived_at: string | null;
 }
 
@@ -63,6 +75,24 @@ export class ClientDeleteConflictError extends Error {
   }
 }
 
+/** The complete stored triple, or undefined (UNKNOWN) for anything less. */
+function toSmsMarketingConsent(row: ClientRow): ClientSmsMarketingConsent | undefined {
+  if (
+    row.sms_marketing_consent === null ||
+    row.sms_marketing_consent_updated_at === null ||
+    row.sms_marketing_consent_source === null ||
+    !isClientSmsMarketingConsentStatus(row.sms_marketing_consent) ||
+    !isClientSmsMarketingConsentSource(row.sms_marketing_consent_source)
+  ) {
+    return undefined;
+  }
+  return {
+    status: row.sms_marketing_consent,
+    updatedAt: fromSqlInstant(row.sms_marketing_consent_updated_at),
+    source: row.sms_marketing_consent_source,
+  };
+}
+
 function toClient(row: ClientRow): Client {
   const lastName = fromSqlOptional(row.last_name);
   const phone = fromSqlOptional(row.phone);
@@ -70,6 +100,7 @@ function toClient(row: ClientRow): Client {
   const birthday = row.birthday === null ? undefined : parseBirthdayKey(row.birthday);
   const notes = normalizeClientNotes(row.notes);
   const photoPath = fromSqlOptional(row.photo_path);
+  const smsMarketingConsent = toSmsMarketingConsent(row);
   const archivedAt = row.archived_at === null ? undefined : fromSqlInstant(row.archived_at);
   return {
     id: row.id,
@@ -80,6 +111,7 @@ function toClient(row: ClientRow): Client {
     ...(birthday !== undefined ? { birthday } : {}),
     ...(notes !== undefined ? { notes } : {}),
     ...(photoPath !== undefined ? { photoPath } : {}),
+    ...(smsMarketingConsent !== undefined ? { smsMarketingConsent } : {}),
     ...(archivedAt !== undefined ? { archivedAt } : {}),
   };
 }
@@ -92,10 +124,17 @@ function toNotesColumn(client: Client) {
   return toSqlOptional(normalizeClientNotes(client.notes));
 }
 
+/** The three consent columns, always written together (or three NULLs). */
+function toConsentColumns(client: Client): [string | null, string | null, string | null] {
+  const consent = client.smsMarketingConsent;
+  if (consent === undefined) return [null, null, null];
+  return [consent.status, toSqlInstant(consent.updatedAt), consent.source];
+}
+
 export function loadClients(db: SourisDatabase): readonly Client[] {
   return db
     .getAllSync<ClientRow>(
-      'SELECT id, first_name, last_name, phone, email, birthday, notes, photo_path, archived_at FROM clients ORDER BY rowid',
+      'SELECT id, first_name, last_name, phone, email, birthday, notes, photo_path, sms_marketing_consent, sms_marketing_consent_updated_at, sms_marketing_consent_source, archived_at FROM clients ORDER BY rowid',
     )
     .map(toClient);
 }
@@ -103,7 +142,7 @@ export function loadClients(db: SourisDatabase): readonly Client[] {
 export function insertClient(db: SourisDatabase, client: Client): void {
   runInTransaction(db, () => {
     db.runSync(
-      'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, notes, photo_path, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, notes, photo_path, sms_marketing_consent, sms_marketing_consent_updated_at, sms_marketing_consent_source, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         client.id,
         client.firstName,
@@ -113,6 +152,7 @@ export function insertClient(db: SourisDatabase, client: Client): void {
         toBirthdayColumn(client),
         toNotesColumn(client),
         toSqlOptional(client.photoPath),
+        ...toConsentColumns(client),
         client.archivedAt === undefined ? null : toSqlInstant(client.archivedAt),
       ],
     );
@@ -121,14 +161,15 @@ export function insertClient(db: SourisDatabase, client: Client): void {
 }
 
 /**
- * Replaces every identity field of the Client with the same id. The
- * lifecycle and photo columns are untouched: identity edits never archive,
- * restore, or change the photo.
+ * Replaces every identity field of the Client with the same id — the
+ * promotional SMS consent included (the form carries it). The lifecycle and
+ * photo columns are untouched: identity edits never archive, restore, or
+ * change the photo.
  */
 export function updateClient(db: SourisDatabase, client: Client): void {
   runInTransaction(db, () => {
     const result = db.runSync(
-      'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ?, notes = ? WHERE id = ?',
+      'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ?, notes = ?, sms_marketing_consent = ?, sms_marketing_consent_updated_at = ?, sms_marketing_consent_source = ? WHERE id = ?',
       [
         client.firstName,
         toSqlOptional(client.lastName),
@@ -136,6 +177,7 @@ export function updateClient(db: SourisDatabase, client: Client): void {
         toSqlOptional(client.email),
         toBirthdayColumn(client),
         toNotesColumn(client),
+        ...toConsentColumns(client),
         client.id,
       ],
     );

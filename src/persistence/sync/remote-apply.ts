@@ -94,15 +94,18 @@ function applyClient(db: SourisDatabase, id: string, client: RemoteClientPayload
     client.birthday,
     client.notes,
     client.photo_path,
+    client.sms_marketing_consent,
+    client.sms_marketing_consent_updated_at,
+    client.sms_marketing_consent_source,
     client.archived_at,
   ];
   const updated = db.runSync(
-    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ?, notes = ?, photo_path = ?, archived_at = ? WHERE id = ?',
+    'UPDATE clients SET first_name = ?, last_name = ?, phone = ?, email = ?, birthday = ?, notes = ?, photo_path = ?, sms_marketing_consent = ?, sms_marketing_consent_updated_at = ?, sms_marketing_consent_source = ?, archived_at = ? WHERE id = ?',
     [...params, id],
   ).changes;
   if (updated === 1) return;
   db.runSync(
-    'INSERT INTO clients (first_name, last_name, phone, email, birthday, notes, photo_path, archived_at, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO clients (first_name, last_name, phone, email, birthday, notes, photo_path, sms_marketing_consent, sms_marketing_consent_updated_at, sms_marketing_consent_source, archived_at, id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [...params, id],
   );
 }

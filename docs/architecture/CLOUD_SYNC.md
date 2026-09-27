@@ -22,6 +22,8 @@ V1D.1  Seamless Bootstrap                   done — automatic initial upload an
        Product photos                       done — one additive PRODUCT column in the SAME bucket; legacy local images never uploaded (§23)
        Foreground refresh                   done — an idle open device pulls on the 2-min tick; pulled data refreshes the UI IN PLACE (§24)
        Appointment reminder flag            done — one additive nullable column carried by the APPOINTMENT aggregate (§25)
+       Client SMS consent                   done — three additive CLIENT columns travelling together (SMS pivot Phase 2;
+                                            COMMUNICATIONS.md §34): consent + audit pair, missing-key rule, no backfill
 V1E    Conflict / Retry Hardening
 V1F    Product Image Sync                   superseded by Product photos (§23): one shared photo, no legacy upload
 ```
@@ -102,7 +104,11 @@ duplicated). Column names follow SQLite; types are the Postgres-native equivalen
 
 ```text
 clients             (business_id, id) PK, first_name, last_name?, phone?, email?, birthday? (MM-DD),
-                    notes? (§18), photo_path? (§22), archived_at?, + sync metadata
+                    notes? (§18), photo_path? (§22),
+                    sms_marketing_consent? + _updated_at? + _source? (COMMUNICATIONS.md §34 —
+                    the triple travels together; a payload without the consent key keeps the
+                    stored values, so an older build can never erase a consent),
+                    archived_at?, + sync metadata
 services            (business_id, id) PK, name, type SERVICE|TECHNIQUE, price_cents, active, + sync metadata
 service_phases      (business_id, service_id, id) PK, position (unique per service, deferrable),
                     name, duration_minutes >= 0, requires_staff

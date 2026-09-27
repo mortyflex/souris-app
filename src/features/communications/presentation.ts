@@ -18,6 +18,23 @@ export const REMINDER_UPDATE_FAILURE =
 export const REMINDER_OFFLINE_NOTICE =
   'Connexion indisponible : le réglage affiché est le dernier connu.';
 
+export const LIFECYCLE_SMS_SETTINGS_TITLE = 'SMS fidélisation';
+export const LIFECYCLE_BIRTHDAY_TOGGLE_LABEL = 'Anniversaires';
+export const LIFECYCLE_WINBACK_TOGGLE_LABEL = 'Clientes inactives';
+export const LIFECYCLE_DISCOUNT_LABEL = 'Réduction';
+export const LIFECYCLE_VALIDITY_LABEL = 'Valable';
+export const LIFECYCLE_AFTER_LABEL = 'Après';
+
+/** `15` → `15 %` (the French spaced percent). */
+export function formatLifecyclePercent(percent: number): string {
+  return `${percent} %`;
+}
+
+/** `7` → `7 jours`, `1` → `1 jour`. */
+export function formatLifecycleDays(daysCount: number): string {
+  return `${daysCount} jour${daysCount > 1 ? 's' : ''}`;
+}
+
 export const APPOINTMENT_REMINDER_ROW_LABEL = 'Rappel cliente';
 export const MISSING_EMAIL_TITLE = 'Aucune adresse e-mail renseignée';
 export const MISSING_EMAIL_MESSAGE = 'Le rappel ne pourra pas être envoyé.';

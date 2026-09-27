@@ -1,7 +1,8 @@
-// Souris — Communication Core (SMS pivot Phase 1): the Twilio SMS transport
+// Souris — Communication Core (SMS pivot Phase 2): the Twilio SMS transport
 //
 // Reusable provider infrastructure, tested with a DETERMINISTIC FAKE
-// renderer (no production SMS content exists in Phase 1). Every provider
+// renderer over the client LIFECYCLE kinds (the production renderer has its
+// own suite in sms-content.test.ts). Every provider
 // call is a mocked fetch: no test ever reaches api.twilio.com, and the
 // suite locks in the request shape, the result mapping (SENT only with a
 // valid Message SID), the HTTP-class retry classification and the privacy
@@ -21,14 +22,20 @@ const FROM_NUMBER = '+15005550006';
 const FAKE_SID = `SM${'0'.repeat(32)}`;
 const FAKE_BODY = 'Bonjour de Souris (contenu de test).';
 
-/** Deterministic test renderer: refuses one marker kind, renders the rest. */
+/**
+ * Deterministic test renderer over the LIFECYCLE kinds (Phase 2): renders
+ * the two client lifecycle kinds, refuses everything else — exactly the
+ * contract of the production renderer, without its content rules.
+ */
 const fakeRenderer: SmsContentRenderer = (communication) =>
-  communication.kind === 'KIND_WITHOUT_CONTENT' ? undefined : FAKE_BODY;
+  communication.kind === 'CLIENT_BIRTHDAY_OFFER' || communication.kind === 'INACTIVE_CLIENT_FOLLOWUP'
+    ? FAKE_BODY
+    : undefined;
 
 const message: OutgoingCommunication = {
   id: 'aaaaaaaa-0000-4000-8000-000000000002',
   businessId: 'biz-1',
-  kind: 'TEST_KIND',
+  kind: 'CLIENT_BIRTHDAY_OFFER',
   channel: 'SMS',
   recipient: '+33612345678',
   payload: {},
@@ -178,9 +185,9 @@ describe('input refusals (no provider call at all)', () => {
     expect(requests).toHaveLength(0);
   });
 
-  it('a renderer refusal is a permanent failure without any request', async () => {
+  it('a renderer refusal (an appointment SMS kind) is a permanent failure without any request', async () => {
     const { transport, requests } = createTransport([]);
-    const result = await transport.send({ ...message, kind: 'KIND_WITHOUT_CONTENT' });
+    const result = await transport.send({ ...message, kind: 'APPOINTMENT_REMINDER' });
     expect(result).toEqual({
       status: 'PERMANENT_FAILURE',
       error: 'no sms content for this communication',
