@@ -10,10 +10,11 @@
 
 import {
   areAppointmentDiscountsEqual,
+  canChangeAppointmentCheckoutDiscount,
   isValidAppointmentDiscount,
-  setAppointmentDiscount,
+  setAppointmentCheckoutDiscount,
 } from './discount';
-import { canCompleteAppointment, canEditAppointment } from './lifecycle';
+import { canCompleteAppointment } from './lifecycle';
 import type { Appointment, AppointmentDiscount, AppointmentPayment } from './types';
 
 /** The amounts the professional records; both non-negative integer cents. */
@@ -58,7 +59,9 @@ export function getPaymentTotalCents(amounts: AppointmentPaymentAmounts): number
  * now (SCHEDULED / CONFIRMED / IN_PROGRESS once started), and for an
  * already COMPLETED Appointment without payment (a historical or
  * automatically completed record whose checkout is recorded afterwards).
- * CANCELLED and NO_SHOW can never be checked out.
+ * CANCELLED and NO_SHOW can never be checked out. Status-level only: an
+ * Appointment whose ACTIVE deposits already cover everything receives no
+ * payment either — `validateAppointmentCheckoutAmounts` (`./checkout`).
  */
 export function canCheckoutAppointment(appointment: Appointment, now: Date): boolean {
   if (appointment.status === 'COMPLETED') return appointment.payment === undefined;
@@ -71,9 +74,10 @@ export function canEditAppointmentPayment(appointment: Appointment): boolean {
 }
 
 /**
- * A checkout total is acceptable when it is positive, or when the expected
- * total is itself zero (an Appointment that legitimately costs nothing).
- * The actual amount may otherwise differ from the expected total.
+ * The STANDALONE Sale tolerance (docs/domain/SALES.md): a received total is
+ * acceptable when it is positive, or when the expected total is itself zero.
+ * It may otherwise differ from the expected total. An Appointment final
+ * checkout is stricter — it settles EXACTLY the due (`./checkout`).
  */
 export function isCheckoutTotalAcceptable(
   expectedTotalCents: number,
@@ -91,22 +95,33 @@ function assertValidAmounts(amounts: AppointmentPaymentAmounts, operation: strin
   }
 }
 
+function assertValidPaidAt(paidAt: Date, now: Date, operation: string): void {
+  if (Number.isNaN(paidAt.getTime()) || paidAt.getTime() > now.getTime()) {
+    throw new RangeError(`${operation}: paidAt must be a valid instant, never in the future`);
+  }
+}
+
 /**
  * Explicit checkout: the Appointment becomes COMPLETED and carries the
- * recorded payment. Returns the SAME Appointment when checkout is not
- * allowed; throws on invalid amounts so a broken input never reaches
- * persistence.
+ * recorded payment, received at `paidAt` (default `now`; an earlier instant
+ * for a payment dated on the appointment day — `getAppointmentPaymentInstant`).
+ * Returns the SAME Appointment when checkout is not allowed; throws on
+ * invalid amounts or a future `paidAt` so a broken input never reaches
+ * persistence. Whether the amounts settle the due is `./checkout`'s question
+ * (it needs the linked Sales and the deposits); the store re-verifies it.
  */
 export function checkoutAppointment(
   appointment: Appointment,
   amounts: AppointmentPaymentAmounts,
   now: Date,
+  paidAt: Date = now,
 ): Appointment {
   assertValidAmounts(amounts, 'checkoutAppointment');
+  assertValidPaidAt(paidAt, now, 'checkoutAppointment');
   if (!canCheckoutAppointment(appointment, now)) return appointment;
 
   const payment: AppointmentPayment = {
-    paidAt: new Date(now.getTime()),
+    paidAt: new Date(paidAt.getTime()),
     cardAmountCents: amounts.cardAmountCents,
     cashAmountCents: amounts.cashAmountCents,
   };
@@ -119,28 +134,31 @@ export function checkoutAppointment(
  * Appointment never exists without the discount its payment was taken
  * against. `discount` is the FINAL choice (`undefined` = no discount).
  *
- * The discount follows THE editing rule: an unchanged discount is always
- * fine; a changed one needs an editable Appointment — a COMPLETED
- * Appointment recording its payment afterwards keeps its frozen discount,
- * and the SAME Appointment is returned (nothing to record). Throws on an
- * invalid discount or invalid amounts.
+ * The discount follows THE checkout discount rule
+ * (`canChangeAppointmentCheckoutDiscount`): an editable Appointment, or a
+ * COMPLETED one recording its FIRST payment afterwards — exact settlement
+ * needs the discount to charge less. Once a payment exists the discount is
+ * frozen (and no checkout is possible anyway). Throws on an invalid discount,
+ * invalid amounts or a future `paidAt`.
  */
 export function checkoutAppointmentWithDiscount(
   appointment: Appointment,
   discount: AppointmentDiscount | undefined,
   amounts: AppointmentPaymentAmounts,
   now: Date,
+  paidAt: Date = now,
 ): Appointment {
   if (discount !== undefined && !isValidAppointmentDiscount(discount)) {
     throw new RangeError(`checkoutAppointmentWithDiscount: invalid ${discount.type} discount`);
   }
   assertValidAmounts(amounts, 'checkoutAppointmentWithDiscount');
+  assertValidPaidAt(paidAt, now, 'checkoutAppointmentWithDiscount');
   if (!canCheckoutAppointment(appointment, now)) return appointment;
   if (areAppointmentDiscountsEqual(appointment.discount, discount)) {
-    return checkoutAppointment(appointment, amounts, now);
+    return checkoutAppointment(appointment, amounts, now, paidAt);
   }
-  if (!canEditAppointment(appointment)) return appointment;
-  return checkoutAppointment(setAppointmentDiscount(appointment, discount), amounts, now);
+  if (!canChangeAppointmentCheckoutDiscount(appointment)) return appointment;
+  return checkoutAppointment(setAppointmentCheckoutDiscount(appointment, discount), amounts, now, paidAt);
 }
 
 /**

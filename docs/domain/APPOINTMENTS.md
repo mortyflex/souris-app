@@ -1041,7 +1041,7 @@ The Appointment owns its payment; there is no parallel payment subsystem:
 
 ```text
 AppointmentPayment
-├── paidAt            instant of the explicit checkout
+├── paidAt            when the money was received — its Cash Register day
 ├── cardAmountCents   integer cents >= 0
 └── cashAmountCents   integer cents >= 0
 ```
@@ -1050,9 +1050,14 @@ Rules:
 
 - amounts are **integer cents**; `totalPaidCents = cardAmountCents + cashAmountCents` is derived, never stored;
 - a checkout may be 100 % card, 100 % cash, or mixed; nothing forces exactly one method;
-- the recorded total may legitimately differ from the snapshot total (discount, tip, adjustment). When the
-  expected total is positive, the recorded total must be positive; a zero checkout is valid only for an
-  Appointment that costs nothing;
+- **exact settlement** (since September 2026 — it replaces the former tolerance for tips and adjustments): a
+  new final payment settles EXACTLY the checkout due, `cardAmountCents + cashAmountCents === due`. Less is not
+  a partial payment (not a V1 concept); more is not a tip. To charge less, the professional applies the
+  explicit Appointment **discount** — never a silent under-payment. See *Checkout due and exact settlement*
+  below;
+- **one final payment per Appointment**: an existing payment means no new checkout. An Appointment whose
+  ACTIVE deposits already cover the whole expected total receives no payment either — not even `0 €` — even
+  once `COMPLETED`: it completes with « Terminer » (§25d);
 - **manual checkout is allowed** from `SCHEDULED` / `CONFIRMED` / compatibility `IN_PROGRESS` once
   `appointment.startAt <= now` (the former `Terminer` eligibility), and for a `COMPLETED` Appointment that
   carries no payment yet (« Enregistrer un encaissement » — status stays `COMPLETED`);
@@ -1063,19 +1068,85 @@ Rules:
   the session state changes only after the commit. On failure nothing changes and nothing appears in the
   Cash Register;
 - **discount chosen at checkout** (§15.3): `checkoutAppointmentWithDiscount(appointment, discount, amounts,
-  now)` validates the final discount, applies it through `setAppointmentDiscount` and records the payment as
-  ONE next record. When the discount differs from the stored one, the session writes it first — while the
-  stored row is still editable — then status + payment, in the SAME transaction; a refused or failed step rolls
-  both back, so a completed Appointment never exists without the discount its payment was taken against. A
-  `COMPLETED` Appointment recording its payment afterwards keeps its frozen discount (a changed one is refused);
+  now, paidAt?)` validates the final discount, applies it through `setAppointmentCheckoutDiscount` and records
+  the payment as ONE next record. The checkout discount may change while the Appointment is editable AND while
+  it is `COMPLETED` without its final payment (`canChangeAppointmentCheckoutDiscount`): exact settlement needs
+  the discount to charge less on a late checkout. Once a payment exists it is frozen. Outside checkout, the
+  generic editing rule (`setAppointmentDiscount`) is unchanged: a `COMPLETED` Appointment is frozen. The
+  checkout discount may not take the total below the ACTIVE deposits (`findAppointmentCheckoutDiscountShortfall`,
+  the same rule as §25d, extended to a completed-unpaid Appointment). The store writes the discount, then status
+  + payment, in the SAME transaction; a refused or failed step rolls both back, so a completed Appointment never
+  exists without the discount its payment was taken against;
 - **correction**: a completed Appointment with a payment may have its card/cash split edited. The status and
-  the original `paidAt` are preserved; no second record is created;
+  the original `paidAt` are preserved (no date choice is offered again); no second record is created. The new
+  total stays within `[min(due, recorded), max(due, recorded)]` — see *Legacy payments* below;
 - **with deposits** (§25d): the payment records ONLY the money received at the final checkout. The sheet
-  shows `Total attendu`, then `Acomptes déjà versés` and `Reste à encaisser`; the `Reste` shortcut, the `Écart`
-  and the acceptability of the entry are measured against the remaining amount (expected − ACTIVE deposits),
-  never against the whole expected total. A typed amount is never overwritten. `100 €` expected with a `30 €`
-  deposit is checked out as `70 €` — the Caisse then holds `30 €` on the deposit day and `70 €` on the checkout
-  day, never `130 €`.
+  shows `Total attendu`, then `Acomptes déjà versés` and `Reste à encaisser`; the `Reste` shortcut and the
+  acceptability of the entry are measured against the checkout due (expected − ACTIVE deposits), never against
+  the whole expected total. `100 €` expected with a `30 €` deposit is checked out as EXACTLY `70 €` — the Caisse
+  then holds `30 €` on the deposit day and `70 €` on the checkout day, never `130 €`.
+
+**Checkout due and exact settlement.** ONE derivation (`src/domain/appointments/checkout.ts`):
+
+```text
+expectedTotalCents = services gross − discount + linked products     (getAppointmentExpectedTotal)
+activeDeposits     = Σ ACTIVE deposits                               (getAppointmentActiveDepositTotal)
+checkout due       = max(expectedTotalCents − activeDeposits, 0)     (getAppointmentCheckoutDueCents —
+                                                                       the deposit position's remainingCents)
+```
+
+`validateAppointmentCheckoutAmounts` / `validateCheckoutAmounts` answer `INVALID_AMOUNT`, `ALREADY_SETTLED`
+(a payment exists, or ACTIVE deposits cover everything), `UNDER_DUE` or `EXCEEDS_DUE`. A free Appointment
+without deposits (due `0`) is settled by a `0 €` payment. Example: services `120 €`, discount `10 €`, deposit
+`20 €` → the final checkout settles exactly `90 €`.
+
+Enforcement is layered — never a UI-only guard:
+
+- **domain**: the rules above, integer cents;
+- **checkout sheet**: the same bounds (`getCheckoutPaymentBounds`, `getPaymentCorrectionBounds`) decide whether
+  « Encaisser » is enabled;
+- **store**: `checkoutAppointment` and `updateAppointmentPayment` re-read the stored Appointment, its linked Sale
+  lines and its deposits inside their transaction (the deposit pattern, `readAppointmentDepositPosition`) and
+  throw `AppointmentCheckoutAmountError` — nothing written — when the amounts do not settle what is allowed;
+- **server**: NOT enforced in V1. A remote hard check could strand an offline device's push (a deposit recorded on
+  one device while another checks out), would reject legitimate history (a Revente removed after checkout lowers
+  the total below the payment) and legacy payments. A later hardening could check only the first appearance of a
+  payment (`paid_at` NULL → set) through the existing `FINANCIAL_CONFLICT` answer (`CLOUD_SYNC.md` §21.2).
+
+**Split autofill (checkout sheet).** Each amount has an owner. A typed amount is *manual* and is never
+rewritten. The other one, while *automatic*, becomes what remains to reach the target (the due; the recorded
+total in a correction): Carte `30` → Espèces `70`; Carte `45` → Espèces `55`; Carte `100` → Espèces empty.
+Typing Espèces makes it manual; a later Carte change leaves it alone, and the sheet says
+« Reste à répartir : 20,00 € ». Clearing an amount releases it without refilling it on the spot; the next edit of
+the other amount, or the explicit « Reste » shortcut, fills it again. A discount draft that moves the due moves
+the automatic amount only. Above the maximum the typed value is never capped: « Le montant dépasse le reste à
+encaisser. » and confirmation stays disabled. Nothing changes before the professional interacts — a correction
+opens on the recorded amounts exactly. The standalone Sale payment keeps its own tolerant behaviour
+(`docs/domain/SALES.md`) and none of this.
+
+**Payment date (« Encaissé le »).** The Cash Register counts money on the day it was RECEIVED (`paidAt`); the
+Agenda summaries follow the Appointment day (`startAt`, §25c). The two stay separate. When the FIRST final
+payment of an Appointment of an EARLIER local day is recorded (typically one completed automatically), the
+sheet offers « Encaissé le : Jour du rendez-vous · Aujourd’hui », « Jour du rendez-vous » by default:
+
+- « Jour du rendez-vous » → `paidAt` is the end of the Appointment (`getAppointmentEndAt`, processing included),
+  or 23:59 of its local day when it runs past local midnight (`getAppointmentDayPaymentInstant`). Built from
+  local calendar fields, so the Caisse places it on the appointment day across UTC offsets and DST changes;
+- « Aujourd’hui » → `paidAt = now`;
+- a same-day checkout shows no choice: `paidAt = now`. There is no free date picker in V1.
+
+`paidAt` is set on the device and synced unchanged: a checkout recorded offline and pushed the next day keeps its
+Caisse day — never the record, push or server insertion time. Payments recorded before this rule keep their
+`paidAt` (no backfill, nothing rewritten). Appointment Details shows « Encaissé le 28 septembre 2026 » under the
+received total only when the payment day differs from the Appointment day.
+
+**Legacy payments.** Payments recorded before exact settlement may differ from today's due (a tip, an
+adjustment, or a Revente removed after checkout). They are never invalidated or rewritten. A correction keeps
+the total within `[min(due, recorded), max(due, recorded)]`: with `100 €` due and `120 €` recorded, `120 €`,
+`115 €` and `100 €` are accepted, `125 €` is refused; with `100 €` due and `60 €` recorded, `60 €` to `100 €` are
+accepted, below `60 €` or above `100 €` refused. A payment recorded under the exact rule (recorded = due)
+therefore stays exactly the due. This range is legacy compatibility ONLY: a NEW checkout is always limited to the
+exact due.
 
 **Expected total.** ONE canonical derivation (`getAppointmentExpectedTotal`, `src/domain/appointments`)
 feeds both the Appointment Details ticket (`Total à encaisser`) and the checkout sheet (`Total attendu`), so the
@@ -1099,8 +1170,9 @@ Appointment id, a standalone Sale, or a Sale of another Appointment contributes 
 Sale the expected total is simply the services total — it is always shown, never hidden. It recomputes
 immediately when a Revente is added or a sold Product row is deleted (`docs/domain/SALES.md` §10).
 
-**Expected vs. received.** `appointment.payment` is the amount actually received; the expected total is a
-helper. They may legitimately differ — a discount, a tip, or a sold Product deleted after checkout. Deleting a
+**Expected vs. received.** `appointment.payment` is the amount actually received. A new checkout settles the
+exact due, so they match at checkout; they may still differ afterwards — a sold Product deleted after checkout,
+or a legacy payment recorded before exact settlement (a tip, an adjustment). Deleting a
 Product row never rewrites the payment: after `services 80 € + products 20 €` were checked out as `100 €`, removing
 the 20 € Product gives `Total attendu 80 €` while `Encaissement 100 €` stays recorded, and Details shows the restrained
 `Écart : +20,00 €` (received minus expected). `Modifier l’encaissement` remains the only way to change the recorded
@@ -1136,14 +1208,15 @@ the Agenda's own rule). `CANCELLED` and `NO_SHOW` are left out. Calendar Blocks 
 | `averageBasketCents` — « Panier moyen » | `potentialRevenueCents` / counted Appointments, rounded to the cent; `0` on an empty day |
 | `rows` | chronological (ties by id): the Appointment, its expected total, its ACTIVE deposits, what was collected, what remains, whether it is settled |
 
-A checkout settles its Appointment even when the amount received differs from the expected total (tip,
-adjustment): `collected + remaining` may therefore differ from the potential revenue. An Appointment
+A checkout settles its Appointment. A new checkout records exactly the due (§25b), but a legacy payment
+recorded before exact settlement (a tip, an adjustment) or a Revente removed after checkout still settles it
+with a different amount: `collected + remaining` may therefore differ from the potential revenue. An Appointment
 completed automatically without checkout still counts as remaining — its checkout can be recorded afterwards.
 
 Worked example — an Appointment of the day expected at `100 €`, a `30 €` deposit paid two weeks earlier, no
 final checkout yet: `CA potentiel 100 €`, `Déjà encaissé 30 €`, `Reste à encaisser 70 €`. After the final
-checkout of `70 €`: `100 € / 100 € / 0 €`. A final payment that differs from what was due (a tip) keeps its
-recorded amount in `Déjà encaissé` and owes nothing. VOIDED deposits count nowhere. A `CANCELLED` or `NO_SHOW`
+checkout of `70 €`: `100 € / 100 € / 0 €`. A legacy final payment that differs from what was due (a tip
+recorded before exact settlement) keeps its recorded amount in `Déjà encaissé` and owes nothing. VOIDED deposits count nowhere. A `CANCELLED` or `NO_SHOW`
 Appointment is not counted, so its deposits are not either (they stay in the Caisse of the day they were paid).
 
 This is NOT the Cash Register. The Caisse groups money by the day it was RECEIVED (`paidAt`) and also counts
@@ -1257,7 +1330,20 @@ the checkout sheet).
 **Fully prepaid.** When ACTIVE deposits cover the whole expected total, the Appointment completes with
 « Terminer le rendez-vous » and NO payment: nothing new was received, so no Cash Register movement is
 created and no fake `0,01 €` is ever entered. It is then settled (`isAppointmentSettled`) and offers no further
-checkout. A typed amount (a tip) turns it back into an ordinary checkout of that amount.
+checkout. No payment can be recorded on it at all — no tip, no `0 €` — including once it is `COMPLETED`
+(`validateCheckoutAmounts` → `ALREADY_SETTLED`, re-verified by the store).
+
+**Settled by deposits after a late discount.** A `COMPLETED` Appointment without its final payment whose
+checkout discount brings the expected total down to EXACTLY its ACTIVE deposits
+(`canSettleCompletedAppointmentWithDeposits`) has nothing left to receive. The sheet says « Le rendez-vous est
+entièrement couvert par les acomptes. » and its action becomes « Enregistrer »: the store
+(`settleCompletedAppointmentWithDeposits`) writes ONLY the discount — through the checkout discount write, never
+below the deposits — and verifies, in the same transaction, that the deposits now cover the whole total. No
+payment, no `paidAt`, no amounts; the Appointment stays `COMPLETED` and is settled (`isAppointmentSettled`). The
+Caisse gains no receipt: the deposits stay counted once, on their own `paidAt`. Example: `100 €` expected, `70 €`
+deposit, `30 %` discount → saved, nothing received. A discount leaving `10 €` due still requires the exact `10 €`
+checkout. This path is only for deposits covering the total: a free Appointment without deposits is still settled
+by an ordinary `0 €` checkout.
 
 **Cash Register.** An ACTIVE deposit is a real money movement on its own `paidAt`, by its own method: a `30 €`
 card deposit received on 22 September counts on 22 September (card total, « Acompte · <services> » entry that
@@ -1471,7 +1557,11 @@ operational Agenda exclusion for cancellation/no-show
 overlap calculation without cancellation/no-show
 manual completion eligibility
 manual checkout (card / cash / mixed, invalid amounts, eligibility)
-payment correction (split changes, status and paidAt preserved)
+exact settlement (checkout due, under / over refused in domain, sheet and store, deposits, prepaid refused)
+checkout discount of a completed-unpaid appointment (frozen once paid, deposit shortfall, settled by deposits)
+late checkout payment date (appointment day / today, cross-midnight, DST, Caisse day, offline sync)
+split autofill (automatic / manual owners, clearing, discount retarget, correction opens unchanged)
+payment correction (split changes, status and paidAt preserved, legacy overpaid range)
 appointment discount (percentage half-up cent rounding, fixed clamping, never negative,
   services only, terminal appointments frozen, snapshot prices untouched)
 automatic completion without payment

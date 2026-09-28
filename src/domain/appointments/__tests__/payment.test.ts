@@ -160,13 +160,40 @@ describe('checkoutAppointmentWithDiscount', () => {
     expect(result.status).toBe('COMPLETED');
   });
 
-  it('never rewrites the frozen discount of a completed appointment recording its payment afterwards', () => {
+  it('lets a COMPLETED appointment recording its FIRST payment afterwards choose its checkout discount', () => {
+    // Exact settlement: the discount is THE explicit way to charge less.
     const completed = appointment({ status: 'COMPLETED', discount: { type: 'PERCENT', percent: 10 } });
 
-    expect(checkoutAppointmentWithDiscount(completed, undefined, card(7500), now)).toBe(completed);
+    const removed = checkoutAppointmentWithDiscount(completed, undefined, card(7500), now);
+    expect(removed.discount).toBeUndefined();
+    expect(removed.payment).toMatchObject({ cardAmountCents: 7500 });
+
+    const changed = checkoutAppointmentWithDiscount(completed, { type: 'FIXED', amountCents: 1500 }, card(6000), now);
+    expect(changed).toMatchObject({ status: 'COMPLETED', discount: { type: 'FIXED', amountCents: 1500 } });
     expect(
       checkoutAppointmentWithDiscount(completed, { type: 'PERCENT', percent: 10 }, card(6750), now).payment,
     ).toMatchObject({ cardAmountCents: 6750 });
+  });
+
+  it('keeps the discount frozen once a payment exists: no second checkout, no rewrite', () => {
+    const paid = appointment({
+      status: 'COMPLETED',
+      discount: { type: 'PERCENT', percent: 10 },
+      payment: { paidAt: now, cardAmountCents: 6750, cashAmountCents: 0 },
+    });
+
+    expect(checkoutAppointmentWithDiscount(paid, undefined, card(7500), now)).toBe(paid);
+  });
+
+  it('records the payment on the given paidAt, never in the future', () => {
+    const lastWeek = new Date(2026, 8, 5, 15, 0);
+    const past = appointment({ startAt: new Date(2026, 8, 5, 14, 0), status: 'COMPLETED' });
+
+    expect(checkoutAppointmentWithDiscount(past, undefined, card(7500), now, lastWeek).payment?.paidAt).toEqual(lastWeek);
+    expect(checkoutAppointmentWithDiscount(past, undefined, card(7500), now).payment?.paidAt).toEqual(now);
+    expect(() =>
+      checkoutAppointmentWithDiscount(past, undefined, card(7500), now, new Date(now.getTime() + 1)),
+    ).toThrow(RangeError);
   });
 
   it('refuses what checkout refuses, and rejects an invalid discount or amount before anything changes', () => {

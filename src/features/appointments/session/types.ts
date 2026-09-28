@@ -2,6 +2,7 @@ import type {
   Appointment,
   AppointmentDeposit,
   AppointmentDiscount,
+  AppointmentPaymentDate,
   AppointmentPaymentAmounts,
   AppointmentPhaseDurationUpdate,
   AppointmentReferences,
@@ -100,11 +101,16 @@ export interface AppointmentSessionValue {
    * one it is written in the SAME transaction, before the status changes —
    * never a completed Appointment without its final discount. Omitted, the
    * stored discount is kept.
+   *
+   * The amounts must settle EXACTLY the checkout due (re-verified by the
+   * store). `paymentDate` (default `TODAY`) dates the money: `APPOINTMENT_DAY`
+   * places it on the local day of an Appointment of an earlier day.
    */
   readonly checkoutAppointment: (
     appointmentId: string,
     amounts: AppointmentPaymentAmounts,
     finalDiscount?: AppointmentCheckoutDiscount,
+    paymentDate?: AppointmentPaymentDate,
   ) => void;
   /**
    * « Terminer le rendez-vous » of a FULLY PREPAID Appointment: ACTIVE
@@ -112,6 +118,10 @@ export interface AppointmentSessionValue {
    * checkout), so it becomes COMPLETED WITHOUT any payment — no new money, no
    * new Cash Register movement. ONE transaction; throws and changes nothing
    * when the Appointment is not a prepaid completion.
+   *
+   * An Appointment already COMPLETED without payment is SETTLED by its
+   * deposits instead: only the final discount is written (the store verifies
+   * the deposits then cover the whole total); it stays COMPLETED, no payment.
    */
   readonly completePrepaidAppointment: (
     appointmentId: string,

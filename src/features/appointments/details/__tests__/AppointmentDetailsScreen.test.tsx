@@ -887,38 +887,49 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByTestId("edit-payment")).toBeTruthy();
   });
 
-  it("records a mixed card + cash checkout and lets the split be corrected without a second record", async () => {
+  it("records a mixed card + cash checkout of EXACTLY the due and lets the split be corrected without a second record", async () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
     const view = await renderDetails();
 
     await press(view, "checkout-appointment");
+    // Same-day checkout: no « Encaissé le » choice.
+    expect(view.queryByTestId("checkout-payment-date")).toBeNull();
     await typeAmount(view, "card", "50");
+    // Cash follows automatically: 95 − 50.
+    expect(view.getByTestId("checkout-amount-cash").props.value).toBe("45,00");
+    expect(view.getByTestId("checkout-entered-total").props.children).toBe(formatEuroCents(9500));
+    // A manual cash amount is never rewritten; what is missing is said, and nothing confirms.
     await typeAmount(view, "cash", "25");
-    expect(view.getByTestId("checkout-entered-total").props.children).toBe(formatEuroCents(7500));
-    expect(view.getByTestId("checkout-difference").props.children).toEqual([
-      "Écart : ",
-      `-${formatEuroCents(2000)}`,
+    expect(view.getByTestId("checkout-unallocated").props.children).toEqual([
+      "Reste à répartir : ",
+      formatEuroCents(2000),
     ]);
-    await press(view, "confirm-checkout");
-    await settleSheetTransition();
-
-    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("5000/2500");
-    expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(7500));
-    expect(within(view.getByTestId("appointment-payment-card")).getByText(formatEuroCents(5000))).toBeTruthy();
-    expect(within(view.getByTestId("appointment-payment-cash")).getByText(formatEuroCents(2500))).toBeTruthy();
-
-    await press(view, "edit-payment");
-    expect(view.getByRole("header", { name: "Modifier l’encaissement" })).toBeTruthy();
-    expect(view.getByTestId("checkout-amount-card").props.value).toBe("50,00");
-    expect(view.getByTestId("checkout-amount-cash").props.value).toBe("25,00");
-    await typeAmount(view, "card", "30");
+    expect(view.queryByTestId("checkout-difference")).toBeNull();
+    expect(view.getByTestId("confirm-checkout").props.accessibilityState.disabled).toBe(true);
     await typeAmount(view, "cash", "45");
     await press(view, "confirm-checkout");
     await settleSheetTransition();
 
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("5000/4500");
+    expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(9500));
+    expect(within(view.getByTestId("appointment-payment-card")).getByText(formatEuroCents(5000))).toBeTruthy();
+    expect(within(view.getByTestId("appointment-payment-cash")).getByText(formatEuroCents(4500))).toBeTruthy();
+    // Paid on the appointment day: no « Encaissé le » line.
+    expect(view.queryByTestId("appointment-payment-day")).toBeNull();
+
+    await press(view, "edit-payment");
+    expect(view.getByRole("header", { name: "Modifier l’encaissement" })).toBeTruthy();
+    // Opening changes nothing; the first edit rebalances the other amount.
+    expect(view.getByTestId("checkout-amount-card").props.value).toBe("50,00");
+    expect(view.getByTestId("checkout-amount-cash").props.value).toBe("45,00");
+    await typeAmount(view, "card", "30");
+    expect(view.getByTestId("checkout-amount-cash").props.value).toBe("65,00");
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
     expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
-    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("3000/4500");
-    expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(7500));
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("3000/6500");
+    expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(9500));
     expect(view.getAllByTestId("appointment-payment")).toHaveLength(1);
   });
 
@@ -932,8 +943,13 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByText(/^Enregistrer /)).toBeTruthy();
 
     await press(view, "checkout-appointment");
-    // Already COMPLETED: its financial state is frozen, no discount editor.
-    expect(view.queryByTestId("appointment-discount")).toBeNull();
+    // Completed WITHOUT payment: the discount can still lower the exact due.
+    expect(view.getByTestId("appointment-discount")).toBeTruthy();
+    // An earlier day: « Encaissé le », « Jour du rendez-vous » by default.
+    expect(view.getByTestId("checkout-payment-date")).toBeTruthy();
+    expect(
+      view.getByTestId("checkout-payment-date-appointment-day").props.accessibilityState.selected,
+    ).toBe(true);
     await typeAmount(view, "cash", "42");
     await press(view, "confirm-checkout");
     await settleSheetTransition();
@@ -941,6 +957,25 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
     expect(view.getByTestId("appointment-payment-probe").props.children).toBe("0/4200");
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
+    // Dated on the appointment day: nothing more to say.
+    expect(view.queryByTestId("appointment-payment-day")).toBeNull();
+  });
+
+  it("dates a late checkout « Aujourd’hui » when chosen, and names that day on the payment", async () => {
+    jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+    const view = await renderDetails("agenda-anais");
+
+    await press(view, "checkout-appointment");
+    await press(view, "checkout-payment-date-today");
+    await typeAmount(view, "cash", "42");
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    expect(view.getByTestId("appointment-payment-probe").props.children).toBe("0/4200");
+    expect(view.getByTestId("appointment-payment-day").props.children).toEqual([
+      "Encaissé le ",
+      "29 août 2026",
+    ]);
   });
 
   it("makes start-time actions available on the next wall-clock minute", async () => {
@@ -2263,7 +2298,7 @@ describe("AppointmentDetailsScreen", () => {
       expect(mockSelectionHaptic).not.toHaveBeenCalled();
     });
 
-    it("keeps a manually entered amount when the discount changes, and records it as entered", async () => {
+    it("keeps a manually entered amount when the discount lowers the due: never capped, never confirmable above it", async () => {
       const view = await renderDetails("agenda-sofia", probes);
       const caisseBefore = Number(view.getByTestId("caisse-day-total").props.children);
       await openCheckout(view);
@@ -2274,14 +2309,33 @@ describe("AppointmentDetailsScreen", () => {
 
       expect(view.getByTestId("checkout-amount-card").props.value).toBe("95");
       expect(view.getByTestId("checkout-entered-total").props.children).toBe(formatEuroCents(9500));
-      expect(view.getByTestId("checkout-difference").props.children).toEqual(["Écart : ", `+${formatEuroCents(1900)}`]);
+      expect(view.getByTestId("checkout-exceeds").props.children).toBe("Le montant dépasse le reste à encaisser.");
+      expect(view.getByTestId("confirm-checkout").props.accessibilityState.disabled).toBe(true);
 
+      await typeAmount(view, "card", "76");
       await press(view, "confirm-checkout");
       await settleSheetTransition();
 
-      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("9500/0");
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("7600/0");
       expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"PERCENT","percent":20}');
-      expect(Number(view.getByTestId("caisse-day-total").props.children)).toBe(caisseBefore + 9500);
+      expect(Number(view.getByTestId("caisse-day-total").props.children)).toBe(caisseBefore + 7600);
+    });
+
+    it("recomputes the automatic amount when the discount moves the due; the typed one stays", async () => {
+      const view = await renderDetails("agenda-sofia", probes);
+      await openCheckout(view);
+      await typeAmount(view, "card", "30");
+      expect(view.getByTestId("checkout-amount-cash").props.value).toBe("65,00");
+      await press(view, "appointment-discount-toggle");
+
+      await press(view, "appointment-discount-preset-PERCENT-20");
+
+      expect(view.getByTestId("checkout-amount-card").props.value).toBe("30");
+      expect(view.getByTestId("checkout-amount-cash").props.value).toBe("46,00");
+      await press(view, "confirm-checkout");
+      await settleSheetTransition();
+
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("3000/4600");
     });
 
     it("freezes the discount once completed: the payment correction shows it read-only", async () => {
@@ -2692,6 +2746,59 @@ describe("AppointmentDetailsScreen — deposits (« Acomptes »)", () => {
     await press(view, "take-deposit");
     await settleSheetTransition();
   }
+
+  it("a COMPLETED unpaid Appointment whose discount brings the total to its deposits is saved with « Enregistrer », no payment", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "dp-70", amountCents: 7000, paymentMethod: "CASH" }], "COMPLETED");
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    await press(view, "checkout-appointment");
+    await settleSheetTransition();
+    expect(view.queryByTestId("checkout-deposits-cover")).toBeNull();
+    await press(view, "appointment-discount-toggle");
+    await press(view, "appointment-discount-preset-PERCENT-30");
+
+    // 100 € − 30 % = 70 € = the deposits: nothing to receive, a clear way to save.
+    expect(view.getByTestId("checkout-due").props.children).toBe(formatEuroCents(0));
+    expect(view.getByTestId("checkout-deposits-cover").props.children).toBe(
+      "Le rendez-vous est entièrement couvert par les acomptes.",
+    );
+    expect(view.getByTestId("confirm-checkout").props.accessibilityState.disabled).toBe(false);
+    expect(within(view.getByTestId("confirm-checkout")).getByText("Enregistrer")).toBeTruthy();
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    expect(storedAppointment(db)).toMatchObject({ status: "COMPLETED", discount: { type: "PERCENT", percent: 30 } });
+    expect(storedAppointment(db)?.payment).toBeUndefined();
+    expect(storedDeposits(db)).toEqual([expect.objectContaining({ amountCents: 7000, status: "ACTIVE" })]);
+    // Settled: no checkout left to offer.
+    expect(view.queryByTestId("checkout-appointment")).toBeNull();
+    expect(view.queryByTestId("appointment-payment")).toBeNull();
+  });
+
+  it("a COMPLETED unpaid Appointment whose discount leaves 10 € due still settles EXACTLY those 10 €", async () => {
+    const db = openTestDatabase();
+    persistDepositAppointment(db, [{ id: "dp-70", amountCents: 7000, paymentMethod: "CASH" }], "COMPLETED");
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    await press(view, "checkout-appointment");
+    await settleSheetTransition();
+    await press(view, "appointment-discount-toggle");
+    await press(view, "appointment-discount-preset-PERCENT-20");
+
+    expect(view.getByTestId("checkout-due").props.children).toBe(formatEuroCents(1000));
+    expect(view.queryByTestId("checkout-deposits-cover")).toBeNull();
+    expect(view.getByTestId("confirm-checkout").props.accessibilityState.disabled).toBe(true);
+    await typeAmount(view, "card", "10");
+    await press(view, "confirm-checkout");
+    await settleSheetTransition();
+
+    expect(storedAppointment(db)).toMatchObject({
+      status: "COMPLETED",
+      discount: { type: "PERCENT", percent: 20 },
+      payment: { cardAmountCents: 1000, cashAmountCents: 0 },
+    });
+  });
 
   it("without a deposit shows ONE « Prendre un acompte » row and no accounting block", async () => {
     const db = openTestDatabase();

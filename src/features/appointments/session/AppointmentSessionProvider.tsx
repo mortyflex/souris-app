@@ -18,8 +18,10 @@ import {
   createAppointmentDeposit,
   voidAppointmentDeposit as markDepositVoided,
   checkoutAppointmentWithDiscount as recordCheckout,
+  getAppointmentPaymentInstant,
   removeAppointmentItem as dropItem,
   reorderAppointmentItemsByIds as arrangeItems,
+  setAppointmentCheckoutDiscount as applyCheckoutDiscount,
   setAppointmentDiscount as applyDiscount,
   updateAppointmentItemPhaseDurations as adjustItemPhaseDurations,
   updateAppointmentPayment as correctPayment,
@@ -27,6 +29,7 @@ import {
   type AppointmentDeposit,
   type AppointmentDiscount,
   type AppointmentPaymentAmounts,
+  type AppointmentPaymentDate,
   type AppointmentPhaseDurationUpdate,
 } from '@/domain/appointments';
 import { getLocalDateKey } from '@/features/agenda/calendar/week';
@@ -43,6 +46,7 @@ import {
   deleteAppointment as removeAppointment,
   insertAppointment,
   removeAppointmentItem as persistItemRemoval,
+  settleCompletedAppointmentWithDeposits as persistDepositSettlement,
   reorderAppointmentItems as persistItemOrder,
   updateAppointment as persistAppointment,
   updateAppointmentDiscount as persistDiscount,
@@ -288,28 +292,34 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   };
 
   // Checkout: the domain decides eligibility, validates the final discount
-  // and builds the next record; ONE transaction then writes the changed
-  // discount (while the stored row is still editable) and status + payment,
-  // re-verifying the stored row at each step. A refused step rolls both
-  // back; state reflects the record only after the commit.
+  // (THE checkout discount rule: open, or COMPLETED without payment) and the
+  // payment date, and builds the next record; ONE store transaction then
+  // writes the changed discount and status + payment, re-verifying the stored
+  // row — including that the amounts settle EXACTLY the checkout due. A
+  // refused step rolls both back; state reflects the record only after the
+  // commit.
   const checkoutAppointment = (
     appointmentId: string,
     amounts: AppointmentPaymentAmounts,
     finalDiscount?: AppointmentCheckoutDiscount,
+    paymentDate: AppointmentPaymentDate = 'TODAY',
   ) => {
     const appointment = requireAppointment(appointmentId, 'checkoutAppointment');
     const discount = finalDiscount ? finalDiscount.discount : appointment.discount;
-    const next = recordCheckout(appointment, discount, amounts, new Date());
+    const now = new Date();
+    const paidAt = getAppointmentPaymentInstant(appointment, paymentDate, now);
+    const next = recordCheckout(appointment, discount, amounts, now, paidAt);
     if (next === appointment || !next.payment) {
       throw new Error(`checkoutAppointment: Appointment "${appointmentId}" cannot be checked out`);
     }
-    const payment = next.payment;
-    runInTransaction(database, () => {
-      if (!areAppointmentDiscountsEqual(appointment.discount, next.discount)) {
-        persistDiscount(database, appointmentId, next.discount);
-      }
-      persistCheckout(database, appointmentId, payment);
-    });
+    persistCheckout(
+      database,
+      appointmentId,
+      next.payment,
+      areAppointmentDiscountsEqual(appointment.discount, next.discount)
+        ? undefined
+        : { discount: next.discount },
+    );
     replaceEntry(next);
   };
 
@@ -318,11 +328,26 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   // the store then re-verifies, in the SAME transaction, that the ACTIVE
   // deposits cover the whole expected total, and writes COMPLETED with NO
   // payment. State reflects the record only after the commit.
+  //
+  // An Appointment ALREADY COMPLETED without payment (a late checkout whose
+  // discount brings the total down to the deposits) is settled by its
+  // deposits: the store writes ONLY the discount, re-verifying in the same
+  // transaction that the deposits cover everything. No payment, status kept.
   const completePrepaidAppointment = (
     appointmentId: string,
     finalDiscount?: AppointmentCheckoutDiscount,
   ) => {
     const appointment = requireAppointment(appointmentId, 'completePrepaidAppointment');
+    if (appointment.status === 'COMPLETED') {
+      const discount = finalDiscount ? finalDiscount.discount : appointment.discount;
+      const candidate = applyCheckoutDiscount(appointment, discount);
+      if (appointment.payment !== undefined || !areAppointmentDiscountsEqual(candidate.discount, discount)) {
+        throw new Error(`completePrepaidAppointment: Appointment "${appointmentId}" cannot be settled`);
+      }
+      persistDepositSettlement(database, appointmentId, { discount });
+      replaceEntry(candidate);
+      return;
+    }
     const now = new Date();
     const candidate = finalDiscount ? applyDiscount(appointment, finalDiscount.discount) : appointment;
     if (!canCompleteAppointment(candidate, now) || candidate.payment !== undefined) {

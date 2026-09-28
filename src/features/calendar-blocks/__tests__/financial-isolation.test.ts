@@ -34,7 +34,7 @@ const now = new Date('2026-09-30T08:00:00.000Z');
 function openWorkingDay() {
   const db = openTestDatabase();
   bootstrapPersistence(db, createTestSeed);
-  checkoutAppointment(db, appointmentLea.id, { paidAt, cardAmountCents: 9000, cashAmountCents: 550 });
+  checkoutAppointment(db, appointmentLea.id, { paidAt, cardAmountCents: 9000, cashAmountCents: 4500 });
   completeSale(
     db,
     {

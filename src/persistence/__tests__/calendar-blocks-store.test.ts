@@ -199,7 +199,7 @@ describe('Calendar Block store — financial and client isolation', () => {
   it('changes no expected total and no Cash Register figure, day or month', () => {
     const db = openSeeded();
     const paidAt = new Date('2026-09-21T10:45:00.000Z');
-    checkoutAppointment(db, appointmentLea.id, { paidAt, cardAmountCents: 9000, cashAmountCents: 500 });
+    checkoutAppointment(db, appointmentLea.id, { paidAt, cardAmountCents: 9000, cashAmountCents: 4500 });
     const figures = () => {
       const { appointments, sales } = loadSnapshot(db);
       return {

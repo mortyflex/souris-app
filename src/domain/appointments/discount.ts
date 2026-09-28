@@ -15,8 +15,8 @@
 //
 // Integer arithmetic only; nothing here formats or parses money.
 
-import { canEditAppointment } from './lifecycle';
-import type { Appointment, AppointmentDiscount } from './types';
+import { canEditAppointment, isEditableAppointmentStatus } from './lifecycle';
+import type { Appointment, AppointmentDiscount, AppointmentStatus } from './types';
 
 /**
  * A percentage is a whole number of percent, 1–50. ONE bound for the domain,
@@ -78,7 +78,45 @@ export function setAppointmentDiscount(
     throw new RangeError(`setAppointmentDiscount: invalid ${discount.type} discount`);
   }
   if (!canEditAppointment(appointment)) return appointment;
+  return withDiscount(appointment, discount);
+}
 
+/**
+ * Whether the checkout sheet may still choose the discount: an editable
+ * Appointment, or a COMPLETED one whose FINAL payment is not recorded yet —
+ * a late checkout settles the exact amount due, and the discount is THE
+ * explicit way to charge less. Frozen for good once a payment exists.
+ */
+export function canChangeAppointmentCheckoutDiscount(
+  appointment: Pick<Appointment, 'status' | 'payment'>,
+): boolean {
+  return isCheckoutDiscountOpen(appointment.status, appointment.payment !== undefined);
+}
+
+/** The same eligibility from stored facts (status, whether a payment exists). */
+export function isCheckoutDiscountOpen(status: AppointmentStatus, hasPayment: boolean): boolean {
+  if (status === 'COMPLETED') return !hasPayment;
+  return isEditableAppointmentStatus(status);
+}
+
+/**
+ * The discount chosen in the checkout sheet, with the checkout eligibility
+ * (`canChangeAppointmentCheckoutDiscount`). Everywhere else the ONE editing
+ * rule of `setAppointmentDiscount` applies. Returns the SAME Appointment when
+ * the discount may not change; throws on an invalid discount.
+ */
+export function setAppointmentCheckoutDiscount(
+  appointment: Appointment,
+  discount: AppointmentDiscount | undefined,
+): Appointment {
+  if (discount !== undefined && !isValidAppointmentDiscount(discount)) {
+    throw new RangeError(`setAppointmentCheckoutDiscount: invalid ${discount.type} discount`);
+  }
+  if (!canChangeAppointmentCheckoutDiscount(appointment)) return appointment;
+  return withDiscount(appointment, discount);
+}
+
+function withDiscount(appointment: Appointment, discount: AppointmentDiscount | undefined): Appointment {
   const { discount: _previous, ...rest } = appointment;
   return discount === undefined ? rest : { ...rest, discount: { ...discount } };
 }

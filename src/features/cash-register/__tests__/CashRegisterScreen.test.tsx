@@ -79,9 +79,14 @@ function CheckoutProbe() {
         onPress={() => sell('sale-standalone-mixed', undefined, { cardAmountCents: 1000, cashAmountCents: 4000 })}
       />
       <Pressable testID="sell-linked-sofia" onPress={() => sell('sale-linked-sofia', 'agenda-sofia')} />
+      <Pressable testID="sell-linked-lea" onPress={() => sell('sale-linked-lea', 'agenda-lea')} />
       <Pressable
         testID="checkout-sofia"
         onPress={() => checkoutAppointment('agenda-sofia', { cardAmountCents: 9500, cashAmountCents: 0 })}
+      />
+      <Pressable
+        testID="checkout-sofia-with-product"
+        onPress={() => checkoutAppointment('agenda-sofia', { cardAmountCents: 14500, cashAmountCents: 0 })}
       />
       <Pressable
         testID="checkout-ines"
@@ -89,7 +94,7 @@ function CheckoutProbe() {
       />
       <Pressable
         testID="checkout-elodie"
-        onPress={() => checkoutAppointment('agenda-elodie', { cardAmountCents: 0, cashAmountCents: 4000 })}
+        onPress={() => checkoutAppointment('agenda-elodie', { cardAmountCents: 0, cashAmountCents: 4200 })}
       />
       <Pressable
         testID="edit-sofia"
@@ -289,7 +294,7 @@ describe('CashRegisterScreen', () => {
       'cash-register-entry-agenda-sofia',
     ]);
     expect(within(view.getByTestId('cash-register-entry-agenda-elodie')).getByText('28 août')).toBeTruthy();
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(18500), count: '3 encaissements' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(18700), count: '3 encaissements' });
   });
 
   it('carries the decorative cash-register watermark, hidden from accessibility and touches', async () => {
@@ -311,16 +316,16 @@ describe('CashRegisterScreen', () => {
     // Appointment: services 95 € + linked product 50 € → the professional records 145 € once.
     await press(view, 'sell-linked-sofia');
     await act(async () => {
-      fireEvent.press(view.getByTestId('checkout-sofia'));
+      fireEvent.press(view.getByTestId('checkout-sofia-with-product'));
     });
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 encaissement' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(14500), count: '1 encaissement' });
 
     await press(view, 'sell-standalone-card');
     await press(view, 'sell-standalone-mixed');
 
     expect(totals(view)).toMatchObject({
-      total: formatEuroCents(19500),
-      card: formatEuroCents(15500),
+      total: formatEuroCents(24500),
+      card: formatEuroCents(20500),
       cash: formatEuroCents(4000),
       count: '3 encaissements',
     });
@@ -361,9 +366,9 @@ describe('CashRegisterScreen', () => {
 
     await press(view, 'cash-register-previous');
     expect(totals(view)).toMatchObject({
-      total: formatEuroCents(4000),
+      total: formatEuroCents(4200),
       card: formatEuroCents(0),
-      cash: formatEuroCents(4000),
+      cash: formatEuroCents(4200),
       count: '1 encaissement',
       caption: 'encaissé ce jour',
       period: 'Vendredi 28 août',
@@ -398,8 +403,8 @@ describe('CashRegisterScreen', () => {
       jest.setSystemTime(new Date(2026, 7, 15, 10, 0));
       await press(view, 'sell-standalone-card');
       jest.setSystemTime(new Date(2026, 7, 20, 10, 0));
-      // Sold during the Appointment: its checkout records the money, never the Sale.
-      await press(view, 'sell-linked-sofia');
+      // Sold during an Appointment: its checkout records the money, never the Sale.
+      await press(view, 'sell-linked-lea');
       jest.setSystemTime(new Date(2026, 7, 22, 11, 0));
       await press(view, 'deposit-sofia');
       // Checked out just before local midnight: still the 28th.
@@ -503,7 +508,7 @@ describe('CashRegisterScreen', () => {
       await recordAugust(view);
 
       await press(view, 'cash-register-date-button');
-      // Best day 11 500 → high; 5 000 and 4 000 are above a third → medium; 3 000 is below → low.
+      // Best day 11 500 → high; 5 000 and 4 200 are above a third → medium; 3 000 is below → low.
       expect(intensityOf(view, '2026-08-29')).toEqual(['high']);
       expect(intensityOf(view, '2026-08-15')).toEqual(['medium']);
       expect(intensityOf(view, '2026-08-28')).toEqual(['medium']);
@@ -544,7 +549,7 @@ describe('CashRegisterScreen', () => {
         '2026-08-15': 5000,
         '2026-08-20': 0,
         '2026-08-22': 3000,
-        '2026-08-28': 4000,
+        '2026-08-28': 4200,
         '2026-08-29': 11500,
       };
       for (const [id, cents] of Object.entries(expected)) {
@@ -735,9 +740,9 @@ describe('CashRegisterScreen', () => {
     expect(view.queryByTestId('cash-register-date')).toBeNull();
     expect(view.queryByTestId('cash-register-calendar')).toBeNull();
     expect(totals(view)).toMatchObject({
-      total: formatEuroCents(18500),
+      total: formatEuroCents(18700),
       card: formatEuroCents(14500),
-      cash: formatEuroCents(4000),
+      cash: formatEuroCents(4200),
       count: '3 encaissements',
       caption: 'encaissé ce mois-ci',
       period: 'Août 2026',
@@ -751,7 +756,7 @@ describe('CashRegisterScreen', () => {
     expect(view.queryByTestId('cash-register-this-month')).toBeNull();
 
     await press(view, 'cash-register-current');
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(18500), period: 'Août 2026' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(18700), period: 'Août 2026' });
 
     await press(view, 'cash-register-next');
     expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Septembre 2026' });

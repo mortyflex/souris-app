@@ -286,8 +286,9 @@ describe('CheckoutSheet', () => {
   });
 
   describe('with deposits (settlement)', () => {
-    // 95 € expected, 30 € already paid ahead: 65 € due.
+    // 95 € expected, 30 € already paid ahead: 65 € due — settled EXACTLY, as the Appointment sheet passes it.
     const settlement = { depositsCents: 3000, dueCents: 6500 };
+    const allocation = { minimumCents: 6500, maximumCents: 6500, targetCents: 6500 };
 
     it('keeps « Total attendu » and adds the deposits and what is still due', async () => {
       const { view } = await renderSheet({ settlement });
@@ -301,7 +302,7 @@ describe('CheckoutSheet', () => {
     });
 
     it('the « Reste » shortcut fills what is still due, never the whole total', async () => {
-      const { view, onConfirm } = await renderSheet({ settlement });
+      const { view, onConfirm } = await renderSheet({ settlement, allocation });
 
       await act(async () => {
         fireEvent.press(view.getByTestId('checkout-fill-card'));
@@ -315,17 +316,30 @@ describe('CheckoutSheet', () => {
       expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 6500, cashAmountCents: 0 });
     });
 
-    it('keeps a manually typed amount and measures the « Écart » against what is due', async () => {
-      const { view, onConfirm } = await renderSheet({ settlement });
+    it('keeps a typed amount above what is due — never capped, never confirmed: the maximum is 65 €, not 95 €', async () => {
+      const { view, onConfirm } = await renderSheet({ settlement, allocation });
 
       await type(view, 'cash', '70');
       expect(view.getByTestId('checkout-amount-cash').props.value).toBe('70');
-      expect(view.getByTestId('checkout-difference').props.children).toEqual(['Écart : ', `+${formatEuroCents(500)}`]);
+      expect(view.queryByTestId('checkout-difference')).toBeNull();
+      expect(view.getByTestId('checkout-exceeds').props.children).toBe('Le montant dépasse le reste à encaisser.');
+      expect(view.getByTestId('confirm-checkout').props.accessibilityState.disabled).toBe(true);
 
       await act(async () => {
         fireEvent.press(view.getByTestId('confirm-checkout'));
       });
-      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 0, cashAmountCents: 7000 });
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it('Card 20 → Cash automatically 45 of the 65 € due', async () => {
+      const { view, onConfirm } = await renderSheet({ settlement, allocation });
+
+      await type(view, 'card', '20');
+      expect(view.getByTestId('checkout-amount-cash').props.value).toBe('45,00');
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 2000, cashAmountCents: 4500 });
     });
 
     it('without deposits nothing changes: no deposit line, the whole total is due', async () => {
@@ -337,6 +351,7 @@ describe('CheckoutSheet', () => {
     it('fully prepaid: nothing due, nothing typed — the zero-balance label, no fake amount', async () => {
       const { view, onConfirm } = await renderSheet({
         settlement: { depositsCents: 9500, dueCents: 0 },
+        allocation: { minimumCents: 0, maximumCents: 0, targetCents: 0 },
         zeroBalanceConfirmTitle: 'Terminer le rendez-vous',
       });
 
@@ -348,15 +363,17 @@ describe('CheckoutSheet', () => {
       });
       expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 0, cashAmountCents: 0 });
 
-      // A typed amount (a tip) turns it back into an ordinary checkout.
+      // No tip on a prepaid Appointment: a typed amount exceeds what is due.
       await type(view, 'card', '5');
-      expect(view.getByText('Encaisser')).toBeTruthy();
+      expect(view.getByTestId('checkout-exceeds')).toBeTruthy();
+      expect(view.getByTestId('confirm-checkout').props.accessibilityState.disabled).toBe(true);
     });
 
     it('a blocking notice disables confirmation while the entries stay editable', async () => {
       const { Text } = jest.requireActual('react-native') as typeof import('react-native');
       const { view, onConfirm } = await renderSheet({
         settlement,
+        allocation,
         blockingNotice: <Text testID="blocking">Sous les acomptes</Text>,
       });
 
@@ -367,6 +384,196 @@ describe('CheckoutSheet', () => {
         fireEvent.press(view.getByTestId('confirm-checkout'));
       });
       expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Appointment allocation — exact due, automatic and manual amounts', () => {
+    const exact95 = { minimumCents: 9500, maximumCents: 9500, targetCents: 9500 };
+    const value = (view: Awaited<ReturnType<typeof render>>, method: 'card' | 'cash') =>
+      view.getByTestId(`checkout-amount-${method}`).props.value as string;
+    const disabled = (view: Awaited<ReturnType<typeof render>>) =>
+      view.getByTestId('confirm-checkout').props.accessibilityState.disabled as boolean;
+
+    it('opens empty and changes nothing on its own', async () => {
+      const { view } = await renderSheet({ allocation: exact95 });
+
+      expect(value(view, 'card')).toBe('');
+      expect(value(view, 'cash')).toBe('');
+      expect(view.queryByTestId('checkout-unallocated')).toBeNull();
+      expect(disabled(view)).toBe(true);
+    });
+
+    it('Card 30 → Cash 65 automatically; Card 45 → Cash 50; confirmation records exactly the due', async () => {
+      const { view, onConfirm } = await renderSheet({ allocation: exact95 });
+
+      await type(view, 'card', '30');
+      expect(value(view, 'cash')).toBe('65,00');
+      await type(view, 'card', '45');
+      expect(value(view, 'cash')).toBe('50,00');
+      expect(disabled(view)).toBe(false);
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 4500, cashAmountCents: 5000 });
+    });
+
+    it('Card = the whole due → Cash empty, confirmable', async () => {
+      const { view } = await renderSheet({ allocation: exact95 });
+
+      await type(view, 'card', '95');
+      expect(value(view, 'cash')).toBe('');
+      expect(disabled(view)).toBe(false);
+    });
+
+    it('Card above the due: kept as typed, the error is shown, nothing confirms', async () => {
+      const { view, onConfirm } = await renderSheet({ allocation: exact95 });
+
+      await type(view, 'card', '110');
+      expect(value(view, 'card')).toBe('110');
+      expect(value(view, 'cash')).toBe('');
+      expect(view.getByTestId('checkout-exceeds')).toBeTruthy();
+      expect(disabled(view)).toBe(true);
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it('a typed Cash is manual: « Reste à répartir », and a later Card change never rewrites it', async () => {
+      const { view } = await renderSheet({ allocation: exact95 });
+
+      await type(view, 'card', '30');
+      await type(view, 'cash', '45');
+      expect(view.getByTestId('checkout-unallocated').props.children).toEqual([
+        'Reste à répartir : ',
+        formatEuroCents(2000),
+      ]);
+      expect(disabled(view)).toBe(true);
+
+      await type(view, 'card', '40');
+      expect(value(view, 'cash')).toBe('45');
+      expect(view.getByTestId('checkout-unallocated').props.children).toEqual([
+        'Reste à répartir : ',
+        formatEuroCents(1000),
+      ]);
+
+      // Card 30 + Cash 80: above the due.
+      await type(view, 'card', '30');
+      await type(view, 'cash', '80');
+      expect(view.getByTestId('checkout-exceeds')).toBeTruthy();
+      expect(disabled(view)).toBe(true);
+    });
+
+    it('clearing a typed amount releases it without refilling it; the next Card edit does', async () => {
+      const { view } = await renderSheet({ allocation: exact95 });
+      await type(view, 'card', '30');
+      await type(view, 'cash', '50');
+
+      await type(view, 'cash', '');
+      expect(value(view, 'cash')).toBe('');
+      // The explicit « Reste » stays available.
+      expect(view.getByTestId('checkout-fill-cash')).toBeTruthy();
+
+      await type(view, 'card', '35');
+      expect(value(view, 'cash')).toBe('60,00');
+    });
+
+    it('a new due (discount draft) moves the automatic amount only', async () => {
+      const { view } = await renderSheet({ allocation: exact95 });
+      await type(view, 'card', '30');
+      expect(value(view, 'cash')).toBe('65,00');
+
+      await act(async () => {
+        view.rerender(
+          <CheckoutSheet
+            allocation={{ minimumCents: 7600, maximumCents: 7600, targetCents: 7600 }}
+            confirmTitle="Encaisser"
+            expectedTotalCents={7600}
+            onClose={jest.fn()}
+            onConfirm={jest.fn()}
+            summaryLines={summaryLines}
+            title="Encaisser le rendez-vous"
+            visible
+          />,
+        );
+      });
+
+      expect(value(view, 'card')).toBe('30');
+      expect(value(view, 'cash')).toBe('46,00');
+    });
+
+    it('a correction opens EXACTLY on the recorded amounts, then rebalances on the first edit', async () => {
+      const { view, onConfirm } = await renderSheet({
+        allocation: exact95,
+        initialAmounts: { cardAmountCents: 5000, cashAmountCents: 4500 },
+      });
+
+      expect(value(view, 'card')).toBe('50,00');
+      expect(value(view, 'cash')).toBe('45,00');
+      expect(disabled(view)).toBe(false);
+
+      await type(view, 'card', '20');
+      expect(value(view, 'cash')).toBe('75,00');
+      await type(view, 'card', '96');
+      expect(view.getByTestId('checkout-exceeds')).toBeTruthy();
+      await type(view, 'card', '20');
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 2000, cashAmountCents: 7500 });
+    });
+
+    it('a LEGACY overpaid correction (120 € recorded, 95 € due) keeps 120 €, may lower it, never raises it', async () => {
+      const legacy = { minimumCents: 9500, maximumCents: 12000, targetCents: 12000 };
+      const { view } = await renderSheet({
+        allocation: legacy,
+        initialAmounts: { cardAmountCents: 12000, cashAmountCents: 0 },
+      });
+
+      expect(value(view, 'card')).toBe('120,00');
+      expect(disabled(view)).toBe(false);
+      await type(view, 'card', '115');
+      expect(disabled(view)).toBe(false);
+      await type(view, 'card', '125');
+      expect(view.getByTestId('checkout-exceeds')).toBeTruthy();
+      expect(disabled(view)).toBe(true);
+    });
+
+    it('shows the caller’s payment-date control under the amounts', async () => {
+      const { Text } = jest.requireActual('react-native') as typeof import('react-native');
+      const { view } = await renderSheet({ allocation: exact95, paymentDate: <Text testID="date-choice">Encaissé le</Text> });
+
+      expect(view.getByTestId('date-choice')).toBeTruthy();
+    });
+  });
+
+  describe('standalone Sale (no allocation) — unchanged', () => {
+    it('never fills the other amount on its own, accepts a different total and shows the « Écart »', async () => {
+      const { view, onConfirm } = await renderSheet();
+
+      await type(view, 'card', '30');
+      expect(view.getByTestId('checkout-amount-cash').props.value).toBe('');
+      await type(view, 'card', '100');
+      expect(view.getByTestId('checkout-difference').props.children).toEqual(['Écart : ', `+${formatEuroCents(500)}`]);
+      expect(view.queryByTestId('checkout-exceeds')).toBeNull();
+      expect(view.queryByTestId('checkout-unallocated')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 10000, cashAmountCents: 0 });
+    });
+
+    it('accepts less than the total too', async () => {
+      const { view, onConfirm } = await renderSheet();
+
+      await type(view, 'card', '30');
+      await type(view, 'cash', '20');
+      await act(async () => {
+        fireEvent.press(view.getByTestId('confirm-checkout'));
+      });
+      expect(onConfirm).toHaveBeenCalledWith({ cardAmountCents: 3000, cashAmountCents: 2000 });
     });
   });
 });

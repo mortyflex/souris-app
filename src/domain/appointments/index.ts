@@ -78,6 +78,7 @@ export {
   cancelAppointment,
   markAppointmentNoShow,
   finalizePastBusinessDays,
+  isPreviousLocalDay,
 } from "./lifecycle";
 
 export type { AppointmentPaymentAmounts, AppointmentReferences } from "./payment";
@@ -95,11 +96,33 @@ export {
   updateAppointmentPayment,
 } from "./payment";
 
+export type {
+  AppointmentCheckoutRefusal,
+  AppointmentPaymentBounds,
+  AppointmentPaymentDate,
+} from "./checkout";
+export {
+  canChooseAppointmentPaymentDate,
+  getAppointmentCheckoutDueCents,
+  getAppointmentDayPaymentInstant,
+  getAppointmentPaymentInstant,
+  getCheckoutPaymentBounds,
+  getPaymentCorrectionBounds,
+  validateAppointmentCheckoutAmounts,
+  validateAppointmentPaymentCorrection,
+  validateCheckoutAmounts,
+  validatePaymentCorrectionAmounts,
+  validatePaymentWithinBounds,
+} from "./checkout";
+
 export {
   MAX_DISCOUNT_PERCENT,
   areAppointmentDiscountsEqual,
+  canChangeAppointmentCheckoutDiscount,
   getAppointmentDiscountCents,
+  isCheckoutDiscountOpen,
   isValidAppointmentDiscount,
+  setAppointmentCheckoutDiscount,
   setAppointmentDiscount,
 } from "./discount";
 
@@ -113,12 +136,15 @@ export {
   AppointmentDepositInvalidError,
   PAYMENT_METHODS,
   canCompletePrepaidAppointment,
+  canSettleCompletedAppointmentWithDeposits,
   canCorrectAppointmentDeposits,
   canRecordAppointmentDeposit,
   canVoidAppointmentDeposit,
   completePrepaidAppointment,
   createAppointmentDeposit,
   findAppointmentChangeDepositShortfall,
+  findAppointmentCheckoutDiscountShortfall,
+  findCheckoutDiscountDepositShortfall,
   findAppointmentDepositInvariantBreach,
   findAppointmentTotalChangeDepositShortfall,
   findDepositInvariantBreach,

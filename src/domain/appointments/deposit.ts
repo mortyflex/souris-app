@@ -38,7 +38,7 @@
 // injected; every operation returns a new value and never mutates its input.
 
 import type { Sale } from '../sales/types';
-import { setAppointmentDiscount } from './discount';
+import { isCheckoutDiscountOpen, setAppointmentDiscount } from './discount';
 import { getAppointmentExpectedTotal } from './expected-total';
 import { canCompleteAppointment, isEditableAppointmentStatus } from './lifecycle';
 import type {
@@ -310,6 +310,14 @@ export function findAppointmentTotalChangeDepositShortfall(input: {
   readonly activeDepositTotalCents: number;
 }): AppointmentDepositShortfall | undefined {
   if (!isEditableAppointmentStatus(input.status)) return undefined;
+  return findTotalDecreaseShortfall(input);
+}
+
+function findTotalDecreaseShortfall(input: {
+  readonly previousExpectedTotalCents: number;
+  readonly nextExpectedTotalCents: number;
+  readonly activeDepositTotalCents: number;
+}): AppointmentDepositShortfall | undefined {
   if (input.nextExpectedTotalCents >= input.previousExpectedTotalCents) return undefined;
   if (input.nextExpectedTotalCents >= input.activeDepositTotalCents) return undefined;
   return {
@@ -339,6 +347,40 @@ export function findAppointmentChangeDepositShortfall(input: {
       input.candidate,
       input.candidateSales ?? input.sales,
     ).expectedTotalCents,
+    activeDepositTotalCents: getAppointmentActiveDepositTotal(input.deposits, input.current.id),
+  });
+}
+
+/**
+ * THE same rule for the discount chosen in the checkout sheet, whose scope is
+ * wider than editing (`canChangeAppointmentCheckoutDiscount`): a COMPLETED
+ * Appointment without its final payment is still being settled, so its
+ * checkout discount may not take the total below the deposits either.
+ * Totals-level form, shared by the sheet (through the Appointment form below)
+ * and the store.
+ */
+export function findCheckoutDiscountDepositShortfall(input: {
+  readonly status: AppointmentStatus;
+  readonly hasPayment: boolean;
+  readonly previousExpectedTotalCents: number;
+  readonly nextExpectedTotalCents: number;
+  readonly activeDepositTotalCents: number;
+}): AppointmentDepositShortfall | undefined {
+  if (!isCheckoutDiscountOpen(input.status, input.hasPayment)) return undefined;
+  return findTotalDecreaseShortfall(input);
+}
+
+export function findAppointmentCheckoutDiscountShortfall(input: {
+  readonly current: Appointment;
+  readonly candidate: Appointment;
+  readonly sales: readonly Sale[];
+  readonly deposits: readonly AppointmentDeposit[];
+}): AppointmentDepositShortfall | undefined {
+  return findCheckoutDiscountDepositShortfall({
+    status: input.current.status,
+    hasPayment: input.current.payment !== undefined,
+    previousExpectedTotalCents: getAppointmentExpectedTotal(input.current, input.sales).expectedTotalCents,
+    nextExpectedTotalCents: getAppointmentExpectedTotal(input.candidate, input.sales).expectedTotalCents,
     activeDepositTotalCents: getAppointmentActiveDepositTotal(input.deposits, input.current.id),
   });
 }
@@ -420,6 +462,29 @@ export function canCompletePrepaidAppointment(
 ): boolean {
   return (
     canCompleteAppointment(appointment, now) &&
+    appointment.payment === undefined &&
+    position.activeDepositTotalCents > 0 &&
+    position.remainingCents === 0
+  );
+}
+
+/**
+ * A COMPLETED Appointment without its final payment whose ACTIVE deposits cover
+ * the whole expected total — typically once the checkout discount of a late
+ * checkout brings the total down to the deposits. It is settled by the
+ * deposits alone: the discount is recorded, and NO payment (not even `0 €`)
+ * is created, so nothing new reaches the Cash Register. Judge it on the
+ * position of the candidate carrying the final discount.
+ *
+ * Distinct from an Appointment that costs nothing without deposits: that one
+ * is still settled by an ordinary `0 €` checkout.
+ */
+export function canSettleCompletedAppointmentWithDeposits(
+  appointment: Pick<Appointment, 'status' | 'payment'>,
+  position: AppointmentDepositPosition,
+): boolean {
+  return (
+    appointment.status === 'COMPLETED' &&
     appointment.payment === undefined &&
     position.activeDepositTotalCents > 0 &&
     position.remainingCents === 0

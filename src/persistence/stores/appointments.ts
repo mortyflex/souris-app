@@ -20,12 +20,15 @@
 
 import {
   canDeleteAppointmentPermanently,
+  canSettleCompletedAppointmentWithDeposits,
   canRemoveAppointmentItem,
+  findCheckoutDiscountDepositShortfall,
   isEditableAppointmentStatus,
   isValidPhaseDurationMinutes,
   type Appointment,
   type AppointmentCancellation,
   type AppointmentCancellationActor,
+  type AppointmentCheckoutRefusal,
   type AppointmentDiscount,
   type AppointmentItem,
   type AppointmentPayment,
@@ -35,11 +38,14 @@ import {
   type AppointmentReferences,
   type AppointmentStatus,
   type ServiceType,
+  validateCheckoutAmounts,
+  validatePaymentCorrectionAmounts,
 } from '@/domain/appointments';
 
 import { runInTransaction, type SourisDatabase } from '../database';
 import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
 import {
+  AppointmentDepositShortfallError,
   assertAppointmentDepositsCovered,
   countAppointmentDeposits,
   readAppointmentDepositPosition,
@@ -494,18 +500,53 @@ export class AppointmentCheckoutConflictError extends Error {
 }
 
 /**
- * Explicit checkout in ONE transaction: the stored row must still exist and
- * still be eligible (a completable status, or COMPLETED without payment),
- * otherwise nothing is written. Status and payment land together — never
- * COMPLETED first and the payment afterwards.
+ * The amounts do not settle what the stored Appointment allows: not the exact
+ * due of a new final payment, outside the correction range, or nothing to
+ * pay (deposits already cover everything). Nothing was written.
+ */
+export class AppointmentCheckoutAmountError extends Error {
+  constructor(
+    readonly appointmentId: string,
+    readonly refusal: AppointmentCheckoutRefusal,
+  ) {
+    super(`Appointment "${appointmentId}" refuses this payment: ${refusal}`);
+    this.name = 'AppointmentCheckoutAmountError';
+  }
+}
+
+/** The final discount chosen in the checkout sheet (`discount: undefined` removes it). */
+export interface StoredCheckoutDiscount {
+  readonly discount: AppointmentDiscount | undefined;
+}
+
+/**
+ * Explicit checkout in ONE transaction, re-verified against the STORED rows
+ * (the same pattern as a deposit), so a stale screen or another call path can
+ * never record what the domain refuses:
+ *
+ *   1. with `finalDiscount`, the discount is written first — only while the
+ *      row may still change it (open, or COMPLETED without payment) — and may
+ *      not take the expected total below the ACTIVE deposits;
+ *   2. the deposit position is re-read and the amounts must settle EXACTLY the
+ *      checkout due; deposits covering everything refuse any payment;
+ *   3. status and payment land together, only on a still eligible row (a
+ *      completable status, or COMPLETED without payment).
+ *
+ * Any refusal throws and rolls every step back.
  */
 export function checkoutAppointment(
   db: SourisDatabase,
   appointmentId: string,
   payment: AppointmentPayment,
+  finalDiscount?: StoredCheckoutDiscount,
 ): void {
   const [paidAt, cardAmountCents, cashAmountCents] = toSqlPaymentColumns(payment);
   runInTransaction(db, () => {
+    if (finalDiscount) writeCheckoutDiscount(db, appointmentId, finalDiscount.discount);
+    const position = readAppointmentDepositPosition(db, appointmentId);
+    if (!position) throw new AppointmentCheckoutConflictError(appointmentId);
+    const refusal = validateCheckoutAmounts(position, payment);
+    if (refusal) throw new AppointmentCheckoutAmountError(appointmentId, refusal);
     const result = db.runSync(
       "UPDATE appointments SET status = 'COMPLETED', paid_at = ?, card_amount_cents = ?, cash_amount_cents = ? WHERE id = ? AND (status IN ('SCHEDULED', 'CONFIRMED', 'IN_PROGRESS') OR (status = 'COMPLETED' AND paid_at IS NULL))",
       [paidAt, cardAmountCents, cashAmountCents, appointmentId],
@@ -517,9 +558,42 @@ export function checkoutAppointment(
   });
 }
 
+/** Step 1 of the checkout: THE checkout discount rule, on the stored row. */
+function writeCheckoutDiscount(
+  db: SourisDatabase,
+  appointmentId: string,
+  discount: AppointmentDiscount | undefined,
+): void {
+  const before = readAppointmentDepositPosition(db, appointmentId);
+  const stored = db.getFirstSync<{ paid_at: string | null }>(
+    'SELECT paid_at FROM appointments WHERE id = ?',
+    [appointmentId],
+  );
+  if (!before || !stored) throw new AppointmentCheckoutConflictError(appointmentId);
+  const [discountPercent, discountAmountCents] = toSqlDiscountColumns(discount);
+  const result = db.runSync(
+    "UPDATE appointments SET discount_percent = ?, discount_amount_cents = ? WHERE id = ? AND (status IN ('SCHEDULED', 'CONFIRMED', 'IN_PROGRESS') OR (status = 'COMPLETED' AND paid_at IS NULL))",
+    [discountPercent, discountAmountCents, appointmentId],
+  );
+  if (result.changes !== 1) throw new AppointmentDiscountConflictError(appointmentId);
+  const after = readAppointmentDepositPosition(db, appointmentId);
+  if (!after) throw new AppointmentCheckoutConflictError(appointmentId);
+  const shortfall = findCheckoutDiscountDepositShortfall({
+    status: before.status,
+    hasPayment: stored.paid_at !== null,
+    previousExpectedTotalCents: before.expectedTotalCents,
+    nextExpectedTotalCents: after.expectedTotalCents,
+    activeDepositTotalCents: after.activeDepositTotalCents,
+  });
+  if (shortfall) throw new AppointmentDepositShortfallError(appointmentId, shortfall);
+}
+
 /**
  * Payment correction: only the card/cash split of an already recorded
  * payment changes. `paid_at` and the status are preserved by construction.
+ * The new total is re-verified against the stored position and the stored
+ * payment: within [min(due, recorded), max(due, recorded)] — exactly the due
+ * for every payment recorded under the exact rule.
  */
 export function updateAppointmentPayment(
   db: SourisDatabase,
@@ -529,6 +603,21 @@ export function updateAppointmentPayment(
   const cardAmountCents = assertAmountCents(amounts.cardAmountCents, 'card_amount_cents');
   const cashAmountCents = assertAmountCents(amounts.cashAmountCents, 'cash_amount_cents');
   runInTransaction(db, () => {
+    const stored = db.getFirstSync<{
+      status: AppointmentStatus;
+      paid_at: string | null;
+      card_amount_cents: number | null;
+      cash_amount_cents: number | null;
+    }>('SELECT status, paid_at, card_amount_cents, cash_amount_cents FROM appointments WHERE id = ?', [
+      appointmentId,
+    ]);
+    const recorded = stored ? fromSqlPaymentColumns(stored) : undefined;
+    const position = readAppointmentDepositPosition(db, appointmentId);
+    if (!stored || stored.status !== 'COMPLETED' || !recorded || !position) {
+      throw new AppointmentCheckoutConflictError(appointmentId);
+    }
+    const refusal = validatePaymentCorrectionAmounts(position, recorded, { cardAmountCents, cashAmountCents });
+    if (refusal) throw new AppointmentCheckoutAmountError(appointmentId, refusal);
     const result = db.runSync(
       "UPDATE appointments SET card_amount_cents = ?, cash_amount_cents = ? WHERE id = ? AND status = 'COMPLETED' AND paid_at IS NOT NULL",
       [cardAmountCents, cashAmountCents, appointmentId],
@@ -563,6 +652,38 @@ export function completePrepaidAppointment(
       [appointmentId, toSqlInstant(now)],
     );
     if (result.changes !== 1) {
+      throw new AppointmentCheckoutConflictError(appointmentId);
+    }
+    markAggregateUpserted(db, 'APPOINTMENT', appointmentId);
+  });
+}
+
+/**
+ * A COMPLETED Appointment without payment, settled by its deposits once the
+ * checkout discount is applied — in ONE transaction: the discount goes through
+ * THE checkout discount write (eligibility on the stored row, never below the
+ * deposits), then the stored position must show the ACTIVE deposits covering
+ * the whole expected total. Only the discount is written: NO payment, no
+ * `paid_at`, no amounts; the status stays COMPLETED. Any refusal rolls back.
+ */
+export function settleCompletedAppointmentWithDeposits(
+  db: SourisDatabase,
+  appointmentId: string,
+  finalDiscount: StoredCheckoutDiscount,
+): void {
+  runInTransaction(db, () => {
+    writeCheckoutDiscount(db, appointmentId, finalDiscount.discount);
+    const position = readAppointmentDepositPosition(db, appointmentId);
+    const stored = db.getFirstSync<{ paid_at: string | null }>(
+      'SELECT paid_at FROM appointments WHERE id = ?',
+      [appointmentId],
+    );
+    if (
+      !position ||
+      !stored ||
+      stored.paid_at !== null ||
+      !canSettleCompletedAppointmentWithDeposits({ status: position.status }, position)
+    ) {
       throw new AppointmentCheckoutConflictError(appointmentId);
     }
     markAggregateUpserted(db, 'APPOINTMENT', appointmentId);

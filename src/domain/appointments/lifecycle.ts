@@ -39,7 +39,8 @@ function localDayOrdinal(date: Date): number {
   return date.getFullYear() * 10_000 + (date.getMonth() + 1) * 100 + date.getDate();
 }
 
-function isPreviousLocalDay(candidate: Date, reference: Date): boolean {
+/** Whether `candidate` falls on a local civil day BEFORE the day of `reference`. */
+export function isPreviousLocalDay(candidate: Date, reference: Date): boolean {
   return localDayOrdinal(candidate) < localDayOrdinal(reference);
 }
 

@@ -10,11 +10,16 @@
 // checkout sheet does. The payment is the final checkout only: deposits are
 // listed in their own section and never counted here twice. The payment itself is never rewritten
 // here; « Modifier l’encaissement » remains the correction.
+//
+// When the money was received on another local day than the Appointment's
+// (a checkout recorded later, dated « Aujourd’hui »), one quiet line names
+// that day — « Encaissé le 28 septembre 2026 » — the day the Caisse counts it.
 
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
 
 import { getPaymentTotalCents, type AppointmentPayment } from '@/domain/appointments';
+import { getCashRegisterDayKey } from '@/domain/cash-register';
 import {
   paymentMethodIcons,
   paymentMethodLabels,
@@ -29,12 +34,21 @@ interface AppointmentPaymentSummaryProps {
   readonly payment: AppointmentPayment;
   /** What the final checkout was expected to collect (domain remaining amount); « Écart » only when it differs. */
   readonly dueCents: number;
+  /** The Appointment start: « Encaissé le » appears only when the payment day differs. */
+  readonly appointmentStartAt: Date;
   readonly onEdit: () => void;
 }
+
+const paymentDayFormatter = new Intl.DateTimeFormat('fr-FR', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
 
 export function AppointmentPaymentSummary({
   payment,
   dueCents,
+  appointmentStartAt,
   onEdit,
 }: AppointmentPaymentSummaryProps) {
   const total = getPaymentTotalCents(payment);
@@ -53,6 +67,11 @@ export function AppointmentPaymentSummary({
       <AppText variant="summaryValue" selectable style={styles.total} testID="appointment-payment-total">
         {formatEuroCents(total)}
       </AppText>
+      {getCashRegisterDayKey(payment.paidAt) !== getCashRegisterDayKey(appointmentStartAt) && (
+        <AppText variant="metadata" style={styles.paymentDay} testID="appointment-payment-day">
+          Encaissé le {paymentDayFormatter.format(payment.paidAt)}
+        </AppText>
+      )}
       {methods.length > 0 && (
         <View style={styles.methods}>
           {methods.map(({ method, cents }) => (
@@ -100,6 +119,7 @@ const styles = StyleSheet.create({
   methodRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, minHeight: 28 },
   methodLabel: { color: foregroundSoft, flex: 1 },
   methodValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  paymentDay: { color: foregroundSoft },
   difference: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginTop: spacing.xs },
   editAction: { alignSelf: 'flex-start', marginLeft: -spacing.md, marginTop: spacing.xs },
 });

@@ -30,7 +30,17 @@
 //   deposits) — the notice explains why, the entries stay editable;
 // - when nothing is due and nothing is typed, `zeroBalanceConfirmTitle`
 //   names the action (« Terminer le rendez-vous »): the caller completes
-//   without inventing a payment.
+//   without inventing a payment;
+// - `allocation` (the Appointment final checkout and its correction) replaces
+//   the standalone-Sale tolerance with THE domain bounds: confirmation needs a
+//   total inside them; below → « Reste à répartir : 35,00 € », above → « Le
+//   montant dépasse le reste à encaisser. » — the typed value is never capped.
+//   The amounts then have owners (checkout-form `CheckoutSplit`): a typed
+//   amount is `manual` and never rewritten, the other one stays `auto` and
+//   follows the target, including when a discount draft moves it. Without
+//   `allocation` (the standalone Sale) nothing of this applies;
+// - a caller may add ONE control under the amounts (`paymentDate`: the
+//   Appointment « Encaissé le » choice).
 
 import { SymbolView } from 'expo-symbols';
 import { useId, useState, type ReactNode } from 'react';
@@ -59,9 +69,15 @@ import {
 } from '@/shared/ui/theme';
 
 import {
+  createCheckoutSplit,
   deriveCheckoutFormState,
+  editCheckoutSplit,
+  fillCheckoutSplitRemainder,
   getRemainingExpectedCents,
+  retargetCheckoutSplit,
+  type CheckoutAllocation,
   type CheckoutAmounts,
+  type CheckoutSplit,
 } from './checkout-form';
 
 /** One line of the expectation block (« Prestations », « Produits », « Total vente »). */
@@ -92,13 +108,15 @@ interface CheckoutSheetProps {
   readonly settlement?: { readonly depositsCents: number; readonly dueCents: number };
   /** Shown under the expectation block; while present, confirmation is disabled. */
   readonly blockingNotice?: ReactNode;
+  /** Informative line under the expectation block; never blocks confirmation. */
+  readonly note?: ReactNode;
   /** Confirm label when nothing is due and nothing is typed (no payment will be recorded). */
   readonly zeroBalanceConfirmTitle?: string;
+  /** The Appointment amount rule (exact due, or a correction range); absent = the Sale tolerance. */
+  readonly allocation?: CheckoutAllocation;
+  /** Control shown under the amounts (the Appointment « Encaissé le » choice). */
+  readonly paymentDate?: ReactNode;
   readonly testID?: string;
-}
-
-function initialText(cents: number | undefined): string {
-  return cents === undefined || cents === 0 ? '' : formatCentsAsInput(cents);
 }
 
 export function CheckoutSheet({
@@ -113,11 +131,15 @@ export function CheckoutSheet({
   adjustment,
   settlement,
   blockingNotice,
+  note,
   zeroBalanceConfirmTitle,
+  allocation,
+  paymentDate,
   testID = 'checkout-sheet',
 }: CheckoutSheetProps) {
-  const [cardText, setCardText] = useState(() => initialText(initialAmounts?.cardAmountCents));
-  const [cashText, setCashText] = useState(() => initialText(initialAmounts?.cashAmountCents));
+  const [split, setSplit] = useState<CheckoutSplit>(() => createCheckoutSplit(initialAmounts));
+  const targetCents = allocation?.targetCents;
+  const [presentedTarget, setPresentedTarget] = useState(targetCents);
   // Every presentation starts from the recorded values (edit) or empty
   // entries (checkout); a previous draft never leaks into the next one.
   // Derived during render (not in an effect) so the first visible frame
@@ -126,14 +148,34 @@ export function CheckoutSheet({
   if (visible !== presentedVisible) {
     setPresentedVisible(visible);
     if (visible) {
-      setCardText(initialText(initialAmounts?.cardAmountCents));
-      setCashText(initialText(initialAmounts?.cashAmountCents));
+      setSplit(createCheckoutSplit(initialAmounts));
+      setPresentedTarget(targetCents);
     }
+  } else if (targetCents !== presentedTarget) {
+    // The target moved (a discount draft): `auto` amounts follow it.
+    setPresentedTarget(targetCents);
+    if (targetCents !== undefined) setSplit(retargetCheckoutSplit(split, targetCents));
   }
+  const cardText = split.CARD.text;
+  const cashText = split.CASH.text;
 
   // What the entries are measured against: the amount still due.
   const dueCents = settlement ? settlement.dueCents : expectedTotalCents;
-  const state = deriveCheckoutFormState(dueCents, { cardText, cashText });
+  const state = deriveCheckoutFormState(dueCents, { cardText, cashText }, allocation);
+  // The amount the « Reste » shortcuts aim for.
+  const shortcutTargetCents = allocation ? allocation.targetCents : dueCents;
+  const changeAmount = (method: PaymentMethod) => (text: string) =>
+    setSplit((current) =>
+      allocation
+        ? editCheckoutSplit(current, method, text, allocation.targetCents)
+        : { ...current, [method]: { ...current[method], text } },
+    );
+  const fillRemainder = (method: PaymentMethod) => (text: string) =>
+    setSplit((current) =>
+      allocation
+        ? fillCheckoutSplitRemainder(current, method, allocation.targetCents)
+        : { ...current, [method]: { ...current[method], text } },
+    );
   const blocked = blockingNotice !== undefined && blockingNotice !== null && blockingNotice !== false;
   const canConfirm = state.canSubmit && !blocked;
   const confirmLabel =
@@ -228,20 +270,23 @@ export function CheckoutSheet({
           )}
         </View>
         {blockingNotice}
+        {note}
 
         <View style={styles.methods}>
           <PaymentMethodField
             error={state.cardError}
             method="CARD"
-            onChangeText={setCardText}
-            remainingCents={getRemainingExpectedCents(dueCents, state.cashCents)}
+            onChangeText={changeAmount('CARD')}
+            onFillRemaining={fillRemainder('CARD')}
+            remainingCents={getRemainingExpectedCents(shortcutTargetCents, state.cashCents)}
             value={cardText}
           />
           <PaymentMethodField
             error={state.cashError}
             method="CASH"
-            onChangeText={setCashText}
-            remainingCents={getRemainingExpectedCents(dueCents, state.cardCents)}
+            onChangeText={changeAmount('CASH')}
+            onFillRemaining={fillRemainder('CASH')}
+            remainingCents={getRemainingExpectedCents(shortcutTargetCents, state.cardCents)}
             value={cashText}
           />
         </View>
@@ -255,12 +300,34 @@ export function CheckoutSheet({
               {state.enteredTotalCents === undefined ? '—' : formatEuroCents(state.enteredTotalCents)}
             </AppText>
           </View>
-          {state.differenceCents !== undefined && state.differenceCents !== 0 && (
+          {!allocation && state.differenceCents !== undefined && state.differenceCents !== 0 && (
             <AppText variant="metadata" style={styles.difference} testID="checkout-difference">
               Écart : {formatSignedEuroCents(state.differenceCents)}
             </AppText>
           )}
+          {state.unallocatedCents !== undefined && (state.enteredTotalCents ?? 0) > 0 && (
+            <AppText
+              accessibilityLiveRegion="polite"
+              variant="metadata"
+              style={styles.difference}
+              testID="checkout-unallocated"
+            >
+              Reste à répartir : {formatEuroCents(state.unallocatedCents)}
+            </AppText>
+          )}
+          {state.exceedsAllocation && (
+            <AppText
+              accessibilityLiveRegion="polite"
+              accessibilityRole="alert"
+              variant="metadata"
+              style={styles.allocationError}
+              testID="checkout-exceeds"
+            >
+              Le montant dépasse le reste à encaisser.
+            </AppText>
+          )}
         </View>
+        {paymentDate}
       </View>
     </BottomSheet>
   );
@@ -294,6 +361,8 @@ interface PaymentMethodFieldProps {
   readonly error: string | undefined;
   /** Remaining expected amount the professional may fill in with one tap. */
   readonly remainingCents: number;
+  /** The « Reste » tap; receives the remaining amount as text. */
+  readonly onFillRemaining: (text: string) => void;
 }
 
 function PaymentMethodField({
@@ -302,6 +371,7 @@ function PaymentMethodField({
   onChangeText,
   error,
   remainingCents,
+  onFillRemaining,
 }: PaymentMethodFieldProps) {
   const [focused, setFocused] = useState(false);
   // iOS binds one accessory view to ONE text input, once, when it mounts
@@ -336,7 +406,7 @@ function PaymentMethodField({
               accessibilityLabel={`Saisir le reste en ${label.toLowerCase()}, ${formatEuroCents(remainingCents)}`}
               accessibilityRole="button"
               hitSlop={spacing.xs}
-              onPress={() => onChangeText(formatCentsAsInput(remainingCents))}
+              onPress={() => onFillRemaining(formatCentsAsInput(remainingCents))}
               style={({ pressed }) => [styles.remaining, pressed && styles.remainingPressed]}
               testID={`checkout-fill-${key}`}
             >
@@ -442,4 +512,5 @@ const styles = StyleSheet.create({
   enteredLabel: { color: semanticColors.foreground },
   enteredValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   difference: { color: foregroundSoft, fontVariant: ['tabular-nums'], textAlign: 'right' },
+  allocationError: { color: rose.rose600, textAlign: 'right' },
 });

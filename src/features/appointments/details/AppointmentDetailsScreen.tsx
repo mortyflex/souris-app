@@ -31,6 +31,7 @@ import {
   type AppointmentDepositShortfall,
   type AppointmentDiscount,
   type AppointmentPaymentAmounts,
+  type AppointmentPaymentDate,
   type AppointmentPhaseDurationUpdate,
   type AppointmentProductLine,
 } from "@/domain/appointments";
@@ -370,16 +371,18 @@ export function AppointmentDetailsScreen({
     });
   };
 
-  // Checkout records the payment together with the FINAL discount chosen in
-  // the sheet (one transaction); a payment correction never touches it.
+  // Checkout records the payment together with the FINAL discount and the
+  // « Encaissé le » choice made in the sheet (one transaction); a payment
+  // correction never touches either.
   const confirmCheckout = (
     amounts: AppointmentPaymentAmounts,
     discount: AppointmentDiscount | undefined,
+    paymentDate: AppointmentPaymentDate,
   ) => {
     const succeeded = persist(() =>
       checkoutMode === "edit"
         ? updateAppointmentPayment(appointment.id, amounts)
-        : checkoutAppointment(appointment.id, amounts, { discount }),
+        : checkoutAppointment(appointment.id, amounts, { discount }, paymentDate),
     );
     if (!succeeded) return;
     setCheckoutMode(undefined);
@@ -682,6 +685,7 @@ export function AppointmentDetailsScreen({
 
         {canEditPayment && appointment.payment && (
           <AppointmentPaymentSummary
+            appointmentStartAt={appointment.startAt}
             dueCents={depositPosition.remainingCents}
             onEdit={() => setCheckoutMode("edit")}
             payment={appointment.payment}
