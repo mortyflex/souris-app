@@ -107,11 +107,16 @@ export type Database = {
         Returns: Json;
       };
       communications_update_lifecycle_sms_preferences: {
-        /** The numeric knobs are optional server-side; V1 sends the switches only. */
+        /** The numeric knobs are optional (`default null`): an omitted one keeps its stored value. */
         Args: {
           p_business_id: string;
           p_birthday_sms_enabled: boolean;
           p_winback_sms_enabled: boolean;
+          p_birthday_discount_percent?: number;
+          p_birthday_validity_days?: number;
+          p_winback_after_days?: number;
+          p_winback_discount_percent?: number;
+          p_winback_validity_days?: number;
         };
         Returns: Json;
       };

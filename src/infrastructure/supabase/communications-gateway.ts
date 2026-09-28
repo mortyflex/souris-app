@@ -168,12 +168,27 @@ export function createSupabaseCommunicationsGateway(
       businessId,
       preferences,
     ): Promise<UpdateLifecycleSmsPreferencesResult> {
-      // V1 only edits the two switches; the numeric knobs keep their stored
-      // values (the RPC's optional parameters are simply not sent).
+      // The switches are always sent; a numeric knob only when the caller
+      // supplies it — an omitted optional parameter keeps the stored value.
       const { data, error } = await client.rpc('communications_update_lifecycle_sms_preferences', {
         p_business_id: businessId,
         p_birthday_sms_enabled: preferences.birthdaySmsEnabled,
         p_winback_sms_enabled: preferences.winbackSmsEnabled,
+        ...(preferences.birthdayDiscountPercent !== undefined
+          ? { p_birthday_discount_percent: preferences.birthdayDiscountPercent }
+          : {}),
+        ...(preferences.birthdayValidityDays !== undefined
+          ? { p_birthday_validity_days: preferences.birthdayValidityDays }
+          : {}),
+        ...(preferences.winbackAfterDays !== undefined
+          ? { p_winback_after_days: preferences.winbackAfterDays }
+          : {}),
+        ...(preferences.winbackDiscountPercent !== undefined
+          ? { p_winback_discount_percent: preferences.winbackDiscountPercent }
+          : {}),
+        ...(preferences.winbackValidityDays !== undefined
+          ? { p_winback_validity_days: preferences.winbackValidityDays }
+          : {}),
       });
       if (error) throw mapCommunicationsPostgrestError(error);
       const row = asObject(data);

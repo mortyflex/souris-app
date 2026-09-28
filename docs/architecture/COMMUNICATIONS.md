@@ -1013,9 +1013,17 @@ an SMS, and the Twilio Trial recipient remains developer-only.**
 ## 43. The app surfaces
 
 - **Plus › SMS fidélisation** (`/lifecycle-sms-settings`,
-  `LifecycleSmsSettingsScreen`) — two switches (Anniversaires, Clientes inactives) over the
-  read-only V1 knobs, separate from « Rappels clientes » (EMAIL). Server-persisted before the
-  UI claims anything; fail-safe disabled when the server cannot answer. **Exposure strategy
+  `LifecycleSmsSettingsScreen`) — two switches (Anniversaires, Clientes inactives) and their
+  numeric knobs as [ − ] value [ + ] steppers, separate from « Rappels clientes » (EMAIL).
+  UI ranges, narrower than the server CHECKs (which stay the final validation): discount
+  5–50 % by 5, offer validity 1–30 days by 1, win-back inactivity 30–365 days by 15. A switch
+  is server-persisted before the UI claims it; a step shows at once, sends ONLY its knob (the
+  RPC's optional parameters — an omitted one keeps its stored value), and rolls back to the
+  last confirmed value on failure or INVALID_VALUE (« Cette valeur n’est pas autorisée. »).
+  One write at a time. Changing a knob enqueues nothing and never rewrites already queued
+  offers (their payload snapshots the discount and validity); only the daily reconciliation
+  uses the new values. No app-side defaults: until a read succeeds, the steppers show a dash
+  and every control is disabled (fail-safe). **Exposure strategy
   (fail-safe): the app cannot know the server transport capability, so the Plus entry is
   compiled for DEVELOPMENT builds only (`__DEV__`) until the controlled deployment step —
   production users cannot reach the screen, and server-side both automations default OFF for

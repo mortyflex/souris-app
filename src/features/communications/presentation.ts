@@ -22,8 +22,37 @@ export const LIFECYCLE_SMS_SETTINGS_TITLE = 'SMS fidélisation';
 export const LIFECYCLE_BIRTHDAY_TOGGLE_LABEL = 'Anniversaires';
 export const LIFECYCLE_WINBACK_TOGGLE_LABEL = 'Clientes inactives';
 export const LIFECYCLE_DISCOUNT_LABEL = 'Réduction';
-export const LIFECYCLE_VALIDITY_LABEL = 'Valable';
-export const LIFECYCLE_AFTER_LABEL = 'Après';
+export const LIFECYCLE_VALIDITY_LABEL = 'Offre valable';
+export const LIFECYCLE_AFTER_LABEL = 'Cliente inactive depuis';
+/** The server refused a knob value (INVALID_VALUE) — never RPC wording. */
+export const LIFECYCLE_INVALID_VALUE = 'Cette valeur n’est pas autorisée.';
+/** Offline before any successful read: nothing is « dernier connu ». */
+export const LIFECYCLE_UNAVAILABLE_NOTICE =
+  'Connexion indisponible : les réglages n’ont pas pu être chargés.';
+
+/** The spoken [ − ] / [ + ] actions of the SMS fidélisation steppers. */
+export const LIFECYCLE_STEPPER_LABELS = {
+  birthdayDiscount: {
+    decrement: 'Diminuer la réduction anniversaire',
+    increment: 'Augmenter la réduction anniversaire',
+  },
+  birthdayValidity: {
+    decrement: 'Diminuer la durée de validité anniversaire',
+    increment: 'Augmenter la durée de validité anniversaire',
+  },
+  winbackAfter: {
+    decrement: 'Diminuer le délai d’inactivité',
+    increment: 'Augmenter le délai d’inactivité',
+  },
+  winbackDiscount: {
+    decrement: 'Diminuer la réduction clientes inactives',
+    increment: 'Augmenter la réduction clientes inactives',
+  },
+  winbackValidity: {
+    decrement: 'Diminuer la durée de validité clientes inactives',
+    increment: 'Augmenter la durée de validité clientes inactives',
+  },
+} as const;
 
 /** `15` → `15 %` (the French spaced percent). */
 export function formatLifecyclePercent(percent: number): string {

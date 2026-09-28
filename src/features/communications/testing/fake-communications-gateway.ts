@@ -3,7 +3,8 @@
 // The server contract of the three Lot B owner RPCs, deterministic and
 // offline: a per-Business preference row (disabled by default, like the
 // server), the INVALID_REPLY_TO refusal, scriptable failures, and scriptable
-// appointment reminder statuses.
+// appointment reminder statuses; the lifecycle SMS preferences merge only
+// the supplied numeric knobs, like the server RPC.
 
 import { isUsableCommunicationEmail } from '@/domain/communications';
 
@@ -41,6 +42,8 @@ export interface FakeCommunicationsGateway extends CommunicationsGateway {
   readonly lifecycleUpdates: { businessId: string; preferences: LifecycleSmsPreferences }[];
   /** Makes the NEXT call fail with the given code. */
   failNext(code: CommunicationsGatewayFailureCode): void;
+  /** Makes the NEXT lifecycle update answer the server's INVALID_VALUE refusal. */
+  refuseNextLifecycleUpdate(): void;
   /** Scripts the projection answer of one appointment. */
   setReminderStatus(appointmentId: string, status: AppointmentReminderStatus): void;
   /** Seeds the stored preference of a Business. */
@@ -57,6 +60,7 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
   const updates: { businessId: string; preferences: CommunicationPreferences }[] = [];
   const lifecycleUpdates: { businessId: string; preferences: LifecycleSmsPreferences }[] = [];
   let nextFailure: CommunicationsGatewayFailureCode | undefined;
+  let refusingLifecycleUpdate = false;
 
   const takeFailure = () => {
     if (nextFailure === undefined) return;
@@ -71,6 +75,9 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
     lifecycleUpdates,
     failNext(code) {
       nextFailure = code;
+    },
+    refuseNextLifecycleUpdate() {
+      refusingLifecycleUpdate = true;
     },
     setReminderStatus(appointmentId, status) {
       statusByAppointment.set(appointmentId, status);
@@ -120,11 +127,21 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
     async updateLifecycleSmsPreferences(businessId, next) {
       calls.updateLifecycle += 1;
       takeFailure();
-      // Like the server: the switches change, the numeric knobs stay stored.
+      if (refusingLifecycleUpdate) {
+        refusingLifecycleUpdate = false;
+        return { status: 'INVALID_VALUE' };
+      }
+      // Like the server: the switches change, an omitted numeric knob stays
+      // stored (NULL keeps the stored value).
+      const stored = lifecycleByBusiness.get(businessId) ?? DEFAULT_LIFECYCLE_SMS_PREFERENCES;
       const preferences: LifecycleSmsPreferences = {
-        ...(lifecycleByBusiness.get(businessId) ?? DEFAULT_LIFECYCLE_SMS_PREFERENCES),
         birthdaySmsEnabled: next.birthdaySmsEnabled,
+        birthdayDiscountPercent: next.birthdayDiscountPercent ?? stored.birthdayDiscountPercent,
+        birthdayValidityDays: next.birthdayValidityDays ?? stored.birthdayValidityDays,
         winbackSmsEnabled: next.winbackSmsEnabled,
+        winbackAfterDays: next.winbackAfterDays ?? stored.winbackAfterDays,
+        winbackDiscountPercent: next.winbackDiscountPercent ?? stored.winbackDiscountPercent,
+        winbackValidityDays: next.winbackValidityDays ?? stored.winbackValidityDays,
       };
       lifecycleByBusiness.set(businessId, preferences);
       lifecycleUpdates.push({ businessId, preferences });

@@ -201,7 +201,7 @@ describe('lifecycle SMS preferences (SMS pivot Phase 2)', () => {
     ).rejects.toThrow(CommunicationsGatewayError);
   });
 
-  it('updates the two switches only and returns the accepted state', async () => {
+  it('sends the two switches alone when no knob is supplied', async () => {
     const { client, calls } = createRpcMock({
       communications_update_lifecycle_sms_preferences: {
         data: { status: 'UPDATED', ...SERVER_DEFAULTS, birthday_sms_enabled: true },
@@ -213,7 +213,7 @@ describe('lifecycle SMS preferences (SMS pivot Phase 2)', () => {
       winbackSmsEnabled: false,
     });
 
-    // V1 never edits the numeric knobs: they are simply not sent.
+    // An omitted knob is not sent: the server keeps its stored value.
     expect(calls[0]).toEqual({
       fn: 'communications_update_lifecycle_sms_preferences',
       args: { p_business_id: 'biz-1', p_birthday_sms_enabled: true, p_winback_sms_enabled: false },
@@ -225,6 +225,82 @@ describe('lifecycle SMS preferences (SMS pivot Phase 2)', () => {
     }
   });
 
+  it.each([
+    ['birthdayDiscountPercent', 20, 'p_birthday_discount_percent'],
+    ['birthdayValidityDays', 10, 'p_birthday_validity_days'],
+    ['winbackAfterDays', 90, 'p_winback_after_days'],
+    ['winbackDiscountPercent', 25, 'p_winback_discount_percent'],
+    ['winbackValidityDays', 14, 'p_winback_validity_days'],
+  ] as const)('maps %s alone to %s', async (knob, value, parameter) => {
+    const { client, calls } = createRpcMock({
+      communications_update_lifecycle_sms_preferences: {
+        data: { status: 'UPDATED', ...SERVER_DEFAULTS },
+      },
+    });
+
+    await createSupabaseCommunicationsGateway(client).updateLifecycleSmsPreferences('biz-1', {
+      birthdaySmsEnabled: false,
+      winbackSmsEnabled: true,
+      [knob]: value,
+    });
+
+    expect(calls[0]?.args).toEqual({
+      p_business_id: 'biz-1',
+      p_birthday_sms_enabled: false,
+      p_winback_sms_enabled: true,
+      [parameter]: value,
+    });
+  });
+
+  it('maps every supplied knob and returns the stored values', async () => {
+    const { client, calls } = createRpcMock({
+      communications_update_lifecycle_sms_preferences: {
+        data: {
+          status: 'UPDATED',
+          ...SERVER_DEFAULTS,
+          birthday_discount_percent: 20,
+          birthday_validity_days: 10,
+          winback_after_days: 90,
+          winback_discount_percent: 25,
+          winback_validity_days: 14,
+        },
+      },
+    });
+
+    const result = await createSupabaseCommunicationsGateway(client).updateLifecycleSmsPreferences('biz-1', {
+      birthdaySmsEnabled: false,
+      winbackSmsEnabled: false,
+      birthdayDiscountPercent: 20,
+      birthdayValidityDays: 10,
+      winbackAfterDays: 90,
+      winbackDiscountPercent: 25,
+      winbackValidityDays: 14,
+    });
+
+    expect(calls[0]?.args).toEqual({
+      p_business_id: 'biz-1',
+      p_birthday_sms_enabled: false,
+      p_winback_sms_enabled: false,
+      p_birthday_discount_percent: 20,
+      p_birthday_validity_days: 10,
+      p_winback_after_days: 90,
+      p_winback_discount_percent: 25,
+      p_winback_validity_days: 14,
+    });
+    expect(result).toEqual({
+      status: 'UPDATED',
+      preferences: {
+        birthdaySmsEnabled: false,
+        birthdayDiscountPercent: 20,
+        birthdayValidityDays: 10,
+        winbackSmsEnabled: false,
+        winbackAfterDays: 90,
+        winbackDiscountPercent: 25,
+        winbackValidityDays: 14,
+      },
+    });
+  });
+
   it('maps the INVALID_VALUE refusal', async () => {
     const { client } = createRpcMock({
       communications_update_lifecycle_sms_preferences: { data: { status: 'INVALID_VALUE' } },
@@ -232,6 +308,7 @@ describe('lifecycle SMS preferences (SMS pivot Phase 2)', () => {
     const result = await createSupabaseCommunicationsGateway(client).updateLifecycleSmsPreferences('biz-1', {
       birthdaySmsEnabled: true,
       winbackSmsEnabled: true,
+      birthdayDiscountPercent: 101,
     });
     expect(result).toEqual({ status: 'INVALID_VALUE' });
   });
