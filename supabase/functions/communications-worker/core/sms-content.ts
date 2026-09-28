@@ -4,7 +4,7 @@
 // supports EXACTLY the two client lifecycle kinds:
 //
 //   CLIENT_BIRTHDAY_OFFER      « Joyeux anniversaire {prénom} ! … »
-//   INACTIVE_CLIENT_FOLLOWUP   « Bonjour {prénom}, ça fait un moment ! … »
+//   INACTIVE_CLIENT_FOLLOWUP   « Bonjour {prénom}, ça fait longtemps ! … »
 //
 // Appointment SMS kinds have NO content: appointment reminders are
 // permanently EMAIL-only (SMS pivot Phase 1), so any other kind returns
@@ -176,7 +176,7 @@ export function renderSmsContent(communication: OutgoingCommunication): string |
             : `Joyeux anniversaire ${first} ! ${business} ${offer}`
       : (first, business) =>
           first === undefined
-            ? `Bonjour, ça fait un moment ! ${business} ${offer}`
-            : `Bonjour ${first}, ça fait un moment ! ${business} ${offer}`;
+            ? `Bonjour, ça fait longtemps ! ${business} ${offer}`
+            : `Bonjour ${first}, ça fait longtemps ! ${business} ${offer}`;
   return fitLifecycleSmsBody(compose, payload.clientFirstName, payload.businessName);
 }

@@ -51,7 +51,7 @@ describe('the V1 lifecycle copy', () => {
         }),
       ),
     ).toBe(
-      "Bonjour Léa, ça fait un moment ! Salon Amélie vous offre -10% sur votre prochaine prestation, valable jusqu'au 04/10/2026.",
+      "Bonjour Léa, ça fait longtemps ! Salon Amélie vous offre -10% sur votre prochaine prestation, valable jusqu'au 04/10/2026.",
     );
   });
 
@@ -74,7 +74,7 @@ describe('the V1 lifecycle copy', () => {
         }),
       ),
     ).toBe(
-      "Bonjour, ça fait un moment ! Salon Amélie vous offre -15% sur votre prochaine prestation, valable jusqu'au 04/10/2026.",
+      "Bonjour, ça fait longtemps ! Salon Amélie vous offre -15% sur votre prochaine prestation, valable jusqu'au 04/10/2026.",
     );
   });
 

@@ -988,11 +988,11 @@ no provider request). Fixed V1 French copy, no emoji, no link, no STOP text yet:
 ```text
 Joyeux anniversaire {prénom} ! {salon} vous offre -{d}% sur votre prochaine prestation,
 valable jusqu'au {date}.
-Bonjour {prénom}, ça fait un moment ! {salon} vous offre -{d}% sur votre prochaine
+Bonjour {prénom}, ça fait longtemps ! {salon} vous offre -{d}% sur votre prochaine
 prestation, valable jusqu'au {date}.
 ```
 
-Each with a no-name fallback (« Joyeux anniversaire ! … », « Bonjour, ça fait un moment !
+Each with a no-name fallback (« Joyeux anniversaire ! … », « Bonjour, ça fait longtemps !
 … »). `valid_until` is formatted `DD/MM/YYYY` as pure text — a civil date, never converted
 through a Date or a timezone. Target ≤ 160 characters; 200 is the deterministic HARD ceiling:
 overflow compacts PRESENTATION text only (business name first, then first name, then the
