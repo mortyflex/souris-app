@@ -104,6 +104,8 @@ export function ClientFormSheet({
     <BottomSheet
       backdropLabel="Fermer la fiche client"
       dismissOnPanDown={false}
+      // Glass Sheet Pilot (DESIGN_OVERRIDES.md §40), experimental.
+      material="glass"
       footer={
         <SheetActionBar testID="client-form-actions">
           <AppButton

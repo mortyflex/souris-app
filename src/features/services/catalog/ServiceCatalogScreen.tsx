@@ -148,6 +148,7 @@ export function ServiceCatalogScreen() {
               accessibilityLabel="Rechercher une prestation"
               onChangeText={setQuery}
               placeholder="Rechercher une prestation"
+              placement="page"
               value={query}
             />
           </View>

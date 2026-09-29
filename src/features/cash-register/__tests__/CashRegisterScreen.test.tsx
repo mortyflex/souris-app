@@ -15,7 +15,7 @@ import { formatEuroCents } from '@/shared/lib/money';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { glassIconButtonSize } from '@/shared/ui/GlassIconButton';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
-import { calendarIntensity, watermark as watermarkTheme } from '@/shared/ui/theme';
+import { calendarIntensity, semanticColors, watermark as watermarkTheme } from '@/shared/ui/theme';
 
 import { CashRegisterScreen } from '../CashRegisterScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -295,6 +295,20 @@ describe('CashRegisterScreen', () => {
     ]);
     expect(within(view.getByTestId('cash-register-entry-agenda-elodie')).getByText('28 août')).toBeTruthy();
     expect(totals(view)).toMatchObject({ total: formatEuroCents(18700), count: '3 encaissements' });
+  });
+
+  it('sits on the app background with white total and empty cards (surface hierarchy)', async () => {
+    const view = await renderCashRegister();
+
+    expect(StyleSheet.flatten(view.getByTestId('cash-register-screen').props.style).backgroundColor).toBe(
+      semanticColors.screen,
+    );
+    expect(StyleSheet.flatten(view.getByTestId('cash-register-total-card').props.style).backgroundColor).toBe(
+      semanticColors.surfaceElevated,
+    );
+    expect(StyleSheet.flatten(view.getByTestId('cash-register-empty').props.style).backgroundColor).toBe(
+      semanticColors.surfaceElevated,
+    );
   });
 
   it('carries the decorative cash-register watermark, hidden from accessibility and touches', async () => {

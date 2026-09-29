@@ -211,6 +211,14 @@ describe('AgendaScreen — day navigation', () => {
     expect(view.getByRole('button', { name: 'Jour suivant' })).toBeTruthy();
   });
 
+  it('paints the Agenda on the white operational canvas, not the app background', async () => {
+    const view = await renderAgenda();
+
+    const background = StyleSheet.flatten(view.getByTestId('agenda-screen').props.style).backgroundColor;
+    expect(background).toBe(semanticColors.canvas);
+    expect(background).not.toBe(semanticColors.screen);
+  });
+
   it('groups previous, date, calendar and next into ONE period surface, like Caisse', async () => {
     const view = await renderAgenda();
 

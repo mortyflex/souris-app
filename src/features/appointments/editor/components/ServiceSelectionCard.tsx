@@ -86,7 +86,7 @@ export function ServiceSelectionCard({
           <SymbolView
             name={{ ios: 'checkmark', android: 'check' }}
             size={11}
-            tintColor={semanticColors.surfaceElevated}
+            tintColor={semanticColors.onAccent}
           />
         </View>
       )}

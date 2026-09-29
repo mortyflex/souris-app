@@ -7,7 +7,7 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: semanticColors.screenWarm },
+        contentStyle: { backgroundColor: semanticColors.screen },
       }}
     />
   );

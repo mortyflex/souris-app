@@ -32,6 +32,7 @@ export function PasswordField({
   return (
     <TextField
       accessibilityLabel="Mot de passe"
+      placement="page"
       autoCapitalize="none"
       autoComplete={intent === 'new' ? 'new-password' : 'password'}
       editable={editable}

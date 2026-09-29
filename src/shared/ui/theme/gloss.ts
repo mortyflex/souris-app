@@ -19,6 +19,14 @@ export const gloss = {
     /** Bright top hairline following the surface's top corners — the only rim. */
     topLight: 'inset 0 1px 0 rgba(255, 255, 255, 0.96)',
   },
+  // Glass Sheet Pilot (DESIGN_OVERRIDES.md §40), experimental: the same satin
+  // light, wider, softer and more translucent, so it reads as light held in
+  // the material rather than a white band at the top. Same top hairline.
+  glassSheet: {
+    sheen:
+      'linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.32) 42%, rgba(255, 255, 255, 0) 100%)',
+    sheenHeight: 220,
+  },
   // Light glass of the small floating controls — back button, Agenda previous /
   // next, the floating + and the Jour / Semaine capsule (GlassSurface,
   // DESIGN_OVERRIDES.md §21). Nearly white and only slightly see-through: it

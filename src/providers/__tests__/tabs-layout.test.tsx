@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 
 import TabsLayout from '@/app/(app)/(tabs)/_layout';
 import { sourisNavigationTheme } from '@/providers/navigation-theme';
-import { colors } from '@/shared/ui/theme';
+import { colors, semanticColors } from '@/shared/ui/theme';
 
 jest.mock('expo-router/unstable-native-tabs', () => {
   const React = jest.requireActual('react') as typeof import('react');
@@ -102,14 +102,14 @@ describe('main navigation (NativeTabs)', () => {
     expect(tabs.props.hidden).toBeUndefined();
   });
 
-  it('wraps the tabs in the light Souris navigation theme so no foreign background shows', async () => {
+  it('wraps the tabs in the light Souris navigation theme on the app background so no foreign background shows', async () => {
     const view = await render(<TabsLayout />);
 
-    expect(view.getByTestId('native-tabs').props.themeBackground).toBe(colors.background);
+    expect(view.getByTestId('native-tabs').props.themeBackground).toBe(semanticColors.screen);
     expect(sourisNavigationTheme.dark).toBe(false);
     expect(sourisNavigationTheme.colors).toMatchObject({
-      background: colors.background,
-      card: colors.background,
+      background: semanticColors.screen,
+      card: semanticColors.screen,
       primary: colors.accent,
     });
   });

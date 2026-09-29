@@ -1,12 +1,14 @@
 // Souris — Search field
 //
-// Subtle native search field: Souris surface, search symbol on the left,
-// white background + accent outline on focus, comfortable native height.
+// Subtle native search field: search symbol on the left, accent outline on
+// focus, comfortable native height. Its idle fill follows `FieldPlacement`:
+// white directly on the app background, `surfaceInput` on a sheet or card.
 
 import { useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
+import type { FieldPlacement } from './TextField';
 import { fontFamilies, foregroundSoft, radii, semanticColors, spacing, touchTarget } from './theme';
 
 interface SearchFieldProps {
@@ -16,6 +18,9 @@ interface SearchFieldProps {
   readonly onChangeText: (text: string) => void;
   /** Optional generic trailing accessory (e.g. a scan action). */
   readonly trailingAccessory?: ReactNode;
+  /** Idle fill context — `page` on the app background, `raised` (default) on a sheet or card. */
+  readonly placement?: FieldPlacement;
+  readonly testID?: string;
 }
 
 export function SearchField({
@@ -24,12 +29,22 @@ export function SearchField({
   value,
   onChangeText,
   trailingAccessory,
+  placement = 'raised',
+  testID,
 }: SearchFieldProps) {
   const [focused, setFocused] = useState(false);
   const minimumHeight = touchTarget[Platform.OS === 'android' ? 'android' : 'ios'];
 
   return (
-    <View style={[styles.field, { minHeight: minimumHeight }, focused && styles.fieldFocused]}>
+    <View
+      style={[
+        styles.field,
+        placement === 'page' && styles.fieldOnPage,
+        { minHeight: minimumHeight },
+        focused && styles.fieldFocused,
+      ]}
+      testID={testID}
+    >
       <SymbolView
         name={{ ios: 'magnifyingglass', android: 'search' }}
         size={14}
@@ -56,14 +71,18 @@ export function SearchField({
 const styles = StyleSheet.create({
   field: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.surface,
+    backgroundColor: semanticColors.surfaceInput,
+    borderColor: semanticColors.surfaceInput,
     borderCurve: 'continuous',
     borderRadius: radii.medium,
     borderWidth: 2,
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
+  },
+  fieldOnPage: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.surfaceElevated,
   },
   fieldFocused: {
     backgroundColor: semanticColors.surfaceElevated,

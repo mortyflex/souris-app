@@ -138,7 +138,7 @@ export function AgendaScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]} testID="agenda-screen">
       <MainScreenHeader style={styles.header} title="Agenda" watermark="agenda">
         <AgendaViewSwitcher mode={mode} onChange={setMode} />
       </MainScreenHeader>
@@ -249,7 +249,7 @@ export function AgendaScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
+  safeArea: { backgroundColor: semanticColors.canvas, flex: 1 },
   header: { paddingBottom: spacing.md },
   // The grouped period surface replaces the old hairline under the row.
   periodNavigation: { marginBottom: spacing.sm, marginTop: spacing.xs },

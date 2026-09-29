@@ -320,6 +320,8 @@ export function ServiceEditorScreen({
       dismissible={!editing}
       fit="content"
       keyboardAvoiding
+      // Glass Sheet Pilot (DESIGN_OVERRIDES.md §40), experimental.
+      material="glass"
       testID="service-sheet"
     >
       {mode === "existing" && !editing && service ? (

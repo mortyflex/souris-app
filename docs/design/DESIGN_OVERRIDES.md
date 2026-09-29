@@ -1853,3 +1853,110 @@ that wording. Supersedes every feminine Client quote of the earlier sections.
 `src/features/clients/__tests__/neutral-client-wording.test.ts` guards the presentation sources:
 it reads string literals, template text and JSX text — never comments, route names or testIDs —
 and fails on a visible « cliente » / « clientes ».
+
+---
+
+## 39. Surface Hierarchy — « Lavender satin » App Background
+
+**Precedence.** Supersedes, for the native runtime, `DESIGN.md` §2 `--bg #ffffff` (« Fond de toutes
+les surfaces d'application ») and colour rule 2 « Jamais de fond de page pastel » as far as the PAGE
+BACKGROUND is concerned, and the white-screen / `screenWarm` split implied by §10, §17 and §29.
+`DESIGN.md` keeps both rules as the historical export reference. Rule 2 still holds for pastels:
+they distinguish appointments, phases and states, never a page. Everything else of §10, §19–§21 and
+§36 is unchanged.
+
+Souris now uses a very low-chroma lavender near-white app background. It is a NEUTRAL SURFACE
+HIERARCHY, not a decorative pastel page: its chroma (0.007) is half of `lav050`'s, and it exists so
+white cards and sheets read as raised without extra borders or shadows.
+
+```text
+APP BACKGROUND        semanticColors.screen        #F5F3F8   oklch(0.967 0.007 304)
+  SHEET               overlayMaterial.surface      #FBF9FE   lav025 (§20, unchanged)
+    PRIMARY CARD      semanticColors.surfaceElevated #FFFFFF
+    INPUT             semanticColors.surfaceInput  #F1EEF5   oklch(0.953 0.010 305)
+AGENDA CANVAS         semanticColors.canvas        #FFFFFF
+BORDER / SEPARATOR    semanticColors.borderSubtle  #DFDEE4   (unchanged)
+TEXT ON STRONG FILLS  semanticColors.onAccent      #FFFFFF
+```
+
+- **One app background.** Tabs (Clientèle, Produits, Plus), pushed screens (Client profile and
+  histories, Prestations, Caisse, Rappels clients, SMS fidélisation), Welcome, auth, email
+  verification, business setup, the navigation theme, every stack `contentStyle` and the root view
+  all use `screen`. `screenWarm` is a compatibility alias of `screen` — debt of the former
+  white-tab / lavender-pushed-screen split, to be removed; new code never uses it.
+- **Primary content cards stay white** (`surfaceElevated`): `GroupedSurface`, `ActionGroup`, the
+  Caisse total and empty cards, profile cards. Existing hairlines and shadows are kept; whether
+  white cards directly on the page keep their hairline is decided after the real-device pilot.
+- **Sheets stay slightly lighter than the page**: the §20 satin material (`lav025`) is unchanged, so
+  every sheet, drawer and dialog keeps its surface; white cards and inputs inside still read.
+- **Agenda remains a white operational canvas** (`canvas`): the pastel planning cards, Calendar
+  Blocks and week headers were designed on white and lose most of their separation on a tint.
+  `canvas` is reserved for such deliberate operational canvases — never a way around `screen`.
+- **Inputs follow their placement** (`FieldPlacement` of `TextField` / `SearchField`): on a sheet
+  or inside a white card the idle fill is `surfaceInput`; directly on the app background it is
+  white (`surfaceElevated`), because `surfaceInput` is too close to the page there. Focus (white +
+  accent outline) and error states are unchanged. A field on the page opts in with
+  `placement="page"`.
+- **Pressed states on the page** use `surfaceLavenderStrong`: `surfaceLavender` (lav050) is as
+  light as the page and would vanish. Pressed rows inside white cards keep `surfaceLavender`.
+- **Small text on the page**: `rose600` falls to ~4.3:1 on `screen`, so error and empty-stock text
+  written directly on the page uses `rose700`. Graphics (now-line, dots, icons) are unchanged.
+- **`onAccent`** is the only colour for text and icons on strong accent, category or destructive
+  fills. `surfaceElevated` always means a card surface, never a foreground.
+- **Unchanged by this section**: appointment pastels, status, service-category and Calendar Block
+  colours; `receiptPaper` (Résumé du jour, Tops & tendances keep their paper); the translucent
+  whites of the camera / scanner overlays; the white branded splash and boot surface.
+- **No feature screen defines its own root background colour.** A root inherits `Screen`,
+  `AuthScreenLayout`, `SheetScreen` or the stack `contentStyle`, all driven by semantic roles. The
+  pushed screens that still paint `screenWarm` on their own safe area are legacy, equal to `screen`
+  through the alias; no new root may do so. Future
+  screens — client import source, paste list, candidate review, duplicate review, onboarding steps —
+  need no one-off background styling.
+
+---
+
+## 40. Glass Sheet Pilot — EXPERIMENTAL
+
+**Status: pilot, not a global rule.** Limited to two sheets; a rollout to other sheets requires
+real-device approval and an update of this section. Until then §20 (satin material) remains the rule
+for every sheet, and the « no blur view » line of §21 still governs the light glass controls.
+
+- **Where Liquid Glass lives.** Liquid Glass is reserved for compatible transparent-modal / custom
+  sheet surfaces: the drawers (`BottomSheet`) and content-fit sheet routes (`SheetScreen
+  fit="content"`) that Souris draws itself with `SheetPresentation`, over the dimmed page. There the
+  material has a real page beneath it to sample, and the iOS 26 simulator pilot shows it clearly.
+- **Native large workflow form sheets remain satin** (`SheetScreen fit="fill"`, `workflowSheet`:
+  Appointment creation and editing, Sale creation) because the native `formSheet` presentation does
+  not provide a useful underlying surface for the material to sample: in the pilot the glass was
+  barely perceptible there. This is a Souris presentation decision: those long, keyboard-heavy
+  workflows keep the stable native sheet, and `fill` shells ignore `material`.
+- **An enhancement over the existing material, never a replacement.** The sheet still reads as
+  `overlayMaterial.surface` (`#FBF9FE`). Where the native glass is drawn, the surface becomes
+  transparent and shows, from bottom to top: the system glass (`expo-glass-effect` `GlassView`,
+  `regular`, light scheme — passive and native, no snapshot, no per-frame JS), a moderate veil of
+  the same lav025 (`overlayMaterial.glassTint`, `rgba(251, 249, 254, 0.6)`), then the gloss and the
+  content. Target: the material and the dimmed page are perceptible, the page's text is not
+  comfortably legible, the sheet still reads as Souris lavender white, the content stays crisp.
+  (The first 88 % veil hid the material almost entirely; 60 % is the starting point to validate.)
+- **Glass sheen.** The pilot's `SurfaceGloss` uses `gloss.glassSheet`: the same top light, spread
+  over 220 pt instead of 132 pt and more translucent (72 % → 32 % → 0 instead of 96 % → 55 % → 0),
+  so it reads as light held in the material, not a white band. Same top hairline, no outline, no
+  glow. The premium feel comes from the native material, not from the gradient. Default sheets keep
+  the §20 sheen unchanged.
+- **Fallback = today's sheet.** Android, iOS without Liquid Glass or without the glass API, and iOS
+  with Reduce Transparency: the opaque `#FBF9FE` surface with the glass sheen. Readability never
+  depends on the glass.
+- **Opaque inside.** Cards stay white (`surfaceElevated`) with their hairlines and shadows; inputs
+  stay `surfaceInput` with their focus and error states; segmented controls, action areas and text
+  colours are unchanged. The header (« Annuler » leading, title centred), the grabber, radii, scrim
+  and motion are unchanged.
+- **Opt-in only** — `material="glass"` on `BottomSheet` (`SheetPresentation`) or `SheetScreen
+  fit="content"`. The default is `satin`.
+- **The two pilot sheets**:
+  1. the Client form (« Nouveau client » / « Modifier le client », `ClientFormSheet`) — a frequent
+     editing drawer, opened from Clientèle, the Client profile and, stacked, from inside the
+     Appointment creation / editing sheets, where the simulator confirmed the glass;
+  2. the Prestation sheet (`ServiceEditorScreen`: type chooser, form, details) — a content-fit
+     sheet route on `editorSheet`, with white phase cards and `surfaceInput` fields.
+- « Modifier le rendez-vous », confirmation dialogs, destructive drawers, camera / scanner,
+  receipts, Insights, Agenda, the tab bar and every other sheet are untouched.

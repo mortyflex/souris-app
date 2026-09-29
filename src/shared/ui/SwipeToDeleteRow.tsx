@@ -164,7 +164,7 @@ function DeleteAction({
         testID={testID}
       >
         <Animated.View style={icon}>
-          <SymbolView name={trashIcon} size={22} tintColor={semanticColors.surfaceElevated} />
+          <SymbolView name={trashIcon} size={22} tintColor={semanticColors.onAccent} />
         </Animated.View>
       </Pressable>
     </View>
@@ -283,7 +283,7 @@ export function SwipeToDeleteRow({
     >
       {hintVisible && (
         <View pointerEvents="none" style={styles.hintSurface} testID={`${testID}-hint`}>
-          <SymbolView name={trashIcon} size={22} tintColor={semanticColors.surfaceElevated} />
+          <SymbolView name={trashIcon} size={22} tintColor={semanticColors.onAccent} />
         </View>
       )}
       <Animated.View style={peekStyle}>

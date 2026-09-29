@@ -317,5 +317,6 @@ const styles = StyleSheet.create({
   controls: { gap: spacing.lg },
   offlineNotice: { alignItems: 'flex-start', gap: spacing.xs },
   offlineText: { color: foregroundSoft },
-  failure: { color: rose.rose600 },
+  // Text on the app background: rose600 falls to ~4.3:1 there.
+  failure: { color: rose.rose700 },
 });

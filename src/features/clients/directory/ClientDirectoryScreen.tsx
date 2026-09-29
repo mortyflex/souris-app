@@ -112,6 +112,8 @@ export function ClientDirectoryScreen() {
           accessibilityLabel="Rechercher un client"
           onChangeText={setQuery}
           placeholder="Rechercher un client"
+          placement="page"
+          testID="client-directory-search"
           value={query}
         />
       </View>

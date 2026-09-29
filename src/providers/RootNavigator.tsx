@@ -19,7 +19,7 @@ import { DataLoadingScreen } from '@/features/business/DataLoadingScreen';
 import { DataUnavailableScreen } from '@/features/business/DataUnavailableScreen';
 import { useBusinessSession } from '@/features/business/session/BusinessSessionProvider';
 import { BrandMark } from '@/shared/ui/BrandMark';
-import { colors } from '@/shared/ui/theme';
+import { colors, semanticColors } from '@/shared/ui/theme';
 
 import { useCloudSyncControl } from './CloudSyncRunner';
 import { resolveRootRoute } from './root-route';
@@ -76,7 +76,7 @@ function BootSurface() {
 }
 
 const styles = StyleSheet.create({
-  content: { backgroundColor: colors.background },
+  content: { backgroundColor: semanticColors.screen },
   boot: {
     alignItems: 'center',
     backgroundColor: colors.background,

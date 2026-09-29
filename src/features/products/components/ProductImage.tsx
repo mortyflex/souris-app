@@ -200,7 +200,7 @@ function StickerImage({ imageUri, variant, testID }: StickerImageProps) {
               ],
             },
           ]}
-          tintColor={semanticColors.surfaceElevated}
+          tintColor={semanticColors.onAccent}
         />
       ))}
       <Image

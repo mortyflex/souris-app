@@ -156,6 +156,7 @@ export function ReminderSettingsScreen() {
         <View style={styles.replyToSection}>
           <TextField
             accessibilityLabel={REMINDER_REPLY_TO_LABEL}
+            placement="page"
             autoCapitalize="none"
             autoComplete="email"
             editable={!controlsDisabled}
@@ -229,5 +230,6 @@ const styles = StyleSheet.create({
   replyToHint: { color: foregroundSoft },
   offlineNotice: { alignItems: 'flex-start', gap: spacing.xs },
   offlineText: { color: foregroundSoft },
-  failure: { color: rose.rose600 },
+  // Text on the app background: rose600 falls to ~4.3:1 there.
+  failure: { color: rose.rose700 },
 });

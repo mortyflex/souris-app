@@ -37,7 +37,9 @@ export const directoryListStyles = StyleSheet.create({
     minHeight: 72,
     paddingVertical: spacing.sm,
   },
-  rowPressed: { backgroundColor: semanticColors.surfaceLavender },
+  // Rows sit on the app background (`screen`): lav050 would vanish there, so the
+  // press shows the stronger lavender step.
+  rowPressed: { backgroundColor: semanticColors.surfaceLavenderStrong },
   rowCopy: { flex: 1, gap: 3, minWidth: 0 },
   emptyState: {
     alignItems: 'center',

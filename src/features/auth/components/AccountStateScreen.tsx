@@ -43,7 +43,7 @@ export function AccountStateScreen({ title, message, actions, accessory, testID 
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
+  safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
   content: {
     alignItems: 'center',
     flex: 1,

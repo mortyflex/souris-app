@@ -11,6 +11,16 @@ import {
 import { AppText } from '@/shared/ui/AppText';
 import { fontFamilies, radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
+/**
+ * Where a field sits, which decides its idle fill (DESIGN_OVERRIDES.md §39):
+ *   `raised` (default) — on a sheet or inside a white card: `surfaceInput`, a
+ *                        lavender near-white that reads on both;
+ *   `page`             — directly on the app background (`screen`): white
+ *                        (`surfaceElevated`), since `surfaceInput` is too close
+ *                        to the page there.
+ */
+export type FieldPlacement = 'page' | 'raised';
+
 interface TextFieldProps {
   readonly accessibilityLabel: string;
   readonly label: string;
@@ -41,6 +51,8 @@ interface TextFieldProps {
   readonly multiline?: boolean;
   readonly maxLength?: number;
   readonly inputRef?: Ref<TextInput>;
+  /** Idle fill context — see `FieldPlacement`. */
+  readonly placement?: FieldPlacement;
   readonly testID?: string;
 }
 
@@ -66,6 +78,7 @@ export function TextField({
   multiline = false,
   maxLength,
   inputRef,
+  placement = 'raised',
   testID,
 }: TextFieldProps) {
   const [focused, setFocused] = useState(false);
@@ -78,6 +91,7 @@ export function TextField({
       <View
         style={[
           styles.inputShell,
+          placement === 'page' && styles.inputShellOnPage,
           multiline && styles.inputShellMultiline,
           focused && styles.inputFocused,
           error && styles.inputInvalid,
@@ -118,7 +132,7 @@ export function TextField({
         {trailingAccessory}
       </View>
       {error && (
-        <AppText variant="metadata" style={styles.error}>
+        <AppText variant="metadata" style={[styles.error, placement === 'page' && styles.errorOnPage]}>
           {error}
         </AppText>
       )}
@@ -131,14 +145,18 @@ const styles = StyleSheet.create({
   label: { color: semanticColors.foregroundSoft },
   inputShell: {
     alignItems: 'center',
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.surface,
+    backgroundColor: semanticColors.surfaceInput,
+    borderColor: semanticColors.surfaceInput,
     borderCurve: 'continuous',
     borderRadius: radii.medium,
     borderWidth: 1.5,
     flexDirection: 'row',
     minHeight: 44,
     paddingHorizontal: spacing.md,
+  },
+  inputShellOnPage: {
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.surfaceElevated,
   },
   inputShellMultiline: { alignItems: 'flex-start' },
   inputFocused: {
@@ -164,4 +182,6 @@ const styles = StyleSheet.create({
   },
   suffix: { color: semanticColors.foregroundSoft, marginLeft: spacing.sm },
   error: { color: rose.rose600 },
+  // rose600 falls to ~4.3:1 on `screen`: the darker rose keeps small error text readable.
+  errorOnPage: { color: rose.rose700 },
 });

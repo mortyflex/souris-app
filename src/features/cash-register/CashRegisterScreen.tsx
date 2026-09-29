@@ -476,8 +476,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: horizontalGutter,
     paddingTop: spacing.sm,
   },
+  // A primary white card on the app background (DESIGN_OVERRIDES.md §39).
   totalCard: {
-    backgroundColor: semanticColors.surfaceLavender,
+    backgroundColor: semanticColors.surfaceElevated,
     borderCurve: "continuous",
     borderRadius: radii.large,
     gap: spacing.xs,
@@ -521,10 +522,10 @@ const styles = StyleSheet.create({
   },
   entriesSection: { gap: spacing.md, marginTop: spacing.xs },
   entriesHeader: { justifyContent: "flex-start", gap: spacing.sm },
-  // Quieter than the figures: a light lavender band, a small glyph, two lines.
+  // Quieter than the figures: a white card, a small lavender glyph, two lines.
   emptyState: {
     alignItems: "center",
-    backgroundColor: semanticColors.surfaceLavender,
+    backgroundColor: semanticColors.surfaceElevated,
     borderCurve: "continuous",
     borderRadius: radii.large,
     gap: spacing.xs,

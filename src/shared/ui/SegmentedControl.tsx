@@ -182,8 +182,8 @@ const styles = StyleSheet.create({
   },
   selectedCountPill: { backgroundColor: semanticColors.accent },
   countText: { color: semanticColors.accent, fontVariant: ['tabular-nums'] },
-  selectedCountText: { color: semanticColors.surfaceElevated },
+  selectedCountText: { color: semanticColors.onAccent },
   selectedText: { color: semanticColors.accent },
-  filledText: { color: semanticColors.surfaceElevated },
+  filledText: { color: semanticColors.onAccent },
   unselectedText: { color: semanticColors.foregroundSoft },
 });

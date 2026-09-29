@@ -80,7 +80,7 @@ export function AuthScreenLayout({
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
+  safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
   keyboardContainer: { flex: 1 },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: spacing.xl, paddingHorizontal: horizontalGutter },

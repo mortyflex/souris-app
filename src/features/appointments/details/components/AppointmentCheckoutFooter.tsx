@@ -135,7 +135,7 @@ export function AppointmentCheckoutFooter({
           <SymbolView
             name={paymentMethodIcons.CARD}
             size={18}
-            tintColor={semanticColors.surfaceElevated}
+            tintColor={semanticColors.onAccent}
           />
           <AppText
             variant="control"
@@ -183,5 +183,5 @@ const styles = StyleSheet.create({
     backgroundColor: lavender.lav700,
     transform: [{ scale: interaction.pressedScale }],
   },
-  ctaText: { color: semanticColors.surfaceElevated, flexShrink: 1, fontVariant: ['tabular-nums'] },
+  ctaText: { color: semanticColors.onAccent, flexShrink: 1, fontVariant: ['tabular-nums'] },
 });

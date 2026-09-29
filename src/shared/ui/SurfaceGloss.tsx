@@ -17,15 +17,18 @@
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import type { SheetMaterial } from './sheet-material';
 import { gloss } from './theme';
 
 interface SurfaceGlossProps {
   /** Corner radii of the surface this finish belongs to. */
   readonly shape?: StyleProp<ViewStyle>;
+  /** `glass` (§40 pilot): the wider, softer sheen of the glass sheet. */
+  readonly material?: SheetMaterial;
   readonly testID?: string;
 }
 
-export function SurfaceGloss({ shape, testID = 'surface-gloss' }: SurfaceGlossProps) {
+export function SurfaceGloss({ shape, material = 'satin', testID = 'surface-gloss' }: SurfaceGlossProps) {
   return (
     <View
       accessibilityElementsHidden
@@ -34,7 +37,7 @@ export function SurfaceGloss({ shape, testID = 'surface-gloss' }: SurfaceGlossPr
       style={[styles.fill, shape]}
       testID={testID}
     >
-      <View style={styles.sheen} />
+      <View style={material === 'glass' ? styles.glassSheen : styles.sheen} />
     </View>
   );
 }
@@ -49,5 +52,9 @@ const styles = StyleSheet.create({
   sheen: {
     experimental_backgroundImage: gloss.surface.sheen,
     height: gloss.surface.sheenHeight,
+  },
+  glassSheen: {
+    experimental_backgroundImage: gloss.glassSheet.sheen,
+    height: gloss.glassSheet.sheenHeight,
   },
 });

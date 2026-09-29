@@ -27,7 +27,7 @@ import {
   type DevelopmentSeedContext,
 } from '@/providers/PersistenceProvider';
 import { RootNavigator } from '@/providers/RootNavigator';
-import { colors, duration } from '@/shared/ui/theme';
+import { duration, semanticColors } from '@/shared/ui/theme';
 
 // Bootstrap flow:
 //
@@ -125,5 +125,5 @@ function AccountSession({ gateways }: { readonly gateways: AccountGateways }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: semanticColors.screen },
 });

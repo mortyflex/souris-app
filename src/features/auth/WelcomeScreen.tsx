@@ -22,7 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BrandMark, brandAssets } from '@/shared/ui/BrandMark';
-import { colors, gutter, semanticColors, spacing } from '@/shared/ui/theme';
+import { gutter, semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
   WELCOME_MOTIFS_HALF_HEIGHT,
@@ -154,7 +154,7 @@ function LogoParallax({ touch, children }: { readonly touch: WelcomeTouch; reado
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.background, flex: 1 },
+  safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
   // Clipped: whatever the finger pushes around never draws over the copy.
   hero: {
     alignItems: 'center',

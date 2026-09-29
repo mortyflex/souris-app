@@ -18,7 +18,7 @@ import type { ReactNode } from 'react';
 import { Platform, StyleSheet, View, type ViewProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, gutter, spacing } from './theme';
+import { gutter, semanticColors, spacing } from './theme';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
@@ -48,7 +48,7 @@ export function Screen({ header, children, style, ...rest }: ScreenProps) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: semanticColors.screen,
   },
   content: { flex: 1 },
   contentWithoutHeader: { paddingTop: spacing.md },

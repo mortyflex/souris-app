@@ -72,10 +72,10 @@ import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
 import { SwipeToDeleteRow, useSwipeHintTarget } from "@/shared/ui/SwipeToDeleteRow";
 import {
+  fontFamilies,
   foregroundSoft,
   gutter,
   radii,
-  rose,
   semanticColors,
   spacing,
 } from "@/shared/ui/theme";
@@ -768,7 +768,7 @@ const styles = StyleSheet.create({
   },
   identityAccent: {
     alignSelf: "stretch",
-    backgroundColor: rose.rose600,
+    backgroundColor: semanticColors.accent,
     borderRadius: radii.pill,
     width: 4,
   },
@@ -780,7 +780,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   headerActions: { flexDirection: "row", gap: spacing.sm },
-  identityEyebrow: { color: rose.rose600 },
+  // Brand violet, one step lighter than the eyebrow role (Medium, not SemiBold).
+  identityEyebrow: {
+    color: semanticColors.accent,
+    fontFamily: fontFamilies["500"],
+  },
   clientName: { color: semanticColors.foreground },
   sectionHeader: {
     marginBottom: spacing.md,

@@ -43,6 +43,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { SheetMaterial } from './sheet-material';
 import { SheetLayer, useSheetLayer } from './sheet-layers';
 import { SheetGrabber, SheetPresentation } from './SheetPresentation';
 import { SurfaceGloss } from './SurfaceGloss';
@@ -70,6 +71,13 @@ interface SheetScreenProps {
    * sheet — the screen confirms, then leaves with `router.back()`.
    */
   readonly onLeaveAttempt?: () => void;
+  /**
+   * Surface material: the approved satin (default) or the EXPERIMENTAL glass of
+   * the Glass Sheet Pilot (DESIGN_OVERRIDES.md §40) — explicit opt-in only.
+   * `fit="content"` only: a native `fill` form sheet always stays satin, the
+   * system presentation giving the glass no page to sample (§40).
+   */
+  readonly material?: SheetMaterial;
   readonly style?: StyleProp<ViewStyle>;
   readonly testID?: string;
 }
@@ -85,7 +93,7 @@ function NativeSheetShell({
   keyboardAvoiding = false,
   style,
   testID,
-}: Omit<ShellProps, 'dismissible' | 'contentKey' | 'onLeaveAttempt'>) {
+}: Omit<ShellProps, 'dismissible' | 'contentKey' | 'onLeaveAttempt' | 'material'>) {
   const Body = keyboardAvoiding ? KeyboardAvoidingView : View;
   // A drawer presented from this sheet takes the keyboard: the sheet stays put.
   const layer = useSheetLayer(true);
@@ -112,6 +120,7 @@ function RouteSheet({
   dismissible = true,
   contentKey,
   onLeaveAttempt,
+  material,
   style,
   testID,
 }: ShellProps) {
@@ -149,6 +158,7 @@ function RouteSheet({
       dismissOnBackdropPress={dismissible}
       dismissOnPanDown={dismissible}
       keyboardAvoiding={keyboardAvoiding}
+      material={material}
       onClose={() => router.back()}
       onCloseTransitionEnd={release}
       padded={false}

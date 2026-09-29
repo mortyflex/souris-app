@@ -642,7 +642,8 @@ const styles = StyleSheet.create({
   clientName: { color: semanticColors.foreground },
   archivedBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: semanticColors.surface,
+    // On the app background the neutral `surface` would vanish: a white pill.
+    backgroundColor: semanticColors.surfaceElevated,
     borderRadius: radii.pill,
     minHeight: 24,
     justifyContent: 'center',

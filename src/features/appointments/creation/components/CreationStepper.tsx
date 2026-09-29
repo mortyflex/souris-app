@@ -154,12 +154,12 @@ const styles = StyleSheet.create({
   },
   futureNode: { backgroundColor: semanticColors.surfaceElevated },
   currentDot: {
-    backgroundColor: semanticColors.surfaceElevated,
+    backgroundColor: semanticColors.onAccent,
     borderRadius: 2,
     height: 4,
     width: 4,
   },
-  checkmark: { color: semanticColors.surfaceElevated, fontSize: 11, lineHeight: 13 },
+  checkmark: { color: semanticColors.onAccent, fontSize: 11, lineHeight: 13 },
   connector: {
     backgroundColor: semanticColors.borderSubtle,
     flex: 1,

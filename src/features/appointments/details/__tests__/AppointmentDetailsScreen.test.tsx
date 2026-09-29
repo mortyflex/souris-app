@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react-native";
 import { Alert, Pressable, StyleSheet, Text } from "react-native";
+import { fontFamilies, semanticColors } from "@/shared/ui/theme";
 import { State, type PanGesture } from "react-native-gesture-handler";
 import {
   fireGestureHandler,
@@ -731,6 +732,11 @@ describe("AppointmentDetailsScreen", () => {
       within(close).getByTestId("glass-surface", { includeHiddenElements: true }),
     ).toBeTruthy();
     expect(header.getByRole("button", { name: "Actions du rendez-vous" })).toBeTruthy();
+    // The eyebrow speaks the brand violet, one weight lighter than the role.
+    expect(StyleSheet.flatten(header.getByText("RENDEZ-VOUS").props.style)).toMatchObject({
+      color: semanticColors.accent,
+      fontFamily: fontFamilies["500"],
+    });
 
     await press(view, "close-appointment-details");
 

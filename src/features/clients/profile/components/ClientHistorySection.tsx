@@ -152,8 +152,9 @@ function HistoryLink({ label, onPress, testID }: HistoryLinkProps) {
 
 const styles = StyleSheet.create({
   section: { gap: spacing.md },
+  // Sits on the app background: a white card, like the grouped history.
   empty: {
-    backgroundColor: semanticColors.surface,
+    backgroundColor: semanticColors.surfaceElevated,
     borderRadius: radii.large,
     color: foregroundSoft,
     padding: spacing.base,

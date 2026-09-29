@@ -23,11 +23,11 @@ import { ProductCatalogProvider } from '@/features/products/session/ProductCatal
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
 import { contentSheet, editorSheet, workflowSheet } from '@/providers/sheet-route-options';
-import { colors, semanticColors } from '@/shared/ui/theme';
+import { semanticColors } from '@/shared/ui/theme';
 
 const pushedScreen = {
   headerShown: false,
-  contentStyle: { backgroundColor: semanticColors.screenWarm },
+  contentStyle: { backgroundColor: semanticColors.screen },
 };
 
 export default function AppLayout() {
@@ -47,7 +47,7 @@ export default function AppLayout() {
                     <Stack
                       screenOptions={{
                         headerShown: false,
-                        contentStyle: { backgroundColor: colors.background },
+                        contentStyle: { backgroundColor: semanticColors.screen },
                       }}>
                       <Stack.Screen name="(tabs)" />
                       <Stack.Screen name="appointments/[appointmentId]" options={contentSheet} />

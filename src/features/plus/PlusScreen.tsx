@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   managementSection: { gap: spacing.sm, paddingTop: spacing['2xl'] },
   accountSection: { gap: spacing.sm, paddingTop: spacing['2xl'] },
   developmentSection: { gap: spacing.sm, paddingTop: spacing['2xl'] },
-  developmentTitle: { color: rose.rose600 },
+  developmentTitle: { color: rose.rose700 },
   row: {
     alignItems: 'center',
     borderBottomColor: semanticColors.borderSubtle,
@@ -310,8 +310,9 @@ const styles = StyleSheet.create({
     minHeight: 68,
     paddingVertical: spacing.sm,
   },
+  // Flat rows on the app background: the stronger lavender step keeps the press visible.
   rowPressed: {
-    backgroundColor: semanticColors.surfaceLavender,
+    backgroundColor: semanticColors.surfaceLavenderStrong,
     opacity: interaction.pressedOpacity,
   },
   iconSurface: {

@@ -162,6 +162,7 @@ export function ProductCatalogScreen() {
           accessibilityLabel="Rechercher un produit"
           onChangeText={setQuery}
           placeholder="Rechercher un produit"
+          placement="page"
           trailingAccessory={scanAccessory}
           value={query}
         />
@@ -394,7 +395,8 @@ const styles = StyleSheet.create({
   productName: { color: lavender.lav700 },
   productMeta: { color: foregroundSoft },
   stockLine: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  stockEmpty: { color: rose.rose600 },
+  // Text on the app background: rose600 falls to ~4.3:1 there.
+  stockEmpty: { color: rose.rose700 },
   price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   resultContent: {
     gap: spacing.md,

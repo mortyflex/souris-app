@@ -85,6 +85,7 @@ export function SignInScreen() {
     >
       <TextField
         accessibilityLabel="Email"
+        placement="page"
         autoCapitalize="none"
         autoComplete="email"
         editable={!submitting}
@@ -129,6 +130,7 @@ export function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
-  failure: { color: rose.rose600, paddingTop: spacing.xs },
+  // Text on the app background: rose600 falls to ~4.3:1 there.
+  failure: { color: rose.rose700, paddingTop: spacing.xs },
   inlineAction: { alignSelf: 'flex-start', paddingHorizontal: spacing.base },
 });

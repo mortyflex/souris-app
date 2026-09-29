@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
 });
 
 const textStyles = StyleSheet.create({
-  primary: { color: semanticColors.surfaceElevated },
+  primary: { color: semanticColors.onAccent },
   secondary: { color: semanticColors.foreground },
   tertiary: { color: semanticColors.accent },
   // Deeper rose on the rose fill: clearly destructive, readable (≥ 6:1), never neon.

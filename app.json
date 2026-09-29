@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "sourisapp",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#FFFFFF",
+    "backgroundColor": "#F5F3F8",
     "ios": {
       "bundleIdentifier": "com.mortyflex.sourisapp",
       "icon": "./assets/brand/Souris.icon",

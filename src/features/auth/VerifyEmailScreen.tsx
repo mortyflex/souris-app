@@ -85,5 +85,6 @@ export function VerifyEmailScreen({ email }: VerifyEmailScreenProps) {
 const styles = StyleSheet.create({
   copy: { color: semanticColors.foregroundSoft },
   info: { color: semanticColors.foregroundSoft, paddingTop: spacing.sm },
-  error: { color: rose.rose600, paddingTop: spacing.sm },
+  // Text on the app background: rose600 falls to ~4.3:1 there.
+  error: { color: rose.rose700, paddingTop: spacing.sm },
 });

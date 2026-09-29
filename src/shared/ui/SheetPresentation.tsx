@@ -66,6 +66,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context';
 
+import { SheetGlassBackdrop, sheetSurfaceStyle, useSheetGlass, type SheetMaterial } from './sheet-material';
 import { SheetLayer, useSheetLayer } from './sheet-layers';
 import { SurfaceGloss } from './SurfaceGloss';
 import {
@@ -104,6 +105,11 @@ export interface SheetPresentationOptions {
   /** Horizontal gutter around the body; disable when children pad themselves. */
   readonly padded?: boolean;
   readonly contentStyle?: StyleProp<ViewStyle>;
+  /**
+   * Surface material: the approved satin (default) or the EXPERIMENTAL glass of
+   * the Glass Sheet Pilot (DESIGN_OVERRIDES.md §40) — explicit opt-in only.
+   */
+  readonly material?: SheetMaterial;
   readonly testID?: string;
   /**
    * Identity of what the sheet shows. When it changes (details → edit, type
@@ -140,6 +146,7 @@ type SheetSurfaceContent = Pick<
   | 'footer'
   | 'padded'
   | 'contentStyle'
+  | 'material'
   | 'testID'
   | 'surfaceTestID'
   | 'children'
@@ -434,6 +441,9 @@ function SheetSurface({
     return () => animation.stop();
   }, [leaving, released, shift]);
 
+  const material = shown?.material ?? 'satin';
+  const glass = useSheetGlass(material);
+
   if (!shown) return null;
   const { height, header, scrollable = false, footer, padded = true, contentStyle, testID, surfaceTestID, children } =
     shown;
@@ -463,6 +473,7 @@ function SheetSurface({
       pointerEvents={leaving ? 'none' : 'auto'}
       style={[
         styles.sheet,
+        sheetSurfaceStyle(glass),
         leaving && styles.leavingSheet,
         { maxHeight: windowHeight * sheet.detent },
         height !== undefined && { height },
@@ -478,7 +489,8 @@ function SheetSurface({
       >
         {/* First child, under the content. Absolute, so it spans the whole
             sheet, bottom safe area included. */}
-        <SurfaceGloss shape={styles.sheetShape} testID="bottom-sheet-gloss" />
+        <SheetGlassBackdrop active={glass} />
+        <SurfaceGloss material={material} shape={styles.sheetShape} testID="bottom-sheet-gloss" />
         <View
           accessible={false}
           style={styles.dragZone}

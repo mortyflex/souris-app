@@ -107,6 +107,6 @@ const styles = StyleSheet.create({
     minWidth: 28,
     paddingHorizontal: spacing.sm,
   },
-  count: { color: semanticColors.surfaceElevated, fontVariant: ['tabular-nums'] },
+  count: { color: semanticColors.onAccent, fontVariant: ['tabular-nums'] },
   content: { paddingHorizontal: horizontalGutter },
 });

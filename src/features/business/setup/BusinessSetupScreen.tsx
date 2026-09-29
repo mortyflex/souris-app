@@ -213,6 +213,7 @@ export function BusinessSetupScreen() {
       >
         <TextField
           accessibilityLabel="Adresse de réponse"
+          placement="page"
           autoCapitalize="none"
           autoComplete="email"
           editable={!submitting}
@@ -275,6 +276,7 @@ export function BusinessSetupScreen() {
     >
       <TextField
         accessibilityLabel="Votre prénom"
+        placement="page"
         autoCapitalize="words"
         autoComplete="given-name"
         editable={!submitting}
@@ -288,6 +290,7 @@ export function BusinessSetupScreen() {
       />
       <TextField
         accessibilityLabel="Votre nom"
+        placement="page"
         autoCapitalize="words"
         autoComplete="family-name"
         editable={!submitting}
@@ -299,6 +302,7 @@ export function BusinessSetupScreen() {
       />
       <TextField
         accessibilityLabel="Nom de votre activité"
+        placement="page"
         autoCapitalize="words"
         autoComplete="organization"
         editable={!submitting}
@@ -321,6 +325,7 @@ export function BusinessSetupScreen() {
       />
       <TextField
         accessibilityLabel="Téléphone professionnel"
+        placement="page"
         autoComplete="tel"
         editable={!submitting}
         keyboardType="phone-pad"
@@ -403,9 +408,10 @@ const styles = StyleSheet.create({
   pickerField: { gap: spacing.xs },
   pickerLabel: { color: semanticColors.foregroundSoft },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingTop: spacing.xs },
+  // An input on the app background: white, like a `placement="page"` field.
   chip: {
-    backgroundColor: semanticColors.surface,
-    borderColor: semanticColors.surface,
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.surfaceElevated,
     borderCurve: 'continuous',
     borderRadius: radii.medium,
     borderWidth: 1.5,
@@ -420,5 +426,6 @@ const styles = StyleSheet.create({
   chipPressed: { opacity: interaction.pressedOpacity },
   chipText: { color: semanticColors.foreground },
   chipTextSelected: { color: semanticColors.accent },
-  failure: { color: rose.rose600 },
+  // Text on the app background: rose600 falls to ~4.3:1 there.
+  failure: { color: rose.rose700 },
 });
