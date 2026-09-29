@@ -1,4 +1,4 @@
-// Souris — Rappels clientes Settings screen (Lot B)
+// Souris — Rappels clients Settings screen (Lot B)
 //
 // The real screen against the fake gateway: OFF by default, enabling
 // requires a valid Reply-To (prefilled from the account email), the fixed
@@ -71,6 +71,7 @@ describe('ReminderSettingsScreen', () => {
   it('reads OFF by default, shows the fixed timing and prefills the account email', async () => {
     const view = await renderSettings(createFakeCommunicationsGateway());
 
+    expect(view.getByText('Rappels clients')).toBeTruthy();
     expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(false);
     expect(view.getByText('Envoi')).toBeTruthy();
     expect(view.getByText('24 h avant le rendez-vous')).toBeTruthy();

@@ -73,7 +73,7 @@ describe('buildInsightsShareCard', () => {
   });
 
   it('names the highest-spending clients as « Prénom N. » with a compact amount, in rank order', () => {
-    expect(podium('spendingClients').title).toBe('Clientes qui dépensent le plus');
+    expect(podium('spendingClients').title).toBe('Clients qui dépensent le plus');
     expect(places('spendingClients')).toEqual([
       [1, 'Amel B.', formatCompactEuroCents(19500)],
       [2, 'Nadia F.', formatEuroCents(12345)],
@@ -82,7 +82,7 @@ describe('buildInsightsShareCard', () => {
   });
 
   it('names the most loyal clients as « Prénom N. » with their visits as « rdv », in rank order', () => {
-    expect(podium('loyalClients').title).toBe('Clientes les plus fidèles');
+    expect(podium('loyalClients').title).toBe('Clients les plus fidèles');
     expect(places('loyalClients')).toEqual([
       [1, 'Nadia F.', '4 rdv'],
       [2, 'Amel B.', '3 rdv'],
@@ -119,7 +119,7 @@ describe('buildInsightsShareCard', () => {
 
   it('keeps the quiet category message when a client ranking is empty', () => {
     expect(podium('loyalClients', insights({ topLoyalClients: [] }))).toMatchObject({
-      title: 'Clientes les plus fidèles',
+      title: 'Clients les plus fidèles',
       rows: [],
       emptyMessage: 'Aucun rendez-vous réalisé sur cette période',
     });

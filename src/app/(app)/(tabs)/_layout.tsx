@@ -46,7 +46,7 @@ export default function TabsLayout() {
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="clientes">
           <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} md="group" />
-          <NativeTabs.Trigger.Label>Clientes</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Label>Clientèle</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="produits">
           <NativeTabs.Trigger.Icon

@@ -125,6 +125,7 @@ describe('WelcomeScreen', () => {
 
     expect(view.getAllByLabelText('Souris')).toHaveLength(1);
     expect(view.getByRole('header', { name: 'Votre activité,\nsimplement organisée.' })).toBeTruthy();
+    expect(view.getByText('Agenda, clientèle, prestations et ventes, sans logiciel compliqué.')).toBeTruthy();
     expect(view.queryByText(/sauvegard|synchronis/i)).toBeNull();
 
     await press(view.getByText('Commencer'));

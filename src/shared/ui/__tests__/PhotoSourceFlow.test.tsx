@@ -94,7 +94,7 @@ function Host({ hasImage = false }: { readonly hasImage?: boolean }) {
       <PhotoSourceFlow
         cameraHint="Cadrez le visage au centre"
         cameraTestID="client-camera"
-        cameraTitle="Photo de la cliente"
+        cameraTitle="Photo du client"
         hasImage={hasImage}
         libraryLabel="Choisir dans Photos"
         onClose={() => setVisible(false)}

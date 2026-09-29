@@ -77,9 +77,9 @@ export function EditableAppointmentContext({
     <View>
       <GroupedSurface testID="appointment-context">
         <GroupedDataRow
-          accessibilityHint="Modifier la cliente"
+          accessibilityHint="Modifier le client"
           icon={clientIcon}
-          label="Cliente"
+          label="Client"
           onPress={onEditClient}
           testID="edit-client"
           value={clientName ?? ''}

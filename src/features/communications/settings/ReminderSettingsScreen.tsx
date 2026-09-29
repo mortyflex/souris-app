@@ -173,7 +173,7 @@ export function ReminderSettingsScreen() {
             value={replyToValue}
           />
           <AppText variant="metadata" style={styles.replyToHint}>
-            Les clientes qui répondent à un rappel écrivent à cette adresse.
+            Les clients qui répondent à un rappel écrivent à cette adresse.
           </AppText>
           {replyToDirty && (
             <AppButton

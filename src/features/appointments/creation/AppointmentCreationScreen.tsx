@@ -129,7 +129,7 @@ interface AppointmentCreationScreenProps {
 type CreationMode = 'client' | 'personal';
 
 const MODE_OPTIONS: readonly SegmentedControlOption<CreationMode>[] = [
-  { value: 'client', label: 'Cliente', accessibilityLabel: 'Rendez-vous cliente' },
+  { value: 'client', label: 'Client', accessibilityLabel: 'Rendez-vous client' },
   { value: 'personal', label: 'Personnel', accessibilityLabel: 'Rendez-vous personnel' },
 ];
 

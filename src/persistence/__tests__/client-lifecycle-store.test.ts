@@ -158,10 +158,10 @@ describe('Client lifecycle store', () => {
     const archivedAt = new Date(2026, 0, 5);
     insertClient(db, { id: 'client-old', firstName: 'Ancienne', archivedAt });
 
-    updateClient(db, { id: 'client-old', firstName: 'Renommée', lastName: 'Cliente' });
+    updateClient(db, { id: 'client-old', firstName: 'Renommée', lastName: 'Client' });
 
     expect(loadClients(db)).toEqual([
-      { id: 'client-old', firstName: 'Renommée', lastName: 'Cliente', archivedAt },
+      { id: 'client-old', firstName: 'Renommée', lastName: 'Client', archivedAt },
     ]);
   });
 

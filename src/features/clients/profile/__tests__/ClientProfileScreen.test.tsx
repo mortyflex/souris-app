@@ -379,7 +379,7 @@ async function chooseClientAction(view: Awaited<ReturnType<typeof render>>, test
   await settleSheetTransition();
 }
 
-/** « ••• » › Archiver la cliente, then « Archiver » in the confirmation. */
+/** « ••• » › Archiver le client, then « Archiver » in the confirmation. */
 async function archiveThroughConfirmation(view: Awaited<ReturnType<typeof render>>) {
   await chooseClientAction(view, 'archive-client');
   await act(async () => {
@@ -427,7 +427,7 @@ describe('ClientProfileScreen', () => {
   it('shows a restrained not-found state for an unknown client id', async () => {
     const view = await renderProfile('client-missing');
 
-    expect(view.getByText('Cliente introuvable')).toBeTruthy();
+    expect(view.getByText('Client introuvable')).toBeTruthy();
   });
 
   it('shows identity and Souris appointments for a fixture client', async () => {
@@ -465,19 +465,19 @@ describe('ClientProfileScreen', () => {
   });
 
   describe('header, identity and actions', () => {
-    it('shows « ••• » in the header instead of Modifier, around the centred Cliente title', async () => {
+    it('shows « ••• » in the header instead of Modifier, around the centred Fiche client title', async () => {
       const view = await renderProfile('client-agenda-lea');
 
-      expect(view.getByRole('header', { name: 'Cliente' })).toBeTruthy();
+      expect(view.getByRole('header', { name: 'Fiche client' })).toBeTruthy();
       expect(view.getByLabelText('Retour')).toBeTruthy();
       const more = view.getByTestId('open-client-actions');
       expect(more.props.accessibilityLabel).toBe('Actions');
       expect(within(more).getByTestId('symbol-ellipsis')).toBeTruthy();
       expect(view.queryByText('Modifier')).toBeNull();
-      expect(view.queryByLabelText('Modifier la cliente')).toBeNull();
+      expect(view.queryByLabelText('Modifier le client')).toBeNull();
     });
 
-    it('lists Modifier then the rose Archiver la cliente in the « ••• » drawer, titled by the Client', async () => {
+    it('lists Modifier then the rose Archiver le client in the « ••• » drawer, titled by the Client', async () => {
       const view = await renderProfile('client-agenda-lea');
       expect(view.queryByTestId('client-actions-sheet')).toBeNull();
 
@@ -486,7 +486,7 @@ describe('ClientProfileScreen', () => {
       const sheet = within(view.getByTestId('client-actions-sheet'));
       expect(sheet.getByRole('header', { name: 'Léa Martin' })).toBeTruthy();
       expect(sheet.getByRole('button', { name: 'Modifier' })).toBeTruthy();
-      expect(sheet.getByRole('button', { name: 'Archiver la cliente' })).toBeTruthy();
+      expect(sheet.getByRole('button', { name: 'Archiver le client' })).toBeTruthy();
       expect(within(sheet.getByTestId('archive-client')).getByTestId('symbol-archivebox')).toBeTruthy();
       // Only opening the list: nothing was archived, no feedback given.
       expect(view.getByTestId('session-lea-archived').props.children).toBe('false');
@@ -782,8 +782,8 @@ describe('ClientProfileScreen', () => {
       fireEvent.press(view.getByTestId('add-business-cancelled-appointment'));
     });
 
-    expect(view.getByText(/Annulé par la cliente/)).toBeTruthy();
-    expect(view.getByText(/Annulé par le salon/)).toBeTruthy();
+    expect(view.getByText(/Annulé par le client/)).toBeTruthy();
+    expect(view.getByText(/Annulé par vous/)).toBeTruthy();
     expect(view.getByTestId('metric-cancelled').props.children).toBe('1');
   });
 
@@ -803,8 +803,8 @@ describe('ClientProfileScreen', () => {
 
     await chooseClientAction(view, 'edit-client');
 
-    expect(view.getByRole('header', { name: 'Modifier la cliente' })).toBeTruthy();
-    expect(view.queryByText('CLIENTE')).toBeNull();
+    expect(view.getByRole('header', { name: 'Modifier le client' })).toBeTruthy();
+    expect(view.queryByText('CLIENT')).toBeNull();
     expect(view.getByDisplayValue('Léa')).toBeTruthy();
 
     await act(async () => {
@@ -838,21 +838,21 @@ describe('ClientProfileScreen', () => {
   });
 
   describe('lifecycle', () => {
-    it('offers Archiver la cliente behind « ••• » on an active Client and no permanent deletion', async () => {
+    it('offers Archiver le client behind « ••• » on an active Client and no permanent deletion', async () => {
       const view = await renderProfile('client-agenda-lea');
 
       // Nothing administrative in the page itself: the old bottom action is gone.
       expect(view.queryByTestId('client-management')).toBeNull();
       expect(view.queryByTestId('archive-client')).toBeNull();
-      expect(view.queryByText('Archiver la cliente')).toBeNull();
+      expect(view.queryByText('Archiver le client')).toBeNull();
       expect(view.getByTestId('sell-product')).toBeTruthy();
       expect(view.getByTestId('new-appointment')).toBeTruthy();
 
       await openClientActions(view);
       const actions = within(view.getByTestId('client-actions-sheet'));
-      expect(actions.getByText('Archiver la cliente')).toBeTruthy();
+      expect(actions.getByText('Archiver le client')).toBeTruthy();
       expect(actions.getByTestId('archive-client').props.accessibilityHint).toBe(
-        'La cliente ne sera plus proposée pour les nouveaux rendez-vous et ventes. Son historique est conservé.',
+        'Ce client ne sera plus proposé pour les nouveaux rendez-vous et ventes. Son historique est conservé.',
       );
       expect(actions.queryByTestId('open-client-deletion')).toBeNull();
       expect(view.queryByTestId('restore-client')).toBeNull();
@@ -871,10 +871,10 @@ describe('ClientProfileScreen', () => {
       const dialog = within(view.getByTestId('client-archive-dialog'));
       expect(view.getByTestId('client-archive-dialog').props.accessibilityViewIsModal).toBe(true);
       expect(dialog.getByText('ARCHIVAGE')).toHaveStyle({ color: semanticColors.accent });
-      expect(dialog.getByRole('header', { name: 'Archiver cette cliente ?' })).toBeTruthy();
+      expect(dialog.getByRole('header', { name: 'Archiver ce client ?' })).toBeTruthy();
       expect(
         dialog.getByText(
-          'La cliente restera dans votre répertoire mais sera déplacée dans les clientes archivées. Vous pourrez la restaurer plus tard.',
+          'Ce client restera dans votre répertoire mais sera déplacé dans les clients archivés. Vous pourrez le restaurer plus tard.',
         ),
       ).toBeTruthy();
       expect(dialog.getByRole('button', { name: 'Annuler' })).toBeTruthy();
@@ -912,7 +912,7 @@ describe('ClientProfileScreen', () => {
 
       expect(selectionHaptic).toHaveBeenCalledTimes(1);
       expect(view.getByTestId('client-archived-indicator')).toBeTruthy();
-      expect(view.getByText('Archivée')).toBeTruthy();
+      expect(view.getByText('Archivé')).toBeTruthy();
       expect(view.getByText('Léa Martin')).toBeTruthy();
       expect(view.getByTestId('restore-client')).toBeTruthy();
       expect(view.queryByTestId('sell-product')).toBeNull();
@@ -981,7 +981,7 @@ describe('ClientProfileScreen', () => {
       await chooseClientAction(view, 'open-client-deletion');
 
       expect(view.getByTestId('client-deletion-dialog')).toBeTruthy();
-      expect(view.getByText('Supprimer définitivement cette cliente ?')).toBeTruthy();
+      expect(view.getByText('Supprimer définitivement ce client ?')).toBeTruthy();
       expect(view.getByText('Cette action est irréversible.')).toBeTruthy();
       expect(view.queryByTestId('client-deletion-blocked')).toBeNull();
       // Irreversible: « Annuler » to abort, the rose destructive « Supprimer ».
@@ -1004,7 +1004,7 @@ describe('ClientProfileScreen', () => {
       expect(warningHaptic).toHaveBeenCalledTimes(1);
       expect(mockBack).toHaveBeenCalledTimes(1);
       expect(Number(view.getByTestId('session-client-count').props.children)).toBe(total - 1);
-      expect(view.queryByText('Cliente introuvable')).toBeNull();
+      expect(view.queryByText('Client introuvable')).toBeNull();
     });
 
     it('explains instead of confirming when an Appointment references the archived Client', async () => {
@@ -1018,7 +1018,7 @@ describe('ClientProfileScreen', () => {
       expect(view.getByText('Suppression impossible')).toBeTruthy();
       expect(
         view.getByText(
-          'Cette cliente possède un historique de rendez-vous ou de ventes. Conservez-la archivée pour préserver cet historique.',
+          'Ce client possède un historique de rendez-vous ou de ventes. Conservez-le archivé pour préserver cet historique.',
         ),
       ).toBeTruthy();
       expect(view.queryByTestId('confirm-client-deletion')).toBeNull();

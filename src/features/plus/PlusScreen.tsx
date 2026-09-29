@@ -83,7 +83,7 @@ export function PlusScreen() {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Rappels clientes, rappels par e-mail"
+          accessibilityLabel="Rappels clients, rappels par e-mail"
           onPress={() => router.push('/reminder-settings')}
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
           testID="plus-reminder-settings"
@@ -96,7 +96,7 @@ export function PlusScreen() {
             />
           </View>
           <View style={styles.copy}>
-            <AppText variant="rowTitle">Rappels clientes</AppText>
+            <AppText variant="rowTitle">Rappels clients</AppText>
             <AppText variant="metadata" style={styles.meta}>
               Rappels par e-mail
             </AppText>
@@ -118,7 +118,7 @@ export function PlusScreen() {
         {__DEV__ && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="SMS fidélisation, offres anniversaires et clientes inactives"
+            accessibilityLabel="SMS fidélisation, offres anniversaires et clients inactifs"
             onPress={() => router.push('/lifecycle-sms-settings')}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             testID="plus-lifecycle-sms-settings"
@@ -133,7 +133,7 @@ export function PlusScreen() {
             <View style={styles.copy}>
               <AppText variant="rowTitle">SMS fidélisation</AppText>
               <AppText variant="metadata" style={styles.meta}>
-                Anniversaires et clientes inactives
+                Anniversaires et clients inactifs
               </AppText>
             </View>
             <SymbolView

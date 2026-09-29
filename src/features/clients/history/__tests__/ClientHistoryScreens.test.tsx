@@ -241,7 +241,7 @@ describe('Client history screens', () => {
     it('shows a restrained not-found state for an unknown client', async () => {
       const view = await renderSeeded(<ClientAppointmentHistoryScreen clientId="client-missing" />);
 
-      expect(view.getByText('Cliente introuvable')).toBeTruthy();
+      expect(view.getByText('Client introuvable')).toBeTruthy();
     });
   });
 

@@ -55,16 +55,16 @@ describe('ClientPickerSheet (shared Client selection)', () => {
     const view = await renderPicker();
 
     await act(async () => fireEvent.press(view.getByTestId('open')));
-    expect(view.getByText('Choisir la cliente')).toBeTruthy();
+    expect(view.getByText('Choisir un client')).toBeTruthy();
 
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'camille');
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'camille');
     });
     await act(async () => fireEvent.press(view.getByText('Camille Durand')));
 
     expect(view.getByTestId('selected').props.children).toBe('client-agenda-camille:Camille');
     await settleSheetTransition();
-    expect(view.queryByText('Choisir la cliente')).toBeNull();
+    expect(view.queryByText('Choisir un client')).toBeNull();
   });
 
   it('is a scroll-safe canonical sheet: header, no pan-to-dismiss, no auto-focus', async () => {
@@ -72,15 +72,15 @@ describe('ClientPickerSheet (shared Client selection)', () => {
 
     await act(async () => fireEvent.press(view.getByTestId('open')));
     // The canonical editing header: « Fermer » leading, ONE centred title, no eyebrow.
-    expect(view.queryByText('CLIENTE')).toBeNull();
-    expect(view.getByRole('header', { name: 'Choisir la cliente' })).toBeTruthy();
+    expect(view.queryByText('CLIENT')).toBeNull();
+    expect(view.getByRole('header', { name: 'Choisir un client' })).toBeTruthy();
     const leading = view.getByTestId('sheet-editing-header-leading');
     const title = view.getByTestId('sheet-editing-header-title');
     expect(leading.parent).toBe(title.parent);
     expect(leading.parent!.children.indexOf(leading)).toBeLessThan(leading.parent!.children.indexOf(title));
     expect(view.getByTestId('client-picker-close').props.accessibilityLabel).toBe('Fermer');
     expect(view.queryByTestId('sheet-editing-header-trailing')).toBeNull();
-    expect(view.getByPlaceholderText('Rechercher une cliente').props.autoFocus).toBeFalsy();
+    expect(view.getByPlaceholderText('Rechercher un client').props.autoFocus).toBeFalsy();
     const shouldSet = view.getByTestId('bottom-sheet-drag-zone').props.onMoveShouldSetResponder as (
       event: unknown,
     ) => boolean;
@@ -101,7 +101,7 @@ describe('ClientPickerSheet (shared Client selection)', () => {
     await act(async () => {
       fireEvent.changeText(view.getByLabelText('Prénom'), 'Nour');
     });
-    await act(async () => fireEvent.press(view.getByText('Ajouter la cliente')));
+    await act(async () => fireEvent.press(view.getByText('Ajouter le client')));
 
     expect(view.getByTestId('selected').props.children).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:Nour$/);
     expect(Number(view.getByTestId('client-count').props.children)).toBe(initialCount + 1);
@@ -115,7 +115,7 @@ describe('ClientPickerSheet (shared Client selection)', () => {
 
     expect(view.getByTestId('selected').props.children).toBe('none');
     await settleSheetTransition();
-    expect(view.queryByText('Choisir la cliente')).toBeNull();
+    expect(view.queryByText('Choisir un client')).toBeNull();
   });
 
   it('never offers an archived Client, while the shared source still holds her', async () => {
@@ -125,11 +125,11 @@ describe('ClientPickerSheet (shared Client selection)', () => {
     await act(async () => fireEvent.press(view.getByTestId('archive-camille')));
     await act(async () => fireEvent.press(view.getByTestId('open')));
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'camille');
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'camille');
     });
 
     expect(view.queryByText('Camille Durand')).toBeNull();
-    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+    expect(view.getByText('Aucun client trouvé')).toBeTruthy();
     expect(Number(view.getByTestId('client-count').props.children)).toBe(initialCount);
   });
 });

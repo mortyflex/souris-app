@@ -1,4 +1,4 @@
-// Souris — Client photos in the Clientes directory
+// Souris — Client photos in the Clientèle directory
 //
 // Each mounted row resolves its own `photoPath` through the shared Client
 // photo cache (useClientPhotoUri → ClientAvatar): initials at once in the
@@ -252,7 +252,7 @@ describe('ClientDirectoryScreen — client photos', () => {
     });
     await waitFor(() => expect(view.getByTestId('client-directory-avatar-client-chloe-photo')).toBeTruthy());
     // Only Chloé's uncached photo was fetched: never Audrey's (cached), never
-    // Élise's (archived: her row is not mounted while Actives is shown).
+    // Élise's (archived: her row is not mounted while Actifs is shown).
     expect(remote.downloadCount).toBe(1);
   });
 

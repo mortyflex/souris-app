@@ -16,7 +16,7 @@ describe('buildClientDirectorySections', () => {
   it('groups active Clients first and archived Clients second, each alphabetically', () => {
     const sections = buildClientDirectorySections([zoe, lea, bea, anais], '');
 
-    expect(sections.map((section) => section.title)).toEqual(['Actives', 'Archivées']);
+    expect(sections.map((section) => section.title)).toEqual(['Actifs', 'Archivés']);
     expect(sections[0]?.data.map((client) => client.id)).toEqual(['client-anais', 'client-lea']);
     expect(sections[1]?.data.map((client) => client.id)).toEqual(['client-bea', 'client-zoe']);
   });
@@ -30,13 +30,13 @@ describe('buildClientDirectorySections', () => {
   it('searches both groups with the existing normalization and keeps the grouping', () => {
     const sections = buildClientDirectorySections([zoe, lea, bea, anais], 'martin');
 
-    expect(sections.map((section) => section.title)).toEqual(['Actives', 'Archivées']);
+    expect(sections.map((section) => section.title)).toEqual(['Actifs', 'Archivés']);
     expect(sections[0]?.data.map((client) => client.id)).toEqual(['client-lea']);
     expect(sections[1]?.data.map((client) => client.id)).toEqual(['client-zoe']);
 
     expect(buildClientDirectorySections([zoe, lea, bea, anais], 'zoe')[0]).toEqual({
       key: 'ARCHIVED',
-      title: 'Archivées',
+      title: 'Archivés',
       data: [zoe],
     });
   });

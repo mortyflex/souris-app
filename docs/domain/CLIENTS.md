@@ -102,7 +102,7 @@ Rules (`src/domain/clients/birthday.ts`):
 The value is either a complete day + month pair or absent — there is no
 partial-date model.
 
-The Clientes directory rows show no birthday: the Client Profile shows it.
+The Clientèle directory rows show no birthday: the Client Profile shows it.
 
 #### Birthday experience
 
@@ -130,7 +130,7 @@ Implemented (`src/features/clients/birthday`):
   card and the haptic;
 - **recognition at Client selection** — in Appointment creation, choosing a
   Client whose birthday is the APPOINTMENT date shows a compact reminder on
-  the Cliente step at once and plays the same burst and haptic
+  the Client step at once and plays the same burst and haptic
   (`docs/domain/APPOINTMENTS.md` §15.3). The copy says « aujourd'hui » only
   when the Appointment date is today, « ce jour-là » otherwise;
 - **Appointment discount suggestion** — see
@@ -347,8 +347,8 @@ Historical terminal outcomes (`CANCELLED`, `NO_SHOW`) remain part of history.
 Cancellation history distinguishes the recorded actor:
 
 ```text
-CLIENT   → Annulé par la cliente
-BUSINESS → Annulé par le salon
+CLIENT   → Annulé par le client
+BUSINESS → Annulé par vous
 ```
 
 Both remain historical records. Only explicit permanent Appointment deletion removes a row from Client history.
@@ -427,9 +427,9 @@ restoring removes `archivedAt` entirely (no `null`).
 Every flow that chooses a Client for a NEW action reads ACTIVE Clients only:
 
 ```text
-Appointment creation — Cliente step
-Appointment editing  — Modifier la cliente
-Sale creation        — Choisir / Modifier la cliente
+Appointment creation — Client step
+Appointment editing  — Modifier le client
+Sale creation        — Choisir / Modifier le client
 ```
 
 An archived Client is never offered there, never preselected from a stale
@@ -437,7 +437,7 @@ route parameter, and never silently restored because an action was
 attempted. Existing references keep resolving everywhere (`clientId` →
 Client), so Agenda blocks, Appointment Details, Appointment history, and
 `Produits achetés` still show the archived Client's identity. Her profile
-stays reachable from the directory (`Archivées` group) and from history.
+stays reachable from the directory (`Archivés` tab) and from history.
 
 Reactivating (`restoreClient`) makes the Client selectable again immediately.
 

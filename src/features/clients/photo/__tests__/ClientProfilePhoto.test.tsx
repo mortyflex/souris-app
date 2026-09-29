@@ -464,6 +464,6 @@ describe('Client photo from the Client Profile', () => {
 
     await waitFor(() => expect(displayedPhotoUri(view)).toBe(getClientPhotoCacheUri(mockFiles, path)));
     expect(view.getByTestId('client-archived-indicator')).toBeTruthy();
-    expect(view.getByLabelText('Réactiver la cliente')).toBeTruthy();
+    expect(view.getByLabelText('Réactiver le client')).toBeTruthy();
   });
 });

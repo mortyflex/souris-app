@@ -38,7 +38,7 @@ describe('canNavigateTo', () => {
 
 describe('stepLabels', () => {
   it('keeps the three creation steps in order', () => {
-    expect(stepLabels).toEqual(['Cliente', 'Prestations', 'Résumé']);
+    expect(stepLabels).toEqual(['Client', 'Prestations', 'Résumé']);
   });
 });
 

@@ -263,7 +263,7 @@ async function selectClientBeyond60(view: Rendered) {
 
   await act(async () => {
     fireEvent.changeText(
-      view.getByPlaceholderText('Rechercher une cliente'),
+      view.getByPlaceholderText('Rechercher un client'),
       'Constance Chevalier',
     );
   });
@@ -275,10 +275,10 @@ async function selectClientBeyond60(view: Rendered) {
   });
 }
 
-/** Taps a Client row of the Cliente step — the selection event itself, no « Continuer ». */
+/** Taps a Client row of the Client step — the selection event itself, no « Continuer ». */
 async function tapClient(view: Rendered, fullName: string) {
   await act(async () => {
-    fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), fullName);
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), fullName);
   });
   // The ROW: once chosen, the name is also written in the context row.
   await act(async () => {
@@ -288,7 +288,7 @@ async function tapClient(view: Rendered, fullName: string) {
 
 async function selectClientByName(view: Rendered, fullName: string) {
   await act(async () => {
-    fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), fullName);
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), fullName);
   });
   await act(async () => {
     fireEvent.press(view.getByText(fullName));
@@ -437,10 +437,10 @@ describe('AppointmentCreationScreen', () => {
     // Heure: the whole row is the button; no separate « Changer l'horaire » link.
     expect(view.getByRole('button', { name: 'Heure, 10:15' })).toBeTruthy();
     expect(view.queryByText("Changer l'horaire")).toBeNull();
-    // No Cliente row above the search: the Client is picked in the list.
-    expect(view.queryByText('Choisir une cliente')).toBeNull();
-    expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
-    expect(view.getByText('Ajouter une cliente')).toBeTruthy();
+    // No Client row above the search: the Client is picked in the list.
+    expect(view.queryByText('Choisir un client')).toBeNull();
+    expect(view.getByPlaceholderText('Rechercher un client')).toBeTruthy();
+    expect(view.getByText('Ajouter un client')).toBeTruthy();
   });
 
   it('opens in the canonical Souris sheet shell with a scrollable Client list and no auto-focus', async () => {
@@ -448,14 +448,14 @@ describe('AppointmentCreationScreen', () => {
 
     expect(view.getByTestId('appointment-creation-sheet')).toBeTruthy();
     expect(view.getByRole('header', { name: 'Nouveau rendez-vous' })).toBeTruthy();
-    // The stepper and the segment name the mode: no « Cliente » page title.
-    expect(view.queryByRole('header', { name: 'Cliente' })).toBeNull();
+    // The stepper and the segment name the mode: no « Client » page title.
+    expect(view.queryByRole('header', { name: 'Client' })).toBeNull();
     expect(view.queryByText('NOUVEAU RENDEZ-VOUS')).toBeNull();
     expect(view.getByLabelText('Annuler la création')).toBeTruthy();
     expect(view.getByTestId('appointment-creation-actions')).toBeTruthy();
     expect(view.getByText('Continuer')).toBeTruthy();
 
-    const search = view.getByPlaceholderText('Rechercher une cliente');
+    const search = view.getByPlaceholderText('Rechercher un client');
     expect(search.props.autoFocus).toBeFalsy();
     // The Client list is a real vertical list the professional scrolls through;
     // scrolling it never closes the creation sheet.
@@ -1032,19 +1032,20 @@ describe('AppointmentCreationScreen', () => {
     expect(view.getByText('1 h')).toBeTruthy();
   });
 
-  it('reviews the Résumé in grouped rows: Cliente and Heure are actions, Date is read-only, no TOTAL heading', async () => {
+  it('reviews the Résumé in grouped rows: Client and Heure are actions, Date is read-only, no TOTAL heading', async () => {
     const view = await renderCreation();
     await selectClientBeyond60(view);
     await searchService(view, 'brushing 1');
     await selectService(view, 'Brushing 1');
     await continueToSummary(view);
 
-    // Cliente: one row, the row is the action.
+    // Client: one row, the row is the action.
+    expect(view.getByText('CLIENT')).toBeTruthy();
     const clientRow = view.getByTestId('edit-client');
     expect(clientRow.props.accessibilityRole).toBe('button');
-    expect(clientRow.props.accessibilityLabel).toBe('Cliente, Constance Chevalier');
+    expect(clientRow.props.accessibilityLabel).toBe('Client, Constance Chevalier');
     expect(view.getByTestId('edit-client-value')).toHaveTextContent('Constance Chevalier');
-    expect(view.queryByText('Changer la cliente')).toBeNull();
+    expect(view.queryByText('Changer de client')).toBeNull();
 
     // Date: read-only, the full date spoken.
     const dateRow = view.getByTestId('appointment-date');
@@ -1079,11 +1080,11 @@ describe('AppointmentCreationScreen', () => {
       `Durée totale 30 min, total ${formatEuros(20)}`,
     );
 
-    // Cliente row returns to the Client step.
+    // Client row returns to the Client step.
     await act(async () => {
       fireEvent.press(clientRow);
     });
-    expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+    expect(view.getByPlaceholderText('Rechercher un client')).toBeTruthy();
   });
 
   it('shows the Temps actif / Temps de pose breakdown only when the Résumé has pose time', async () => {
@@ -1147,7 +1148,7 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.changeText(view.getByLabelText('Nom'), 'Cliente');
     });
     await act(async () => {
-      fireEvent.press(view.getByText('Ajouter la cliente'));
+      fireEvent.press(view.getByText('Ajouter le client'));
     });
     await settleSheetTransition();
 
@@ -1173,11 +1174,11 @@ describe('AppointmentCreationScreen', () => {
     });
   });
 
-  it('never offers an archived Client in the Cliente step', async () => {
+  it('never offers an archived Client in the Client step', async () => {
     const view = await renderCreation();
 
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'léa martin');
     });
     expect(view.getByText('Léa Martin')).toBeTruthy();
 
@@ -1186,7 +1187,7 @@ describe('AppointmentCreationScreen', () => {
     });
 
     expect(view.queryByText('Léa Martin')).toBeNull();
-    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+    expect(view.getByText('Aucun client trouvé')).toBeTruthy();
   });
 
   describe('selected Client as the « RENDEZ-VOUS » heading', () => {
@@ -1218,13 +1219,13 @@ describe('AppointmentCreationScreen', () => {
       await tapClient(view, 'Léa Martin');
 
       await act(async () => {
-        fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Constance Chevalier');
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'Constance Chevalier');
       });
       expect(view.queryByRole('button', { name: /Léa Martin/ })).toBeNull();
       expect(view.getAllByText('Léa Martin')).toEqual([heading(view)]);
 
       await act(async () => {
-        fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), '');
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), '');
       });
       expect(heading(view)).toHaveTextContent('Léa Martin');
     });
@@ -1274,11 +1275,11 @@ describe('AppointmentCreationScreen', () => {
   });
 
   describe('opened from a Client Profile (initialClientId)', () => {
-    it('starts on Cliente with her selected, the Agenda date kept, and creates nothing', async () => {
+    it('starts on Client with her selected, the Agenda date kept, and creates nothing', async () => {
       const view = await render(creationTree(0, undefined, startAt, 'client-agenda-lea'));
       const before = view.getByTestId('appointments-probe').props.children;
 
-      expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+      expect(view.getByPlaceholderText('Rechercher un client')).toBeTruthy();
       expect(view.getByTestId('appointment-schedule-heading')).toHaveTextContent('Léa Martin');
       expect(view.getByTestId('appointment-date-value')).toHaveTextContent('Mar. 25 août');
       expect(view.getByTestId('time-modifier-value')).toHaveTextContent('10:15');
@@ -1287,7 +1288,7 @@ describe('AppointmentCreationScreen', () => {
 
       // Her row in the (virtualised) list is the selected one.
       await act(async () => {
-        fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa Martin');
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'Léa Martin');
       });
       expect(view.getByRole('button', { name: /Léa Martin/ })).toBeSelected();
     });
@@ -1309,7 +1310,7 @@ describe('AppointmentCreationScreen', () => {
       expect(view.getByTestId('last-appointment-client-id')).toHaveTextContent('client-agenda-lea');
     });
 
-    it('still lets her be replaced on the Cliente step', async () => {
+    it('still lets her be replaced on the Client step', async () => {
       const view = await render(creationTree(0, undefined, startAt, 'client-agenda-lea'));
 
       await tapClient(view, 'Constance Chevalier');
@@ -1332,13 +1333,13 @@ describe('AppointmentCreationScreen', () => {
       await reachBirthdaySummary(view);
 
       const notice = view.getByTestId('appointment-birthday-notice');
-      expect(within(notice).getByText('Anniversaire de la cliente')).toBeTruthy();
+      expect(within(notice).getByText('Anniversaire du client')).toBeTruthy();
       expect(
         within(notice).getByText('Vous pouvez appliquer une réduction anniversaire.'),
       ).toBeTruthy();
       expect(
         view.getByLabelText(
-          'Anniversaire de la cliente. Vous pouvez appliquer une réduction anniversaire.',
+          'Anniversaire du client. Vous pouvez appliquer une réduction anniversaire.',
         ),
       ).toBeTruthy();
       expect(view.getByRole('button', { name: 'Appliquer une réduction' })).toBeTruthy();
@@ -1485,8 +1486,8 @@ describe('AppointmentCreationScreen', () => {
 
       await tapClient(view, 'Léa Martin');
 
-      // Still on the Cliente step: the selection succeeded and the reminder is there.
-      expect(view.getByLabelText('Cliente — étape en cours')).toBeTruthy();
+      // Still on the Client step: the selection succeeded and the reminder is there.
+      expect(view.getByLabelText('Client — étape en cours')).toBeTruthy();
       expect(view.getByRole('button', { name: /Léa Martin/ }).props.accessibilityState.selected).toBe(true);
       const notice = view.getByTestId('client-selection-birthday-notice');
       expect(within(notice).getByText("C'est l'anniversaire de Léa ce jour-là.")).toBeTruthy();
@@ -1547,7 +1548,7 @@ describe('AppointmentCreationScreen', () => {
         fireEvent.press(view.getByLabelText('Étape précédente'));
       });
 
-      // Back on the Cliente step: the reminder is there, nothing replayed.
+      // Back on the Client step: the reminder is there, nothing replayed.
       expect(view.getByTestId('client-selection-birthday-notice')).toBeTruthy();
       expect(view.queryByTestId('birthday-confetti', hidden)).toBeNull();
       expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);

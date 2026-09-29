@@ -198,8 +198,8 @@ picker (`CLAUDE.md` §18); the data model is staff-scoped all the same.
 ## 7. Product surfaces
 
 ```text
-Creation     the existing « + » / timeline tap → « Cliente | Personnel » (shared SegmentedControl).
-             « Cliente » is the unchanged three-step flow. « Personnel » replaces it by ONE direct
+Creation     the existing « + » / timeline tap → « Client | Personnel » (shared SegmentedControl).
+             « Client » is the unchanged three-step flow. « Personnel » replaces it by ONE direct
              form: date context, Début / Fin, Motif chips (+ free text behind « Autre »),
              « Bloquer le créneau ». The two drafts never meet.
 Agenda Day   drawn through the SAME interval layout, visible range and minute scale as Appointment
@@ -215,7 +215,7 @@ Editing      the same form, « Enregistrer les modifications »; the draft is pr
 Deletion     confirmation dialog, permanent; a remote tombstone under the sync layer.
 ```
 
-Accessibility: `Rendez-vous cliente` / `Rendez-vous personnel`, `Heure de début`, `Heure de fin`,
+Accessibility: `Rendez-vous client` / `Rendez-vous personnel`, `Heure de début`, `Heure de fin`,
 `Motif`, `Bloquer le créneau`, and blocks announced as
 `Indisponible, Déplacement, de 10 heures à 11 heures 30`. Nothing relies on colour. No special motion.
 

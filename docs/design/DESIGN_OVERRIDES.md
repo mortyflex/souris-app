@@ -161,13 +161,13 @@ The exported Agenda reference shows creation as a single form sheet (`Nouveau re
 a Prestation select, date/heure fields, and a Déroulé preview). The implemented Souris creation experience
 deliberately differs:
 
-- three steps with a connected stepper — `Cliente → Prestations → Résumé`;
+- three steps with a connected stepper — `Client → Prestations → Résumé`;
 - the Agenda-selected date/time is pinned as a compact appointment-context row on every step (never a large
   date card). The time is a creation draft: a restrained « Changer l'horaire » reveals the inline start-time
   wheels (hours + 5-minute minutes, see « Appointment start time — wheels ») on the same local date, bounded
   by the operational Agenda day;
 - the client picker searches the complete normalized address book with a virtualized list and no display cap;
-  its search field uses a symbol icon and a clear `Rechercher une cliente` placeholder instead of field
+  its search field uses a symbol icon and a clear `Rechercher un client` placeholder instead of field
   instructions;
 - Prestations reads the single shared active Service catalog as a compact wrapping two-column grid grouped
   by type — `Services` / `Techniques` — with borderless tinted selectable cards (name, concise
@@ -180,7 +180,7 @@ deliberately differs:
   the draft shows the added state and cannot create a duplicate; removing the Appointment item releases the
   card again. Retained snapshot items never appear as grid selections;
 - the Appointment Editing context surface carries explicit restrained violet actions:
-  `Modifier la cliente` (client reassignment through the shared picker), `Changer la date`,
+  `Modifier le client` (client reassignment through the shared picker), `Changer la date`,
   `Changer l'heure` — no generic `Modifier` wording;
 - selection feedback lives in the BOTTOM ACTION AREA: a restrained deep-violet, medium-weight count line
   (`2 prestations sélectionnées`, correctly pluralized) sits directly above the navigation buttons inside
@@ -224,7 +224,7 @@ Appointment selection; existing Appointment snapshots are never changed.
 Archived records (Clients today) share one restrained treatment: the row keeps its structure,
 the name drops to `foregroundSoft`, the initials fallback drops to `foregroundSoft` on the neutral
 `surface` (a Client photo is shown as it is, never greyed), and metadata gains a leading
-`Archivée` mention. *(The muted « Archivées » group eyebrow is superseded by the « Archivées » tab
+`Archivé` mention. *(The muted « Archivés » group eyebrow is superseded by the « Archivés » tab
 of §36.)* Never rose/error styling,
 never strikethrough, never a hidden row — archived is a quiet state, not a failure. The
 lifecycle actions follow the existing hierarchy: reactivate as the secondary action in the
@@ -298,7 +298,7 @@ Products use one consistent primary-image treatment across catalog, details, and
 - Product Details renders no large placeholder when an image is absent, preserving the textual hierarchy;
 - image surfaces use restrained Souris radii with no decorative outer border;
 - the catalog thumbnail geometry (52 pt rounded square, `radii.medium`) is the shared list
-  thumbnail that Clientes rows also use (§36).
+  thumbnail that Clientèle rows also use (§36).
 
 ---
 
@@ -464,8 +464,8 @@ runtime integrates the SAME canonical assets (`assets/brand/logo-mark.png`, `log
   follows the intrinsic ratio (lockup and wordmark 3:1, mark 3:2) with `resizeMode="contain"`, so
   nothing is ever stretched. The PNGs are transparent and coloured: they sit directly on the white
   background with no cream or tinted plate behind them, and there is no white-on-light variant.
-- **Where logos do NOT appear** — Agenda, Clientes, Produits, Prestations, details, sheets, forms,
-  headers. Titles stay `Agenda` / `Clientes` / `Produits` / `Plus`; never `Souris — Agenda`.
+- **Where logos do NOT appear** — Agenda, Clientèle, Produits, Prestations, details, sheets, forms,
+  headers. Titles stay `Agenda` / `Clientèle` / `Produits` / `Plus`; never `Souris — Agenda`.
 - **Display name** — the installed app is named `Souris` (`expo.name`); `souris-app` remains only
   the technical slug / package name.
 - Dark logo variants, alternative palettes, and new artwork are out of scope: the three canonical
@@ -533,8 +533,8 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
 - `tone="neutral"` — accent eyebrow and a primary confirm: sign-out, Product / Service
   deactivation, Client archiving (reversible actions always confirm first, never in rose), and
   explanation-only dialogs (single « Compris »).
-- **Client archiving** — `ARCHIVAGE` · « Archiver cette cliente ? » · « La cliente restera dans
-  votre répertoire mais sera déplacée dans les clientes archivées. Vous pourrez la restaurer plus
+- **Client archiving** — `ARCHIVAGE` · « Archiver ce client ? » · « Ce client restera dans
+  votre répertoire mais sera déplacé dans les clients archivés. Vous pourrez le restaurer plus
   tard. » · `Annuler` / `Archiver`. Nothing is written before « Archiver »; the profile stays open.
 - Wording stays feature-owned; the primitive never names an entity. React Native `Alert` is
   not used for Souris-owned confirmations — it remains only for error reports
@@ -544,11 +544,11 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
 
 - Each main tab carries ONE large, low-contrast semantic symbol anchored in the top-right
   corner and partially cropped by the right edge so it reads as embedded in the page surface:
-  Agenda `calendar`, Clientes `person.2`, Produits `shippingbox`, Plus `gearshape` (Material
+  Agenda `calendar`, Clientèle `person.2`, Produits `shippingbox`, Plus `gearshape` (Material
   equivalents on Android). `watermark.size` / `watermark.opacity` / `watermark.crop*` and one
   position for all four — anchored to the title block by `MainScreenHeader` (§17), never to the
   device edge. Symbols do not fill their box the same way, so a symbol may carry a restrained
-  optical scale and rise (`screenWatermarkOptics`: the two people of Clientes grow and lift so
+  optical scale and rise (`screenWatermarkOptics`: the two people of Clientèle grow and lift so
   the heads and shoulders stay readable above the search field); the shared anchor, the
   right-edge crop and the opacity never change per screen.
 - Decoration only: absolutely positioned under the content, `pointerEvents="none"`, hidden from
@@ -561,7 +561,7 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
   names, February offers 29, a shorter month resolves the day to its last valid one). No year
   column, no typing, no nested overlay; « Effacer » removes it. See §17 and
   `docs/domain/CLIENTS.md` §2.
-- **Directory birthday** — *(Superseded by §36: Clientes rows end with the Produits chevron and
+- **Directory birthday** — *(Superseded by §36: Clientèle rows end with the Produits chevron and
   show no birthday; the Client Profile shows it.)*
 - **Profile birthday glyph** — the Client Profile shows the cake glyph (`shared/icons/birthday-icon.ts`,
   16 pt, accent violet) before the « Anniversaire » value of the `Informations` surface.
@@ -573,7 +573,7 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
     title, soft-foreground supporting text; the optional action is a white secondary button, also
     borderless. The copy is one accessible element; the action is a separate button. Never an
     alert, an error or a popup.
-  - *Compact reminder* (`BirthdayNotice compact`, Cliente step of Appointment creation, under the
+  - *Compact reminder* (`BirthdayNotice compact`, Client step of Appointment creation, under the
     context row): same card with `md` / `sm` padding, a 28 pt badge with a 14 pt glyph, the sentence
     as a `control` title and one supporting line; no action.
   - *Confetti* (`BirthdayConfetti`, Client Profile and Appointment creation — the ONE implementation,
@@ -583,7 +583,7 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
     value on the UI thread, pointer-transparent, hidden from assistive technology, skipped with
     Reduce Motion, with one `success` haptic. Played once per profile entry (mount) and once per
     explicit birthday-Client selection in creation — never on a re-render.
-  - *Appointment Details*: a static 14 pt glyph + « Anniversaire de la cliente » (`metadata`,
+  - *Appointment Details*: a static 14 pt glyph + « Anniversaire du client » (`metadata`,
     `rose700`) under the date line.
 - **Sale glyph on the Client Profile** — « Vendre un produit » carries the bag glyph of the
   « Revente » action of Appointment Details (`shared/icons/sale-icon.ts`: `bag.fill` /
@@ -615,7 +615,7 @@ Produits                                  [watermark, cropped by the right edge]
 ```
 
 - one large screen title on the platform gutter, `spacing.md` below the top safe area;
-  Produits and Clientes carry NO uppercase eyebrow — the title is never repeated. Agenda carries
+  Produits and Clientèle carry NO uppercase eyebrow — the title is never repeated. Agenda carries
   none either: the Jour / Semaine switch already says which view this is, and the selected date
   belongs to the day navigator (§21); Plus keeps its approved content;
 - optional trailing content inside the gutter (Agenda's view switcher);
@@ -643,7 +643,7 @@ Produits                                  [watermark, cropped by the right edge]
   focus it fades and rises `floatingAction.revealRise` into place over `duration.state` — no
   bounce, no overshoot. Losing focus hides it at once, closes any menu and resets the reveal.
   Reduced motion shows it immediately.
-- A single flow opens directly: Clientes → the shared Client form; Prestations & tarifs →
+- A single flow opens directly: Clientèle → the shared Client form; Prestations & tarifs →
   Service creation.
 - Several flows expand into a compact menu anchored above the button (fade + rise + light
   scale, `duration.disclosure`; reduced motion renders the end state): right-aligned pills with
@@ -710,7 +710,7 @@ One selection haptic per row change while scrolling, never per pixel. The model 
 
 ## 18. Main Navigation — Native Tabs (Liquid Glass)
 
-The four main tabs — **Agenda · Clientes · Produits · Plus**, in that order, static for the whole
+The four main tabs — **Agenda · Clientèle · Produits · Plus**, in that order, static for the whole
 app lifetime — live on the platform's own tab bar through Expo Router `NativeTabs`
 (`src/app/(app)/(tabs)/_layout.tsx`). The JavaScript tab bar of the export (`.tabs`, DESIGN.md §5)
 is no longer reproduced natively.
@@ -724,7 +724,7 @@ is no longer reproduced natively.
 - **Android**: native Material bottom navigation, with Material icons — not an imitation of
   Liquid Glass.
 - **Icons / labels**: system symbols, visible native labels, native selected state.
-  Agenda `calendar` / `calendar_month`; Clientes `person.2` → `person.2.fill` / `group`;
+  Agenda `calendar` / `calendar_month`; Clientèle `person.2` → `person.2.fill` / `group`;
   Produits `shippingbox` → `shippingbox.fill` / `inventory_2`; Plus `ellipsis` / `more_horiz`
   (« Plus » is more than settings, so no gear). No icon package.
 - **Tint**: the selected tab uses the Souris accent (`semanticColors.accent`) and nothing else is
@@ -739,7 +739,7 @@ is no longer reproduced natively.
 - **Minimize on scroll**: NOT enabled. The bar stays stable while the professional works; the
   minimize behaviour is evaluated separately later.
 - **Content under the bar (iOS)**: the bar overlays the page. The main lists (Agenda day / week,
-  Clientes, Produits) opt into the system content inset (`contentInsetAdjustmentBehavior`), and
+  Clientèle, Produits) opt into the system content inset (`contentInsetAdjustmentBehavior`), and
   keep `bottomClearance` above it so the last row scrolls above the floating +. Plus does not
   scroll and pads its content by the tab's bottom safe area. No tab-bar height is measured,
   hardcoded or guessed.
@@ -808,7 +808,7 @@ presentation only. Occupancy, segments, statuses and navigation behave exactly a
   violet plus described in §21 (`GlassSurface`), and the `gloss.candy` tokens are removed. What
   remains from this section: the whole finish lives in ONE circular clip (radius = half the
   button), nothing but the round shadow is ever drawn outside the circle, and the button is
-  shared, so Agenda, Clientes, Produits and Prestations carry the same finish.
+  shared, so Agenda, Clientèle, Produits and Prestations carry the same finish.
 - **Bottom bar — iOS 18 and earlier**: NativeTabs asks UIKit for its thinner system material
   (`blurEffect="systemThinMaterial"`) so the page reads through the bar more. Still the system's
   own material — no BlurView, no custom bar.
@@ -822,7 +822,7 @@ presentation only. Occupancy, segments, statuses and navigation behave exactly a
   `UIScrollEdgeEffect` via `ScrollViewMarker` from `react-native-screens/experimental`), so the
   bar refracts crisp, luminous content. The system keeps icons and labels legible by itself.
   That entry point is marked experimental upstream: the wrapper is its single consumer and must
-  be rechecked on every react-native-screens upgrade. Clientes and Produits keep the default
+  be rechecked on every react-native-screens upgrade. Clientèle and Produits keep the default
   edge effect until decided otherwise.
 
 ---
@@ -937,7 +937,7 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
   stays a clean light surface on Android. The floating + uses the denser `fillFloating` so list
   rows never ghost through it. The native tab bar itself is untouched.
 - **Glass icon button** — `GlassIconButton` (`src/shared/ui/`): a 44 pt circle, the glass
-  material, one thin navy glyph centred in it. Used by the back button of Fiche cliente,
+  material, one thin navy glyph centred in it. Used by the back button of Fiche client,
   Prestations & tarifs and Caisse (`glassIcons.back`) and by the Agenda previous / next arrows in
   both Jour and Semaine and the Caisse previous / next arrows in both Jour and Mois
   (`glassIcons.previous` / `next`). Only the symbol changes.
@@ -1024,10 +1024,10 @@ gestures, sheet sizing and card geometry are unchanged.
   price, no type colour), two lines at most with an ellipsis beyond, hidden while nothing is
   selected; the count always stays whole. Appointment Editing needs no such line: its selected
   Services are the named stack above the grid.
-- **Clientes count.** *(Superseded by §36: « Clientes » is a plain title again; the counts live in
-  the « Actives » section header or the Actives / Archivées tabs.)* `MainScreenHeader` takes an
+- **Clientèle count.** *(Superseded by §36: « Clientèle » is a plain title again; the counts live in
+  the « Actifs » section header or the Actifs / Archivés tabs.)* `MainScreenHeader` takes an
   optional `count`: the number of ACTIVE Clients
-  (the session's `activeClients`, never the search results) sits beside the untouched « Clientes »
+  (the session's `activeClients`, never the search results) sits beside the untouched « Clientèle »
   title as white `chip` figures in a small soft-violet pill (`appointmentPastels.lilac.accent` —
   the lightest approved violet that keeps white readable, 4.9:1; same geometry as the
   `SectionHeader` count chip).
@@ -1128,12 +1128,12 @@ fast — never a technical admin form, never a grey disabled state.
   lines, 56 pt minimum): mauve marker, glyph + « Indisponible » in plum, then
   « Déplacement · jusqu'à 11:30 » in `mauve700`. Pressed: `mauve050`. Blocks are never counted in
   « n rendez-vous »; the day header says « 1 créneau indisponible » to assistive technologies.
-- **Creation — « Cliente | Personnel ».** The shared light-glass `SegmentedControl` (§21), directly
-  under the sheet header; no new switch style. Spoken « Rendez-vous cliente » / « Rendez-vous
+- **Creation — « Client | Personnel ».** The shared light-glass `SegmentedControl` (§21), directly
+  under the sheet header; no new switch style. Spoken « Rendez-vous client » / « Rendez-vous
   personnel ». Both modes share the editing header of §27 (« Annuler » leading, one title): « Nouveau
-  rendez-vous » in « Cliente », « Indisponible » in « Personnel » — no eyebrow. In « Personnel » the
+  rendez-vous » in « Client », « Indisponible » in « Personnel » — no eyebrow. In « Personnel » the
   stepper, the context row, every step and the step action bar are replaced by ONE form, in the same
-  row language as the Cliente step:
+  row language as the Client step:
   - `CRÉNEAU` (`eyebrow`, `foregroundSoft`) over ONE `GroupedSurface` of three `GroupedDataRow`s:
     **Date** read-only (calendar glyph, « Mar. 25 août », no chevron, not a button, spoken « Date,
     mardi 25 août »), then **Début** and **Fin** (clock glyph, tabular time, chevron; spoken « Début,
@@ -1310,8 +1310,8 @@ Appointment Creation keeps §22 for now.
   prestations — and the footer outside it. No nested vertical list.
 - **Rendez-vous.** `RENDEZ-VOUS` eyebrow over one white grouped surface (`GroupedSurface`: the §26
   recipe) with three whole-row actions: accent glyph, label (`body`, soft), value (`control`, right,
-  truncating), chevron. Cliente → client picker, Date → date picker, Heure → the inline wheels
-  under the row (the chevron turns). No « Modifier la cliente » link labels; they are the hints.
+  truncating), chevron. Client → client picker, Date → date picker, Heure → the inline wheels
+  under the row (the chevron turns). No « Modifier le client » link labels; they are the hints.
 - **Prestations sélectionnées.** Count badge; ONE grouped list with inset separators. Reorder
   handle leading, a small category dot, name, duration · pose, price column, accordion chevron
   (price + durations, unchanged). Swipe-to-remove unchanged, square on the white surface.
@@ -1338,12 +1338,12 @@ Appointment Creation keeps §22 for now.
 The creation sheet speaks the §27 language. Flow, steps, rules and data are unchanged.
 
 - **Header.** The §27 editing header in both modes: « Annuler » leading, then « Nouveau
-  rendez-vous » (Cliente) or « Indisponible » (Personnel). No eyebrow, no step title — the
+  rendez-vous » (Client) or « Indisponible » (Personnel). No eyebrow, no step title — the
   segment names the mode, the stepper the step.
-- **Rendez-vous.** On Cliente AND Prestations, `RENDEZ-VOUS` over one `GroupedSurface`: **Date**
+- **Rendez-vous.** On Client AND Prestations, `RENDEZ-VOUS` over one `GroupedSurface`: **Date**
   read-only (the Agenda day: no chevron, not a button) and **Heure** (chevron; the whole row
   opens the start-time wheels inline). No « Changer l'horaire », no Client row — the Client is
-  chosen in the search + list of the Cliente step, whose rows are separated by hairlines.
+  chosen in the search + list of the Client step, whose rows are separated by hairlines.
 - **Shared prestation catalogue.** `ServiceCatalogPicker` + `ServiceSelectionCard` serve BOTH
   creation (Prestations step: a tap toggles) and editing (Ajouter des prestations: a tap adds).
   Search, full-width Services / Techniques segment (`serviceCategoryColors[type].strong` fill),
@@ -1361,7 +1361,7 @@ The creation sheet speaks the §27 language. Flow, steps, rules and data are unc
 The profile is a dashboard; the histories are exhaustive pushed screens. Data, rules and
 lifecycle are unchanged.
 
-- **Header.** Glass back, a centred « Cliente » title, « Modifier » trailing.
+- **Header.** Glass back, a centred « Client » title, « Modifier » trailing.
 - **Activité.** One `GroupedSurface`, a 2 × 2 grid split by hairlines. Each metric: a small
   accent glyph in a `surfaceLavender` circle, the value in navy `summaryValue`, the label in
   `metadata`. Numbers are never violet.
@@ -1396,9 +1396,9 @@ the SAME width on both sides — the measured width of the wider side action —
 whatever the width of « Annuler », and a long title truncates before reaching it; no empty placeholder
 button. Used by « Nouveau rendez-vous » (and its « Indisponible » mode), « Modifier le rendez-vous »,
 « Nouvelle vente », « Nouvelle prestation », « Modifier la prestation », « Ajouter un produit »,
-« Modifier le produit », « Ajouter une cliente », « Modifier la cliente », the
+« Modifier le produit », « Ajouter un client », « Modifier le client », the
 checkout sheet (« Encaisser le rendez-vous », « Encaisser la vente », « Modifier l’encaissement »)
-and the pickers opened from these flows: « Choisir la cliente » (« Fermer ») and « Date du
+and the pickers opened from these flows: « Choisir un client » (« Fermer ») and « Date du
 rendez-vous » (« Annuler »).
 
 - Cancel is always on the left. Equivalent sheets never move it to the right.
@@ -1533,7 +1533,7 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
               (metadata) ↔ « Panier moyen » / value (control) · optional quiet notes
   tear line
   rankings    ONE horizontal paged carousel bleeding to the paper edges, one category per page:
-              Top prestations → Top produits → Clientes qui dépensent le plus → Clientes les plus
+              Top prestations → Top produits → Clients qui dépensent le plus → Clients les plus
               fidèles, each an `InsightsPodium`
   pagination  four short pills, lav200; the current one a 16 pt accent pill
   footer      the Souris wordmark, 76 pt, decorative, `spacing.md` above it, clear of the torn edge
@@ -1646,7 +1646,7 @@ Data: `docs/domain/INSIGHTS.md` §7.
   ```
 
 - **Highlight.**
-  - Every category — Top prestations, Top produits, Clientes qui dépensent le plus, Clientes les
+  - Every category — Top prestations, Top produits, Clients qui dépensent le plus, Clients les
     plus fidèles — the SAME `InsightsPodium` and the same places, metrics and order as the receipt.
     Clients read `Prénom N.` (never a full last name) in the podium's own name style; metrics stay
     clear: `195 €`, `3 rdv`. Medals, gold /
@@ -1676,14 +1676,14 @@ Data: `docs/domain/INSIGHTS.md` §7.
 
 ---
 
-## 36. Directory Lists — Produits and Clientes, Actifs / Inactifs
+## 36. Directory Lists — Produits and Clientèle, Actifs / Inactifs
 
-Produits and Clientes browse their active and inactive records the SAME way. Supersedes the
-second, bottom « Inactifs » / « Archivées » section of both lists, and the §22 « Clientes count ».
+Produits and Clientèle browse their active and inactive records the SAME way. Supersedes the
+second, bottom « Inactifs » / « Archivés » section of both lists, and the §22 « Clientèle count ».
 
 ### Screen title
 
-« Produits » and « Clientes » are identity only: no count beside either title (§17 header).
+« Produits » and « Clientèle » are identity only: no count beside either title (§17 header).
 
 ### Without inactive records — one section
 
@@ -1714,16 +1714,16 @@ Actifs                                      [count]
 - search applies only to the selected tab and survives a switch; an empty result shows the
   screen's usual « aucun résultat » state with the tabs still in place;
 - tab counts are the FULL collections and never shrink with search;
-- spoken as tabs, with their selected state and count (« Archivées, 1 »).
+- spoken as tabs, with their selected state and count (« Archivés, 1 »).
 
 ### Wording
 
 - Produits: « Actifs » / « Inactifs ».
-- Clientes: « Actives » / « Archivées » — never « Inactives »: archiving is the Client domain's
-  established term (the « Archivée » row mention, archive / restore actions). Archived Clients
-  are searched from the « Archivées » tab.
+- Clientèle: « Actifs » / « Archivés » — never « Inactifs »: archiving is the Client domain's
+  established term (the « Archivé » row mention, archive / restore actions). Archived Clients
+  are searched from the « Archivés » tab.
 
-### Clientes rows — photo or initials
+### Clientèle rows — photo or initials
 
 - a Client photo shows directly in the row when one exists, cropped (`cover`), never stretched;
 - the frame is the Produits list thumbnail: the same 52 pt rounded square with the same corners
@@ -1736,7 +1736,7 @@ Actifs                                      [count]
 
 ### One directory grid
 
-Clientes and Produits share the same directory grid, so switching between the two tabs never
+Clientèle and Produits share the same directory grid, so switching between the two tabs never
 moves it; only the row content differs:
 
 - the same page: white background, the platform gutter for title, search, tabs, section header,
@@ -1747,7 +1747,7 @@ moves it; only the row content differs:
   the same gap to the text column, the same vertical padding, the same 72 pt minimum height, the
   same flat lavender pressed state, and the same small muted chevron at the end — decorative, not
   a button, silent for assistive technology: the whole row is the one action;
-- Clientes rows show no birthday (neither the date nor the « Aujourd'hui » badge): the birthday
+- Clientèle rows show no birthday (neither the date nor the « Aujourd'hui » badge): the birthday
   lives on the Client Profile and in appointment flows;
 - subtle hairline separators (`borderSubtle`) under every row, spanning the row from the
   thumbnail to the chevron; decorative, never read by assistive technology;
@@ -1816,6 +1816,40 @@ Estimation indicative basée sur les prestations sélectionnées.   metadata, so
   rendering unchanged: `ShareCardCanvas` (the share canvas: ground, width, margins, 9:16, 3×),
   `ShareHighlightPanel` (the lavender panel container) and `CreatedWithSouris` (« Créé avec » +
   wordmark, spoken « Créé avec Souris » once).
-- No recipient: no Client name, no « Cliente » / « Pour » line, no blank placeholder. No height is
+- No recipient: no Client name, no « Client » / « Pour » line, no blank placeholder. No height is
   fixed: a long name wraps, no line or amount is ever truncated or shrunk, and a long estimation is
   simply taller.
+
+---
+
+## 38. Neutral Client Terminology — « Clientèle » and « client »
+
+Souris serves professionals whose clientele is women, men or both. The exported reference and
+`DESIGN.md` §8 address the Client in the feminine (« la cliente », « Clientes »). Do NOT reproduce
+that wording. Supersedes every feminine Client quote of the earlier sections.
+
+- **The directory** — the tab and its screen title read **Clientèle**. The route stays
+  `(tabs)/clientes` and the trigger `name="clientes"`: technical identifiers are not copy.
+- **One person** — the natural masculine form of « client », never `client·e` nor
+  `cliente/client`: « Ajouter un client », « Nouveau client » (form title), « Ajouter le client »
+  (form confirmation), « Modifier le client », « Fiche client » (profile title, form backdrop),
+  « Rechercher un client », « Choisir un client », « Changer de client », « Aucun client »,
+  « Aucun client trouvé », « Aucun client actif », « Client introuvable », « Ce client n'existe
+  plus. », « Archiver le client », « Réactiver le client », « Photo du client », « Client inconnu ».
+- **Lifecycle** — the directory tabs read « Actifs » / « Archivés », the row and profile mention
+  « Archivé »; archive and deletion copy says « ce client », « le client », « clients archivés »
+  (« Vous pourrez le restaurer plus tard », « Conservez-le archivé… »).
+- **Appointments** — the `Client` step, row and eyebrow (`CLIENT`), « Rendez-vous client »,
+  « Anniversaire du client ». Cancellation actors: « Le client » / « Vous », recorded as « Annulé
+  par le client » / « Annulé par vous » — never « le salon », which would tie Souris to hair salons.
+- **Sales and Caisse** — `Client`, « Choisir un client », « Vente sans client ».
+- **Communications** — « Rappels clients », « Rappel client », « Clients inactifs », « Inactif
+  depuis » (the row sits under « Clients inactifs », so the noun is not repeated).
+- **Everywhere else** — « Agenda, clientèle, prestations et ventes » (Welcome), « Clients qui
+  dépensent le plus », « Clients les plus fidèles » (Tops & tendances), and the native photo /
+  camera permission prompts (« photos de vos clients et de vos produits »).
+- Future onboarding completion copy reads « Tout est prêt », never a gendered « Prête ».
+
+`src/features/clients/__tests__/neutral-client-wording.test.ts` guards the presentation sources:
+it reads string literals, template text and JSX text — never comments, route names or testIDs —
+and fails on a visible « cliente » / « clientes ».

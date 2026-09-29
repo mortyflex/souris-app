@@ -32,7 +32,7 @@ function appointment(overrides: Partial<Appointment> & Pick<Appointment, 'id'>):
 }
 
 const clientLabels: Record<string, string> = { 'client-julie': 'Julie Martin' };
-const getClientLabel = (clientId: string) => clientLabels[clientId] ?? 'Cliente inconnue';
+const getClientLabel = (clientId: string) => clientLabels[clientId] ?? 'Client inconnu';
 
 describe('day summary receipt', () => {
   it('writes the full French date, whatever the day', () => {
@@ -79,10 +79,10 @@ describe('day summary receipt', () => {
         key: 'upcoming',
         time: '14:30',
         serviceLabel: 'Coupe',
-        clientLabel: 'Cliente inconnue',
+        clientLabel: 'Client inconnu',
         amount: formatEuroCents(4200),
         collected: false,
-        accessibilityLabel: `14:30, Coupe, Cliente inconnue, ${formatEuroCents(4200)}`,
+        accessibilityLabel: `14:30, Coupe, Client inconnu, ${formatEuroCents(4200)}`,
       },
     ]);
     expect(model.potentialRevenue).toBe(formatEuroCents(8400));

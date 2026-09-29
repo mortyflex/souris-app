@@ -27,7 +27,7 @@ const OPEN_BODY =
   'Cet acompte ne sera plus compté dans le rendez-vous ni dans la caisse. Il reste visible comme acompte annulé. Il s’agit d’une correction de saisie, pas d’un remboursement.';
 
 const EXCEPTION_BODY =
-  'Cette action corrige un acompte enregistré par erreur. Elle ne rembourse pas la cliente. L’acompte ne sera plus compté dans le rendez-vous ni dans les totaux de la caisse, et reste visible comme acompte annulé.';
+  'Cette action corrige un acompte enregistré par erreur. Elle ne rembourse pas le client. L’acompte ne sera plus compté dans le rendez-vous ni dans les totaux de la caisse, et reste visible comme acompte annulé.';
 
 export function AppointmentDepositVoidDialog({
   deposit,

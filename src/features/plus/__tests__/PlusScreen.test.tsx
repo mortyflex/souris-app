@@ -141,6 +141,8 @@ describe('PlusScreen', () => {
 
     expect(view.getByText('Caisse')).toBeTruthy();
     expect(view.getByText('Encaissements du jour et du mois')).toBeTruthy();
+    expect(view.getByText('Rappels clients')).toBeTruthy();
+    expect(view.getByLabelText('Rappels clients, rappels par e-mail')).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(view.getByTestId('plus-cash-register'));

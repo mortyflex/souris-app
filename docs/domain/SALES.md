@@ -70,12 +70,12 @@ understandable from `productName`, `quantity`, and `unitPrice` alone.
 ## 4. Client of a Sale
 
 `clientId` is optional in the canonical model, but the Sale creation flow requires one
-(product decision, September 2026). The « Cliente » row depends on the entry context, decided by
+(product decision, September 2026). The « Client » row depends on the entry context, decided by
 the resolved Appointment id and never by UI state:
 
 - Appointment Details (« Revente »): the Sale belongs to the Appointment's own `clientId`. The
   row is read-only (no chevron, no picker, no removal); a different route Client is ignored.
-- Produits → « Nouvelle vente »: no Client at first (« Choisir une cliente »). The whole row opens
+- Produits → « Nouvelle vente »: no Client at first (« Choisir un client »). The whole row opens
   the shared picker; a selection replaces the current Client. « Valider la vente » stays disabled
   until a Client is chosen.
 - Client Profile: that Client is preselected in the same editable row, replaceable.

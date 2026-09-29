@@ -102,8 +102,8 @@ describe('ClientFormSheet', () => {
     const view = await renderSheet('create');
 
     // §30 editing header: « Annuler » leading, one centered title, no eyebrow.
-    expect(view.queryByText('NOUVELLE CLIENTE')).toBeNull();
-    expect(view.getByRole('header', { name: 'Ajouter une cliente' })).toBeTruthy();
+    expect(view.queryByText('NOUVEAU CLIENT')).toBeNull();
+    expect(view.getByRole('header', { name: 'Nouveau client' })).toBeTruthy();
     expect(view.getByLabelText('Annuler la création')).toBeTruthy();
     expect(view.getAllByText('Annuler')).toHaveLength(1);
     expect(view.queryByText('Fermer')).toBeNull();
@@ -129,7 +129,7 @@ describe('ClientFormSheet', () => {
     const create = await renderSheet('create');
     expect(create.getByTestId('client-form-actions')).toBeTruthy();
     expect(create.getByTestId('submit-client')).toBeTruthy();
-    expect(create.getByText('Ajouter la cliente')).toBeTruthy();
+    expect(create.getByText('Ajouter le client')).toBeTruthy();
 
     const edit = await renderSheet('edit');
     expect(edit.getByTestId('client-form-actions')).toBeTruthy();

@@ -158,8 +158,8 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
 
     const expected = [
       [1, 'Top produits, 2 sur 4', 'products'],
-      [2, 'Clientes qui dépensent le plus, 3 sur 4', 'spendingClients'],
-      [3, 'Clientes les plus fidèles, 4 sur 4', 'loyalClients'],
+      [2, 'Clients qui dépensent le plus, 3 sur 4', 'spendingClients'],
+      [3, 'Clients les plus fidèles, 4 sur 4', 'loyalClients'],
     ] as const;
     for (const [page, label, key] of expected) {
       await swipeTo(view, page);
@@ -205,21 +205,21 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
     const view = await renderReceipt();
 
     await act(async () => fireEvent.press(view.getByTestId('business-insights-page-indicator-spendingClients')));
-    expect(pagination(view).props.accessibilityLabel).toBe('Clientes qui dépensent le plus, 3 sur 4');
+    expect(pagination(view).props.accessibilityLabel).toBe('Clients qui dépensent le plus, 3 sur 4');
 
     expect(pagination(view).props.accessibilityRole).toBe('adjustable');
     await act(async () =>
       fireEvent(pagination(view), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } }),
     );
-    expect(pagination(view).props.accessibilityLabel).toBe('Clientes les plus fidèles, 4 sur 4');
+    expect(pagination(view).props.accessibilityLabel).toBe('Clients les plus fidèles, 4 sur 4');
     // Never past the last category.
     await act(async () =>
       fireEvent(pagination(view), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } }),
     );
-    expect(pagination(view).props.accessibilityLabel).toBe('Clientes les plus fidèles, 4 sur 4');
+    expect(pagination(view).props.accessibilityLabel).toBe('Clients les plus fidèles, 4 sur 4');
     await act(async () =>
       fireEvent(pagination(view), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } }),
     );
-    expect(pagination(view).props.accessibilityLabel).toBe('Clientes qui dépensent le plus, 3 sur 4');
+    expect(pagination(view).props.accessibilityLabel).toBe('Clients qui dépensent le plus, 3 sur 4');
   });
 });

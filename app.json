@@ -48,7 +48,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Souris utilise l’appareil photo pour ajouter des photos aux clientes et aux produits, et pour scanner les codes-barres des produits.",
+          "cameraPermission": "Souris utilise l’appareil photo pour ajouter des photos de vos clients et de vos produits, et pour scanner les codes-barres des produits.",
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
@@ -57,8 +57,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Souris accède à vos photos pour ajouter une photo à une cliente ou à un produit.",
-          "cameraPermission": "Souris utilise l’appareil photo pour ajouter des photos aux clientes et aux produits, et pour scanner les codes-barres des produits.",
+          "photosPermission": "Souris accède à vos photos pour ajouter une photo à un client ou à un produit.",
+          "cameraPermission": "Souris utilise l’appareil photo pour ajouter des photos de vos clients et de vos produits, et pour scanner les codes-barres des produits.",
           "microphonePermission": false
         }
       ],
@@ -66,7 +66,7 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Souris accède à vos photos pour ajouter une photo à une cliente ou à un produit.",
+          "photosPermission": "Souris accède à vos photos pour ajouter une photo à un client ou à un produit.",
           "savePhotosPermission": "Souris enregistre dans Photos les images que vous créez, comme vos Tops & tendances.",
           "granularPermissions": ["photo"]
         }

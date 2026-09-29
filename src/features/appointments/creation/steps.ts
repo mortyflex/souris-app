@@ -9,7 +9,7 @@
 
 export type CreationStep = 0 | 1 | 2;
 
-export const stepLabels = ['Cliente', 'Prestations', 'Résumé'] as const;
+export const stepLabels = ['Client', 'Prestations', 'Résumé'] as const;
 
 export type CreationStepState = 'completed' | 'current' | 'future';
 

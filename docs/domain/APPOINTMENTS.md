@@ -677,7 +677,7 @@ before recording the payment (§25b).
 **No origin, no reason.** The model is `type + value` only. There is no promotion engine, coupon, campaign
 or `birthdayDiscount` field: a discount offered because of a birthday is this same generic discount.
 
-**Birthday recognition at Client selection (creation).** On the Cliente step, choosing a Client whose birthday
+**Birthday recognition at Client selection (creation).** On the Client step, choosing a Client whose birthday
 is the Appointment DATE (`isClientBirthdayOnDate(client, draftStartAt)` — never today's date) shows a compact
 reminder under the context row at once: « C'est l'anniversaire d'Amel ce jour-là. » (« aujourd'hui » only when
 the Appointment date is today's local date) and « Vous pourrez lui proposer une réduction sur ce rendez-vous. ».
@@ -690,14 +690,14 @@ unchanged: no confetti when an editor opens.
 
 **Birthday suggestion.** When the Appointment DATE (the draft date in creation and editing — never today's
 date) is the Client birthday (`isClientBirthdayOnDate`, `docs/domain/CLIENTS.md` §2), creation and editing
-show a reminder right above « Réduction » (`AppointmentDiscountSection`): « Anniversaire de la cliente — Vous
+show a reminder right above « Réduction » (`AppointmentDiscountSection`): « Anniversaire du client — Vous
 pouvez appliquer une réduction anniversaire. » with the action « Appliquer une réduction ». The action ONLY
 opens the generic discount editor: it selects no preset, applies no value and writes nothing. The reminder is
 derived on every render, so changing the Client or the date updates it at once. Once a discount is set the
 reminder states « Une réduction est déjà appliquée à ce rendez-vous. » and offers no action; the wording never
 claims the discount is a birthday discount, because its origin is not recorded. A terminal Appointment is not
-editable, so no birthday discount action exists for it. Appointment Details shows a static « Anniversaire de la
-cliente » line under the date (not on a cancelled or no-show Appointment): no confetti, no discount control in
+editable, so no birthday discount action exists for it. Appointment Details shows a static « Anniversaire du
+client » line under the date (not on a cancelled or no-show Appointment): no confetti, no discount control in
 the body — « Modifier » and the checkout sheet are the places to edit the discount; checkout shows no birthday
 reminder. Nothing is ever discounted automatically, and pricing,
 checkout, the Cash Register and `Total dépensé` are unchanged.

@@ -129,8 +129,8 @@ describe('BusinessInsightsShareCard', () => {
   });
 
   it.each([
-    ['spendingClients', 'Clientes qui dépensent le plus', [['Amel B.', formatCompactEuroCents(19500)], ['Nadia F.', formatEuroCents(12345)]]],
-    ['loyalClients', 'Clientes les plus fidèles', [['Amel B.', '3 rdv']]],
+    ['spendingClients', 'Clients qui dépensent le plus', [['Amel B.', formatCompactEuroCents(19500)], ['Nadia F.', formatEuroCents(12345)]]],
+    ['loyalClients', 'Clients les plus fidèles', [['Amel B.', '3 rdv']]],
   ] as const)('stands the %s podium with « Prénom N. » names and visible metrics', async (category, title, placeTexts) => {
     const view = await renderCard(category);
     const highlight = within(view.getByTestId('card-highlight'));

@@ -49,7 +49,7 @@ describe('ScreenWatermarkIcon', () => {
     expect(style.opacity).toBeLessThan(0.2);
   });
 
-  it('keeps the reference geometry for Produits, Agenda and Plus and applies the people optics to Clientes', async () => {
+  it('keeps the reference geometry for Produits, Agenda and Plus and applies the people optics to Clientèle', async () => {
     const products = await render(<ScreenWatermarkIcon kind="products" />);
     const productsTop = StyleSheet.flatten(
       products.getByTestId('screen-watermark-products', { includeHiddenElements: true }).props.style,

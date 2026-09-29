@@ -250,11 +250,11 @@ describe('EstimationCreationScreen', () => {
     expect(view.getByLabelText('Prestations — étape en cours')).toBeTruthy();
     expect(view.getByLabelText('Résumé — à venir')).toBeTruthy();
     // No Client step, search, list, creation or heading.
-    expect(view.queryByLabelText(/^Cliente/)).toBeNull();
-    expect(view.queryByText('Cliente')).toBeNull();
-    expect(view.queryByPlaceholderText('Rechercher une cliente')).toBeNull();
+    expect(view.queryByLabelText(/^Client/)).toBeNull();
+    expect(view.queryByText('Client')).toBeNull();
+    expect(view.queryByPlaceholderText('Rechercher un client')).toBeNull();
     expect(view.queryByTestId('client-picker-list')).toBeNull();
-    expect(view.queryByText('Ajouter une cliente')).toBeNull();
+    expect(view.queryByText('Ajouter un client')).toBeNull();
     expect(view.queryByTestId('add-client-picker')).toBeNull();
     // Straight into the catalogue.
     expect(view.getByPlaceholderText('Rechercher une prestation')).toBeTruthy();
@@ -271,7 +271,7 @@ describe('EstimationCreationScreen', () => {
     expect(view.getByLabelText('Étape 2 sur 2')).toBeTruthy();
     expect(view.getByLabelText('Prestations — terminée')).toBeTruthy();
     expect(view.getByLabelText('Résumé — étape en cours')).toBeTruthy();
-    expect(view.queryByText(/cliente/i)).toBeNull();
+    expect(view.queryByText(/\bclient/i)).toBeNull();
     expect(view.getByText('Générer l’estimation')).toBeTruthy();
 
     // Back to Prestations keeps the selection, through « Précédent »…
@@ -304,7 +304,7 @@ describe('EstimationCreationScreen', () => {
     const total = formatCompactEuroCents(eurosToCents(brushing) + eurosToCents(balayage));
     expect(view.getByTestId('estimation-summary-total').props.accessibilityLabel).toBe(`Total estimé, ${total}`);
     expect(summary.getByText('24 septembre 2026')).toBeTruthy();
-    expect(summary.queryByText(/cliente/i)).toBeNull();
+    expect(summary.queryByText(/\bclient/i)).toBeNull();
     // A Technique is one commercial line: no phase, no pose time.
     expect(summary.queryByText(/pose|Application|Temps/i)).toBeNull();
     // No formal quote wording anywhere in the review.
@@ -334,9 +334,9 @@ describe('EstimationCreationScreen', () => {
     expect(paper.getByTestId('estimation-document-title').props.children).toBe('ESTIMATION TARIFAIRE');
     expect(paper.getByTestId('estimation-document-business').props.children).toBe('Maison Léa');
     expect(paper.getByTestId('estimation-document-date').props.children).toBe('24 septembre 2026');
-    // Recipient-agnostic: no Client name, no « Cliente » / « Pour » section.
+    // Recipient-agnostic: no Client name, no « Client » / « Pour » section.
     expect(paper.queryByTestId('estimation-document-client')).toBeNull();
-    expect(paper.queryByText(/cliente|client|^Pour\b|destinataire/i)).toBeNull();
+    expect(paper.queryByText(/client|^Pour\b|destinataire/i)).toBeNull();
     expect(paper.getByLabelText(`Brushing 1, ${formatCompactEuroCents(eurosToCents(brushing))}`)).toBeTruthy();
     expect(paper.getByLabelText(`Balayage 1, ${formatCompactEuroCents(eurosToCents(balayage))}`)).toBeTruthy();
     expect(paper.getByTestId('estimation-document-total').props.accessibilityLabel).toBe(

@@ -61,7 +61,7 @@ export function ClientPickerSheet({
 
   return (
     <BottomSheet
-      backdropLabel="Fermer le sélecteur de cliente"
+      backdropLabel="Fermer le sélecteur de client"
       contentStyle={styles.body}
       dismissOnPanDown={false}
       header={
@@ -69,7 +69,7 @@ export function ClientPickerSheet({
           cancelLabel="Fermer"
           cancelTestID="client-picker-close"
           onCancel={close}
-          title="Choisir la cliente"
+          title="Choisir un client"
         />
       }
       height="88%"

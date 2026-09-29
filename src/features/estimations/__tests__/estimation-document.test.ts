@@ -43,7 +43,7 @@ describe('buildEstimationDocument', () => {
     expect(Object.keys(model).sort()).toEqual(
       ['branding', 'businessName', 'dateLabel', 'disclaimer', 'lines', 'title', 'total', 'totalCents', 'totalLabel'].sort(),
     );
-    expect(allText(model)).not.toMatch(/client|cliente|\bpour\b|destinataire/i);
+    expect(allText(model)).not.toMatch(/client|\bpour\b|destinataire/i);
   });
 
   it('dates the generation day only: no time, no appointment or validity wording', () => {

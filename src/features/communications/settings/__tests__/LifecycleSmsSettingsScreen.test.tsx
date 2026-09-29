@@ -97,7 +97,10 @@ describe('LifecycleSmsSettingsScreen', () => {
     expect(view.getByTestId('lifecycle-birthday-toggle-switch').props.value).toBe(false);
     expect(view.getByTestId('lifecycle-winback-toggle-switch').props.value).toBe(false);
     expect(view.getByText('Anniversaires')).toBeTruthy();
-    expect(view.getByText('Clientes inactives')).toBeTruthy();
+    expect(view.getByText('Clients inactifs')).toBeTruthy();
+    expect(view.getByText('Inactif depuis')).toBeTruthy();
+    expect(view.getByLabelText('Diminuer la réduction pour les clients inactifs')).toBeTruthy();
+    expect(view.getByLabelText('Augmenter la durée de validité pour les clients inactifs')).toBeTruthy();
     expect(valueOf(view, 'lifecycle-birthday-discount')).toBe('15 %');
     expect(valueOf(view, 'lifecycle-birthday-validity')).toBe('7 jours');
     expect(valueOf(view, 'lifecycle-winback-after')).toBe('60 jours');

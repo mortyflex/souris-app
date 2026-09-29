@@ -9,7 +9,7 @@
 // The Résumé reuses the same group and passes `endAt` to show the range.
 // Cliente and Prestations pass the selected Client name: it simply replaces
 // « RENDEZ-VOUS » in the same eyebrow, so the choice stays visible whatever
-// the search shows. The Résumé has its own CLIENTE group.
+// the search shows. The Résumé has its own CLIENT group.
 
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';

@@ -59,7 +59,7 @@ describe('formatInsightsClientName', () => {
   it('shows the first name and the initial of the last name only', () => {
     expect(formatInsightsClientName(client('a', ' Amel ', 'benali'))).toBe('Amel B.');
     expect(formatInsightsClientName(client('b', 'Nadia'))).toBe('Nadia');
-    expect(formatInsightsClientName(undefined)).toBe('Cliente inconnue');
+    expect(formatInsightsClientName(undefined)).toBe('Client inconnu');
   });
 });
 
@@ -105,8 +105,8 @@ describe('buildInsightsReceipt', () => {
     expect(model.sections.map((section) => section.title)).toEqual([
       'Top prestations',
       'Top produits',
-      'Clientes qui dépensent le plus',
-      'Clientes les plus fidèles',
+      'Clients qui dépensent le plus',
+      'Clients les plus fidèles',
     ]);
 
     const [services, products, spending, loyal] = model.sections;

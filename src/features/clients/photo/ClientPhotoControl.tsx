@@ -140,7 +140,7 @@ export function ClientPhotoControl({ client, size }: ClientPhotoControlProps) {
       <PhotoSourceFlow
         cameraHint="Cadrez le visage au centre"
         cameraTestID="client-camera"
-        cameraTitle="Photo de la cliente"
+        cameraTitle="Photo du client"
         hasImage={client.photoPath !== undefined}
         libraryLabel="Choisir dans Photos"
         onClose={() => setSourceVisible(false)}

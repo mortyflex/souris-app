@@ -55,7 +55,7 @@ describe('main navigation (NativeTabs)', () => {
     ]);
     expect(view.getAllByTestId('trigger-label').map((label) => label.props.children)).toEqual([
       'Agenda',
-      'Clientes',
+      'Clientèle',
       'Produits',
       'Plus',
     ]);

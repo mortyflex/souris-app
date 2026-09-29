@@ -174,7 +174,7 @@ describe('ClientProfileScreen — birthday', () => {
     expect(view.queryByTestId('birthday-confetti', hidden)).toBeNull();
     expect(successHaptic).toHaveBeenCalledTimes(1);
 
-    // Back to Clientes (unmount), then her profile again (a new mount).
+    // Back to Clientèle (unmount), then her profile again (a new mount).
     await press(view, 'toggle-profile');
     expect(view.queryByTestId('client-birthday-notice')).toBeNull();
     await press(view, 'toggle-profile');

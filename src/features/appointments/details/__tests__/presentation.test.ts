@@ -53,8 +53,8 @@ describe('Appointment details presentation', () => {
   });
 
   it('formats the recorded cancellation actor for history', () => {
-    expect(formatCancellationActorLabel('CLIENT')).toBe('Annulé par la cliente');
-    expect(formatCancellationActorLabel('BUSINESS')).toBe('Annulé par le salon');
+    expect(formatCancellationActorLabel('CLIENT')).toBe('Annulé par le client');
+    expect(formatCancellationActorLabel('BUSINESS')).toBe('Annulé par vous');
   });
 
   it('derives ordered service starts from the calculated timeline', () => {

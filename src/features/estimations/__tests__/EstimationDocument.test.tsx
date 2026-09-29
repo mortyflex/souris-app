@@ -53,7 +53,7 @@ describe('EstimationDocument', () => {
       .map((node) => String(node.props.children))
       .join(' | ');
     expect(all).not.toMatch(/devis|valable|validit|signature|bon pour accord|TVA|\bHT\b|TTC|SIRET/i);
-    expect(all).not.toMatch(/cliente|client|destinataire|\bPour\b|rendez-vous|16:30/i);
+    expect(all).not.toMatch(/client|destinataire|\bPour\b|rendez-vous|16:30/i);
     // No analytics: no podium, no medal, no KPI.
     expect(view.queryByTestId(/podium/)).toBeNull();
   });

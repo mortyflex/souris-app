@@ -140,12 +140,12 @@ const activeClientActionGroups: readonly (readonly DetailAction<ClientAdminActio
   [
     {
       key: 'archive',
-      label: 'Archiver la cliente',
+      label: 'Archiver le client',
       icon: { ios: 'archivebox', android: 'archive' },
       tone: 'destructive',
       testID: 'archive-client',
       accessibilityHint:
-        'La cliente ne sera plus proposée pour les nouveaux rendez-vous et ventes. Son historique est conservé.',
+        'Ce client ne sera plus proposé pour les nouveaux rendez-vous et ventes. Son historique est conservé.',
     },
   ],
 ];
@@ -159,7 +159,7 @@ const archivedClientActionGroups: readonly (readonly DetailAction<ClientAdminAct
       icon: { ios: 'trash', android: 'delete' },
       tone: 'destructive',
       testID: 'open-client-deletion',
-      accessibilityHint: 'Supprime la cliente si aucun rendez-vous ni aucune vente ne la concerne',
+      accessibilityHint: 'Supprime le client si aucun rendez-vous ni aucune vente ne le concerne',
     },
   ],
 ];
@@ -198,9 +198,9 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.notFound}>
-          <AppText variant="stateTitle">Cliente introuvable</AppText>
+          <AppText variant="stateTitle">Client introuvable</AppText>
           <AppText variant="metadata" style={styles.notFoundText}>
-            Cette cliente n&apos;existe plus.
+            Ce client n&apos;existe plus.
           </AppText>
         </View>
       </SafeAreaView>
@@ -311,7 +311,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
           variant="control"
           style={styles.topBarTitle}
         >
-          Cliente
+          Fiche client
         </AppText>
         <GlassIconButton
           accessibilityLabel="Actions"
@@ -352,10 +352,10 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         <View style={styles.actionsSection}>
           {archived ? (
             <AppButton
-              accessibilityLabel="Réactiver la cliente"
+              accessibilityLabel="Réactiver le client"
               onPress={restore}
               testID="restore-client"
-              title="Réactiver la cliente"
+              title="Réactiver le client"
               variant="secondary"
             />
           ) : (
@@ -498,7 +498,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         visible={editVisible}
       />
       <ConfirmationDialog
-        body="La cliente restera dans votre répertoire mais sera déplacée dans les clientes archivées. Vous pourrez la restaurer plus tard."
+        body="Ce client restera dans votre répertoire mais sera déplacé dans les clients archivés. Vous pourrez le restaurer plus tard."
         cancelLabel="Annuler"
         cancelTestID="cancel-client-archive"
         confirmLabel="Archiver"
@@ -507,7 +507,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         onCancel={() => setArchiveConfirmationVisible(false)}
         onConfirm={archive}
         testID="client-archive-dialog"
-        title="Archiver cette cliente ?"
+        title="Archiver ce client ?"
         tone="neutral"
         visible={archiveConfirmationVisible}
       />

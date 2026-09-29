@@ -66,7 +66,7 @@ describe('FloatingCreateButton', () => {
 
   it('keeps the glass finish inside one circular clip the size of the button', async () => {
     const view = await render(
-      <FloatingCreateButton accessibilityLabel="Ajouter une cliente" onPress={jest.fn()} testID="create" />,
+      <FloatingCreateButton accessibilityLabel="Ajouter un client" onPress={jest.fn()} testID="create" />,
     );
     await settleReveal();
 
@@ -85,19 +85,19 @@ describe('FloatingCreateButton', () => {
   it('starts hidden and unavailable, then reveals shortly after focus', async () => {
     const onPress = jest.fn();
     const view = await render(
-      <FloatingCreateButton accessibilityLabel="Ajouter une cliente" onPress={onPress} testID="create" />,
+      <FloatingCreateButton accessibilityLabel="Ajouter un client" onPress={onPress} testID="create" />,
     );
 
     // Hidden: no touches reach it and assistive tech does not announce it.
     expect(view.getByTestId('create-anchor').props.pointerEvents).toBe('none');
-    expect(view.queryByLabelText('Ajouter une cliente')).toBeNull();
+    expect(view.queryByLabelText('Ajouter un client')).toBeNull();
     fireEvent.press(view.getByTestId('create', { includeHiddenElements: true }));
     expect(onPress).not.toHaveBeenCalled();
 
     await settleReveal();
 
     expect(view.getByTestId('create-anchor').props.pointerEvents).toBe('box-none');
-    const button = view.getByLabelText('Ajouter une cliente');
+    const button = view.getByLabelText('Ajouter un client');
     expect(button.props.accessibilityRole).toBe('button');
     await act(async () => fireEvent.press(button));
     expect(onPress).toHaveBeenCalledTimes(1);
@@ -106,20 +106,20 @@ describe('FloatingCreateButton', () => {
 
   it('hides at once on blur and reveals again on the next focus', async () => {
     const view = await render(
-      <FloatingCreateButton accessibilityLabel="Ajouter une cliente" onPress={jest.fn()} testID="create" />,
+      <FloatingCreateButton accessibilityLabel="Ajouter un client" onPress={jest.fn()} testID="create" />,
     );
     await settleReveal();
     expect(view.getByTestId('create-anchor').props.pointerEvents).toBe('box-none');
 
     await blur();
     expect(view.getByTestId('create-anchor').props.pointerEvents).toBe('none');
-    expect(view.queryByLabelText('Ajouter une cliente')).toBeNull();
+    expect(view.queryByLabelText('Ajouter un client')).toBeNull();
 
     await refocus();
     expect(view.getByTestId('create-anchor').props.pointerEvents).toBe('none');
     await settleReveal();
     expect(view.getByTestId('create-anchor').props.pointerEvents).toBe('box-none');
-    expect(view.getByLabelText('Ajouter une cliente')).toBeTruthy();
+    expect(view.getByLabelText('Ajouter un client')).toBeTruthy();
   });
 
   it('expands several actions into an anchored menu, runs the chosen one and closes', async () => {

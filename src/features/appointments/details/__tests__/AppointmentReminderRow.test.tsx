@@ -1,4 +1,4 @@
-// Souris — « Rappel cliente » status line of Appointment Details (Lot B)
+// Souris — « Rappel client » status line of Appointment Details (Lot B)
 //
 // The row against the fake gateway: every projection status renders its
 // French line, NONE and every failure render NOTHING (fail safe, no
@@ -58,23 +58,23 @@ describe('status rendering', () => {
       scheduledFor: new Date(2026, 8, 26, 14, 30),
     });
     const view = await renderRow(gateway);
-    expect(view.getByText('Rappel cliente · Programmé · 26 septembre à 14:30')).toBeTruthy();
+    expect(view.getByText('Rappel client · Programmé · 26 septembre à 14:30')).toBeTruthy();
   });
 
   it('SENT renders « Envoyé » — never a delivery or read claim', async () => {
     const gateway = createFakeCommunicationsGateway();
     gateway.setReminderStatus('apt-1', { status: 'SENT', sentAt: new Date() });
     const view = await renderRow(gateway);
-    expect(view.getByText('Rappel cliente · Envoyé')).toBeTruthy();
+    expect(view.getByText('Rappel client · Envoyé')).toBeTruthy();
     expect(view.queryByText(/Lu|Ouvert|Reçu/)).toBeNull();
   });
 
   // One render per test: a second render inside the same `it` overlaps act scopes.
   it.each([
-    ['DISABLED', 'Rappel cliente · Désactivé'],
-    ['MISSING_EMAIL', 'Rappel cliente · Aucune adresse e-mail'],
-    ['TOO_LATE', 'Rappel cliente · Non programmé · rendez-vous créé trop tard'],
-    ['FAILED', 'Rappel cliente · Échec de l’envoi'],
+    ['DISABLED', 'Rappel client · Désactivé'],
+    ['MISSING_EMAIL', 'Rappel client · Aucune adresse e-mail'],
+    ['TOO_LATE', 'Rappel client · Non programmé · rendez-vous créé trop tard'],
+    ['FAILED', 'Rappel client · Échec de l’envoi'],
   ] as const)('%s renders its French line', async (status, label) => {
     const gateway = createFakeCommunicationsGateway();
     gateway.setReminderStatus('apt-1', { status });

@@ -942,9 +942,9 @@ describe('AppointmentEditingScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByTestId('edit-client'));
     });
-    expect(view.getByText('Choisir la cliente')).toBeTruthy();
+    expect(view.getByText('Choisir un client')).toBeTruthy();
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa');
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'léa');
     });
     await act(async () => {
       fireEvent.press(view.getByText('Léa Martin'));
@@ -971,7 +971,7 @@ describe('AppointmentEditingScreen', () => {
       fireEvent.press(view.getByTestId('edit-client'));
     });
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa');
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'léa');
     });
     await act(async () => {
       fireEvent.press(view.getByText('Léa Martin'));
@@ -987,18 +987,18 @@ describe('AppointmentEditingScreen', () => {
     expect(view.getByTestId('session-client-id').props.children).toBe('client-agenda-sofia');
   });
 
-  it('shows Cliente, Date and Heure as whole tappable rows without link labels', async () => {
+  it('shows Client, Date and Heure as whole tappable rows without link labels', async () => {
     const view = await renderEditor();
 
     const clientRow = view.getByTestId('edit-client');
     expect(clientRow.props.accessibilityRole).toBe('button');
-    expect(clientRow.props.accessibilityHint).toBe('Modifier la cliente');
+    expect(clientRow.props.accessibilityHint).toBe('Modifier le client');
     expect(view.getByTestId('edit-client-value').props.children).toBe('Sofia Petit');
     expect(view.getByTestId('edit-date').props.accessibilityHint).toBe('Changer la date');
     expect(view.getByTestId('edit-date').props.accessibilityLabel).toMatch(/^Date, /);
     expect(view.getByTestId('edit-time').props.accessibilityHint).toBe("Changer l'heure");
     expect(view.getByLabelText(/^Heure, \d{2}:\d{2}$/)).toBeTruthy();
-    expect(view.queryByText('Modifier la cliente')).toBeNull();
+    expect(view.queryByText('Modifier le client')).toBeNull();
     expect(view.queryByText('Changer la date')).toBeNull();
     expect(view.queryByText("Changer l'heure")).toBeNull();
     expect(view.queryByText('Modifier')).toBeNull();
@@ -1014,11 +1014,11 @@ describe('AppointmentEditingScreen', () => {
       fireEvent.press(view.getByTestId('edit-client'));
     });
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa martin');
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'léa martin');
     });
 
     expect(view.queryByText('Léa Martin')).toBeNull();
-    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+    expect(view.getByText('Aucun client trouvé')).toBeTruthy();
     expect(view.getByText('Sofia Petit')).toBeTruthy();
   });
 
@@ -1156,7 +1156,7 @@ describe('AppointmentEditingScreen', () => {
       });
 
       expect(view.getByTestId('appointment-birthday-notice')).toBeTruthy();
-      expect(view.getByText('Anniversaire de la cliente')).toBeTruthy();
+      expect(view.getByText('Anniversaire du client')).toBeTruthy();
       expect(view.getByRole('button', { name: 'Appliquer une réduction' })).toBeTruthy();
       // The reminder alone never dirties the form.
       expect(view.getByTestId('save-appointment-edit').props.accessibilityState.disabled).toBe(true);
@@ -1187,7 +1187,7 @@ describe('AppointmentEditingScreen', () => {
         fireEvent.press(view.getByTestId('edit-client'));
       });
       await act(async () => {
-        fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'léa');
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'léa');
       });
       await act(async () => {
         fireEvent.press(view.getByText('Léa Martin'));

@@ -729,7 +729,7 @@ describe('AgendaScreen — day navigation', () => {
       }),
     );
     expect(view.getByTestId('business-insights-pagination').props.accessibilityLabel).toBe(
-      'Clientes les plus fidèles, 4 sur 4',
+      'Clients les plus fidèles, 4 sur 4',
     );
     expect(view.getByLabelText(/^Première place, .+, \d+ rendez-vous$/)).toBeTruthy();
     await press(view, 'business-insights-period-year');

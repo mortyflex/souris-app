@@ -155,7 +155,7 @@ describe("ServiceCatalogScreen", () => {
     expect(within(services).getByText("8")).toBeTruthy();
     expect(within(techniques).getByText("8")).toBeTruthy();
     // No redundant « Actives » eyebrow, no legacy category headers.
-    expect(view.queryByText("Actives")).toBeNull();
+    expect(view.queryByText("Actifs")).toBeNull();
     expect(view.queryByText("Brushing")).toBeNull();
     expect(view.queryByText("Coloration")).toBeNull();
 

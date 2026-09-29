@@ -1,4 +1,4 @@
-// Souris — Appointment creation: the « Cliente | Personnel » type choice
+// Souris — Appointment creation: the « Client | Personnel » type choice
 //
 // The sheet still opens on the unchanged client flow. « Personnel » replaces it
 // by ONE direct form that blocks the slot as unavailable — a Calendar Block:
@@ -149,7 +149,7 @@ async function press(view: Rendered, element: ReturnType<Rendered['getByText']>)
   });
 }
 
-async function switchTo(view: Rendered, label: 'Rendez-vous cliente' | 'Rendez-vous personnel') {
+async function switchTo(view: Rendered, label: 'Rendez-vous client' | 'Rendez-vous personnel') {
   await press(view, view.getByRole('tab', { name: label }));
 }
 
@@ -159,7 +159,7 @@ const timeOf = (view: Rendered, testID: string) =>
 /** Léa + Brushing 1, up to the Résumé of the client flow. */
 async function reachClientSummary(view: Rendered) {
   await act(async () => {
-    fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa Martin');
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'Léa Martin');
   });
   await press(view, view.getByText('Léa Martin'));
   await press(view, view.getByText('Continuer'));
@@ -197,28 +197,28 @@ describe('creation type choice', () => {
   it('opens in the existing Client mode, unchanged', async () => {
     const view = await renderCreation();
 
-    expect(view.getByRole('tab', { name: 'Rendez-vous cliente' }).props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByRole('tab', { name: 'Rendez-vous client' }).props.accessibilityState).toEqual({ selected: true });
     expect(view.getByRole('tab', { name: 'Rendez-vous personnel' }).props.accessibilityState).toEqual({ selected: false });
     expect(view.getByRole('header', { name: 'Nouveau rendez-vous' })).toBeTruthy();
-    expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+    expect(view.getByPlaceholderText('Rechercher un client')).toBeTruthy();
     expect(view.getByText('Prestations')).toBeTruthy();
     expect(view.getByText('Continuer')).toBeTruthy();
     expect(view.queryByTestId('calendar-block-form')).toBeNull();
     expect(view.queryByText('Bloquer le créneau')).toBeNull();
   });
 
-  it('« Personnel » shows ONE direct form: no Cliente, Prestations or Résumé to walk through', async () => {
+  it('« Personnel » shows ONE direct form: no Client, Prestations or Résumé to walk through', async () => {
     const view = await renderCreation();
     await switchTo(view, 'Rendez-vous personnel');
 
     expect(view.getByTestId('calendar-block-form')).toBeTruthy();
-    // Same header as the Cliente step: « Annuler » leading, one title.
+    // Same header as the Client step: « Annuler » leading, one title.
     expect(view.getByRole('header', { name: 'Indisponible' })).toBeTruthy();
     expect(view.queryByText('CRÉNEAU PERSONNEL')).toBeNull();
     expect(view.getAllByText('Indisponible').length).toBeGreaterThan(0);
     expect(view.getByText('Bloquer le créneau')).toBeTruthy();
     // Every client / service / pricing control is gone.
-    expect(view.queryByPlaceholderText('Rechercher une cliente')).toBeNull();
+    expect(view.queryByPlaceholderText('Rechercher un client')).toBeNull();
     expect(view.queryByText('Prestations')).toBeNull();
     expect(view.queryByText('Résumé')).toBeNull();
     expect(view.queryByText('Continuer')).toBeNull();
@@ -418,7 +418,7 @@ describe('schedule conflicts while blocking a slot', () => {
 });
 
 describe('data separation between the two modes', () => {
-  it('Personnel → Cliente: no personal reason or interval reaches the client Appointment, and no block is created', async () => {
+  it('Personnel → Client: no personal reason or interval reaches the client Appointment, and no block is created', async () => {
     const database = openSeededDatabase();
     const appointmentsBefore = loadAppointments(database).length;
     const view = await renderCreation(database);
@@ -428,7 +428,7 @@ describe('data separation between the two modes', () => {
     await act(async () => {
       fireEvent.changeText(view.getByTestId('calendar-block-custom-reason'), 'Dentiste');
     });
-    await switchTo(view, 'Rendez-vous cliente');
+    await switchTo(view, 'Rendez-vous client');
     expect(view.queryByText('Dentiste')).toBeNull();
 
     await reachClientSummary(view);
@@ -443,7 +443,7 @@ describe('data separation between the two modes', () => {
     expect(loadCalendarBlocks(database)).toEqual([]);
   });
 
-  it('Cliente → Personnel: a chosen client, service and discount never reach the block', async () => {
+  it('Client → Personnel: a chosen client, service and discount never reach the block', async () => {
     const database = openSeededDatabase();
     const appointmentsBefore = loadAppointments(database);
     const view = await renderCreation(database);
@@ -461,17 +461,17 @@ describe('data separation between the two modes', () => {
     ]);
   });
 
-  it('switching back to Cliente restores the untouched client flow, draft included', async () => {
+  it('switching back to Client restores the untouched client flow, draft included', async () => {
     const view = await renderCreation();
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa Martin');
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'Léa Martin');
     });
     await press(view, view.getByText('Léa Martin'));
 
     await switchTo(view, 'Rendez-vous personnel');
-    await switchTo(view, 'Rendez-vous cliente');
+    await switchTo(view, 'Rendez-vous client');
 
-    expect(view.getByPlaceholderText('Rechercher une cliente')).toBeTruthy();
+    expect(view.getByPlaceholderText('Rechercher un client')).toBeTruthy();
     expect(view.getAllByText('Léa Martin').length).toBeGreaterThan(0);
     expect(view.getByText('Continuer')).toBeTruthy();
   });

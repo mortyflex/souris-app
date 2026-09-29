@@ -16,9 +16,9 @@ export function ClientHistoryNotFound({ title }: { readonly title: string }) {
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <ClientHistoryHeader title={title} />
       <View style={styles.notFound}>
-        <AppText variant="stateTitle">Cliente introuvable</AppText>
+        <AppText variant="stateTitle">Client introuvable</AppText>
         <AppText variant="metadata" style={styles.text}>
-          Cette cliente n&apos;existe plus.
+          Ce client n&apos;existe plus.
         </AppText>
       </View>
     </SafeAreaView>

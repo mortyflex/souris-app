@@ -7,7 +7,7 @@
 
 import type { AppointmentReminderStatus } from './gateway';
 
-export const REMINDER_SETTINGS_TITLE = 'Rappels clientes';
+export const REMINDER_SETTINGS_TITLE = 'Rappels clients';
 export const REMINDER_TOGGLE_LABEL = 'Rappels par e-mail';
 export const REMINDER_TIMING_LABEL = 'Envoi';
 export const REMINDER_TIMING_VALUE = '24 h avant le rendez-vous';
@@ -20,10 +20,10 @@ export const REMINDER_OFFLINE_NOTICE =
 
 export const LIFECYCLE_SMS_SETTINGS_TITLE = 'SMS fidélisation';
 export const LIFECYCLE_BIRTHDAY_TOGGLE_LABEL = 'Anniversaires';
-export const LIFECYCLE_WINBACK_TOGGLE_LABEL = 'Clientes inactives';
+export const LIFECYCLE_WINBACK_TOGGLE_LABEL = 'Clients inactifs';
 export const LIFECYCLE_DISCOUNT_LABEL = 'Réduction';
 export const LIFECYCLE_VALIDITY_LABEL = 'Offre valable';
-export const LIFECYCLE_AFTER_LABEL = 'Cliente inactive depuis';
+export const LIFECYCLE_AFTER_LABEL = 'Inactif depuis';
 /** The server refused a knob value (INVALID_VALUE) — never RPC wording. */
 export const LIFECYCLE_INVALID_VALUE = 'Cette valeur n’est pas autorisée.';
 /** Offline before any successful read: nothing is « dernier connu ». */
@@ -45,12 +45,12 @@ export const LIFECYCLE_STEPPER_LABELS = {
     increment: 'Augmenter le délai d’inactivité',
   },
   winbackDiscount: {
-    decrement: 'Diminuer la réduction clientes inactives',
-    increment: 'Augmenter la réduction clientes inactives',
+    decrement: 'Diminuer la réduction pour les clients inactifs',
+    increment: 'Augmenter la réduction pour les clients inactifs',
   },
   winbackValidity: {
-    decrement: 'Diminuer la durée de validité clientes inactives',
-    increment: 'Augmenter la durée de validité clientes inactives',
+    decrement: 'Diminuer la durée de validité pour les clients inactifs',
+    increment: 'Augmenter la durée de validité pour les clients inactifs',
   },
 } as const;
 
@@ -64,7 +64,7 @@ export function formatLifecycleDays(daysCount: number): string {
   return `${daysCount} jour${daysCount > 1 ? 's' : ''}`;
 }
 
-export const APPOINTMENT_REMINDER_ROW_LABEL = 'Rappel cliente';
+export const APPOINTMENT_REMINDER_ROW_LABEL = 'Rappel client';
 export const MISSING_EMAIL_TITLE = 'Aucune adresse e-mail renseignée';
 export const MISSING_EMAIL_MESSAGE = 'Le rappel ne pourra pas être envoyé.';
 export const MISSING_EMAIL_ACTION = 'Ajouter l’e-mail';

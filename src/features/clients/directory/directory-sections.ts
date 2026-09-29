@@ -19,7 +19,7 @@ export type ClientDirectoryGroup = 'ACTIVE' | 'ARCHIVED';
 
 export interface ClientDirectorySection {
   readonly key: ClientDirectoryGroup;
-  readonly title: 'Actives' | 'Archivées';
+  readonly title: 'Actifs' | 'Archivés';
   readonly data: readonly Client[];
 }
 
@@ -32,7 +32,7 @@ export function buildClientDirectorySections(
   const archived = visible.filter((client) => isClientArchived(client));
 
   const sections: ClientDirectorySection[] = [];
-  if (actives.length > 0) sections.push({ key: 'ACTIVE', title: 'Actives', data: actives });
-  if (archived.length > 0) sections.push({ key: 'ARCHIVED', title: 'Archivées', data: archived });
+  if (actives.length > 0) sections.push({ key: 'ACTIVE', title: 'Actifs', data: actives });
+  if (archived.length > 0) sections.push({ key: 'ARCHIVED', title: 'Archivés', data: archived });
   return sections;
 }

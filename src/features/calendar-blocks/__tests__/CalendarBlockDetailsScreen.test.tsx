@@ -320,7 +320,7 @@ describe("Calendar Block editing", () => {
     // Nothing changed yet: nothing to save.
     expect(view.getByTestId("calendar-block-submit").props.accessibilityState).toMatchObject({ disabled: true });
     expect(view.getByText("Enregistrer les modifications")).toBeTruthy();
-    expect(view.queryByText(/€|Réduction|Cliente|Prestations/)).toBeNull();
+    expect(view.queryByText(/€|Réduction|Client|Prestations/)).toBeNull();
 
     await press(view, "calendar-block-start");
     await settleWheelOn(view, "calendar-block-start-wheel-hour", "14");

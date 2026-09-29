@@ -9,9 +9,9 @@ import {
   type ClientSmsMarketingConsentStatus,
 } from '@/domain/clients';
 
-export const UNKNOWN_CLIENT_LABEL = 'Cliente inconnue';
+export const UNKNOWN_CLIENT_LABEL = 'Client inconnu';
 /** Subtle lifecycle indicator shown on archived Clients (directory row, profile). */
-export const ARCHIVED_CLIENT_LABEL = 'Archivée';
+export const ARCHIVED_CLIENT_LABEL = 'Archivé';
 
 export function getResolvedClientDisplayName(client: Client | undefined): string {
   return client ? getClientDisplayName(client) : UNKNOWN_CLIENT_LABEL;

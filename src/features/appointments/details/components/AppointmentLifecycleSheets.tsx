@@ -67,13 +67,13 @@ export function AppointmentCancellationSheet({
         <View accessibilityRole="radiogroup" style={styles.actorOptions}>
           <ActorOption
             actor="CLIENT"
-            label="La cliente"
+            label="Le client"
             selected={actor === 'CLIENT'}
             onPress={() => setActor('CLIENT')}
           />
           <ActorOption
             actor="BUSINESS"
-            label="Le salon"
+            label="Vous"
             selected={actor === 'BUSINESS'}
             onPress={() => setActor('BUSINESS')}
           />
@@ -115,7 +115,7 @@ export function AppointmentNoShowSheet({
     <LifecycleSheet
       confirmTestID="confirm-no-show"
       confirmTitle="Confirmer l’absence"
-      description="Le rendez-vous sera conservé dans l’historique de la cliente comme une absence."
+      description="Le rendez-vous sera conservé dans l’historique du client comme une absence."
       onClose={onClose}
       onConfirm={onConfirm}
       testID="no-show-sheet"

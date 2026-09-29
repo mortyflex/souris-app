@@ -33,8 +33,8 @@ Concrètement, dans le prototype :
 - Les ombres sont teintées navy et quasi invisibles ; rien ne flotte sans raison.
 
 **Idée directrice du produit, à ne jamais diluer :** une prestation se découpe en phases. Certaines
-occupent la professionnelle, d'autres sont un temps de pose pendant lequel la cliente reste en
-rendez-vous mais la professionnelle redevient libre. Une autre cliente peut donc être placée
+occupent la professionnelle, d'autres sont un temps de pose pendant lequel le client reste en
+rendez-vous mais la professionnelle redevient libre. Un autre client peut donc être placé
 volontairement dans ce créneau. Le système visuel existe pour rendre cela lisible d'un coup d'œil
 (`assets/agenda-view.js`, rendez-vous `ines` + `camille`).
 
@@ -171,7 +171,7 @@ clé/valeur sont des filets et des graisses — pas des conteneurs.
 ### Navigation
 
 Quatre onglets, dans cet ordre, définis une seule fois dans `assets/souris.js` :
-**Agenda · Clientes · Produits · Plus**. Agenda est l'écran d'accueil.
+**Agenda · Clientèle · Produits · Plus**. Agenda est l'écran d'accueil.
 
 « Plus » est organisé par usage, pas comme un écran Réglages : **Gestion** (Prestations & tarifs,
 Remises, Réservation en ligne) · **Salon** (Informations, Horaires & disponibilités, Équipe) ·
@@ -287,8 +287,8 @@ Règles :
   lockup, 45 % du mark, 61 % du wordmark) : on dimensionne la boîte, pas le dessin ;
 - les logos apparaissent seulement aux moments de marque : icône, splash natif, surface de
   démarrage, Welcome, écrans d'état de compte, bloc identité de Plus. **Aucun logo ni en-tête
-  « Souris » sur Agenda, Clientes, Produits, les détails, les feuilles ou les formulaires** — les
-  titres restent `Agenda`, `Clientes`, `Produits`, `Plus` ;
+  « Souris » sur Agenda, Clientèle, Produits, les détails, les feuilles ou les formulaires** — les
+  titres restent `Agenda`, `Clientèle`, `Produits`, `Plus` ;
 - accessibilité : un seul élément annonce « Souris » ; un mark posé à côté d'un texte ou d'un
   wordmark lisible est décoratif ;
 - les PNG sont posés directement sur le fond clair de l'app (blanc `--bg`), sans plaque ni fond
@@ -334,12 +334,13 @@ Concise, humaine, directe. Peu de mots. Les actions sont formulées simplement e
 « Rendez-vous créé ».
 
 - Pas de jargon logiciel, pas de phrase administrative, pas de ton marketing.
-- Le produit s'adresse à une professionnelle : féminin par défaut (« la cliente », « vous êtes libre »).
-- Le vocabulaire métier est fixe : **rendez-vous · prestation · phase · temps de pose · cliente ·
+- Le client est désigné au neutre : « Clientèle » pour le répertoire, « client » pour une personne
+  (« Ajouter un client », « vous êtes libre ») — voir `DESIGN_OVERRIDES.md` §38.
+- Le vocabulaire métier est fixe : **rendez-vous · prestation · phase · temps de pose · client ·
   réserve · seuil d'alerte · remise**.
 - Les intertitres sont des noms courts en capitales : Gestion, Salon, Préférences, Compte, Déroulé, Phases.
 - Capitalisation à la française : première lettre seule en majuscule, sauf intertitres en capitales.
-- Un état explique ce qui marche encore avant de proposer une sortie (« Clientes — erreur »).
+- Un état explique ce qui marche encore avant de proposer une sortie (« Clientèle — erreur »).
 - Le contenu de démonstration est signalé comme tel : « Contenu de démonstration — noms, tarifs et
   volumes sont fictifs. » **Ne jamais présenter des données inventées comme réelles.**
 

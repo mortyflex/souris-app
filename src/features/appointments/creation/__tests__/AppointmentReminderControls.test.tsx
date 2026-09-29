@@ -2,7 +2,7 @@
 //
 // The real screen against the development fixtures, with the communications
 // providers mounted the way (app)/_layout mounts them:
-// - GLOBAL preference ON → the Résumé shows « Rappel cliente », ON by
+// - GLOBAL preference ON → the Résumé shows « Rappel client », ON by
 //   default, and the created Appointment stores the explicit choice;
 // - toggle OFF → stored false, and the missing-email warning stays away;
 // - Client without a usable email → the lightweight warning with
@@ -171,7 +171,7 @@ const press = (element: unknown) =>
 async function reachSummary(view: Rendered) {
   // Search first: the picker list is virtualized.
   await act(async () => {
-    fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Léa Martin');
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'Léa Martin');
   });
   await press(view.getByText('Léa Martin'));
   await press(view.getByText('Continuer'));
@@ -192,7 +192,7 @@ function enabledGateway() {
 }
 
 describe('with the global preference enabled', () => {
-  it('shows « Rappel cliente » ON by default and stores the explicit choice', async () => {
+  it('shows « Rappel client » ON by default and stores the explicit choice', async () => {
     const view = await renderCreation(enabledGateway());
     await reachSummary(view);
 
@@ -222,7 +222,7 @@ describe('with the global preference enabled', () => {
 
     await press(view.getByTestId('creation-missing-email-notice-add-email'));
     await settleSheetTransition();
-    expect(view.getByText('Modifier la cliente')).toBeTruthy();
+    expect(view.getByText('Modifier le client')).toBeTruthy();
 
     // The same outcome as saving through the sheet: the Client gains an email.
     await press(view.getByTestId('give-lea-email'));

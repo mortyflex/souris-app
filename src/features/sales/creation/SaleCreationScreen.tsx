@@ -413,20 +413,20 @@ export function SaleCreationScreen({
               <GroupedDataRow
                 detail="Liée au rendez-vous"
                 icon={clientIcon}
-                label="Cliente"
+                label="Client"
                 testID="sale-client-row"
                 value={clientName ?? "—"}
               />
             ) : (
               <GroupedDataRow
                 accessibilityHint={
-                  clientName ? "Changer la cliente" : undefined
+                  clientName ? "Changer de client" : undefined
                 }
                 icon={clientIcon}
-                label="Cliente"
+                label="Client"
                 onPress={() => setClientPickerVisible(true)}
                 testID="sale-client-row"
-                value={clientName ?? "Choisir une cliente"}
+                value={clientName ?? "Choisir un client"}
               />
             )}
           </GroupedSurface>

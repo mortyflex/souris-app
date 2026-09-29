@@ -22,7 +22,7 @@ export function ClientDeletionDialog({ mode, onClose, onConfirm }: ClientDeletio
   if (mode === 'blocked') {
     return (
       <ConfirmationDialog
-        body="Cette cliente possède un historique de rendez-vous ou de ventes. Conservez-la archivée pour préserver cet historique."
+        body="Ce client possède un historique de rendez-vous ou de ventes. Conservez-le archivé pour préserver cet historique."
         cancelLabel="Compris"
         cancelTestID="close-client-deletion-blocked"
         eyebrow="SUPPRESSION"
@@ -46,7 +46,7 @@ export function ClientDeletionDialog({ mode, onClose, onConfirm }: ClientDeletio
       onCancel={onClose}
       onConfirm={onConfirm}
       testID="client-deletion-dialog"
-      title="Supprimer définitivement cette cliente ?"
+      title="Supprimer définitivement ce client ?"
       visible={mode === 'confirm'}
     />
   );

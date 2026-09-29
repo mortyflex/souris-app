@@ -799,7 +799,7 @@ describe("AppointmentDetailsScreen", () => {
     await user.press(view.getByTestId("confirm-cancellation"));
 
     expect(view.getByText("Annulé")).toBeTruthy();
-    expect(view.getByText("Annulé par la cliente")).toBeTruthy();
+    expect(view.getByText("Annulé par le client")).toBeTruthy();
     expect(view.getByText("Empêchement")).toBeTruthy();
     expect(view.queryByTestId("checkout-appointment")).toBeNull();
     expect(await secondaryActions(view)).toEqual(["open-permanent-deletion"]);
@@ -1008,7 +1008,7 @@ describe("AppointmentDetailsScreen", () => {
       within(noShowSheet.getByTestId("sheet-editing-header-leading")).getByText("Fermer"),
     ).toBeTruthy();
     expect(
-      view.getByText("Le rendez-vous sera conservé dans l’historique de la cliente comme une absence."),
+      view.getByText("Le rendez-vous sera conservé dans l’historique du client comme une absence."),
     ).toBeTruthy();
     expect(within(view.getByTestId("confirm-no-show")).getByText("Confirmer l’absence")).toBeTruthy();
 
@@ -1079,7 +1079,7 @@ describe("AppointmentDetailsScreen", () => {
     await settleSheetTransition();
 
     expect(view.getByText("Terminé")).toBeTruthy();
-    expect(view.queryByText("Annulé par la cliente")).toBeNull();
+    expect(view.queryByText("Annulé par le client")).toBeNull();
     expect(view.queryByTestId("cancellation-sheet")).toBeNull();
     expect(view.getByTestId("appointment-payment-probe").props.children).toBe("none");
   });
@@ -1100,7 +1100,7 @@ describe("AppointmentDetailsScreen", () => {
     expect(view.getByText("SUPPRESSION")).toBeTruthy();
     expect(view.getByText("Supprimer ce rendez-vous ?")).toBeTruthy();
     expect(
-      view.getByText(/supprimé de l’agenda et de l’historique de la cliente/),
+      view.getByText(/supprimé de l’agenda et de l’historique du client/),
     ).toBeTruthy();
     expect(view.getByText("Retour")).toBeTruthy();
     expect(view.getByTestId("appointment-presence").props.children).toBe(
@@ -1825,7 +1825,7 @@ describe("AppointmentDetailsScreen", () => {
     await press(view, "archive-sofia");
 
     expect(view.getByText("Sofia Petit")).toBeTruthy();
-    expect(view.queryByText("Cliente inconnue")).toBeNull();
+    expect(view.queryByText("Client inconnu")).toBeNull();
     expect(view.queryByTestId("sell-product")).toBeNull();
     expect(view.queryByText("Ajouter une vente")).toBeNull();
     expect(view.getByTestId("checkout-appointment")).toBeTruthy();
@@ -2370,8 +2370,8 @@ describe("AppointmentDetailsScreen", () => {
       });
 
       const indication = view.getByTestId("appointment-birthday-indication");
-      expect(indication.props.accessibilityLabel).toBe("Anniversaire de la cliente");
-      expect(within(indication).getByText("Anniversaire de la cliente")).toBeTruthy();
+      expect(indication.props.accessibilityLabel).toBe("Anniversaire du client");
+      expect(within(indication).getByText("Anniversaire du client")).toBeTruthy();
       // Read-only: no celebration, no discount control — « Modifier » owns the discount.
       expect(view.queryByTestId("birthday-confetti", { includeHiddenElements: true })).toBeNull();
       expect(view.queryByTestId("appointment-discount")).toBeNull();
@@ -3070,7 +3070,7 @@ describe("AppointmentDetailsScreen — deposits (« Acomptes »)", () => {
       expect(dialog.getByText("Annuler cet acompte ?")).toBeTruthy();
       expect(
         dialog.getByText(
-          /Cette action corrige un acompte enregistré par erreur\. Elle ne rembourse pas la cliente\./,
+          /Cette action corrige un acompte enregistré par erreur\. Elle ne rembourse pas le client\./,
         ),
       ).toBeTruthy();
       expect(dialog.getByText(/plus compté dans le rendez-vous ni dans les totaux de la caisse/)).toBeTruthy();

@@ -22,7 +22,7 @@ import { spacing } from '@/shared/ui/theme';
 
 import { AppointmentDiscountEditor } from './AppointmentDiscountEditor';
 
-const TITLE = 'Anniversaire de la cliente';
+const TITLE = 'Anniversaire du client';
 const SUGGESTION = 'Vous pouvez appliquer une réduction anniversaire.';
 const ALREADY_DISCOUNTED = 'Une réduction est déjà appliquée à ce rendez-vous.';
 

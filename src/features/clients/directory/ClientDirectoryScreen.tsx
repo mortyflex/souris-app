@@ -82,14 +82,14 @@ export function ClientDirectoryScreen() {
   const tabOptions: readonly SegmentedControlOption<ClientDirectoryGroup>[] = [
     {
       value: 'ACTIVE',
-      label: 'Actives',
+      label: 'Actifs',
       count: activeClients.length,
       selectedColor: semanticColors.accent,
       testID: 'client-tab-active',
     },
     {
       value: 'ARCHIVED',
-      label: 'Archivées',
+      label: 'Archivés',
       count: archivedClients.length,
       selectedColor: semanticColors.accent,
       testID: 'client-tab-archived',
@@ -105,13 +105,13 @@ export function ClientDirectoryScreen() {
 
   return (
     <Screen
-      header={<MainScreenHeader testID="clients-header" title="Clientes" watermark="clients" />}
+      header={<MainScreenHeader testID="clients-header" title="Clientèle" watermark="clients" />}
     >
       <View style={directoryListStyles.searchArea}>
         <SearchField
-          accessibilityLabel="Rechercher une cliente"
+          accessibilityLabel="Rechercher un client"
           onChangeText={setQuery}
-          placeholder="Rechercher une cliente"
+          placeholder="Rechercher un client"
           value={query}
         />
       </View>
@@ -154,15 +154,15 @@ export function ClientDirectoryScreen() {
           <View style={directoryListStyles.emptyState}>
             <AppText variant="stateTitle">
               {searching
-                ? 'Aucune cliente trouvée'
+                ? 'Aucun client trouvé'
                 : clients.length > 0
-                  ? 'Aucune cliente active'
-                  : 'Aucune cliente'}
+                  ? 'Aucun client actif'
+                  : 'Aucun client'}
             </AppText>
             <AppText variant="metadata" style={directoryListStyles.emptyStateText}>
               {searching
                 ? 'Essayez un autre nom ou numéro.'
-                : 'Ajoutez votre première cliente pour commencer.'}
+                : 'Ajoutez votre premier client pour commencer.'}
             </AppText>
           </View>
         }
@@ -174,7 +174,7 @@ export function ClientDirectoryScreen() {
       />
 
       <FloatingCreateButton
-        accessibilityLabel="Ajouter une cliente"
+        accessibilityLabel="Ajouter un client"
         onPress={() => setAddClientVisible(true)}
         testID="add-client-directory"
       />

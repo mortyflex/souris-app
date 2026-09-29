@@ -79,7 +79,7 @@ The intended primary navigation is:
 
 ```text
 Agenda
-Clientes
+Clientèle
 Produits
 Plus
 ```
@@ -182,7 +182,7 @@ Estimation
   the day shown: nothing is scheduled.
 - **Flow.** Two steps in the appointment-creation sheet and stepper language — Prestations →
   Résumé — opening straight on the shared Services / Techniques catalogue. The heading stays
-  « ESTIMATION » throughout. There is no Client step, search, list or « Ajouter une cliente ».
+  « ESTIMATION » throughout. There is no Client step, search, list or « Ajouter un client ».
 - **Prices.** The CURRENT catalog price of each selected Service (Prestations & tarifs), nothing
   copied. A Technique is one commercial line: its phases never appear. « Total estimé » is the sum
   of the selected prices, in exact cents.
@@ -277,7 +277,7 @@ choose time
 ```
 
 The same entry point (the floating « + », or a tap on the timeline) also blocks personal time. The
-sheet opens on **« Cliente »** — the flow above, unchanged — next to **« Personnel »**:
+sheet opens on **« Client »** — the flow above, unchanged — next to **« Personnel »**:
 
 ```text
 Personnel
@@ -286,7 +286,7 @@ Personnel
 → Bloquer le créneau
 ```
 
-One compact form, a few seconds, no Cliente / Prestations / Résumé to walk through. The quick reasons
+One compact form, a few seconds, no Client / Prestations / Résumé to walk through. The quick reasons
 are shortcuts: the saved reason is plain text. Nothing of one mode ever reaches the other.
 
 An appointment may contain multiple services.
@@ -301,7 +301,7 @@ The first native creation slice follows this interaction:
 
 ```text
 tap an empty Day grid position
-→ Cliente
+→ Client
 → Prestations
 → Résumé
 → Créer le rendez-vous
@@ -352,8 +352,8 @@ the Service, its phases, or any catalog default — there is no implicit update 
 option. A pose set to 0 on today's Balayage leaves the catalog at its official value, and tomorrow's
 Balayage starts from the catalog again.
 
-The initial address book and catalog use normalized legacy sources. The Cliente step reads the shared
-Client source — the same directory as the Clientes tab — and a new Client can be added directly from
+The initial address book and catalog use normalized legacy sources. The Client step reads the shared
+Client source — the same directory as the Clientèle tab — and a new Client can be added directly from
 the picker when the person is not found. Client search uses only identity and contact fields. The
 Prestations step reads the single shared in-memory Service catalog (`ServiceCatalogProvider`): active
 services only, in deterministic import order. Services and techniques preserve their type, ordered
@@ -415,7 +415,7 @@ structure, and phase durations therefore remain visible even when the catalog ha
 starts from the current catalog configuration and becomes a new AppointmentItem snapshot only when saved.
 
 Appointment Editing is ONE continuous editor with tight vertical rhythm: an editable context surface
-(`Modifier la cliente` reassigns the Appointment's Client through the shared picker — identity stays
+(`Modifier le client` reassigns the Appointment's Client through the shared picker — identity stays
 `clientId`-only; `Changer la date` / `Changer l'heure` edit the draft start), the retained AppointmentItem
 stack, and the SAME shared grouped `Services` / `Techniques` compact card grid inline directly below it —
 there is no separate add-service screen or mode. Tapping a catalog Service card IMMEDIATELY appends a new
@@ -487,7 +487,7 @@ Appointment Details exposes only relevant actions:
 ### Appointment Details layout
 
 ```text
-Rendez-vous · Cliente · date · heure · statut
+Rendez-vous · Client · date · heure · statut
 Prestations (ordered services; each row expands into its phase timing;
              editable Appointment: drag handle to reorder, swipe right to remove)
 Durée totale · Prestations                    (one banner; no separate active / processing breakdown)
@@ -593,7 +593,7 @@ taken from Appointment Details only — never from the creation wizard — while
   appointment or the Caisse; it stays visible as « Annulé »; it is a correction, not a refund. An amount is
   never edited: void, then take a new deposit. A cancelled or missed appointment takes no NEW deposit but keeps
   the correction — the confirmation is then explicit: « Annuler cet acompte ? », « Cette action corrige un
-  acompte enregistré par erreur. Elle ne rembourse pas la cliente. » A completed appointment is frozen: no
+  acompte enregistré par erreur. Elle ne rembourse pas le client. » A completed appointment is frozen: no
   deposit, no correction.
 - **Checkout.** Deposits are not a discount: `Total attendu` is unchanged, followed by `Acomptes déjà versés`
   and `Reste à encaisser`. `Reste …` fills what remains; a typed amount is kept and `Écart` is measured
@@ -679,7 +679,7 @@ Appointments — every surface resolves identity through the stable id.
 
 ### Directory and search
 
-The Clientes tab is the complete Client directory: a prominent, fast search
+The Clientèle tab is the complete Client directory: a prominent, fast search
 over first name, last name, full name, and phone. Search is case-insensitive,
 accent-insensitive, and tolerant of ordinary phone formatting differences
 ("06 12 34 56 78" finds "0612345678"). The default list order is a
@@ -689,20 +689,20 @@ the import order.
 The directory groups Clients by lifecycle:
 
 ```text
-Clientes
+Clientèle
   search
-  Actives     every Client in daily use
-  Archivées   archived Clients — visually secondary, still searchable
+  Actifs      every Client in daily use
+  Archivés    archived Clients — visually secondary, still searchable
 ```
 
 Search covers both groups and keeps the grouping, so an archived Client can
 always be found again. Empty groups do not render. An archived row keeps its
-name and phone with muted colors and a subtle `Archivée` mention — it never
+name and phone with muted colors and a subtle `Archivé` mention — it never
 looks deleted or erroneous.
 
 ### Creating and editing a Client
 
-A restrained `Ajouter une cliente` action opens the shared Client form
+A restrained `Ajouter un client` action opens the shared Client form
 (Prénom required; Nom, Téléphone, Email, Anniversaire optional). A new
 Client appears immediately in the directory and in the Appointment Creation
 picker, and can be created directly from the picker when the person is not
@@ -732,7 +732,7 @@ is no Souris history.
 
 Activity rules are explicit: completed and no-show counts come from their status; `Annulations` counts only
 `CANCELLED` appointments whose recorded actor is `CLIENT`. A `BUSINESS` cancellation remains visible in history as
-`Annulé par le salon` but does not count against the Client. `Total dépensé` is the sum of AppointmentItem snapshot
+`Annulé par vous` but does not count against the Client. `Total dépensé` is the sum of AppointmentItem snapshot
 prices for COMPLETED appointments only, net of each Appointment's discount (§15). History rows open the existing Appointment Details. Permanently deleting an
 Appointment removes its history row and all derived count or spending contributions without mutating the Client.
 
@@ -743,20 +743,20 @@ reversible and keeps every history. Permanent deletion exists only for
 Clients without any history, and only from an archived profile:
 
 ```text
-Active  →  Archiver la cliente  →  Archivée  →  Réactiver la cliente  →  Active
+Active  →  Archiver le client  →  Archivé  →  Réactiver le client  →  Active
                                        ↓
                             Supprimer définitivement   (only if safe)
 ```
 
-On an ACTIVE profile, `Archiver la cliente` is a restrained tertiary
+On an ACTIVE profile, `Archiver le client` is a restrained tertiary
 management action placed after the history sections, away from the business
 actions. Archiving asks no confirmation (it is reversible), gives restrained
-haptic feedback, and moves the Client under `Archivées`.
+haptic feedback, and moves the Client under `Archivés`.
 
 On an ARCHIVED profile:
 
-- a subtle `Archivée` mention sits under the name;
-- `Réactiver la cliente` replaces `Vendre un produit` as the lifecycle action;
+- a subtle `Archivé` mention sits under the name;
+- `Réactiver le client` replaces `Vendre un produit` as the lifecycle action;
 - no NEW business action is offered (`Vendre un produit` is hidden, and
   Appointment Details hides `Revente` for an archived Client);
 - Activité, contact information, Rendez-vous, and Produits achetés remain
@@ -771,15 +771,15 @@ action immediately; an action attempt never reactivates a Client by itself.
 
 Tapping `Supprimer définitivement` first checks the stored references. When
 the Client has no Appointment and no Sale, a focused confirmation asks
-`Supprimer définitivement cette cliente ?` — `Cette action est irréversible.`
+`Supprimer définitivement ce client ?` — `Cette action est irréversible.`
 — then deletes her from Souris (directory, session, database). When ANY
 Appointment (whatever its status) or Sale references her, Souris shows a
 concise explanation instead of a confirmation that could never succeed:
 
 ```text
 Suppression impossible
-Cette cliente possède un historique de rendez-vous ou de ventes.
-Conservez-la archivée pour préserver cet historique.
+Ce client possède un historique de rendez-vous ou de ventes.
+Conservez-le archivé pour préserver cet historique.
 ```
 
 There is no cascade option and no anonymization. Deletion gives warning
@@ -792,7 +792,7 @@ timestamp and never a year: Souris only needs it to recognize an upcoming
 birthday, offer a birthday promotion and show it. The Client form asks for the
 day and the month with an inline selector (no keyboard, no year wheel;
 February offers 29 days), and the profile shows a friendly French day + month
-(e.g. `12 octobre`). The Clientes directory row shows a recorded birthday as
+(e.g. `12 octobre`). The Clientèle directory row shows a recorded birthday as
 a compact secondary `21 sept.` with a cake glyph, and nothing when there is
 none. The birthday is annual — it works from day + month alone, no birth year
 is ever needed. Age display is out of scope by design
@@ -804,7 +804,7 @@ reminder card with one short confetti burst and one haptic — every time the
 profile is entered, never on a re-render, and without confetti under Reduce
 Motion (the card stays). When an Appointment is created on the Client
 birthday (the APPOINTMENT date, even weeks ahead), choosing her on the
-Cliente step shows a compact reminder at once (« C'est l'anniversaire d'Amel
+Client step shows a compact reminder at once (« C'est l'anniversaire d'Amel
 ce jour-là. », « aujourd'hui » only when the Appointment is today) with the
 same short burst and one haptic, once per explicit selection. Then, in
 creation and editing, a reminder next to « Réduction » offers « Appliquer une
@@ -963,7 +963,7 @@ disabled). Opening the flow sells nothing: the Sale stays a draft, and stock onl
 validated. Cancelling returns to Product Details.
 
 From the Client Profile and Appointment Details the Client is resolved on the first render — the
-professional never selects them again and never sees a transient « Aucune cliente ». A Sale opened
+professional never selects them again and never sees a transient « Aucun client ». A Sale opened
 through `Revente` also carries the Appointment it was sold during, so Appointment Details lists it
 under `Produits vendus` (name, quantity, snapshot unit price, line total, `Total produits`) as soon
 as the professional returns — a Sale opened from Produits or the Client Profile carries no
@@ -1006,8 +1006,8 @@ The flow is one focused content-fit sheet (`Nouvelle vente`), presented like the
 an empty sale opens compact and the sheet grows with its lines; a draft holding lines asks « Abandonner la vente ? » before `Annuler`, swipe, or
 back can discard it. The flow itself:
 
-- `Cliente` is optional — `Aucune cliente` when opened from Produits (a walk-in sale).
-  `Choisir une cliente` reuses the shared Client picker; once chosen or preselected, `Modifier`
+- `Client` is optional — `Aucun client` when opened from Produits (a walk-in sale).
+  `Choisir un client` reuses the shared Client picker; once chosen or preselected, `Modifier`
   and `Retirer` stay available until completion. Selecting a Client never mutates the Client
   session;
 - `Produits`: the same search field as the catalog (name, brand, category, barcode — ACTIVE
@@ -1322,7 +1322,7 @@ Votre activité. Sans la lourdeur.
 Introduce the essential ecosystem:
 
 - Agenda;
-- Clientes;
+- Clientèle;
 - Produits.
 
 Primary final CTA:

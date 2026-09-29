@@ -33,7 +33,7 @@ export function isTerminalAppointmentStatus(status: Appointment['status']): bool
 }
 
 export function formatCancellationActorLabel(actor: AppointmentCancellationActor): string {
-  return actor === 'CLIENT' ? 'Annulé par la cliente' : 'Annulé par le salon';
+  return actor === 'CLIENT' ? 'Annulé par le client' : 'Annulé par vous';
 }
 
 export function formatAppointmentTime(date: Date): string {

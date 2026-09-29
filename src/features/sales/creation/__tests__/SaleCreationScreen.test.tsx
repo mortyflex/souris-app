@@ -285,7 +285,7 @@ function clientValue(view: Awaited<ReturnType<typeof render>>) {
 async function chooseClient(view: Awaited<ReturnType<typeof render>>, query: string, name: string) {
   await press(view, CLIENT_ROW);
   await act(async () => {
-    fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), query);
+    fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), query);
   });
   await act(async () => fireEvent.press(view.getByText(name)));
 }
@@ -328,11 +328,11 @@ describe('SaleCreationScreen', () => {
     expect(view.getByText('Nouvelle vente')).toBeTruthy();
     const row = view.getByTestId(CLIENT_ROW);
     expect(row.props.accessibilityRole).toBe('button');
-    expect(row.props.accessibilityLabel).toBe('Cliente, Choisir une cliente');
+    expect(row.props.accessibilityLabel).toBe('Client, Choisir un client');
     expect(within(row).getByTestId('disclosure-chevron')).toBeTruthy();
-    expect(view.queryByText('Aucune cliente')).toBeNull();
-    expect(view.queryByText('Vente de passage, sans historique cliente.')).toBeNull();
-    expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
+    expect(view.queryByText('Aucun client')).toBeNull();
+    expect(view.queryByText('Vente de passage, sans historique client.')).toBeNull();
+    expect(view.queryByLabelText('Retirer le client')).toBeNull();
     // The empty cart, in its own section above « Ajouter un produit ».
     expect(within(view.getByTestId('sale-lines-empty')).getByText('Aucun produit ajouté')).toBeTruthy();
     expect(within(view.getByTestId('sale-lines-section')).getByTestId('sale-lines-empty')).toBeTruthy();
@@ -346,11 +346,11 @@ describe('SaleCreationScreen', () => {
     const view = await renderSale('client-agenda-camille');
 
     expect(clientValue(view)).toBe('Camille Durand');
-    expect(view.getByTestId(CLIENT_ROW).props.accessibilityLabel).toBe('Cliente, Camille Durand');
+    expect(view.getByTestId(CLIENT_ROW).props.accessibilityLabel).toBe('Client, Camille Durand');
 
     await chooseClient(view, 'Léa', 'Léa Martin');
     expect(clientValue(view)).toBe('Léa Martin');
-    expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
+    expect(view.queryByLabelText('Retirer le client')).toBeNull();
     expect(view.queryByText('Retirer')).toBeNull();
   });
 
@@ -374,13 +374,13 @@ describe('SaleCreationScreen', () => {
 
     const row = view.getByTestId(CLIENT_ROW);
     expect(clientValue(view)).toBe('Sofia Petit');
-    expect(row.props.accessibilityLabel).toBe('Cliente, Sofia Petit');
+    expect(row.props.accessibilityLabel).toBe('Client, Sofia Petit');
     expect(row.props.accessibilityRole).toBeUndefined();
     expect(within(row).queryByTestId('disclosure-chevron')).toBeNull();
-    expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
+    expect(view.queryByLabelText('Retirer le client')).toBeNull();
 
     await press(view, CLIENT_ROW);
-    expect(view.queryByPlaceholderText('Rechercher une cliente')).toBeNull();
+    expect(view.queryByPlaceholderText('Rechercher un client')).toBeNull();
     expect(clientValue(view)).toBe('Sofia Petit');
 
     // The Client requirement is already met: only the empty cart blocks validation.
@@ -517,8 +517,8 @@ describe('SaleCreationScreen', () => {
   it('falls back to no Client when the supplied id is unknown, without inventing data', async () => {
     const view = await renderSale('client-missing');
 
-    expect(clientValue(view)).toBe('Choisir une cliente');
-    expect(view.queryByText('Cliente inconnue')).toBeNull();
+    expect(clientValue(view)).toBe('Choisir un client');
+    expect(view.queryByText('Client inconnu')).toBeNull();
   });
 
   it('requires a Client for a Produits sale: chosen, then replaced, through the whole row', async () => {
@@ -538,7 +538,7 @@ describe('SaleCreationScreen', () => {
 
     await chooseClient(view, 'Léa', 'Léa Martin');
     expect(clientValue(view)).toBe('Léa Martin');
-    expect(view.queryByLabelText('Retirer la cliente')).toBeNull();
+    expect(view.queryByLabelText('Retirer le client')).toBeNull();
     expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(false);
   });
 
@@ -851,7 +851,7 @@ describe('SaleCreationScreen', () => {
       expect(view.getByTestId('sale-unit-count').props.children).toBe('1 produit · ');
       expect(view.getByTestId('sale-total').props.children).toBe(formatServicePrice(50));
       // The Produits entry: a Client still has to be chosen before validating.
-      expect(clientValue(view)).toBe('Choisir une cliente');
+      expect(clientValue(view)).toBe('Choisir un client');
       expect(view.getByTestId('validate-sale').props.accessibilityState.disabled).toBe(true);
       // Only a draft: no Sale, no stock movement.
       expect(view.getByTestId('sales-count').props.children).toBe(0);
@@ -995,16 +995,16 @@ describe('SaleCreationScreen', () => {
   it('never attaches an archived Client: no preselection from a stale route, never offered by the picker', async () => {
     const view = await renderSale('client-agenda-camille', createSeedWithArchivedCamille);
 
-    expect(clientValue(view)).toBe('Choisir une cliente');
+    expect(clientValue(view)).toBe('Choisir un client');
     expect(view.queryByText('Camille Durand')).toBeNull();
 
     await press(view, CLIENT_ROW);
     await act(async () => {
-      fireEvent.changeText(view.getByPlaceholderText('Rechercher une cliente'), 'Camille');
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'Camille');
     });
 
     expect(view.queryByText('Camille Durand')).toBeNull();
-    expect(view.getByText('Aucune cliente trouvée')).toBeTruthy();
+    expect(view.getByText('Aucun client trouvé')).toBeTruthy();
   });
 
   it('lists the active directory in the shared picker inside a bounded list area (regression: blank picker)', async () => {
@@ -1012,17 +1012,17 @@ describe('SaleCreationScreen', () => {
     await press(view, 'stock-masque-2');
     await search(view, 'masque');
     await press(view, `sale-product-${MASQUE_ID}`);
-    expect(clientValue(view)).toBe('Choisir une cliente');
+    expect(clientValue(view)).toBe('Choisir un client');
 
     await press(view, CLIENT_ROW);
 
-    expect(view.queryByText('CLIENTE')).toBeNull();
-    expect(view.getByRole('header', { name: 'Choisir la cliente' })).toBeTruthy();
+    expect(view.queryByText('CLIENT')).toBeNull();
+    expect(view.getByRole('header', { name: 'Choisir un client' })).toBeTruthy();
     // Nothing typed: the whole active directory is offered; the archived Client never.
     expect(view.getByText('Alice Aubert')).toBeTruthy();
     expect(view.getByText('Bianca Bonnet')).toBeTruthy();
     expect(view.queryByText('Chloé Caron')).toBeNull();
-    expect(view.queryByText('Aucune cliente trouvée')).toBeNull();
+    expect(view.queryByText('Aucun client trouvé')).toBeNull();
 
     // The list needs real height: from the FlatList up to the sheet surface every
     // host ancestor grows. A shrink-only ancestor collapses the list to zero
@@ -1038,9 +1038,9 @@ describe('SaleCreationScreen', () => {
     await act(async () => fireEvent.press(view.getByText('Alice Aubert')));
 
     expect(clientValue(view)).toBe('Alice Aubert');
-    expect(view.getByTestId(CLIENT_ROW).props.accessibilityLabel).toBe('Cliente, Alice Aubert');
+    expect(view.getByTestId(CLIENT_ROW).props.accessibilityLabel).toBe('Client, Alice Aubert');
     await settleSheetTransition();
-    expect(view.queryByText('Choisir la cliente')).toBeNull();
+    expect(view.queryByText('Choisir un client')).toBeNull();
 
     // The draft is otherwise untouched: line, total, stock and the Sale session.
     expect(view.getByTestId(`sale-line-increment-${MASQUE_ID}`)).toBeTruthy();

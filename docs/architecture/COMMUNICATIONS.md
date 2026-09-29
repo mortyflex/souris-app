@@ -506,7 +506,7 @@ src/features/communications/
   session/CommunicationsGatewayProvider.tsx     the ONE gateway instance (account root)
   preferences/CommunicationPreferencesProvider  the latest KNOWN server preference, per (app)
   preferences/preferences-cache.ts              Business-scoped souris_metadata cache
-  settings/ReminderSettingsScreen.tsx           Plus › Rappels clientes  (/reminder-settings)
+  settings/ReminderSettingsScreen.tsx           Plus › Rappels clients  (/reminder-settings)
   components/MissingEmailNotice.tsx             the inline warning
   presentation.ts                               the French copy in one place
 src/infrastructure/supabase/communications-gateway.ts   the three RPCs
@@ -516,7 +516,7 @@ src/infrastructure/supabase/communications-gateway.ts   the three RPCs
   last server answer, refreshes the Business-scoped cache, falls back to it offline, and with
   neither answers DISABLED — no cached value ever enables anything the server did not confirm.
   There is NO local queue and no device-side scheduling of any kind.
-- **Settings** (`Plus › Rappels clientes`): ONE switch, the fixed « 24 h avant le rendez-vous »
+- **Settings** (`Plus › Rappels clients`): ONE switch, the fixed « 24 h avant le rendez-vous »
   timing (no customization in V1), the Reply-To (prefilled from the account email, validated
   locally AND by the server). Every change is persisted server-side before the UI claims it; the
   server trigger does the reconciliation.
@@ -532,13 +532,13 @@ src/infrastructure/supabase/communications-gateway.ts   the three RPCs
   reuses an ALREADY_EXISTS one), and the safe fallback stays OFF. Existing users never see the
   step (onboarding only mounts while no Business exists).
 - **Appointment creation and editing**: while the global preference is ON, an Options row
-  « Rappel cliente » (native switch, ON by default; editing hydrates from the stored flag). The
+  « Rappel client » (native switch, ON by default; editing hydrates from the stored flag). The
   explicit choice is stored on the appointment; an untouched toggle keeps the field absent.
   While the global preference is OFF the row does not exist and nothing is stored. When the
   selected Client has no usable email, a lightweight inline notice (« Aucune adresse e-mail
   renseignée / Le rappel ne pourra pas être envoyé ») offers « Ajouter l’e-mail » through the
   EXISTING Client editor — and never blocks the appointment.
-- **Details**: a discreet « Rappel cliente · … » line under the schedule, read from the
+- **Details**: a discreet « Rappel client · … » line under the schedule, read from the
   owner-scoped projection `communications_appointment_reminder_status`:
 
   ```text
@@ -735,7 +735,7 @@ Never exposes recipient, payload, provider id, attempts, errors or dedupe keys; 
 
 App side: while SMS is globally OFF (every real user in C1) the Details row renders EXACTLY
 the Lot B single email line through the legacy projection. With SMS enabled (test Business),
-it lists one compact line per channel under « Rappels cliente » (« E-mail · Envoyé »,
+it lists one compact line per channel under « Rappels client » (« E-mail · Envoyé »,
 « SMS · Programmé · … »; « Aucun numéro de téléphone » / « Numéro non reconnu »). The
 per-appointment toggle copy is channel-neutral (« Rappel automatique 24 h avant le
 rendez-vous »), and `MissingPhoneNotice` (missing/invalid variants, opening the existing
@@ -798,7 +798,7 @@ only the legacy EMAIL projection. Deliberately kept for Phase 2: the channel-gen
 `communications_client_phone_e164` / `communications_is_sms_eligible_phone` /
 `communications_client_sms_recipient`, their app mirror (`src/domain/communications/phone.ts`)
 and the client trigger's `phone` watch. The app returned to the exact validated email-only
-reminder UX (single « Rappel cliente » line, « E-mail 24 h avant le rendez-vous » toggle,
+reminder UX (single « Rappel client » line, « E-mail 24 h avant le rendez-vous » toggle,
 MissingEmailNotice).
 
 ## 32. The Twilio SMS transport — implemented, deliberately UNBOUND
@@ -1013,8 +1013,8 @@ an SMS, and the Twilio Trial recipient remains developer-only.**
 ## 43. The app surfaces
 
 - **Plus › SMS fidélisation** (`/lifecycle-sms-settings`,
-  `LifecycleSmsSettingsScreen`) — two switches (Anniversaires, Clientes inactives) and their
-  numeric knobs as [ − ] value [ + ] steppers, separate from « Rappels clientes » (EMAIL).
+  `LifecycleSmsSettingsScreen`) — two switches (Anniversaires, Clients inactifs) and their
+  numeric knobs as [ − ] value [ + ] steppers, separate from « Rappels clients » (EMAIL).
   UI ranges, narrower than the server CHECKs (which stay the final validation): discount
   5–50 % by 5, offer validity 1–30 days by 1, win-back inactivity 30–365 days by 15. A switch
   is server-persisted before the UI claims it; a step shows at once, sends ONLY its knob (the

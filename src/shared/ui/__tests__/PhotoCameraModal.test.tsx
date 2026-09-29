@@ -131,12 +131,12 @@ describe('PhotoCameraModal', () => {
         onCaptured={jest.fn()}
         onClose={jest.fn()}
         testID="client-camera"
-        title="Photo de la cliente"
+        title="Photo du client"
         visible
       />,
     );
 
-    expect(view.getByText('Photo de la cliente')).toBeTruthy();
+    expect(view.getByText('Photo du client')).toBeTruthy();
     expect(view.getByText('Cadrez le visage au centre')).toBeTruthy();
     expect(view.getByTestId('client-camera-shutter')).toBeTruthy();
   });

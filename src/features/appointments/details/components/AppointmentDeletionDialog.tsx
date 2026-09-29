@@ -39,7 +39,7 @@ export function AppointmentDeletionDialog({ mode, onClose, onConfirm }: Appointm
 
   return (
     <ConfirmationDialog
-      body="Il sera supprimé de l’agenda et de l’historique de la cliente. Cette action est irréversible."
+      body="Il sera supprimé de l’agenda et de l’historique du client. Cette action est irréversible."
       cancelLabel="Retour"
       cancelTestID="cancel-permanent-deletion"
       confirmLabel="Supprimer"

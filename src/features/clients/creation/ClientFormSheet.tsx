@@ -102,7 +102,7 @@ export function ClientFormSheet({
 
   return (
     <BottomSheet
-      backdropLabel="Fermer la fiche cliente"
+      backdropLabel="Fermer la fiche client"
       dismissOnPanDown={false}
       footer={
         <SheetActionBar testID="client-form-actions">
@@ -110,7 +110,7 @@ export function ClientFormSheet({
             disabled={!canSubmit}
             onPress={submit}
             testID="submit-client"
-            title={mode === 'edit' ? 'Enregistrer les modifications' : 'Ajouter la cliente'}
+            title={mode === 'edit' ? 'Enregistrer les modifications' : 'Ajouter le client'}
           />
         </SheetActionBar>
       }
@@ -118,7 +118,7 @@ export function ClientFormSheet({
         <SheetEditingHeader
           cancelAccessibilityLabel={mode === 'edit' ? 'Annuler les modifications' : 'Annuler la création'}
           onCancel={onClose}
-          title={mode === 'edit' ? 'Modifier la cliente' : 'Ajouter une cliente'}
+          title={mode === 'edit' ? 'Modifier le client' : 'Nouveau client'}
         />
       }
       keyboardAvoiding

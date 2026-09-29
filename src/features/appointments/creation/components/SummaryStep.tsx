@@ -125,13 +125,13 @@ export function SummaryStep({
     >
       <View style={styles.section}>
         <AppText variant="eyebrow" style={styles.eyebrow}>
-          CLIENTE
+          CLIENT
         </AppText>
         <GroupedSurface testID="summary-client">
           <GroupedDataRow
-            accessibilityHint="Modifier la cliente"
+            accessibilityHint="Modifier le client"
             icon={clientIcon}
-            label="Cliente"
+            label="Client"
             onPress={onEditClient}
             testID="edit-client"
             value={clientName}

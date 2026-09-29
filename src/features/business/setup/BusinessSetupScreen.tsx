@@ -229,7 +229,7 @@ export function BusinessSetupScreen() {
           value={replyToValue}
         />
         <AppText variant="metadata" style={styles.replyToHint}>
-          Les clientes qui répondent à un rappel écrivent à cette adresse. Modifiable à tout
+          Les clients qui répondent à un rappel écrivent à cette adresse. Modifiable à tout
           moment dans les réglages.
         </AppText>
         {activationFailed && (

@@ -37,7 +37,7 @@ const SALE_SOURCE_LABEL = 'Vente';
 /** A deposit is named as such next to its Appointment's services. */
 const DEPOSIT_SOURCE_LABEL = 'Acompte';
 /** A walk-in Sale has no Client to name; nothing is invented. */
-export const WALK_IN_SALE_LABEL = 'Vente sans cliente';
+export const WALK_IN_SALE_LABEL = 'Vente sans client';
 
 const WHEN_COLUMN = 58;
 const CHEVRON_COLUMN = 14;

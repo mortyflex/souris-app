@@ -32,19 +32,19 @@ describe('MainScreenHeader', () => {
     const view = await render(
       <MainScreenHeader
         count={622}
-        countAccessibilityLabel="622 clientes actives"
+        countAccessibilityLabel="622 clients actifs"
         testID="clients-header"
-        title="Clientes"
+        title="Clientèle"
       />,
     );
 
     // The title keeps its own name and role; the count is a separate plain text.
-    expect(view.getByRole('header', { name: 'Clientes' })).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Clientèle' })).toBeTruthy();
     const count = view.getByTestId('clients-header-count');
     expect(count.props.children).toBe(622);
-    expect(count.props.accessibilityLabel).toBe('622 clientes actives');
+    expect(count.props.accessibilityLabel).toBe('622 clients actifs');
 
-    await view.rerender(<MainScreenHeader testID="clients-header" title="Clientes" />);
+    await view.rerender(<MainScreenHeader testID="clients-header" title="Clientèle" />);
     expect(view.queryByTestId('clients-header-count')).toBeNull();
   });
 });

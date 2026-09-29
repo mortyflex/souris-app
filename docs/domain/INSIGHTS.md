@@ -97,8 +97,8 @@ placeholders. Places are read-only.
 | --- | --- | --- |
 | Top prestations | one per `AppointmentItem` of a completed Appointment, grouped by `serviceId` | count ↓, name, id |
 | Top produits | units of the Sale lines of the period, grouped by `productId` | units ↓, name, id |
-| Clientes qui dépensent le plus | period client spending (> 0 only) | spending ↓, completed visits ↓, client id |
-| Clientes les plus fidèles | completed Appointments of the period | completed visits ↓, spending ↓, client id |
+| Clients qui dépensent le plus | period client spending (> 0 only) | spending ↓, completed visits ↓, client id |
+| Clients les plus fidèles | completed Appointments of the period | completed visits ↓, spending ↓, client id |
 
 Names come from SNAPSHOTS: `AppointmentItem.serviceName` and `SaleItem.productName`. When a Service or
 Product was renamed within the period, the row shows the snapshot of its most recent occurrence in that
@@ -109,7 +109,7 @@ Clients are shown compactly as `Prénom N.` on the private ticket. Visit counts 
 (spoken « 3 rendez-vous »), never a truncated « rendez-v… ». The shareable card (§7) shows the same
 rankings, built from `BusinessInsights` as its own public model, never by capturing this receipt.
 
-There is deliberately no « Clientes qui dépensent le moins » ranking.
+There is deliberately no « Clients qui dépensent le moins » ranking.
 
 ---
 
@@ -175,8 +175,8 @@ figure printed is the receipt's completed count from the same `BusinessInsights`
 | --- | --- |
 | Top prestations | the podium: service snapshot names, ranks, `N prestations` |
 | Top produits | the podium: product snapshot names, ranks, `1 unité` / `N unités` |
-| Clientes qui dépensent le plus | the podium: `Prénom N.`, ranks, spending (`195 €`) |
-| Clientes les plus fidèles | the podium: `Prénom N.`, ranks, visits (`3 rdv`) |
+| Clients qui dépensent le plus | the podium: `Prénom N.`, ranks, spending (`195 €`) |
+| Clients les plus fidèles | the podium: `Prénom N.`, ranks, visits (`3 rdv`) |
 
 Every podium has the ticket's places, metrics and order; services and products are identical to it. An empty category
 shows its quiet message and no podium. An empty period shows its zero figures and « Une période toute calme ✨ »
@@ -212,6 +212,6 @@ change.
 
 - sharing a capture of the receipt itself (only the dedicated card is shared);
 - actions from the rankings (open a profile, reward, discount, offer);
-- « Clientes à relancer »;
+- « Clients à relancer »;
 - revenue per service;
 - any persisted analytics.

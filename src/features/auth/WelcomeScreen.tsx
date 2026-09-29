@@ -113,7 +113,7 @@ export function WelcomeScreen() {
           {'Votre activité,\nsimplement organisée.'}
         </AppText>
         <AppText variant="body" style={styles.subtitle}>
-          Agenda, clientes, prestations et ventes, sans logiciel compliqué.
+          Agenda, clientèle, prestations et ventes, sans logiciel compliqué.
         </AppText>
       </View>
       <View style={styles.actions}>

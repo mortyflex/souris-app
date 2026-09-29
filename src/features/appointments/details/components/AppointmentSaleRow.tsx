@@ -19,7 +19,7 @@ interface AppointmentSaleRowProps {
 export function AppointmentSaleRow({ onPress }: AppointmentSaleRowProps) {
   return (
     <Pressable
-      accessibilityHint="Vendre un produit à cette cliente"
+      accessibilityHint="Vendre un produit à ce client"
       accessibilityLabel="Ajouter une vente"
       accessibilityRole="button"
       onPress={onPress}

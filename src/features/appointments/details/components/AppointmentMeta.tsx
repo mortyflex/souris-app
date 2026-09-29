@@ -50,13 +50,13 @@ export function AppointmentMeta({
       {isBirthday && (
         <View
           accessible
-          accessibilityLabel="Anniversaire de la cliente"
+          accessibilityLabel="Anniversaire du client"
           style={styles.birthdayLine}
           testID="appointment-birthday-indication"
         >
           <SymbolView name={birthdayIcon} size={14} tintColor={rose.rose700} />
           <AppText variant="metadata" style={styles.birthdayText}>
-            Anniversaire de la cliente
+            Anniversaire du client
           </AppText>
         </View>
       )}

@@ -5,7 +5,7 @@
 // upstream by the session), embedded by Appointment Creation and by the
 // shared ClientPickerSheet. No display cap: FlatList
 // virtualization keeps the list fast without limiting the business dataset.
-// A restrained "Ajouter une cliente" action opens the shared creation sheet
+// A restrained "Ajouter un client" action opens the shared creation sheet
 // when the person is not in the directory. An optional `header` scrolls
 // above the search inside the same list, so the step keeps ONE vertical
 // scroll. Rows are a plain list: avatar + name, hairline separators.
@@ -58,14 +58,14 @@ export function ClientPickerStep({
         <View style={styles.listHeader}>
           {header && <View style={styles.header}>{header}</View>}
           <SearchField
-            accessibilityLabel="Rechercher une cliente"
+            accessibilityLabel="Rechercher un client"
             onChangeText={onChangeQuery}
-            placeholder="Rechercher une cliente"
+            placeholder="Rechercher un client"
             value={query}
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Ajouter une cliente"
+            accessibilityLabel="Ajouter un client"
             hitSlop={spacing.sm}
             onPress={onAddClientPress}
             style={({ pressed }) => [styles.addAction, pressed && styles.addActionPressed]}
@@ -77,16 +77,16 @@ export function ClientPickerStep({
               tintColor={semanticColors.accent}
             />
             <AppText variant="metadata" style={styles.addActionText}>
-              Ajouter une cliente
+              Ajouter un client
             </AppText>
           </Pressable>
         </View>
       }
       ListEmptyComponent={
         <View style={styles.emptyState}>
-          <AppText variant="stateTitle">Aucune cliente trouvée</AppText>
+          <AppText variant="stateTitle">Aucun client trouvé</AppText>
           <AppText variant="metadata" style={styles.emptyStateText}>
-            Essayez un autre nom ou numéro, ou ajoutez une nouvelle cliente.
+            Essayez un autre nom ou numéro, ou ajoutez un nouveau client.
           </AppText>
         </View>
       }

@@ -172,7 +172,7 @@ export function buildInsightsRankingSections(
     },
     {
       key: 'spendingClients',
-      title: 'Clientes qui dépensent le plus',
+      title: 'Clients qui dépensent le plus',
       rows: insights.topSpendingClients.map((client, index) =>
         row(clientKey(client.clientId, index), index, clientName(client.clientId), spending(client.spendingCents)),
       ),
@@ -180,7 +180,7 @@ export function buildInsightsRankingSections(
     },
     {
       key: 'loyalClients',
-      title: 'Clientes les plus fidèles',
+      title: 'Clients les plus fidèles',
       rows: insights.topLoyalClients.map((client, index) =>
         row(
           clientKey(client.clientId, index),
