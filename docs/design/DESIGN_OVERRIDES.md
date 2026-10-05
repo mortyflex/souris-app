@@ -798,8 +798,28 @@ presentation only. Occupancy, segments, statuses and navigation behave exactly a
   `appointment-palette.test.ts`). The approved `subtitle` equals the `accent` and measures
   2.1:1 (soft yellow) to 4.1:1 (soft indigo) on its background — below the 4.5:1 target for
   small text. It is an accepted decision of the approved palette, to be re-checked on device.
-- **Shape**: `radii.small` (8), reduced on short blocks (a quarter of the height, minimum 3) so
-  a quarter-hour card never reads as a pill.
+- **Shape**: the corner is a quarter of the card height, from 3 up to `radii.medium` (12): a
+  quarter-hour card never reads as a pill, a roomy card gets a softer corner.
+- **Composition by height** (`getAgendaSegmentDensity`, thresholds unchanged; `AppointmentBlock`).
+  - *Tall* (≥ 56): one cluster anchored to the START line (4 pt inset, never vertically
+    centred — the empty remainder of a long card is its duration). A 32 pt identity disc, then
+    beside it: the segment start time (`chip`, family `subtitle` tone, tabular), the client
+    name (`rowTitle`, family `title` tone — the strongest line), the prestation summary
+    (`metadata`) and the phases on their own line while the height allows. On the shortest
+    tall cards the phases stay inline after the prestations; time, name and prestations
+    always fit.
+  - *Medium* (32–55): a 24 pt identity disc beside two tight centred lines, name then
+    prestations. No time.
+  - *Compact* (16–31): one line, first name · prestation. Below 16: colour only. No disc.
+  - *Identity disc*: the client's photo (`cover`, clipped to the circle) when the Client has
+    one — resolved from its `photoPath` through the shared media cache, like the Clientèle
+    list. Otherwise, and when the photo cannot load, a SOLID white circle (`surfaceElevated`)
+    with the initials in the card's name tone — flat, nothing translucent over the pastel.
+    Decorative: the card speaks the client's name. Dropped when the card is narrower than
+    140 pt (overlap columns).
+  - **No duration is written**: the height of the card is the duration. The start time is read
+    from the card's own segment (`startAt`). `spacing.sm` side padding. No written status: the
+    colours carry it.
 - **Depth**: the barely-there `nativeShadows.card` under live cards, nothing else. The former
   card sheen (a top-down white gradient plus a one-pixel highlight, `gloss.card`) is removed: it
   read as a washed gradient across the pastel fill. No blur, no glassmorphism.

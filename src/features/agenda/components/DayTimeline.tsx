@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
 import {
   Platform,
@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 
 import type { CalendarBlock } from '@/domain/calendar-blocks';
+import { getClientInitials } from '@/domain/clients';
 import { AppText } from '@/shared/ui/AppText';
 import { TabBarGlassScrollEdge } from '@/shared/ui/TabBarGlassScrollEdge';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
+import { useClientPhotoUri } from '@/features/clients/photo/use-client-photo-uri';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { agenda, bottomClearance, gutter, rose, semanticColors } from '@/shared/ui/theme';
@@ -42,6 +44,20 @@ const blockLayoutId = (calendarBlock: CalendarBlock) => `calendar-block:${calend
 
 const minuteHeight = agenda.hourHeight / 60;
 
+/**
+ * One Appointment card with its client's photo: the stable `photoPath` of the
+ * Client already resolved for this day becomes a displayable file through the
+ * shared media cache — the Clientèle list's own path, nothing new is read.
+ */
+function AppointmentSegmentCard({
+  clientPhotoPath,
+  ...card
+}: Omit<ComponentProps<typeof AppointmentBlock>, 'clientPhotoUri'> & {
+  readonly clientPhotoPath?: string;
+}) {
+  return <AppointmentBlock {...card} clientPhotoUri={useClientPhotoUri(clientPhotoPath)} />;
+}
+
 export function DayTimeline({ day, appointments, calendarBlocks = [] }: DayTimelineProps) {
   const router = useRouter();
   const { getClientById } = useClientSession();
@@ -52,11 +68,16 @@ export function DayTimeline({ day, appointments, calendarBlocks = [] }: DayTimel
     appointments.map(({ appointment }) => appointment),
   );
   const visibleSegments = appointments.flatMap(({ appointment }) =>
-    buildAgendaStaffSegments(appointment).map((segment) => ({
-      ...segment,
-      clientName: getResolvedClientDisplayName(getClientById(appointment.clientId)),
-      palette: paletteOf(appointment),
-    })),
+    buildAgendaStaffSegments(appointment).map((segment) => {
+      const client = getClientById(appointment.clientId);
+      return {
+        ...segment,
+        clientInitials: client ? getClientInitials(client) : undefined,
+        clientPhotoPath: client?.photoPath,
+        clientName: getResolvedClientDisplayName(client),
+        palette: paletteOf(appointment),
+      };
+    }),
   );
   // ONE geometry for everything the day holds: Calendar Blocks go through the
   // same interval layout, the same range and the same minute scale as the
@@ -163,8 +184,10 @@ export function DayTimeline({ day, appointments, calendarBlocks = [] }: DayTimel
             if (!frame) return null;
             return (
               <View key={segment.id} testID={`agenda-segment-${segment.id}`} style={frame}>
-                <AppointmentBlock
+                <AppointmentSegmentCard
+                  clientInitials={segment.clientInitials}
                   clientName={segment.clientName}
+                  clientPhotoPath={segment.clientPhotoPath}
                   height={frame.height}
                   onPress={() =>
                     router.push({
@@ -174,6 +197,7 @@ export function DayTimeline({ day, appointments, calendarBlocks = [] }: DayTimel
                   }
                   palette={segment.palette}
                   segment={segment}
+                  width={frame.width}
                 />
               </View>
             );
