@@ -2133,7 +2133,11 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
     (« 100 € », cents only when there are some).
   - *Secondary* (`HomeCollectionSummary`): ONE compact white card « Encaissements du jour » —
     « 0 € encaissé » | « 100 € restant » side by side, split by a hairline, values in 16 pt
-    `control`, no glyph. Spoken « Déjà encaissé » / « Reste à encaisser ».
+    `control`, no glyph. The WHOLE card is one button that pushes the existing Caisse
+    (`/cash-register`): an 18 pt accent chevron at the right edge, vertically centred on the WHOLE card (never
+    inline with the title), no « Voir » button, no separate tap
+    targets. Spoken once: « Encaissements du jour, déjà encaissé …, reste à encaisser … »,
+    hint « Ouvre la Caisse ». Plus → Caisse is unchanged.
   - All four figures are exactly the domain day summary of today, the figures of « Résumé du
     jour ». This is NOT the Caisse total (money by the day it was received).
 - **Actions rapides** (`HomeQuickAction`). One row of four light shortcuts: a 56 pt white
@@ -2156,9 +2160,11 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
 - **Pilotage** (`HomeToolRow`). Existing business tools, consulted rather than created — never
   styled as quick actions: ONE borderless `GroupedSurface` of two 64 pt navigation rows split by
   an inset hairline. Each: accent glyph in a 36 pt `surfaceLavender` disc, `rowTitle` title, one
-  `metadata` line, muted chevron. « Créer une estimation — Chiffrer des prestations pour un
+  `metadata` line, accent chevron. « Créer une estimation — Chiffrer des prestations pour un
   client » pushes `/estimations/new`; « Tops & tendances — Voir ce qui fonctionne le mieux »
   opens the existing insights receipt on the current month.
+- **Chevrons.** Every navigation chevron of Accueil — hero card, section links, Encaissements
+  du jour, Pilotage rows — is the Souris accent, never the muted grey.
 - **Order.** Welcome, next appointment, the two figures, the collection summary, quick actions,
   Cette semaine, Pilotage. Nothing else. Weight decreases down the page: the hero is the only
   tint, today owns the only 30 pt figures.

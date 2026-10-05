@@ -8,7 +8,7 @@
 //   [ PROCHAIN RENDEZ-VOUS — the one tinted hero card ]   → Appointment Details
 //   Aujourd’hui                       Résumé du jour ›
 //   [ 2  Rendez-vous ]   [ 100 €  CA potentiel ]          the two primary figures
-//   [ Encaissements du jour · 0 € encaissé | 100 € restant ]   secondary
+//   [ Encaissements du jour ›  0 € encaissé | 100 € restant ]   secondary → Caisse
 //   Actions rapides
 //   ( Rendez-vous ) ( Client ) ( Produit ) ( Vente )      light shortcuts: they CREATE
 //   Cette semaine                Résumé de la semaine ›
@@ -185,6 +185,7 @@ export function HomeScreen() {
               </View>
               <HomeCollectionSummary
                 collected={formatCompactEuroCents(summary.collectedCents)}
+                onPress={() => router.push('/cash-register')}
                 remaining={formatCompactEuroCents(summary.remainingToCollectCents)}
               />
             </View>

@@ -185,7 +185,8 @@ describe('HomeScreen', () => {
     const summary = todaySummary(database);
     const view = await renderHome(database);
 
-    const card = within(view.getByTestId('home-collection-summary'));
+    const button = view.getByTestId('home-collection-summary');
+    const card = within(button);
     expect(card.getByText('Encaissements du jour')).toBeTruthy();
     const collected = card.getByTestId('home-stat-collected');
     const remaining = card.getByTestId('home-stat-remaining');
@@ -195,14 +196,28 @@ describe('HomeScreen', () => {
     expect(card.getByText('restant')).toBeTruthy();
     // Visibly lighter than the primary figures.
     for (const value of [collected, remaining]) expect(value).toHaveStyle({ fontSize: 16 });
-    expect(
-      view.getByLabelText(`Déjà encaissé, ${formatCompactEuroCents(summary.collectedCents)}`),
-    ).toBeTruthy();
-    expect(
-      view.getByLabelText(
-        `Reste à encaisser, ${formatCompactEuroCents(summary.remainingToCollectCents)}`,
-      ),
-    ).toBeTruthy();
+    // ONE button: it speaks both amounts and says where it leads.
+    expect(button.props.accessibilityRole).toBe('button');
+    expect(button.props.accessibilityLabel).toBe(
+      `Encaissements du jour, déjà encaissé ${formatCompactEuroCents(
+        summary.collectedCents,
+      )}, reste à encaisser ${formatCompactEuroCents(summary.remainingToCollectCents)}`,
+    );
+    expect(button.props.accessibilityHint).toBe('Ouvre la Caisse');
+    // The chevron belongs to the card, centred on its whole height at the right edge.
+    expect(button).toHaveStyle({ alignItems: 'center', flexDirection: 'row' });
+    const chevron = card.getByTestId('home-collection-chevron');
+    expect(chevron.parent).toBe(card.getByText('Encaissements du jour').parent?.parent);
+    expect(within(view.getByTestId('home-collection-summary')).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('opens the existing Caisse from anywhere on the collection card', async () => {
+    const view = await renderHome(seededDatabase());
+
+    await act(async () => fireEvent.press(view.getByTestId('home-stat-remaining')));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/cash-register');
   });
 
   it('reads top-down: welcome, next appointment, figures, collection, quick actions, week, pilotage', async () => {

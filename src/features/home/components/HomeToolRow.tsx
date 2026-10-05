@@ -2,7 +2,7 @@
 //
 // One existing business tool, as a compact navigation row inside the grouped
 // Pilotage surface: a quiet accent glyph, a title, one short line saying what
-// the tool does, a muted chevron. Deliberately NOT a quick action — a quick
+// the tool does, an accent chevron (every navigation chevron of Accueil is). Deliberately NOT a quick action — a quick
 // action creates, a tool is consulted. Pressing only reports.
 
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
@@ -42,7 +42,7 @@ export function HomeToolRow({ title, description, icon, onPress, testID }: HomeT
       <SymbolView
         name={{ ios: 'chevron.right', android: 'chevron_right' }}
         size={14}
-        tintColor={semanticColors.foregroundMuted}
+        tintColor={semanticColors.accent}
       />
     </Pressable>
   );
