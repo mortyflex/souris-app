@@ -42,6 +42,13 @@ async function nativeBack() {
   });
 }
 
+// The system file picker: each test says what the professional picks.
+const mockPickFileBytes = jest.fn();
+
+jest.mock('@/shared/lib/file-acquisition', () => ({
+  pickFileBytes: (...args: unknown[]) => mockPickFileBytes(...args),
+}));
+
 jest.mock('expo-symbols', () => {
   const React = jest.requireActual('react') as typeof import('react');
   return { SymbolView: () => React.createElement(React.Fragment, null) };
@@ -97,7 +104,9 @@ async function press(view: Rendered, testID: string) {
   await act(async () => fireEvent.press(view.getByTestId(testID)));
 }
 
+/** Chooses « Coller une liste » on the source choice, pastes and analyses. */
 async function pasteAndAnalyze(view: Rendered, text: string) {
+  await press(view, 'client-import-source-paste');
   await act(async () => fireEvent.changeText(view.getByTestId('client-import-paste-input'), text));
   await press(view, 'client-import-analyze');
 }
@@ -118,24 +127,37 @@ const PASTED = [
 describe('ClientImportScreen', () => {
   beforeEach(() => {
     mockBack.mockClear();
+    mockPickFileBytes.mockReset();
   });
 
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  it('opens straight on the paste step while paste is the only source, without the source choice', async () => {
+  it('opens on the source choice now that paste and CSV are both enabled', async () => {
     const { view } = await renderImport();
 
     expect(view.getByRole('header', { name: 'Importer ma clientèle' })).toBeTruthy();
+    expect(view.getByText('Coller une liste')).toBeTruthy();
+    expect(view.getByText('Importer un fichier CSV')).toBeTruthy();
+    expect(view.queryByTestId('client-import-paste-input')).toBeNull();
+    expect(view.queryByTestId('client-import-csv-pick')).toBeNull();
+    expect(mockPickFileBytes).not.toHaveBeenCalled();
+  });
+
+  it('opens the unchanged paste step from « Coller une liste », without touching the file picker', async () => {
+    const { view } = await renderImport();
+    await press(view, 'client-import-source-paste');
+
     expect(view.getByText('Collez une liste de clients')).toBeTruthy();
     expect(view.getByTestId('client-import-paste-input')).toBeTruthy();
-    expect(view.queryByText('Coller une liste')).toBeNull();
     expect(view.queryByTestId('client-import-source-paste')).toBeNull();
+    expect(mockPickFileBytes).not.toHaveBeenCalled();
   });
 
   it('keeps « Analyser la liste » disabled for empty or whitespace-only text', async () => {
     const { view } = await renderImport();
+    await press(view, 'client-import-source-paste');
 
     const analyze = () => view.getByTestId('client-import-analyze');
     expect(analyze().props.accessibilityState.disabled).toBe(true);
@@ -421,14 +443,27 @@ describe('ClientImportScreen', () => {
     expect(countSyncOutboxRows(db)).toBe(0);
   });
 
-  it('leaves the import from the initial paste step at once, with no hidden source step and no dialog', async () => {
+  it('leaves the import from the source choice at once, with no dialog', async () => {
     const { view } = await renderImport();
 
     expect(mockRemovalGuard.enabled).toBe(false);
     await press(view, 'client-import-back');
 
     expect(mockBack).toHaveBeenCalledTimes(1);
-    expect(view.queryByText('Coller une liste')).toBeNull();
+    expect(view.queryByTestId('client-import-discard-dialog')).toBeNull();
+  });
+
+  it('returns from the paste step to the source choice, keeping the import open', async () => {
+    const { view } = await renderImport();
+    await press(view, 'client-import-source-paste');
+
+    expect(mockRemovalGuard.enabled).toBe(false);
+    await press(view, 'client-import-back');
+
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(view.getByTestId('client-import-source-paste')).toBeTruthy();
+    expect(view.getByTestId('client-import-source-csv')).toBeTruthy();
+    expect(view.queryByTestId('client-import-paste-input')).toBeNull();
     expect(view.queryByTestId('client-import-discard-dialog')).toBeNull();
   });
 
@@ -471,5 +506,173 @@ describe('ClientImportScreen', () => {
 
     expect(view.queryByTestId('client-import-discard-dialog')).toBeNull();
     expect(mockBack).toHaveBeenCalledTimes(2);
+  });
+});
+
+const CSV_FILE = [
+  'Prénom;Nom;Téléphone;Anniversaire;Total dépensé',
+  'Nadia;Benali;07 45 67 89 12;',
+  '',
+  'Lina;;06 55 44 33 22;12/04',
+  'Sophie;Martin;0612345678;',
+  'Emma;Durand;+33 7 11 22 33 44;',
+  'Sophie;MARTIN;06 00 00 00 01;',
+  ';;06 99 88 77 66;',
+].join('\r\n');
+
+function selectedFile(text: string, name = 'clients.csv') {
+  return { status: 'selected', name, bytes: new TextEncoder().encode(text) };
+}
+
+describe('ClientImportScreen — CSV file', () => {
+  beforeEach(() => {
+    mockBack.mockClear();
+    mockPickFileBytes.mockReset();
+  });
+
+  it('opens the system file picker for a CSV file as soon as the source is chosen', async () => {
+    mockPickFileBytes.mockResolvedValue({ status: 'cancelled' });
+    const { view } = await renderImport();
+
+    await press(view, 'client-import-source-csv');
+
+    expect(mockPickFileBytes).toHaveBeenCalledTimes(1);
+    expect(mockPickFileBytes.mock.calls[0]?.[0].mimeTypes).toEqual(expect.arrayContaining(['text/csv', 'text/plain']));
+  });
+
+  it('stays safely on the CSV step when the picker is cancelled, ready to choose again', async () => {
+    mockPickFileBytes.mockResolvedValue({ status: 'cancelled' });
+    const { view, db } = await renderImport();
+
+    await press(view, 'client-import-source-csv');
+
+    expect(view.getByText('Importez un fichier CSV')).toBeTruthy();
+    expect(view.queryByTestId('client-import-csv-error')).toBeNull();
+    expect(view.queryByTestId('client-import-detected')).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockRemovalGuard.enabled).toBe(false);
+    expect(countSyncOutboxRows(db)).toBe(0);
+    expect(view.getByTestId('client-import-csv-pick')).toHaveTextContent('Choisir un fichier');
+    expect(view.getByTestId('client-import-csv-pick').props.accessibilityState.disabled).toBe(false);
+
+    await press(view, 'client-import-csv-pick');
+    expect(mockPickFileBytes).toHaveBeenCalledTimes(2);
+  });
+
+  it('leads a picked file into the same review, never straight into an import', async () => {
+    mockPickFileBytes.mockResolvedValue(selectedFile(CSV_FILE));
+    const { view, db } = await renderImport();
+    const before = sessionCount(view);
+
+    await press(view, 'client-import-source-csv');
+
+    expect(view.getByTestId('client-import-detected')).toHaveTextContent('6 clients détectés');
+    expect(view.getByTestId('client-import-segment-new')).toHaveTextContent(/Nouveaux.*2/);
+    expect(view.getByTestId('client-import-segment-duplicates')).toHaveTextContent(/Doublons.*3/);
+    expect(view.getByTestId('client-import-segment-to-fix')).toHaveTextContent(/À corriger.*1/);
+    expect(view.getByText('Colonnes ignorées : Total dépensé')).toBeTruthy();
+    expect(view.getByTestId('client-import-confirm')).toHaveTextContent('Importer 2 clients');
+    // Reading the file wrote nothing.
+    expect(sessionCount(view)).toBe(before);
+    expect(countSyncOutboxRows(db)).toBe(0);
+  });
+
+  it('corrects a CSV row in the review drawer, quoting its line of the file', async () => {
+    mockPickFileBytes.mockResolvedValue(selectedFile(CSV_FILE));
+    const { view } = await renderImport();
+    await press(view, 'client-import-source-csv');
+
+    await press(view, 'client-import-segment-to-fix');
+    await press(view, 'client-import-edit-csv-6');
+    expect(view.getByText('Texte d’origine · ligne 8')).toBeTruthy();
+    await act(async () => fireEvent.changeText(view.getByLabelText('Prénom'), 'Inès'));
+    await press(view, 'client-import-candidate-save');
+
+    expect(view.getByTestId('client-import-segment-new')).toHaveTextContent(/Nouveaux.*3/);
+    expect(view.getByTestId('client-import-confirm')).toHaveTextContent('Importer 3 clients');
+  });
+
+  it('imports the confirmed CSV clients through the same run, each with its CLIENT outbox entry', async () => {
+    mockPickFileBytes.mockResolvedValue(selectedFile(CSV_FILE));
+    const { view, db } = await renderImport();
+    const before = sessionCount(view);
+    await press(view, 'client-import-source-csv');
+
+    await press(view, 'client-import-confirm');
+
+    expect(view.getByTestId('client-import-result-title')).toHaveTextContent('2 clients importés');
+    expect(sessionCount(view)).toBe(before + 2);
+    expect(countSyncOutboxRows(db)).toBe(2);
+    const lina = clientStore.loadClients(db).find((client) => client.firstName === 'Lina');
+    expect(lina).toMatchObject({ phone: '06 55 44 33 22', birthday: { month: 4, day: 12 } });
+  });
+
+  it.each([
+    [{ status: 'error' }, 'Impossible de lire ce fichier. Réessayez ou choisissez-en un autre.'],
+    [{ status: 'too-large' }, 'Ce fichier est trop volumineux. Choisissez un fichier CSV plus léger.'],
+    [
+      { status: 'selected', name: 'clients.xlsx', bytes: new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]) },
+      'Ce fichier n’est pas un fichier CSV. Depuis Excel, Numbers ou Google Sheets, exportez votre liste au format CSV.',
+    ],
+    [selectedFile('  \n'), 'Ce fichier est vide. Choisissez-en un autre.'],
+    [selectedFile('12;34\n--;--'), 'Aucun client détecté dans ce fichier. Choisissez-en un autre.'],
+  ])('says in French why a file cannot be used and lets another one be chosen (%#)', async (picked, message) => {
+    mockPickFileBytes.mockResolvedValueOnce(picked);
+    const { view } = await renderImport();
+
+    await press(view, 'client-import-source-csv');
+
+    expect(view.getByTestId('client-import-csv-error')).toHaveTextContent(message);
+    expect(view.queryByTestId('client-import-detected')).toBeNull();
+    expect(view.getByTestId('client-import-csv-pick')).toHaveTextContent('Choisir un autre fichier');
+
+    mockPickFileBytes.mockResolvedValueOnce(selectedFile(CSV_FILE));
+    await press(view, 'client-import-csv-pick');
+
+    expect(view.getByTestId('client-import-detected')).toHaveTextContent('6 clients détectés');
+  });
+
+  it('returns from the CSV step to the source choice, forgetting the last message', async () => {
+    mockPickFileBytes.mockResolvedValue({ status: 'error' });
+    const { view } = await renderImport();
+    await press(view, 'client-import-source-csv');
+    expect(view.getByTestId('client-import-csv-error')).toBeTruthy();
+
+    await press(view, 'client-import-back');
+
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(view.getByTestId('client-import-source-paste')).toBeTruthy();
+    expect(view.getByTestId('client-import-source-csv')).toBeTruthy();
+    expect(view.queryByTestId('client-import-csv-pick')).toBeNull();
+
+    mockPickFileBytes.mockResolvedValue({ status: 'cancelled' });
+    await press(view, 'client-import-source-csv');
+    expect(view.queryByTestId('client-import-csv-error')).toBeNull();
+  });
+
+  it('forgets a file that finishes reading after the CSV step was left', async () => {
+    let finishReading: (picked: unknown) => void = () => {};
+    mockPickFileBytes.mockReturnValue(new Promise((resolve) => (finishReading = resolve)));
+    const { view } = await renderImport();
+    await press(view, 'client-import-source-csv');
+    expect(view.getByTestId('client-import-csv-pick').props.accessibilityState.disabled).toBe(true);
+
+    await press(view, 'client-import-back');
+    await act(async () => finishReading(selectedFile(CSV_FILE)));
+
+    expect(view.getByTestId('client-import-source-csv')).toBeTruthy();
+    expect(view.queryByTestId('client-import-detected')).toBeNull();
+  });
+
+  it('keeps the review discard guard for a CSV batch', async () => {
+    mockPickFileBytes.mockResolvedValue(selectedFile(CSV_FILE));
+    const { view } = await renderImport();
+    await press(view, 'client-import-source-csv');
+
+    expect(mockRemovalGuard.enabled).toBe(true);
+    await press(view, 'client-import-back');
+
+    expect(view.getByTestId('client-import-discard-dialog')).toBeTruthy();
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

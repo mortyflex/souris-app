@@ -1,12 +1,12 @@
 // Souris — client import: choose a source
 //
-// The entry of every import source. « Coller une liste » is the only one
-// today; files, phone contacts and photos are future adapters of the same
+// The entry of every import source: « Coller une liste » and « Importer un
+// fichier CSV ». Phone contacts and photos are future adapters of the same
 // pipeline and are deliberately NOT listed before they exist.
 //
-// While ONE source is enabled, the import opens straight on it and this step
-// is never shown (ClientImportScreen). Enabling a second source in
-// ENABLED_CLIENT_IMPORT_SOURCES brings the choice back as the first step.
+// With ONE enabled source the import would open straight on it and this step
+// would never show (ClientImportScreen); with two, the choice is the first
+// step.
 
 import { ScrollView, StyleSheet } from 'react-native';
 
@@ -14,10 +14,10 @@ import { ActionGroup, type DetailAction } from '@/shared/ui/ActionGroup';
 import { AppText } from '@/shared/ui/AppText';
 import { spacing } from '@/shared/ui/theme';
 
-export type ClientImportSourceKey = 'PASTE';
+export type ClientImportSourceKey = 'PASTE' | 'CSV';
 
 /** The sources offered, in order. More than one → the import opens on the choice. */
-export const ENABLED_CLIENT_IMPORT_SOURCES: readonly ClientImportSourceKey[] = ['PASTE'];
+export const ENABLED_CLIENT_IMPORT_SOURCES: readonly ClientImportSourceKey[] = ['PASTE', 'CSV'];
 
 const SOURCE_ACTIONS: Record<ClientImportSourceKey, DetailAction<ClientImportSourceKey>> = {
   PASTE: {
@@ -26,6 +26,13 @@ const SOURCE_ACTIONS: Record<ClientImportSourceKey, DetailAction<ClientImportSou
     icon: { ios: 'doc.on.clipboard', android: 'content_paste' },
     tone: 'normal',
     testID: 'client-import-source-paste',
+  },
+  CSV: {
+    key: 'CSV',
+    label: 'Importer un fichier CSV',
+    icon: { ios: 'doc.text', android: 'description' },
+    tone: 'normal',
+    testID: 'client-import-source-csv',
   },
 };
 

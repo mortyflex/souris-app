@@ -3,9 +3,15 @@
 // The permanent client import flow, pushed from Clientèle inside the
 // authenticated, Business-bound `(app)` group only:
 //
-//   source → paste → review (edit, reclassify) → confirm → chunked import → result
+//   source → paste | CSV file → review (edit, reclassify) → confirm
+//          → chunked import → result
 //
-// (the source choice is skipped while paste is the only enabled source)
+// (the source choice would be skipped with a single enabled source)
+//
+// Both sources end in the SAME staging (`stage`): from the review on, nothing
+// knows where the candidates came from. The CSV file is read in memory through
+// the system picker (shared/lib/file-acquisition) and parsed by the domain
+// adapter; the reader never writes anything.
 //
 // Staging stays in THIS component's memory: the pasted text, the candidates,
 // the choices. Nothing of it is persisted, logged or sent anywhere; leaving
@@ -19,8 +25,9 @@
 // Leaving a review that holds analysed candidates — the back button, the
 // native back gesture, hardware back — always asks first (« Quitter l'import
 // ? »), the canonical discard dialog: the staging is memory-only by design, so
-// it would be lost. The source choice, the paste step and the result leave
-// freely; while an import runs, leaving is simply blocked.
+// it would be lost. The source choice and the result leave freely; the paste
+// and CSV steps go back to the source choice; while an import runs, leaving is
+// simply blocked.
 //
 // Confirmation first re-classifies the batch against the Clients STORED
 // right now (sync may have brought some in): if that changes the selection,
@@ -28,21 +35,24 @@
 
 import { useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import type { Client } from '@/domain/clients';
 import {
   classifyClientImportCandidates,
+  parseClientImportCsv,
   parseClientImportText,
   toImportedClient,
   type ClientImportCandidate,
+  type ClientImportParseResult,
 } from '@/domain/clients/import';
 import { createClientId } from '@/features/clients/creation/runtime-ids';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { loadClients } from '@/persistence/stores/clients';
 import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { usePersistence } from '@/providers/PersistenceProvider';
+import { pickFileBytes } from '@/shared/lib/file-acquisition';
 import { haptics } from '@/shared/lib/haptics';
 import { AppText } from '@/shared/ui/AppText';
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
@@ -50,6 +60,7 @@ import { Screen } from '@/shared/ui/Screen';
 import { semanticColors, spacing } from '@/shared/ui/theme';
 
 import { ClientImportCandidateSheet } from './components/ClientImportCandidateSheet';
+import { ClientImportCsvStep } from './components/ClientImportCsvStep';
 import { ClientImportHeader } from './components/ClientImportHeader';
 import { ClientImportPasteStep } from './components/ClientImportPasteStep';
 import { ClientImportResult } from './components/ClientImportResult';
@@ -57,7 +68,9 @@ import { ClientImportReviewStep } from './components/ClientImportReviewStep';
 import {
   ClientImportSourceStep,
   ENABLED_CLIENT_IMPORT_SOURCES,
+  type ClientImportSourceKey,
 } from './components/ClientImportSourceStep';
+import { csvProblemMessage, type ClientImportCsvProblem } from './presentation';
 import {
   countBySegment,
   hasSameSelection,
@@ -69,14 +82,29 @@ import {
 } from './review-selection';
 import { runClientImport, type ClientImportFailureCode } from './run-client-import';
 
-type Step = 'source' | 'paste' | 'review' | 'importing' | 'result';
+type Step = 'source' | 'paste' | 'csv' | 'review' | 'importing' | 'result';
+
+const SOURCE_STEPS: Record<ClientImportSourceKey, Step> = { PASTE: 'paste', CSV: 'csv' };
 
 /**
- * The source choice is a step only once several sources exist; with paste as
- * the only one, the import opens straight on it and back leaves the import.
+ * The source choice is a step only while several sources are enabled; with a
+ * single one, the import opens straight on it and back leaves the import.
  */
 const SHOWS_SOURCE_CHOICE = ENABLED_CLIENT_IMPORT_SOURCES.length > 1;
-const INITIAL_STEP: Step = SHOWS_SOURCE_CHOICE ? 'source' : 'paste';
+const INITIAL_STEP: Step = SHOWS_SOURCE_CHOICE
+  ? 'source'
+  : SOURCE_STEPS[ENABLED_CLIENT_IMPORT_SOURCES[0] ?? 'PASTE'];
+
+/** What the system picker offers: CSV under the types the platforms give it, and plain text. */
+const CSV_MIME_TYPES = [
+  'text/csv',
+  'text/comma-separated-values',
+  'text/tab-separated-values',
+  'text/plain',
+  'application/csv',
+];
+/** Far above any address book (≈ 100 000 rows); a larger file is not a client list. */
+const CSV_MAX_BYTES = 10 * 1024 * 1024;
 
 interface ImportProgress {
   /** Clients confirmed for this import (every attempt included). */
@@ -100,6 +128,10 @@ export function ClientImportScreen() {
   const [step, setStep] = useState<Step>(INITIAL_STEP);
   const [text, setText] = useState('');
   const [nothingDetected, setNothingDetected] = useState(false);
+  const [csvProblem, setCsvProblem] = useState<ClientImportCsvProblem>();
+  const [csvPicking, setCsvPicking] = useState(false);
+  // Bumped when the CSV step is left: a file still being read is then forgotten.
+  const csvRequest = useRef(0);
   const [candidates, setCandidates] = useState<readonly ClientImportCandidate[]>([]);
   const [ignoredColumns, setIgnoredColumns] = useState<readonly string[]>([]);
   const [unreadLines, setUnreadLines] = useState<readonly string[]>([]);
@@ -135,8 +167,24 @@ export function ClientImportScreen() {
   // The same rule as the native gesture: a staged review asks first.
   const back = () => {
     if (hasStagedReview) setDiscardRequested(true);
-    else if (step === 'paste' && SHOWS_SOURCE_CHOICE) setStep('source');
-    else router.back();
+    else if ((step === 'paste' || step === 'csv') && SHOWS_SOURCE_CHOICE) {
+      csvRequest.current += 1;
+      setCsvPicking(false);
+      setCsvProblem(undefined);
+      setStep('source');
+    } else router.back();
+  };
+
+  /** The one entry of the review, whatever the source produced the candidates. */
+  const stage = (result: ClientImportParseResult) => {
+    const counts = countBySegment(classifyClientImportCandidates(result.candidates, clients));
+    setCandidates(result.candidates);
+    setIgnoredColumns(result.ignoredColumns);
+    setUnreadLines(result.unreadLines);
+    setChoices(NO_CHOICES);
+    setStoredClients(undefined);
+    setSegment(counts.NEW > 0 ? 'NEW' : counts.TO_FIX > 0 ? 'TO_FIX' : 'DUPLICATES');
+    setStep('review');
   };
 
   const analyze = () => {
@@ -145,15 +193,36 @@ export function ClientImportScreen() {
       setNothingDetected(true);
       return;
     }
-    const counts = countBySegment(classifyClientImportCandidates(result.candidates, clients));
     setNothingDetected(false);
-    setCandidates(result.candidates);
-    setIgnoredColumns(result.ignoredColumns);
-    setUnreadLines(result.unreadLines);
-    setChoices(NO_CHOICES);
-    setStoredClients(undefined);
-    setSegment(counts.NEW > 0 ? 'NEW' : counts.TO_FIX > 0 ? 'TO_FIX' : 'DUPLICATES');
-    setStep('review');
+    stage(result);
+  };
+
+  const pickCsvFile = async () => {
+    if (csvPicking) return;
+    const request = (csvRequest.current += 1);
+    setCsvPicking(true);
+    const picked = await pickFileBytes({ mimeTypes: CSV_MIME_TYPES, maxBytes: CSV_MAX_BYTES });
+    if (request !== csvRequest.current) return;
+    setCsvPicking(false);
+    // A cancelled picker changes nothing: the step and its last message stay.
+    if (picked.status === 'cancelled') return;
+    if (picked.status !== 'selected') {
+      setCsvProblem(picked.status === 'too-large' ? 'TOO_LARGE' : 'UNREADABLE');
+      return;
+    }
+    const result = parseClientImportCsv(picked.bytes);
+    if (result.status === 'UNUSABLE') setCsvProblem(result.reason);
+    else if (result.candidates.length === 0) setCsvProblem('NO_CLIENT');
+    else {
+      setCsvProblem(undefined);
+      stage(result);
+    }
+  };
+
+  const selectSource = (source: ClientImportSourceKey) => {
+    setStep(SOURCE_STEPS[source]);
+    // The picker opens at once; the CSV step is what a cancel or an unusable file comes back to.
+    if (source === 'CSV') void pickCsvFile();
   };
 
   const saveEdit = (edited: ClientImportCandidate) => {
@@ -228,7 +297,14 @@ export function ClientImportScreen() {
       }
       testID="client-import-screen"
     >
-      {step === 'source' && <ClientImportSourceStep onSelect={() => setStep('paste')} />}
+      {step === 'source' && <ClientImportSourceStep onSelect={selectSource} />}
+      {step === 'csv' && (
+        <ClientImportCsvStep
+          onPickFile={() => void pickCsvFile()}
+          picking={csvPicking}
+          {...(csvProblem ? { error: csvProblemMessage(csvProblem) } : {})}
+        />
+      )}
       {step === 'paste' && (
         <ClientImportPasteStep
           nothingDetected={nothingDetected}

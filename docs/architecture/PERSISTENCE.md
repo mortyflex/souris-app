@@ -872,8 +872,8 @@ COMMIT                       (any failure rolls the whole chunk back)
   stored is skipped, never duplicated nor re-marked.
 - **Sync.** Every imported Client has its CLIENT outbox entry; the existing cloud sync runner
   pushes them at its next trigger like any other mutation. No screen triggers sync.
-- **Privacy.** Only confirmed Clients are written; the pasted text and the review candidates are
-  never persisted.
+- **Privacy.** Only confirmed Clients are written; the pasted text, a picked CSV file and the
+  review candidates are never persisted.
 
 Covered by `client-import-store.test.ts` (batch + outbox entry per Client, 500 Clients, chunk
 rollback, retry idempotence, unbound refusal, no notes / photo / archive / consent written) and

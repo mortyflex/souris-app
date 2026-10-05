@@ -9,6 +9,7 @@ import { formatClientBirthday, getClientDisplayName, type Client } from '@/domai
 import type {
   ClassifiedClientImportCandidate,
   ClientImportCandidate,
+  ClientImportCsvFailure,
   ClientImportIssue,
 } from '@/domain/clients/import';
 
@@ -49,6 +50,24 @@ export function importedClientDetail(client: Client): string | undefined {
   const contact = [client.phone, client.email].filter(Boolean).join(' · ');
   if (contact) return contact;
   return client.birthday ? `Anniversaire : ${formatClientBirthday(client.birthday)}` : undefined;
+}
+
+/** Why a picked file gave nothing to review — always a way forward, never a technical error. */
+export type ClientImportCsvProblem = ClientImportCsvFailure | 'UNREADABLE' | 'TOO_LARGE' | 'NO_CLIENT';
+
+export function csvProblemMessage(problem: ClientImportCsvProblem): string {
+  switch (problem) {
+    case 'UNREADABLE':
+      return 'Impossible de lire ce fichier. Réessayez ou choisissez-en un autre.';
+    case 'TOO_LARGE':
+      return 'Ce fichier est trop volumineux. Choisissez un fichier CSV plus léger.';
+    case 'NOT_TEXT':
+      return 'Ce fichier n’est pas un fichier CSV. Depuis Excel, Numbers ou Google Sheets, exportez votre liste au format CSV.';
+    case 'EMPTY':
+      return 'Ce fichier est vide. Choisissez-en un autre.';
+    case 'NO_CLIENT':
+      return 'Aucun client détecté dans ce fichier. Choisissez-en un autre.';
+  }
 }
 
 export function unreadLinesLabel(lines: readonly string[]): string {

@@ -1980,15 +1980,27 @@ sheet » for Clientèle only.
 
 ### Steps
 
-While « Coller une liste » is the only source, the import opens straight on the paste step and its
-back button leaves the import; the source choice below is kept in code
-(`ENABLED_CLIENT_IMPORT_SOURCES`) and returns as the first step once a second source is enabled.
+Two sources are enabled (`ENABLED_CLIENT_IMPORT_SOURCES`: paste, CSV), so the import opens on the
+source choice. Back: the source choice leaves the import; the paste and CSV steps return to the
+source choice; a staged review asks first (below). With a single enabled source the import would
+open straight on it and its back button would leave the import.
 
 ```text
 Importer ma clientèle                  (source choice — shown only with 2+ sources)
   Ajoutez en une fois les clients que vous suivez déjà.
-  [ Coller une liste ]                 ActionGroup, the only source today
+  [ Coller une liste        ]          ONE ActionGroup, two rows
+  [ Importer un fichier CSV ]
   Seuls le nom, le téléphone, l'email et l'anniversaire sont importés.
+
+Importez un fichier CSV                sectionTitle — the system file picker opens at once
+  Exportez votre liste au format CSV depuis Excel, Numbers, Google Sheets ou votre ancien
+  logiciel, puis choisissez le fichier.
+  (Ce fichier est vide. Choisissez-en un autre.)       rose700 metadata, only after a failure
+  ╭ Colonnes reconnues ──────────────────────────╮     white GroupedSurface
+  │ Prénom · Nom · Téléphone · Email · Anniversaire │
+  ╰──────────────────────────────────────────────╯
+  Vous vérifiez la liste avant d'importer. Les autres colonnes sont ignorées.
+  [ Choisir un fichier ]               fixed footer; « Choisir un autre fichier » after a failure
 
 Collez une liste de clients            sectionTitle
   Vous pouvez copier une liste depuis Notes, WhatsApp, Excel, Numbers ou Google Sheets.
@@ -2008,6 +2020,12 @@ Collez une liste de clients            sectionTitle
   [ Importer 42 clients ]              fixed footer, the exact number written
 ```
 
+- **CSV step** — choosing « Importer un fichier CSV » opens the system file picker at once (Files
+  on iOS, the system picker on Android; no permission). The step is what a cancelled picker or an
+  unusable file comes back to: a cancel shows nothing new; a failure shows ONE plain French sentence
+  (unreadable, too large, not a CSV, empty, nobody detected) and the button becomes « Choisir un
+  autre fichier ». The button is disabled while the picker is open or the file is read. A usable
+  file leads to the same review as a paste — never straight to an import.
 - **Review cards** — white (`surfaceElevated`) with the card hairline, on the page. NEW rows carry
   a 44 pt checkbox (accent `checkmark.circle.fill` / muted `circle`, spoken as a checkbox); the rest
   of the card opens the correction drawer (chevron). Metadata lines: phone · email, the birthday,

@@ -1,4 +1,5 @@
-// Souris — client import text parser (PASTE today, OCR text later)
+// Souris — client import text parser (PASTE today, OCR text later) and the
+// table reader it shares with the CSV adapter (csv-parser.ts)
 //
 // Turns pasted text — a Notes list, a WhatsApp message, spreadsheet rows
 // copied from Excel / Numbers / Google Sheets — into ClientImportCandidates.
@@ -477,9 +478,25 @@ function parseFreeText(
 type ColumnRole = 'firstName' | 'lastName' | 'fullName' | 'phone' | 'email' | 'birthday';
 
 const HEADER_ROLES: readonly (readonly [ColumnRole, readonly string[]])[] = [
-  ['firstName', ['prenom', 'first name', 'firstname', 'given name']],
+  ['firstName', ['prenom', 'first name', 'firstname', 'given name', 'givenname']],
   ['lastName', ['nom', 'nom de famille', 'last name', 'lastname', 'surname', 'family name']],
-  ['fullName', ['nom complet', 'nom prenom', 'prenom nom', 'nom et prenom', 'client', 'name', 'contact']],
+  [
+    'fullName',
+    [
+      'nom complet',
+      'nom prenom',
+      'prenom nom',
+      'nom et prenom',
+      'prenom et nom',
+      'client',
+      'cliente',
+      'nom du client',
+      'name',
+      'full name',
+      'fullname',
+      'contact',
+    ],
+  ],
   [
     'phone',
     [
@@ -494,17 +511,37 @@ const HEADER_ROLES: readonly (readonly [ColumnRole, readonly string[]])[] = [
       'telephone portable',
       'numero de telephone',
       'fixe',
+      'telephone mobile',
+      'phone number',
+      'mobile phone',
+      'cell',
+      'cell phone',
     ],
   ],
-  ['email', ['email', 'e-mail', 'mail', 'courriel', 'adresse email', 'adresse mail', 'adresse e-mail']],
+  [
+    'email',
+    ['email', 'e-mail', 'mail', 'courriel', 'adresse email', 'adresse mail', 'adresse e-mail', 'email address'],
+  ],
   [
     'birthday',
-    ['anniversaire', 'date de naissance', 'naissance', 'ddn', 'birthday', 'date anniversaire', 'birth date'],
+    [
+      'anniversaire',
+      'date de naissance',
+      'naissance',
+      'ddn',
+      'birthday',
+      'date anniversaire',
+      'birth date',
+      'birthdate',
+      'date of birth',
+      'dob',
+    ],
   ],
 ];
 
 function headerRole(cell: string): ColumnRole | undefined {
-  const key = wordKey(cell).replace(/[.:]/g, '').replace(/\s+/g, ' ').trim();
+  // « first_name », « date_de_naissance »: file exports name their columns with underscores.
+  const key = wordKey(cell).replace(/[.:]/g, '').replace(/[_\s]+/g, ' ').trim();
   return HEADER_ROLES.find(([, names]) => names.includes(key))?.[0];
 }
 
@@ -512,15 +549,72 @@ function looksLikeData(cell: string): boolean {
   return cell.includes('@') || /\d{2}/.test(cell);
 }
 
-function splitCells(line: string): string[] {
-  return line.split('\t').map((cell) => collapse(cell));
+/** One row of a table, whatever cut it into cells (tabs of a paste, the delimiter of a file). */
+export interface ClientImportTableRow {
+  /** 1-based line of the row in its source. */
+  readonly lineNumber: number;
+  readonly cells: readonly string[];
+  /** The source text shown for correction, when it is not simply the cells. */
+  readonly raw?: string;
 }
 
-function parseTabular(lines: readonly string[], source: ClientImportSource): ClientImportParseResult {
-  const rows = lines
-    .map((line, index) => ({ line, lineNumber: index + 1 }))
-    .filter((row) => row.line.trim().length > 0);
-  const firstCells = rows[0] ? splitCells(rows[0].line) : [];
+export interface ClientImportTableOptions {
+  /**
+   * The cells are the real fields of a file (CSV), not an assumption about
+   * pasted text. A header-less row is then read cell by cell — two cells
+   * never merge into one number or one date — and a name spread over several
+   * cells has an unknown column order: AMBIGUOUS_NAME_SPLIT.
+   */
+  readonly cellsAreFields?: boolean;
+}
+
+/** A header-less row read cell by cell; `nameCells` counts the cells holding name words. */
+function analyzeCells(cells: readonly string[]): { readonly fields: LineFields; readonly nameCells: number } {
+  const names: string[] = [];
+  const phones: string[] = [];
+  const emails: string[] = [];
+  const ignored: string[] = [];
+  let date: Pick<LineFields, 'birthday' | 'birthdayIssue'> | undefined;
+  let nameCells = 0;
+  for (const cell of cells) {
+    if (cell.trim().length === 0) continue;
+    const fields = analyzeLine(cell);
+    if (fields.names.length > 0) nameCells += 1;
+    names.push(...fields.names);
+    phones.push(...fields.phones);
+    emails.push(...fields.emails);
+    ignored.push(...fields.ignored);
+    if (!fields.hasDate) continue;
+    // Only the first date is read; a later one stays visible as ignored text.
+    if (date) ignored.push(collapse(cell));
+    else date = { birthday: fields.birthday, birthdayIssue: fields.birthdayIssue };
+  }
+  return {
+    fields: {
+      names,
+      phones,
+      emails,
+      ...(date?.birthday !== undefined ? { birthday: date.birthday } : {}),
+      ...(date?.birthdayIssue !== undefined ? { birthdayIssue: date.birthdayIssue } : {}),
+      hasDate: date !== undefined,
+      ignored,
+    },
+    nameCells,
+  };
+}
+
+/**
+ * Reads rows of cells: one row = one candidate. A header row maps its columns
+ * to the allowed fields; without one, each row reads like a line of text.
+ * Rows without any content are skipped. Never throws.
+ */
+export function parseClientImportTable(
+  tableRows: readonly ClientImportTableRow[],
+  source: ClientImportSource,
+  options: ClientImportTableOptions = {},
+): ClientImportParseResult {
+  const rows = tableRows.filter((row) => row.cells.some((cell) => cell.trim().length > 0));
+  const firstCells = rows[0] ? rows[0].cells.map(collapse) : [];
   const roles = firstCells.map(headerRole);
   const hasHeader =
     roles.some((role) => role !== undefined) && !firstCells.some((cell) => looksLikeData(cell));
@@ -529,7 +623,13 @@ function parseTabular(lines: readonly string[], source: ClientImportSource): Cli
     // No header to trust: each row reads like a line of text.
     const unreadLines: string[] = [];
     const readable = rows
-      .map((row) => ({ ...row, fields: analyzeLine(row.line) }))
+      .map((row) => {
+        const line = row.cells.join('\t');
+        const analysis = options.cellsAreFields
+          ? analyzeCells(row.cells)
+          : { fields: analyzeLine(line), nameCells: 1 };
+        return { ...row, line, ...analysis };
+      })
       .filter((row) => {
         if (hasIdentity(row.fields)) return true;
         unreadLines.push(String(row.lineNumber));
@@ -538,7 +638,7 @@ function parseTabular(lines: readonly string[], source: ClientImportSource): Cli
     const candidates = readable.map((row, index) => {
       const fields = row.fields;
       const name = splitClientImportName(fields.names);
-      return toCandidate(source, index, String(row.lineNumber), collapse(row.line), {
+      return toCandidate(source, index, String(row.lineNumber), row.raw ?? collapse(row.line), {
         firstName: name.firstName,
         lastName: name.lastName,
         phones: fields.phones,
@@ -546,7 +646,7 @@ function parseTabular(lines: readonly string[], source: ClientImportSource): Cli
         birthday: fields.birthday,
         issues: fields.birthdayIssue ? [fields.birthdayIssue] : [],
         ignored: [...name.ignored, ...fields.ignored],
-        nameAmbiguous: name.ambiguous,
+        nameAmbiguous: name.ambiguous || row.nameCells > 1,
       });
     });
     return { candidates, ignoredColumns: [], unreadLines };
@@ -562,12 +662,12 @@ function parseTabular(lines: readonly string[], source: ClientImportSource): Cli
 
   const unreadLines: string[] = [];
   const dataRows = rows.slice(1).filter((row) => {
-    const mapped = splitCells(row.line).some((cell, column) => columnRoles[column] !== undefined && cell.length > 0);
+    const mapped = row.cells.some((cell, column) => columnRoles[column] !== undefined && collapse(cell).length > 0);
     if (!mapped) unreadLines.push(String(row.lineNumber));
     return mapped;
   });
   const candidates = dataRows.map((row, index) => {
-    const cells = splitCells(row.line);
+    const cells = row.cells.map(collapse);
     const valuesOf = (role: ColumnRole) =>
       cells.filter((cell, column) => columnRoles[column] === role && cell.length > 0);
 
@@ -600,7 +700,7 @@ function parseTabular(lines: readonly string[], source: ClientImportSource): Cli
       if (!date) issues.push({ code: 'BIRTHDAY_DROPPED', detail: birthdayCell });
     }
 
-    return toCandidate(source, index, String(row.lineNumber), cells.filter(Boolean).join(' · '), {
+    return toCandidate(source, index, String(row.lineNumber), row.raw ?? cells.filter(Boolean).join(' · '), {
       firstName,
       lastName,
       phones,
@@ -625,6 +725,9 @@ export function parseClientImportText(
   source: ClientImportSource = 'PASTE',
 ): ClientImportParseResult {
   const lines = text.split(/\r\n|\r|\n/);
-  if (lines.some((line) => line.includes('\t'))) return parseTabular(lines, source);
+  if (lines.some((line) => line.includes('\t'))) {
+    const rows = lines.map((line, index) => ({ lineNumber: index + 1, cells: line.split('\t') }));
+    return parseClientImportTable(rows, source);
+  }
   return { ...parseFreeText(lines, source), ignoredColumns: [] };
 }

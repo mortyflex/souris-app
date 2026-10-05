@@ -342,7 +342,7 @@ in the authenticated, Business-bound `(app)` group only; onboarding does not use
 | Source     | State                                                                                   |
 | ---------- | --------------------------------------------------------------------------------------- |
 | `PASTE`    | Implemented: text pasted into a multiline field (system Paste; no clipboard API read).  |
-| `CSV`      | Future adapter (file picking is not implemented).                                       |
+| `CSV`      | Implemented: a file chosen in the system file picker, read in memory (`parseClientImportCsv`). |
 | `CONTACTS` | Future adapter (phone contacts are not implemented).                                    |
 | `OCR`      | Future adapter: recognized text will feed the SAME text parser (`parseClientImportText(text, 'OCR')`). |
 
@@ -407,6 +407,40 @@ does not exist (`29/02/1991`, `31/02/1991`) is dropped with `BIRTHDAY_DROPPED`, 
 the issue; `29/02/1992` is kept as 29 février. Without a year, `29/02` is a valid day + month (§2).
 An impossible day + month pair (`31/04`) is dropped with `BIRTHDAY_DROPPED`.
 
+### CSV adapter (`parseClientImportCsv`)
+
+`src/domain/clients/import/csv-parser.ts` holds everything CSV-specific and nothing else:
+
+- **bytes → text**: UTF-8 (with or without a byte order mark), UTF-16 with a byte order mark,
+  otherwise Windows-1252 — the encoding of a French Excel « CSV » export. A file holding binary
+  control characters (a workbook, a PDF) is refused as `NOT_TEXT`; a blank file as `EMPTY`;
+- **text → records**: the delimiter is the one of « ; », « , » and tab that cuts the first rows
+  into the same number (2+) of cells most often — « ; » on a tie — or the one announced by an Excel
+  `sep=;` first line; without any, each line is one cell. Quoted cells, doubled quotes, line breaks
+  inside quotes and CRLF / CR / LF are read; completely empty rows are dropped. A row keeps the line
+  number of the FILE as its `sourceRef`, and its own cells as `raw`;
+- **year-first dates**: a cell that is exactly `1990-04-12` (or `1990-04-12T00:00:00`) is handed
+  over day first, so the French birthday reader cannot swap day and month.
+
+The rows then enter the SAME table reader as a tabular paste (`parseClientImportTable`): header
+mapping, name split, phone / email / birthday extraction and every issue above are shared rules.
+
+Headers (accent-, case- and underscore-insensitive): `Prénom` / `First name`; `Nom` /
+`Last name` / `Surname`; `Nom complet` / `Client` / `Name` / `Full name`; `Téléphone` /
+`Tél` / `Portable` / `Mobile` / `Phone`; `Email` / `E-mail` / `Mail` / `Courriel`;
+`Anniversaire` / `Date de naissance` / `DDN` / `Birthday` / `Date of birth`. Any other column
+is ignored as a whole and listed once. No software-specific mapping (Planity, Fresha…) exists.
+
+Without a header row, a file row is read cell by cell with the line rules above — two cells never
+merge into one number or one date. A name spread over several cells has an unknown column order
+(`Prénom;Nom` or `Nom;Prénom`): it is kept as read and flagged `AMBIGUOUS_NAME_SPLIT`. An
+unlabelled date stays `AMBIGUOUS_BIRTHDAY` under the paste rule. Nothing is inferred beyond that.
+
+The file itself is picked and read by `src/shared/lib/file-acquisition.ts` (the system picker of
+`expo-file-system`; at most 10 MB; the temporary copy iOS hands over is removed once read). The
+reader returns bytes and never writes anything: the screen stages the candidates exactly like a
+paste.
+
 ### Email
 
 ONE rule for manual creation and import: `isValidClientEmail` (`src/domain/clients/email.ts`);
@@ -458,9 +492,9 @@ selection refreshes the review instead of importing. Ids are created at confirma
 
 ### Privacy
 
-The pasted text and the candidates stay in the import screen's memory: never persisted (no
-SQLite, no AsyncStorage draft), never logged, never sent to any API, no AI. Leaving the screen
-forgets them. `import-privacy.test.ts` guards the pipeline sources.
+The pasted text, the bytes of a picked CSV file and the candidates stay in the import screen's
+memory: never persisted (no SQLite, no AsyncStorage draft), never logged, never sent to any API, no
+AI. Leaving the screen forgets them. `import-privacy.test.ts` guards the pipeline sources.
 
 ---
 

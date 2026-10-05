@@ -17,7 +17,7 @@
 
 import type { ClientBirthday } from '../birthday';
 
-/** Where a batch comes from. Only PASTE has an adapter today; the others are future adapters. */
+/** Where a batch comes from. PASTE and CSV have an adapter; the others are future adapters. */
 export type ClientImportSource = 'PASTE' | 'CSV' | 'CONTACTS' | 'OCR';
 
 export type ClientImportIssueCode =
