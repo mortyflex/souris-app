@@ -1,5 +1,5 @@
-import { AgendaScreen } from '@/features/agenda/AgendaScreen';
+import { HomeScreen } from '@/features/home/HomeScreen';
 
-export default function AgendaRoute() {
-  return <AgendaScreen />;
+export default function HomeRoute() {
+  return <HomeScreen />;
 }

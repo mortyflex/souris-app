@@ -1,6 +1,7 @@
 // Souris — main navigation
 //
-// The four canonical tabs (Agenda · Clientes · Produits · Plus) on the
+// The five canonical tabs (Accueil · Agenda · Clientèle · Produits · Plus —
+// Accueil is the landing tab) on the
 // platform's own tab bar through Expo Router's NativeTabs: UIKit's tab bar on
 // iOS (Apple's Liquid Glass on iOS 26 when the binary is built with Xcode 26),
 // Material bottom navigation on Android. The system owns the bar's material,
@@ -41,6 +42,10 @@ export default function TabsLayout() {
         tintColor={semanticColors.accent}
       >
         <NativeTabs.Trigger name="index">
+          <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
+          <NativeTabs.Trigger.Label>Accueil</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="agenda">
           <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
           <NativeTabs.Trigger.Label>Agenda</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>

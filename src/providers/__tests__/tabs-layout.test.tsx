@@ -1,7 +1,7 @@
 // Souris — main navigation (NativeTabs) contract
 //
 // Checks the declaration handed to Expo Router's native tabs: exactly the
-// four canonical triggers in order, their labels and system icons, the Souris
+// five canonical triggers in order, their labels and system icons, the Souris
 // tint, the scroll-edge decision, the navigation theme and what must stay
 // absent (a creation tab, minimize-on-scroll). Apple's glass rendering is a
 // real-device matter, not a Jest one.
@@ -43,25 +43,27 @@ jest.mock('expo-router/unstable-native-tabs', () => {
 });
 
 describe('main navigation (NativeTabs)', () => {
-  it('declares exactly the four canonical tabs, in order, with native labels', async () => {
+  it('declares exactly the five canonical tabs, in order, with native labels — Accueil lands first', async () => {
     const view = await render(<TabsLayout />);
 
     const triggers = view.getByTestId('native-tabs').children;
     expect(triggers.map((trigger) => (typeof trigger === 'string' ? trigger : trigger.props.name))).toEqual([
       'index',
+      'agenda',
       'clientes',
       'produits',
       'plus',
     ]);
     expect(view.getAllByTestId('trigger-label').map((label) => label.props.children)).toEqual([
+      'Accueil',
       'Agenda',
       'Clientèle',
       'Produits',
       'Plus',
     ]);
     // No creation tab, no search tab, no hidden or disabled tab.
-    expect(view.getAllByTestId(/^trigger-/).filter((node) => node.props.name !== undefined)).toHaveLength(4);
-    for (const trigger of view.getAllByTestId(/^trigger-(index|clientes|produits|plus)$/)) {
+    expect(view.getAllByTestId(/^trigger-/).filter((node) => node.props.name !== undefined)).toHaveLength(5);
+    for (const trigger of view.getAllByTestId(/^trigger-(index|agenda|clientes|produits|plus)$/)) {
       expect(trigger.props.hidden).toBeUndefined();
       expect(trigger.props.disabled).toBeUndefined();
       expect(trigger.props.role).toBeUndefined();
@@ -73,6 +75,7 @@ describe('main navigation (NativeTabs)', () => {
 
     const icons = view.getAllByTestId('trigger-icon').map(({ props }) => ({ sf: props.sf, md: props.md }));
     expect(icons).toEqual([
+      { sf: { default: 'house', selected: 'house.fill' }, md: 'home' },
       { sf: 'calendar', md: 'calendar_month' },
       { sf: { default: 'person.2', selected: 'person.2.fill' }, md: 'group' },
       { sf: { default: 'shippingbox', selected: 'shippingbox.fill' }, md: 'inventory_2' },

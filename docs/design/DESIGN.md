@@ -173,6 +173,9 @@ clé/valeur sont des filets et des graisses — pas des conteneurs.
 Quatre onglets, dans cet ordre, définis une seule fois dans `assets/souris.js` :
 **Agenda · Clientèle · Produits · Plus**. Agenda est l'écran d'accueil.
 
+> Remplacé (octobre 2026) : cinq onglets, **Accueil · Agenda · Clientèle · Produits · Plus**, et
+> Accueil est l'écran d'accueil — voir `DESIGN_OVERRIDES.md` §18 et §42.
+
 « Plus » est organisé par usage, pas comme un écran Réglages : **Gestion** (Prestations & tarifs,
 Remises, Réservation en ligne) · **Salon** (Informations, Horaires & disponibilités, Équipe) ·
 **Préférences** (Notifications, Préférences Agenda) · **Compte** (Profil, Sécurité, Aide).

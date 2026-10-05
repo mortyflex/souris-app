@@ -78,17 +78,31 @@ Souris must not become an ERP.
 The intended primary navigation is:
 
 ```text
+Accueil
 Agenda
 Clientèle
 Produits
 Plus
 ```
 
-There is no separate Home dashboard.
-
-Agenda is Home.
+Accueil is the landing tab (product decision of October 2026 — it supersedes the earlier
+« Agenda is Home » rule).
 
 The professional primarily opens Souris to understand and manage the working day.
+
+Accueil answers that at a glance and stays deliberately small:
+
+- the next appointment;
+- today's four figures — the ones of « Résumé du jour »;
+- the most common creation actions.
+
+Accueil is a composition of what Souris already knows.
+
+It is never a second Agenda: it selects no day and shows no timeline.
+
+It is never an analytics dashboard: no chart, no trend, no extra KPI.
+
+Agenda remains the core product surface and the place to browse and manage days.
 
 ---
 

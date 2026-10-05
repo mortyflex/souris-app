@@ -710,7 +710,8 @@ One selection haptic per row change while scrolling, never per pixel. The model 
 
 ## 18. Main Navigation — Native Tabs (Liquid Glass)
 
-The four main tabs — **Agenda · Clientèle · Produits · Plus**, in that order, static for the whole
+The five main tabs — **Accueil · Agenda · Clientèle · Produits · Plus**, in that order (Accueil is
+the landing tab since October 2026, §42; `house` / `home` system symbol), static for the whole
 app lifetime — live on the platform's own tab bar through Expo Router `NativeTabs`
 (`src/app/(app)/(tabs)/_layout.tsx`). The JavaScript tab bar of the export (`.tabs`, DESIGN.md §5)
 is no longer reproduced natively.
@@ -2092,3 +2093,74 @@ Collez une liste de clients            sectionTitle
   « Quitter ». « Continuer l'import » keeps the review exactly as it was; « Quitter » leaves the
   import. Never shown on the source choice, the paste step or the result; a running import stays
   simply blocked.
+
+---
+
+## 42. Accueil — the Landing Tab
+
+Product decision (October 2026): a first tab **Accueil** is where the app lands; Agenda is the
+second tab and is otherwise unchanged (PRODUCT.md §4). `src/features/home`, route
+`(tabs)/index`; the Agenda route is `(tabs)/agenda`.
+
+Accueil is a calm composition of existing data on the app background (`screen`). It scrolls as
+one page. Hierarchy comes from SURFACE and SIZE, never from new colours: one tinted hero card,
+two strong white figures, one lighter white summary, then shortcuts that are barely surfaces.
+
+- **Welcome** (`HomeHeader`). The canonical wordmark (`BrandMark`, 150 pt box — artwork about
+  92 pt — pulled back by its built-in transparent padding so the ARTWORK sits on the gutter) with
+  today's date facing it in quiet `metadata` (« Lundi 5 octobre »). Under them « Bonjour »
+  (« Bonsoir » from 18:00) in the 23 pt `summaryValue` role — the page header, deliberately not a
+  screen-sized title — and « Votre journée en un coup d’œil. » in soft `body`. No watermark, no
+  illustration, no mascot.
+- **Prochain rendez-vous** (`NextAppointmentCard`) — the hero, and the ONLY tinted surface of the
+  page: `surfaceLavenderStrong`, `radii.large`, no shadow. An accent eyebrow « PROCHAIN
+  RENDEZ-VOUS », then a row: the 56 pt portrait `ClientAvatar` (photo from the shared media
+  cache, initials otherwise) in a 2 pt white ring, when it starts as a supporting line
+  (`control`, 16 pt semibold, `foregroundSoft` — « Aujourd’hui · 10:00 », « Demain · 09:30 »,
+  otherwise the date), the CLIENT NAME as the strongest text (`sheetTitle`, 21 pt bold, navy),
+  the prestation summary (`metadata`), an accent chevron. The whole card opens
+  Appointment Details. The next Appointment is the nearest one that occupies the schedule, is
+  not completed and starts now or later — today or any later day.
+- **Nothing to come.** ONE compact white line (44 pt minimum): a muted calendar glyph and
+  « Aucun rendez-vous à venir. » Never a hero-sized empty card, no eyebrow. (Not « Aujourd’hui
+  est calme »: the line also shows on a day whose appointments are simply over.)
+- **Aujourd’hui.** `SectionHeader` with a trailing accent link « Résumé du jour › » that opens
+  the existing receipt (§25) for today.
+  - *Primary pair* (`HomeKpiCard`): two white cards, each an accent glyph in a 36 pt
+    `surfaceLavender` disc, the VALUE in navy 30 pt bold, a `metadata` label — « Rendez-vous »
+    and « CA potentiel ». Both values share the same size; a long amount steps down by its
+    length (26, then 22), never measured or auto-shrunk. Amounts use the compact euro format
+    (« 100 € », cents only when there are some).
+  - *Secondary* (`HomeCollectionSummary`): ONE compact white card « Encaissements du jour » —
+    « 0 € encaissé » | « 100 € restant » side by side, split by a hairline, values in 16 pt
+    `control`, no glyph. Spoken « Déjà encaissé » / « Reste à encaisser ».
+  - All four figures are exactly the domain day summary of today, the figures of « Résumé du
+    jour ». This is NOT the Caisse total (money by the day it was received).
+- **Actions rapides** (`HomeQuickAction`). One row of four light shortcuts: a 56 pt white
+  rounded square (`radii.large`) with the accent glyph, and a one-word navy `chip` label UNDER
+  it, outside the surface — « Rendez-vous », « Client », « Produit », « Vente » — spoken in full
+  (« Nouveau rendez-vous », « Ajouter un client », « Ajouter un produit », « Nouvelle vente »).
+  The whole column is the button. They open the existing flows; the glyphs are those of the
+  same actions on the other tabs.
+  Every shortcut CREATES something, and says so with a small plus: the calendar and the person
+  use the system `…badge.plus` glyphs; the box (Produit) and the bag (Vente) have none, so the
+  tile sets the same small accent plus, on a white knock-out disc, on the glyph's lower-right
+  corner (`plusBadge`). One icon language, no second icon system.
+- **Cette semaine** (`HomeWeekSummary`). `SectionHeader` with the trailing link « Résumé de la
+  semaine › » (the existing receipt, §25, for the current week). ONE compact white card: the
+  week range in quiet `metadata` (« 5 – 11 octobre 2026 »), then a row — the appointment count
+  in navy 26 pt bold over « rendez-vous », a hairline, and two quiet label → value lines,
+  « Déjà encaissé » and « CA potentiel », values in 16 pt `control`. No glyph, no chart, no
+  trend, no percentage. The Agenda week (Monday → Sunday) of today, from the domain period
+  summary — the figures of « Résumé de la semaine ».
+- **Pilotage** (`HomeToolRow`). Existing business tools, consulted rather than created — never
+  styled as quick actions: ONE borderless `GroupedSurface` of two 64 pt navigation rows split by
+  an inset hairline. Each: accent glyph in a 36 pt `surfaceLavender` disc, `rowTitle` title, one
+  `metadata` line, muted chevron. « Créer une estimation — Chiffrer des prestations pour un
+  client » pushes `/estimations/new`; « Tops & tendances — Voir ce qui fonctionne le mieux »
+  opens the existing insights receipt on the current month.
+- **Order.** Welcome, next appointment, the two figures, the collection summary, quick actions,
+  Cette semaine, Pilotage. Nothing else. Weight decreases down the page: the hero is the only
+  tint, today owns the only 30 pt figures.
+- **No** day strip, day selection, timeline, chart, trend, low-stock block or ticket styling on
+  the page itself. Browsing days belongs to the Agenda.
