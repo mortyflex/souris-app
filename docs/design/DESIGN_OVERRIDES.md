@@ -383,7 +383,7 @@ introducing a POS visual language:
   use the rose surface and text, never a blocking dialog;
 - scan results inside a Sale use the shared `BottomSheet` (unknown / inactive / several matches)
   and never offer Product creation;
-- `Vendre un produit` is a secondary `AppButton` in the Client Profile identity block. In
+- `Vendre un produit` is a quick-action tile of the Client Profile (§29). In
   Appointment Details the same action is `Revente`: a borderless full-width lavender pill with the
   shopping-bag symbol and violet label, placed ABOVE `Terminer` and the lifecycle row, without a
   heading or divider — a contextual business action that never competes with the primary
@@ -1361,10 +1361,22 @@ The creation sheet speaks the §27 language. Flow, steps, rules and data are unc
 The profile is a dashboard; the histories are exhaustive pushed screens. Data, rules and
 lifecycle are unchanged.
 
-- **Header.** Glass back, a centred « Client » title, « Modifier » trailing.
-- **Activité.** One `GroupedSurface`, a 2 × 2 grid split by hairlines. Each metric: a small
-  accent glyph in a `surfaceLavender` circle, the value in navy `summaryValue`, the label in
-  `metadata`. Numbers are never violet.
+- **Header.** Glass back, a centred « Fiche client » title, « ••• » trailing (`Modifier`, then
+  the lifecycle action).
+- **Identity.** A centred block: the 80 pt portrait `ClientAvatar` (the photo control), the
+  name in the 23 pt `summaryValue` role — one step under `screenTitle`, two lines at most,
+  wrapped and never shrunk — then the phone and the email on their own quiet
+  `foregroundSoft` lines when present, then the `Archivée` pill. Phone and email are NOT
+  repeated in Informations.
+- **Quick actions.** One row of equal white tiles (`ProfileQuickAction`, 56 pt minimum): a
+  36 pt `surfaceLavender` disc with the accent glyph BESIDE a navy label (two lines at most).
+  `Nouveau rendez-vous`, `Vendre un produit` — existing actions only, same weight, never a
+  coloured CTA. An archived Client shows `Réactiver le client` instead.
+- **Activité.** A 2 × 2 grid of small borderless white cards (`ProfileStatCard`,
+  `spacing.sm` apart). Each card reads number first: a small accent glyph in a 32 pt
+  `surfaceLavender` disc, the value in navy `summaryValue`, then a SHORT label in `metadata`
+  that never truncates: « Réalisés » (spoken « Rendez-vous réalisés »), « Total dépensé »,
+  « Absences », « Annulations ». Numbers are never violet. Always four cards, zeros included.
 - **History area.** Right under Activité, a full-width `SegmentedControl` « Rendez-vous [n] |
   Produits achetés [n] » (default Rendez-vous, plain local state). Options may carry a count
   pill: `surfaceLavenderStrong` + accent text, accent + white on the selected option, `999+`
@@ -1383,8 +1395,9 @@ lifecycle are unchanged.
   virtualized list whose rows carry the grouped surface slice by slice. Appointments filter
   « Tous | À venir | Passés » from the existing upcoming / history split; a multi-product Sale
   lists each line.
-- **Order.** Identity, `Vendre un produit`, birthday, next appointment, Activité, history,
-  Informations, Notes, then the tertiary archive action.
+- **Order.** Identity (with phone / email), quick actions, birthday, next appointment,
+  Activité, history, Informations (birthday, SMS consent — only when one exists), Notes.
+- **No** ticket / printer treatment, no extra KPI, no call or message action here.
 
 ## 30. Standard Sheet Header — « Annuler » Leading, Title Centered
 

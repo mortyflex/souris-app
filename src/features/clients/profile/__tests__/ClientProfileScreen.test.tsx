@@ -436,7 +436,7 @@ describe('ClientProfileScreen', () => {
     expect(view.getByText('Léa Martin')).toBeTruthy();
     expect(view.getByText('Coloration')).toBeTruthy();
     expect(view.getByText(/09:00/)).toBeTruthy();
-    expect(view.getByText('Rendez-vous réalisés')).toBeTruthy();
+    expect(view.getByText('Réalisés')).toBeTruthy();
     expect(view.getByTestId('metric-completed').props.children).toBe('0');
     expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(0));
   });
@@ -493,12 +493,12 @@ describe('ClientProfileScreen', () => {
       expect(selectionHaptic).not.toHaveBeenCalled();
     });
 
-    it('renders the 96 pt rounded portrait frame with the Client initials, inside ONE photo button spoken with her name', async () => {
+    it('renders the 80 pt rounded portrait frame with the Client initials, inside ONE photo button spoken with her name', async () => {
       const view = await renderProfile('client-agenda-lea');
 
       const avatar = view.getByTestId('client-avatar');
       // A softly rounded square, not a small disc: room for a real portrait.
-      expect(avatar).toHaveStyle({ borderRadius: 24, height: 96, width: 96 });
+      expect(avatar).toHaveStyle({ borderRadius: 20, height: 80, width: 80 });
       expect(view.getByTestId('client-avatar-initials')).toHaveTextContent('LM');
       expect(view.queryByTestId('client-avatar-photo')).toBeNull();
       // The frame is the photo control (Client photos): one element, named after her.
@@ -509,31 +509,47 @@ describe('ClientProfileScreen', () => {
       expect(within(view.getByTestId('client-photo-badge')).getByTestId('symbol-camera.fill')).toBeTruthy();
     });
 
-    it('places the portrait and the name side by side in the identity row', async () => {
+    it('centres the portrait over the name in the identity block', async () => {
       const view = await renderProfile('client-agenda-lea');
 
       const identity = view.getByTestId('client-identity');
-      expect(identity).toHaveStyle({ alignItems: 'center', flexDirection: 'row' });
+      expect(identity).toHaveStyle({ alignItems: 'center' });
+      expect(identity).not.toHaveStyle({ flexDirection: 'row' });
       expect(within(identity).getByTestId('client-avatar')).toBeTruthy();
-      expect(within(identity).getByRole('header', { name: 'Léa Martin' })).toBeTruthy();
+      const name = within(identity).getByRole('header', { name: 'Léa Martin' });
+      expect(name).toHaveStyle({ textAlign: 'center' });
+      // A long name wraps on two lines at a fixed size: never shrunk.
+      expect(name.props.numberOfLines).toBe(2);
+      expect(name.props.adjustsFontSizeToFit).toBeUndefined();
     });
 
-    it('stacks Nouveau rendez-vous then Vendre un produit as two rows of ONE white action card, above Activité', async () => {
+    it('shows the phone and the email once, in the identity block, and nothing for a missing one', async () => {
+      const view = await renderProfile('client-birthday');
+      await act(async () => {
+        fireEvent.press(view.getByTestId('add-birthday-client'));
+      });
+
+      const identity = within(view.getByTestId('client-identity'));
+      expect(identity.getByTestId('client-phone')).toHaveTextContent('06 11 22 33 44');
+      expect(view.getAllByText('06 11 22 33 44')).toHaveLength(1);
+      expect(view.queryByText('Téléphone')).toBeNull();
+      expect(view.queryByTestId('client-email')).toBeNull();
+    });
+
+    it('lays Nouveau rendez-vous then Vendre un produit as two equal white tiles of ONE row, above Activité', async () => {
       const view = await renderProfile('client-agenda-lea');
 
-      const card = within(view.getByTestId('client-daily-actions'));
+      const row = view.getByTestId('client-daily-actions');
+      expect(row).toHaveStyle({ flexDirection: 'row' });
+      const card = within(row);
       const newAppointment = card.getByTestId('new-appointment');
       const sell = card.getByTestId('sell-product');
       expect(newAppointment.props.accessibilityLabel).toBe('Nouveau rendez-vous');
       expect(within(newAppointment).getByTestId('symbol-calendar.badge.plus')).toBeTruthy();
       expect(sell.props.accessibilityLabel).toBe('Vendre un produit');
-      // The white surface of the « ••• » drawers, never a coloured CTA.
-      expect(view.getByTestId('client-daily-actions')).toHaveStyle({
-        backgroundColor: semanticColors.surfaceElevated,
-      });
-      for (const row of [newAppointment, sell]) {
-        expect(row).not.toHaveStyle({ backgroundColor: semanticColors.accent });
-        expect(row).not.toHaveStyle({ backgroundColor: semanticColors.surfaceLavender });
+      // White tiles sharing the row equally, never a coloured CTA.
+      for (const tile of [newAppointment, sell]) {
+        expect(tile).toHaveStyle({ backgroundColor: semanticColors.surfaceElevated, flex: 1 });
       }
       // Navy labels, same weight for both: no primary / secondary pair.
       for (const label of ['Nouveau rendez-vous', 'Vendre un produit']) {
@@ -658,7 +674,11 @@ describe('ClientProfileScreen', () => {
     const view = await renderProfile(withoutAppointments.id);
 
     expect(view.getByText('Activité')).toBeTruthy();
-    expect(view.getByText('Rendez-vous réalisés')).toBeTruthy();
+    // Short visible labels, the full name spoken.
+    for (const label of ['Réalisés', 'Total dépensé', 'Absences', 'Annulations']) {
+      expect(view.getByText(label)).toBeTruthy();
+    }
+    expect(view.getByLabelText('Rendez-vous réalisés, 0')).toBeTruthy();
     expect(view.getByTestId('metric-completed').props.children).toBe('0');
     expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(0));
     expect(view.getByTestId('metric-noshow').props.children).toBe('0');
@@ -1087,6 +1107,8 @@ describe('ClientProfileScreen', () => {
       expect(view.queryByText('Brushing 2')).toBeNull();
       expect(view.queryByText('Brushing 1')).toBeNull();
       expect(view.queryByTestId('client-purchases')).toBeNull();
+      // A completed appointment names no status: only exceptions do.
+      expect(view.queryByText('Terminé')).toBeNull();
       // Total dépensé still covers the whole history, not the preview.
       expect(view.getByTestId('metric-completed').props.children).toBe('5');
       expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(5 * 42));

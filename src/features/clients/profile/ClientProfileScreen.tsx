@@ -1,11 +1,12 @@
 // Souris — Client Profile
 //
-// A compact client dashboard: identity (portrait ClientAvatar beside the
-// name, editable in place through ClientPhotoControl) + ONE white action card (`Nouveau rendez-vous`, `Vendre un produit`,
-// the shared ActionGroup of the « ••• » drawers) + today's birthday
-// reminder + next appointment + derived activity + ONE switchable history
-// preview (Rendez-vous | Produits achetés, 3 records at most, the complete
-// histories on their own pushed screens) + contact + notes. Nothing here is
+// A client profile read top-down: a centred identity (portrait ClientAvatar,
+// editable in place through ClientPhotoControl, over the name, the phone and
+// the email) + a compact row of quick-action tiles (`Nouveau rendez-vous`,
+// `Vendre un produit`) + today's birthday reminder + next appointment + the
+// derived activity as four small stat cards + ONE switchable history preview
+// (Rendez-vous | Produits achetés, 3 records at most, the complete histories
+// on their own pushed screens) + the remaining information + notes. Nothing here is
 // stored on the Client — activity is derived from Appointment state and
 // purchases from Sale snapshots through clientId. No dashboard KPIs, no fake
 // metrics, no edit/delete traps.
@@ -75,10 +76,9 @@ import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
-import { ActionGroup, type DetailAction } from '@/shared/ui/ActionGroup';
+import type { DetailAction } from '@/shared/ui/ActionGroup';
 import { DetailActionsSheet } from '@/shared/ui/DetailActionsSheet';
 import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
-import { GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
   foregroundSoft,
@@ -91,6 +91,8 @@ import {
 
 import { ClientDeletionDialog, type ClientDeletionDialogMode } from './components/ClientDeletionDialog';
 import { ClientHistorySection } from './components/ClientHistorySection';
+import { ProfileQuickAction } from './components/ProfileQuickAction';
+import { ProfileStatCard } from './components/ProfileStatCard';
 import { getClientActivitySummary, getClientAppointmentTimeline } from './presentation';
 
 const metricIcons = {
@@ -100,29 +102,14 @@ const metricIcons = {
   cancelled: { ios: 'xmark.circle', android: 'cancel' },
 } as const satisfies Record<string, PlatformSymbolName>;
 
-/** The profile portrait frame: 96 × 96, room for a real photo later. */
-const profileAvatarSize = spacing['3xl'] * 3;
+/** The profile portrait frame: 80 × 80, large enough for a real photo. */
+const profileAvatarSize = spacing.lg * 4;
 
-type ClientDailyAction = 'appointment' | 'sale';
-
-// The operational actions, in the row language of the « ••• » drawers. The
-// calendar glyph is the one of « Nouveau rendez-vous » in the Agenda.
-const dailyActions: readonly DetailAction<ClientDailyAction>[] = [
-  {
-    key: 'appointment',
-    label: 'Nouveau rendez-vous',
-    icon: { ios: 'calendar.badge.plus', android: 'event' },
-    tone: 'normal',
-    testID: 'new-appointment',
-  },
-  {
-    key: 'sale',
-    label: 'Vendre un produit',
-    icon: saleIcon,
-    tone: 'normal',
-    testID: 'sell-product',
-  },
-];
+// The calendar glyph is the one of « Nouveau rendez-vous » in the Agenda.
+const newAppointmentIcon = {
+  ios: 'calendar.badge.plus',
+  android: 'event',
+} as const satisfies PlatformSymbolName;
 
 type ClientAdminAction = 'modify' | 'archive' | 'delete';
 
@@ -209,9 +196,8 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
 
   const activity = getClientActivitySummary(appointments, client.id);
   const purchases = getClientSales(sales, client.id);
-  const hasContactInfo = Boolean(
-    client.phone || client.email || client.birthday || client.smsMarketingConsent,
-  );
+  // Phone and email live in the identity block; the rest stays below.
+  const hasMoreInfo = Boolean(client.birthday || client.smsMarketingConsent);
   const archived = isClientArchived(client);
 
   const openAppointmentCreation = () => {
@@ -325,28 +311,53 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
       >
-        {/* The portrait frame beside the name: the Client's photo or her
+        {/* The portrait frame over the name: the Client's photo or the
             initials in the very same frame; tapping it manages the photo. */}
         <View style={styles.identity} testID="client-identity">
           <ClientPhotoControl client={client} size={profileAvatarSize} />
-          <View style={styles.identityCopy}>
-            <AppText
-              variant="screenTitle"
-              accessibilityRole="header"
-              numberOfLines={3}
-              selectable
-              style={styles.clientName}
-            >
-              {getClientDisplayName(client)}
-            </AppText>
-            {archived && (
-              <View style={styles.archivedBadge} testID="client-archived-indicator">
-                <AppText variant="chip" style={styles.archivedBadgeText}>
-                  {ARCHIVED_CLIENT_LABEL}
+          {/* One step under the screen title: prominent, never dominant. */}
+          <AppText
+            variant="summaryValue"
+            accessibilityRole="header"
+            numberOfLines={2}
+            selectable
+            style={styles.clientName}
+          >
+            {getClientDisplayName(client)}
+          </AppText>
+          {(client.phone !== undefined || client.email !== undefined) && (
+            <View style={styles.contact}>
+              {client.phone !== undefined && (
+                <AppText
+                  accessibilityLabel={`Téléphone, ${client.phone}`}
+                  numberOfLines={1}
+                  selectable
+                  style={styles.contactLine}
+                  testID="client-phone"
+                >
+                  {client.phone}
                 </AppText>
-              </View>
-            )}
-          </View>
+              )}
+              {client.email !== undefined && (
+                <AppText
+                  accessibilityLabel={`Email, ${client.email}`}
+                  numberOfLines={1}
+                  selectable
+                  style={styles.contactLine}
+                  testID="client-email"
+                >
+                  {client.email}
+                </AppText>
+              )}
+            </View>
+          )}
+          {archived && (
+            <View style={styles.archivedBadge} testID="client-archived-indicator">
+              <AppText variant="chip" style={styles.archivedBadgeText}>
+                {ARCHIVED_CLIENT_LABEL}
+              </AppText>
+            </View>
+          )}
         </View>
 
         <View style={styles.actionsSection}>
@@ -359,13 +370,20 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
               variant="secondary"
             />
           ) : (
-            <ActionGroup
-              actions={dailyActions}
-              onSelect={(action) =>
-                action === 'appointment' ? openAppointmentCreation() : openSale()
-              }
-              testID="client-daily-actions"
-            />
+            <View style={styles.quickActions} testID="client-daily-actions">
+              <ProfileQuickAction
+                icon={newAppointmentIcon}
+                label="Nouveau rendez-vous"
+                onPress={openAppointmentCreation}
+                testID="new-appointment"
+              />
+              <ProfileQuickAction
+                icon={saleIcon}
+                label="Vendre un produit"
+                onPress={openSale}
+                testID="sell-product"
+              />
+            </View>
           )}
         </View>
 
@@ -392,39 +410,37 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
 
         <View style={styles.activitySection}>
           <SectionHeader style={styles.sectionHeader} title="Activité" />
-          <GroupedSurface>
-            <View style={styles.metricsRow}>
-              <Metric
+          <View style={styles.statsGrid}>
+            <View style={styles.statsRow}>
+              <ProfileStatCard
                 icon={metricIcons.completed}
-                label="Rendez-vous réalisés"
+                accessibilityLabel="Rendez-vous réalisés"
+                label="Réalisés"
                 testID="metric-completed"
                 value={String(activity.completedAppointmentCount)}
               />
-              <View style={styles.metricsColumnDivider} />
-              <Metric
+              <ProfileStatCard
                 icon={metricIcons.spent}
                 label="Total dépensé"
                 testID="metric-spent"
                 value={formatPrice(activity.totalSpent)}
               />
             </View>
-            <View style={styles.metricsDivider} />
-            <View style={styles.metricsRow}>
-              <Metric
+            <View style={styles.statsRow}>
+              <ProfileStatCard
                 icon={metricIcons.noShow}
                 label="Absences"
                 testID="metric-noshow"
                 value={String(activity.noShowAppointmentCount)}
               />
-              <View style={styles.metricsColumnDivider} />
-              <Metric
+              <ProfileStatCard
                 icon={metricIcons.cancelled}
                 label="Annulations"
                 testID="metric-cancelled"
                 value={String(activity.cancelledAppointmentCount)}
               />
             </View>
-          </GroupedSurface>
+          </View>
         </View>
 
         <View style={styles.historySection}>
@@ -437,12 +453,10 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
           />
         </View>
 
-        {hasContactInfo && (
+        {hasMoreInfo && (
           <View style={styles.infoSection}>
             <SectionHeader style={styles.sectionHeader} title="Informations" />
             <View style={styles.infoSurface}>
-              <InfoRow label="Téléphone" value={client.phone} />
-              <InfoRow label="Email" value={client.email} />
               <InfoRow
                 icon={birthdayIcon}
                 label="Anniversaire"
@@ -517,40 +531,6 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
         onConfirm={deletePermanently}
       />
     </SafeAreaView>
-  );
-}
-
-function Metric({
-  icon,
-  label,
-  value,
-  testID,
-}: {
-  readonly icon: PlatformSymbolName;
-  readonly label: string;
-  readonly value: string;
-  readonly testID: string;
-}) {
-  return (
-    <View accessible accessibilityLabel={`${label}, ${value}`} style={styles.metric}>
-      <View style={styles.metricIcon}>
-        <SymbolView name={icon} size={16} tintColor={semanticColors.accent} />
-      </View>
-      <View style={styles.metricCopy}>
-        <AppText
-          adjustsFontSizeToFit
-          numberOfLines={1}
-          variant="summaryValue"
-          style={styles.metricValue}
-          testID={testID}
-        >
-          {value}
-        </AppText>
-        <AppText variant="metadata" numberOfLines={2} style={styles.metricLabel}>
-          {label}
-        </AppText>
-      </View>
-    </View>
   );
 }
 
@@ -630,18 +610,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     zIndex: -1,
   },
-  content: { paddingBottom: spacing['3xl'], paddingTop: spacing.base },
-  identity: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.base,
-    marginBottom: spacing.xl,
+  content: { paddingBottom: spacing['3xl'], paddingTop: spacing.md },
+  identity: { alignItems: 'center', marginBottom: spacing.lg },
+  clientName: {
+    color: semanticColors.foreground,
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
-  identityCopy: { flex: 1, gap: spacing.sm, minWidth: 0 },
-  actionsSection: { marginBottom: spacing.xl },
-  clientName: { color: semanticColors.foreground },
+  contact: { alignItems: 'center', gap: 2, marginTop: spacing.xs },
+  contactLine: { color: foregroundSoft, fontVariant: ['tabular-nums'], textAlign: 'center' },
+  actionsSection: { marginBottom: spacing.lg },
+  quickActions: { flexDirection: 'row', gap: spacing.sm },
   archivedBadge: {
-    alignSelf: 'flex-start',
+    marginTop: spacing.md,
     // On the app background the neutral `surface` would vanish: a white pill.
     backgroundColor: semanticColors.surfaceElevated,
     borderRadius: radii.pill,
@@ -672,37 +653,8 @@ const styles = StyleSheet.create({
   nextTimeLine: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   nextSummary: { color: foregroundSoft },
   activitySection: { marginBottom: spacing.xl },
-  metricsRow: { flexDirection: 'row' },
-  metricsDivider: {
-    backgroundColor: semanticColors.borderSubtle,
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: spacing.base,
-  },
-  metricsColumnDivider: {
-    backgroundColor: semanticColors.borderSubtle,
-    marginVertical: spacing.md,
-    width: StyleSheet.hairlineWidth,
-  },
-  metric: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minWidth: 0,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  metricIcon: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavender,
-    borderRadius: radii.pill,
-    height: 32,
-    justifyContent: 'center',
-    width: 32,
-  },
-  metricCopy: { flex: 1, gap: 2, minWidth: 0 },
-  metricValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
-  metricLabel: { color: foregroundSoft },
+  statsGrid: { gap: spacing.sm },
+  statsRow: { flexDirection: 'row', gap: spacing.sm },
   historySection: { marginBottom: spacing.xl },
   infoSection: { marginBottom: spacing.xl },
   infoSurface: {

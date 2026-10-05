@@ -2,7 +2,9 @@
 //
 // One Souris Appointment of a Client, shared by the profile preview and the
 // complete « Rendez-vous » history: date + time, prestation summary, amount
-// and chevron in one grouped row. Everything reads the Appointment snapshot
+// and chevron in one grouped row. Only an exceptional outcome (cancellation,
+// no-show) is named, in rose: a completed or upcoming Appointment shows no
+// status line, the Appointment Details keep it. Everything reads the Appointment snapshot
 // through the existing appointment formatters; the whole row opens the
 // existing Appointment Details.
 
@@ -18,7 +20,6 @@ import {
   formatPrice,
   getAppointmentSnapshotTotal,
   getAppointmentStatusLabel,
-  isTerminalAppointmentStatus,
 } from '@/features/appointments/presentation';
 import { AppText } from '@/shared/ui/AppText';
 import { foregroundSoft, rose, semanticColors, spacing } from '@/shared/ui/theme';
@@ -31,13 +32,12 @@ interface ClientAppointmentRowProps {
 }
 
 export function ClientAppointmentRow({ appointment, onPress }: ClientAppointmentRowProps) {
-  const statusLabel =
-    appointment.status === 'CANCELLED' && appointment.cancellation
-      ? formatCancellationActorLabel(appointment.cancellation.cancelledBy)
-      : isTerminalAppointmentStatus(appointment.status)
-        ? getAppointmentStatusLabel(appointment.status)
-        : undefined;
   const isException = appointment.status === 'CANCELLED' || appointment.status === 'NO_SHOW';
+  const statusLabel = !isException
+    ? undefined
+    : appointment.status === 'CANCELLED' && appointment.cancellation
+      ? formatCancellationActorLabel(appointment.cancellation.cancelledBy)
+      : getAppointmentStatusLabel(appointment.status);
   const summary = formatAppointmentServiceSummary(appointment);
   const time = formatAppointmentTime(appointment.startAt);
   const price = formatPrice(getAppointmentSnapshotTotal(appointment));
@@ -70,11 +70,7 @@ export function ClientAppointmentRow({ appointment, onPress }: ClientAppointment
           {summary}
         </AppText>
         {statusLabel && (
-          <AppText
-            variant="metadata"
-            numberOfLines={1}
-            style={isException ? styles.exceptionStatus : styles.status}
-          >
+          <AppText variant="metadata" numberOfLines={1} style={styles.exceptionStatus}>
             {statusLabel}
           </AppText>
         )}
@@ -107,7 +103,6 @@ const styles = StyleSheet.create({
   time: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   copy: { flex: 1, gap: 1, minWidth: 0 },
   summary: { color: semanticColors.foreground },
-  status: { color: foregroundSoft },
   exceptionStatus: { color: rose.rose600 },
   price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
 });

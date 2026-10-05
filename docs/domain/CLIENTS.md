@@ -225,7 +225,7 @@ One optional portrait per Client, taken or chosen in Souris
   SQLite, not in Postgres);
 - every new photo is a NEW object (new `photo_id`), so the path changes with
   the photo; a replaced object is removed once the new path is committed;
-- the Client Profile avatar (the 96 pt portrait `ClientAvatar`) is the
+- the Client Profile avatar (the 80 pt portrait `ClientAvatar`) is the
   control: a small camera badge, one tap opens the shared photo sheet —
   `Prendre une photo` / `Prendre une nouvelle photo`, `Choisir dans Photos`,
   `Supprimer la photo` when a photo exists, `Annuler`. Camera permission is

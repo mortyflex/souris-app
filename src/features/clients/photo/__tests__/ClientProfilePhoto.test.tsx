@@ -242,13 +242,13 @@ describe('Client photo from the Client Profile', () => {
     successHaptic.mockClear();
   });
 
-  it('shows the initials in the same 96 pt portrait, with a subtle camera badge and no permission request', async () => {
+  it('shows the initials in the same 80 pt portrait, with a subtle camera badge and no permission request', async () => {
     const view = await renderProfile(db, mockFiles, remote);
 
     const button = view.getByTestId('client-photo-button');
     expect(button.props.accessibilityRole).toBe('button');
     expect(button.props.accessibilityLabel).toBe('Ajouter une photo pour Léa Martin');
-    expect(view.getByTestId('client-avatar')).toHaveStyle({ borderRadius: 24, height: 96, width: 96 });
+    expect(view.getByTestId('client-avatar')).toHaveStyle({ borderRadius: 20, height: 80, width: 80 });
     expect(view.getByTestId('client-avatar-initials')).toHaveTextContent('LM');
     expect(view.queryByTestId('client-avatar-photo')).toBeNull();
     // The initials are not a second, separate accessibility element.
