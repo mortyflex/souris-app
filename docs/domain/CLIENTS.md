@@ -323,6 +323,147 @@ Empty optional values become `undefined`.
 
 ---
 
+## 3b. Client Import — « Importer ma clientèle »
+
+The professional's own address book enters Souris through ONE shared import pipeline, whatever
+the source:
+
+```text
+source → extraction → parsing → normalization → validation
+       → duplicate detection → review → confirmed import
+```
+
+Code: `src/domain/clients/import/` (pure TypeScript) and `src/features/clients/import/` (screen,
+review, chunked run). Entry: Clientèle (see `docs/design/DESIGN_OVERRIDES.md` §41). The flow lives
+in the authenticated, Business-bound `(app)` group only; onboarding does not use it yet.
+
+### Sources
+
+| Source     | State                                                                                   |
+| ---------- | --------------------------------------------------------------------------------------- |
+| `PASTE`    | Implemented: text pasted into a multiline field (system Paste; no clipboard API read).  |
+| `CSV`      | Future adapter (file picking is not implemented).                                       |
+| `CONTACTS` | Future adapter (phone contacts are not implemented).                                    |
+| `OCR`      | Future adapter: recognized text will feed the SAME text parser (`parseClientImportText(text, 'OCR')`). |
+
+Persistence never depends on the source.
+
+### Candidate (staging only)
+
+```text
+ClientImportCandidate
+├── key          stable within the batch
+├── source       PASTE | CSV | CONTACTS | OCR
+├── sourceRef?   « 3 », « 3-4 » (lines / rows)
+├── firstName?   lastName?   phone?   email?   birthday?
+├── raw?         the source text, shown for correction
+└── issues[]     extraction issues
+```
+
+A candidate is NOT a Client: it may lack a first name, carry an invalid email, or hold warnings.
+It exists in memory during the review only and is never persisted.
+
+Allowed fields: first name, last name, phone, email, birthday — nothing else. Never imported:
+notes, a photo, an archive state, external ids, SMS marketing consent. An imported Client's
+promotional SMS consent is UNKNOWN (absent): nothing infers consent from a phone number, a
+spreadsheet, pasted text or another software. Leftover text is reported (`IGNORED_TEXT`), never
+turned into notes. §3's strict no-history rule applies to every source.
+
+### Paste parser (`parseClientImportText`)
+
+Deterministic extraction:
+
+- emails: any token holding « @ » — kept even when invalid, so the review asks for a correction;
+- phones: French national (`06 12 34 56 78`, dots, hyphens), `+33 6…`, `+33 (0)6…`, `0033…`,
+  bare `33612345678`, other international numbers; any other 8–15 digit run is kept and flagged;
+- birthdays after a marker: `anniv`, `anniversaire`, `né le` / `née le`, `ddn`;
+- tab-separated rows (Excel, Numbers, Google Sheets): one row = one candidate; a header row maps
+  `Prénom`, `Nom` (the whole name when there is no `Prénom` column), `Téléphone` / `Portable` /
+  `Tél`, `Email` / `Mail`, `Anniversaire` / `Date de naissance`; unknown columns are ignored as a
+  whole and listed once.
+
+Records: a line with a name starts a candidate; a blank line closes it. A nameless line (phone,
+email, birthday) completes the candidate — always inside blank-line blocks, and in a plain list
+only when it fills a field the candidate lacks. A line with no name, phone, email or date is
+reported as unread, never an empty candidate. A heading line ending with « : » is skipped.
+
+Heuristics always produce a review issue:
+
+| Issue                  | Meaning                                                                    |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `AMBIGUOUS_NAME_SPLIT` | 3+ name words, or an ALL-CAPS first word taken for the last name           |
+| `AMBIGUOUS_BIRTHDAY`   | a date without a birthday marker — except a complete `DD/MM/YYYY` date that exists in the calendar (`14/05/1992`), which is certain |
+| `BIRTHDAY_DROPPED`     | an impossible date (`31/04`)                                               |
+| `EXTRA_PHONES` / `EXTRA_EMAILS` | only the first is kept                                           |
+| `IGNORED_TEXT`         | leftover words, parentheses, symbols; words after a field delimiter (`-`, `/`, `\|`, `;`, `,`) never join the name |
+| `UNRECOGNIZED_PHONE`   | computed: the phone maps to no canonical number — a warning, never a refusal |
+
+Blocking (computed from the current values): `MISSING_FIRST_NAME` (no phone-only Client is ever
+created) and `INVALID_EMAIL` (an explicitly supplied invalid email must be corrected or erased).
+
+Birthdays: day first (French), `12/04`, `12.04`, `12/04/1990`, `12 avril`, `1er mai`, `3 févr.`.
+A year is never stored, but a complete `DD/MM/YYYY` date is validated WITH its year first: one that
+does not exist (`29/02/1991`, `31/02/1991`) is dropped with `BIRTHDAY_DROPPED`, the date quoted in
+the issue; `29/02/1992` is kept as 29 février. Without a year, `29/02` is a valid day + month (§2).
+An impossible day + month pair (`31/04`) is dropped with `BIRTHDAY_DROPPED`.
+
+### Email
+
+ONE rule for manual creation and import: `isValidClientEmail` (`src/domain/clients/email.ts`);
+the Client form delegates to it. Comparison key: trimmed + lowercased. The stored email is the
+value as written (trimmed).
+
+### Phone comparison
+
+`clientImportPhoneKey` (`src/domain/clients/import/phone-key.ts`) derives comparison keys only:
+
+- `canonical`: the communications rule `normalizeCommunicationPhoneE164` (unchanged), after an
+  import-only cleanup of `(0)`, a trunk `0` after `+33` and a bare `33` country code;
+- `lastNine`: the last nine digits — a weak fallback.
+
+The stored Client phone stays the raw trimmed value. No `phone_e164` exists anywhere.
+
+### Classification (never stored, recomputed after every edit)
+
+Inputs: the candidate, the existing Clients (active AND archived), the earlier non-invalid
+candidates of the same batch.
+
+```text
+INVALID             a blocking issue
+EXACT_DUPLICATE     same canonical phone, or same email key
+POSSIBLE_DUPLICATE  phone matches one record while email matches another
+                    same last nine digits where canonical forms cannot decide
+                    same first + last name (accent-, case-, separator-insensitive)
+NEW                 nothing matches
+```
+
+A first name alone never makes a duplicate. An archived match is named as such. Nothing is ever
+merged: no field of an existing Client is filled or changed by an import.
+
+### Review and confirmation
+
+```text
+NEW                 selected by default (can be unticked)
+POSSIBLE_DUPLICATE  skipped by default — « Importer quand même » opts in
+EXACT_DUPLICATE     skipped, inspectable, never imported
+INVALID             not selectable until corrected
+```
+
+A correction edits staging only (the review drawer never writes); it marks the candidate reviewed
+(its extraction issues are dropped) and re-runs validation, classification and eligibility. The
+confirmation re-classifies the batch against the Clients stored at that moment; a changed
+selection refreshes the review instead of importing. Ids are created at confirmation
+(`createClientId`), then the Clients are written in chunks (`docs/architecture/PERSISTENCE.md`
+§7h).
+
+### Privacy
+
+The pasted text and the candidates stay in the import screen's memory: never persisted (no
+SQLite, no AsyncStorage draft), never logged, never sent to any API, no AI. Leaving the screen
+forgets them. `import-privacy.test.ts` guards the pipeline sources.
+
+---
+
 ## 4. Relationships
 
 Appointments reference clients through `clientId` only.

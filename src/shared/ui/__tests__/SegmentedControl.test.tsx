@@ -100,4 +100,47 @@ describe('SegmentedControl', () => {
     expect(formatSegmentCount(999)).toBe('999');
     expect(formatSegmentCount(1000)).toBe('999+');
   });
+
+  it('trims horizontal room in the opt-in compact density only, keeping height, counts and touch target', async () => {
+    const counted = [
+      { value: 'new', label: 'Nouveaux', count: 42, testID: 'seg-new' },
+      { value: 'duplicates', label: 'Doublons', count: 3, testID: 'seg-dup' },
+      { value: 'fix', label: 'À corriger', count: 12, testID: 'seg-fix' },
+    ] as const;
+    const view = await render(
+      <SegmentedControl density="compact" onChange={jest.fn()} options={counted} stretch value="new" />,
+    );
+
+    const option = view.getByTestId('seg-new');
+    expect(StyleSheet.flatten(option.props.style)).toMatchObject({
+      gap: 4,
+      paddingHorizontal: 6,
+      height: segmentedControlOptionHeight,
+      flex: 1,
+    });
+    const { top, bottom } = option.props.hitSlop as { top: number; bottom: number };
+    expect(segmentedControlOptionHeight + top + bottom).toBeGreaterThanOrEqual(touchTarget.ios);
+    expect(StyleSheet.flatten(view.getByTestId('seg-new-count').parent?.props.style)).toMatchObject({
+      minWidth: 20,
+      paddingHorizontal: 4,
+    });
+    const label = view.getByText('À corriger');
+    expect(label.props.numberOfLines).toBe(1);
+    expect(label.props.adjustsFontSizeToFit).toBe(true);
+    expect(label.props.minimumFontScale).toBe(0.9);
+    expect(view.getByTestId('seg-new').props.accessibilityLabel).toBe('Nouveaux, 42');
+  });
+
+  it('keeps the regular density unchanged for every other caller', async () => {
+    const view = await render(
+      <SegmentedControl onChange={jest.fn()} options={[{ value: 'a', label: 'Actifs', count: 7, testID: 'reg' }]} value="a" />,
+    );
+
+    expect(StyleSheet.flatten(view.getByTestId('reg').props.style)).toMatchObject({ gap: 6, paddingHorizontal: 10 });
+    expect(StyleSheet.flatten(view.getByTestId('reg-count').parent?.props.style)).toMatchObject({
+      minWidth: 22,
+      paddingHorizontal: 6,
+    });
+    expect(view.getByText('Actifs').props.adjustsFontSizeToFit).toBe(false);
+  });
 });

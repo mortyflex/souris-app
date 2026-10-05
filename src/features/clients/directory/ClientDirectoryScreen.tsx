@@ -19,8 +19,11 @@
 // Every row ends with the Produits NavigationChevron (thumbnail → copy →
 // chevron); the whole row is the one action. Birthdays and notes never appear
 // in the list: the Client Profile shows them. The
-// shared floating + opens the shared creation sheet, the single way to add a
-// Client. The header follows the Produits reference:
+// shared floating + opens its menu (the Agenda pattern): « Ajouter un client »
+// — the shared creation sheet, the single way to add ONE Client — and
+// « Importer ma clientèle », the permanent entry of the client import flow.
+// An empty directory also offers the import right under its empty state,
+// where a first-time professional looks. The header follows the Produits reference:
 // large title, no eyebrow, no count, search right below (MainScreenHeader).
 
 import { useMemo, useState } from 'react';
@@ -48,6 +51,7 @@ import {
 } from '@/features/clients/directory/directory-sections';
 import { useClientPhotoUri } from '@/features/clients/photo/use-client-photo-uri';
 import { ARCHIVED_CLIENT_LABEL } from '@/features/clients/presentation';
+import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { directoryListStyles } from '@/shared/ui/directory-list';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
@@ -57,7 +61,7 @@ import { Screen } from '@/shared/ui/Screen';
 import { SearchField } from '@/shared/ui/SearchField';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
-import { foregroundSoft, listThumbnail, semanticColors } from '@/shared/ui/theme';
+import { foregroundSoft, listThumbnail, semanticColors, spacing } from '@/shared/ui/theme';
 
 export function ClientDirectoryScreen() {
   const router = useRouter();
@@ -65,6 +69,7 @@ export function ClientDirectoryScreen() {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<ClientDirectoryGroup>('ACTIVE');
   const [addClientVisible, setAddClientVisible] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
 
   const showsTabs = archivedClients.length > 0;
   // No archived Client → no tab to be on: back to Actives, so the next
@@ -95,6 +100,8 @@ export function ClientDirectoryScreen() {
       testID: 'client-tab-archived',
     },
   ];
+
+  const openImport = () => router.push('/clients/import');
 
   const openProfile = (clientId: string) => {
     router.push({
@@ -166,6 +173,16 @@ export function ClientDirectoryScreen() {
                 ? 'Essayez un autre nom ou numéro.'
                 : 'Ajoutez votre premier client pour commencer.'}
             </AppText>
+            {!searching && clients.length === 0 ? (
+              <AppButton
+                icon={importIcon}
+                onPress={openImport}
+                style={styles.emptyImport}
+                testID="client-directory-empty-import"
+                title="Importer ma clientèle"
+                variant="secondary"
+              />
+            ) : null}
           </View>
         }
         renderItem={({ item }) => (
@@ -176,8 +193,23 @@ export function ClientDirectoryScreen() {
       />
 
       <FloatingCreateButton
-        accessibilityLabel="Ajouter un client"
-        onPress={() => setAddClientVisible(true)}
+        accessibilityLabel="Actions de la clientèle"
+        actions={[
+          {
+            icon: { ios: 'person.badge.plus', android: 'person_add' },
+            label: 'Ajouter un client',
+            onPress: () => setAddClientVisible(true),
+            testID: 'client-directory-add-client',
+          },
+          {
+            icon: importIcon,
+            label: 'Importer ma clientèle',
+            onPress: openImport,
+            testID: 'client-directory-import',
+          },
+        ]}
+        menuOpen={createMenuOpen}
+        onMenuOpenChange={setCreateMenuOpen}
         testID="add-client-directory"
       />
 
@@ -244,7 +276,10 @@ function ClientRow({ client, onPress }: ClientRowProps) {
   );
 }
 
+const importIcon = { ios: 'square.and.arrow.down.on.square', android: 'download' } as const;
+
 const styles = StyleSheet.create({
+  emptyImport: { alignSelf: 'center', marginTop: spacing.base },
   clientName: { color: semanticColors.foreground },
   archivedClientName: { color: foregroundSoft },
   phoneLine: { color: foregroundSoft },

@@ -56,6 +56,8 @@ export default function AppLayout() {
                       <Stack.Screen name="estimations/new" options={workflowSheet} />
                       <Stack.Screen name="calendar-blocks/[calendarBlockId]" options={contentSheet} />
                       <Stack.Screen name="clients/[clientId]" options={pushedScreen} />
+                      {/* Client import: inside the bound (app) group only — its writes need the Business binding. */}
+                      <Stack.Screen name="clients/import" options={pushedScreen} />
                       <Stack.Screen name="clients/appointments/[clientId]" options={pushedScreen} />
                       <Stack.Screen name="clients/purchases/[clientId]" options={pushedScreen} />
                       <Stack.Screen name="services/index" options={pushedScreen} />

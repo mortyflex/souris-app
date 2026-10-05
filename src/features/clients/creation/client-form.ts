@@ -14,6 +14,7 @@
 
 import {
   isValidClientBirthday,
+  isValidClientEmail,
   normalizeClientNotes,
   resolveClientSmsMarketingConsent,
   type Client,
@@ -55,10 +56,9 @@ export function toClientFormValues(client: Client): ClientFormValues {
   };
 }
 
+/** Optional email: blank is fine, anything else follows the shared Client email rule. */
 export function isAcceptableEmail(email: string): boolean {
-  const trimmed = email.trim();
-  if (trimmed.length === 0) return true;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+  return email.trim().length === 0 || isValidClientEmail(email);
 }
 
 export function isAcceptableBirthday(birthday: ClientBirthday | undefined): boolean {

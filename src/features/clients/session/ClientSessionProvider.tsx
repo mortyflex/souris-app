@@ -12,6 +12,7 @@ import {
   countClientReferences,
   deleteClientPermanently as persistDelete,
   insertClient,
+  insertClients,
   restoreClient as persistRestore,
   setClientPhotoPath as persistPhotoPath,
   updateClient as persistClient,
@@ -62,6 +63,19 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
   const addClient = (client: Client) => {
     insertClient(database, client);
     setClients((current) => [...current, client]);
+  };
+
+  const addClients = (batch: readonly Client[]) => {
+    const inserted = insertClients(database, batch);
+    if (inserted.length > 0) {
+      // ONE state update per batch; an id already in the session (a retried
+      // batch) is never listed twice.
+      setClients((current) => {
+        const known = new Set(current.map((client) => client.id));
+        return [...current, ...inserted.filter((client) => !known.has(client.id))];
+      });
+    }
+    return inserted;
   };
 
   const updateClient = (client: Client) => {
@@ -116,6 +130,7 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
         archivedClients,
         getClientById,
         addClient,
+        addClients,
         updateClient,
         setClientPhoto,
         archiveClient,

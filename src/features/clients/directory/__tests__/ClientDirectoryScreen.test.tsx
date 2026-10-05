@@ -5,6 +5,7 @@ import { createInitialClients } from '../../data/initial-clients';
 import { prepareClientDirectory } from '../sort-clients';
 import { ClientDirectoryScreen } from '../ClientDirectoryScreen';
 import { ClientSessionProvider, useClientSession } from '../../session/ClientSessionProvider';
+import { createDevelopmentSeed } from '@/providers/development-seed';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleFloatingReveal } from '@/shared/ui/testing/sheet-transitions';
 import { directoryListStyles } from '@/shared/ui/directory-list';
@@ -108,7 +109,42 @@ describe('ClientDirectoryScreen', () => {
     await settleFloatingReveal();
     const create = view.getByTestId('add-client-directory');
     expect(create.props.accessibilityRole).toBe('button');
-    expect(create.props.accessibilityLabel).toBe('Ajouter un client');
+    expect(create.props.accessibilityLabel).toBe('Actions de la clientèle');
+  });
+
+  it('opens the floating + menu: « Ajouter un client » and the permanent « Importer ma clientèle »', async () => {
+    const view = await renderDirectory();
+    await settleFloatingReveal();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-client-directory'));
+    });
+
+    expect(view.getByTestId('client-directory-add-client')).toHaveTextContent('Ajouter un client');
+    expect(view.getByTestId('client-directory-import')).toHaveTextContent('Importer ma clientèle');
+    // A populated directory keeps its empty-state import out of the way.
+    expect(view.queryByTestId('client-directory-empty-import')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('client-directory-import'));
+    });
+    expect(mockPush).toHaveBeenCalledWith('/clients/import');
+  });
+
+  it('offers the import right in the empty state of an empty directory', async () => {
+    const view = await render(
+      <TestPersistenceProvider createSeed={() => ({ ...createDevelopmentSeed(new Date()), clients: [], appointments: [], sales: [] })}>
+        <ClientSessionProvider>
+          <ClientDirectoryScreen />
+        </ClientSessionProvider>
+      </TestPersistenceProvider>,
+    );
+
+    expect(view.getByText('Aucun client')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('client-directory-empty-import'));
+    });
+    expect(mockPush).toHaveBeenCalledWith('/clients/import');
   });
 
   it('keeps the « Clientèle » title free of any count: the total belongs to the Actifs section', async () => {
@@ -278,6 +314,9 @@ describe('ClientDirectoryScreen', () => {
     await settleFloatingReveal();
     await act(async () => {
       fireEvent.press(view.getByTestId('add-client-directory'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('client-directory-add-client'));
     });
     expect(view.getByTestId('client-form-sheet')).toBeTruthy();
     await act(async () => {

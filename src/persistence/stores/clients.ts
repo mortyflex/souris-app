@@ -27,7 +27,9 @@
 //
 // Every mutation marks the CLIENT aggregate in the sync outbox within its own
 // transaction (Cloud Sync V1B): identity edits, archive and restore are
-// UPSERTs; permanent deletion is a DELETE that outlives the row.
+// UPSERTs; permanent deletion is a DELETE that outlives the row. The bulk
+// insertion of the client import (`insertClients`) is the same row insert +
+// the same UPSERT mark, repeated inside ONE transaction per batch.
 
 import {
   canDeleteClientPermanently,
@@ -42,6 +44,7 @@ import {
 } from '@/domain/clients';
 
 import { runInTransaction, type SourisDatabase } from '../database';
+import { readBoundBusinessId } from '../sync/aggregate';
 import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
 import { fromSqlInstant, fromSqlOptional, toSqlInstant, toSqlOptional } from '../values';
 
@@ -139,25 +142,64 @@ export function loadClients(db: SourisDatabase): readonly Client[] {
     .map(toClient);
 }
 
+/** The row + its CLIENT outbox mark; the caller owns the transaction. */
+function insertClientRow(db: SourisDatabase, client: Client): void {
+  db.runSync(
+    'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, notes, photo_path, sms_marketing_consent, sms_marketing_consent_updated_at, sms_marketing_consent_source, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      client.id,
+      client.firstName,
+      toSqlOptional(client.lastName),
+      toSqlOptional(client.phone),
+      toSqlOptional(client.email),
+      toBirthdayColumn(client),
+      toNotesColumn(client),
+      toSqlOptional(client.photoPath),
+      ...toConsentColumns(client),
+      client.archivedAt === undefined ? null : toSqlInstant(client.archivedAt),
+    ],
+  );
+  markAggregateUpserted(db, 'CLIENT', client.id);
+}
+
 export function insertClient(db: SourisDatabase, client: Client): void {
+  runInTransaction(db, () => insertClientRow(db, client));
+}
+
+/** Raised when a bulk insertion is attempted on a database not bound to a Business. */
+export class ClientBulkInsertUnboundError extends Error {
+  constructor() {
+    super('Bulk Client insertion requires a database bound to a Business');
+    this.name = 'ClientBulkInsertUnboundError';
+  }
+}
+
+/**
+ * Inserts a batch of NEW Clients (the client import) in ONE transaction:
+ * every row with its CLIENT UPSERT outbox entry, or nothing at all.
+ *
+ * - The database must be bound to a Business: an unbound device records no
+ *   sync intent, so a batch written there could never reach the normal sync
+ *   path. Refused with ClientBulkInsertUnboundError before any write.
+ * - Retry-safe: a Client whose id is already stored (a chunk that committed
+ *   before a later one failed) is skipped, never duplicated nor overwritten.
+ *
+ * Returns the Clients actually inserted, in order.
+ */
+export function insertClients(db: SourisDatabase, clients: readonly Client[]): readonly Client[] {
+  const inserted: Client[] = [];
   runInTransaction(db, () => {
-    db.runSync(
-      'INSERT INTO clients (id, first_name, last_name, phone, email, birthday, notes, photo_path, sms_marketing_consent, sms_marketing_consent_updated_at, sms_marketing_consent_source, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [
+    if (readBoundBusinessId(db) === undefined) throw new ClientBulkInsertUnboundError();
+    for (const client of clients) {
+      const stored = db.getFirstSync<{ readonly id: string }>('SELECT id FROM clients WHERE id = ?', [
         client.id,
-        client.firstName,
-        toSqlOptional(client.lastName),
-        toSqlOptional(client.phone),
-        toSqlOptional(client.email),
-        toBirthdayColumn(client),
-        toNotesColumn(client),
-        toSqlOptional(client.photoPath),
-        ...toConsentColumns(client),
-        client.archivedAt === undefined ? null : toSqlInstant(client.archivedAt),
-      ],
-    );
-    markAggregateUpserted(db, 'CLIENT', client.id);
+      ]);
+      if (stored !== null) continue;
+      insertClientRow(db, client);
+      inserted.push(client);
+    }
   });
+  return inserted;
 }
 
 /**

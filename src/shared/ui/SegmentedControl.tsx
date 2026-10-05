@@ -17,6 +17,12 @@
 // after its label (Rendez-vous 20 | Produits achetés 8) and spoken with it;
 // counts above 999 read `999+` so the capsule never breaks.
 //
+// `density="compact"` (opt-in, the client import review's three counted
+// filters) trims the option's horizontal padding, the label → count gap and
+// the count pill's padding, so three counted labels fit a phone width on one
+// line; as a last resort only (3-digit counts on the narrowest phones) the
+// label may scale down to 90 %. Every other caller keeps the regular density.
+//
 // The visible capsule is deliberately lower than the platform touch target;
 // each option's vertical hitSlop gives the missing height back to the finger.
 
@@ -46,6 +52,8 @@ interface SegmentedControlProps<Value extends string> {
   readonly onChange: (value: Value) => void;
   /** Spreads the options over the full available width. */
   readonly stretch?: boolean;
+  /** `compact` trims horizontal padding for three counted options on a phone width. */
+  readonly density?: 'regular' | 'compact';
   readonly testID?: string;
 }
 
@@ -60,6 +68,9 @@ const optionHitSlop = { bottom: optionTouchSlop, top: optionTouchSlop } as const
 
 const MAX_DISPLAYED_COUNT = 999;
 
+/** Last-resort label scale of the compact density (never below 90 %). */
+const COMPACT_MINIMUM_FONT_SCALE = 0.9;
+
 /** `8`, `120`, `999+`. */
 export function formatSegmentCount(count: number): string {
   return count > MAX_DISPLAYED_COUNT ? `${MAX_DISPLAYED_COUNT}+` : String(count);
@@ -70,8 +81,10 @@ export function SegmentedControl<Value extends string>({
   value,
   onChange,
   stretch = false,
+  density = 'regular',
   testID,
 }: SegmentedControlProps<Value>) {
+  const compact = density === 'compact';
   return (
     <View
       accessibilityRole="tablist"
@@ -97,6 +110,7 @@ export function SegmentedControl<Value extends string>({
             onPress={select}
             style={({ pressed }) => [
               styles.option,
+              compact && styles.compactOption,
               stretch && styles.stretchedOption,
               pressed && styles.pressedOption,
               selected && styles.selectedOption,
@@ -105,6 +119,8 @@ export function SegmentedControl<Value extends string>({
             testID={option.testID}
           >
             <AppText
+              adjustsFontSizeToFit={compact}
+              minimumFontScale={compact ? COMPACT_MINIMUM_FONT_SCALE : undefined}
               variant="control"
               numberOfLines={1}
               style={[
@@ -115,7 +131,9 @@ export function SegmentedControl<Value extends string>({
               {option.label}
             </AppText>
             {option.count !== undefined && (
-              <View style={[styles.countPill, selected && styles.selectedCountPill]}>
+              <View
+                style={[styles.countPill, compact && styles.compactCountPill, selected && styles.selectedCountPill]}
+              >
                 <AppText
                   variant="chip"
                   style={[styles.countText, selected && styles.selectedCountText]}
@@ -161,6 +179,8 @@ const styles = StyleSheet.create({
     minWidth: 64,
     paddingHorizontal: 10,
   },
+  // 6 pt sides and a 4 pt label → count gap: 10 pt more room for the label.
+  compactOption: { gap: 4, paddingHorizontal: 6 },
   selectedOption: {
     backgroundColor: gloss.glass.selectedFill,
     borderColor: gloss.glass.selectedBorder,
@@ -180,6 +200,8 @@ const styles = StyleSheet.create({
     minWidth: 22,
     paddingHorizontal: 6,
   },
+  // Same pill, 4 pt sides: a 1–2 digit count stays a round badge.
+  compactCountPill: { minWidth: 20, paddingHorizontal: 4 },
   selectedCountPill: { backgroundColor: semanticColors.accent },
   countText: { color: semanticColors.accent, fontVariant: ['tabular-nums'] },
   selectedCountText: { color: semanticColors.onAccent },

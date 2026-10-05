@@ -22,6 +22,7 @@ export {
   type ClientBirthday,
 } from './birthday';
 export { CLIENT_NOTES_MAX_LENGTH, normalizeClientNotes } from './notes';
+export { clientEmailComparisonKey, isValidClientEmail } from './email';
 export {
   CLIENT_SMS_CONSENT_SOURCES,
   CLIENT_SMS_CONSENT_STATUSES,

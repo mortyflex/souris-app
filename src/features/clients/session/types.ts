@@ -22,6 +22,13 @@ export interface ClientSessionValue {
   readonly archivedClients: readonly Client[];
   readonly getClientById: (clientId: string | undefined) => Client | undefined;
   readonly addClient: (client: Client) => void;
+  /**
+   * Bulk creation (client import): one SQLite transaction and one state update
+   * for the whole batch. Ids already stored are skipped (retry-safe); returns
+   * the Clients actually inserted. Throws — nothing written, state unchanged —
+   * when the write fails or the database is not bound to a Business.
+   */
+  readonly addClients: (clients: readonly Client[]) => readonly Client[];
   /** Replaces the identity of the Client with the same id; the id and lifecycle never change. */
   readonly updateClient: (client: Client) => void;
   /**

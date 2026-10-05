@@ -1,3 +1,4 @@
+import { isValidClientEmail } from '@/domain/clients';
 import {
   buildClientFromForm,
   EMPTY_CLIENT_FORM,
@@ -225,5 +226,14 @@ describe('promotional SMS consent in the form', () => {
   it('hydrates the form with the stored status only', () => {
     expect(toClientFormValues(previous).smsMarketingConsent).toBe('OPTED_IN');
     expect(toClientFormValues({ id: 'c2', firstName: 'Uma' }).smsMarketingConsent).toBeUndefined();
+  });
+});
+
+describe('email rule shared with the client import', () => {
+  it('follows the domain Client email rule, blank staying optional', () => {
+    for (const value of ['sophie@example.com', ' sophie@example.com ', 'sophie@', 'a@b.c', 'no at.sign']) {
+      expect(isAcceptableEmail(value)).toBe(isValidClientEmail(value));
+    }
+    expect(isAcceptableEmail('   ')).toBe(true);
   });
 });

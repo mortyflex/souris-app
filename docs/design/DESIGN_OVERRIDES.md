@@ -1960,3 +1960,84 @@ for every sheet, and the « no blur view » line of §21 still governs the light
      sheet route on `editorSheet`, with white phase cards and `surfaceInput` fields.
 - « Modifier le rendez-vous », confirmation dialogs, destructive drawers, camera / scanner,
   receipts, Insights, Agenda, the tab bar and every other sheet are untouched.
+
+---
+
+## 41. Client Import — « Importer ma clientèle »
+
+Domain: `docs/domain/CLIENTS.md` §3b. Supersedes §36's « the shared floating + opens the creation
+sheet » for Clientèle only.
+
+### Entry
+
+- **Clientèle floating +** — the Agenda menu pattern (§17 / §19): « Ajouter un client » (the shared
+  creation sheet, unchanged) and « Importer ma clientèle ». The button is spoken « Actions de la
+  clientèle ».
+- **Empty directory** — a secondary `AppButton` « Importer ma clientèle » under « Aucun client »,
+  where a first-time professional looks. Hidden while searching and once a Client exists.
+- A pushed screen (`clients/import`, `pushedScreen`) on the app background (§39): the Client
+  histories' top bar (glass back, centred title), `Screen`, no root colour of its own.
+
+### Steps
+
+While « Coller une liste » is the only source, the import opens straight on the paste step and its
+back button leaves the import; the source choice below is kept in code
+(`ENABLED_CLIENT_IMPORT_SOURCES`) and returns as the first step once a second source is enabled.
+
+```text
+Importer ma clientèle                  (source choice — shown only with 2+ sources)
+  Ajoutez en une fois les clients que vous suivez déjà.
+  [ Coller une liste ]                 ActionGroup, the only source today
+  Seuls le nom, le téléphone, l'email et l'anniversaire sont importés.
+
+Collez une liste de clients            sectionTitle
+  Vous pouvez copier une liste depuis Notes, WhatsApp, Excel, Numbers ou Google Sheets.
+  [ multiline TextField, placement="page" ]
+  ╭ Exemple ─────────────────────╮     white GroupedSurface
+  │ Sophie Martin 06 12 34 56 78 │
+  │ Nadia 07 45 67 89 12         │
+  ╰──────────────────────────────╯
+  [ Analyser la liste ]                fixed footer, disabled while blank
+
+47 clients détectés
+  [ Nouveaux 42 | Doublons 3 | À corriger 2 ]      shared SegmentedControl, stretched, counts
+  ╭─────────────────────────────────╮
+  │ ◉  Sophie Martin              › │  one white card per candidate
+  │    06 12 34 56 78               │
+  ╰─────────────────────────────────╯
+  [ Importer 42 clients ]              fixed footer, the exact number written
+```
+
+- **Review cards** — white (`surfaceElevated`) with the card hairline, on the page. NEW rows carry
+  a 44 pt checkbox (accent `checkmark.circle.fill` / muted `circle`, spoken as a checkbox); the rest
+  of the card opens the correction drawer (chevron). Metadata lines: phone · email, the birthday,
+  the duplicate explanation, then one « ⚠︎ » line per issue — blocking ones in `rose700` (page
+  text), warnings in `foregroundSoft`. Information is never colour-only: every issue is a sentence.
+- **Doublons** — possible duplicates first, each with a full-width « Importer quand même » /
+  « Ne pas importer » action under a hairline; exact duplicates folded into one « N doublons
+  détectés — ignorés » card (« 1 doublon détecté — ignoré »; « Voir » / « Masquer ») and never
+  importable — neutral wording, since a duplicate may match an earlier line of the list rather
+  than a saved Client. An archived match says « (archivé) ».
+- **Batch notes** under the segments, metadata size: ignored spreadsheet columns, lines with
+  nothing to import, and the accent notice when the stored clientèle changed during the review.
+- **Correction drawer** — the canonical editing drawer (`BottomSheet`, §30 header « Annuler » ·
+  « Vérifier le client », « Enregistrer » in the action bar, no pan-to-dismiss). SATIN, not the
+  glass pilot (§40): it quotes the pasted source text (« Texte d'origine · ligne 3 ») and
+  readability wins. Fields: Prénom, Nom, Téléphone, Email, the shared `BirthdayField`. Never Notes,
+  never SMS consent.
+- **Progress / result** — a centred spinner « Import en cours… 200 / 500 » (polite live region);
+  then « 380 clients importés », in `rose700` « 120 clients n'ont pas pu être importés », a plain
+  message (never a technical error), « Réessayer » (primary) and « Terminé ». Back is disabled
+  while an import runs.
+- **Imported summary** — under the count, ONE white card (`surfaceElevated`, `radii.large`,
+  hairline, inset separators) listing only the Clients actually written, as created (the
+  corrected values): the name (`rowTitle`) and at most one `metadata` line — phone · email, else
+  « Anniversaire : 14 mai » — never a placeholder, no action. The card sizes to its rows and
+  scrolls inside the room above the fixed footer. A confirmation, not a second review: no skipped
+  duplicate is listed.
+- **Leaving a staged review** — the back button, the native back gesture and hardware back all
+  open the canonical discard dialog (`ConfirmationDialog`): « Quitter l'import ? » / « Les
+  informations analysées et vos corrections seront perdues. » / « Continuer l'import » ·
+  « Quitter ». « Continuer l'import » keeps the review exactly as it was; « Quitter » leaves the
+  import. Never shown on the source choice, the paste step or the result; a running import stays
+  simply blocked.

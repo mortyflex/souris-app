@@ -687,6 +687,7 @@ outbox entry inside the same transaction (§7c):
 
 ```text
 Client create/edit            row (edit never touches archived_at)              + CLIENT UPSERT
+Client import chunk           binding check + rows, stored ids skipped (§7h)    + CLIENT UPSERT each
 Client archive/restore        archived_at                                        + CLIENT UPSERT
 Client permanent deletion     reference counts + DELETE (§7a)                    + CLIENT DELETE
 Service create/edit           service row + full phase-list replacement          + SERVICE UPSERT
@@ -844,6 +845,39 @@ the session is the single writer of a device). Covered by `calendar-blocks-store
 restart, edit, deletion, the domain guard, coalesced outbox marking, binding, development reset, and
 isolation — every other table byte-identical, expected totals and Cash Register unchanged, no column
 a price / payment / client / status could live in.
+
+### 7h. Client import — bulk insertion
+
+`src/persistence/stores/clients.ts` — `insertClients(db, clients)` is the single-Client insert
+(`insertClientRow`: the row + its CLIENT UPSERT outbox mark) repeated inside ONE transaction. No
+parallel implementation, no new table, no migration, no server API.
+
+```text
+BEGIN
+  bound Business?  no ⇒ ClientBulkInsertUnboundError, nothing written
+  for each Client: id already stored? skip : INSERT row + CLIENT UPSERT outbox entry
+COMMIT                       (any failure rolls the whole chunk back)
+```
+
+- **Bound only.** An unbound database records no sync intent (§7c), so a batch written there could
+  never reach the normal sync path: bulk insertion refuses it. The import flow is only reachable
+  inside the bound `(app)` group anyway.
+- **Chunks.** `runClientImport` (`src/features/clients/import/run-client-import.ts`) writes
+  `CLIENT_IMPORT_CHUNK_SIZE` Clients per transaction (100 — an implementation constant, not
+  benchmarked, easy to tune) through `ClientSessionProvider.addClients`, which updates the session
+  ONCE per chunk; it yields to the UI between chunks so progress renders for 500+ Clients.
+- **Partial success.** The first failing chunk stops the run; committed chunks stay (never rolled
+  back). The failing chunk and the rest are kept in memory with their ids for « Réessayer ».
+- **Retry-safe.** Ids are created once, at confirmation; a retried Client whose id is already
+  stored is skipped, never duplicated nor re-marked.
+- **Sync.** Every imported Client has its CLIENT outbox entry; the existing cloud sync runner
+  pushes them at its next trigger like any other mutation. No screen triggers sync.
+- **Privacy.** Only confirmed Clients are written; the pasted text and the review candidates are
+  never persisted.
+
+Covered by `client-import-store.test.ts` (batch + outbox entry per Client, 500 Clients, chunk
+rollback, retry idempotence, unbound refusal, no notes / photo / archive / consent written) and
+`run-client-import.test.ts` (chunking, partial success, retry, `NOT_BOUND`).
 
 ### 7c. Sync outbox integration (Cloud Sync V1B)
 
