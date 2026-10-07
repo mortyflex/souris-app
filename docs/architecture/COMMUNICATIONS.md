@@ -465,11 +465,12 @@ Templates (`core/email-content.ts`) are FIXED V1 French transactional emails —
 Rappel de votre rendez-vous chez … »), rescheduled (« … a été modifié », with the NEW schedule),
 cancelled (« … a été annulé », date kept for context, no services) — one restrained
 BeautIzzy-branded HTML card (email-safe table + inline styles, plum accent, « Envoyé avec BeautIzzy »
-footer: one centered presentation-table row reading « Envoyé avec [BeautIzzy logo] » when the
+footer: one centered presentation-table row reading « Envoyé avec [BeautIzzy symbol] » when the
 optional `SOURIS_EMAIL_LOGO_URL` secret names a public HTTPS copy of
-`assets/brand/email/logo.png` — a fixed 120×46 `<img>` (the exact ratio of that 360×138 file) with
-`alt="BeautIzzy"`, carrying the brand over the discreet 12px « Envoyé avec »; the brand name is
-never doubled as plain text next to the logo, and the footer falls back to the plain
+`assets/brand/email/symbol-on-dark.png` — the email-specific symbol, ONE image for light and dark
+mail backgrounds (no wordmark, no light/dark swap, no second secret), a fixed 23×30 `<img>` (the
+exact ratio of that 69×90 file) with `alt="BeautIzzy"`, beside the discreet 12px « Envoyé avec »;
+the brand name is never written as plain text next to the symbol, and the footer falls back to the plain
 « Envoyé avec BeautIzzy » whenever the URL is absent, invalid or fails to load) plus a plain-text
 version ending with « Envoyé avec BeautIzzy ». `SOURIS_EMAIL_LOGO_URL` and the
 `souris-communication-<id>` idempotency key are historical technical names, kept on purpose:

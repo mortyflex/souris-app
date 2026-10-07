@@ -3,8 +3,8 @@
 import {
   escapeHtml,
   FOOTER_TEXT_SIZE_PX,
-  FOOTER_WORDMARK_HEIGHT,
-  FOOTER_WORDMARK_WIDTH,
+  FOOTER_SYMBOL_HEIGHT,
+  FOOTER_SYMBOL_WIDTH,
   normalizeEmailLogoUrl,
   formatAppointmentEmailDate,
   formatAppointmentEmailTime,
@@ -149,22 +149,22 @@ describe('the footer logo', () => {
   const PRODUCTION_LOGO =
     'https://oxfqcgbtihczubisjyek.supabase.co/storage/v1/object/public/brand/logo-mark.png';
 
-  it('accepts the exact production URL verbatim and renders the exact wordmark markup', () => {
+  it('accepts the exact production URL verbatim and renders the exact symbol markup', () => {
     expect(normalizeEmailLogoUrl(PRODUCTION_LOGO)).toBe(PRODUCTION_LOGO);
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, {
       logoUrl: PRODUCTION_LOGO,
     });
     expect(email.html).toContain(
-      `<img src="${PRODUCTION_LOGO}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="BeautIzzy" style="display:block;border:0;outline:none;text-decoration:none;" />`,
+      `<img src="${PRODUCTION_LOGO}" width="${FOOTER_SYMBOL_WIDTH}" height="${FOOTER_SYMBOL_HEIGHT}" alt="BeautIzzy" style="display:block;border:0;outline:none;text-decoration:none;" />`,
     );
   });
 
-  it('reads « Envoyé avec [wordmark] » — one centered row, the wordmark carrying the brand', () => {
+  it('reads « Envoyé avec [symbol] » — one centered row, the symbol alone carrying the brand', () => {
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, {
       logoUrl: PRODUCTION_LOGO,
     });
     const footer = email.html.slice(email.html.lastIndexOf('<table'));
-    // One presentation table row: the discreet wording, THEN the wordmark.
+    // One presentation table row: the discreet wording, THEN the symbol.
     expect(footer).toContain('role="presentation"');
     expect(footer).toContain('align="center"');
     expect((footer.match(/<tr>/g) ?? []).length).toBe(1);
@@ -173,16 +173,20 @@ describe('the footer logo', () => {
     expect((footer.match(/vertical-align:middle/g) ?? []).length).toBe(2);
     expect(footer).toContain('padding-right:4px');
     // The brand name is the IMAGE: « BeautIzzy » never doubles as plain text
-    // next to the logo — it survives only as the alt attribute.
+    // next to the symbol — it survives only as the alt attribute.
     expect(footer).not.toContain('Envoyé avec BeautIzzy');
     expect(footer.replace('alt="BeautIzzy"', '')).not.toContain('BeautIzzy');
-    // Balance lock: 120×46 logo (the exact intrinsic ratio of the 360×138
-    // assets/brand/email/logo.png) over discreet, non-bold 12px wording.
-    expect(FOOTER_WORDMARK_WIDTH).toBe(120);
-    expect(FOOTER_WORDMARK_HEIGHT).toBe(46);
-    expect(FOOTER_WORDMARK_WIDTH / FOOTER_WORDMARK_HEIGHT).toBeCloseTo(360 / 138);
+    // Balance lock: 23×30 symbol (the exact intrinsic ratio of the 69×90
+    // assets/brand/email/symbol-on-dark.png) beside discreet, non-bold 12px
+    // wording. ONE image: no second logo, no light/dark swap.
+    expect(FOOTER_SYMBOL_WIDTH).toBe(23);
+    expect(FOOTER_SYMBOL_HEIGHT).toBe(30);
+    expect(FOOTER_SYMBOL_WIDTH / FOOTER_SYMBOL_HEIGHT).toBeCloseTo(69 / 90);
+    expect(footer).toContain('width="23" height="30" alt="BeautIzzy"');
+    expect((footer.match(/<img /g) ?? []).length).toBe(1);
+    expect(email.html).not.toContain('prefers-color-scheme');
     expect(footer).toContain(`font-size:${FOOTER_TEXT_SIZE_PX}px`);
-    expect(FOOTER_WORDMARK_HEIGHT).toBeGreaterThan(2 * FOOTER_TEXT_SIZE_PX);
+    expect(FOOTER_SYMBOL_HEIGHT).toBeGreaterThan(2 * FOOTER_TEXT_SIZE_PX);
     expect(footer).not.toContain('font-weight');
   });
 
@@ -212,10 +216,10 @@ describe('the footer logo', () => {
     }
   });
 
-  it('renders the wordmark after « Envoyé avec », email-safe and sized', () => {
+  it('renders the symbol after « Envoyé avec », email-safe and sized', () => {
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, { logoUrl: LOGO });
     expect(email.html).toContain(
-      `<img src="${LOGO}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="BeautIzzy"`,
+      `<img src="${LOGO}" width="${FOOTER_SYMBOL_WIDTH}" height="${FOOTER_SYMBOL_HEIGHT}" alt="BeautIzzy"`,
     );
     // Layout, colors and content are otherwise unchanged; the plain-text
     // version keeps its own textual footer.
@@ -224,10 +228,10 @@ describe('the footer logo', () => {
     expect(email.text).not.toContain('<img');
   });
 
-  it('every appointment kind shares the same wordmark footer', () => {
+  it('every appointment kind shares the same symbol footer', () => {
     for (const kind of ['APPOINTMENT_REMINDER', 'APPOINTMENT_RESCHEDULED', 'APPOINTMENT_CANCELLED'] as const) {
       const email = renderAppointmentEmail(kind, payload, { logoUrl: LOGO });
-      expect(email.html).toContain(`<img src="${LOGO}" width="${FOOTER_WORDMARK_WIDTH}"`);
+      expect(email.html).toContain(`<img src="${LOGO}" width="${FOOTER_SYMBOL_WIDTH}"`);
       const footer = email.html.slice(email.html.lastIndexOf('<table'));
       expect(footer).not.toContain('Envoyé avec BeautIzzy');
     }

@@ -397,21 +397,23 @@ The sender domain must be added and VERIFIED in the Resend dashboard first (SPF 
 worker refuses the pass (HTTP 500, nothing claimed) while either secret is missing or the sender
 is not a valid address.
 
-Optional footer branding — the footer reads « Envoyé avec [BeautIzzy logo] »: the file to host is
-`assets/brand/email/logo.png` (360×138, transparent: the editorial BeautIzzy logo at 3× the
-120×46 footer slot; never the symbol alone, never another export). Email clients only load
+Optional footer branding — the footer reads « Envoyé avec [BeautIzzy symbol] »: the file to host is
+`assets/brand/email/symbol-on-dark.png` (69×90, transparent: the email-specific BeautIzzy symbol
+at 3× the 23×30 footer slot, readable on light and dark mail backgrounds; one image, no
+light/dark swap; never the in-app `symbol.png`, never the wordmark). Email clients only load
 public HTTPS assets (a bundled app asset, file path or data URI never renders), so upload that
 exact file to the PUBLIC Supabase Storage bucket (`brand`), separate from the private
 `business-media` one, under a NEW file name (mail clients cache the previous image by URL), and
 point the variable at it:
 
 ```bash
-npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage/v1/object/public/brand/beautizzy-email-logo.png
+npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage/v1/object/public/brand/beautizzy-email-symbol.png
 ```
 
 `SOURIS_EMAIL_LOGO_URL` is intentionally kept as the technical secret name; only its VALUE
-changes, and it must point to the BeautIzzy email logo. A value still pointing at a previous
-Souris image would show that image, distorted, in the 120×46 slot.
+changes, and it must point to the BeautIzzy email symbol. A value still pointing at a previous
+image (the Souris mark, or the 360×138 BeautIzzy wordmark) would show that image, distorted, in
+the 23×30 slot.
 
 The URL must be plain `https://`; surrounding whitespace, a trailing newline or ONE layer of
 surrounding quotes (a manual Dashboard paste artifact) are stripped, anything else is ignored.

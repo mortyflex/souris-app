@@ -134,8 +134,9 @@ export interface RenderAppointmentEmailOptions {
   /**
    * Public HTTPS URL of the BeautIzzy brand image shown in the footer
    * (SOURIS_EMAIL_LOGO_URL — the secret keeps its historical name; its
-   * VALUE must point to a public copy of `assets/brand/email/logo.png`,
-   * the email export of the editorial logo). Email clients can only load
+   * VALUE must point to a public copy of
+   * `assets/brand/email/symbol-on-dark.png`, the email-specific BeautIzzy
+   * symbol, readable on light and dark backgrounds). Email clients can only load
    * public HTTPS assets — never a bundled app asset, a file path or a data
    * URI. Absent or non-HTTPS, the footer falls back to the plain
    * « Envoyé avec BeautIzzy » text.
@@ -144,14 +145,15 @@ export interface RenderAppointmentEmailOptions {
 }
 
 /**
- * The BeautIzzy email logo (`assets/brand/email/logo.png`, 360×138: the
- * editorial logo at 3× the displayed size). 120×46 keeps that ratio to the
- * pixel and reads comfortably on a phone without zooming. The logo IS the
- * brand name in the footer — never the symbol alone, never a redrawn logo.
+ * The BeautIzzy email symbol (`assets/brand/email/symbol-on-dark.png`,
+ * 69×90: 3× the displayed size). 23×30 keeps that ratio to the pixel. The
+ * footer image is the symbol ALONE — one image for light and dark mail
+ * backgrounds, no wordmark, no light/dark swap. It is an email-specific
+ * asset, never the in-app `symbol.png`.
  */
-export const FOOTER_WORDMARK_WIDTH = 120;
-export const FOOTER_WORDMARK_HEIGHT = 46;
-/** « Envoyé avec » stays discreet and light next to the wordmark. */
+export const FOOTER_SYMBOL_WIDTH = 23;
+export const FOOTER_SYMBOL_HEIGHT = 30;
+/** « Envoyé avec » stays discreet and light next to the symbol. */
 export const FOOTER_TEXT_SIZE_PX = 12;
 
 /**
@@ -178,16 +180,16 @@ export function normalizeEmailLogoUrl(raw: string | undefined): string | undefin
 /**
  * The ONE shared footer of every appointment email kind:
  *
- *   image configured   « Envoyé avec [BeautIzzy logo] » — the logo IS
- *                      the brand name; « BeautIzzy » is never duplicated as
- *                      plain text next to it (it survives only as alt text
- *                      for blocked images)
+ *   image configured   « Envoyé avec [BeautIzzy symbol] » — the symbol
+ *                      stands for the brand; « BeautIzzy » is never written
+ *                      as plain text next to it (it survives only as alt
+ *                      text for blocked images)
  *   image unavailable  « Envoyé avec BeautIzzy » — the clean text fallback
  *
  * One centered horizontal row, built as a small presentation table so the
- * wording and the wordmark stay vertically centered in every mail client
+ * wording and the symbol stay vertically centered in every mail client
  * (flexbox and inline-block baseline tricks are not reliable in email).
- * The discreet 12px wording sits left, the 120×46 logo right, a tight
+ * The discreet 12px wording sits left, the 23×30 symbol right, a tight
  * 4px apart. Branding only: no appointment information lives in the image.
  */
 function footerHtml(logoUrl: string | undefined): string {
@@ -199,7 +201,7 @@ function footerHtml(logoUrl: string | undefined): string {
           </table>`;
   }
   return `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:20px auto 0;border-collapse:collapse;">
-            <tr><td style="${textStyle}padding-right:4px;">Envoyé avec</td><td style="vertical-align:middle;"><img src="${escapeHtml(canonical)}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="BeautIzzy" style="display:block;border:0;outline:none;text-decoration:none;" /></td></tr>
+            <tr><td style="${textStyle}padding-right:4px;">Envoyé avec</td><td style="vertical-align:middle;"><img src="${escapeHtml(canonical)}" width="${FOOTER_SYMBOL_WIDTH}" height="${FOOTER_SYMBOL_HEIGHT}" alt="BeautIzzy" style="display:block;border:0;outline:none;text-decoration:none;" /></td></tr>
           </table>`;
 }
 

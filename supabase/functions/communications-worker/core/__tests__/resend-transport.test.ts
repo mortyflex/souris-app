@@ -110,7 +110,7 @@ describe('successful dispatch', () => {
     });
     await transport.send(message);
     const body = JSON.parse(String(requests[0].init.body));
-    expect(body.html).toContain('<img src="https://cdn.souris.test/brand/logo-mark.png" width="120" height="46" alt="BeautIzzy"');
+    expect(body.html).toContain('<img src="https://cdn.souris.test/brand/logo-mark.png" width="23" height="30" alt="BeautIzzy"');
     expect(body.text).not.toContain('<img');
   });
 
