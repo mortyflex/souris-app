@@ -13,7 +13,7 @@ const messages: Record<AuthFailureCode, string> = {
   INVALID_EMAIL: 'Adresse email invalide.',
   RATE_LIMITED: 'Trop de tentatives. Patientez un instant avant de réessayer.',
   NETWORK: 'Connexion impossible. Vérifiez votre réseau et réessayez.',
-  NOT_CONFIGURED: 'Souris n’est pas encore relié à son service de compte.',
+  NOT_CONFIGURED: 'BeautIzzy n’est pas encore relié à son service de compte.',
   UNKNOWN: 'Une erreur est survenue. Réessayez.',
 };
 

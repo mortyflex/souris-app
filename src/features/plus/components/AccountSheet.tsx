@@ -64,7 +64,7 @@ export function AccountSheet({ visible, onClose }: AccountSheetProps) {
       </View>
 
       <ConfirmationDialog
-        body="Vous devrez vous reconnecter pour accéder à Souris. Les données restent enregistrées sur cet appareil."
+        body="Vous devrez vous reconnecter pour accéder à BeautIzzy. Les données restent enregistrées sur cet appareil."
         cancelLabel="Annuler"
         cancelTestID="cancel-sign-out"
         confirmLabel="Se déconnecter"

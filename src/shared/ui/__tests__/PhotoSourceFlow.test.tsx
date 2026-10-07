@@ -209,7 +209,7 @@ describe('PhotoSourceFlow', () => {
     expect(view.getByText('Accès à l’appareil photo')).toBeTruthy();
     expect(
       view.getByText(
-        'Autorisez Souris à utiliser l’appareil photo dans les réglages pour pouvoir prendre une photo.',
+        'Autorisez BeautIzzy à utiliser l’appareil photo dans les réglages pour pouvoir prendre une photo.',
       ),
     ).toBeTruthy();
 

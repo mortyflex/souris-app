@@ -228,7 +228,7 @@ function PersistenceFailure({ onRetry }: { readonly onRetry: () => void }) {
         Impossible d’ouvrir vos données
       </AppText>
       <AppText variant="metadata" style={styles.failureText}>
-        Souris n’a pas pu ouvrir sa base locale. Réessayez ou relancez l’application.
+        BeautIzzy n’a pas pu ouvrir sa base locale. Réessayez ou relancez l’application.
       </AppText>
       <AppButton onPress={onRetry} title="Réessayer" variant="secondary" />
     </View>

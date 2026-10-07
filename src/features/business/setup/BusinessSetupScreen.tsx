@@ -207,7 +207,7 @@ export function BusinessSetupScreen() {
           // The details can no longer change once the Business exists.
           createdBusiness || submitting ? undefined : () => setStep('details')
         }
-        subtitle="Souris peut envoyer un rappel par e-mail 24 h avant chaque rendez-vous."
+        subtitle="BeautIzzy peut envoyer un rappel par e-mail 24 h avant chaque rendez-vous."
         testID="business-reminders-screen"
         title="Rappels automatiques"
       >

@@ -83,7 +83,7 @@ export function SignUpScreen() {
         </>
       }
       onBack={() => router.back()}
-      subtitle="Votre compte vous permet de retrouver Souris sur cet appareil."
+      subtitle="Votre compte vous permet de retrouver BeautIzzy sur cet appareil."
       testID="sign-up-screen"
       title="Créer mon compte"
     >

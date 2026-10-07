@@ -54,7 +54,7 @@ export const ESTIMATION_SHARE_ERROR = 'Impossible de préparer le partage.';
 export const ESTIMATION_SAVED = 'Image enregistrée dans Photos';
 export const ESTIMATION_SAVE_ERROR = 'Impossible d’enregistrer l’image.';
 export const ESTIMATION_SAVE_PERMISSION_ERROR =
-  'Souris n’a pas accès à Photos. Autorisez-le dans Réglages pour enregistrer l’image.';
+  'BeautIzzy n’a pas accès à Photos. Autorisez-le dans Réglages pour enregistrer l’image.';
 /** How long the save confirmation stays before it quietly goes away (ms). */
 export const ESTIMATION_SAVED_NOTICE_DURATION = 2600;
 

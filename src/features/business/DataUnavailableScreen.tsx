@@ -33,7 +33,7 @@ export function DataUnavailableScreen({ retrying, onRetry, onSignOut }: DataUnav
           <AppButton onPress={onSignOut} title="Se déconnecter" variant="tertiary" />
         </>
       }
-      message="Vérifiez votre connexion internet, puis réessayez. Souris réessaie aussi automatiquement."
+      message="Vérifiez votre connexion internet, puis réessayez. BeautIzzy réessaie aussi automatiquement."
       testID="data-unavailable-screen"
       title="Impossible de récupérer vos données"
     />

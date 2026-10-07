@@ -297,7 +297,7 @@ Règles :
   bord (en-tête d'Accueil) ;
 - les logos apparaissent seulement aux moments de marque : icône, splash natif, surface de
   démarrage, Welcome, écrans d'état de compte, bloc identité de Plus. **Aucun logo ni en-tête
-  « Souris » sur Agenda, Clientèle, Produits, les détails, les feuilles ou les formulaires** — les
+  « BeautIzzy » sur Agenda, Clientèle, Produits, les détails, les feuilles ou les formulaires** — les
   titres restent `Agenda`, `Clientèle`, `Produits`, `Plus` ;
 - accessibilité : un seul élément annonce « BeautIzzy » ; un symbole posé à côté d'un texte ou d'un
   logo lisible est décoratif ;

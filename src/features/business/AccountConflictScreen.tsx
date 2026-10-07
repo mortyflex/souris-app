@@ -15,7 +15,7 @@ export function AccountConflictScreen() {
   return (
     <AccountStateScreen
       actions={<AppButton onPress={() => void signOut()} title="Se déconnecter" variant="secondary" />}
-      message="Les données Souris enregistrées sur cet appareil appartiennent à un autre compte. Pour les protéger, elles ne sont pas affichées. Reconnectez-vous avec le compte d’origine, ou utilisez un autre appareil."
+      message="Les données BeautIzzy enregistrées sur cet appareil appartiennent à un autre compte. Pour les protéger, elles ne sont pas affichées. Reconnectez-vous avec le compte d’origine, ou utilisez un autre appareil."
       testID="account-conflict-screen"
       title="Cet appareil est lié à un autre compte"
     />

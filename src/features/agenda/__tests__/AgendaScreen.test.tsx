@@ -1085,7 +1085,7 @@ describe('AgendaScreen — day navigation', () => {
       await press(view, 'business-insights-save');
 
       expect(noticeText(view)).toBe(
-        'Souris n’a pas accès à Photos. Autorisez-le dans Réglages pour enregistrer l’image.',
+        'BeautIzzy n’a pas accès à Photos. Autorisez-le dans Réglages pour enregistrer l’image.',
       );
       expect(mockViewShot.captureRef).not.toHaveBeenCalled();
       expect(mockMediaLibrary.Asset.create).not.toHaveBeenCalled();

@@ -5,7 +5,7 @@ import type { BusinessSessionFailureCode } from './session/resolve-business-sess
 const messages: Record<BusinessSessionFailureCode, string> = {
   NETWORK: 'Une connexion internet est nécessaire pour cette première étape. Vérifiez votre réseau et réessayez.',
   MULTIPLE_REMOTE_BUSINESSES:
-    'Plusieurs activités sont associées à ce compte. Contactez le support Souris avant de continuer.',
+    'Plusieurs activités sont associées à ce compte. Contactez le support BeautIzzy avant de continuer.',
   OWNER_MISMATCH: 'Cette activité n’appartient pas au compte connecté.',
   LOCAL_DATA_CONFLICT:
     'Les données de cet appareil ne peuvent pas être associées automatiquement à votre compte.',

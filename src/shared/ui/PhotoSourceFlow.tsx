@@ -139,7 +139,7 @@ export function PhotoSourceFlow({
         visible={cameraVisible}
       />
       <ConfirmationDialog
-        body="Autorisez Souris à utiliser l’appareil photo dans les réglages pour pouvoir prendre une photo."
+        body="Autorisez BeautIzzy à utiliser l’appareil photo dans les réglages pour pouvoir prendre une photo."
         cancelLabel="Annuler"
         confirmLabel="Ouvrir les réglages"
         onCancel={() => setSettingsVisible(false)}

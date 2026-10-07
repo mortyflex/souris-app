@@ -32,7 +32,7 @@ export function AccountUnavailableScreen() {
       }
       message={message}
       testID="account-unavailable-screen"
-      title="Souris n’a pas pu ouvrir votre compte"
+      title="Impossible d’ouvrir votre compte"
     />
   );
 }

@@ -196,7 +196,7 @@ ticket open where it was. A failure shows « Impossible de préparer le partage.
 **Enregistrer.** The only flow that confirms a save. It asks for the minimum permission (add-only on
 iOS, images only on Android), captures the same card and adds it to Photos. Once Photos has it: one
 success haptic and « Image enregistrée dans Photos » above the actions, which goes away on its own
-after 2.6 s. A declined permission shows « Souris n’a pas accès à Photos. Autorisez-le dans Réglages
+after 2.6 s. A declined permission shows « BeautIzzy n’a pas accès à Photos. Autorisez-le dans Réglages
 pour enregistrer l’image. » (no automatic redirection to Settings); any other failure « Impossible
 d’enregistrer l’image. ». Busy like « Partager », one save per press.
 
