@@ -72,7 +72,7 @@ describe('successful dispatch', () => {
     expect(requests).toHaveLength(1);
     expect(requests[0].url).toBe('https://api.resend.com/emails');
     const body = JSON.parse(String(requests[0].init.body));
-    expect(body.from).toBe('"Salon Amélie via Souris" <rappels@souris.test>');
+    expect(body.from).toBe('"Salon Amélie via BeautIzzy" <rappels@souris.test>');
     expect(body.to).toEqual(['lea@example.test']);
     expect(body.reply_to).toEqual(['amelie@salon.test']);
     expect(body.subject).toBe('Rappel de votre rendez-vous chez Salon Amélie');
@@ -95,6 +95,9 @@ describe('successful dispatch', () => {
     expect(keys[0]).toBe(resendIdempotencyKey(message.id));
     expect(keys[1]).toBe(keys[0]);
     expect(keys[0]).toContain(message.id);
+    // The historical prefix is part of the contract: renaming it would change
+    // the key of communications already in flight.
+    expect(resendIdempotencyKey('abc-123')).toBe('souris-communication-abc-123');
   });
 
   it('carries the configured footer logo through to the posted HTML', async () => {
@@ -107,7 +110,7 @@ describe('successful dispatch', () => {
     });
     await transport.send(message);
     const body = JSON.parse(String(requests[0].init.body));
-    expect(body.html).toContain('<img src="https://cdn.souris.test/brand/logo-mark.png" width="120" height="40" alt="Souris"');
+    expect(body.html).toContain('<img src="https://cdn.souris.test/brand/logo-mark.png" width="120" height="46" alt="BeautIzzy"');
     expect(body.text).not.toContain('<img');
   });
 
@@ -116,7 +119,7 @@ describe('successful dispatch', () => {
     await transport.send(message);
     const body = JSON.parse(String(requests[0].init.body));
     expect(body.html).not.toContain('<img');
-    expect(body.html).toContain('Envoyé avec Souris');
+    expect(body.html).toContain('Envoyé avec BeautIzzy');
   });
 
   it('omits reply_to when the payload has none', async () => {
@@ -205,10 +208,10 @@ describe('privacy', () => {
 describe('sender display name safety', () => {
   it('strips header metacharacters from the business name', () => {
     expect(sanitizeSenderDisplayName('Salon "Léa" <evil@x.y>\r\nBcc: a@b.c')).toBe(
-      'Salon Léa evil@x.y Bcc: a@b.c via Souris',
+      'Salon Léa evil@x.y Bcc: a@b.c via BeautIzzy',
     );
-    expect(sanitizeSenderDisplayName('   ')).toBe('Souris');
-    expect(sanitizeSenderDisplayName('A'.repeat(200))).toHaveLength('A'.repeat(80).length + ' via Souris'.length);
+    expect(sanitizeSenderDisplayName('   ')).toBe('BeautIzzy');
+    expect(sanitizeSenderDisplayName('A'.repeat(200))).toHaveLength('A'.repeat(80).length + ' via BeautIzzy'.length);
   });
 });
 

@@ -34,9 +34,9 @@ const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 export interface ResendEmailTransportOptions {
   readonly apiKey: string;
-  /** The verified Souris sender address (RESEND_FROM_EMAIL). */
+  /** The verified BeautIzzy sender address (RESEND_FROM_EMAIL). */
   readonly fromEmail: string;
-  /** Public HTTPS Souris logo for the footer (SOURIS_EMAIL_LOGO_URL), optional. */
+  /** Public HTTPS BeautIzzy logo for the footer (SOURIS_EMAIL_LOGO_URL — historical secret name), optional. */
   readonly logoUrl?: string;
   /** Injected in tests; the platform fetch in production. */
   readonly fetchFn?: typeof fetch;
@@ -55,10 +55,14 @@ export function sanitizeSenderDisplayName(businessName: string): string {
     .trim()
     .slice(0, 80)
     .trim();
-  return cleaned.length > 0 ? `${cleaned} via Souris` : 'Souris';
+  return cleaned.length > 0 ? `${cleaned} via BeautIzzy` : 'BeautIzzy';
 }
 
-/** The stable provider idempotency key of one logical communication. */
+/**
+ * The stable provider idempotency key of one logical communication. The
+ * `souris-` prefix is historical and deliberately kept: changing it would
+ * change the key of communications already in flight.
+ */
 export function resendIdempotencyKey(communicationId: string): string {
   return `souris-communication-${communicationId}`;
 }

@@ -90,8 +90,12 @@ describe('the reminder template', () => {
       expect(email.text).toContain(part);
     }
     expect(email.text).toContain('• Coloration');
-    expect(email.text).toContain('Souris');
-    expect(email.html).toContain('Souris');
+    expect(email.text).toContain('BeautIzzy');
+    expect(email.html).toContain('BeautIzzy');
+    // The old product name never reaches a recipient.
+    expect(email.text).not.toMatch(/souris/i);
+    expect(email.html).not.toMatch(/souris/i);
+    expect(email.subject).not.toMatch(/souris/i);
   });
 
   it('never contains financial, status or internal data', () => {
@@ -151,7 +155,7 @@ describe('the footer logo', () => {
       logoUrl: PRODUCTION_LOGO,
     });
     expect(email.html).toContain(
-      `<img src="${PRODUCTION_LOGO}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="Souris" style="display:block;border:0;outline:none;text-decoration:none;" />`,
+      `<img src="${PRODUCTION_LOGO}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="BeautIzzy" style="display:block;border:0;outline:none;text-decoration:none;" />`,
     );
   });
 
@@ -168,15 +172,15 @@ describe('the footer logo', () => {
     expect(footer.indexOf('Envoyé avec')).toBeLessThan(footer.indexOf('<img'));
     expect((footer.match(/vertical-align:middle/g) ?? []).length).toBe(2);
     expect(footer).toContain('padding-right:4px');
-    // The brand name is the IMAGE: « Souris » never doubles as plain text
-    // next to the wordmark — it survives only as the alt attribute.
-    expect(footer).not.toContain('Envoyé avec Souris');
-    expect(footer.replace('alt="Souris"', '')).not.toContain('Souris');
-    // Balance lock: 120×40 wordmark (the exact 3:1 intrinsic ratio of
-    // assets/brand/logo-wordmark.png) over discreet, non-bold 12px wording.
+    // The brand name is the IMAGE: « BeautIzzy » never doubles as plain text
+    // next to the logo — it survives only as the alt attribute.
+    expect(footer).not.toContain('Envoyé avec BeautIzzy');
+    expect(footer.replace('alt="BeautIzzy"', '')).not.toContain('BeautIzzy');
+    // Balance lock: 120×46 logo (the exact intrinsic ratio of the 360×138
+    // assets/brand/email/logo.png) over discreet, non-bold 12px wording.
     expect(FOOTER_WORDMARK_WIDTH).toBe(120);
-    expect(FOOTER_WORDMARK_HEIGHT).toBe(40);
-    expect(FOOTER_WORDMARK_WIDTH / FOOTER_WORDMARK_HEIGHT).toBeCloseTo(2172 / 724);
+    expect(FOOTER_WORDMARK_HEIGHT).toBe(46);
+    expect(FOOTER_WORDMARK_WIDTH / FOOTER_WORDMARK_HEIGHT).toBeCloseTo(360 / 138);
     expect(footer).toContain(`font-size:${FOOTER_TEXT_SIZE_PX}px`);
     expect(FOOTER_WORDMARK_HEIGHT).toBeGreaterThan(2 * FOOTER_TEXT_SIZE_PX);
     expect(footer).not.toContain('font-weight');
@@ -211,12 +215,12 @@ describe('the footer logo', () => {
   it('renders the wordmark after « Envoyé avec », email-safe and sized', () => {
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, { logoUrl: LOGO });
     expect(email.html).toContain(
-      `<img src="${LOGO}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="Souris"`,
+      `<img src="${LOGO}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="BeautIzzy"`,
     );
     // Layout, colors and content are otherwise unchanged; the plain-text
     // version keeps its own textual footer.
     expect(email.html).toContain('Bonjour Léa,');
-    expect(email.text).toContain('Envoyé avec Souris');
+    expect(email.text).toContain('Envoyé avec BeautIzzy');
     expect(email.text).not.toContain('<img');
   });
 
@@ -225,14 +229,14 @@ describe('the footer logo', () => {
       const email = renderAppointmentEmail(kind, payload, { logoUrl: LOGO });
       expect(email.html).toContain(`<img src="${LOGO}" width="${FOOTER_WORDMARK_WIDTH}"`);
       const footer = email.html.slice(email.html.lastIndexOf('<table'));
-      expect(footer).not.toContain('Envoyé avec Souris');
+      expect(footer).not.toContain('Envoyé avec BeautIzzy');
     }
   });
 
-  it('keeps the clean « Envoyé avec Souris » text fallback without a configured image', () => {
+  it('keeps the clean « Envoyé avec BeautIzzy » text fallback without a configured image', () => {
     const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload);
     expect(email.html).not.toContain('<img');
-    expect(email.html).toContain('Envoyé avec Souris');
+    expect(email.html).toContain('Envoyé avec BeautIzzy');
   });
 
   it('ignores anything that is not a plain HTTPS URL', () => {
@@ -245,7 +249,7 @@ describe('the footer logo', () => {
     ]) {
       const email = renderAppointmentEmail('APPOINTMENT_REMINDER', payload, { logoUrl: bad });
       expect(email.html).not.toContain('<img');
-      expect(email.html).toContain('Envoyé avec Souris');
+      expect(email.html).toContain('Envoyé avec BeautIzzy');
     }
   });
 

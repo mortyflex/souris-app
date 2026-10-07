@@ -397,17 +397,21 @@ The sender domain must be added and VERIFIED in the Resend dashboard first (SPF 
 worker refuses the pass (HTTP 500, nothing claimed) while either secret is missing or the sender
 is not a valid address.
 
-Optional footer branding — the footer reads « Envoyé avec [Souris wordmark] »: the visual
-source of truth is `assets/brand/logo-wordmark.png` (the EMAIL footer never uses the small
-`logo-mark.png`). Email clients only load public HTTPS assets (a bundled app asset, file path
-or data URI never renders), so upload a public PNG copy of that exact wordmark (intrinsic
-2172×724 = 3:1 — e.g. a 240×80 export for crisp 2× rendering at the 120×40 footer slot; the
-full-resolution export also works, just heavier) to the PUBLIC Supabase Storage bucket
-(`brand`), separate from the private `business-media` one, and point the SAME variable at it:
+Optional footer branding — the footer reads « Envoyé avec [BeautIzzy logo] »: the file to host is
+`assets/brand/email/logo.png` (360×138, transparent: the editorial BeautIzzy logo at 3× the
+120×46 footer slot; never the symbol alone, never another export). Email clients only load
+public HTTPS assets (a bundled app asset, file path or data URI never renders), so upload that
+exact file to the PUBLIC Supabase Storage bucket (`brand`), separate from the private
+`business-media` one, under a NEW file name (mail clients cache the previous image by URL), and
+point the variable at it:
 
 ```bash
-npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage/v1/object/public/brand/logo-wordmark.png
+npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage/v1/object/public/brand/beautizzy-email-logo.png
 ```
+
+`SOURIS_EMAIL_LOGO_URL` is intentionally kept as the technical secret name; only its VALUE
+changes, and it must point to the BeautIzzy email logo. A value still pointing at a previous
+Souris image would show that image, distorted, in the 120×46 slot.
 
 The URL must be plain `https://`; surrounding whitespace, a trailing newline or ONE layer of
 surrounding quotes (a manual Dashboard paste artifact) are stripped, anything else is ignored.
@@ -416,7 +420,7 @@ sending is never affected. Each worker run answers with `emailLogoConfigured: tr
 boolean only, never the value — so a smoke call shows at once whether the RUNNING instance
 reads a usable logo URL; `false` means the secret is absent from that instance's environment
 (re-set it and redeploy/restart the function) or its value fails validation. The API key must never exist in Expo env, the app bundle, SQLite, public
-database rows or source control. The From displays « <business name> via Souris »; replies go to
+database rows or source control. The From displays « <business name> via BeautIzzy »; replies go to
 the professional's configured Reply-To.
 
 ### Worker deployment and scheduling (required for Lot B sending)

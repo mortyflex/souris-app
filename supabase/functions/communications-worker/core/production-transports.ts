@@ -37,7 +37,8 @@ export class WorkerConfigurationError extends Error {
 export type SecretReader = (name: string) => string | undefined;
 
 /**
- * Safe runtime diagnostic: whether the configured SOURIS_EMAIL_LOGO_URL is
+ * Safe runtime diagnostic: whether the configured SOURIS_EMAIL_LOGO_URL (the
+ * historical name of the BeautIzzy email logo secret, deliberately kept) is
  * present AND survives canonicalization — a boolean only, never the value.
  */
 export function isEmailLogoConfigured(readSecret: SecretReader): boolean {

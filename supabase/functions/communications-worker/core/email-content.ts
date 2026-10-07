@@ -15,7 +15,7 @@
 // arbitrary user text and must never become markup. The HTML itself is
 // deliberately email-safe — one centered table, inline styles, system fonts,
 // no script, no external asset — with a plain-text alternative. The visual
-// identity is a restrained Souris: warm surface, white card, plum accent.
+// identity is a restrained BeautIzzy: warm surface, white card, plum accent.
 
 const EMAIL_ACCENT = '#654199'; // Souris plum (lavender lav700)
 const EMAIL_FOREGROUND = '#19163F';
@@ -132,25 +132,25 @@ export interface RenderedEmail {
 
 export interface RenderAppointmentEmailOptions {
   /**
-   * Public HTTPS URL of the Souris brand image shown in the footer
-   * (SOURIS_EMAIL_LOGO_URL — the variable name is stable even though the
-   * asset is the WORDMARK: a public PNG copy of
-   * `assets/brand/logo-wordmark.png`, the visual source of truth). Email
-   * clients can only load public HTTPS assets — never a bundled app asset,
-   * a file path or a data URI. Absent or non-HTTPS, the footer falls back
-   * to the plain « Envoyé avec Souris » text.
+   * Public HTTPS URL of the BeautIzzy brand image shown in the footer
+   * (SOURIS_EMAIL_LOGO_URL — the secret keeps its historical name; its
+   * VALUE must point to a public copy of `assets/brand/email/logo.png`,
+   * the email export of the editorial logo). Email clients can only load
+   * public HTTPS assets — never a bundled app asset, a file path or a data
+   * URI. Absent or non-HTTPS, the footer falls back to the plain
+   * « Envoyé avec BeautIzzy » text.
    */
   readonly logoUrl?: string;
 }
 
 /**
- * The Souris WORDMARK (`assets/brand/logo-wordmark.png`, intrinsic
- * 2172×724 = exactly 3:1): 120×40 keeps that ratio to the pixel and reads
- * comfortably on a phone without zooming. The wordmark IS the brand name in
- * the footer — never the small logo-mark, never a redrawn logo.
+ * The BeautIzzy email logo (`assets/brand/email/logo.png`, 360×138: the
+ * editorial logo at 3× the displayed size). 120×46 keeps that ratio to the
+ * pixel and reads comfortably on a phone without zooming. The logo IS the
+ * brand name in the footer — never the symbol alone, never a redrawn logo.
  */
 export const FOOTER_WORDMARK_WIDTH = 120;
-export const FOOTER_WORDMARK_HEIGHT = 40;
+export const FOOTER_WORDMARK_HEIGHT = 46;
 /** « Envoyé avec » stays discreet and light next to the wordmark. */
 export const FOOTER_TEXT_SIZE_PX = 12;
 
@@ -178,16 +178,16 @@ export function normalizeEmailLogoUrl(raw: string | undefined): string | undefin
 /**
  * The ONE shared footer of every appointment email kind:
  *
- *   image configured   « Envoyé avec [Souris wordmark] » — the wordmark IS
- *                      the brand name; « Souris » is never duplicated as
+ *   image configured   « Envoyé avec [BeautIzzy logo] » — the logo IS
+ *                      the brand name; « BeautIzzy » is never duplicated as
  *                      plain text next to it (it survives only as alt text
  *                      for blocked images)
- *   image unavailable  « Envoyé avec Souris » — the clean text fallback
+ *   image unavailable  « Envoyé avec BeautIzzy » — the clean text fallback
  *
  * One centered horizontal row, built as a small presentation table so the
  * wording and the wordmark stay vertically centered in every mail client
  * (flexbox and inline-block baseline tricks are not reliable in email).
- * The discreet 12px wording sits left, the 120×40 wordmark right, a tight
+ * The discreet 12px wording sits left, the 120×46 logo right, a tight
  * 4px apart. Branding only: no appointment information lives in the image.
  */
 function footerHtml(logoUrl: string | undefined): string {
@@ -195,11 +195,11 @@ function footerHtml(logoUrl: string | undefined): string {
   const textStyle = `vertical-align:middle;font-size:${FOOTER_TEXT_SIZE_PX}px;color:${EMAIL_SOFT};font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;`;
   if (canonical === undefined) {
     return `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:20px auto 0;border-collapse:collapse;">
-            <tr><td style="${textStyle}">Envoyé avec Souris</td></tr>
+            <tr><td style="${textStyle}">Envoyé avec BeautIzzy</td></tr>
           </table>`;
   }
   return `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:20px auto 0;border-collapse:collapse;">
-            <tr><td style="${textStyle}padding-right:4px;">Envoyé avec</td><td style="vertical-align:middle;"><img src="${escapeHtml(canonical)}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="Souris" style="display:block;border:0;outline:none;text-decoration:none;" /></td></tr>
+            <tr><td style="${textStyle}padding-right:4px;">Envoyé avec</td><td style="vertical-align:middle;"><img src="${escapeHtml(canonical)}" width="${FOOTER_WORDMARK_WIDTH}" height="${FOOTER_WORDMARK_HEIGHT}" alt="BeautIzzy" style="display:block;border:0;outline:none;text-decoration:none;" /></td></tr>
           </table>`;
 }
 
@@ -256,7 +256,7 @@ export function renderAppointmentEmail(
     textLines.push('', 'Prestations');
     for (const service of payload.services) textLines.push(`• ${service}`);
   }
-  textLines.push('', copy.outro, payload.businessName, '', '—', 'Envoyé avec Souris');
+  textLines.push('', copy.outro, payload.businessName, '', '—', 'Envoyé avec BeautIzzy');
 
   const servicesHtml = showServices
     ? `<p style="margin:24px 0 6px;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;color:${EMAIL_SOFT};">Prestations</p>

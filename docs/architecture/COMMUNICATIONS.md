@@ -464,14 +464,16 @@ vocabulary, notes or provider data:
 Templates (`core/email-content.ts`) are FIXED V1 French transactional emails — reminder («
 Rappel de votre rendez-vous chez … »), rescheduled (« … a été modifié », with the NEW schedule),
 cancelled (« … a été annulé », date kept for context, no services) — one restrained
-Souris-branded HTML card (email-safe table + inline styles, plum accent, « Envoyé avec Souris »
-footer: one centered presentation-table row reading « Envoyé avec [Souris wordmark] » when the
-optional `SOURIS_EMAIL_LOGO_URL` secret names a public HTTPS PNG copy of
-`assets/brand/logo-wordmark.png` — a fixed 120×40 `<img>` (the asset's exact 3:1 ratio) with
-`alt="Souris"`, carrying the brand over the discreet 12px « Envoyé avec »; the brand name is
-never doubled as plain text next to the wordmark, and the footer falls back to the plain
-« Envoyé avec Souris » whenever the URL is absent, invalid or fails to load) plus a plain-text
-version. Every interpolated value is HTML-escaped. Date/time format in
+BeautIzzy-branded HTML card (email-safe table + inline styles, plum accent, « Envoyé avec BeautIzzy »
+footer: one centered presentation-table row reading « Envoyé avec [BeautIzzy logo] » when the
+optional `SOURIS_EMAIL_LOGO_URL` secret names a public HTTPS copy of
+`assets/brand/email/logo.png` — a fixed 120×46 `<img>` (the exact ratio of that 360×138 file) with
+`alt="BeautIzzy"`, carrying the brand over the discreet 12px « Envoyé avec »; the brand name is
+never doubled as plain text next to the logo, and the footer falls back to the plain
+« Envoyé avec BeautIzzy » whenever the URL is absent, invalid or fails to load) plus a plain-text
+version ending with « Envoyé avec BeautIzzy ». `SOURIS_EMAIL_LOGO_URL` and the
+`souris-communication-<id>` idempotency key are historical technical names, kept on purpose:
+only their recipient-visible results carry the BeautIzzy brand. Every interpolated value is HTML-escaped. Date/time format in
 `Europe/Paris` (the V1 single-market constant `APPOINTMENT_EMAIL_TIMEZONE`; a future business
 timezone belongs in the payload).
 
@@ -479,7 +481,7 @@ Transport (`core/resend-transport.ts`) — the ONLY module that talks to a provi
 
 ```text
 POST https://api.resend.com/emails
-From        "<business name, header-sanitized> via Souris" <RESEND_FROM_EMAIL>
+From        "<business name, header-sanitized> via BeautIzzy" <RESEND_FROM_EMAIL>
 Reply-To    the professional's configured address
 Idempotency-Key   souris-communication-<communication id>   (stable across every retry:
                   provider-level idempotence ON TOP of the database dedupe)

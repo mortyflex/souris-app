@@ -292,6 +292,17 @@ describe('the delivery surface stays contained (Lot B)', () => {
     expect(html).toContain(`<img src="${PRODUCTION_LOGO}"`);
   });
 
+  it('reads the email logo from the historical SOURIS_EMAIL_LOGO_URL secret, and from no other name', () => {
+    const read: string[] = [];
+    const reader = (name: string) => {
+      read.push(name);
+      return name === 'SOURIS_EMAIL_LOGO_URL' ? 'https://cdn.souris.test/logo.png' : undefined;
+    };
+    expect(isEmailLogoConfigured(reader)).toBe(true);
+    expect(read).toEqual(['SOURIS_EMAIL_LOGO_URL']);
+    expect(isEmailLogoConfigured((name) => (name === 'BEAUTIZZY_EMAIL_LOGO_URL' ? 'https://cdn.souris.test/logo.png' : undefined))).toBe(false);
+  });
+
   it('the logo diagnostic is a boolean that never leaks the value', () => {
     expect(isEmailLogoConfigured(() => undefined)).toBe(false);
     expect(isEmailLogoConfigured(() => 'not-a-url')).toBe(false);
