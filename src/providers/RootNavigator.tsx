@@ -66,11 +66,11 @@ export function RootNavigator() {
   }
 }
 
-/** Mirrors the iOS splash (canonical lockup at 333 dp on white). */
+/** The primary logo on white, 252 dp wide: the size the native splash takes when it is rebranded. */
 function BootSurface() {
   return (
     <View style={styles.boot} testID="boot-surface">
-      <BrandMark variant="lockup" size={333} decorative />
+      <BrandMark variant="primary" size={252} decorative />
     </View>
   );
 }

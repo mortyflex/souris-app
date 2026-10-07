@@ -101,16 +101,21 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - `logo-wordmark.png`
 
 ## Souris native brand integration (repository truth)
-The three logo PNGs in `assets/brand/` are the approved Souris identity (final artwork and palette:
-coloured purple / plum artwork on a transparent background). They supersede the logo copies kept
-inside `reference-export/`, which document the earlier navy identity and are no longer the runtime
-truth. They are never redrawn, recoloured, cropped, regenerated, or replaced by generic icons:
+The app renders the BeautIzzy identity from three PNGs in `assets/brand/` (coloured artwork on a
+transparent background). They supersede the logo copies kept inside `reference-export/`, which are
+no longer the runtime truth. They are never redrawn, recoloured, cropped, regenerated, or replaced
+by generic icons:
 
-| Asset | Role | Runtime use |
+| Asset | `BrandMark` variant | Runtime use |
 | --- | --- | --- |
-| `assets/brand/logo-lockup.png` | LOCKUP — full logo: ears + the name + whiskers + smile/tail + calendar | iOS splash, boot surface, Welcome |
-| `assets/brand/logo-mark.png` | MARK — compact symbol for reduced uses | account state screens, Android splash |
-| `assets/brand/logo-wordmark.png` | WORDMARK — horizontal Souris name | Plus identity block, name-forward contexts |
+| `assets/brand/logo-primary.png` (1489 × 541) | `primary` — the symbol, then the full name | boot surface, Welcome |
+| `assets/brand/logo-editorial.png` (1514 × 580) | `editorial` — the name with the symbol as its initial | Home header, Plus identity block, receipts, « Créé avec » share footer |
+| `assets/brand/symbol.png` (811 × 1097) | `symbol` — the symbol alone | account state screens, estimation and share-card header |
+
+The previous Souris files (`logo-lockup.png`, `logo-mark.png`, `logo-wordmark.png`, `Souris.icon`,
+`assets/images/`) are no longer rendered in-app. The native icon and splash below still point at
+them until `app.json` is rebranded. The dark-background variants in `docs/design/brand/` are design
+references, never loaded at runtime.
 
 - iOS app icon: `assets/brand/Souris.icon` (Apple Icon Composer document, `ios.icon` in
   `app.json`). Flat by design: a single layer, `logo-mark.png` copied byte-identical, centred on a

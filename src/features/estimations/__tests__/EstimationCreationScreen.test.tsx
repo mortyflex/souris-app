@@ -344,7 +344,7 @@ describe('EstimationCreationScreen', () => {
     );
     expect(paper.getByText('Estimation indicative basée sur les prestations sélectionnées.')).toBeTruthy();
     expect(paper.getByText('Créé avec')).toBeTruthy();
-    expect(paper.getByLabelText('Créé avec Souris')).toBeTruthy();
+    expect(paper.getByLabelText('Créé avec BeautIzzy')).toBeTruthy();
     expect(paper.queryByText(/devis|valable|signature|bon pour accord|TVA|\bHT\b|TTC/i)).toBeNull();
 
     // Nothing was written by the review, nor by the generation.

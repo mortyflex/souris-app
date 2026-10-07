@@ -67,7 +67,7 @@ export function BusinessInsightsShareCard({ model, testID }: BusinessInsightsSha
   return (
     <ShareCardCanvas testID={testID}>
       <View style={styles.header}>
-        <BrandMark decorative size={56} variant="mark" />
+        <BrandMark decorative size={25} variant="symbol" />
         <AppText {...FIXED} style={styles.kicker} variant="eyebrow">
           Tops & tendances
         </AppText>

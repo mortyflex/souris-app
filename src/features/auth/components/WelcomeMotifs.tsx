@@ -1,6 +1,6 @@
 // Souris — Welcome motifs
 //
-// A small weightless scene around the brand lockup: six approved beauty
+// A small weightless scene around the brand logo: six approved beauty
 // objects (assets/brand/welcome-floating) — hairdryer, scissors, mirror,
 // brush, comb, nail polish. They accompany the logo and never compete with
 // it: smaller, staggered around it with plenty of air, never over the word.
@@ -79,9 +79,10 @@ interface MotifPlacement {
 }
 
 /**
- * Staggered ring around the lockup (artwork ≈ ±133 × ±68 dp): mirror and
- * hairdryer above, scissors off the left ear, brush under the whiskers, comb
- * and nail polish below. Nothing rests over the word.
+ * Staggered ring around the logo (artwork ≈ ±145 × ±45 dp, a horizontal
+ * band): mirror, hairdryer and scissors above it, brush, comb and nail polish
+ * below. Every object rests at least 84 dp above or below the logo centre, so
+ * nothing rests over the word.
  */
 export const welcomeMotifs: readonly MotifPlacement[] = [
   { kind: 'mirror', x: -98, y: -168, size: 80, tilt: -8, floatY: 6, floatX: 3, sway: 2.5, period: 6200, mass: 1.1, spinGain: 0.012, maxSpin: 8 },
@@ -97,8 +98,10 @@ export const WELCOME_MOTIFS_HALF_HEIGHT = 212;
 
 /** Collision radius of an object, as a share of its PNG box (the artwork does not fill the box). */
 const COLLISION_RADIUS_RATIO = 0.36;
-/** The logo as an obstacle: half-axes of its ellipse on the reference width (artwork ≈ ±133 × ±68 dp). */
-const LOGO_OBSTACLE = { radiusX: 132, radiusY: 66 } as const;
+/** The logo as an obstacle: half-axes of its ellipse on the reference width (artwork ≈ ±145 × ±45 dp). */
+const LOGO_OBSTACLE = { radiusX: 145, radiusY: 45 } as const;
+/** Air kept between the logo band and the box of an object resting above or below it. */
+const LOGO_REST_GAP = 4;
 /** Speed (dp/s) at which the idle drift has fully faded out in favour of the physics. */
 const IDLE_FADE_SPEED = 90;
 /** A released object that stays this slow for this long stops simulating even if something keeps it from home. */
@@ -171,7 +174,10 @@ function FloatingMotif({ placement, scale, verticalScale, touch, world }: Floati
 
   const size = Math.round(placement.size * verticalScale);
   const restX = placement.x * scale;
-  const restY = placement.y * verticalScale;
+  // A short hero pulls the objects in, but never onto the logo: the logo keeps
+  // its size, so an object stays clear of its band, above or below it.
+  const logoClearance = LOGO_OBSTACLE.radiusY * scale + size / 2 + LOGO_REST_GAP;
+  const restY = Math.sign(placement.y) * Math.max(Math.abs(placement.y * verticalScale), logoClearance);
   const traits = {
     restX,
     restY,

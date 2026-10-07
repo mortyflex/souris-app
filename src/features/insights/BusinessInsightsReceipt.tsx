@@ -276,7 +276,7 @@ export function BusinessInsightsReceipt({
           ))}
         </View>
 
-        <BrandMark decorative size={76} style={styles.brand} variant="wordmark" />
+        <BrandMark decorative size={67} style={styles.brand} variant="editorial" />
       </ScrollView>
     </ReceiptPaper>
   );

@@ -60,7 +60,7 @@ export function EstimationDocument({
   return (
     <View onLayout={onLayout} style={styles.document} testID={testID}>
       <View style={styles.header}>
-        <BrandMark decorative size={56} variant="mark" />
+        <BrandMark decorative size={25} variant="symbol" />
         <AppText {...text} style={styles.kicker} testID={`${testID}-title`} variant="eyebrow">
           {model.title}
         </AppText>

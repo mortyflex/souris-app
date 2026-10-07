@@ -211,15 +211,15 @@ export function formatAppVersion(version: string | undefined): string | undefine
 }
 
 /**
- * Restrained Souris identity at the bottom of Plus: the canonical wordmark,
- * then the installed version. It exposes exactly one accessible "Souris".
+ * Restrained BeautIzzy identity at the bottom of Plus: the editorial logo,
+ * then the installed version. It exposes exactly one accessible "BeautIzzy".
  */
 function BrandSection({ version }: { readonly version: string | undefined }) {
   const versionLabel = formatAppVersion(version);
 
   return (
     <View style={styles.brandSection} testID="plus-brand">
-      <BrandMark variant="wordmark" size={150} />
+      <BrandMark variant="editorial" size={125} />
       {versionLabel && (
         <AppText variant="metadata" style={styles.brandVersion}>
           {versionLabel}

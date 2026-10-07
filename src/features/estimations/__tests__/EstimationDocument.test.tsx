@@ -1,7 +1,7 @@
 // Souris — EstimationDocument: the style contract of the generated estimate.
 //
 // Semantic checks, no pixel snapshot: the content, the highlighted total in
-// the shared lavender panel, the shared « Créé avec Souris » footer, wrapped
+// the shared lavender panel, the shared « Créé avec BeautIzzy » footer, wrapped
 // (never truncated) names, the warm share-card paper, and fixed typography
 // on the export surface.
 
@@ -58,7 +58,7 @@ describe('EstimationDocument', () => {
     expect(view.queryByTestId(/podium/)).toBeNull();
   });
 
-  it('is the interior only — no surface of its own — with a restrained Souris mark on top', async () => {
+  it('is the interior only — no surface of its own — with a restrained BeautIzzy symbol on top', async () => {
     const view = await render(<EstimationDocument model={model} />);
 
     // The printer ticket or the share canvas brings the paper and its margins.
@@ -67,9 +67,9 @@ describe('EstimationDocument', () => {
     expect(root.borderRadius).toBeUndefined();
     expect(root.padding ?? root.paddingHorizontal ?? root.paddingTop).toBeUndefined();
     const images = view.container.queryAll((node) => node.type === 'Image');
-    const mark = images.find((image) => image.props.source === brandAssets.mark.source);
+    const mark = images.find((image) => image.props.source === brandAssets.symbol.source);
     expect(mark).toBeDefined();
-    expect(style(mark!).width).toBe(56);
+    expect(style(mark!).width).toBe(25);
     expect(style(view.getByTestId('estimation-document-business')).color).toBe(semanticColors.brandForeground);
     // No fixed height anywhere: a long estimation is a taller card.
     expect(style(view.getByTestId('estimation-document')).height).toBeUndefined();
@@ -101,22 +101,22 @@ describe('EstimationDocument', () => {
     for (const node of texts(view)) expect(node.props.numberOfLines).toBeUndefined();
   });
 
-  it('signs with the shared « Créé avec » + Souris wordmark footer', async () => {
+  it('signs with the shared « Créé avec » + BeautIzzy logo footer', async () => {
     const view = await render(<EstimationDocument model={model} />);
 
     const footer = view.getByTestId('estimation-document-branding');
     expect(footer.props.accessibilityLabel).toBe(CREATED_WITH_SOURIS_LABEL);
     expect(within(footer).getByText('Créé avec')).toBeTruthy();
     const wordmark = view.container.queryAll(
-      (node) => node.type === 'Image' && node.props.source === brandAssets.wordmark.source,
+      (node) => node.type === 'Image' && node.props.source === brandAssets.editorial.source,
     );
     expect(wordmark).toHaveLength(1);
-    // Inside the footer, decorative: the footer speaks « Créé avec Souris » once.
+    // Inside the footer, decorative: the footer speaks « Créé avec BeautIzzy » once.
     let ancestor = wordmark[0]!.parent;
     while (ancestor && ancestor.props.testID !== 'estimation-document-branding') ancestor = ancestor.parent;
     expect(ancestor).toBeTruthy();
     expect(wordmark[0]!.props.accessible).toBe(false);
-    expect(style(wordmark[0]!).width).toBe(64);
+    expect(style(wordmark[0]!).width).toBe(58);
   });
 
   it('follows the device text size on screen', async () => {

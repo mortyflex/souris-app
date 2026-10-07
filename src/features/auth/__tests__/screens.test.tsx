@@ -120,10 +120,10 @@ describe('WelcomeScreen', () => {
     mockSetFrameCallbackActive.mockClear();
   });
 
-  it('shows the brand lockup once and routes to sign-up or sign-in', async () => {
+  it('shows the brand logo once and routes to sign-up or sign-in', async () => {
     const view = await render(<WelcomeScreen />);
 
-    expect(view.getAllByLabelText('Souris')).toHaveLength(1);
+    expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
     expect(view.getByRole('header', { name: 'Votre activité,\nsimplement organisée.' })).toBeTruthy();
     expect(view.getByText('Agenda, clientèle, prestations et ventes, sans logiciel compliqué.')).toBeTruthy();
     expect(view.queryByText(/sauvegard|synchronis/i)).toBeNull();
@@ -158,7 +158,7 @@ describe('WelcomeScreen', () => {
       expect(image.props.resizeMode).toBe('contain');
     }
     // The only accessible brand element is still the logo.
-    expect(view.getAllByLabelText('Souris')).toHaveLength(1);
+    expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
   });
 
   it('drifts every object on its own loop, inside a hero that owns the touch field', async () => {

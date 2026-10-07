@@ -50,7 +50,7 @@ async function renderPlus() {
 }
 
 describe('PlusScreen', () => {
-  it('keeps the management navigation, shows the Business identity, and keeps the Souris identity block', async () => {
+  it('keeps the management navigation, shows the Business identity, and keeps the BeautIzzy identity block', async () => {
     const { view } = await renderPlus();
 
     expect(view.getByRole('header', { name: 'Plus' })).toBeTruthy();
@@ -59,8 +59,8 @@ describe('PlusScreen', () => {
     expect(view.getByText('Coiffure')).toBeTruthy();
 
     const brand = view.getByTestId('plus-brand');
-    // The wordmark is the single accessible "Souris" element.
-    expect(view.getAllByLabelText('Souris')).toHaveLength(1);
+    // The logo is the single accessible "BeautIzzy" element.
+    expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
     expect(brand).toBeTruthy();
     expect(view.getByText('Version 1.0.0')).toBeTruthy();
     expect(view.queryByText(/sauvegard|synchronis|cloud/i)).toBeNull();

@@ -111,12 +111,12 @@ describe('HomeScreen', () => {
     jest.useRealTimers();
   });
 
-  it('welcomes with the Souris wordmark, a compact greeting and a quiet date', async () => {
+  it('welcomes with the BeautIzzy logo, a compact greeting and a quiet date', async () => {
     const view = await renderHome(seededDatabase());
 
     const header = within(view.getByTestId('home-header'));
     // The canonical brand asset, announced once.
-    expect(header.getByLabelText('Souris').props.accessibilityRole).toBe('image');
+    expect(header.getByLabelText('BeautIzzy').props.accessibilityRole).toBe('image');
     const greeting = header.getByRole('header', { name: 'Bonjour' });
     // One step under a screen title: important, never dominant.
     expect(greeting).toHaveStyle({ fontSize: 23 });

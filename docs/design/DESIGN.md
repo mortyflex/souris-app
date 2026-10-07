@@ -270,14 +270,18 @@ sprite `build/souris-icons.svg`, index `build/icons.json`.
 
 ### Marque
 
-Trois assets canoniques, et seulement trois, dans `assets/brand/` (PNG colorés sur fond transparent,
-palette violet / prune, dessin et palette définitifs) :
+Trois assets canoniques BeautIzzy, et seulement trois, rendus dans l'app, dans `assets/brand/` (PNG
+colorés sur fond transparent) :
 
 | Fichier | Rôle | Contextes approuvés |
 | --- | --- | --- |
-| `assets/brand/logo-lockup.png` (2172 × 724) | **LOCKUP** — logo complet : oreilles, mot « Souris », moustaches, sourire / queue, calendrier | splash iOS, surface de démarrage, écran d'accueil (Welcome) |
-| `assets/brand/logo-mark.png` (1536 × 1024) | **MARK** — symbole compact : oreilles, S, moustaches, calendrier | usages réduits : écrans d'état de compte, splash Android |
-| `assets/brand/logo-wordmark.png` (2172 × 724) | **WORDMARK** — le mot « Souris » horizontal avec son calendrier | bloc identité de Plus, contextes où le nom est mis en avant |
+| `assets/brand/logo-primary.png` (1489 × 541) | **PRIMARY** — logo horizontal principal : le symbole, puis le nom complet « BeautIzzy » | surface de démarrage, écran d'accueil (Welcome) |
+| `assets/brand/logo-editorial.png` (1514 × 580) | **EDITORIAL** — le nom, le symbole tenant lieu d'initiale | en-tête d'Accueil, bloc identité de Plus, tickets, pied « Créé avec » des images partagées |
+| `assets/brand/symbol.png` (811 × 1097) | **SYMBOL** — le symbole seul | usages réduits : écrans d'état de compte, en-tête de l'estimation et de la carte de partage |
+
+L'icône et le splash natifs utilisent encore les anciens fichiers Souris (`logo-lockup.png`,
+`logo-mark.png`, `Souris.icon`, `assets/images/`) tant que `app.json` n'est pas rebrandé ; les
+variantes sur fond sombre de `docs/design/brand/` sont des références, jamais chargées par l'app.
 
 Règles :
 
@@ -285,15 +289,17 @@ Règles :
   générer un autre symbole, un monogramme ou un wordmark, ni substituer un emoji ou un symbole
   système au logo ;
 - le runtime rend la marque uniquement via `src/shared/ui/BrandMark.tsx` (`BrandMark` : `variant` =
-  `mark` / `wordmark` / `lockup`, `size` = largeur, ratio intrinsèque conservé, `contain`, jamais
-  d'étirement). Les PNG portent une marge transparente importante (dessin ≈ 56 % de la largeur du
-  lockup, 45 % du mark, 61 % du wordmark) : on dimensionne la boîte, pas le dessin ;
+  `primary` / `editorial` / `symbol`, `size` = largeur, ratio intrinsèque conservé, `contain`,
+  jamais d'étirement). Chaque PNG est son dessin entouré d'une marge transparente de sécurité égale
+  sur les quatre côtés (4 % du plus grand côté du dessin) : la boîte dépasse à peine le dessin, et
+  `brandMarkInsets` donne cette marge en dp à l'écran qui doit poser le dessin exactement sur un
+  bord (en-tête d'Accueil) ;
 - les logos apparaissent seulement aux moments de marque : icône, splash natif, surface de
   démarrage, Welcome, écrans d'état de compte, bloc identité de Plus. **Aucun logo ni en-tête
   « Souris » sur Agenda, Clientèle, Produits, les détails, les feuilles ou les formulaires** — les
   titres restent `Agenda`, `Clientèle`, `Produits`, `Plus` ;
-- accessibilité : un seul élément annonce « Souris » ; un mark posé à côté d'un texte ou d'un
-  wordmark lisible est décoratif ;
+- accessibilité : un seul élément annonce « BeautIzzy » ; un symbole posé à côté d'un texte ou d'un
+  logo lisible est décoratif ;
 - les PNG sont posés directement sur le fond clair de l'app (blanc `--bg`), sans plaque ni fond
   crème ou teinté derrière eux ; il n'existe pas de variante blanche, et aucune ne doit être posée
   sur fond clair. Détails d'implémentation : `DESIGN_OVERRIDES.md` §15.
@@ -305,7 +311,8 @@ Règles :
   silhouette. Les icônes Android / raster de `assets/images/` montrent encore l'ancienne identité
   tant que des exports approuvés ne sont pas fournis. Les calques de `assets/brand/icon-source/`
   sont conservés mais inutilisés (halo cuit dans les pixels, voir le README du dossier).
-- **Welcome** : le lockup occupe la zone de marque (dessin ≈ 265 dp sur un écran de 393 dp) ; six
+- **Welcome** : le logo principal occupe la zone de marque (dessin ≈ 291 × 91 dp sur un écran de
+  393 dp) ; six
   objets beauté validés (`assets/brand/welcome-floating/` : sèche-cheveux, ciseaux, miroir, pinceau,
   peigne, vernis) flottent lentement autour, s'écartent doucement du doigt et reviennent en ressort
   souple ; scène immobile si « Réduire les animations » est actif. Ils accompagnent le logo, jamais

@@ -145,7 +145,7 @@ export function DaySummaryReceipt({
         ))}
       </View>
 
-      <BrandMark decorative size={84} style={styles.brand} variant="wordmark" />
+      <BrandMark decorative size={75} style={styles.brand} variant="editorial" />
     </ReceiptPaper>
   );
 }

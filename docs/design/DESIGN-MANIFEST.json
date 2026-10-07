@@ -307,14 +307,14 @@
   ],
   "brand": {
     "canonicalAssets": {
-      "mark": "assets/brand/logo-mark.png",
-      "wordmark": "assets/brand/logo-wordmark.png",
-      "lockup": "assets/brand/logo-lockup.png"
+      "primary": "assets/brand/logo-primary.png",
+      "editorial": "assets/brand/logo-editorial.png",
+      "symbol": "assets/brand/symbol.png"
     },
     "roles": {
-      "lockup": "full logo (ears + the name + whiskers + smile/tail + calendar) — iOS splash, boot surface, Welcome",
-      "mark": "compact symbol for reduced uses — account state screens, Android splash",
-      "wordmark": "horizontal Souris wordmark — Plus identity block, name-forward contexts"
+      "primary": "horizontal BeautIzzy logo: the symbol, then the full name — boot surface, Welcome",
+      "editorial": "the name with the symbol as its initial — Home header, Plus identity block, receipts, share footer",
+      "symbol": "the symbol alone, for reduced uses — account state screens, estimation and share-card header"
     },
     "appIcon": {
       "ios": {

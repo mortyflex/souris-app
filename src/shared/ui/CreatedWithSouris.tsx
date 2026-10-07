@@ -1,11 +1,11 @@
 // Souris — CreatedWithSouris
 //
-// The footer of the Souris share images: « Créé avec » + the Souris wordmark
-// (BrandMark, 64 pt), centred on one line, restrained at 85 % opacity. No
+// The footer of the share images: « Créé avec » + the editorial BeautIzzy
+// logo (BrandMark, 58 pt), centred on one line, restrained at 85 % opacity. No
 // slogan, no call to action. Shared by « Tops & tendances » and
 // « Estimation tarifaire » so both images carry the SAME signature.
 //
-// Spoken once as « Créé avec Souris »: the wordmark itself is decorative.
+// Spoken once as « Créé avec BeautIzzy »: the logo itself is decorative.
 // `allowFontScaling={false}` on export surfaces, whose text never scales.
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -14,7 +14,7 @@ import { AppText } from './AppText';
 import { BrandMark } from './BrandMark';
 import { foregroundSoft, spacing } from './theme';
 
-export const CREATED_WITH_SOURIS_LABEL = 'Créé avec Souris';
+export const CREATED_WITH_SOURIS_LABEL = 'Créé avec BeautIzzy';
 
 interface CreatedWithSourisProps {
   readonly allowFontScaling?: boolean;
@@ -33,7 +33,7 @@ export function CreatedWithSouris({ allowFontScaling, style, testID }: CreatedWi
       <AppText allowFontScaling={allowFontScaling} style={styles.text} variant="metadata">
         Créé avec
       </AppText>
-      <BrandMark decorative size={64} variant="wordmark" />
+      <BrandMark decorative size={58} variant="editorial" />
     </View>
   );
 }

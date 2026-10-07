@@ -399,8 +399,14 @@ introducing a POS visual language:
 ## 15. Brand Foundation V1 — Identity Integration
 
 The exported reference shows the logos only inside a web launcher and an onboarding mock. The native
-runtime integrates the SAME canonical assets (`assets/brand/logo-mark.png`, `logo-wordmark.png`,
-`logo-lockup.png` — transparent PNGs, never modified) at deliberate brand moments only:
+runtime integrates the canonical assets (transparent PNGs, never modified) at deliberate brand
+moments only.
+
+**BeautIzzy rendering (in-app).** `BrandMark` draws `assets/brand/logo-primary.png` (`primary`),
+`logo-editorial.png` (`editorial`) and `symbol.png` (`symbol`). The native icon and splash bullets
+below still describe the previous Souris files (`Souris.icon`, `logo-lockup.png`, `logo-mark.png`,
+`assets/images/`): `app.json` is not rebranded yet, so the native splash shows the old lockup
+before the boot surface shows the new logo.
 
 - **iOS app icon (flat)** — `assets/brand/Souris.icon`, an Apple Icon Composer document
   referenced by `ios.icon`; Xcode compiles it and renders every size, appearance and pre-26 fallback
@@ -427,10 +433,11 @@ runtime integrates the SAME canonical assets (`assets/brand/logo-mark.png`, `log
   animation beyond the short native fade (`duration.settle`).
 - **Bootstrap** — the splash stays visible until Plus Jakarta Sans and the SQLite bootstrap are both
   settled and the router is committed; the root view shares the splash white and the boot surface
-  renders the same lockup at the same 333 dp, so no intermediate unbranded surface or flash exists.
-- **Welcome** — the lockup is the hero: box width 472 dp on the 393 dp reference screen (artwork
-  ≈ 265 dp), scaled with the screen width (capped at 430 dp); it stays the single accessible
-  "Souris". Around it, `WelcomeMotifs` floats the six approved PNGs of
+  renders `<BrandMark variant="primary" size={252} decorative />` (artwork ≈ 233 × 73 dp), the size
+  the native splash takes when it is rebranded, so no intermediate unbranded surface exists.
+- **Welcome** — the primary logo is the hero: box width 314 dp on the 393 dp reference screen
+  (artwork ≈ 291 × 91 dp), scaled with the screen width (capped at 430 dp); it stays the single
+  accessible "BeautIzzy". Its obstacle ellipse is 145 × 45 dp. Around it, `WelcomeMotifs` floats the six approved PNGs of
   `assets/brand/welcome-floating/` (hairdryer, scissors, mirror, brush, comb, nail polish) — drawn as
   supplied with `contain`, no plate, no shadow, boxes of 58–90 dp (hairdryer largest, nail polish
   smallest), staggered around the logo and never over the word. A short hero pulls the objects in
@@ -448,21 +455,24 @@ runtime integrates the SAME canonical assets (`assets/brand/logo-mark.png`, `log
   module-level worklets, never functions declared inside a worklet (the React Compiler would hoist
   them out as non-worklets — guarded by `worklet-closures.test.ts`); the physics rules are
   unit-tested, the feel is validated by hand on simulator / device. The logo leans ≤ 2.5 dp. The
-  headline uses `semanticColors.brandForeground` (`brand.plum` `#5F1852`, the measured plum of the
-  word in `logo-lockup.png`, 12.1:1 on white); the subtitle keeps `foregroundSoft`. Reduce Motion:
+  headline uses `semanticColors.brandForeground` (`brand.plum` `#5F1852`, measured on the previous
+  Souris lockup, 12.1:1 on white — to be re-checked against the BeautIzzy logo); the subtitle keeps `foregroundSoft`. Reduce Motion:
   still scene, touch field off. Decorative, pointer-transparent, hidden from assistive technology;
-  the hero clips its content so nothing draws over the copy or the buttons. The splash and boot
-  surface are unchanged (lockup at 333 dp).
-- **Account state screens** — `<BrandMark variant="mark" size={126} decorative />` (compact symbol
-  above the state title).
+  the hero clips its content so nothing draws over the copy or the buttons.
+- **Account state screens** — `<BrandMark variant="symbol" size={54} decorative />` (the symbol
+  above the state title; artwork ≈ 48 × 68 dp).
 - **Plus** — a compact identity block at the bottom of the screen:
-  `<BrandMark variant="wordmark" size={150} />` (the single accessible "Souris"), then
+  `<BrandMark variant="editorial" size={125} />` (the single accessible "BeautIzzy"; artwork
+  ≈ 116 × 39 dp), then
   `Version x.y.z` from the Expo manifest in muted metadata. It never competes with the management
   rows.
-- **Sizing** — the canonical PNGs carry generous transparent padding (artwork ≈ 56 % of the lockup
-  width, 45 % of the mark, 61 % of the wordmark). `size` is the rendered box width; the height
-  follows the intrinsic ratio (lockup and wordmark 3:1, mark 3:2) with `resizeMode="contain"`, so
-  nothing is ever stretched. The PNGs are transparent and coloured: they sit directly on the white
+- **Sizing** — each canonical PNG is its artwork plus an even transparent safe padding of 4 % of
+  the artwork's longer side: `logo-primary.png` 1489 × 541 (padding 55 px), `logo-editorial.png`
+  1514 × 580 (56 px), `symbol.png` 811 × 1097 (41 px). `size` is the rendered box width; the
+  height follows the intrinsic ratio with `resizeMode="contain"`, so nothing is ever stretched.
+  `brandAssets[variant].inset` records the padding measured on each file and
+  `brandMarkInsets(variant, size)` gives it in dp (2–5 dp at the sizes used); only `HomeHeader`
+  needs it, to set the artwork exactly on the gutter. The PNGs are transparent and coloured: they sit directly on the white
   background with no cream or tinted plate behind them, and there is no white-on-light variant.
 - **Where logos do NOT appear** — Agenda, Clientèle, Produits, Prestations, details, sheets, forms,
   headers. Titles stay `Agenda` / `Clientèle` / `Produits` / `Plus`; never `Souris — Agenda`.
@@ -1231,7 +1241,7 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
              the amount in `display` 34 / 700, plum, tabular — THE strongest value
   breakdown  Déjà encaissé (value mint700) · Reste à encaisser · Temps total · Panier moyen
              body label, foregroundSoft ↔ control value, tabular
-  footer     the Souris wordmark, 84 pt, decorative
+  footer     the editorial BeautIzzy logo, 75 pt box, decorative
   ```
 
   On a long day only the LIST scrolls; the header and the totals never leave the paper, whose height
@@ -1266,7 +1276,7 @@ activity   Réalisés · Prévus · Annulés · Absences — body label ↔ cont
            each ONE spoken element (« 14 rendez-vous réalisés »)          in place of the list
 total      « CA POTENTIEL », exactly as §25
 breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen, exactly as §25
-footer     the Souris wordmark
+footer     the editorial BeautIzzy logo
 ```
 
 - **Range.** Months written in full, the year once: `21 – 27 septembre 2026`,
@@ -1570,7 +1580,8 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
               Top prestations → Top produits → Clients qui dépensent le plus → Clients les plus
               fidèles, each an `InsightsPodium`
   pagination  four short pills, lav200; the current one a 16 pt accent pill
-  footer      the Souris wordmark, 76 pt, decorative, `spacing.md` above it, clear of the torn edge
+  footer      the editorial BeautIzzy logo, 67 pt box, decorative, `spacing.md` above it, clear of
+              the torn edge
   ```
 
 - **Fit.** The whole paper is visible at once on a standard 6.1" iPhone (844 / 852 pt), even with
@@ -1676,7 +1687,7 @@ Data: `docs/domain/INSIGHTS.md` §7.
   tear line   the receipt's dashed `ReceiptTearLine`
   highlight   centred in the remaining height, raised by a 24 pt bottom padding so the podium
               stays close to the summary (below)
-  footer      « Créé avec » metadata + logo-wordmark 64 pt, 85 % opacity
+  footer      « Créé avec » metadata + logo-editorial 58 pt, 85 % opacity
   ```
 
 - **Highlight.**
@@ -1828,7 +1839,7 @@ Balayage 1                          70 €
 │                 115 €                 │ eyebrow accent over display, plum
 ╰───────────────────────────────────────╯
 Estimation indicative basée sur les prestations sélectionnées.   metadata, soft, centred
-          Créé avec [Souris wordmark]     CreatedWithSouris (64 pt, 85 %)
+          Créé avec [BeautIzzy logo]      CreatedWithSouris (58 pt, 85 %)
 ```
 
 - **Two presentations, one interior** — exactly the « Tops & tendances » pipeline (§34, §35).
@@ -1849,7 +1860,7 @@ Estimation indicative basée sur les prestations sélectionnées.   metadata, so
 - **Shared primitives** (`src/shared/ui`), also used by the « Tops & tendances » card with its
   rendering unchanged: `ShareCardCanvas` (the share canvas: ground, width, margins, 9:16, 3×),
   `ShareHighlightPanel` (the lavender panel container) and `CreatedWithSouris` (« Créé avec » +
-  wordmark, spoken « Créé avec Souris » once).
+  the editorial logo, spoken « Créé avec BeautIzzy » once).
 - No recipient: no Client name, no « Client » / « Pour » line, no blank placeholder. No height is
   fixed: a long name wraps, no line or amount is ever truncated or shrunk, and a long estimation is
   simply taller.
@@ -2106,8 +2117,8 @@ Accueil is a calm composition of existing data on the app background (`screen`).
 one page. Hierarchy comes from SURFACE and SIZE, never from new colours: one tinted hero card,
 two strong white figures, one lighter white summary, then shortcuts that are barely surfaces.
 
-- **Welcome** (`HomeHeader`). The canonical wordmark (`BrandMark`, 150 pt box — artwork about
-  92 pt — pulled back by its built-in transparent padding so the ARTWORK sits on the gutter) with
+- **Welcome** (`HomeHeader`). The editorial logo (`BrandMark`, 125 pt box — artwork about
+  116 × 39 pt — pulled back by its 5 pt transparent padding so the ARTWORK sits on the gutter) with
   today's date facing it in quiet `metadata` (« Lundi 5 octobre »). Under them « Bonjour »
   (« Bonsoir » from 18:00) in the 23 pt `summaryValue` role — the page header, deliberately not a
   screen-sized title — and « Votre journée en un coup d’œil. » in soft `body`. No watermark, no

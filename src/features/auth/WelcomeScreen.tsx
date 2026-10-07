@@ -1,11 +1,10 @@
 // Souris — Welcome
 //
-// The first screen of a fresh install: the canonical brand lockup, one
-// promise, one primary action. No carousel, no marketing. The lockup fills
-// the hero (its PNG carries wide transparent margins, so the box is wider
-// than the screen while the artwork spans about two thirds of it), and six
-// beauty objects float around it (WelcomeMotifs). The hero — and only the
-// hero — answers the finger: objects can be pushed and thrown, and drift back.
+// The first screen of a fresh install: the primary brand logo, one promise,
+// one primary action. No carousel, no marketing. The logo spans about three
+// quarters of the hero's width, a horizontal band across its middle, and six
+// beauty objects float around it (WelcomeMotifs). The hero — and only the hero — answers the finger: objects
+// can be pushed and thrown, and drift back.
 
 import { useState, type ReactNode } from 'react';
 import { useRouter } from 'expo-router';
@@ -37,10 +36,10 @@ const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios
 /** The hero is drawn for this screen width and scales with the device. */
 const REFERENCE_WIDTH = 393;
 const MAX_COMPOSITION_WIDTH = 430;
-/** Lockup box width on the reference screen: the artwork (56 % of the box) spans ≈ 265 dp. */
-const LOCKUP_WIDTH = 472;
-/** Height the lockup artwork needs for itself (half, with air), on the reference width. */
-const LOCKUP_HALF_HEIGHT = 96;
+/** Logo box width on the reference screen: the artwork (93 % of the box) spans ≈ 291 × 91 dp. */
+const LOGO_WIDTH = 314;
+/** Height the logo artwork needs for itself (half, with air), on the reference width. */
+const LOGO_HALF_HEIGHT = 74;
 /** Floor for very short heroes (large text sizes): the logo stays a logo. */
 const MIN_SCALE = 0.6;
 /** Sits the composition slightly below the centre of the hero, towards the copy. */
@@ -63,14 +62,14 @@ export function WelcomeScreen() {
   const logoScale =
     usableHeight === null
       ? widthScale
-      : Math.max(MIN_SCALE, Math.min(widthScale, usableHeight / (2 * LOCKUP_HALF_HEIGHT)));
+      : Math.max(MIN_SCALE, Math.min(widthScale, usableHeight / (2 * LOGO_HALF_HEIGHT)));
   const motifsVerticalScale =
     usableHeight === null
       ? widthScale
       : Math.max(MIN_SCALE, Math.min(widthScale, usableHeight / (2 * WELCOME_MOTIFS_HALF_HEIGHT)));
 
-  const lockupWidth = Math.round(LOCKUP_WIDTH * logoScale);
-  const lockupHeight = Math.round((lockupWidth * brandAssets.lockup.height) / brandAssets.lockup.width);
+  const logoWidth = Math.round(LOGO_WIDTH * logoScale);
+  const logoHeight = Math.round((logoWidth * brandAssets.primary.height) / brandAssets.primary.width);
 
   // Logo centre in the hero's own coordinates (the top inset shifts it down).
   const centre = { x: (hero?.width ?? windowWidth) / 2, y: ((hero?.height ?? 0) + HERO_TOP_INSET) / 2 };
@@ -100,9 +99,9 @@ export function WelcomeScreen() {
             <WelcomeMotifs bounds={bounds} scale={logoScale} touch={touch} verticalScale={motifsVerticalScale} />
             <LogoParallax touch={touch}>
               <BrandMark
-                variant="lockup"
-                size={lockupWidth}
-                style={[styles.lockup, { left: -lockupWidth / 2, top: -lockupHeight / 2 }]}
+                variant="primary"
+                size={logoWidth}
+                style={[styles.logo, { left: -logoWidth / 2, top: -logoHeight / 2 }]}
               />
             </LogoParallax>
           </View>
@@ -163,13 +162,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingTop: HERO_TOP_INSET,
   },
-  // Zero-size anchor at the logo centre: the lockup and the objects are placed
-  // around it, so the oversized lockup box never affects layout.
+  // Zero-size anchor at the logo centre: the logo and the objects are placed
+  // around it, so the logo box never affects layout.
   heroAnchor: { height: 0, width: 0 },
   unmeasured: { opacity: 0 },
-  lockup: { position: 'absolute' },
+  logo: { position: 'absolute' },
   copy: { gap: spacing.md, paddingBottom: spacing['3xl'], paddingHorizontal: horizontalGutter },
-  // Colour only: the headline picks up the plum of the word in the lockup above it.
+  // Colour only: the headline carries the brand plum under the logo.
   headline: { color: semanticColors.brandForeground },
   subtitle: { color: semanticColors.foregroundSoft, maxWidth: 320 },
   actions: { gap: spacing.sm, paddingBottom: spacing.base, paddingHorizontal: horizontalGutter },
