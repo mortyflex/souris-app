@@ -1,25 +1,25 @@
 {
   "expo": {
-    "name": "Souris",
+    "name": "BeautIzzy",
     "slug": "souris-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/brand/app-icon/icon.png",
     "scheme": "sourisapp",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F5F3F8",
     "ios": {
       "bundleIdentifier": "com.mortyflex.sourisapp",
-      "icon": "./assets/brand/Souris.icon",
+      "icon": "./assets/brand/app-icon/BeautIzzy.icon",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E1D6F9",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#320882",
+        "foregroundImage": "./assets/brand/app-icon/android-foreground.png",
+        "monochromeImage": "./assets/brand/app-icon/android-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -28,7 +28,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/brand/app-icon/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -36,10 +36,10 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#FFFFFF",
-          "image": "./assets/brand/logo-lockup.png",
-          "imageWidth": 333,
+          "image": "./assets/brand/logo-primary.png",
+          "imageWidth": 252,
           "android": {
-            "image": "./assets/brand/logo-mark.png",
+            "image": "./assets/brand/app-icon/android-splash.png",
             "imageWidth": 288
           }
         }
@@ -48,7 +48,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Souris utilise l’appareil photo pour ajouter des photos de vos clients et de vos produits, et pour scanner les codes-barres des produits.",
+          "cameraPermission": "BeautIzzy utilise l’appareil photo pour ajouter des photos de vos clients et de vos produits, et pour scanner les codes-barres des produits.",
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
@@ -57,8 +57,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Souris accède à vos photos pour ajouter une photo à un client ou à un produit.",
-          "cameraPermission": "Souris utilise l’appareil photo pour ajouter des photos de vos clients et de vos produits, et pour scanner les codes-barres des produits.",
+          "photosPermission": "BeautIzzy accède à vos photos pour ajouter une photo à un client ou à un produit.",
+          "cameraPermission": "BeautIzzy utilise l’appareil photo pour ajouter des photos de vos clients et de vos produits, et pour scanner les codes-barres des produits.",
           "microphonePermission": false
         }
       ],
@@ -66,8 +66,8 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Souris accède à vos photos pour ajouter une photo à un client ou à un produit.",
-          "savePhotosPermission": "Souris enregistre dans Photos les images que vous créez, comme vos Tops & tendances.",
+          "photosPermission": "BeautIzzy accède à vos photos pour ajouter une photo à un client ou à un produit.",
+          "savePhotosPermission": "BeautIzzy enregistre dans Photos les images que vous créez, comme vos Tops & tendances.",
           "granularPermissions": ["photo"]
         }
       ]

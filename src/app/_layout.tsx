@@ -31,7 +31,7 @@ import { duration, semanticColors } from '@/shared/ui/theme';
 
 // Bootstrap flow:
 //
-//   native Souris splash (app.json → expo-splash-screen: mark + wordmark on white)
+//   native BeautIzzy splash (app.json → expo-splash-screen: primary logo on white)
 //     ↓ fonts (Plus Jakarta Sans) + SQLite open / migrate / hydrate
 //   hideAsync() once both are settled and the first surface is committed
 //     ↓ local Supabase session restoration + local account binding (no network needed)

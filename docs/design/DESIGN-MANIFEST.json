@@ -317,26 +317,23 @@
       "symbol": "the symbol alone, for reduced uses — account state screens, estimation and share-card header"
     },
     "appIcon": {
+      "master": "assets/brand/app-icon/icon.png",
+      "masterSpec": "1024 x 1024, opaque, full-bleed purple, symbol only, no text, no baked mask",
       "ios": {
-        "iconComposer": "assets/brand/Souris.icon",
+        "iconComposer": "assets/brand/app-icon/BeautIzzy.icon",
         "configKey": "ios.icon",
-        "material": "flat: glass off, shadow none, translucency off; no wordmark",
-        "direction": "approved symbol (logo-mark.png, byte-identical copy) centred on a white document fill; nothing else",
+        "material": "glass off, shadow none, translucency off",
+        "direction": "one layer: the master copied byte-identical, full canvas",
         "layers": [
           {
             "group": "background",
             "kind": "document-fill",
-            "color": "#FFFFFF",
-            "dark": "system dark treatment (no document-level dark fill in file)"
+            "color": "#320882",
+            "note": "entirely under the opaque layer"
           },
           {
-            "group": "Mark",
-            "file": "assets/brand/logo-mark.png",
-            "scale": 1.05,
-            "translationInPoints": [
-              -15,
-              -6
-            ],
+            "group": "Icon",
+            "file": "assets/brand/app-icon/icon.png",
             "glass": false,
             "translucency": 0,
             "shadow": 0
@@ -345,32 +342,29 @@
         "appearances": [
           "default",
           "dark",
-          "mono",
-          "tinted"
-        ],
-        "sources": "assets/brand/icon-source/README.md",
-        "unusedLayerSources": "assets/brand/icon-source/*.png (halo baked into 02-mouse-mark.png)"
+          "tinted",
+          "clear"
+        ]
       },
       "derived": {
-        "iosFallback": "assets/images/icon.png",
-        "androidForeground": "assets/images/android-icon-foreground.png",
-        "androidMonochrome": "assets/images/android-icon-monochrome.png",
-        "favicon": "assets/images/favicon.png"
+        "androidForeground": "assets/brand/app-icon/android-foreground.png",
+        "androidMonochrome": "assets/brand/app-icon/android-monochrome.png",
+        "favicon": "assets/brand/app-icon/favicon.png"
       },
-      "derivedStatus": "previous identity — awaiting approved flat exports of the new icon",
-      "backgroundColor": "#E1D6F9",
-      "backgroundToken": "lavender.lav200"
+      "derivedStatus": "derived from symbol.png (Android: exact silhouette at 48 % of the canvas height, inside the safe zone; foreground recoloured to the master's light symbol tones) and from the master (favicon)",
+      "backgroundColor": "#320882",
+      "backgroundToken": "mean deep purple of the icon master background"
     },
     "splash": {
       "backgroundColor": "#FFFFFF",
       "ios": {
-        "image": "assets/brand/logo-lockup.png",
-        "imageWidth": 333
+        "image": "assets/brand/logo-primary.png",
+        "imageWidth": 252
       },
       "android": {
-        "image": "assets/brand/logo-mark.png",
+        "image": "assets/brand/app-icon/android-splash.png",
         "imageWidth": 288,
-        "note": "mark only: the Android 12+ splash mask would clip the lockup"
+        "note": "dedicated splash file (coloured symbol, 56 % of the canvas): the Android 12+ splash mask would clip the horizontal logo"
       }
     },
     "runtimeComponent": "src/shared/ui/BrandMark.tsx",

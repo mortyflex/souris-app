@@ -279,9 +279,10 @@ colorés sur fond transparent) :
 | `assets/brand/logo-editorial.png` (1514 × 580) | **EDITORIAL** — le nom, le symbole tenant lieu d'initiale | en-tête d'Accueil, bloc identité de Plus, tickets, pied « Créé avec » des images partagées |
 | `assets/brand/symbol.png` (811 × 1097) | **SYMBOL** — le symbole seul | usages réduits : écrans d'état de compte, en-tête de l'estimation et de la carte de partage |
 
-L'icône et le splash natifs utilisent encore les anciens fichiers Souris (`logo-lockup.png`,
-`logo-mark.png`, `Souris.icon`, `assets/images/`) tant que `app.json` n'est pas rebrandé ; les
-variantes sur fond sombre de `docs/design/brand/` sont des références, jamais chargées par l'app.
+L'icône et le splash natifs dérivent des mêmes fichiers (voir plus bas) ; les anciens fichiers Souris
+(`logo-lockup.png`, `logo-mark.png`, `logo-wordmark.png`, `Souris.icon`, `assets/images/`) ne sont
+plus référencés et attendent leur suppression. Les variantes sur fond sombre de
+`docs/design/brand/` sont des références, jamais chargées par l'app.
 
 Règles :
 
@@ -303,14 +304,18 @@ Règles :
 - les PNG sont posés directement sur le fond clair de l'app (blanc `--bg`), sans plaque ni fond
   crème ou teinté derrière eux ; il n'existe pas de variante blanche, et aucune ne doit être posée
   sur fond clair. Détails d'implémentation : `DESIGN_OVERRIDES.md` §15.
-- **Icône d'application iOS — à plat** : `assets/brand/Souris.icon` (document Icon Composer,
-  `ios.icon`). Un seul calque : `logo-mark.png` copié à l'identique, centré, dessin ≈ 71 % de la
-  largeur, sur fond de document blanc. **Ni glass, ni ombre, ni halo, ni relief** : le symbole validé,
-  net et sobre. L'échelle et la position vivent dans `icon.json`. Pas de wordmark dans l'icône.
-  Apparence sombre : fond assombri par le système ; mono / teinté : rendu système à partir de la
-  silhouette. Les icônes Android / raster de `assets/images/` montrent encore l'ancienne identité
-  tant que des exports approuvés ne sont pas fournis. Les calques de `assets/brand/icon-source/`
-  sont conservés mais inutilisés (halo cuit dans les pixels, voir le README du dossier).
+- **Icône d'application** : le maître validé est `assets/brand/app-icon/icon.png` (1024 × 1024,
+  opaque, fond violet à bord perdu, symbole seul, aucun texte, aucun masque arrondi cuit). iOS :
+  `assets/brand/app-icon/BeautIzzy.icon` (document Icon Composer, `ios.icon`), un seul calque — le
+  maître copié à l'identique, sans glass ni ombre ajoutée ; les apparences sombre, teintée et claire
+  sont rendues par le système. Android : icône adaptative dérivée de `symbol.png`
+  (`android-foreground.png`, la silhouette exacte du symbole à 48 % de la hauteur, dans la zone
+  sûre, recolorée dans les tons clairs lavande / blanc du maître ; `android-monochrome.png`, la même
+  silhouette unie) sur `#320882`, le violet profond moyen du fond du maître. Web :
+  `favicon.png` (96 × 96, le maître réduit).
+- **Splash natif** : `logo-primary.png` sur blanc, `imageWidth` 252 (iOS), identique à la surface de
+  démarrage ; Android affiche le symbole coloré sur une marge sûre (`android-splash.png`, fichier dédié, distinct
+  du premier plan de l'icône adaptative).
 - **Welcome** : le logo principal occupe la zone de marque (dessin ≈ 291 × 91 dp sur un écran de
   393 dp) ; six
   objets beauté validés (`assets/brand/welcome-floating/` : sèche-cheveux, ciseaux, miroir, pinceau,

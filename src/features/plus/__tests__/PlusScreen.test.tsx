@@ -18,7 +18,7 @@ jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
 jest.mock('expo-constants', () => ({
   __esModule: true,
-  default: { expoConfig: { name: 'Souris', version: '1.0.0' } },
+  default: { expoConfig: { name: 'BeautIzzy', version: '1.0.0' } },
 }));
 
 jest.mock('react-native-safe-area-context', () => {

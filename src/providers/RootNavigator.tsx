@@ -66,7 +66,7 @@ export function RootNavigator() {
   }
 }
 
-/** The primary logo on white, 252 dp wide: the size the native splash takes when it is rebranded. */
+/** Mirrors the iOS splash (primary logo in a 252 dp box on white). */
 function BootSurface() {
   return (
     <View style={styles.boot} testID="boot-surface">

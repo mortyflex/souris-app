@@ -113,21 +113,27 @@ by generic icons:
 | `assets/brand/symbol.png` (811 × 1097) | `symbol` — the symbol alone | account state screens, estimation and share-card header |
 
 The previous Souris files (`logo-lockup.png`, `logo-mark.png`, `logo-wordmark.png`, `Souris.icon`,
-`assets/images/`) are no longer rendered in-app. The native icon and splash below still point at
-them until `app.json` is rebranded. The dark-background variants in `docs/design/brand/` are design
-references, never loaded at runtime.
+`assets/brand/icon-source/`, `assets/images/`) are no longer referenced by the app or its config and
+await deletion. The dark-background variants in `docs/design/brand/` are design references, never
+loaded at runtime.
 
-- iOS app icon: `assets/brand/Souris.icon` (Apple Icon Composer document, `ios.icon` in
-  `app.json`). Flat by design: a single layer, `logo-mark.png` copied byte-identical, centred on a
-  white document fill; glass off, no shadow, no glow. No wordmark. Dark: system dark background;
-  mono/tinted: system rendering. Settings and verification: `assets/brand/icon-source/README.md`.
-- Derived runtime icons (`assets/images/icon.png` — fallback/metadata PNG, not the iOS icon —,
-  `android-icon-foreground.png`, `android-icon-monochrome.png`, `favicon.png`) still show the
-  PREVIOUS identity. They are outputs, not sources, and must be replaced by approved exports of the
-  new icon; do not improvise them.
-- Splash: `app.json` → `expo-splash-screen` renders the canonical `assets/brand/logo-lockup.png`
-  (iOS, `imageWidth` 333, no derived splash PNG) and `logo-mark.png` (Android, `imageWidth` 288,
-  mark only because the Android 12+ splash mask would clip the lockup) on white `#FFFFFF`.
+- App icon master: `assets/brand/app-icon/icon.png` (1024 × 1024, opaque, full-bleed purple, symbol
+  only, no text, no baked mask). It is the top-level `icon` in `app.json`.
+- iOS app icon: `assets/brand/app-icon/BeautIzzy.icon` (Apple Icon Composer document, `ios.icon`).
+  One layer: the master copied byte-identical, full canvas, glass off, no added shadow. Dark, tinted
+  and clear appearances are the system's renderings of that layer.
+- Android adaptive icon: `android-foreground.png` (`symbol.png` scaled to 48 % of the 1024 canvas
+  height (about 72 % of the visible launcher area, like the master), centred on its enclosing circle,
+  well inside the 66 dp safe zone; its silhouette is untouched
+  and its colours are remapped to the light lavender / white tones of the master's symbol),
+  `android-monochrome.png` (the same silhouette in one ink), `backgroundColor` `#320882` (the mean
+  deep purple of the master's background).
+- Favicon: `assets/brand/app-icon/favicon.png` (96 × 96, the master downsampled).
+- Splash: `app.json` → `expo-splash-screen` renders `assets/brand/logo-primary.png` (iOS,
+  `imageWidth` 252, the same box as the in-app boot surface) and `android-splash.png` (Android,
+  `imageWidth` 288: a dedicated file, the coloured symbol at 56 % of a transparent 1024 canvas, so
+  it stays inside the Android 12+ circular mask; never the launcher foreground) on white
+  `#FFFFFF`.
 - In-app rendering goes through `src/shared/ui/BrandMark.tsx`; no other component loads the PNGs.
 - UI typeface: **Plus Jakarta Sans** (see `DESIGN_OVERRIDES.md` §12). Inter appears only inside the
   historical export files and must not be reintroduced. The wordmark is an image, never typeset.

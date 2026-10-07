@@ -402,39 +402,41 @@ The exported reference shows the logos only inside a web launcher and an onboard
 runtime integrates the canonical assets (transparent PNGs, never modified) at deliberate brand
 moments only.
 
-**BeautIzzy rendering (in-app).** `BrandMark` draws `assets/brand/logo-primary.png` (`primary`),
-`logo-editorial.png` (`editorial`) and `symbol.png` (`symbol`). The native icon and splash bullets
-below still describe the previous Souris files (`Souris.icon`, `logo-lockup.png`, `logo-mark.png`,
-`assets/images/`): `app.json` is not rebranded yet, so the native splash shows the old lockup
-before the boot surface shows the new logo.
+**BeautIzzy rendering.** `BrandMark` draws `assets/brand/logo-primary.png` (`primary`),
+`logo-editorial.png` (`editorial`) and `symbol.png` (`symbol`). The native icon and splash derive
+from the same masters. The previous Souris files (`Souris.icon`, `icon-source/`, `logo-lockup.png`,
+`logo-mark.png`, `logo-wordmark.png`, `assets/images/`) are no longer referenced and await deletion.
 
-- **iOS app icon (flat)** — `assets/brand/Souris.icon`, an Apple Icon Composer document
-  referenced by `ios.icon`; Xcode compiles it and renders every size, appearance and pre-26 fallback
-  from it. Direction: the approved symbol, flat and crisp on clean white — no glass, no shadow, no
-  glow, no relief. One layer: `logo-mark.png` copied byte-identical into the document (never
-  resized, recoloured or cropped), scale 1.05, translation (−15, −6) pt so the artwork spans ≈ 71 %
-  of the canvas width and is centred on its own bounding box; white `#FFFFFF` document fill; glass
-  off, shadow none, translucency off. Dark appearance: no specialization (system dark background).
-  Mono / tinted: system rendering from the layer alpha. No wordmark in the icon. The layered sources
-  in `assets/brand/icon-source/` are retained but unused: `02-mouse-mark.png` has a halo baked into
-  its pixels that rendered blurry at Home Screen size (see the README there).
-- **Fallback raster icon** — `assets/images/icon.png` stays as the top-level `icon` for Expo Go,
-  web metadata and any tooling that needs a flat PNG. It is not the iOS icon. **It still shows the
-  previous identity** (navy mouse on `#E1D6F9`) until an approved flat export of the new icon is
-  supplied; the same applies to `assets/images/favicon.png`.
-- **Android icon** — adaptive icon (`android-icon-foreground.png`, `android-icon-monochrome.png`,
-  `backgroundColor` `#E1D6F9`), platform-appropriate, no glass imitation. **These files still show
-  the previous identity** until approved Android exports of the new icon are supplied.
+- **App icon master** — `assets/brand/app-icon/icon.png`: 1024 × 1024, opaque, full-bleed purple
+  background, the symbol alone, no text, no rounded mask baked in. It is the top-level `icon` (Expo
+  Go, metadata, tooling). Never edited: every derivative below is produced from it or from
+  `symbol.png`.
+- **iOS app icon** — `assets/brand/app-icon/BeautIzzy.icon`, an Apple Icon Composer document
+  referenced by `ios.icon`; Xcode compiles it and renders every size and appearance from it. One
+  layer: the master copied byte-identical (`Assets/icon.png`), full canvas, no scale or translation;
+  glass off, shadow none, translucency off. The document fill (`#320882`, the master's mean
+  background) sits entirely under the opaque layer. Dark, tinted and clear appearances are the
+  system's renderings of that single layer.
+- **Android icon** — adaptive icon. `android-foreground.png`: `symbol.png` scaled to 48 % of the
+  1024 px canvas height and centred on its minimal enclosing circle: about 72 % of the visible
+  launcher area, the proportion of the master, and well inside the 66 dp safe zone. Its alpha is the
+  approved silhouette, pixel for pixel; only its colours change: each pixel's luminance rank in
+  `symbol.png` takes the colour of the same rank among the master's light symbol tones (`#7E3EF0` →
+  `#BF7DFC` → `#FDF8FD`), so the launcher shows a light symbol on deep purple like the master.
+  `android-monochrome.png`: the same silhouette in a single ink. `backgroundColor` `#320882`, the
+  mean deep purple of the master's background (adaptive icons take one solid colour, not its
+  gradient).
+- **Favicon** — `assets/brand/app-icon/favicon.png`, 96 × 96, the master downsampled.
 - **Native splash** — `expo-splash-screen`: white `#FFFFFF` background (identical to the Agenda
-  first frame). iOS shows the canonical `assets/brand/logo-lockup.png` directly at `imageWidth`
-  333 (no derived splash PNG any more). Android shows `logo-mark.png` alone at `imageWidth` 288,
-  because the Android 12+ system splash masks the image to a circle that would clip the lockup; the
-  mark's artwork spans 45 % of its canvas, so it stays inside the safe circle. No spinner, text, or
-  animation beyond the short native fade (`duration.settle`).
+  first frame). iOS shows `assets/brand/logo-primary.png` at `imageWidth` 252, the same box as the
+  boot surface. Android shows `android-splash.png` at `imageWidth` 288: the Android 12+ system
+  splash masks the image to a circle that would clip the horizontal logo. The file is dedicated to
+  the splash (the coloured `symbol.png` at 56 % of a transparent 1024 px canvas, inside the mask) and
+  is deliberately not the launcher foreground, which may differ from it. No spinner, text, or animation beyond the short native fade (`duration.settle`).
 - **Bootstrap** — the splash stays visible until Plus Jakarta Sans and the SQLite bootstrap are both
   settled and the router is committed; the root view shares the splash white and the boot surface
-  renders `<BrandMark variant="primary" size={252} decorative />` (artwork ≈ 233 × 73 dp), the size
-  the native splash takes when it is rebranded, so no intermediate unbranded surface exists.
+  renders `<BrandMark variant="primary" size={252} decorative />` (artwork ≈ 233 × 73 dp), the same
+  box as the native splash, so no intermediate unbranded surface or jump exists.
 - **Welcome** — the primary logo is the hero: box width 314 dp on the 393 dp reference screen
   (artwork ≈ 291 × 91 dp), scaled with the screen width (capped at 430 dp); it stays the single
   accessible "BeautIzzy". Its obstacle ellipse is 145 × 45 dp. Around it, `WelcomeMotifs` floats the six approved PNGs of
