@@ -13,6 +13,13 @@
 // paper is only ever visible below the slot. The capsule is drawn above the
 // clip. No line of the receipt animates on its own: the paper is the object.
 //
+// The paper keeps its NATURAL height. Inside the clip it sits in ONE vertical
+// scroll view: on a short screen (iPhone SE) or a long receipt the whole paper
+// — header, lines, totals and BeautIzzy footer — scrolls as one document, back
+// up into the slot, and the room of the actions is padded under it so its torn
+// bottom edge always comes clear of them. When the paper fits, nothing scrolls
+// and nothing bounces.
+//
 // Motion is Reanimated on the UI thread: `presence` (scrim, capsule, « Fermer »,
 // closing), `feed` (the travel) and `settle` (one tiny give at the end). The
 // only JS work is starting them and one timer that unmounts the Modal after the
@@ -37,6 +44,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -71,10 +79,9 @@ import {
   semanticColors,
 } from './theme';
 
+/** The paper is as tall as its content: the printer scrolls it, it never bounds it. */
 export interface ReceiptPaperFrame {
   readonly width: number;
-  /** The paper never grows past this: its own list scrolls instead. */
-  readonly maxHeight: number;
 }
 
 /** An icon button after « Fermer ». Icon-only: its label is spoken, never shown. */
@@ -211,7 +218,6 @@ export function ReceiptPrinter({
   );
   const capsuleWidth = paperWidth + receiptPrinter.capsuleOverhang * 2;
   const actionsHeight = closeAreaHeight + (actionNotice !== undefined ? NOTICE_ROOM : 0);
-  const maxHeight = Math.max(windowHeight - slotLine - restOffset - actionsHeight, 0);
 
   // Nothing is mounted — and the receipt is not even built — while closed.
   if (!presented) return null;
@@ -241,13 +247,27 @@ export function ReceiptPrinter({
 
         {/* Everything above the slot line is cut off: the paper only exists below it. */}
         <View pointerEvents="box-none" style={[styles.clip, { top: slotLine }]}>
-          <Animated.View
-            onLayout={onPaperLayout}
-            style={[styles.paper, { marginTop: restOffset, width: paperWidth }, paperStyle]}
-            testID={`${testID}-paper`}
+          <ScrollView
+            alwaysBounceVertical={false}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: actionsHeight }]}
+            showsVerticalScrollIndicator={false}
+            testID={`${testID}-scroll`}
           >
-            {renderReceipt({ width: paperWidth, maxHeight })}
-          </Animated.View>
+            {/* The dimmed page around the paper still dismisses; the labelled backdrop above is the spoken one. */}
+            <Pressable
+              accessible={false}
+              onPress={onClose}
+              style={StyleSheet.absoluteFill}
+              testID={`${testID}-scroll-backdrop`}
+            />
+            <Animated.View
+              onLayout={onPaperLayout}
+              style={[styles.paper, { marginTop: restOffset, width: paperWidth }, paperStyle]}
+              testID={`${testID}-paper`}
+            >
+              {renderReceipt({ width: paperWidth })}
+            </Animated.View>
+          </ScrollView>
         </View>
 
         <Animated.View
@@ -325,6 +345,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scrim: { ...StyleSheet.absoluteFill, backgroundColor: scrim },
   clip: { bottom: 0, left: 0, overflow: 'hidden', position: 'absolute', right: 0 },
+  // At least the height of the clip, so the dimmed page stays tappable under a short paper.
+  scrollContent: { flexGrow: 1 },
   paper: { alignSelf: 'center' },
   capsule: {
     alignSelf: 'center',

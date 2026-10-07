@@ -1,4 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { getInsightsPeriod, type BusinessInsights } from '@/domain/insights';
 import { haptics } from '@/shared/lib/haptics';
@@ -104,7 +105,6 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
   function renderReceipt() {
     return render(
       <BusinessInsightsReceipt
-        maxHeight={900}
         model={model}
         nextLabel="Mois suivant"
         onNext={jest.fn()}
@@ -152,6 +152,23 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
     expect(view.queryByText(/Partager/)).toBeNull();
   });
 
+  it('is ONE natural-height paper: only the carousel scrolls, and the wordmark closes it', async () => {
+    const view = await renderReceipt();
+    const receipt = view.getByTestId('business-insights-receipt');
+
+    // The printer scrolls the whole paper on a short screen; nothing scrolls vertically inside it.
+    const scrollViews = receipt.queryAll((node) => node.type === 'RCTScrollView');
+    expect(scrollViews.map((node) => node.props.testID)).toEqual(['business-insights-rankings']);
+    expect(StyleSheet.flatten(receipt.props.style).maxHeight).toBeUndefined();
+    // The BeautIzzy wordmark is part of the paper, after the pagination.
+    const footer = receipt.queryAll((node) => node.props.resizeMode === 'contain');
+    expect(footer).toHaveLength(1);
+    const order = receipt.queryAll(
+      (node) => node === footer[0] || node.props.testID === 'business-insights-pagination',
+    );
+    expect(order[order.length - 1]).toBe(footer[0]);
+  });
+
   it('follows swipes through every category, with ONE selection haptic per settled change', async () => {
     const selection = jest.spyOn(haptics, 'selection');
     const view = await renderReceipt();
@@ -181,7 +198,6 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
     const onCategoryChange = jest.fn();
     const view = await render(
       <BusinessInsightsReceipt
-        maxHeight={900}
         model={model}
         nextLabel="Mois suivant"
         onCategoryChange={onCategoryChange}

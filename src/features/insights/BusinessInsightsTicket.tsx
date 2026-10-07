@@ -209,7 +209,6 @@ function BusinessInsightsPaper({
 
   return (
     <BusinessInsightsReceipt
-      maxHeight={frame.maxHeight}
       model={model}
       nextLabel={navigation.next}
       onCategoryChange={setCategory}

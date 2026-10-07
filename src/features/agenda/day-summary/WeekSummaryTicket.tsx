@@ -31,7 +31,7 @@ export function WeekSummaryTicket({ visible, day, onClose }: WeekSummaryTicketPr
     <ReceiptPrinter
       backdropLabel="Fermer le résumé de la semaine"
       onClose={onClose}
-      renderReceipt={({ width, maxHeight }) => {
+      renderReceipt={({ width }) => {
         const weekDays = getWeekDays(day);
         const period = { firstDay: weekDays[0], lastDay: weekDays[6] };
         const sessionAppointments = appointments.map((entry) => entry.appointment);
@@ -41,9 +41,7 @@ export function WeekSummaryTicket({ visible, day, onClose }: WeekSummaryTicketPr
         );
         const activity = getAppointmentPeriodActivity(sessionAppointments, period);
         const model = buildWeekSummaryReceipt(summary, activity, period.firstDay);
-        return (
-          <DaySummaryReceipt maxHeight={maxHeight} model={model} testID="week-summary" width={width} />
-        );
+        return <DaySummaryReceipt model={model} testID="week-summary" width={width} />;
       }}
       testID="week-summary"
       visible={visible}

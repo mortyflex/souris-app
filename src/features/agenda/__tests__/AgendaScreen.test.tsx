@@ -470,6 +470,24 @@ describe('AgendaScreen — day navigation', () => {
     expect(selectedDate(view)).toBe('Jeudi 17 sept.');
   });
 
+  it('prints ONE natural-height paper the printer scrolls, its BeautIzzy footer inside it', async () => {
+    const view = await renderAgenda();
+    await press(view, 'agenda-date-next');
+    await openDaySummary(view);
+
+    const receipt = within(view.getByTestId('day-summary-scroll')).getByTestId('day-summary-receipt');
+    // Nothing scrolls inside the paper, and nothing bounds its height: no line can leave it.
+    expect(receipt.queryAll((node) => node.type === 'RCTScrollView')).toHaveLength(0);
+    expect(StyleSheet.flatten(receipt.props.style).maxHeight).toBeUndefined();
+    expect(within(receipt).getByTestId('day-summary-list')).toBeTruthy();
+    // The wordmark comes after the breakdown, in the same paper.
+    const tail = receipt.queryAll(
+      (node) => node.props.resizeMode === 'contain' || node.props.testID === 'day-summary-metric-averageBasket',
+    );
+    expect(tail).toHaveLength(2);
+    expect(tail[1]!.props.resizeMode).toBe('contain');
+  });
+
   it('still prints a neutral summary on a free day', async () => {
     const view = await renderAgenda();
     await pickAgendaDay(view, new Date(2026, 10, 3));

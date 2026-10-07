@@ -1,4 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { getAppointmentDaySummary, getAppointmentPeriodSummary } from '@/domain/appointments';
 import { getWeekDays } from '@/features/agenda/calendar/week';
@@ -19,6 +20,7 @@ import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 import { semanticColors } from '@/shared/ui/theme';
 
 import { HomeScreen } from '../HomeScreen';
+import { LABEL_OVERHANG } from '../components/HomeQuickAction';
 
 const mockPush = jest.fn();
 
@@ -277,8 +279,16 @@ describe('HomeScreen', () => {
         width: 56,
       });
     }
+    // Whole words on ONE line at full size: the label borrows the gutter of its column
+    // (never more than half of it, so two neighbours cannot overlap) instead of shrinking.
+    const rowGap = StyleSheet.flatten(row.props.style).gap as number;
+    expect(LABEL_OVERHANG).toBeGreaterThan(0);
+    expect(LABEL_OVERHANG * 2).toBeLessThanOrEqual(rowGap);
     for (const label of ['Rendez-vous', 'Client', 'Produit', 'Vente']) {
-      expect(within(row).getByText(label).props.adjustsFontSizeToFit).toBeUndefined();
+      const text = within(row).getByText(label);
+      expect(text.props.adjustsFontSizeToFit).toBeUndefined();
+      expect(text.props.numberOfLines).toBe(1);
+      expect(text).toHaveStyle({ marginHorizontal: -LABEL_OVERHANG });
     }
   });
 

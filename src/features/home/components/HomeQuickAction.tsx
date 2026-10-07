@@ -7,6 +7,10 @@
 // (`accessibilityLabel`). Pressing only reports — the flows opened are the
 // existing ones.
 //
+// The label is centred under the tile and may reach half-way into the gutter
+// on each side of its column (`LABEL_OVERHANG`): at 375 pt a quarter of the
+// row is a few points narrower than « Rendez-vous », which must stay whole.
+//
 // Every shortcut CREATES something. Where the system glyph already carries a
 // plus (calendar.badge.plus, person.badge.plus) nothing is added; where it
 // does not (the box, the bag), `plusBadge` sets the same small plus on the
@@ -20,6 +24,8 @@ import { interaction, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 const SURFACE_SIZE = 56;
 const PLUS_BADGE_SIZE = 12;
+/** Half the gap between two shortcuts (`spacing.sm`): two neighbouring labels can never overlap. */
+export const LABEL_OVERHANG = spacing.sm / 2;
 
 interface HomeQuickActionProps {
   /** Short visible label: one word where possible. */
@@ -92,5 +98,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -6,
   },
-  label: { color: semanticColors.foreground, textAlign: 'center' },
+  label: { color: semanticColors.foreground, marginHorizontal: -LABEL_OVERHANG, textAlign: 'center' },
 });

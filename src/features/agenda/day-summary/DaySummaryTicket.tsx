@@ -33,7 +33,7 @@ export function DaySummaryTicket({ visible, day, onClose }: DaySummaryTicketProp
     <ReceiptPrinter
       backdropLabel="Fermer le résumé du jour"
       onClose={onClose}
-      renderReceipt={({ width, maxHeight }) => {
+      renderReceipt={({ width }) => {
         const summary = getAppointmentDaySummary(
           { appointments: appointments.map((entry) => entry.appointment), sales, deposits },
           day,
@@ -41,7 +41,7 @@ export function DaySummaryTicket({ visible, day, onClose }: DaySummaryTicketProp
         const model = buildDaySummaryReceipt(summary, day, (clientId) =>
           getResolvedClientDisplayName(getClientById(clientId)),
         );
-        return <DaySummaryReceipt maxHeight={maxHeight} model={model} width={width} />;
+        return <DaySummaryReceipt model={model} width={width} />;
       }}
       testID="day-summary"
       visible={visible}

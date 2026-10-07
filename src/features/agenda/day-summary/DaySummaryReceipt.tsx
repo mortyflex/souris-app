@@ -10,12 +10,15 @@
 //   total      « CA potentiel » — THE strongest value of the paper
 //   breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen
 //
-// It renders the receipt model as is and computes nothing. On a long day only
-// the LIST scrolls: the header and the totals never leave the paper. BeautIzzy
-// typography and tokens throughout — no texture, no grain, no serif.
+//   footer     the BeautIzzy wordmark, inside the paper
+//
+// It renders the receipt model as is and computes nothing. The paper is as
+// tall as its content — nothing scrolls inside it: on a long day or a short
+// screen the printer scrolls the whole receipt. BeautIzzy typography and
+// tokens throughout — no texture, no grain, no serif.
 
 import { SymbolView } from 'expo-symbols';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { daySummaryIcon } from '@/shared/icons/day-summary-icon';
 import { AppText } from '@/shared/ui/AppText';
@@ -39,7 +42,6 @@ import type {
 interface DaySummaryReceiptProps {
   readonly model: DaySummaryReceiptModel;
   readonly width: number;
-  readonly maxHeight: number;
   /** Prefix of every testID: `day-summary` (default) or `week-summary`. */
   readonly testID?: string;
 }
@@ -47,11 +49,10 @@ interface DaySummaryReceiptProps {
 export function DaySummaryReceipt({
   model,
   width,
-  maxHeight,
   testID = 'day-summary',
 }: DaySummaryReceiptProps) {
   return (
-    <ReceiptPaper maxHeight={maxHeight} testID={`${testID}-receipt`} width={width}>
+    <ReceiptPaper testID={`${testID}-receipt`} width={width}>
       <View style={styles.header}>
         <View
           accessibilityElementsHidden
@@ -74,17 +75,11 @@ export function DaySummaryReceipt({
       <ReceiptTearLine />
 
       {model.activity ? (
-        // Scrolls like the list: at large text sizes the totals still stay on the paper.
-        <ScrollView
-          contentContainerStyle={styles.activity}
-          showsVerticalScrollIndicator={false}
-          style={styles.list}
-          testID={`${testID}-activity`}
-        >
+        <View style={styles.activity} testID={`${testID}-activity`}>
           {model.activity.map((line) => (
             <ActivityLine key={line.key} line={line} testID={`${testID}-activity-${line.key}`} />
           ))}
-        </ScrollView>
+        </View>
       ) : model.isEmpty ? (
         <View accessible style={styles.empty} testID={`${testID}-empty`}>
           <AppText variant="stateTitle" style={styles.centered}>
@@ -95,16 +90,11 @@ export function DaySummaryReceipt({
           </AppText>
         </View>
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          style={styles.list}
-          testID={`${testID}-list`}
-        >
+        <View style={styles.list} testID={`${testID}-list`}>
           {model.rows.map((row) => (
             <ReceiptRow key={row.key} row={row} />
           ))}
-        </ScrollView>
+        </View>
       )}
 
       <ReceiptTearLine />
@@ -215,8 +205,7 @@ const styles = StyleSheet.create({
   centered: { textAlign: 'center' },
   empty: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl },
   activity: { gap: spacing.sm, paddingVertical: spacing.xs },
-  list: { flexGrow: 0, flexShrink: 1 },
-  listContent: { gap: spacing.md, paddingVertical: spacing.xs },
+  list: { gap: spacing.md, paddingVertical: spacing.xs },
   row: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
   rowTime: { color: foregroundSoft, fontVariant: ['tabular-nums'], width: 40 },
   rowBody: { flex: 1, minWidth: 0 },

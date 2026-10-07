@@ -1246,8 +1246,12 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
   footer     the editorial BeautIzzy logo, 75 pt box, decorative
   ```
 
-  On a long day only the LIST scrolls; the header and the totals never leave the paper, whose height
-  is bounded by the capsule above and « Fermer » below.
+  The paper is ONE continuous document at its NATURAL height: header, list, total, breakdown and
+  footer, with nothing scrolling inside it and no height bound. When it is taller than the room
+  between the capsule and « Fermer » — a long day, a short screen (iPhone SE), large text — the
+  PRINTER scrolls the whole paper vertically (`ReceiptPrinter`, shared by every receipt): it slides
+  back up into the slot, and the room of the actions is padded under it, so the footer and the torn
+  bottom edge always come clear of them. When it fits, nothing scrolls and nothing bounces.
 - **Empty day.** The same paper: « Aucun rendez-vous » in the header, « Cette journée est libre » /
   « Aucun rendez-vous prévu. » in place of the list, every figure at zero. Never an error, never a
   refusal to open.
@@ -1285,7 +1289,7 @@ footer     the editorial BeautIzzy logo
   `28 septembre – 4 octobre 2026`, `28 décembre 2026 – 3 janvier 2027`.
 - **Compact.** No Appointment list, no seven daily sections, no chart. An empty week is the same
   paper: « Aucun rendez-vous », every line at zero.
-- **Large text.** The activity lines scroll like the daily list; the header and totals stay.
+- **Large text.** As §25: the whole paper scrolls in the printer; nothing scrolls inside it.
 
 ---
 
@@ -1591,7 +1595,7 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
   summary rows `spacing.xs` apart, the tear line `spacing.md` above and below, pagination
   `spacing.md` under the podium, wordmark `spacing.md` under the pagination, no extra padding under
   it beyond the paper's own. Text sizes, podium, medals and wordmark size are unchanged. Only
-  larger text sizes or a small phone (iPhone SE) fall back to the quiet vertical scroll.
+  larger text sizes or a small phone (iPhone SE) make the printer scroll the whole paper (§25).
 
 - **Podium** (`features/insights/components/InsightsPodium.tsx`), the visual signature of the
   receipt. The category eyebrow (accent, centred) belongs to the page, so a page stands on its own.
@@ -1625,7 +1629,7 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
   ONE selection haptic, never during the drag. Tapping a pill moves to its category (animated,
   instant under Reduce Motion). The page survives period changes and is forgotten on close. Nothing
   re-prints. The summary never scrolls horizontally. Nothing scrolls vertically while the content
-  fits; only an unusually tall layout falls back to a quiet, non-bouncing vertical scroll.
+  fits, and never inside the paper: an unusually tall layout is scrolled whole by the printer (§25).
 - **Period labels.** `22 sept. 2026` · `21 – 27 sept. 2026` (`28 sept. – 4 oct. 2026`,
   `28 déc. 2026 – 3 janv. 2027`) · `Septembre 2026` · `2026`. The arrows are labelled after the period
   they move by (« Mois précédent », « Semaine suivante »…).
@@ -1847,8 +1851,8 @@ Estimation indicative basée sur les prestations sélectionnées.   metadata, so
 - **Two presentations, one interior** — exactly the « Tops & tendances » pipeline (§34, §35).
   `EstimationDocument` is the interior only, with no surface of its own:
   - **printer:** inside `ReceiptPaper`, the torn-edge ticket every BeautIzzy receipt feeds out of the
-    printer (as `BusinessInsightsReceipt`). The whole interior scrolls inside the room the printer
-    leaves; its text follows the device text size.
+    printer (as `BusinessInsightsReceipt`). The paper is as tall as its document; the printer
+    scrolls it whole when it is taller than the screen (§25). Its text follows the device text size.
   - **export:** `ImageExportFrame` on `SHARE_CARD_BACKGROUND` holding the shared `ShareCardCanvas`
     (as `BusinessInsightsShareCard`): flat warm paper FULL-BLEED — never a rounded card on another
     ground — 360 dp wide, the share-card margins (52 pt top, 48 pt bottom, 24 pt sides), every
@@ -2158,7 +2162,9 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
   it, outside the surface — « Rendez-vous », « Client », « Produit », « Vente » — spoken in full
   (« Nouveau rendez-vous », « Ajouter un client », « Ajouter un produit », « Nouvelle vente »).
   The whole column is the button. They open the existing flows; the glyphs are those of the
-  same actions on the other tabs.
+  same actions on the other tabs. The label stays on ONE line at full `chip` size and is never
+  abbreviated: centred under its tile, it may reach half the row gap into the gutter on each side
+  of its column, which is what keeps « Rendez-vous » whole at 375 pt (iPhone SE).
   Every shortcut CREATES something, and says so with a small plus: the calendar and the person
   use the system `…badge.plus` glyphs; the box (Produit) and the bag (Vente) have none, so the
   tile sets the same small accent plus, on a white knock-out disc, on the glyph's lower-right

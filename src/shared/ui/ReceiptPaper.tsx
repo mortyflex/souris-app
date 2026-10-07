@@ -6,8 +6,9 @@
 // « Résumé du jour » and « Tops & tendances » each lay out their own lines
 // inside it and separate their sections with `ReceiptTearLine`.
 //
-// The paper never grows past `maxHeight` (the room the printer leaves between
-// its capsule and « Fermer »): the caller lets one part of its content scroll.
+// The paper is as tall as its content, never bounded by the screen: on a short
+// screen the printer scrolls the WHOLE paper (`ReceiptPrinter`), so the footer
+// of a receipt always stays on the paper, above the torn bottom edge.
 
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -16,18 +17,17 @@ import { nativeShadows, receiptPaper, receiptPrinter, spacing } from './theme';
 
 interface ReceiptPaperProps {
   readonly width: number;
-  readonly maxHeight: number;
   readonly children: ReactNode;
   readonly testID?: string;
 }
 
-export function ReceiptPaper({ width, maxHeight, children, testID }: ReceiptPaperProps) {
+export function ReceiptPaper({ width, children, testID }: ReceiptPaperProps) {
   // The top teeth are drawn LAST, over the room kept for them here, so the
   // shadow of the paper never tints them.
   const topEdgeRoom = getToothWidth(width) / 2 - StyleSheet.hairlineWidth;
 
   return (
-    <View style={{ maxHeight, paddingTop: topEdgeRoom, width }} testID={testID}>
+    <View style={{ paddingTop: topEdgeRoom, width }} testID={testID}>
       <View style={styles.paper}>{children}</View>
       <PaperEdge side="bottom" width={width} />
       <PaperEdge side="top" width={width} />
@@ -96,7 +96,6 @@ function PaperEdge({ side, width }: { readonly side: 'top' | 'bottom'; readonly 
 const styles = StyleSheet.create({
   paper: {
     backgroundColor: receiptPaper.surface,
-    flexShrink: 1,
     paddingBottom: spacing.base,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,

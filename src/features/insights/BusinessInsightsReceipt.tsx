@@ -14,12 +14,12 @@
 //              ONE adjustable element for VoiceOver / TalkBack
 //   footer     the BeautIzzy wordmark, clear of the torn edge
 //
-// Horizontal paging is THE interaction. Nothing scrolls vertically while the
-// content fits; only an unusually tall layout (the largest text sizes on a
-// small phone) falls back to a quiet vertical scroll. The gaps between the
-// sections are deliberately compact so that the whole paper — two-line podium
-// names, pagination, wordmark and torn edge included — fits at once on a
-// standard 6.1" iPhone.
+// Horizontal paging is THE interaction. Nothing scrolls vertically inside the
+// paper: it is as tall as its content, and on a short screen (iPhone SE, the
+// largest text sizes) the printer scrolls the whole receipt, wordmark
+// included. The gaps between the sections are deliberately compact so that the
+// whole paper — two-line podium names, pagination, wordmark and torn edge
+// included — fits at once on a standard 6.1" iPhone.
 //
 // It renders the receipt model as is and computes nothing. The carousel page
 // is local presentation state: it survives period changes and is forgotten
@@ -78,7 +78,6 @@ const PAPER_SIDE_PADDING = spacing.lg;
 interface BusinessInsightsReceiptProps {
   readonly model: InsightsReceiptModel;
   readonly width: number;
-  readonly maxHeight: number;
   readonly periodKind: InsightsPeriodKind;
   readonly periodLabel: string;
   readonly previousLabel: string;
@@ -93,7 +92,6 @@ interface BusinessInsightsReceiptProps {
 export function BusinessInsightsReceipt({
   model,
   width,
-  maxHeight,
   periodKind,
   periodLabel,
   previousLabel,
@@ -130,162 +128,150 @@ export function BusinessInsightsReceipt({
   };
 
   return (
-    <ReceiptPaper maxHeight={maxHeight} testID="business-insights-receipt" width={width}>
-      <ScrollView
-        alwaysBounceVertical={false}
-        bounces={false}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        style={styles.scroll}
-        testID="business-insights-content"
-      >
-        <View style={styles.header}>
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={styles.badge}
-          >
-            <SymbolView name={insightsIcon} size={18} tintColor={semanticColors.accent} />
-          </View>
-          <AppText accessibilityRole="header" variant="sheetTitle">
-            Tops & tendances
+    <ReceiptPaper testID="business-insights-receipt" width={width}>
+      <View style={styles.header}>
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.badge}
+        >
+          <SymbolView name={insightsIcon} size={18} tintColor={semanticColors.accent} />
+        </View>
+        <AppText accessibilityRole="header" variant="sheetTitle">
+          Tops & tendances
+        </AppText>
+      </View>
+
+      <View style={styles.controls}>
+        <SegmentedControl
+          onChange={onPeriodKindChange}
+          options={PERIOD_OPTIONS}
+          stretch
+          testID="business-insights-period"
+          value={periodKind}
+        />
+        <PeriodNavigator
+          nextLabel={nextLabel}
+          onNext={onNext}
+          onPrevious={onPrevious}
+          previousLabel={previousLabel}
+          style={styles.navigator}
+          testID="business-insights-navigator"
+        >
+          <PeriodNavigatorCopy title={periodLabel} titleTestID="business-insights-period-label" />
+        </PeriodNavigator>
+      </View>
+
+      <View style={styles.summary}>
+        <View
+          accessible
+          accessibilityLabel={`Encaissé, ${model.cashCollected}`}
+          style={styles.total}
+          testID="business-insights-cash"
+        >
+          <AppText variant="eyebrow" style={styles.totalLabel}>
+            Encaissé
+          </AppText>
+          <AppText adjustsFontSizeToFit numberOfLines={1} variant="display" style={styles.totalValue}>
+            {model.cashCollected}
           </AppText>
         </View>
-
-        <View style={styles.controls}>
-          <SegmentedControl
-            onChange={onPeriodKindChange}
-            options={PERIOD_OPTIONS}
-            stretch
-            testID="business-insights-period"
-            value={periodKind}
-          />
-          <PeriodNavigator
-            nextLabel={nextLabel}
-            onNext={onNext}
-            onPrevious={onPrevious}
-            previousLabel={previousLabel}
-            style={styles.navigator}
-            testID="business-insights-navigator"
-          >
-            <PeriodNavigatorCopy title={periodLabel} titleTestID="business-insights-period-label" />
-          </PeriodNavigator>
-        </View>
-
-        <View style={styles.summary}>
+        <View style={styles.metrics}>
           <View
             accessible
-            accessibilityLabel={`Encaissé, ${model.cashCollected}`}
-            style={styles.total}
-            testID="business-insights-cash"
+            accessibilityLabel={model.completedAppointments}
+            style={styles.metric}
+            testID="business-insights-completed"
           >
-            <AppText variant="eyebrow" style={styles.totalLabel}>
-              Encaissé
-            </AppText>
-            <AppText adjustsFontSizeToFit numberOfLines={1} variant="display" style={styles.totalValue}>
-              {model.cashCollected}
+            <AppText variant="metadata" style={styles.metricLabel}>
+              {model.completedAppointments}
             </AppText>
           </View>
-          <View style={styles.metrics}>
-            <View
-              accessible
-              accessibilityLabel={model.completedAppointments}
-              style={styles.metric}
-              testID="business-insights-completed"
-            >
-              <AppText variant="metadata" style={styles.metricLabel}>
-                {model.completedAppointments}
-              </AppText>
-            </View>
-            <View
-              accessible
-              accessibilityLabel={`Panier moyen, ${model.averageAppointmentValue}`}
-              style={[styles.metric, styles.metricEnd]}
-              testID="business-insights-average"
-            >
-              <AppText variant="metadata" style={styles.metricLabel}>
-                Panier moyen
-              </AppText>
-              <AppText variant="control" style={styles.tabular}>
-                {model.averageAppointmentValue}
-              </AppText>
-            </View>
+          <View
+            accessible
+            accessibilityLabel={`Panier moyen, ${model.averageAppointmentValue}`}
+            style={[styles.metric, styles.metricEnd]}
+            testID="business-insights-average"
+          >
+            <AppText variant="metadata" style={styles.metricLabel}>
+              Panier moyen
+            </AppText>
+            <AppText variant="control" style={styles.tabular}>
+              {model.averageAppointmentValue}
+            </AppText>
           </View>
-          {model.activityNote !== undefined && (
-            <AppText variant="metadata" style={styles.note} testID="business-insights-activity-note">
-              {model.activityNote}
-            </AppText>
-          )}
-          {model.conflictNote !== undefined && (
-            <AppText variant="metadata" style={styles.note} testID="business-insights-conflict-note">
-              {model.conflictNote}
-            </AppText>
-          )}
         </View>
+        {model.activityNote !== undefined && (
+          <AppText variant="metadata" style={styles.note} testID="business-insights-activity-note">
+            {model.activityNote}
+          </AppText>
+        )}
+        {model.conflictNote !== undefined && (
+          <AppText variant="metadata" style={styles.note} testID="business-insights-conflict-note">
+            {model.conflictNote}
+          </AppText>
+        )}
+      </View>
 
-        <ReceiptTearLine style={styles.tearLine} />
+      <ReceiptTearLine style={styles.tearLine} />
 
-        <ScrollView
-          decelerationRate="fast"
-          horizontal
-          onMomentumScrollEnd={onMomentumScrollEnd}
-          pagingEnabled
-          ref={carousel}
-          showsHorizontalScrollIndicator={false}
-          style={styles.carousel}
-          testID="business-insights-rankings"
-        >
-          {model.sections.map((section, index) => {
-            const active = index === page;
-            return (
-              // Only the settled page is exposed to VoiceOver / TalkBack; the
-              // pagination below moves between categories.
-              <View
-                accessibilityElementsHidden={!active}
-                importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}
-                key={section.key}
-                style={[styles.page, { width }]}
-                testID={`business-insights-page-${section.key}`}
-              >
-                <InsightsPodium section={section} testID={`business-insights-podium-${section.key}`} />
-              </View>
-            );
-          })}
-        </ScrollView>
-
-        <View
-          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-          accessibilityLabel={`${current.title}, ${page + 1} sur ${pageCount}`}
-          accessibilityRole="adjustable"
-          accessible
-          onAccessibilityAction={(event) =>
-            goTo(event.nativeEvent.actionName === 'increment' ? page + 1 : page - 1)
-          }
-          style={styles.pagination}
-          testID="business-insights-pagination"
-        >
-          {model.sections.map((section, index) => (
-            <Pressable
-              hitSlop={{ bottom: spacing.md, left: spacing.xs, right: spacing.xs, top: spacing.md }}
+      <ScrollView
+        decelerationRate="fast"
+        horizontal
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        pagingEnabled
+        ref={carousel}
+        showsHorizontalScrollIndicator={false}
+        style={styles.carousel}
+        testID="business-insights-rankings"
+      >
+        {model.sections.map((section, index) => {
+          const active = index === page;
+          return (
+            // Only the settled page is exposed to VoiceOver / TalkBack; the
+            // pagination below moves between categories.
+            <View
+              accessibilityElementsHidden={!active}
+              importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}
               key={section.key}
-              onPress={() => goTo(index)}
-              testID={`business-insights-page-indicator-${section.key}`}
+              style={[styles.page, { width }]}
+              testID={`business-insights-page-${section.key}`}
             >
-              <View style={[styles.pill, index === page && styles.pillActive]} />
-            </Pressable>
-          ))}
-        </View>
-
-        <BrandMark decorative size={67} style={styles.brand} variant="editorial" />
+              <InsightsPodium section={section} testID={`business-insights-podium-${section.key}`} />
+            </View>
+          );
+        })}
       </ScrollView>
+
+      <View
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+        accessibilityLabel={`${current.title}, ${page + 1} sur ${pageCount}`}
+        accessibilityRole="adjustable"
+        accessible
+        onAccessibilityAction={(event) =>
+          goTo(event.nativeEvent.actionName === 'increment' ? page + 1 : page - 1)
+        }
+        style={styles.pagination}
+        testID="business-insights-pagination"
+      >
+        {model.sections.map((section, index) => (
+          <Pressable
+            hitSlop={{ bottom: spacing.md, left: spacing.xs, right: spacing.xs, top: spacing.md }}
+            key={section.key}
+            onPress={() => goTo(index)}
+            testID={`business-insights-page-indicator-${section.key}`}
+          >
+            <View style={[styles.pill, index === page && styles.pillActive]} />
+          </Pressable>
+        ))}
+      </View>
+
+      <BrandMark decorative size={67} style={styles.brand} variant="editorial" />
     </ReceiptPaper>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flexGrow: 0, flexShrink: 1 },
-  // The paper's own bottom padding keeps the wordmark clear of the torn edge.
-  content: { paddingBottom: 0 },
   header: { alignItems: 'center', gap: 2 },
   badge: {
     alignItems: 'center',
@@ -333,6 +319,7 @@ const styles = StyleSheet.create({
   pillActive: { backgroundColor: semanticColors.accent, width: 16 },
   tearLine: { marginVertical: spacing.md },
   // The wordmark PNG carries its own transparent padding: a short margin
-  // already reads as breathing room under the pagination.
+  // already reads as breathing room under the pagination. The paper's own
+  // bottom padding keeps it clear of the torn edge.
   brand: { alignSelf: 'center', marginTop: spacing.md, opacity: 0.85 },
 });

@@ -490,8 +490,11 @@ describe('EstimationCreationScreen', () => {
       });
     });
 
-    // The on-screen paper scrolls; nothing is cut from it or from the image.
-    expect(view.getByTestId('estimation-paper-scroll')).toBeTruthy();
+    // The printer scrolls the whole on-screen paper; nothing is cut from it or from the image,
+    // and the export surface stays outside that scroll.
+    const printerScroll = within(view.getByTestId('estimation-scroll'));
+    expect(printerScroll.getByTestId('estimation-document-paper')).toBeTruthy();
+    expect(printerScroll.queryByTestId('estimation-export-frame', HIDDEN)).toBeNull();
     const paper = within(view.getByTestId('estimation-document-paper'));
     const exported = within(view.getByTestId('estimation-export-frame', HIDDEN));
     for (const [index, name] of names.entries()) {

@@ -1,11 +1,11 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { StyleSheet, Text } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 
 import { glassIcons } from '../GlassIconButton';
 import { ReceiptPrinter } from '../ReceiptPrinter';
-import { receiptPrint } from '../theme';
+import { receiptPrint, receiptPrinter } from '../theme';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
@@ -93,6 +93,49 @@ describe('ReceiptPrinter', () => {
 
     expect(onClose).toHaveBeenCalledTimes(4);
     expect(view.queryByLabelText(/^×$|^X$/)).toBeNull();
+  });
+
+  it('scrolls the whole natural-height paper, clear of the actions, and never bounds its height', async () => {
+    const onClose = jest.fn();
+    const frames: object[] = [];
+    const view = await render(
+      <ReceiptPrinter
+        actionNotice="Image enregistrée dans Photos"
+        backdropLabel="Fermer le ticket"
+        offstage={<Text testID="export-surface">card</Text>}
+        onClose={onClose}
+        renderReceipt={(frame) => {
+          frames.push(frame);
+          return <Text testID="receipt-content">paper</Text>;
+        }}
+        testID="printer"
+        visible
+      />,
+    );
+
+    // The paper is handed a width only: its height is its content's.
+    expect(Object.keys(frames[0]!)).toEqual(['width']);
+    const scroll = view.getByTestId('printer-scroll');
+    expect(scroll.props.horizontal).toBeFalsy();
+    expect(scroll.props.alwaysBounceVertical).toBe(false);
+    expect(within(scroll).getByTestId('printer-paper')).toBeTruthy();
+    expect(within(scroll).getByTestId('receipt-content')).toBeTruthy();
+    expect(StyleSheet.flatten(view.getByTestId('printer-paper').props.style).maxHeight).toBeUndefined();
+    // Room for « Fermer », its gaps and the notice line under the paper.
+    const content = StyleSheet.flatten(scroll.props.contentContainerStyle);
+    expect(content.flexGrow).toBe(1);
+    expect(content.paddingBottom).toBeGreaterThanOrEqual(
+      receiptPrinter.closeHeight + receiptPrinter.closeGap * 2,
+    );
+    // The export surface is never inside the scroll.
+    expect(within(scroll).queryByTestId('printer-offstage', { includeHiddenElements: true })).toBeNull();
+    expect(view.getByTestId('printer-offstage', { includeHiddenElements: true })).toBeTruthy();
+
+    // The dimmed page around the paper still dismisses, without a second spoken button.
+    const scrollBackdrop = view.getByTestId('printer-scroll-backdrop');
+    expect(scrollBackdrop.props.accessible).toBe(false);
+    await act(async () => fireEvent.press(scrollBackdrop));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('shows only the « Fermer » icon button unless the receipt offers more actions', async () => {

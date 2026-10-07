@@ -26,13 +26,13 @@
 //                `shareViewAsImage`. It reports no outcome.
 //
 // Both capture the off-screen ImageExportFrame, sized from the canvas's
-// measured height. The ticket scrolls when it is taller than the room the
-// printer leaves.
+// measured height — never the on-screen paper. That paper is as tall as its
+// document: the printer scrolls it when it is taller than the screen.
 //
 // One action at a time; a failure shows one retryable line.
 
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import type { LayoutChangeEvent, View } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 import { PhotosPermissionError, saveViewToPhotos, shareViewAsImage } from '@/shared/lib/share-image';
@@ -157,16 +157,10 @@ export function EstimationTicket({ visible, model, onClose }: EstimationTicketPr
         )
       }
       onClose={onClose}
-      renderReceipt={({ width, maxHeight }) =>
+      renderReceipt={({ width }) =>
         model === undefined ? null : (
-          <ReceiptPaper maxHeight={maxHeight} testID="estimation-document-paper" width={width}>
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              style={styles.scroll}
-              testID="estimation-paper-scroll"
-            >
-              <EstimationDocument model={model} />
-            </ScrollView>
+          <ReceiptPaper testID="estimation-document-paper" width={width}>
+            <EstimationDocument model={model} />
           </ReceiptPaper>
         )
       }
@@ -175,8 +169,3 @@ export function EstimationTicket({ visible, model, onClose }: EstimationTicketPr
     />
   );
 }
-
-const styles = StyleSheet.create({
-  // The ticket never grows past the printer's room: the whole interior scrolls.
-  scroll: { flexGrow: 0, flexShrink: 1 },
-});
