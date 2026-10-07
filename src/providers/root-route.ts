@@ -1,4 +1,4 @@
-// Souris — root navigation state (pure)
+// BeautIzzy — root navigation state (pure)
 //
 // One deterministic decision per render, from the Auth and Business states and
 // the first-sync gate (CloudSyncRunner):

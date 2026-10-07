@@ -1,4 +1,4 @@
-// Souris — Client domain types
+// BeautIzzy — Client domain types
 //
 // Source: docs/domain/CLIENTS.md, docs/product/PRODUCT.md §11
 //
@@ -7,7 +7,7 @@
 //
 // Relationships from other domains (e.g. Appointments) use clientId only.
 // Commercial history, formulas, statistics, and product purchases are
-// separate concerns and are intentionally absent from the canonical model. Activity statistics are always DERIVED from Souris
+// separate concerns and are intentionally absent from the canonical model. Activity statistics are always DERIVED from BeautIzzy
 // Appointment state — never stored on the Client.
 
 import type { ClientBirthday } from './birthday';
@@ -20,12 +20,12 @@ export interface Client {
   readonly phone?: string;
   readonly email?: string;
   /**
-   * Birthday as a day + month only (see birthday.ts). Souris never stores,
+   * Birthday as a day + month only (see birthday.ts). BeautIzzy never stores,
    * asks for, or invents a birth year. Optional.
    */
   readonly birthday?: ClientBirthday;
   /**
-   * Free-text professional note written in Souris (see notes.ts): trimmed,
+   * Free-text professional note written in BeautIzzy (see notes.ts): trimmed,
    * line breaks preserved, absent when blank. Never imported from legacy data.
    */
   readonly notes?: string;

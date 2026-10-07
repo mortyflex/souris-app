@@ -1,4 +1,4 @@
-// Souris — payment method icons
+// BeautIzzy — payment method icons
 //
 // The ONE cross-platform mapping for the two checkout methods, shared by
 // Appointment Details (Encaisser, payment summary), the Checkout sheet and

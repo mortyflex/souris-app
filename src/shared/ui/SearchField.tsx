@@ -1,4 +1,4 @@
-// Souris — Search field
+// BeautIzzy — Search field
 //
 // Subtle native search field: search symbol on the left, accent outline on
 // focus, comfortable native height. Its idle fill follows `FieldPlacement`:

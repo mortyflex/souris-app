@@ -1,4 +1,4 @@
-// Souris — Communication Core: the ONE retry policy
+// BeautIzzy — Communication Core: the ONE retry policy
 //
 // Every retry constant lives here. The worker asks this module what to do
 // after a retryable failure; the database only receives the resulting delay

@@ -1,4 +1,4 @@
-// Souris — client import: choose a source
+// BeautIzzy — client import: choose a source
 //
 // The entry of every import source: « Coller une liste » and « Importer un
 // fichier CSV ». Phone contacts and photos are future adapters of the same

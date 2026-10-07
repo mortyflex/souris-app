@@ -1,4 +1,4 @@
-// Souris — remote aggregate → SQLite (Cloud Sync V1D)
+// BeautIzzy — remote aggregate → SQLite (Cloud Sync V1D)
 //
 // The mirror image of aggregate-payload.ts: writes ONE validated remote
 // aggregate into the local tables. It is used by the new-device restore and by
@@ -25,7 +25,7 @@
 // of the row (children cascade), guarded exactly like a user deletion — a
 // Client still referenced by history, or an Appointment with a payment or a
 // linked Sale or a deposit, is NOT removed (`BLOCKED`); integrity wins over
-// convergence. A deposit is never tombstoned by Souris (a correction is the
+// convergence. A deposit is never tombstoned by BeautIzzy (a correction is the
 // VOIDED status, an UPSERT); a remote tombstone written by an administrator
 // removes the local row without a guard — nothing references a deposit.
 

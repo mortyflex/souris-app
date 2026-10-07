@@ -1,4 +1,4 @@
-// Souris — bulk Client insertion of the client import (fictional data)
+// BeautIzzy — bulk Client insertion of the client import (fictional data)
 //
 // `insertClients` is the single-Client insert + CLIENT outbox mark repeated
 // inside ONE transaction, refused on an unbound database, and retry-safe.

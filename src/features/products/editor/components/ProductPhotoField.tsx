@@ -1,4 +1,4 @@
-// Souris — Product photo field
+// BeautIzzy — Product photo field
 //
 // The image area is the interaction: tapping the tile opens the shared photo
 // source flow (camera / library / remove — shared/ui/PhotoSourceFlow.tsx,

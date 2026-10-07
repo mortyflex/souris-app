@@ -1,4 +1,4 @@
-// Souris — money helpers
+// BeautIzzy — money helpers
 //
 // The ONE place that formats euros for display and parses French decimal
 // input into integer cents. Checkout and Cash Register amounts are exact

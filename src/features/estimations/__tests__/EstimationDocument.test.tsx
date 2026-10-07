@@ -1,4 +1,4 @@
-// Souris — EstimationDocument: the style contract of the generated estimate.
+// BeautIzzy — EstimationDocument: the style contract of the generated estimate.
 //
 // Semantic checks, no pixel snapshot: the content, the highlighted total in
 // the shared lavender panel, the shared « Créé avec BeautIzzy » footer, wrapped
@@ -9,7 +9,7 @@ import { render, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 import { brandAssets } from '@/shared/ui/BrandMark';
-import { CREATED_WITH_SOURIS_LABEL } from '@/shared/ui/CreatedWithSouris';
+import { CREATED_WITH_BEAUTIZZY_LABEL } from '@/shared/ui/CreatedWithBeautIzzy';
 import { lavender, radii, semanticColors } from '@/shared/ui/theme';
 
 import { EstimationDocument } from '../EstimationDocument';
@@ -85,7 +85,7 @@ describe('EstimationDocument', () => {
     const value = view.getByTestId('estimation-document-total-value');
     expect(value.props.children).toBe(model.total);
     expect(style(value).color).toBe(semanticColors.brandForeground);
-    // As large as the Souris display value, never clipped to one line.
+    // As large as the BeautIzzy display value, never clipped to one line.
     expect(style(value).fontSize).toBeGreaterThanOrEqual(30);
     expect(value.props.numberOfLines).toBeUndefined();
     expect(value.props.adjustsFontSizeToFit).toBeUndefined();
@@ -105,7 +105,7 @@ describe('EstimationDocument', () => {
     const view = await render(<EstimationDocument model={model} />);
 
     const footer = view.getByTestId('estimation-document-branding');
-    expect(footer.props.accessibilityLabel).toBe(CREATED_WITH_SOURIS_LABEL);
+    expect(footer.props.accessibilityLabel).toBe(CREATED_WITH_BEAUTIZZY_LABEL);
     expect(within(footer).getByText('Créé avec')).toBeTruthy();
     const wordmark = view.container.queryAll(
       (node) => node.type === 'Image' && node.props.source === brandAssets.editorial.source,

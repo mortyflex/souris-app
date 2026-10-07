@@ -1,4 +1,4 @@
-// Souris — historical schema fixtures (never imported by app code)
+// BeautIzzy — historical schema fixtures (never imported by app code)
 //
 // Migration tests build databases exactly as OLDER builds left them. The
 // current stores write today's columns, so rows of historical schemas are

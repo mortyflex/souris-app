@@ -1,4 +1,4 @@
-# Souris — Calendar Blocks (Personal Unavailability)
+# BeautIzzy — Calendar Blocks (Personal Unavailability)
 
 ## 1. Purpose
 
@@ -20,7 +20,7 @@ Calendar Block       → staff member + interval + reason
 ```
 
 The two are deliberately different entities. A Calendar Block is NOT an Appointment variant, a status,
-or an item type. There is no generic "calendar event" abstraction in Souris, and none was introduced:
+or an item type. There is no generic "calendar event" abstraction in BeautIzzy, and none was introduced:
 the only thing the two share is a place on the Agenda, which is a presentation concern (§7).
 
 Source: `src/domain/calendar-blocks/` (plain TypeScript, no React / Expo / persistence import).
@@ -64,7 +64,7 @@ no status              no notes                 no cancellation / no-show outcom
 
 Its lifecycle is "exists" or "deleted". `SCHEDULED … NO_SHOW` are Appointment statuses and are never
 reused here. Sync metadata (`created_at`, `updated_at`, `sync_version`, `deleted_at`) is NOT part of the
-domain value: like every Souris aggregate it lives in the sync layer (`CLOUD_SYNC.md` §20).
+domain value: like every BeautIzzy aggregate it lives in the sync layer (`CLOUD_SYNC.md` §20).
 
 ---
 

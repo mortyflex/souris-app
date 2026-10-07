@@ -1,4 +1,4 @@
-// Souris — StatePill
+// BeautIzzy — StatePill
 //
 // The small state pill of detail sheets — a dot and the label on a light fill
 // of the same family, the shape of the Appointment Details status. Used for

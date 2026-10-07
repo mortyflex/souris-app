@@ -1,4 +1,4 @@
-// Souris — Sale store
+// BeautIzzy — Sale store
 //
 // Sale completion is ONE transaction: every stock decrement is revalidated
 // and applied against the stored quantity (active Product, enough stock),

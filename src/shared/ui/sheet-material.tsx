@@ -1,4 +1,4 @@
-// Souris — sheet material (Glass Sheet Pilot, DESIGN_OVERRIDES.md §40)
+// BeautIzzy — sheet material (Glass Sheet Pilot, DESIGN_OVERRIDES.md §40)
 //
 // EXPERIMENTAL and opt-in. Every sheet shell keeps the approved satin material
 // (`overlayMaterial.surface`, §20) unless its consumer passes

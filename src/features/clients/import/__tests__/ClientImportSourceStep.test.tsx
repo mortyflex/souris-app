@@ -1,4 +1,4 @@
-// Souris — client import source choice
+// BeautIzzy — client import source choice
 
 import { act, fireEvent, render } from '@testing-library/react-native';
 

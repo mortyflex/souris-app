@@ -1,4 +1,4 @@
-// Souris — status pill of Appointment Details
+// BeautIzzy — status pill of Appointment Details
 //
 // ONE pill for every status: a small dot and the label on a light fill of
 // the same family. The status arrives as data (label + tone); only colours

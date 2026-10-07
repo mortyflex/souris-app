@@ -1,4 +1,4 @@
-// Souris — Appointment selected-service editor card
+// BeautIzzy — Appointment selected-service editor card
 //
 // Shared by NEW Appointment Creation (Résumé) and existing Appointment
 // Editing. Collapsed it is a compact recognition/reorder row; expanded it

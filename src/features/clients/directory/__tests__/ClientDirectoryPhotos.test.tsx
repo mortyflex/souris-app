@@ -1,4 +1,4 @@
-// Souris — Client photos in the Clientèle directory
+// BeautIzzy — Client photos in the Clientèle directory
 //
 // Each mounted row resolves its own `photoPath` through the shared Client
 // photo cache (useClientPhotoUri → ClientAvatar): initials at once in the

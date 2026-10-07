@@ -1,4 +1,4 @@
-// Souris - Appointment service editing operations
+// BeautIzzy - Appointment service editing operations
 //
 // These operations rebuild AppointmentItems from editable snapshots without
 // changing appointment metadata or mutating the source Appointment.

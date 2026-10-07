@@ -1,4 +1,4 @@
-// Souris — per-appointment reminder control in « Modifier le rendez-vous »
+// BeautIzzy — per-appointment reminder control in « Modifier le rendez-vous »
 // (Lot B): visible only while the GLOBAL preference is on, hydrated from the
 // stored flag (absent = enabled), saved as an explicit choice only when the
 // professional actually changed it.

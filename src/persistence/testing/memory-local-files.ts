@@ -1,4 +1,4 @@
-// Souris — in-memory LocalFiles for tests
+// BeautIzzy — in-memory LocalFiles for tests
 //
 // Records every file as a URI → content entry so tests can assert exactly
 // which files exist after a Product image commit. Never imported by

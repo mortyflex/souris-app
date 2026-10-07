@@ -1,4 +1,4 @@
-// Souris — client import result
+// BeautIzzy — client import result
 //
 //   8 clients importés
 //   [ 2 clients n'ont pas pu être importés + message ]   only after a failure

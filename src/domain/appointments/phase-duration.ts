@@ -1,4 +1,4 @@
-// Souris — Appointment phase duration stepping
+// BeautIzzy — Appointment phase duration stepping
 //
 // Source: docs/domain/APPOINTMENTS.md §14
 //

@@ -1,4 +1,4 @@
-// Souris — client import phone comparison keys
+// BeautIzzy — client import phone comparison keys
 //
 // Duplicate detection needs to recognize the same number written in the
 // many ways an address book carries it:

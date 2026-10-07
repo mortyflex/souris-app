@@ -1,4 +1,4 @@
-// Souris — Appointment creation steps
+// BeautIzzy — Appointment creation steps
 //
 // Pure step-state rules for the three-step creation flow:
 //   Cliente → Prestations → Résumé

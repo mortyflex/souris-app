@@ -1,4 +1,4 @@
-// Souris — client import pipeline (docs/domain/CLIENTS.md §3b)
+// BeautIzzy — client import pipeline (docs/domain/CLIENTS.md §3b)
 //
 // Source adapters produce ClientImportCandidates (PASTE — text-parser.ts;
 // CSV — csv-parser.ts; CONTACTS and OCR are future adapters feeding the same

@@ -1,4 +1,4 @@
-// Souris — Communication Core: in-memory queue for worker tests
+// BeautIzzy — Communication Core: in-memory queue for worker tests
 //
 // Mirrors the observable contract of the communications_* functions closely
 // enough to exercise the worker: claiming turns SCHEDULED into PROCESSING and

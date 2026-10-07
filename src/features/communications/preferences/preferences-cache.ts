@@ -1,4 +1,4 @@
-// Souris — local cache of the LAST KNOWN server reminder preference
+// BeautIzzy — local cache of the LAST KNOWN server reminder preference
 //
 // The server preference is authoritative (CLAUDE.md-level rule of Lot B);
 // this cache only keeps the Settings screen and the appointment editors

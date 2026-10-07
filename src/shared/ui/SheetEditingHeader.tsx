@@ -1,4 +1,4 @@
-// Souris — SheetEditingHeader
+// BeautIzzy — SheetEditingHeader
 //
 // The canonical header of creation / editing sheets (DESIGN_OVERRIDES.md §30):
 // « Annuler » leading, ONE title centered on the header — « Nouveau

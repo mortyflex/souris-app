@@ -1,4 +1,4 @@
-// Souris — Cash Register entry row
+// BeautIzzy — Cash Register entry row
 //
 // ONE counted payment of the « Encaissements » list:
 //

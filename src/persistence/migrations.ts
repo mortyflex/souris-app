@@ -1,4 +1,4 @@
-// Souris — migration runner
+// BeautIzzy — migration runner
 //
 // Deterministic and transactional: every pending migration runs in its own
 // transaction together with the `user_version` bump, so a crash mid-way
@@ -20,7 +20,7 @@ export function migrateDatabase(db: SourisDatabase): number {
   const installed = readSchemaVersion(db);
   if (installed > CURRENT_SCHEMA_VERSION) {
     throw new Error(
-      `Souris database schema v${installed} is newer than the supported v${CURRENT_SCHEMA_VERSION}`,
+      `BeautIzzy database schema v${installed} is newer than the supported v${CURRENT_SCHEMA_VERSION}`,
     );
   }
 

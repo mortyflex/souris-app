@@ -1,4 +1,4 @@
-// Souris — Cash Register presentation helpers
+// BeautIzzy — Cash Register presentation helpers
 //
 // Local civil calendar navigation and French labels for the Caisse screen.
 // Money formatting comes from the shared money helpers; totals come from
@@ -46,7 +46,7 @@ export function formatCashRegisterMonth(date: Date): string {
 }
 
 /**
- * Caption under the big total. Souris records what was received; it never
+ * Caption under the big total. BeautIzzy records what was received; it never
  * claims accounting-grade turnover.
  *   Day   → « encaissé aujourd'hui » / « encaissé ce jour »
  *   Month → « encaissé ce mois-ci » / « encaissé ce mois »

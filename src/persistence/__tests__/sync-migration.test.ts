@@ -1,4 +1,4 @@
-// Souris — schema v7: sync_outbox + sync_state (docs/architecture/PERSISTENCE.md §4)
+// BeautIzzy — schema v7: sync_outbox + sync_state (docs/architecture/PERSISTENCE.md §4)
 
 import type { Sale } from '@/domain/sales';
 

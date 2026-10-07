@@ -1,4 +1,4 @@
-// Souris — Promotional SMS consent field (SMS pivot Phase 2)
+// BeautIzzy — Promotional SMS consent field (SMS pivot Phase 2)
 //
 // One quiet optional form row: the professional records the client's
 // EXPRESSED choice about promotional SMS (birthday and win-back offers) —

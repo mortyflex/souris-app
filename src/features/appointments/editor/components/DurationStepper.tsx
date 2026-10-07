@@ -1,4 +1,4 @@
-// Souris — Duration stepper (Appointment timing)
+// BeautIzzy — Duration stepper (Appointment timing)
 //
 // The ONE control for appointment-specific phase durations, shared by
 // Appointment Details (expanded Service) and the Appointment editor card

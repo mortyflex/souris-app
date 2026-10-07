@@ -1,4 +1,4 @@
-// Souris — Immutable Appointment mutations
+// BeautIzzy — Immutable Appointment mutations
 //
 // Source: docs/domain/APPOINTMENTS.md §10 (reordering), §14 (phase duration editing)
 //

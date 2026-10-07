@@ -1,6 +1,6 @@
-// Souris — SheetPresentation
+// BeautIzzy — SheetPresentation
 //
-// The ONE bottom-anchored sheet presentation of Souris (DESIGN_OVERRIDES.md
+// The ONE bottom-anchored sheet presentation of BeautIzzy (DESIGN_OVERRIDES.md
 // §16, §20), shared by its two hosts:
 //
 // - `BottomSheet`  hosts it in a React Native Modal (drawers opened by state);
@@ -34,7 +34,7 @@
 //   safe-area view mounted while a modal is still being presented (and inside a
 //   surface still translated below the screen) measures 0 and never recomputes:
 //   content then sits on the home indicator. The inset therefore comes from the
-//   window metrics known at launch (Souris is portrait-locked), a resting probe
+//   window metrics known at launch (BeautIzzy is portrait-locked), a resting probe
 //   only ever raising it;
 // - optional canonical header, scrollable body, fixed action area and
 //   keyboard-safe layout (the bottom safe-area inset is dropped while the
@@ -519,7 +519,7 @@ function SheetSurface({
   );
 }
 
-/** The Souris grabber: shared by every sheet shell. */
+/** The BeautIzzy grabber: shared by every sheet shell. */
 export function SheetGrabber() {
   return <View accessible={false} style={styles.grabber} />;
 }

@@ -1,4 +1,4 @@
-// Souris — WeekSummaryTicket
+// BeautIzzy — WeekSummaryTicket
 //
 // « Résumé de la semaine » of the week the Agenda is showing — the SAME seven
 // local days as Week mode (`getWeekDays`: Monday → Sunday of the selected day).

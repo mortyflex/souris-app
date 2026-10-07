@@ -1,4 +1,4 @@
-// Souris — Accueil « Cette semaine »
+// BeautIzzy — Accueil « Cette semaine »
 //
 // The current Agenda week in ONE compact card: the number of appointments as
 // the strong figure, then what they have brought in and what they represent.

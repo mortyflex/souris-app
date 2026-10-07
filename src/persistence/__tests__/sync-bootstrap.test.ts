@@ -1,4 +1,4 @@
-// Souris — Cloud Sync V1C: first-sync classification and initial-upload enqueue
+// BeautIzzy — Cloud Sync V1C: first-sync classification and initial-upload enqueue
 // (docs/architecture/CLOUD_SYNC.md §11)
 
 import { bootstrapPersistence } from '../bootstrap';

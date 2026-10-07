@@ -1,4 +1,4 @@
-// Souris — Communication Core: the production transport registry
+// BeautIzzy — Communication Core: the production transport registry
 //
 // EMAIL → ResendEmailTransport, always required: a deployment without the
 // Resend secrets refuses the whole pass BEFORE anything is claimed.

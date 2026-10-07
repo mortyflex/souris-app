@@ -1,4 +1,4 @@
-// Souris — the ONE Supabase client
+// BeautIzzy — the ONE Supabase client
 //
 // Application-root only: screens and providers never import this module;
 // they talk to the AuthGateway / BusinessGateway boundaries, which the root
@@ -7,7 +7,7 @@
 // Session persistence uses the `localStorage` installed by expo-sqlite
 // (`expo-sqlite/localStorage/install`, the current Expo/Supabase
 // integration), so no extra storage dependency is needed. Tokens live only
-// inside that Supabase-owned storage — never in Souris business tables.
+// inside that Supabase-owned storage — never in BeautIzzy business tables.
 //
 // `AppState` drives token auto-refresh (start when active, stop otherwise);
 // the listener is registered exactly once, with the client.

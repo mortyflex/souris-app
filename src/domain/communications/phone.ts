@@ -1,4 +1,4 @@
-// Souris — communication phone rules
+// BeautIzzy — communication phone rules
 //
 // THE phone-usability rules of client SMS communications, mirroring the
 // server (`communications_client_phone_e164` and

@@ -1,4 +1,4 @@
-// Souris — Accueil « Encaissements du jour »
+// BeautIzzy — Accueil « Encaissements du jour »
 //
 // The secondary money line of Accueil: what today's Appointments have already
 // brought in and what is still to collect, side by side in ONE compact card.

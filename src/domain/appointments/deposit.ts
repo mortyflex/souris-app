@@ -1,4 +1,4 @@
-// Souris — Appointment deposits (« Acomptes ») — pure
+// BeautIzzy — Appointment deposits (« Acomptes ») — pure
 //
 // Source: docs/domain/APPOINTMENTS.md §25d
 //

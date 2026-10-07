@@ -1,4 +1,4 @@
-// Souris — client import top bar
+// BeautIzzy — client import top bar
 //
 // The pushed-screen top bar of the Client histories (glass back button,
 // centred title, mirrored spacer), with a back action owned by the import

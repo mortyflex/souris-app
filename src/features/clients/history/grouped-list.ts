@@ -1,4 +1,4 @@
-// Souris — grouped look for virtualized history lists
+// BeautIzzy — grouped look for virtualized history lists
 //
 // A virtualized list cannot wrap its rows in one GroupedSurface, so each row
 // carries its slice of the surface: the same white fill and hairline, the

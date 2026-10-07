@@ -1,4 +1,4 @@
-# Souris — Business Insights (« Tops & tendances »)
+# BeautIzzy — Business Insights (« Tops & tendances »)
 
 ## 1. Purpose
 

@@ -1,4 +1,4 @@
-// Souris — production first-run seed
+// BeautIzzy — production first-run seed
 //
 // Runs once, on the very first launch of a fresh install
 // (docs/architecture/PERSISTENCE.md §5). Since Account & Onboarding V1 it is

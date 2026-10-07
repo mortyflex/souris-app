@@ -1,4 +1,4 @@
-// Souris — Calendar Block store
+// BeautIzzy — Calendar Block store
 //
 // One row per block: staff member, interval, reason (schema v11). There is no
 // client, price, payment or status column — a block is calendar availability

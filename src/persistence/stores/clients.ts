@@ -1,4 +1,4 @@
-// Souris — Client store
+// BeautIzzy — Client store
 //
 // birthday (schema v4) is the civil `MM-DD` key of the Client birthday and
 // stays a string end to end: it is parsed into the day + month domain value

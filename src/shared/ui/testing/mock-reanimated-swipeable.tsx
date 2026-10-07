@@ -1,4 +1,4 @@
-// Souris — test double for the gesture-handler ReanimatedSwipeable
+// BeautIzzy — test double for the gesture-handler ReanimatedSwipeable
 //
 // Used through `jest.mock('react-native-gesture-handler/ReanimatedSwipeable',
 // () => jest.requireActual('@/shared/ui/testing/mock-reanimated-swipeable'))`

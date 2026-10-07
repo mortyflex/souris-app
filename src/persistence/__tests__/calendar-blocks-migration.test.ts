@@ -1,4 +1,4 @@
-// Souris — schema v11: Calendar Blocks (docs/architecture/PERSISTENCE.md §4)
+// BeautIzzy — schema v11: Calendar Blocks (docs/architecture/PERSISTENCE.md §4)
 //
 // The migration creates one empty table AND rebuilds the two sync bookkeeping
 // tables (SQLite cannot alter a CHECK). Real data exists, so this suite builds

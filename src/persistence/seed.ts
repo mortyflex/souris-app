@@ -1,4 +1,4 @@
-// Souris — first-run seed
+// BeautIzzy — first-run seed
 //
 // The legacy adapters feed the database exactly ONCE. The `seed_version`
 // metadata marker (distinct from the schema version) records that the seed

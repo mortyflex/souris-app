@@ -1,4 +1,4 @@
-// Souris — Client form sheet (create + edit)
+// BeautIzzy — Client form sheet (create + edit)
 //
 // The ONE Client form, shared by the Clientes directory, the Appointment
 // Creation picker (create mode), and the Client Profile (edit mode).
@@ -6,7 +6,7 @@
 // Prénom required; Nom / Téléphone / Email / Anniversaire / SMS
 // promotionnels / Notes optional.
 // The birthday is a day + month chosen inline with the shared selector — no
-// year, no keyboard. Notes is a quiet multiline field at the end of the form. The sheet is the canonical Souris drawer: it opens in
+// year, no keyboard. Notes is a quiet multiline field at the end of the form. The sheet is the canonical BeautIzzy drawer: it opens in
 // its resting position with the keyboard CLOSED (no autofocus), the fields
 // scroll under a fixed header, the action bar stays reachable above the
 // keyboard, and pan-to-dismiss is off so scrolling the form never abandons

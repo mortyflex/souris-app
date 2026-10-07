@@ -1,4 +1,4 @@
-// Souris — « Rappel cliente » status line (Appointment Details)
+// BeautIzzy — « Rappel cliente » status line (Appointment Details)
 //
 // A discreet metadata line in the family of the birthday mention: the
 // server-side reminder state of THIS appointment, read through the narrow

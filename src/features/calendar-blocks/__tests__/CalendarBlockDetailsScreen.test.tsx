@@ -1,4 +1,4 @@
-// Souris — Calendar Block details, editing and deletion
+// BeautIzzy — Calendar Block details, editing and deletion
 //
 // The dedicated sheet a tap on an « Indisponible » block opens: reason, date,
 // time — « ••• » (Modifier, Supprimer) and × — and nothing a client

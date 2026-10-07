@@ -1,4 +1,4 @@
-// Souris — Appointment timeline calculation
+// BeautIzzy — Appointment timeline calculation
 //
 // Source: docs/domain/APPOINTMENTS.md §8–§11
 //

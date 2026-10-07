@@ -1,4 +1,4 @@
-// Souris — SQLite value mapping helpers
+// BeautIzzy — SQLite value mapping helpers
 //
 // The only place where SQLite representations (0/1 booleans, ISO instants,
 // NULL optionals, integer cents) are converted. Canonical domain values

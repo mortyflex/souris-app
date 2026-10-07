@@ -1,6 +1,6 @@
-// Souris — Client profile presentation
+// BeautIzzy — Client profile presentation
 //
-// Souris-generated Appointment history and derived activity ONLY. Nothing
+// BeautIzzy-generated Appointment history and derived activity ONLY. Nothing
 // here is stored on the Client: every value is derived from Appointment
 // state through appointment.clientId. Summaries and totals come
 // exclusively from AppointmentItem snapshots (never the current catalog).

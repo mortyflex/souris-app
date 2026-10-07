@@ -1,4 +1,4 @@
-// Souris — DetailSheetHeader
+// BeautIzzy — DetailSheetHeader
 //
 // The canonical header of DETAIL sheets (Product, Prestation): the object's
 // name as the heading, then « ••• » (secondary actions) and × (close), both

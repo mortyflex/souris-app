@@ -1,4 +1,4 @@
-# Souris — Design Overrides
+# BeautIzzy — Design Overrides
 
 This document records deliberate product/design decisions that override the exported visual reference.
 
@@ -105,7 +105,7 @@ Translate the intended behavior into native React Native patterns instead.
 
 ## 4. Future Overrides
 
-Only add entries here when a deliberate Souris product/design decision differs from the exported reference.
+Only add entries here when a deliberate BeautIzzy product/design decision differs from the exported reference.
 
 Do not use this file as a miscellaneous design notes document.
 
@@ -116,7 +116,7 @@ The goal is to keep exceptions explicit and rare.
 ## 5. Operational Agenda — Professional Occupancy
 
 The exported Agenda design shows unattended processing as a peach striped section inside an event.
-The operational Souris Agenda intentionally overrides that treatment:
+The operational BeautIzzy Agenda intentionally overrides that treatment:
 
 - a phase with `requiresStaff = false` remains part of the Appointment domain timeline;
 - it contributes to elapsed duration and appointment end time;
@@ -132,7 +132,7 @@ The operational Souris Agenda intentionally overrides that treatment:
 - short active segments use a compact single-line identity instead of becoming blank;
 - reprise content preserves service continuity.
 
-The exported design does not define the approved smartphone Week view. Souris uses a vertical list of seven day
+The exported design does not define the approved smartphone Week view. BeautIzzy uses a vertical list of seven day
 sections rather than a compressed seven-column calendar. Week rows summarize appointments once, keep the Day/Week
 palette identity, and do not render processing or reprise phases. Tapping a day opens its detailed Day view; a
 future larger-screen layout may use a multi-day grid but is outside this phase.
@@ -158,7 +158,7 @@ deletion.
 ## 7. Appointment Creation Flow
 
 The exported Agenda reference shows creation as a single form sheet (`Nouveau rendez-vous` with a Cliente field,
-a Prestation select, date/heure fields, and a Déroulé preview). The implemented Souris creation experience
+a Prestation select, date/heure fields, and a Déroulé preview). The implemented BeautIzzy creation experience
 deliberately differs:
 
 - three steps with a connected stepper — `Client → Prestations → Résumé`;
@@ -259,7 +259,7 @@ The current React Native runtime adopts **soft editorial beauty productivity** a
 direction. For native runtime presentation, this section takes precedence over the original exported design;
 the export remains preserved as the historical brand and interaction reference.
 
-- The canonical deep navy, Souris purple, lavender, rose, peach, warm white, and cool neutral palette remains
+- The canonical deep navy, BeautIzzy purple, lavender, rose, peach, warm white, and cool neutral palette remains
   unchanged. Runtime semantic tokens assign those approved values to layered screen, elevated, neutral,
   lavender, rose, and peach surfaces rather than introducing new colors.
 - Appointment detail, creation, and editing surfaces may use a near-white lavender page tint. Elevated white,
@@ -273,7 +273,7 @@ the export remains preserved as the historical brand and interaction reference.
 - Lavender identifies service structure and selection, rose carries the Appointment Details brand accent and
   destructive meaning, and peach remains dedicated to processing / unattended time.
 - Section hierarchy uses title-case editorial titles with optional count chips. Uppercase eyebrows remain a
-  selective Souris brand detail, not the default heading treatment.
+  selective BeautIzzy brand detail, not the default heading treatment.
 - All service disclosures use the same small purple line chevron and the same soft rotation behavior. Drag
   handles remain separate, neutral, and visually quieter than disclosure controls.
 - Native feedback is fast and restrained: press states, 150–240 ms disclosure transitions, drag lift/settle,
@@ -296,7 +296,7 @@ Products use one consistent primary-image treatment across catalog, details, and
 - transparent or letterboxed content rests on the approved soft lavender Product surface;
 - Products without images use a quiet lavender square with the existing package symbol in catalog/form;
 - Product Details renders no large placeholder when an image is absent, preserving the textual hierarchy;
-- image surfaces use restrained Souris radii with no decorative outer border;
+- image surfaces use restrained BeautIzzy radii with no decorative outer border;
 - the catalog thumbnail geometry (52 pt rounded square, `radii.medium`) is the shared list
   thumbnail that Clientèle rows also use (§36).
 
@@ -359,13 +359,13 @@ Extends §11.
 
 ## 14. Sale Creation — Operational Selection
 
-The exported reference contains no Sale flow. Sales V1 reuses existing Souris patterns rather than
+The exported reference contains no Sale flow. Sales V1 reuses existing BeautIzzy patterns rather than
 introducing a POS visual language:
 
 - `Nouvelle vente` is a primary action beside a secondary `Ajouter un produit` on the Produits
   tab — no new tab, no KPI, no cash-register surface;
-- Sale creation is one content-fit sheet route in the canonical Souris shell (§16, §20
-  `<SheetScreen fit="content">`: Souris grabber, the §30 editing header « Annuler | Nouvelle
+- Sale creation is one content-fit sheet route in the canonical BeautIzzy shell (§16, §20
+  `<SheetScreen fit="content">`: BeautIzzy grabber, the §30 editing header « Annuler | Nouvelle
   vente » (no eyebrow), sticky `SheetActionBar` with the summary and `Valider la vente`, no
   swipe-to-dismiss, no outside tap), like the Product editor — never a full-screen modal that
   would collide with the status bar. An empty sale opens COMPACT, sized by its content (client,
@@ -404,8 +404,8 @@ moments only.
 
 **BeautIzzy rendering.** `BrandMark` draws `assets/brand/logo-primary.png` (`primary`),
 `logo-editorial.png` (`editorial`) and `symbol.png` (`symbol`). The native icon and splash derive
-from the same masters. The previous Souris files (`Souris.icon`, `icon-source/`, `logo-lockup.png`,
-`logo-mark.png`, `logo-wordmark.png`, `assets/images/`) are no longer referenced and await deletion.
+from the same masters. The files of the previous Souris identity (logos, icon document, raster icons)
+have been removed from the repository.
 
 - **App icon master** — `assets/brand/app-icon/icon.png`: 1024 × 1024, opaque, full-bleed purple
   background, the symbol alone, no text, no rounded mask baked in. It is the top-level `icon` (Expo
@@ -477,8 +477,8 @@ from the same masters. The previous Souris files (`Souris.icon`, `icon-source/`,
   needs it, to set the artwork exactly on the gutter. The PNGs are transparent and coloured: they sit directly on the white
   background with no cream or tinted plate behind them, and there is no white-on-light variant.
 - **Where logos do NOT appear** — Agenda, Clientèle, Produits, Prestations, details, sheets, forms,
-  headers. Titles stay `Agenda` / `Clientèle` / `Produits` / `Plus`; never `Souris — Agenda`.
-- **Display name** — the installed app is named `Souris` (`expo.name`); `souris-app` remains only
+  headers. Titles stay `Agenda` / `Clientèle` / `Produits` / `Plus`; never `BeautIzzy — Agenda`.
+- **Display name** — the installed app is named `BeautIzzy` (`expo.name`); `souris-app` remains only
   the technical slug / package name.
 - Dark logo variants, alternative palettes, and new artwork are out of scope: the three canonical
   assets are the identity.
@@ -487,18 +487,18 @@ from the same masters. The previous Souris files (`Souris.icon`, `icon-source/`,
 
 ## 16. Overlay Consistency V1 — Sheets, Dialogs, Keyboard, Main-Screen Identity
 
-Every Souris overlay now shares ONE visual and behavioral language. The reference is the
+Every BeautIzzy overlay now shares ONE visual and behavioral language. The reference is the
 Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confirmations).
 
 ### Bottom sheet (`src/shared/ui/BottomSheet.tsx`, `SheetScreen.tsx`)
 
 - **Shell** — full-width satin overlay surface (§20; formerly flat white), `radii.ios.sheet` top
-  corners, the Souris grabber (40 × 5, translucent navy `overlayMaterial.grabber`), platform gutter, bottom safe area. The same shell
+  corners, the BeautIzzy grabber (40 × 5, translucent navy `overlayMaterial.grabber`), platform gutter, bottom safe area. The same shell
   serves the JS drawer (`BottomSheet`, a Modal) and every sheet route (`SheetScreen`; native
   `formSheet` for workflows, transparent route + shared `SheetPresentation` for content-fit
   sheets — see §20 Geometry; configured once in
   `src/providers/sheet-route-options.ts`: overlay-surface `contentStyle`, `sheetCornerRadius`, system
-  grabber hidden so the Souris grabber is the only one). Workflow sheets use the system's large detent (`sheet.workflowDetent`, §20 — the only detent
+  grabber hidden so the BeautIzzy grabber is the only one). Workflow sheets use the system's large detent (`sheet.workflowDetent`, §20 — the only detent
   iOS 26 keeps attached to the screen edges);
   read-first sheets (Appointment details, Product / Service details) use `fitToContents` so a
   short detail never leaves a blank middle area, capped at the same detent (`sheet.detent`).
@@ -532,7 +532,7 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
 
 ### Confirmation dialog (`src/shared/ui/ConfirmationDialog.tsx`)
 
-- The ONE Souris-owned confirmation: near-full-width centered card (`dialog.maxWidth`),
+- The ONE BeautIzzy-owned confirmation: near-full-width centered card (`dialog.maxWidth`),
   `radii.large`, the overlay material with NO outline (§20), `scrim` backdrop, fade in/out. Uppercase eyebrow, large
   navy title, soft body, then full-width stacked actions: soft lavender secondary
   (« Retour » / « Annuler ») above the confirm. For Product and Client administration — deactivate,
@@ -549,7 +549,7 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
   votre répertoire mais sera déplacé dans les clients archivés. Vous pourrez le restaurer plus
   tard. » · `Annuler` / `Archiver`. Nothing is written before « Archiver »; the profile stays open.
 - Wording stays feature-owned; the primitive never names an entity. React Native `Alert` is
-  not used for Souris-owned confirmations — it remains only for error reports
+  not used for BeautIzzy-owned confirmations — it remains only for error reports
   (`alertPersistenceFailure`), permission explanations, and the development-only reset.
 
 ### Main-screen identity (`src/shared/ui/ScreenWatermarkIcon.tsx`)
@@ -730,9 +730,9 @@ is no longer reproduced natively.
 
 - **iOS**: UIKit's tab bar. On iOS 26, with a binary compiled by Xcode 26+, it is Apple's native
   Liquid Glass — the system material, sampling the page beneath it. Older iOS shows the standard
-  system tab bar. Souris never fakes the glass **of the bar**: no BlurView, no translucent view, no
+  system tab bar. BeautIzzy never fakes the glass **of the bar**: no BlurView, no translucent view, no
   gradient, no opaque forced background, no version-conditional custom bar. (The small light-glass
-  controls of §21 are Souris-drawn surfaces that echo this material; they never replace or
+  controls of §21 are BeautIzzy-drawn surfaces that echo this material; they never replace or
   imitate the bar itself.)
 - **Android**: native Material bottom navigation, with Material icons — not an imitation of
   Liquid Glass.
@@ -740,9 +740,9 @@ is no longer reproduced natively.
   Agenda `calendar` / `calendar_month`; Clientèle `person.2` → `person.2.fill` / `group`;
   Produits `shippingbox` → `shippingbox.fill` / `inventory_2`; Plus `ellipsis` / `more_horiz`
   (« Plus » is more than settings, so no gear). No icon package.
-- **Tint**: the selected tab uses the Souris accent (`semanticColors.accent`) and nothing else is
+- **Tint**: the selected tab uses the BeautIzzy accent (`semanticColors.accent`) and nothing else is
   restyled — the system owns the material, layout and typography of the bar.
-- **Theme**: the tabs are wrapped in the Souris navigation theme
+- **Theme**: the tabs are wrapped in the BeautIzzy navigation theme
   (`src/providers/navigation-theme.ts`, light only), whose background is the canonical white
   screen, so a tab switch never flashes a foreign colour behind the glass.
 - **Scroll edge**: `disableTransparentOnScrollEdge` is set because every main screen keeps its
@@ -848,7 +848,7 @@ presentation only. Occupancy, segments, statuses and navigation behave exactly a
 - **Bottom bar — iOS 26 (Liquid Glass)**: the glass material is NOT tunable. Every bar-material
   prop of NativeTabs / react-native-screens (`backgroundColor`, `blurEffect`, `shadowColor`) is
   ignored by the system there (verified in the simulator: a forced red bar changes iOS 18, not
-  iOS 26), and no glass variant or opacity prop exists. What Souris controls is what the glass
+  iOS 26), and no glass variant or opacity prop exists. What BeautIzzy controls is what the glass
   samples: iOS 26 lays a dimming scroll-edge fog over scroll content under the bar, which greys
   the pastel cards before the glass refracts them. The Agenda day and week scroll views hide that
   bottom edge effect through `TabBarGlassScrollEdge` (`src/shared/ui/`, UIKit's own
@@ -871,7 +871,7 @@ scrim, motion, gestures and dismissal policies of §16 are unchanged.
 - **Surface** — `overlayMaterial.surface` (`lavender.lav025`): near-white lavender instead of
   flat `#FFF`, still lighter than `surfaceLavender`, so lavender, neutral AND white inner cards
   all read on it. **Opaque on purpose**: without a blur, even 3 % translucency lets the page
-  ghost through the text (verified in the simulator). Souris adds no blur view for this; the
+  ghost through the text (verified in the simulator). BeautIzzy adds no blur view for this; the
   glass feel comes from light, not from see-through.
 - **Finish** — `SurfaceGloss` (`src/shared/ui/`), rendered first inside the surface under its
   content: a full-width highlight that starts at the very top edge and dissolves to nothing
@@ -899,7 +899,7 @@ scrim, motion, gestures and dismissal policies of §16 are unchanged.
   - **workflow routes** (Appointment creation / editing) stay NATIVE form sheets
     on the large detent, the one detent iOS 26 keeps attached (`<SheetScreen fit="fill">`);
   - **content-fit routes** (Appointment details, Product / Service details and creation, Sale
-    creation) are TRANSPARENT-MODAL routes whose sheet Souris draws itself (`<SheetScreen fit="content">`),
+    creation) are TRANSPARENT-MODAL routes whose sheet BeautIzzy draws itself (`<SheetScreen fit="content">`),
     with the very same `SheetPresentation` as every `BottomSheet` — scrim, slide, material,
     grabber-zone pan, safe area. They are identical to a drawer on every iOS version.
 - **Leaving a content-fit route** — nothing special in the screens: `router.back()`, a hardware
@@ -929,7 +929,7 @@ scrim, motion, gestures and dismissal policies of §16 are unchanged.
     at the very moment the new one starts. Same duration and easing as the opening. Never an
     instant swap, never a flash. Reduced motion swaps directly.
 - **Bottom safe area** — kept inside the surface as plain padding from the window metrics known
-  at launch (Souris is portrait-locked), a resting probe only ever raising it. A native
+  at launch (BeautIzzy is portrait-locked), a resting probe only ever raising it. A native
   safe-area view mounted while a modal is still being presented measures 0 and never recomputes
   — actions then sit on the home indicator.
 - **Destructive action placement** (Appointment details) — « Supprimer » sits as low as the
@@ -947,7 +947,7 @@ scrim, motion, gestures and dismissal policies of §16 are unchanged.
   component, same look; moving Carte ⇄ Espèces swaps two identical pills and never closes the
   keyboard. An input still relying on React
   Native's own accessory (`returnKeyType="done"`, hardcoded « Done ») must set
-  `inputAccessoryViewButtonLabel="OK"` (Appointment deposit). No English string in Souris-owned UI.
+  `inputAccessoryViewButtonLabel="OK"` (Appointment deposit). No English string in BeautIzzy-owned UI.
 - **Not part of the material** — main screens, cards, fields, the camera / scanner full-screen
   modals and the floating-create menu keep their own surfaces: not everything is glass.
 
@@ -991,7 +991,7 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
   violet number; today = a violet ring. The calendar is domain-agnostic: each caller decorates
   the days with presentation data only. Agenda: ONE quiet violet dot on days holding
   appointments. Caisse: a soft 44 pt halo behind the number (`calendarIntensity` low / medium /
-  high — the Souris violet at 16 / 30 / 48 %, never red / green, never a gradient), relative to
+  high — the BeautIzzy violet at 16 / 30 / 48 %, never red / green, never a gradient), relative to
   the best day of the DISPLAYED month (> ⅔ of it high, > ⅓ medium, otherwise low), none on zero
   days nor on adjacent-month days; the halo sits behind the selected fill and the today ring,
   and an unselected today keeps a navy number on a halo. No amount is written in a cell;
@@ -1010,7 +1010,7 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
   it is shown whole; the inset moves the WHOLE canvas, so labels, grid lines, blocks, the
   tap-to-create surface and the now line keep their exact relationship.
 - **Floating +** — same size, placement, reveal, menu and hit target (§17). The circle is the
-  glass material; the plus keeps its symbol and becomes Souris violet — the button's only accent.
+  glass material; the plus keeps its symbol and becomes BeautIzzy violet — the button's only accent.
 - **Segmented switches — Agenda Jour / Semaine, Caisse Jour / Mois** — ONE shared primitive,
   `SegmentedControl` (`src/shared/ui/`): a glass capsule (`radii.pill`), a touch lighter than the
   circles because it covers more area (`fillCapsule`, `borderCapsule`,
@@ -1028,7 +1028,7 @@ Three independent presentation decisions. Data, editing, deletion, pricing, navi
 gestures, sheet sizing and card geometry are unchanged.
 
 - **Appointment details — explicit « Fermer ».** The swipe on the grabber and the outside tap stay
-  exactly as they are (§16); they are joined by the visible « Fermer » text action of every Souris
+  exactly as they are (§16); they are joined by the visible « Fermer » text action of every BeautIzzy
   sheet — the tertiary `AppButton` that `SheetHeader` uses (§16) — at the right of the identity
   header. Never an icon-only ✕: sheets say « Fermer » / « Annuler » in words. It is the SAME way
   out as the gestures: one `router.back()`, which `SheetScreen` holds while the close transition
@@ -1120,7 +1120,7 @@ Personal unavailability (`docs/domain/CALENDAR_BLOCKS.md`) must be recognised in
 WITHOUT looking like a client Appointment, and must read as the same product: calm, premium, obvious,
 fast — never a technical admin form, never a grey disabled state.
 
-- **One dedicated family — mauve.** `mauve` in `theme/colors.ts`, derived like every Souris scale from
+- **One dedicated family — mauve.** `mauve` in `theme/colors.ts`, derived like every BeautIzzy scale from
   OKLCH, at hue 326: between the structural lavender (300) and the brand plum (336).
 
   ```text
@@ -1260,7 +1260,7 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
 - **Accessibility.** The Modal is `accessibilityViewIsModal`. Each row is ONE element —
   « 09:00, Coloration, Léa Martin, 95,00 €, encaissé » — as are the total and each breakdown line.
   « encaissé » is never colour alone: a check glyph and the spoken word.
-- **Wording.** Souris has no deposit: the line reads « Déjà encaissé », never « Acomptes ».
+- **Wording.** BeautIzzy has no deposit: the line reads « Déjà encaissé », never « Acomptes ».
 
 ### 25a. Weekly Summary — « Résumé de la semaine »
 
@@ -1356,7 +1356,7 @@ Appointment Creation keeps §22 for now.
   check. Search filters inside the chosen category; when only the other one matches, the empty
   state offers « Voir N résultats dans Techniques ». Tapping a selected row still adds nothing.
 - **Category colours** (`serviceCategoryColors`, keyed by `ServiceType`) — taxonomy, never state:
-  SERVICE = Souris violet (`colors.accent`); TECHNIQUE = azure (`azure600 #4F8EDC` for dots and
+  SERVICE = BeautIzzy violet (`colors.accent`); TECHNIQUE = azure (`azure600 #4F8EDC` for dots and
   checks; `azure700 #2F6DB8` fills the active segment, 5.3:1 with white). Selected rows take a
   whisper tint of their category. Never green or rose for a category. Never colour alone: segment
   label and tab state, selection ring vs check with `selected` state, and the spoken category on
@@ -1607,7 +1607,7 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
 - **Medals** (`receiptMedal`, Views only, no image or SVG). Each medal is a flat metal disc with a 1.5 pt
   darker rim, a 1 pt lighter inset ring and the digit centred on it (≥ 6:1), hanging from two
   ribbon tails that part outwards (±16°), each cut with a swallow-tail notch in paper colour. The
-  tails are in the Souris lilac family, with a darker left tail and a lighter right one for depth.
+  tails are in the BeautIzzy lilac family, with a darker left tail and a lighter right one for depth.
   - #1 antique gold: `#E6CD8C` fill, `#B48F3E` rim, `#F3E4B8` ring, `#5A4213` digit. 48 pt disc,
     `sectionTitle` digit, plum `#654199` / `#7C5FC9` tails 12 × 18 pt.
   - #2 pearl silver: `#DEDCE7`, `#9E9BB2`, `#EFEEF4`, `#3F3D55`. 38 pt, `control` digit, lilac
@@ -1630,7 +1630,7 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
   `28 déc. 2026 – 3 janv. 2027`) · `Septembre 2026` · `2026`. The arrows are labelled after the period
   they move by (« Mois précédent », « Semaine suivante »…).
 - **Haptics.** The ONE print haptic, the selection haptic of `SegmentedControl` on a real change only,
-  and nothing on the arrows (like every Souris period navigator). Re-laying out the paper while browsing
+  and nothing on the arrows (like every BeautIzzy period navigator). Re-laying out the paper while browsing
   never prints again.
 - **Empty.** The same complete paper with every figure at zero, one quiet « Aucune activité sur
   cette période » line under the summary, and each category page showing its own message.
@@ -1679,7 +1679,7 @@ Data: `docs/domain/INSIGHTS.md` §7.
   keep text clear of the areas social apps cover or crop:
 
   ```text
-  brand       logo-mark, 56 pt, decorative — restrained
+  brand       symbol, 25 pt, decorative — restrained
   kicker      « TOPS & TENDANCES » eyebrow, accent
   period      « Septembre 2026 » screenTitle, plum, one line
   summary     lavender050 panel, radii.large: « ENCAISSÉ SUR LA PÉRIODE » eyebrow accent over a
@@ -1710,7 +1710,7 @@ Data: `docs/domain/INSIGHTS.md` §7.
   9 × 7 pt marks in a 20 pt pill for « Panier moyen ». The shape never depends on the value and no
   digit is rendered, so the image can reveal nothing, not even a blurred number (a native blur would
   not survive the capture anyway). The label above or beside it stays readable.
-- **Brand.** The professional's result, powered by Souris: a small mark at the top, « Créé avec »
+- **Brand.** The professional's result, powered by BeautIzzy: a small mark at the top, « Créé avec »
   + wordmark at the bottom. No slogan, no call to action, no app-store badge.
 - **Interaction.** « Partager »: one light haptic (`haptics.action`), none while preparing, then the
   platform share sheet; nothing is confirmed when it closes. « Enregistrer »: no tap haptic; once
@@ -1822,12 +1822,12 @@ sélectionnées » with « Modifier », one « name — price » row each ; the 
 fade — with Fermer · Enregistrer l’image · Partager as in §34. Fermer lets the paper leave, then
 closes the sheet back to the Agenda.
 
-**Interior.** The visual language of the « Tops & tendances » share card (§35) — the same Souris
+**Interior.** The visual language of the « Tops & tendances » share card (§35) — the same BeautIzzy
 family, structurally simpler, with no analytics (no podium, medal, chart or KPI), never an
 administrative form:
 
 ```text
-            [logo-mark 56 pt]             decorative, restrained
+             [symbol 25 pt]               decorative, restrained
           ESTIMATION TARIFAIRE            eyebrow, accent
                Maison Léa                 screenTitle, plum, wraps
             24 septembre 2026             metadata, soft — generation date, no time
@@ -1841,12 +1841,12 @@ Balayage 1                          70 €
 │                 115 €                 │ eyebrow accent over display, plum
 ╰───────────────────────────────────────╯
 Estimation indicative basée sur les prestations sélectionnées.   metadata, soft, centred
-          Créé avec [BeautIzzy logo]      CreatedWithSouris (58 pt, 85 %)
+          Créé avec [BeautIzzy logo]      CreatedWithBeautIzzy (58 pt, 85 %)
 ```
 
 - **Two presentations, one interior** — exactly the « Tops & tendances » pipeline (§34, §35).
   `EstimationDocument` is the interior only, with no surface of its own:
-  - **printer:** inside `ReceiptPaper`, the torn-edge ticket every Souris receipt feeds out of the
+  - **printer:** inside `ReceiptPaper`, the torn-edge ticket every BeautIzzy receipt feeds out of the
     printer (as `BusinessInsightsReceipt`). The whole interior scrolls inside the room the printer
     leaves; its text follows the device text size.
   - **export:** `ImageExportFrame` on `SHARE_CARD_BACKGROUND` holding the shared `ShareCardCanvas`
@@ -1861,7 +1861,7 @@ Estimation indicative basée sur les prestations sélectionnées.   metadata, so
   période » — an estimated price, never an amount due.
 - **Shared primitives** (`src/shared/ui`), also used by the « Tops & tendances » card with its
   rendering unchanged: `ShareCardCanvas` (the share canvas: ground, width, margins, 9:16, 3×),
-  `ShareHighlightPanel` (the lavender panel container) and `CreatedWithSouris` (« Créé avec » +
+  `ShareHighlightPanel` (the lavender panel container) and `CreatedWithBeautIzzy` (« Créé avec » +
   the editorial logo, spoken « Créé avec BeautIzzy » once).
 - No recipient: no Client name, no « Client » / « Pour » line, no blank placeholder. No height is
   fixed: a long name wraps, no line or amount is ever truncated or shrunk, and a long estimation is
@@ -1871,7 +1871,7 @@ Estimation indicative basée sur les prestations sélectionnées.   metadata, so
 
 ## 38. Neutral Client Terminology — « Clientèle » and « client »
 
-Souris serves professionals whose clientele is women, men or both. The exported reference and
+BeautIzzy serves professionals whose clientele is women, men or both. The exported reference and
 `DESIGN.md` §8 address the Client in the feminine (« la cliente », « Clientes »). Do NOT reproduce
 that wording. Supersedes every feminine Client quote of the earlier sections.
 
@@ -1888,7 +1888,7 @@ that wording. Supersedes every feminine Client quote of the earlier sections.
   (« Vous pourrez le restaurer plus tard », « Conservez-le archivé… »).
 - **Appointments** — the `Client` step, row and eyebrow (`CLIENT`), « Rendez-vous client »,
   « Anniversaire du client ». Cancellation actors: « Le client » / « Vous », recorded as « Annulé
-  par le client » / « Annulé par vous » — never « le salon », which would tie Souris to hair salons.
+  par le client » / « Annulé par vous » — never « le salon », which would tie BeautIzzy to hair salons.
 - **Sales and Caisse** — `Client`, « Choisir un client », « Vente sans client ».
 - **Communications** — « Rappels clients », « Rappel client », « Clients inactifs », « Inactif
   depuis » (the row sits under « Clients inactifs », so the noun is not repeated).
@@ -1912,7 +1912,7 @@ BACKGROUND is concerned, and the white-screen / `screenWarm` split implied by §
 they distinguish appointments, phases and states, never a page. Everything else of §10, §19–§21 and
 §36 is unchanged.
 
-Souris now uses a very low-chroma lavender near-white app background. It is a NEUTRAL SURFACE
+BeautIzzy now uses a very low-chroma lavender near-white app background. It is a NEUTRAL SURFACE
 HIERARCHY, not a decorative pastel page: its chroma (0.007) is half of `lav050`'s, and it exists so
 white cards and sheets read as raised without extra borders or shadows.
 
@@ -1970,12 +1970,12 @@ for every sheet, and the « no blur view » line of §21 still governs the light
 
 - **Where Liquid Glass lives.** Liquid Glass is reserved for compatible transparent-modal / custom
   sheet surfaces: the drawers (`BottomSheet`) and content-fit sheet routes (`SheetScreen
-  fit="content"`) that Souris draws itself with `SheetPresentation`, over the dimmed page. There the
+  fit="content"`) that BeautIzzy draws itself with `SheetPresentation`, over the dimmed page. There the
   material has a real page beneath it to sample, and the iOS 26 simulator pilot shows it clearly.
 - **Native large workflow form sheets remain satin** (`SheetScreen fit="fill"`, `workflowSheet`:
   Appointment creation and editing, Sale creation) because the native `formSheet` presentation does
   not provide a useful underlying surface for the material to sample: in the pilot the glass was
-  barely perceptible there. This is a Souris presentation decision: those long, keyboard-heavy
+  barely perceptible there. This is a BeautIzzy presentation decision: those long, keyboard-heavy
   workflows keep the stable native sheet, and `fill` shells ignore `material`.
 - **An enhancement over the existing material, never a replacement.** The sheet still reads as
   `overlayMaterial.surface` (`#FBF9FE`). Where the native glass is drawn, the surface becomes
@@ -1983,7 +1983,7 @@ for every sheet, and the « no blur view » line of §21 still governs the light
   `regular`, light scheme — passive and native, no snapshot, no per-frame JS), a moderate veil of
   the same lav025 (`overlayMaterial.glassTint`, `rgba(251, 249, 254, 0.6)`), then the gloss and the
   content. Target: the material and the dimmed page are perceptible, the page's text is not
-  comfortably legible, the sheet still reads as Souris lavender white, the content stays crisp.
+  comfortably legible, the sheet still reads as BeautIzzy lavender white, the content stays crisp.
   (The first 88 % veil hid the material almost entirely; 60 % is the starting point to validate.)
 - **Glass sheen.** The pilot's `SurfaceGloss` uses `gloss.glassSheet`: the same top light, spread
   over 220 pt instead of 132 pt and more translucent (72 % → 32 % → 0 instead of 96 % → 55 % → 0),
@@ -2177,7 +2177,7 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
   client » pushes `/estimations/new`; « Tops & tendances — Voir ce qui fonctionne le mieux »
   opens the existing insights receipt on the current month.
 - **Chevrons.** Every navigation chevron of Accueil — hero card, section links, Encaissements
-  du jour, Pilotage rows — is the Souris accent, never the muted grey.
+  du jour, Pilotage rows — is the BeautIzzy accent, never the muted grey.
 - **Order.** Welcome, next appointment, the two figures, the collection summary, quick actions,
   Cette semaine, Pilotage. Nothing else. Weight decreases down the page: the hero is the only
   tint, today owns the only 30 pt figures.

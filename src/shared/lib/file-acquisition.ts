@@ -1,6 +1,6 @@
-// Souris — file acquisition (system document picker)
+// BeautIzzy — file acquisition (system document picker)
 //
-// The ONE boundary through which Souris reads a file the professional
+// The ONE boundary through which BeautIzzy reads a file the professional
 // chooses: the system picker (the Files app on iOS, the Storage Access
 // Framework on Android), which needs no permission. It never touches
 // business state and keeps nothing: it returns the bytes of the chosen file,

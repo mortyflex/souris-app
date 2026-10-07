@@ -1,4 +1,4 @@
-// Souris — Communication Core: the queue port the worker runs against
+// BeautIzzy — Communication Core: the queue port the worker runs against
 //
 // The authoritative queue is the `scheduled_communications` table; the
 // production adapter (supabase-queue.ts) binds this port to the

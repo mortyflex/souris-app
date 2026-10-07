@@ -1,7 +1,7 @@
-// Souris — photo acquisition (camera permission + photo library)
+// BeautIzzy — photo acquisition (camera permission + photo library)
 //
 // The ONE permission and media-selection boundary shared by every photo in
-// Souris (Product photos, Client photos). It never touches business state:
+// BeautIzzy (Product photos, Client photos). It never touches business state:
 // it answers whether the camera may open, or returns a local file URI.
 //
 // Camera permission is resolved on the professional's explicit tap on
@@ -14,7 +14,7 @@
 // Nothing here is called on mount, at startup, or when a photo menu opens.
 //
 // The photo library goes through the system picker (PHPicker on iOS 14+,
-// the Android Photo Picker), which needs no library permission: Souris never
+// the Android Photo Picker), which needs no library permission: BeautIzzy never
 // asks for broader photo access.
 
 import { Camera } from 'expo-camera';
@@ -67,7 +67,7 @@ export async function pickPhotoFromLibrary(): Promise<PhotoPickResult> {
   }
 }
 
-/** Opens Souris in the Settings app, where a blocked permission can be granted. */
+/** Opens BeautIzzy in the Settings app, where a blocked permission can be granted. */
 export function openAppSettings(): void {
   void Linking.openSettings().catch(() => {});
 }

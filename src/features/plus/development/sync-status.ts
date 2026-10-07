@@ -1,4 +1,4 @@
-// Souris — development sync control: what it shows (Cloud Sync V1C–V1D.1, __DEV__ only)
+// BeautIzzy — development sync control: what it shows (Cloud Sync V1C–V1D.1, __DEV__ only)
 //
 // Plain reads of the local sync bookkeeping for the supervised validation of
 // the automatic first sync (initial upload / new-device restore), the push

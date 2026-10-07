@@ -1,4 +1,4 @@
-// Souris — Calendar Block wording
+// BeautIzzy — Calendar Block wording
 //
 // « Indisponible » is the primary information everywhere a block appears; the
 // reason is secondary. No client, service or price wording exists here.

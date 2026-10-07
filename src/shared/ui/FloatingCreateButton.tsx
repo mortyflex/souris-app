@@ -1,4 +1,4 @@
-// Souris — FloatingCreateButton
+// BeautIzzy — FloatingCreateButton
 //
 // The ONE floating creation action of screens whose primary action is
 // "add / create": a compact light-glass circle with a violet plus, fixed
@@ -30,7 +30,7 @@
 //
 // Single action  → `onPress` opens the existing flow directly.
 // Several actions → `actions` expand into a compact menu anchored above the
-// button (fade + rise), each option an icon + label pill on a subtle Souris
+// button (fade + rise), each option an icon + label pill on a subtle BeautIzzy
 // surface. A transparent layer catches outside taps; choosing an option
 // closes the menu first, then runs the action. The plus rotates to a cross
 // while the menu is open. No scrim, no drawer, no native action sheet.

@@ -1,4 +1,4 @@
-// Souris — client import copy
+// BeautIzzy — client import copy
 //
 // Every visible string of the import review lives here: counts, issue and
 // duplicate explanations, the import button, result messages. Neutral

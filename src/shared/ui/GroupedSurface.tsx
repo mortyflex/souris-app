@@ -1,4 +1,4 @@
-// Souris — GroupedSurface
+// BeautIzzy — GroupedSurface
 //
 // The white grouped-list surface of the redesigned Appointment sheets
 // (DESIGN_OVERRIDES.md §26, §27): `surfaceElevated`, one `borderSubtle`

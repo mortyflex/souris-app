@@ -1,4 +1,4 @@
-// Souris — Calendar Block row (Agenda Week)
+// BeautIzzy — Calendar Block row (Agenda Week)
 //
 // Same row construction as a Week Appointment — marker, start time, two lines —
 // so the list stays one list; the content is what tells it apart: the fixed

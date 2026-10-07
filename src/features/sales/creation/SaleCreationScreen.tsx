@@ -1,4 +1,4 @@
-// Souris — Sale creation (Nouvelle vente)
+// BeautIzzy — Sale creation (Nouvelle vente)
 //
 // ONE focused operational flow: a Client, Product search + scan, immediate
 // add / increment, bounded quantities, derived total, then « Valider la
@@ -16,7 +16,7 @@
 // pinned below it. With the keyboard up the sheet shrinks above it. Swipe and
 // outside tap are off; leaving is an explicit « Annuler ». A draft with lines
 // is guarded against « Annuler » and the hardware back (through the shell's
-// `onLeaveAttempt`) by the shared Souris confirmation dialog.
+// `onLeaveAttempt`) by the shared BeautIzzy confirmation dialog.
 //
 // Entry contexts (docs/domain/SALES.md §4), decided by the resolved
 // Appointment id, never by UI state:

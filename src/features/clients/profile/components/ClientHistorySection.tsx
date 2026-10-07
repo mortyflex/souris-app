@@ -1,4 +1,4 @@
-// Souris — Client Profile history switcher
+// BeautIzzy — Client Profile history switcher
 //
 // ONE content area for the two histories of a Client: a full-width
 // segmented control `Rendez-vous [n] | Produits achetés [n]` replaces only the

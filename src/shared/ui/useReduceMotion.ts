@@ -1,4 +1,4 @@
-// Souris — reduce-motion preference (shared by the core-Animated primitives)
+// BeautIzzy — reduce-motion preference (shared by the core-Animated primitives)
 
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';

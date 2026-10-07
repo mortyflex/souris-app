@@ -1,4 +1,4 @@
-// Souris — Directory list grid
+// BeautIzzy — Directory list grid
 //
 // The ONE structural grid of the Produits and Clientes directories
 // (DESIGN_OVERRIDES.md §36): search, tabs, section header, row rhythm,

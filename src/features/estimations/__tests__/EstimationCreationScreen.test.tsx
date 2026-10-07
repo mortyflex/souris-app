@@ -1,4 +1,4 @@
-// Souris — Estimation tarifaire integration test
+// BeautIzzy — Estimation tarifaire integration test
 //
 // Runs the real sheet over the development seed (synthetic address book,
 // pilot catalog, Agenda fixtures) in an in-memory SQLite database. Proves:

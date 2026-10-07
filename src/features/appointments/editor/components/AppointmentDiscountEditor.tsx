@@ -1,4 +1,4 @@
-// Souris — « Réduction » control (Appointment creation and editing)
+// BeautIzzy — « Réduction » control (Appointment creation and editing)
 //
 // Deliberately secondary: most Appointments carry no discount, so the block
 // is ONE collapsed row (« Réduction · Aucune ») until the professional opens

@@ -1,4 +1,4 @@
-// Souris — birthday confetti
+// BeautIzzy — birthday confetti
 //
 // One short, tasteful burst: a restrained handful of paper pieces fan out
 // from the top of the screen, flutter down and fade. THE one implementation,
@@ -16,7 +16,7 @@
 // hidden from assistive technology, particles included. Reduced motion is the
 // caller's decision — this component is simply not rendered then.
 //
-// Palette: approved Souris violets, lilac, rose and one soft gold. No
+// Palette: approved BeautIzzy violets, lilac, rose and one soft gold. No
 // primary-colour rainbow, no neon, no emoji.
 
 import { useEffect } from 'react';

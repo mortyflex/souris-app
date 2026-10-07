@@ -1,4 +1,4 @@
-// Souris — client import validation + duplicate classification (fictional data)
+// BeautIzzy — client import validation + duplicate classification (fictional data)
 
 import type { Client } from '../../types';
 import { editClientImportCandidate, toClientImportCandidateValues } from '../candidate';

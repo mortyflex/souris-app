@@ -1,4 +1,4 @@
-// Souris — GroupedDataRow
+// BeautIzzy — GroupedDataRow
 //
 // The editable-data row of the redesigned sheets (DESIGN_OVERRIDES.md §27):
 // glyph + label on the left, value + chevron on the right, inside a

@@ -1,4 +1,4 @@
-// Souris — remote sync boundary (Cloud Sync V1C push, V1D pull / restore)
+// BeautIzzy — remote sync boundary (Cloud Sync V1C push, V1D pull / restore)
 //
 // The ONLY shape in which operational data leaves or reaches the device.
 // Production binds it to the Supabase RPCs of

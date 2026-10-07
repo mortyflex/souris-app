@@ -1,4 +1,4 @@
-// Souris — InsightsPodium
+// BeautIzzy — InsightsPodium
 //
 // ONE ranking category of « Tops & tendances » as a Top 3 podium — the visual
 // signature of the receipt (DESIGN_OVERRIDES.md §34): the category eyebrow,

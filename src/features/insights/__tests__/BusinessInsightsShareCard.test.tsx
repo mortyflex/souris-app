@@ -5,7 +5,7 @@ import type { Client } from '@/domain/clients';
 import { getInsightsPeriod, type BusinessInsights } from '@/domain/insights';
 import { formatCompactEuroCents, formatEuroCents } from '@/shared/lib/money';
 
-import { CREATED_WITH_SOURIS_LABEL } from '@/shared/ui/CreatedWithSouris';
+import { CREATED_WITH_BEAUTIZZY_LABEL } from '@/shared/ui/CreatedWithBeautIzzy';
 import { lavender, radii, receiptPaper, spacing } from '@/shared/ui/theme';
 
 import {
@@ -73,7 +73,7 @@ describe('BusinessInsightsShareCard', () => {
     expect(INSIGHTS_SHARE_IMAGE_SIZE).toEqual({ width: 1080, height: 1920 });
   });
 
-  it('frames the period, the summary and the service podium with the Souris brand, and no control', async () => {
+  it('frames the period, the summary and the service podium with the BeautIzzy brand, and no control', async () => {
     const view = await renderCard('services');
 
     expect(view.getByText('Tops & tendances')).toBeTruthy();
@@ -108,7 +108,7 @@ describe('BusinessInsightsShareCard', () => {
     });
     // The footer: « Créé avec » + the 64 pt wordmark at 85 %, fixed text size.
     const footer = view.getByTestId('card-footer');
-    expect(footer.props.accessibilityLabel).toBe(CREATED_WITH_SOURIS_LABEL);
+    expect(footer.props.accessibilityLabel).toBe(CREATED_WITH_BEAUTIZZY_LABEL);
     expect(StyleSheet.flatten(footer.props.style)).toMatchObject({ flexDirection: 'row', opacity: 0.85 });
     expect(within(footer).getByText('Créé avec').props.allowFontScaling).toBe(false);
   });

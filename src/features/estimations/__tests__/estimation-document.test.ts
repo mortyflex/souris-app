@@ -91,7 +91,7 @@ describe('buildEstimationDocument', () => {
     expect(model.total).not.toMatch(/,00/);
   });
 
-  it('carries the indicative disclaimer and the Souris branding', () => {
+  it('carries the indicative disclaimer and the BeautIzzy branding', () => {
     const model = build();
     expect(model.disclaimer).toBe(ESTIMATION_DISCLAIMER);
     expect(model.disclaimer).toBe('Estimation indicative basée sur les prestations sélectionnées.');

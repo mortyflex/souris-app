@@ -1,4 +1,4 @@
-// Souris — Sale presentation helpers
+// BeautIzzy — Sale presentation helpers
 //
 // Derivations and formatting shared by Sale creation, the Client Profile
 // purchases section and the Appointment « Produits vendus » section.

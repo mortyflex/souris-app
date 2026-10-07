@@ -1,4 +1,4 @@
-// Souris — Creation draft start time
+// BeautIzzy — Creation draft start time
 //
 // The Agenda tap proposes the initial appointment time. During creation the
 // professional may choose another time of day on the start-time wheels

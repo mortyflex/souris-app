@@ -1,4 +1,4 @@
-// Souris — client import candidate edits and confirmation (fictional data)
+// BeautIzzy — client import candidate edits and confirmation (fictional data)
 
 import {
   editClientImportCandidate,

@@ -1,11 +1,11 @@
-// Souris — EstimationDocument
+// BeautIzzy — EstimationDocument
 //
 // The generated « Estimation tarifaire », in the visual language of the
 // « Tops & tendances » share card (DESIGN_OVERRIDES.md §35, §37): a
-// shareable Souris document rather than an administrative form — yet
+// shareable BeautIzzy document rather than an administrative form — yet
 // structurally simple, with no analytics.
 //
-//   header    the Souris mark (56 pt, restrained) · « ESTIMATION TARIFAIRE »
+//   header    the BeautIzzy mark (56 pt, restrained) · « ESTIMATION TARIFAIRE »
 //             eyebrow in accent · Business name in plum (screenTitle) ·
 //             generation date
 //   tear line the dashed ReceiptTearLine of the share card
@@ -14,9 +14,9 @@
 //   total     the shared lavender highlight panel: « Total estimé » eyebrow
 //             over the amount, large and plum — the focal point
 //   note      the indicative disclaimer, secondary
-//   footer    the shared « Créé avec » + Souris wordmark
+//   footer    the shared « Créé avec » + BeautIzzy wordmark
 //
-// Souris tokens only: no gradient, no chart, no client, no validity, no tax.
+// BeautIzzy tokens only: no gradient, no chart, no client, no validity, no tax.
 // It renders the model as is and computes nothing. It is the INTERIOR only,
 // with no surface of its own — the two presentations bring theirs, exactly
 // as « Tops & tendances » does (EstimationTicket):
@@ -34,7 +34,7 @@ import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
 import { BrandMark } from '@/shared/ui/BrandMark';
-import { CreatedWithSouris } from '@/shared/ui/CreatedWithSouris';
+import { CreatedWithBeautIzzy } from '@/shared/ui/CreatedWithBeautIzzy';
 import { ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
 import { ShareHighlightPanel } from '@/shared/ui/ShareHighlightPanel';
 import { foregroundSoft, semanticColors, spacing } from '@/shared/ui/theme';
@@ -127,7 +127,7 @@ export function EstimationDocument({
       {/* Takes whatever room a taller surface leaves: the footer sits at its bottom. */}
       <View style={styles.spacer} />
 
-      <CreatedWithSouris
+      <CreatedWithBeautIzzy
         allowFontScaling={fixedTypography ? false : undefined}
         style={styles.footer}
         testID={`${testID}-branding`}

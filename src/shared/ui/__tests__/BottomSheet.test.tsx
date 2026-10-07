@@ -1,4 +1,4 @@
-// Souris — shared BottomSheet contract
+// BeautIzzy — shared BottomSheet contract
 //
 // Behavior only (no animation frame values): render, dismissal policy,
 // the close transition lifecycle (slide down THEN unmount / onDismissed),

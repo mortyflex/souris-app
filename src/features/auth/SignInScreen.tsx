@@ -1,4 +1,4 @@
-// Souris — Sign in (email + password)
+// BeautIzzy — Sign in (email + password)
 //
 // Wrong credentials, unconfirmed accounts, and network failures each get one
 // concise sentence; the entered email survives every failure. Password

@@ -1,4 +1,4 @@
-// Souris — Prestation editor screen (create + details + edit)
+// BeautIzzy — Prestation editor screen (create + details + edit)
 //
 // Modes:
 // - create: « Annuler » + « Nouvelle prestation », the Service / Technique
@@ -16,7 +16,7 @@
 //
 // Durations come from the catalogue presentation helpers; the details never
 // compute timing of their own. Deactivation and deletion keep the shared
-// Souris confirmation dialog; each runs once the « ••• » drawer is gone.
+// BeautIzzy confirmation dialog; each runs once the « ••• » drawer is gone.
 
 import { useRouter } from "expo-router";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";

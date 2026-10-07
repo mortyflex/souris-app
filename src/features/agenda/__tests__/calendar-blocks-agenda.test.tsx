@@ -1,4 +1,4 @@
-// Souris — Calendar Blocks on the Agenda: Day geometry, card content, the
+// BeautIzzy — Calendar Blocks on the Agenda: Day geometry, card content, the
 // dedicated theme, the tap target and the Week rows. Appointment cards are
 // asserted unchanged next to them.
 

@@ -1,4 +1,4 @@
-// Souris — client import text parser (fictional data only)
+// BeautIzzy — client import text parser (fictional data only)
 
 import { parseClientImportText } from '../text-parser';
 import type { ClientImportCandidate } from '../types';

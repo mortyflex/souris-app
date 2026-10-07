@@ -1169,7 +1169,7 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("managed-image").props.children).toBe("-");
   });
 
-  it("deactivates through the shared Souris dialog and reactivates, closing each time", async () => {
+  it("deactivates through the shared BeautIzzy dialog and reactivates, closing each time", async () => {
     const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     const view = await renderEditor(
       <ProductEditorScreen
@@ -1209,7 +1209,7 @@ describe("ProductEditorScreen", () => {
     alertSpy.mockRestore();
   });
 
-  it("deletes only after the shared Souris confirmation, never a native alert", async () => {
+  it("deletes only after the shared BeautIzzy confirmation, never a native alert", async () => {
     const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     const view = await renderEditor(
       <ProductEditorScreen

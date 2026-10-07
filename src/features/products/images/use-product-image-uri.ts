@@ -1,4 +1,4 @@
-// Souris — the image a Product shows on this device
+// BeautIzzy — the image a Product shows on this device
 //
 // Resolves the authoritative `photoPath` through the shared Business media
 // cache and applies the ONE display precedence of product-photo-storage.ts:

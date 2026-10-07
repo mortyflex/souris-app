@@ -1,4 +1,4 @@
-// Souris — Product catalog search and directory order
+// BeautIzzy — Product catalog search and directory order
 //
 // Name/brand/category/barcode search over the canonical Product source.
 // Case- and accent-insensitive substring matching; barcodes match exactly as

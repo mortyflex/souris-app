@@ -1,4 +1,4 @@
-// Souris — « Prendre un acompte » form rules (pure)
+// BeautIzzy — « Prendre un acompte » form rules (pure)
 //
 // The raw amount text → exact integer cents, validated by THE domain rule
 // (`validateAppointmentDepositAmount`) against the Appointment's current

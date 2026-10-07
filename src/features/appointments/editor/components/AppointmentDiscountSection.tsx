@@ -1,4 +1,4 @@
-// Souris — « Réduction » section (Appointment creation and editing)
+// BeautIzzy — « Réduction » section (Appointment creation and editing)
 //
 // The generic AppointmentDiscountEditor, preceded by a birthday reminder when
 // the Appointment DATE is the Client birthday (`birthdayReminder`, decided by

@@ -1,4 +1,4 @@
-// Souris — client import text parser (PASTE today, OCR text later) and the
+// BeautIzzy — client import text parser (PASTE today, OCR text later) and the
 // table reader it shares with the CSV adapter (csv-parser.ts)
 //
 // Turns pasted text — a Notes list, a WhatsApp message, spreadsheet rows

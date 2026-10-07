@@ -1,4 +1,4 @@
-// Souris — GroupedReadRow
+// BeautIzzy — GroupedReadRow
 //
 // The read-only « label  value » row of detail sheets, inside a
 // GroupedSurface (separators: `GroupedSeparator` with

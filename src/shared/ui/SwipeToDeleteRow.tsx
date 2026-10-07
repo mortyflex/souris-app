@@ -1,6 +1,6 @@
-// Souris — SwipeToDeleteRow
+// BeautIzzy — SwipeToDeleteRow
 //
-// The ONE Souris swipe-to-delete interaction, shared by every deletable row
+// The ONE BeautIzzy swipe-to-delete interaction, shared by every deletable row
 // (Appointment « Produits vendus », Appointment editing Services). The row
 // is swiped to the RIGHT:
 //
@@ -29,7 +29,7 @@
 // expands / collapses the card, steppers, buttons. Those are React Native
 // presses, and nothing cancels them when the swipe starts: gesture-handler
 // withdraws React Native touches by walking up to the app's root surface,
-// which a modally presented screen (every Souris sheet route) is not part of.
+// which a modally presented screen (every BeautIzzy sheet route) is not part of.
 // Worse, the row FOLLOWS the finger, so the touch never leaves the pressed
 // element: releasing a swipe fired its `onPress` and toggled the card. The
 // content wrapper therefore claims the JS responder as soon as the touch shows

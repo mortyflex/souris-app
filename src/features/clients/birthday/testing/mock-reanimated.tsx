@@ -1,4 +1,4 @@
-// Souris — lightweight Reanimated test double for the birthday confetti
+// BeautIzzy — lightweight Reanimated test double for the birthday confetti
 //
 // Used through `jest.mock('react-native-reanimated', () =>
 // jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'))`

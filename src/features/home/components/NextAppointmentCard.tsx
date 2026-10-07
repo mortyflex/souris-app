@@ -1,7 +1,7 @@
-// Souris — Accueil « Prochain rendez-vous »
+// BeautIzzy — Accueil « Prochain rendez-vous »
 //
 // The hero card of Accueil, and the only tinted surface of the page: the
-// strong Souris lavender, an accent eyebrow, then the client's portrait (the
+// strong BeautIzzy lavender, an accent eyebrow, then the client's portrait (the
 // shared ClientAvatar — photo from the shared media cache, initials
 // otherwise) in a white ring, when the Appointment starts as a supporting
 // line, WHO it is for as the strongest text, and its prestation summary. The whole card opens the existing

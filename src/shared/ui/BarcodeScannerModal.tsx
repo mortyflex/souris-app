@@ -1,4 +1,4 @@
-// Souris — Barcode scanner (shared, non-Product-specific)
+// BeautIzzy — Barcode scanner (shared, non-Product-specific)
 //
 // A focused full-screen native scanner presentation. Responsibility is ONLY:
 // camera, permission, barcode detection, and returning the scanned STRING.

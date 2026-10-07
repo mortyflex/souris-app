@@ -1,4 +1,4 @@
-// Souris — communication domain public entry point (Lots B and C1)
+// BeautIzzy — communication domain public entry point (Lots B and C1)
 
 export { isUsableCommunicationEmail } from "./email";
 export {

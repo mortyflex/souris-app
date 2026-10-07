@@ -1,4 +1,4 @@
-// Souris - Shared appointment service editor drafts
+// BeautIzzy - Shared appointment service editor drafts
 //
 // Creation drafts start from catalog Services. Edit drafts start from
 // AppointmentItem snapshots. Both use the same immutable editing operations.

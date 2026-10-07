@@ -1,4 +1,4 @@
-// Souris — Business insights (« Tops & tendances ») — pure
+// BeautIzzy — Business insights (« Tops & tendances ») — pure
 //
 // Read-only statistics of ONE civil period, derived on demand from the
 // existing records. Nothing is stored, cached or projected. Two concepts stay

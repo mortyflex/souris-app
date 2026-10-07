@@ -1,4 +1,4 @@
-// Souris — the Business the protected app runs for
+// BeautIzzy — the Business the protected app runs for
 //
 // Provided by the protected route group once the session is `ready`, so
 // every operational screen stamps new records with the real Business id

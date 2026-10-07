@@ -1,4 +1,4 @@
-// Souris — shared frame of the account screens
+// BeautIzzy — shared frame of the account screens
 //
 // Warm screen background, top/bottom safe areas, native keyboard avoidance,
 // a scrollable body (so the primary action stays reachable on small phones

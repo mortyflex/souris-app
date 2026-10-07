@@ -1,4 +1,4 @@
-// Souris — Client directory ordering
+// BeautIzzy — Client directory ordering
 //
 // Deterministic human-friendly alphabetical order:
 //   firstName → lastName → id

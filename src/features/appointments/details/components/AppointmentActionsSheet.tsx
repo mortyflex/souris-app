@@ -1,7 +1,7 @@
-// Souris — « ••• » secondary actions of Appointment Details
+// BeautIzzy — « ••• » secondary actions of Appointment Details
 //
 // The lifecycle and maintenance actions leave the main sheet for ONE action
-// list on the canonical Souris drawer (BottomSheet, DESIGN_OVERRIDES.md §16):
+// list on the canonical BeautIzzy drawer (BottomSheet, DESIGN_OVERRIDES.md §16):
 //
 //   Modifier                     normal
 //   Annuler                      status-changing (rose text)

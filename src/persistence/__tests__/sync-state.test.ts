@@ -1,4 +1,4 @@
-// Souris — Cloud Sync V1B: acknowledged remote revisions round trip
+// BeautIzzy — Cloud Sync V1B: acknowledged remote revisions round trip
 
 import { bootstrapPersistence } from '../bootstrap';
 import { bindLocalDatabaseToBusiness } from '../stores/business-profile';

@@ -1,4 +1,4 @@
-// Souris — Calendar Block validity
+// BeautIzzy — Calendar Block validity
 //
 // Source: docs/domain/CALENDAR_BLOCKS.md §2
 //

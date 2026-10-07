@@ -1,4 +1,4 @@
-// Souris — Appointment Creation screen
+// BeautIzzy — Appointment Creation screen
 //
 // Three-step creation flow: Cliente → Prestations → Résumé.
 // The draft (client, selected services, appointment-specific price and
@@ -30,7 +30,7 @@
 // client Appointment that would run into a Calendar Block of the same staff
 // member is explained inline on the Résumé and cannot be created.
 //
-// Presented as a native form sheet in the canonical Souris shell
+// Presented as a native form sheet in the canonical BeautIzzy shell
 // (SheetScreen + SheetActionBar) under the editing header of « Modifier le
 // rendez-vous ». The route disables
 // swipe-to-dismiss (`src/app/(app)/_layout.tsx`): scrolling the Client list

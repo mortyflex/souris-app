@@ -1,4 +1,4 @@
-// Souris — client import candidate edits and confirmation
+// BeautIzzy — client import candidate edits and confirmation
 //
 // A review edit replaces the candidate's field values and marks it REVIEWED:
 // the extraction issues (name split, ignored text, extra numbers…) described

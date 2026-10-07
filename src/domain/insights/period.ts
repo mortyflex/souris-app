@@ -1,4 +1,4 @@
-// Souris — Insights periods (pure)
+// BeautIzzy — Insights periods (pure)
 //
 // The civil periods « Tops & tendances » reads, in the DEVICE-LOCAL calendar:
 //

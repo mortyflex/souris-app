@@ -1,8 +1,8 @@
-# Souris — Account & Onboarding V1
+# BeautIzzy — Account & Onboarding V1
 
 ## 1. Purpose
 
-Souris now has a real user/account boundary. This document defines what the account layer is, what
+BeautIzzy now has a real user/account boundary. This document defines what the account layer is, what
 it is NOT, and how the application behaves around it.
 
 ```text
@@ -70,7 +70,7 @@ Screens and providers only ever see these contracts. Tests use deterministic fak
 (`src/features/*/testing/fake-*-gateway.ts`); adapter tests exercise the mapping with hand-rolled
 Supabase-shaped objects. Jest never talks to Supabase.
 
-Never logged, never stored in Souris tables, never rendered: passwords, access tokens, refresh
+Never logged, never stored in BeautIzzy tables, never rendered: passwords, access tokens, refresh
 tokens, session JSON, raw `AuthApiError` / PostgREST payloads.
 
 ---

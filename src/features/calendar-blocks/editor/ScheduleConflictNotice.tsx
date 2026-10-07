@@ -1,4 +1,4 @@
-// Souris — schedule conflict notice
+// BeautIzzy — schedule conflict notice
 //
 // The ONE inline message shown when a save would run into personal
 // unavailability (or when a Calendar Block would cover a client Appointment):

@@ -1,4 +1,4 @@
-// Souris — per-appointment reminder controls in Appointment Creation (Lot B)
+// BeautIzzy — per-appointment reminder controls in Appointment Creation (Lot B)
 //
 // The real screen against the development fixtures, with the communications
 // providers mounted the way (app)/_layout mounts them:

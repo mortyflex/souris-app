@@ -1,4 +1,4 @@
-// Souris — in-memory Business media remote for tests (never imported by app code)
+// BeautIzzy — in-memory Business media remote for tests (never imported by app code)
 //
 // One shared object store, like the Business media bucket: `forDevice` gives
 // another device's view of the SAME store, writing downloads into that

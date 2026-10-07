@@ -1,4 +1,4 @@
-// Souris — deterministic AuthGateway for tests (never imported by app code)
+// BeautIzzy — deterministic AuthGateway for tests (never imported by app code)
 
 import type {
   AuthCredentials,

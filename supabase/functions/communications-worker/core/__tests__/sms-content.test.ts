@@ -1,4 +1,4 @@
-// Souris — Communication Core (SMS pivot Phase 2): lifecycle SMS content
+// BeautIzzy — Communication Core (SMS pivot Phase 2): lifecycle SMS content
 //
 // Locks the V1 French copy of the two client lifecycle SMS, the fallback
 // without a usable first name, the civil valid_until formatting, the

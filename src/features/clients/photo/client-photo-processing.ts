@@ -1,4 +1,4 @@
-// Souris — Client photo processing
+// BeautIzzy — Client photo processing
 //
 // Every Client photo, from the camera or from Photos, goes through the shared
 // normalization (shared/lib/photo-normalization.ts) with the portrait

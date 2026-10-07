@@ -1,4 +1,4 @@
-// Souris — sync worker (Cloud Sync V1C push, V1D restore + pull, V1D.1 seamless bootstrap)
+// BeautIzzy — sync worker (Cloud Sync V1C push, V1D restore + pull, V1D.1 seamless bootstrap)
 //
 // Uploads local SQLite state to the remote, one aggregate at a time, then
 // downloads what changed remotely. It is INVOKED explicitly (`run`) — no

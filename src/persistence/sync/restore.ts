@@ -1,4 +1,4 @@
-// Souris — new-device restore (Cloud Sync V1D)
+// BeautIzzy — new-device restore (Cloud Sync V1D)
 //
 // Rebuilds the EMPTY local database of a bound device from the remote data of
 // its Business. It runs only from the sync worker, only when the first-sync

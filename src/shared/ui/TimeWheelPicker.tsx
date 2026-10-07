@@ -1,4 +1,4 @@
-// Souris — TimeWheelPicker
+// BeautIzzy — TimeWheelPicker
 //
 // A 24-hour time of day on two adjacent wheels — hours and minutes — built on
 // the shared `WheelColumn` mechanics (native inertial scrolling, snapping, a

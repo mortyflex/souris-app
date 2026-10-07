@@ -1,4 +1,4 @@
-// Souris — photo source flow
+// BeautIzzy — photo source flow
 //
 // The ONE photo-selection workflow shared by Product photos and Client
 // photos: source sheet → (camera permission) → camera, library, or removal.

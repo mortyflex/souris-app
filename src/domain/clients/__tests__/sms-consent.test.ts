@@ -1,4 +1,4 @@
-// Souris — Client promotional SMS consent (domain rules)
+// BeautIzzy — Client promotional SMS consent (domain rules)
 
 import { resolveClientSmsMarketingConsent, type ClientSmsMarketingConsent } from '../sms-consent';
 

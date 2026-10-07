@@ -1,4 +1,4 @@
-# Souris — First TestFlight build (pilot)
+# BeautIzzy — First TestFlight build (pilot)
 
 Release notes for the first iOS TestFlight build. Short on purpose: what must be configured
 outside the repository, what the build does and does NOT provide, and what to verify on a device.
@@ -22,8 +22,8 @@ Consequences for the pilot:
   (within about two minutes); data that already existed on a device bound to an EMPTY Business is
   uploaded the same way. There is no approval, no prompt and no sync screen;
 - deleting the app, losing the phone or changing phone no longer loses the data: after sign-in on
-  the empty device, Souris restores the Business by itself and the data appears in every tab.
-  Meanwhile Souris shows « Récupération de vos données… ». Offline or on a failing network — at
+  the empty device, BeautIzzy restores the Business by itself and the data appears in every tab.
+  Meanwhile BeautIzzy shows « Récupération de vos données… ». Offline or on a failing network — at
   that moment or at ANY later launch of a device that holds no data and never synchronized — it does NOT open an
   empty application: it
   shows "Impossible de récupérer vos données" with « Réessayer » (and keeps retrying on its own),
@@ -87,17 +87,17 @@ Also confirm:
 ```text
 sign-up → "Vérifiez votre boîte mail" → link opened on the phone
   → Supabase verifies the address in the browser → redirects to sourisapp://sign-in
-  → Souris opens on "Connexion" → the owner signs in with their password
+  → BeautIzzy opens on "Connexion" → the owner signs in with their password
 ```
 
 The app does not consume the tokens carried by the redirect (`detectSessionInUrl: false`); the
 session always comes from a password sign-in. A link opened on another device (computer) still
-confirms the address; the browser simply cannot open Souris there.
+confirms the address; the browser simply cannot open BeautIzzy there.
 
 ## 5. Real-device checklist (not automated)
 
 - [ ] fresh install starts on Welcome, with empty data after onboarding;
-- [ ] sign-up → email received → link returns to Souris on the sign-in screen (app running, and
+- [ ] sign-up → email received → link returns to BeautIzzy on the sign-in screen (app running, and
       app killed);
 - [ ] sign-in, kill, relaunch offline → app usable;
 - [ ] Plus tab shows no "Développement" section;

@@ -1,8 +1,8 @@
-# Souris — Product Domain
+# BeautIzzy — Product Domain
 
 ## 1. Purpose
 
-This document defines the Product catalog rules of Souris V1.
+This document defines the Product catalog rules of BeautIzzy V1.
 
 V1 scope: a professional-managed Product catalog + current stock. Completed Product sales
 (Sales V1) reference Products through the stable `productId` and decrement current stock
@@ -23,7 +23,7 @@ Product
 ├── barcode?       optional STRING — leading zeroes preserved, never numeric-only
 ├── photoPath?     the ONE shared Product photo: a stable Storage object path (§11)
 ├── imageUri?      LEGACY device-local image, display-only fallback, never synced (§11)
-├── price          Souris money convention: finite number >= 0
+├── price          BeautIzzy money convention: finite number >= 0
 ├── stockQuantity  integer >= 0 (whole units, no fractional inventory)
 └── active         current catalog availability
 ```

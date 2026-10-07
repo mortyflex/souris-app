@@ -1,8 +1,8 @@
-# Souris — Local Persistence
+# BeautIzzy — Local Persistence
 
 ## 1. Purpose
 
-Souris survives app termination and restart. Every canonical business record lives in one local
+BeautIzzy survives app termination and restart. Every canonical business record lives in one local
 SQLite database owned by the app; feature providers hydrate from it at launch and write through it
 on every mutation.
 
@@ -313,7 +313,7 @@ souris_metadata           DELETE key 'sync_pull_cursor'
 The procedure of schema v11, applied again for a new aggregate type (`docs/domain/APPOINTMENTS.md` §25d,
 `CLOUD_SYNC.md` §21):
 
-1. **A new, empty table.** Nothing is backfilled — Souris never fabricates a deposit. A deposit is its
+1. **A new, empty table.** Nothing is backfilled — BeautIzzy never fabricates a deposit. A deposit is its
    own row, never a column of `appointments`. `appointment_id` is plain reference metadata with NO
    foreign key and NO cascade, exactly like `sales.appointment_id`; the Appointment deletion guard
    (§7b) refuses to delete an Appointment that holds a deposit. The domain `createdAt` is stored as
@@ -1097,7 +1097,7 @@ the no-photo placeholder until it can; once cached, the photo shows offline.
 `products.image_uri` is the LEGACY device-local image of builds before v14 (a file under
 `<documents>/products/`). Schema v14 leaves both the column and the files exactly as they are; the
 column is never synced and its file is never uploaded. It is a display-only fallback while the
-Product has no `photo_path`, never over one. It is cleared — and its Souris-owned file deleted, best
+Product has no `photo_path`, never over one. It is cleared — and its BeautIzzy-owned file deleted, best
 effort (a failure never affects the Product) — when this device gives the Product a new shared
 photo or removes its photo, and its file is deleted with the Product. Only files under
 `<documents>/products/` or the app cache are ever deleted; external photo-library assets never are.

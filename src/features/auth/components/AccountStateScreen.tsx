@@ -1,4 +1,4 @@
-// Souris — dedicated account state (conflict, unavailable, waiting for data)
+// BeautIzzy — dedicated account state (conflict, unavailable, waiting for data)
 //
 // One restrained explanatory surface: brand, title, short text, at most one
 // primary action and one secondary — or, for a waiting state, an activity
@@ -15,7 +15,7 @@ import { gutter, semanticColors, spacing } from '@/shared/ui/theme';
 interface AccountStateScreenProps {
   readonly title: string;
   readonly message: string;
-  /** Absent for a waiting state: nothing to press while Souris is working. */
+  /** Absent for a waiting state: nothing to press while BeautIzzy is working. */
   readonly actions?: ReactNode;
   /** Shown under the message (an activity indicator). */
   readonly accessory?: ReactNode;

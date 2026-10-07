@@ -1,4 +1,4 @@
-// Souris — Calendar Blocks are invisible to every client and financial derivation
+// BeautIzzy — Calendar Blocks are invisible to every client and financial derivation
 //
 // The isolation is structural, not a filter: a block lives in its own table
 // and its own session, and the inputs of the Cash Register, the expected

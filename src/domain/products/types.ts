@@ -1,4 +1,4 @@
-// Souris — Product domain types
+// BeautIzzy — Product domain types
 //
 // Framework-independent canonical Product catalog model.
 // No React, React Native, Expo, or persistence imports.
@@ -30,7 +30,7 @@ export interface Product {
    * while the Product has no `photoPath` — a `photoPath` always wins.
    */
   readonly imageUri?: string;
-  /** Souris money convention: finite number >= 0. */
+  /** BeautIzzy money convention: finite number >= 0. */
   readonly price: number;
   /** Current stock in whole units: integer >= 0. */
   readonly stockQuantity: number;

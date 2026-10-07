@@ -1,4 +1,4 @@
-// Souris — Appointment Details summary
+// BeautIzzy — Appointment Details summary
 //
 // One compact surface, two columns: « Durée totale » and « Nombre de
 // prestations », each with a quiet accent glyph. Deliberately no amount:

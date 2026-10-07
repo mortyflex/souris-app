@@ -1,4 +1,4 @@
-// Souris — Sale completion (pure)
+// BeautIzzy — Sale completion (pure)
 //
 // Source: docs/domain/SALES.md §4–§6
 //

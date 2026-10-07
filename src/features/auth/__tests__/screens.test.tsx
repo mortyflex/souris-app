@@ -1,4 +1,4 @@
-// Souris — account screens (behavioral, no pixel tests)
+// BeautIzzy — account screens (behavioral, no pixel tests)
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 

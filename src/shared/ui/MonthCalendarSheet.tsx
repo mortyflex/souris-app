@@ -1,6 +1,6 @@
-// Souris — MonthCalendarSheet
+// BeautIzzy — MonthCalendarSheet
 //
-// The ONE month date picker of Souris (Agenda Jour, Caisse Jour): the month
+// The ONE month date picker of BeautIzzy (Agenda Jour, Caisse Jour): the month
 // of the selected day as a French calendar (Monday first), and a direct tap
 // on a day to open it — no « Valider ».
 //
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: MARK_SIZE,
   },
-  // Selected: the soft lavender fill of Souris selections.
+  // Selected: the soft lavender fill of BeautIzzy selections.
   markSelected: { backgroundColor: semanticColors.surfaceLavenderStrong },
   // Today: a violet ring; on the selected day it simply rings the same fill.
   markToday: { borderColor: semanticColors.accent },

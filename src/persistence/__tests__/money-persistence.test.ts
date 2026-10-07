@@ -1,4 +1,4 @@
-// Souris — monetary persistence (schema v8): integer cents in SQLite, euro numbers in the domain
+// BeautIzzy — monetary persistence (schema v8): integer cents in SQLite, euro numbers in the domain
 
 import { getAppointmentExpectedTotal, type Appointment, type Service } from '@/domain/appointments';
 import { getCashRegisterDaySummary } from '@/domain/cash-register';

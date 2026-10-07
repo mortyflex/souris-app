@@ -1,4 +1,4 @@
-// Souris — Client directory (Clientes tab)
+// BeautIzzy — Client directory (Clientes tab)
 //
 // The complete Client directory: search + SectionList over the shared Client
 // session source, split into Actives / Archivées (archived Clients stay

@@ -1,6 +1,6 @@
-// Souris — ConfirmationDialog
+// BeautIzzy — ConfirmationDialog
 //
-// The ONE Souris-owned confirmation surface (reference: the permanent Client
+// The ONE BeautIzzy-owned confirmation surface (reference: the permanent Client
 // deletion dialog). A near-full-width centered card on the canonical navy
 // scrim: uppercase eyebrow, large navy title, body, then full-width stacked
 // actions — a soft lavender secondary (« Retour » / « Annuler ») above the

@@ -1,8 +1,8 @@
-# Souris — Service Domain
+# BeautIzzy — Service Domain
 
 ## 1. Purpose
 
-This document defines the Service catalog rules of Souris.
+This document defines the Service catalog rules of BeautIzzy.
 
 Appointment scheduling rules live in `docs/domain/APPOINTMENTS.md`. This document defines the catalog that feeds Appointment selection; it deliberately does not duplicate the full Appointment timeline documentation.
 

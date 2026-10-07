@@ -1,4 +1,4 @@
-// Souris — Calendar Block store (docs/architecture/PERSISTENCE.md §7f)
+// BeautIzzy — Calendar Block store (docs/architecture/PERSISTENCE.md §7f)
 //
 // Round trip, edit, permanent deletion, restart, outbox marking, the domain
 // guard in front of SQL — and isolation: a block never reaches an Appointment

@@ -1,4 +1,4 @@
-// Souris — Checkout form rules (pure)
+// BeautIzzy — Checkout form rules (pure)
 //
 // Shared by the Appointment checkout and the standalone Sale payment step:
 // two text entries (Carte, Espèces) and everything derived from them —
@@ -124,7 +124,7 @@ export function getRemainingExpectedCents(
   return remaining > 0 ? remaining : 0;
 }
 
-/** Who owns an amount: typed by the professional, or kept by Souris. */
+/** Who owns an amount: typed by the professional, or kept by BeautIzzy. */
 export type CheckoutAmountOwner = 'auto' | 'manual';
 
 export interface CheckoutSplitEntry {
@@ -196,7 +196,7 @@ export function editCheckoutSplit(
 
 /**
  * « Reste » tapped on an empty amount: it takes what remains to reach the
- * target and stays `auto` (Souris's proposal, rebalanced by later edits of the
+ * target and stays `auto` (BeautIzzy's proposal, rebalanced by later edits of the
  * other amount).
  */
 export function fillCheckoutSplitRemainder(

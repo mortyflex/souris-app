@@ -1,4 +1,4 @@
-// Souris — SMS fidélisation stepper row
+// BeautIzzy — SMS fidélisation stepper row
 //
 // « Réduction      [ − ] 15 % [ + ] » inside a GroupedSurface: the row
 // label on the left, the compact [ − ] value [ + ] stepper on the right, in

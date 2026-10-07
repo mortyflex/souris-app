@@ -1,8 +1,8 @@
-// Souris — permanent Appointment deletion dialog
+// BeautIzzy — permanent Appointment deletion dialog
 //
 // Deletion is different from cancellation and no-show: it removes the
 // record from the Agenda and from the Client history. Two shapes on the
-// shared Souris confirmation dialog, never both:
+// shared BeautIzzy confirmation dialog, never both:
 //
 //   confirm  → irreversible confirmation (Retour / Supprimer)
 //   blocked  → concise explanation: a recorded checkout, a deposit (even a

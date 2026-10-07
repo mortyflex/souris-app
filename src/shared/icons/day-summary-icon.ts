@@ -1,4 +1,4 @@
-// Souris — day summary icon
+// BeautIzzy — day summary icon
 //
 // The ONE glyph of « Résumé du jour » and « Résumé de la semaine »: the Agenda
 // + menu option and the receipt header. A listed slip of paper — available on every supported iOS

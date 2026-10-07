@@ -1,4 +1,4 @@
-// Souris — Appointment deposits persistence (schema v12, docs/domain/APPOINTMENTS.md §25d)
+// BeautIzzy — Appointment deposits persistence (schema v12, docs/domain/APPOINTMENTS.md §25d)
 //
 // The stored rows are the authority: a deposit is re-validated against the
 // stored Appointment inside its transaction, and every write that can lower

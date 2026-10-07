@@ -1,4 +1,4 @@
-// Souris — Calendar Block session: SQLite first, state after the commit, and
+// BeautIzzy — Calendar Block session: SQLite first, state after the commit, and
 // the schedule-conflict rule re-verified by the mutations themselves (the
 // editors show it inline, the session is what refuses).
 

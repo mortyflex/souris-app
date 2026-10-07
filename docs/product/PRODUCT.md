@@ -1,8 +1,8 @@
-# Souris — Product
+# BeautIzzy — Product
 
 ## 1. Product Definition
 
-Souris is a lightweight native mobile application for beauty professionals.
+BeautIzzy is a lightweight native mobile application for beauty professionals.
 
 Its purpose is to make the professional's working day easier to understand and manage without the administrative weight of traditional salon-management software.
 
@@ -13,7 +13,7 @@ The first real-world implementation and validation context is:
 - one professional;
 - daily mobile usage.
 
-Souris is not a hairdressing-only application.
+BeautIzzy is not a hairdressing-only application.
 
 The core product should remain appropriate for appointment-based beauty professionals such as:
 
@@ -31,13 +31,13 @@ The guiding principle is:
 
 ## 2. Product Promise
 
-Souris should provide the minimum tools required to manage a beauty professional's activity clearly and quickly.
+BeautIzzy should provide the minimum tools required to manage a beauty professional's activity clearly and quickly.
 
 The product should make the professional feel:
 
 > “I know what my day looks like, who I am seeing, what I need to do, and what time I actually have available.”
 
-Souris does not compete by offering the largest number of features.
+BeautIzzy does not compete by offering the largest number of features.
 
 It competes through:
 
@@ -52,7 +52,7 @@ It competes through:
 
 ## 3. Product Simplicity
 
-Souris should remain deliberately small.
+BeautIzzy should remain deliberately small.
 
 A feature should not be added merely because another salon-management product offers it.
 
@@ -69,7 +69,7 @@ New capabilities should normally improve at least one of:
 
 If a feature does not materially improve one of these areas, it should be questioned.
 
-Souris must not become an ERP.
+BeautIzzy must not become an ERP.
 
 ---
 
@@ -88,7 +88,7 @@ Plus
 Accueil is the landing tab (product decision of October 2026 — it supersedes the earlier
 « Agenda is Home » rule).
 
-The professional primarily opens Souris to understand and manage the working day.
+The professional primarily opens BeautIzzy to understand and manage the working day.
 
 Accueil answers that at a glance and stays deliberately small:
 
@@ -96,7 +96,7 @@ Accueil answers that at a glance and stays deliberately small:
 - today's four figures — the ones of « Résumé du jour »;
 - the most common creation actions.
 
-Accueil is a composition of what Souris already knows.
+Accueil is a composition of what BeautIzzy already knows.
 
 It is never a second Agenda: it selects no day and shows no timeline.
 
@@ -202,10 +202,10 @@ Estimation
   of the selected prices, in exact cents.
 - **Résumé.** Generation date, one line per prestation with its price, « Total estimé ». Then
   « Générer l’estimation ».
-- **Document.** Printed by the Souris receipt printer as an « ESTIMATION TARIFAIRE » share
+- **Document.** Printed by the BeautIzzy receipt printer as an « ESTIMATION TARIFAIRE » share
   document, in the « Tops & tendances » share-card family: Business name, the generation date (the local day, no time — document metadata only, never an
   appointment, booking or validity date), the lines, « Total estimé », the line « Estimation
-  indicative basée sur les prestations sélectionnées. », « Créé avec » + the Souris wordmark. No
+  indicative basée sur les prestations sélectionnées. », « Créé avec » + the BeautIzzy wordmark. No
   Client name and no recipient section: the same image suits any potential client.
   Design: `docs/design/DESIGN_OVERRIDES.md` §37.
 - **Actions.** Fermer · Enregistrer (Photos) · Partager (native share sheet) — the export flow of
@@ -216,7 +216,7 @@ Client history — and no estimation record. The flow has no path able to create
 attach a Client. There is no estimation table, sync, history or status.
 
 It is deliberately NOT a formal quote (devis), an invoice, accounting, or a legally binding
-acceptance. It carries no validity period, no signature, no acceptance, and no tax wording: Souris
+acceptance. It carries no validity period, no signature, no acceptance, and no tax wording: BeautIzzy
 stores no HT / TVA model and no legal business identity (address, SIRET, legal form, VAT status),
 so the stored service price is the one amount shown. Not implemented: quote history,
 acceptance / signature, conversion to an appointment or an invoice.
@@ -249,7 +249,7 @@ The client remains in the appointment throughout all phases.
 
 However, the professional may be available during unattended phases.
 
-This distinction is one of the core product concepts of Souris.
+This distinction is one of the core product concepts of BeautIzzy.
 
 It must not be reduced to a cosmetic UI detail.
 
@@ -257,7 +257,7 @@ It must not be reduced to a cosmetic UI detail.
 
 ## 7. Services and Techniques
 
-Souris distinguishes two conceptual service types:
+BeautIzzy distinguishes two conceptual service types:
 
 ```text
 SERVICE
@@ -412,7 +412,7 @@ Existing appointments support service-composition editing:
 
 - adding services from the current catalog;
 - removing services, except the final remaining service — by swiping the Service card to the right
-  (the same Souris swipe-to-delete interaction as `Produits vendus`: a rose destructive surface and a
+  (the same BeautIzzy swipe-to-delete interaction as `Produits vendus`: a rose destructive surface and a
   trash icon labelled `Retirer <Service> du rendez-vous`; a partial swipe leaves the trash available to
   tap, a full swipe removes on release). There is no visible `Retirer` button. The removal changes the
   editing draft ONLY: the persisted Appointment keeps the Service until `Enregistrer les modifications`
@@ -560,7 +560,7 @@ Balayage                                 1 h 25
 
 ### Checkout (« Encaisser »)
 
-Tapping `Encaisser` opens the canonical Souris sheet `Annuler | Encaisser le rendez-vous` (the §30 editing header, no eyebrow) with the keyboard
+Tapping `Encaisser` opens the canonical BeautIzzy sheet `Annuler | Encaisser le rendez-vous` (the §30 editing header, no eyebrow) with the keyboard
 closed. It shows a compact expectation (`Prestations`, `Réduction` when the Appointment has a discount — §15,
 `Produits` when linked Sales exist, `Total attendu`) as a
 helper, then two payment rows — `Carte` and `Espèces` — with editable French decimal amounts (`75`, `75,50`)
@@ -584,7 +584,7 @@ after a Revente is added or deleted. When the received amount differs from the e
 or a Revente deleted after checkout — the `Encaissement` summary shows a quiet `Écart : ±…` line; the recorded
 payment itself is never changed automatically.
 
-Souris does not process payments: no card is charged, no terminal or provider is involved. `Encaisser` records
+BeautIzzy does not process payments: no card is charged, no terminal or provider is involved. `Encaisser` records
 what the professional received.
 
 ### Deposits (« Acomptes »)
@@ -672,7 +672,7 @@ Active/completed geometry, ordered phases, processing gaps, reprises, and overla
 
 ## 11. Clients
 
-Clients are a core Souris entity.
+Clients are a core BeautIzzy entity.
 
 The Client model is one stable identity used everywhere:
 
@@ -683,7 +683,7 @@ lastName?
 phone?
 email?
 birthday?    { month, day } — day + month only, never a year
-notes?       free-text professional note written in Souris
+notes?       free-text professional note written in BeautIzzy
 ```
 
 A Client selected during Appointment creation is the SAME Client later used
@@ -736,13 +736,13 @@ The Client Profile is a full business screen containing:
   absent otherwise, never an empty card;
 - the next upcoming Appointment when one exists;
 - derived activity: Rendez-vous réalisés, Total dépensé, Absences,
-  Annulations — always derived from Souris Appointment state, never stored;
-- upcoming Appointments and Souris history (terminal outcomes included).
+  Annulations — always derived from BeautIzzy Appointment state, never stored;
+- upcoming Appointments and BeautIzzy history (terminal outcomes included).
 
 The Client Profile structure stays stable from client to client: the
 `Activité` section is always visible (zero values are valid information) and
 the `Rendez-vous` section always shows its restrained empty state when there
-is no Souris history.
+is no BeautIzzy history.
 
 Activity rules are explicit: completed and no-show counts come from their status; `Annulations` counts only
 `CANCELLED` appointments whose recorded actor is `CLIENT`. A `BUSINESS` cancellation remains visible in history as
@@ -786,8 +786,8 @@ action immediately; an action attempt never reactivates a Client by itself.
 Tapping `Supprimer définitivement` first checks the stored references. When
 the Client has no Appointment and no Sale, a focused confirmation asks
 `Supprimer définitivement ce client ?` — `Cette action est irréversible.`
-— then deletes her from Souris (directory, session, database). When ANY
-Appointment (whatever its status) or Sale references her, Souris shows a
+— then deletes her from BeautIzzy (directory, session, database). When ANY
+Appointment (whatever its status) or Sale references her, BeautIzzy shows a
 concise explanation instead of a confirmation that could never succeed:
 
 ```text
@@ -802,7 +802,7 @@ haptic feedback only after it actually succeeded.
 ### Birthday
 
 `birthday` is an optional day + month pair (`{ month, day }`), never a
-timestamp and never a year: Souris only needs it to recognize an upcoming
+timestamp and never a year: BeautIzzy only needs it to recognize an upcoming
 birthday, offer a birthday promotion and show it. The Client form asks for the
 day and the month with an inline selector (no keyboard, no year wheel;
 February offers 29 days), and the profile shows a friendly French day + month
@@ -870,7 +870,7 @@ birthdate → birthday (day + month of a well-formed YYYY-MM-DD; the year is dro
 
 Existing commercial history is intentionally not migrated.
 
-Souris starts its own activity history from zero.
+BeautIzzy starts its own activity history from zero.
 
 Do not import legacy:
 
@@ -922,7 +922,7 @@ change activation state.
 
 The camera permission is checked — and, when the system can still ask, requested — the moment
 `Prendre une photo` is tapped, BEFORE the camera sheet is presented; already granted opens the camera
-at once, a permanent denial shows a Souris explanation (`Accès à l’appareil photo` · `Ouvrir les
+at once, a permanent denial shows a BeautIzzy explanation (`Accès à l’appareil photo` · `Ouvrir les
 réglages` / `Annuler`). The library uses the system picker, which needs no photo-library permission.
 This flow is shared with Client photos (`src/shared/ui/PhotoSourceFlow.tsx`,
 `src/shared/lib/photo-acquisition.ts`). A photo explicitly taken or chosen becomes, on Save, the
@@ -1049,7 +1049,7 @@ dashboard, a Sales history screen or tab, and loyalty. Stock remains direct V1 s
 still no stock-movement history — a completed Sale simply decrements the quantity.
 
 **Standalone Product Sale payment.** `Produits → Nouvelle vente`: after `Valider la vente` the same
-Souris checkout sheet (`Annuler | Encaisser la vente`) shows `Total vente` and the `Carte` /
+BeautIzzy checkout sheet (`Annuler | Encaisser la vente`) shows `Total vente` and the `Carte` /
 `Espèces` rows, keyboard closed; card only, cash only, or mixed; a positive received total is
 required when the Sale total is positive; the received total may differ. Confirming completes the
 Sale with its payment and decrements stock in one operation; `Annuler` returns to the draft with
@@ -1058,7 +1058,7 @@ recorded by the Appointment checkout. Historical Sales without payment are never
 
 Product management should remain simple.
 
-Souris should not become a full retail or ERP platform.
+BeautIzzy should not become a full retail or ERP platform.
 
 ---
 
@@ -1149,7 +1149,7 @@ for an existing service is explicitly overridden by `docs/design/DESIGN_OVERRIDE
 
 The professional can apply ONE optional discount to a whole Appointment, as a normal professional action:
 
-- a percentage — quick choices `5 10 15 20 25 30 35 40 45 50` (%); 50 % is the maximum Souris accepts;
+- a percentage — quick choices `5 10 15 20 25 30 35 40 45 50` (%); 50 % is the maximum BeautIzzy accepts;
 - or a fixed amount — quick choices `5 € 10 € 15 € 20 € 25 € 30 € 35 € 40 € 45 € 50 €`.
 
 It lives in a deliberately secondary, collapsed `Réduction` row of the Résumé step (creation) and of
@@ -1250,7 +1250,7 @@ encaissé aujourd’hui                     (« encaissé ce jour » / « encais
 - `Jour` sums the payments whose `paidAt` falls on the selected device-local civil day; `Mois` sums the
   selected calendar month (never a rolling 30-day window); previous / next navigate freely into history, and
   the calendar control of the shared day navigator (the same one as Agenda Jour) opens the canonical
-  Souris date picker to jump to any day; « Aujourd’hui » marks today, « Revenir à aujourd’hui » leads back;
+  BeautIzzy date picker to jump to any day; « Aujourd’hui » marks today, « Revenir à aujourd’hui » leads back;
 - the amounts derive ONLY from money explicitly recorded: appointment checkouts (`appointment.payment`),
   standalone Product Sale payments (`sale.payment`) and appointment deposits, each on the day the money was
   received — a `30 €` deposit taken on 22 September appears that day (« Acompte · Balayage », on its own
@@ -1269,8 +1269,8 @@ it (`100 €` paid as `30 €` + `70 €` counts `100 €`).
 Account & Onboarding V1: a `Compte` section shows the Business identity
 (name + activity, e.g. `Maison Léa` / `Coiffure`) and opens a restrained account sheet (activity,
 responsable, email, phone, `Se déconnecter`). Sign-out asks for an explicit, non-alarming
-confirmation: "Les données restent enregistrées sur cet appareil." Souris never claims local data is
-backed up or synchronized — operational cloud sync does not exist yet. The Souris brand block stays
+confirmation: "Les données restent enregistrées sur cet appareil." BeautIzzy never claims local data is
+backed up or synchronized — operational cloud sync does not exist yet. The BeautIzzy brand block stays
 at the bottom of Plus.
 
 Do not implement future entries merely because they are documented here.
@@ -1292,7 +1292,7 @@ Implemented (Account & Onboarding V1) — four steps, no tutorial carousel:
 4. App
 ```
 
-Wording: "Nom de votre activité" (never "Nom du salon") — Souris serves every appointment-based
+Wording: "Nom de votre activité" (never "Nom du salon") — BeautIzzy serves every appointment-based
 beauty profession and independent workers; placeholders never imply hairdressing only. Activities:
 Coiffure, Barbier, Onglerie, Esthétique, Cils & sourcils, Autre. Nothing else is asked at first run
 (no address, SIRET, VAT, hours, social links, logo, staff, banking, subscription).
@@ -1317,7 +1317,7 @@ The experience should introduce:
 Votre journée, plus légère.
 ```
 
-Introduce Souris and the Agenda.
+Introduce BeautIzzy and the Agenda.
 
 ### Screen 2
 
@@ -1420,7 +1420,7 @@ clientId
 
 This allows future evolution without changing the identity model.
 
-It does not mean Souris should currently implement:
+It does not mean BeautIzzy should currently implement:
 
 - staff management;
 - roles;
@@ -1473,4 +1473,4 @@ clarity
 
 If a visually sophisticated interaction makes daily usage slower or harder to understand, simplify it.
 
-Souris exists to make the professional's day lighter.
+BeautIzzy exists to make the professional's day lighter.

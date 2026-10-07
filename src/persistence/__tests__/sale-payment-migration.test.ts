@@ -1,4 +1,4 @@
-// Souris — schema v6: standalone Sale payment columns (docs/architecture/PERSISTENCE.md §4)
+// BeautIzzy — schema v6: standalone Sale payment columns (docs/architecture/PERSISTENCE.md §4)
 
 import type { Sale } from '@/domain/sales';
 

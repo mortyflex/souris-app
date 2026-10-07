@@ -1,4 +1,4 @@
-// Souris — BusinessInsightsTicket
+// BeautIzzy — BusinessInsightsTicket
 //
 // « Tops & tendances », printed by the SAME receipt printer as « Résumé du
 // jour ». Opens on the MONTH of the date the Agenda is showing (not the real

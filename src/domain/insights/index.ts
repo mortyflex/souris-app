@@ -1,4 +1,4 @@
-// Souris — Business insights public entry point (« Tops & tendances »)
+// BeautIzzy — Business insights public entry point (« Tops & tendances »)
 
 export type { InsightsPeriod, InsightsPeriodKind } from './period';
 export { getInsightsPeriod, isWithinInsightsPeriod, shiftInsightsAnchor } from './period';

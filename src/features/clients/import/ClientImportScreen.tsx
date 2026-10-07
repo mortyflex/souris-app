@@ -1,4 +1,4 @@
-// Souris — « Importer ma clientèle »
+// BeautIzzy — « Importer ma clientèle »
 //
 // The permanent client import flow, pushed from Clientèle inside the
 // authenticated, Business-bound `(app)` group only:

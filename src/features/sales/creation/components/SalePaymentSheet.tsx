@@ -1,4 +1,4 @@
-// Souris — standalone Sale payment step
+// BeautIzzy — standalone Sale payment step
 //
 // After the Products are chosen and before the Sale completes, the
 // professional records what was received by card and/or cash — the shared

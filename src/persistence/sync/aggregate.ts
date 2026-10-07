@@ -1,4 +1,4 @@
-// Souris — sync aggregate vocabulary (Cloud Sync V1B)
+// BeautIzzy — sync aggregate vocabulary (Cloud Sync V1B)
 //
 // The seven aggregate boundaries of the remote contract
 // (docs/architecture/CLOUD_SYNC.md §6). Children never sync on their own: a

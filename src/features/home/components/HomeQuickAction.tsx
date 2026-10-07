@@ -1,4 +1,4 @@
-// Souris — Accueil quick action
+// BeautIzzy — Accueil quick action
 //
 // One shortcut of the Accueil action row: a small white rounded square with
 // an accent glyph, and a short navy label under it — lighter than a card, so

@@ -1,4 +1,4 @@
-// Souris — Initial clients source
+// BeautIzzy — Initial clients source
 //
 // The development address book: a SYNTHETIC legacy-shaped dataset
 // (synthetic-legacy-clients.ts — no real person) strictly mapped through the

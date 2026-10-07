@@ -1,4 +1,4 @@
-// Souris — Synthetic legacy address book (development and tests only)
+// BeautIzzy — Synthetic legacy address book (development and tests only)
 //
 // 100 % FICTIONAL. No record describes a real person: names are combined
 // mechanically from two fixed lists, phone numbers come from the ranges

@@ -1,4 +1,4 @@
-// Souris — Rappels clientes (Settings)
+// BeautIzzy — Rappels clientes (Settings)
 //
 // Plus › Rappels clientes: the ONE reminder setting of V1. A single switch
 // (« Rappels par e-mail »), the fixed timing (« 24 h avant le rendez-vous »,

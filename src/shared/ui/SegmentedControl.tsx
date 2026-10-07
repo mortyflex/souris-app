@@ -1,6 +1,6 @@
-// Souris — SegmentedControl
+// BeautIzzy — SegmentedControl
 //
-// The ONE compact option switcher of Souris — Agenda Jour / Semaine, Caisse
+// The ONE compact option switcher of BeautIzzy — Agenda Jour / Semaine, Caisse
 // Jour / Mois: a light-glass capsule (GlassSurface, DESIGN_OVERRIDES.md §21)
 // from the same family as the glass icon buttons and the native tab bar,
 // slightly lighter than the circles since it covers more area. The selected

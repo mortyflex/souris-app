@@ -1,4 +1,4 @@
-// Souris design tokens — Spacing
+// BeautIzzy design tokens — Spacing
 //
 // Source: docs/design/DESIGN.md §4, docs/design/reference-export/tokens.css
 //

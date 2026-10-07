@@ -1,8 +1,8 @@
-# Souris — Sale Domain
+# BeautIzzy — Sale Domain
 
 ## 1. Purpose
 
-This document defines the Product Sale rules of Souris Sales V1.
+This document defines the Product Sale rules of BeautIzzy Sales V1.
 
 V1 scope: COMPLETED Product sales only, created by the professional, optionally attached to a
 Client and optionally to the Appointment they were sold during, decrementing current Product stock
@@ -10,7 +10,7 @@ atomically. No pending orders, payment methods on the Sale itself, refunds, retu
 tax, receipts, revenue dashboard, or loyalty.
 
 Sales exist to make Product retail and stock easier to manage and to give the Client Profile a
-real, Souris-generated purchase history.
+real, BeautIzzy-generated purchase history.
 
 ---
 
@@ -92,7 +92,7 @@ Appointment later disappears, and it never resolves live Appointment data. The A
 
 `clientId` stays optional in the canonical model so that historical walk-in Sales (created before
 the Client requirement) remain valid: they decrement stock and are stored like any other Sale, but
-appear on no Client Profile. Souris never fabricates a "Client de passage" record.
+appear on no Client Profile. BeautIzzy never fabricates a "Client de passage" record.
 
 Selecting or replacing a Client in the Sale draft never mutates the Client session. Purchase
 history is derived from Sales through `sale.clientId` and never stored on the Client.
@@ -119,7 +119,7 @@ the Sale total. Invalid cents or a zero payment on a priced Sale are completion 
 
 A Sale sold during an Appointment (« Revente », `appointmentId` set) NEVER carries a payment:
 the Appointment checkout records the whole amount received. A draft that combines both is
-refused (`LINKED_SALE_PAYMENT`). Historical Sales keep `payment = undefined`; Souris never
+refused (`LINKED_SALE_PAYMENT`). Historical Sales keep `payment = undefined`; BeautIzzy never
 fabricates a payment method for them.
 
 The Cash Register counts `sale.payment` ONLY for standalone Sales, so the same money is never
@@ -243,7 +243,7 @@ example « Shampoo ×2 » — not a Sale. Deletion is a correction of an entry, 
   aborts the deletion (`PRODUCT_MISSING`) — no line is removed while its stock cannot be restored;
 - it never rewrites other Sales, the Product catalog price, or unrelated stock;
 - it **never touches the Appointment payment**. When the Appointment was already checked out, the
-  expected total decreases and the recorded payment stays exactly as recorded: Souris cannot know
+  expected total decreases and the recorded payment stays exactly as recorded: BeautIzzy cannot know
   whether the money was refunded, genuinely received, or whether the entry was simply wrong.
   `Modifier l’encaissement` remains the correction mechanism. The Cash Register, which counts
   `appointment.payment` and never linked Sales, is therefore unchanged by the deletion;

@@ -1,4 +1,4 @@
-// Souris — in-memory remote for sync tests (never imported by app code)
+// BeautIzzy — in-memory remote for sync tests (never imported by app code)
 //
 // Reproduces the CONTRACT of `public.sync_push_aggregate` /
 // `public.sync_count_business_aggregates`

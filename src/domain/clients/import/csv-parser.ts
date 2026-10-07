@@ -1,4 +1,4 @@
-// Souris — client import CSV adapter
+// BeautIzzy — client import CSV adapter
 //
 // Turns the bytes of a picked CSV file into ClientImportCandidates. Pure
 // TypeScript: no file picker, no file system, no UI, no persistence, no

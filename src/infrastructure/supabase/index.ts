@@ -1,4 +1,4 @@
-// Souris — Supabase wiring for the application root
+// BeautIzzy — Supabase wiring for the application root
 //
 // Builds the domain-facing gateways from the single client. When the
 // environment is incomplete, the Auth gateway reports NOT_CONFIGURED as a
@@ -64,7 +64,7 @@ export function createAccountGateways(): AccountGateways {
   } catch (error) {
     if (error instanceof SupabaseConfigurationError) {
       if (__DEV__) {
-        console.warn(`[Souris] ${error.message}`);
+        console.warn(`[BeautIzzy] ${error.message}`);
       }
       return createUnconfiguredGateways();
     }

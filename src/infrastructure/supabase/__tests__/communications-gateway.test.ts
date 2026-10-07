@@ -1,4 +1,4 @@
-// Souris — CommunicationsGateway bound to the Lot B owner RPCs
+// BeautIzzy — CommunicationsGateway bound to the Lot B owner RPCs
 
 import { CommunicationsGatewayError } from '@/features/communications/gateway';
 

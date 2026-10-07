@@ -1,4 +1,4 @@
-// Souris — Estimation Résumé step
+// BeautIzzy — Estimation Résumé step
 //
 // The accessible review of an « Estimation tarifaire » before it is generated,
 // in the grouped-row family of the Appointment creation Résumé

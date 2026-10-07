@@ -1,4 +1,4 @@
-// Souris — MainScreenHeader
+// BeautIzzy — MainScreenHeader
 //
 // The ONE header composition of the main tabs (reference: Produits):
 //

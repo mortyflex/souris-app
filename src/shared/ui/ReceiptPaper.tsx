@@ -1,6 +1,6 @@
-// Souris — ReceiptPaper
+// BeautIzzy — ReceiptPaper
 //
-// The paper of the Souris receipts (DESIGN_OVERRIDES.md §25): a warm
+// The paper of the BeautIzzy receipts (DESIGN_OVERRIDES.md §25): a warm
 // near-white slip, FLAT (no grain, no texture, no gradient), square corners
 // with torn top and bottom edges, lifted by one soft shadow. Content-agnostic:
 // « Résumé du jour » and « Tops & tendances » each lay out their own lines

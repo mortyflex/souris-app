@@ -1,4 +1,4 @@
-// Souris — the global reminder preference, as the app knows it
+// BeautIzzy — the global reminder preference, as the app knows it
 //
 // The SERVER preference is authoritative; this provider holds the latest
 // known copy for the signed-in Business. On mount it asks the server once,

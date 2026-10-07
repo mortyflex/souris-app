@@ -1,4 +1,4 @@
-// Souris — Appointment session reconciliation
+// BeautIzzy — Appointment session reconciliation
 //
 // The application boundary where automatic previous-local-day
 // finalization runs. Pure and idempotent: reconciling repeatedly never

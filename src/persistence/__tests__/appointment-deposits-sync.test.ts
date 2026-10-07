@@ -1,4 +1,4 @@
-// Souris — Appointment deposits through the existing aggregate sync
+// BeautIzzy — Appointment deposits through the existing aggregate sync
 // (docs/architecture/CLOUD_SYNC.md §21): real stores, the real worker, the
 // contract-faithful in-memory remote. A deposit is its own aggregate type,
 // APPOINTMENT_DEPOSIT, of the same outbox → push → pull / restore pipeline.

@@ -1,4 +1,4 @@
-// Souris — Cloud Sync V1D: new-device restore + incremental pull, through the
+// BeautIzzy — Cloud Sync V1D: new-device restore + incremental pull, through the
 // real stores, the real worker and a contract-faithful in-memory remote
 // (docs/architecture/CLOUD_SYNC.md §11.2, §16)
 

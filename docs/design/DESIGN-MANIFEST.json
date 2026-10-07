@@ -388,7 +388,7 @@
     "rules": [
       "Never redraw, recolour, crop, regenerate, or replace the canonical assets.",
       "Never typeset the wordmark with the UI font.",
-      "Exactly one accessible 'Souris' element per brand moment.",
+      "Exactly one accessible 'BeautIzzy' element per brand moment.",
       "Transparent coloured PNGs sit directly on the light background: no cream or tinted plate, no white logo on light."
     ],
     "welcomeFloatingAssets": {
@@ -435,7 +435,7 @@
       "Closing a sheet slides it down and fades the scrim before unmounting; it never disappears instantly.",
       "Pan-to-dismiss lives on the grabber/header zone only; scroll-safe sheets and workflow routes disable it.",
       "Presenting an overlay never opens the keyboard; no autoFocus.",
-      "Souris-owned confirmations use ConfirmationDialog, never React Native Alert.",
+      "BeautIzzy-owned confirmations use ConfirmationDialog, never React Native Alert.",
       "Main tabs carry one decorative, accessibility-hidden semantic watermark icon.",
       "Main tabs share MainScreenHeader; Produits is the reference (title, no duplicate eyebrow, search below); the watermark anchors to the title block, never the device edge.",
       "Primary creation uses the shared bottom-right FloatingCreateButton: a single flow opens directly, several flows expand into a compact anchored menu.",

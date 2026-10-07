@@ -1,4 +1,4 @@
-// Souris — Accueil « Pilotage » row
+// BeautIzzy — Accueil « Pilotage » row
 //
 // One existing business tool, as a compact navigation row inside the grouped
 // Pilotage surface: a quiet accent glyph, a title, one short line saying what

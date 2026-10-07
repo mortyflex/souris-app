@@ -74,7 +74,7 @@ describe('CheckoutSheet', () => {
       const input = view.getByTestId(`checkout-amount-${method}`);
       expect(input.props.autoFocus).toBeFalsy();
       expect(input.props.keyboardType).toBe('decimal-pad');
-      // The pad gets the compact Souris « OK », never React Native's « Done » toolbar.
+      // The pad gets the compact BeautIzzy « OK », never React Native's « Done » toolbar.
       expect(input.props.inputAccessoryViewID).toBeTruthy();
       expect(input.props.inputAccessoryViewButtonLabel).toBeUndefined();
       expect(input.props.value).toBe('');

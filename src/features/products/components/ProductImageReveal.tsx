@@ -1,4 +1,4 @@
-// Souris — Product image reveal
+// BeautIzzy — Product image reveal
 //
 // Wraps ProductImage with the "sticker placed on the form" micro-interaction:
 // each time the image URI changes (photo taken, library pick, background

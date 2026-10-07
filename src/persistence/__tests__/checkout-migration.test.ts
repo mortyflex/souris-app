@@ -1,4 +1,4 @@
-// Souris — schema v5: Sale ↔ Appointment link + Appointment checkout columns
+// BeautIzzy — schema v5: Sale ↔ Appointment link + Appointment checkout columns
 // (docs/architecture/PERSISTENCE.md §4)
 
 import type { Sale } from '@/domain/sales';

@@ -1,4 +1,4 @@
-// Souris — development sync control (Cloud Sync V1C–V1D.1, __DEV__ ONLY)
+// BeautIzzy — development sync control (Cloud Sync V1C–V1D.1, __DEV__ ONLY)
 //
 // A supervised test bench for the first sync (automatic since V1D.1), the push
 // and the pull on a real device or simulator. It is NOT product UI:

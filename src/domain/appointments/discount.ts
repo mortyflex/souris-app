@@ -1,4 +1,4 @@
-// Souris — Appointment discount (pure)
+// BeautIzzy — Appointment discount (pure)
 //
 // Source: docs/domain/APPOINTMENTS.md §15.3
 //
@@ -21,7 +21,7 @@ import type { Appointment, AppointmentDiscount, AppointmentStatus } from './type
 /**
  * A percentage is a whole number of percent, 1–50. ONE bound for the domain,
  * the SQLite and Supabase CHECKs and the sync validation: a percentage above
- * it is never a valid Souris discount.
+ * it is never a valid BeautIzzy discount.
  */
 export const MAX_DISCOUNT_PERCENT = 50;
 

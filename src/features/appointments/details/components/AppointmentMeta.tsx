@@ -1,4 +1,4 @@
-// Souris — metadata of Appointment Details
+// BeautIzzy — metadata of Appointment Details
 //
 // No card: two quiet lines (calendar glyph + date, clock glyph + time range)
 // and the status pill on the right, closed by a hairline. The same layout

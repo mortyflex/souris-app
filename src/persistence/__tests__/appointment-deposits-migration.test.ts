@@ -1,4 +1,4 @@
-// Souris — schema v12: Appointment deposits (docs/architecture/PERSISTENCE.md §4)
+// BeautIzzy — schema v12: Appointment deposits (docs/architecture/PERSISTENCE.md §4)
 //
 // The migration creates one empty table AND rebuilds the two sync bookkeeping
 // tables (SQLite cannot alter a CHECK) — the procedure of schema v11. Real

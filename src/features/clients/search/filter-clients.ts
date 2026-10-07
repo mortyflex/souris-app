@@ -1,4 +1,4 @@
-// Souris — Client search helper
+// BeautIzzy — Client search helper
 //
 // Filters canonical Clients by first name, last name, full name, and phone.
 // Matching is case-insensitive, accent-insensitive, and tolerant of ordinary

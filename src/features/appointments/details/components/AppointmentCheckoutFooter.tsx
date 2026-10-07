@@ -1,4 +1,4 @@
-// Souris — sticky checkout footer of Appointment Details
+// BeautIzzy — sticky checkout footer of Appointment Details
 //
 // Anchored below the scrolling body (SheetActionBar), so it stays visible
 // while the Prestations scroll and never covers them. Left: « Total à

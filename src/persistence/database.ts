@@ -1,4 +1,4 @@
-// Souris — local database boundary
+// BeautIzzy — local database boundary
 //
 // The ONE synchronous SQL surface every persistence module writes against.
 // Production binds it to expo-sqlite (see expo-database.ts); tests bind it to

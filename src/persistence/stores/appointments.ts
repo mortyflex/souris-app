@@ -1,4 +1,4 @@
-// Souris — Appointment store
+// BeautIzzy — Appointment store
 //
 // The parent row, its ordered item snapshots, and each item's ordered phases
 // are written in ONE transaction. Items keep their authoritative `order`;

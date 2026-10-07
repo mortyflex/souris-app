@@ -1,4 +1,4 @@
-// Souris — Client purchase history row
+// BeautIzzy — Client purchase history row
 //
 // One completed Sale of a Client, shared by the profile « Produits achetés »
 // preview and the complete purchase history. Rendered EXCLUSIVELY from the

@@ -1,4 +1,4 @@
-// Souris — the shared photo source flow: camera permission timing, camera,
+// BeautIzzy — the shared photo source flow: camera permission timing, camera,
 // library, removal (Product photos and Client photos both run through it).
 
 import { act, fireEvent, render } from '@testing-library/react-native';

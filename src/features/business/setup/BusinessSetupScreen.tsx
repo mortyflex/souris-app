@@ -1,4 +1,4 @@
-// Souris — Business setup (first run after authentication)
+// BeautIzzy — Business setup (first run after authentication)
 //
 // Two light steps for NEW businesses only. First the short form: who you
 // are, what you do. Then ONE optional question — automatic email reminders

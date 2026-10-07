@@ -1,4 +1,4 @@
-// Souris — Client presentation helpers
+// BeautIzzy — Client presentation helpers
 //
 // Small pure helpers shared by every surface that displays a Client.
 // No honorifics, titles, or person abstractions: identity stays first name

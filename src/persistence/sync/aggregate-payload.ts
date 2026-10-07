@@ -1,4 +1,4 @@
-// Souris — current local aggregate → remote payload (Cloud Sync V1C)
+// BeautIzzy — current local aggregate → remote payload (Cloud Sync V1C)
 //
 // The push worker never uploads an outbox snapshot: it reads the CURRENT
 // aggregate from SQLite at push time, through this module. Rows are read

@@ -1,7 +1,7 @@
-// Souris — Cash Register derivation
+// BeautIzzy — Cash Register derivation
 //
 // The Cash Register ("Caisse") derives ONLY from money explicitly recorded
-// through Souris:
+// through BeautIzzy:
 //
 //   A. Appointment checkouts          appointment.payment — the money received at the
 //                                     FINAL checkout only (deposits already received

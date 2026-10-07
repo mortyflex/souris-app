@@ -1,7 +1,7 @@
-// Souris — account sheet (Plus › Compte)
+// BeautIzzy — account sheet (Plus › Compte)
 //
 // Business identity, the signed-in email, and the sign-out action. This
-// sheet is the canonical Souris drawer reference (docs/design/
+// sheet is the canonical BeautIzzy drawer reference (docs/design/
 // DESIGN_OVERRIDES.md §16): shared shell, header and close transition.
 // Signing out is consequential but not destructive, so its confirmation is
 // the neutral variant of the shared dialog. Wording rule: local data stays on

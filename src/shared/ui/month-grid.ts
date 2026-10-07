@@ -1,4 +1,4 @@
-// Souris — month grid
+// BeautIzzy — month grid
 //
 // The local civil days shown by the shared MonthCalendarSheet: six
 // Monday-first weeks around one month, real adjacent-month days included.

@@ -1,4 +1,4 @@
-// Souris — GlassIconButton
+// BeautIzzy — GlassIconButton
 //
 // The circular light-glass icon control (docs/design/DESIGN_OVERRIDES.md §21):
 // the back button of pushed screens, the Agenda previous / next arrows and the

@@ -1,4 +1,4 @@
-// Souris — expo-file-system binding of PhotoFileIO
+// BeautIzzy — expo-file-system binding of PhotoFileIO
 //
 // Application-root only (infrastructure/supabase/index.ts). Tests never import it.
 

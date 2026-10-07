@@ -1,4 +1,4 @@
-// Souris — Calendar Block schedule conflicts
+// BeautIzzy — Calendar Block schedule conflicts
 //
 // Source: docs/domain/CALENDAR_BLOCKS.md §5
 //

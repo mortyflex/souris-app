@@ -1,4 +1,4 @@
-// Souris — Communication Core: the transport boundary
+// BeautIzzy — Communication Core: the transport boundary
 //
 // The worker depends on this interface, never on a provider SDK. A transport
 // reports success or one of two failure classes — retryable (a temporary

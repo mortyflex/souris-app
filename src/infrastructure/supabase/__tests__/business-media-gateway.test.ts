@@ -1,4 +1,4 @@
-// Souris — Client and Product photos through Supabase Storage (business-media bucket)
+// BeautIzzy — Client and Product photos through Supabase Storage (business-media bucket)
 
 import {
   BUSINESS_MEDIA_BUCKET,

@@ -1,4 +1,4 @@
-// Souris — key/value metadata (seed marker and future flags)
+// BeautIzzy — key/value metadata (seed marker and future flags)
 
 import type { SourisDatabase } from './database';
 

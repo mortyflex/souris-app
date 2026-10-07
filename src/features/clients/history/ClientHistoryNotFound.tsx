@@ -1,4 +1,4 @@
-// Souris — Client history, unknown client
+// BeautIzzy — Client history, unknown client
 //
 // The restrained not-found state of the pushed history screens (a stale
 // route after a permanent deletion): the header stays, so back still works.

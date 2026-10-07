@@ -1,4 +1,4 @@
-// Souris — Client Profile
+// BeautIzzy — Client Profile
 //
 // A client profile read top-down: a centred identity (portrait ClientAvatar,
 // editable in place through ClientPhotoControl, over the name, the phone and

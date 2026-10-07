@@ -1,4 +1,4 @@
-// Souris — BrandMark
+// BeautIzzy — BrandMark
 //
 // The only way the application renders the BeautIzzy identity. It draws one
 // of the three canonical brand assets under assets/brand — never a redrawn

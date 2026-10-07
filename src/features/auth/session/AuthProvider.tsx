@@ -1,4 +1,4 @@
-// Souris — Auth session boundary
+// BeautIzzy — Auth session boundary
 //
 // Answers ONE question: who is signed in? The state machine:
 //

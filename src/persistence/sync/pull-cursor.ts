@@ -1,4 +1,4 @@
-// Souris — incremental pull cursor (Cloud Sync V1D)
+// BeautIzzy — incremental pull cursor (Cloud Sync V1D)
 //
 // The SERVER time of the last remote read this device fully applied, stored
 // in `souris_metadata` as `{ businessId, pulledAt }`. It is a server clock

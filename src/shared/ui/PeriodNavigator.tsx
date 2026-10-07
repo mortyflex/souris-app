@@ -1,6 +1,6 @@
-// Souris — PeriodNavigator
+// BeautIzzy — PeriodNavigator
 //
-// The ONE grouped period control of Souris (Agenda Jour / Semaine, Caisse
+// The ONE grouped period control of BeautIzzy (Agenda Jour / Semaine, Caisse
 // Jour / Mois): previous, the selected period, an optional extra control
 // (the calendar of the day navigators) and next, on a single quiet surface
 // so the whole row reads as one module:

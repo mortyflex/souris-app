@@ -1,4 +1,4 @@
-// Souris — local sync outbox (Cloud Sync V1B)
+// BeautIzzy — local sync outbox (Cloud Sync V1B)
 //
 // ONE current pending record per aggregate, written INSIDE the transaction
 // of the business mutation it describes (the stores call `markAggregate…`

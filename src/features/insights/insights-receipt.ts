@@ -1,4 +1,4 @@
-// Souris — « Tops & tendances » receipt model
+// BeautIzzy — « Tops & tendances » receipt model
 //
 // Turns the domain insights (`getBusinessInsights`) into the French text the
 // receipt renders. Every amount, count and ranking comes from the domain;

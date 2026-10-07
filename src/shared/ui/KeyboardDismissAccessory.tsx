@@ -1,4 +1,4 @@
-// Souris — KeyboardDismissAccessory
+// BeautIzzy — KeyboardDismissAccessory
 //
 // The « OK » of a numeric keyboard. The iOS decimal / number pad has no return
 // key; React Native's own accessory for it is a full-width system toolbar.

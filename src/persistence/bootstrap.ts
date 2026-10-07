@@ -1,4 +1,4 @@
-// Souris — persistence bootstrap
+// BeautIzzy — persistence bootstrap
 //
 // The single startup sequence, run before any feature provider renders:
 //

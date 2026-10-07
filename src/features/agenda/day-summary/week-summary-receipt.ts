@@ -1,4 +1,4 @@
-// Souris — « Résumé de la semaine » receipt model
+// BeautIzzy — « Résumé de la semaine » receipt model
 //
 // The week's big picture on the SAME paper as « Résumé du jour »: the header
 // names the week, the outcome lines replace the Appointment list, and the

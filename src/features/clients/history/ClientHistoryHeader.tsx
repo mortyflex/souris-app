@@ -1,4 +1,4 @@
-// Souris — Client history header
+// BeautIzzy — Client history header
 //
 // The top bar of the pushed client history screens: the glass back button,
 // the centred history title with the client's name as quiet context, and a

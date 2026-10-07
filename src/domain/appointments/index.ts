@@ -1,4 +1,4 @@
-// Souris — Appointment domain public entry point
+// BeautIzzy — Appointment domain public entry point
 //
 // Only the Appointment domain exists under src/domain/ for now.
 

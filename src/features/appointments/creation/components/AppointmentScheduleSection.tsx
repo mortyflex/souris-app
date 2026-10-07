@@ -1,4 +1,4 @@
-// Souris — Appointment schedule section (Appointment Creation, Cliente step)
+// BeautIzzy — Appointment schedule section (Appointment Creation, Cliente step)
 //
 // The « Rendez-vous » group of the first creation step, in the same family as
 // « Modifier le rendez-vous » (DESIGN_OVERRIDES.md §27): ONE grouped surface,

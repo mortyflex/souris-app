@@ -100,7 +100,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - `logo-mark.png`
 - `logo-wordmark.png`
 
-## Souris native brand integration (repository truth)
+## BeautIzzy native brand integration (repository truth)
 The app renders the BeautIzzy identity from three PNGs in `assets/brand/` (coloured artwork on a
 transparent background). They supersede the logo copies kept inside `reference-export/`, which are
 no longer the runtime truth. They are never redrawn, recoloured, cropped, regenerated, or replaced
@@ -112,10 +112,10 @@ by generic icons:
 | `assets/brand/logo-editorial.png` (1514 × 580) | `editorial` — the name with the symbol as its initial | Home header, Plus identity block, receipts, « Créé avec » share footer |
 | `assets/brand/symbol.png` (811 × 1097) | `symbol` — the symbol alone | account state screens, estimation and share-card header |
 
-The previous Souris files (`logo-lockup.png`, `logo-mark.png`, `logo-wordmark.png`, `Souris.icon`,
-`assets/brand/icon-source/`, `assets/images/`) are no longer referenced by the app or its config and
-await deletion. The dark-background variants in `docs/design/brand/` are design references, never
-loaded at runtime.
+The files of the previous Souris identity (logos, icon document, raster icons) have been removed
+from the repository; the file lists above describe the historical `reference-export/` folder, which
+still carries its own copies. `docs/design/brand/` holds dark-background design references, never
+loaded at runtime; `symbol-on-dark.png` there is the master of the symbol used in emails.
 
 - App icon master: `assets/brand/app-icon/icon.png` (1024 × 1024, opaque, full-bleed purple, symbol
   only, no text, no baked mask). It is the top-level `icon` in `app.json`.
@@ -139,12 +139,12 @@ loaded at runtime.
   historical export files and must not be reintroduced. The wordmark is an image, never typeset.
 - The logo never appears on Agenda, Clientes, Produits, or any functional detail/sheet surface.
 
-## Souris native overlay contract (repository truth)
+## BeautIzzy native overlay contract (repository truth)
 - Every drawer, form sheet and picker uses the shared shell in `src/shared/ui/`: `BottomSheet`
   (JS Modal) or `SheetScreen` (native form-sheet routes), `SheetHeader`, `SheetActionBar`.
-  White surface, Souris grabber, one navy scrim (`scrim`), slide-down close before unmount,
+  White surface, BeautIzzy grabber, one navy scrim (`scrim`), slide-down close before unmount,
   explicit gesture policy, no automatic keyboard. See `DESIGN_OVERRIDES.md` §16.
-- Every Souris-owned confirmation uses `ConfirmationDialog` (destructive or neutral tone);
+- Every BeautIzzy-owned confirmation uses `ConfirmationDialog` (destructive or neutral tone);
   React Native `Alert` is reserved for error reports and permission explanations.
 - Main tabs use `MainScreenHeader` (Produits is the reference: large title, no duplicate
   eyebrow, search right below); its decorative `ScreenWatermarkIcon` (calendar / people /
@@ -152,7 +152,7 @@ loaded at runtime.
   touches. Primary creation goes through the shared bottom-right `FloatingCreateButton`
   (direct flow, or a compact anchored menu for several flows). See `DESIGN_OVERRIDES.md` §17.
 - Main navigation is the platform's native tab bar (Expo Router `NativeTabs`): Apple's Liquid
-  Glass on iOS 26, Material bottom navigation on Android, four static tabs, Souris violet for the
+  Glass on iOS 26, Material bottom navigation on Android, four static tabs, BeautIzzy violet for the
   selected tab only. Never an imitation glass bar, never a « + » tab. See `DESIGN_OVERRIDES.md` §18.
 
 ## Coding checklist for AI tools

@@ -1,4 +1,4 @@
-// Souris — Summary step (Appointment Creation)
+// BeautIzzy — Summary step (Appointment Creation)
 //
 // The grouped-row review of the redesigned sheets (DESIGN_OVERRIDES.md §27),
 // in the same family as « Modifier le rendez-vous »:

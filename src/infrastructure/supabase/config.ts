@@ -1,4 +1,4 @@
-// Souris — Supabase configuration boundary
+// BeautIzzy — Supabase configuration boundary
 //
 // The ONLY place that reads the Supabase environment. Expo inlines
 // `process.env.EXPO_PUBLIC_*` at build time, so the two variables must be

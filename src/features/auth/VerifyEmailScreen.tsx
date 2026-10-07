@@ -1,4 +1,4 @@
-// Souris — email confirmation pending
+// BeautIzzy — email confirmation pending
 //
 // Shown when Supabase requires the email link before issuing a session. It
 // states what happened and offers the way back to sign-in; the resend action

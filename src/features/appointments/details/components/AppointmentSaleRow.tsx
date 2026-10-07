@@ -1,4 +1,4 @@
-// Souris — « Ajouter une vente » of Appointment Details
+// BeautIzzy — « Ajouter une vente » of Appointment Details
 //
 // The retail action of an Appointment (internally a Revente: a Sale linked
 // to the Appointment) as ONE lightweight row: accent ⊕ glyph, accent label,

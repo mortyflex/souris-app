@@ -1,4 +1,4 @@
-// Souris — Appointment service-selection sections
+// BeautIzzy — Appointment service-selection sections
 //
 // Pure presentation helpers for the shared prestation catalogue. Categories
 // are derived from Service.type only; legacy categories never reappear.

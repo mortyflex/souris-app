@@ -1,4 +1,4 @@
-// Souris — Appointment checkout sheet (« Encaisser »)
+// BeautIzzy — Appointment checkout sheet (« Encaisser »)
 //
 // The shared CheckoutSheet with Appointment wording: the expectation block
 // lists the service snapshot total, the Appointment discount when there is

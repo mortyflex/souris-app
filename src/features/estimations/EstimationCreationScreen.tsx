@@ -1,4 +1,4 @@
-// Souris — Estimation tarifaire (creation sheet)
+// BeautIzzy — Estimation tarifaire (creation sheet)
 //
 // A lightweight, recipient-agnostic price estimation based on the
 // professional's configured Services. Opened from the Agenda + menu

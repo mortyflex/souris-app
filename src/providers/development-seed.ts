@@ -1,4 +1,4 @@
-// Souris — development seed
+// BeautIzzy — development seed
 //
 // The data set for development builds and tests: the SYNTHETIC client address
 // book (no real person — a real address book is never tracked in this

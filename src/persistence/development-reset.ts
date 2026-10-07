@@ -1,4 +1,4 @@
-// Souris — development-only data reset
+// BeautIzzy — development-only data reset
 //
 // Wipes every persisted record, the local sync bookkeeping (pending outbox
 // intents, acknowledged remote revisions, the first-sync decision, the pull

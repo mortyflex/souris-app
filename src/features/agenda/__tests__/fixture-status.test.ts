@@ -1,4 +1,4 @@
-// Souris — Development fixture status + runtime reconciliation
+// BeautIzzy — Development fixture status + runtime reconciliation
 //
 // Fixtures seed every appointment SCHEDULED (raw seed data). Automatic
 // previous-local-day completion is product behavior and runs at the

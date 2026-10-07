@@ -1,4 +1,4 @@
-// Souris — Calendar Block editor times
+// BeautIzzy — Calendar Block editor times
 //
 // A block is defined explicitly by a start and an end, both on the SAME local
 // day as the Agenda day it was opened from, on the same 5-minute wheels as an

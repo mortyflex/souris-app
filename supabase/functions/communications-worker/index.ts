@@ -1,4 +1,4 @@
-// Souris — Communication Core: the scheduled worker Edge Function (Lot B)
+// BeautIzzy — Communication Core: the scheduled worker Edge Function (Lot B)
 //
 // Invoked by the scheduler (pg_cron + pg_net, about once per minute — see
 // docs/architecture/COMMUNICATIONS.md §7). One invocation runs one worker
@@ -10,8 +10,11 @@
 // secret key named `communications_worker` (an `sb_secret_…` key created in
 // the Dashboard, sent on the `apikey` header). Publishable keys, user JWTs
 // and unauthenticated calls are refused by the wrapper before this handler
-// runs. `verify_jwt` must be disabled for this function (secret keys are not
-// JWTs); the secret-key check replaces it. `ctx.supabaseAdmin` is the
+// runs. `verify_jwt` stays ENABLED (the deploy default): the gateway accepts
+// a valid new-style API key on the `apikey` header in place of a JWT, which
+// is exactly what the pg_cron call sends, and the secret-key check above then
+// narrows it to the one named key. Never deploy with `--no-verify-jwt`.
+// `ctx.supabaseAdmin` is the
 // privileged server client — it still resolves to the Postgres service_role
 // role, which is the only role holding EXECUTE on the communications_* RPCs.
 //

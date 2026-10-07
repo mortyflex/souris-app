@@ -1,4 +1,4 @@
-// Souris — Communication Core: ambient types for the Deno Edge Function entry
+// BeautIzzy — Communication Core: ambient types for the Deno Edge Function entry
 //
 // index.ts runs on Supabase Edge Functions (Deno) and imports the server SDK
 // through a Deno npm specifier the app's TypeScript project cannot resolve.

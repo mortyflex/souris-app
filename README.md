@@ -64,3 +64,16 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Historical technical identifiers
+
+The product was previously named Souris. The name is intentionally retained in technical
+identifiers that real installs, data and infrastructure depend on, and must not be renamed:
+
+- Expo slug `souris-app`, URL scheme `sourisapp`, bundle identifiers
+  `com.mortyflex.sourisapp` and `com.mortyflex.sourisapp.dev`, the npm package name;
+- the SQLite file `souris.db` and the `souris_metadata` table;
+- the `SOURIS_EMAIL_LOGO_URL` secret and the `souris-communication-…` email idempotency key;
+- applied migrations and internal `Souris*` TypeScript identifiers (for example `SourisDatabase`).
+
+Everything a user, a client or an email recipient sees says BeautIzzy.

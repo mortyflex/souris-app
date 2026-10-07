@@ -1,4 +1,4 @@
-// Souris — « Produits vendus » of one Appointment
+// BeautIzzy — « Produits vendus » of one Appointment
 //
 // The Products sold during the Appointment (Sales carrying its id), read
 // from Sale snapshots only: catalog edits or deletion never change what is

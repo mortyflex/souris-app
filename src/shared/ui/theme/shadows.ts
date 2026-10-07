@@ -1,4 +1,4 @@
-// Souris design tokens — Shadows
+// BeautIzzy design tokens — Shadows
 //
 // Source: docs/design/DESIGN.md §4, docs/design/reference-export/tokens.css
 //

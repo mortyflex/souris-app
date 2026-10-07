@@ -1,4 +1,4 @@
-// Souris — Sortable selected-services list (Appointment service editor)
+// BeautIzzy — Sortable selected-services list (Appointment service editor)
 //
 // The draft-level adapter over the shared SortableRowList: creation Résumé
 // and « Modifier le rendez-vous » render their SelectedServiceDrafts as

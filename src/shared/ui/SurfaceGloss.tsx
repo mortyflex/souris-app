@@ -1,4 +1,4 @@
-// Souris — SurfaceGloss
+// BeautIzzy — SurfaceGloss
 //
 // The satin finish shared by every overlay surface — BottomSheet, SheetScreen
 // and ConfirmationDialog (docs/design/DESIGN_OVERRIDES.md §20). Rendered FIRST

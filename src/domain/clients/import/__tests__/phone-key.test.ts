@@ -1,4 +1,4 @@
-// Souris — client import phone comparison keys (fictional numbers)
+// BeautIzzy — client import phone comparison keys (fictional numbers)
 
 import { normalizeCommunicationPhoneE164 } from '@/domain/communications/phone';
 

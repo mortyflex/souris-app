@@ -1,4 +1,4 @@
-// Souris — client import validation and duplicate classification
+// BeautIzzy — client import validation and duplicate classification
 //
 // Every candidate of a batch is classified from THREE inputs only — itself,
 // the existing Clients (active AND archived) and the candidates before it in

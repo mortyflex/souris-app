@@ -1,4 +1,4 @@
-// Souris — client import review: segments and selection
+// BeautIzzy — client import review: segments and selection
 //
 // Selection is derived from the CURRENT classification plus the
 // professional's explicit choices, so an edit that reclassifies a candidate

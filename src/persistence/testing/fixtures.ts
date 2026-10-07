@@ -1,4 +1,4 @@
-// Souris — shared persistence test fixtures (never imported by app code)
+// BeautIzzy — shared persistence test fixtures (never imported by app code)
 
 import type { Appointment, Service } from '@/domain/appointments';
 import type { BusinessProfile } from '@/domain/business';

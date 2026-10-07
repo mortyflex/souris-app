@@ -1,4 +1,4 @@
-// Souris — in-memory reconciliation retry queue (tests only)
+// BeautIzzy — in-memory reconciliation retry queue (tests only)
 //
 // The contract of the Lot B hardening RPCs, deterministic and offline: jobs
 // are claimed once per pass, `runReconciliation` succeeds or throws per a

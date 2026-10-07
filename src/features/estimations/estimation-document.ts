@@ -1,4 +1,4 @@
-// Souris — Estimation tarifaire (document model)
+// BeautIzzy — Estimation tarifaire (document model)
 //
 // A lightweight, recipient-agnostic, NON-PERSISTED price estimate built from
 // the professional's configured Service prices: « combien coûterait cette
@@ -16,10 +16,10 @@
 //             commercial name — phases, durations and requiresStaff are
 //             internal scheduling details and never appear.
 //   total     « Total estimé »: Σ selected catalog prices, in exact cents
-//   footer    the indicative disclaimer · « Créé avec » + the Souris wordmark
+//   footer    the indicative disclaimer · « Créé avec » + the BeautIzzy wordmark
 //
 // No recipient: no Client name, no « Cliente » / « Pour » section, no blank
-// placeholder. Only data Souris genuinely stores: no address, no legal identifier, no
+// placeholder. Only data BeautIzzy genuinely stores: no address, no legal identifier, no
 // validity period, no HT / TVA / TTC split — the stored Service price is the
 // one authoritative amount. Nothing here reads or writes a session.
 

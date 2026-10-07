@@ -1,4 +1,4 @@
-// Souris — schema v16: Client promotional SMS consent (SMS pivot Phase 2)
+// BeautIzzy — schema v16: Client promotional SMS consent (SMS pivot Phase 2)
 //
 // Three nullable columns travelling together on `clients`: the explicit
 // consent (OPTED_IN / OPTED_OUT, NULL = UNKNOWN), the recording instant and

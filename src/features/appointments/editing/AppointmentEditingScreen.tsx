@@ -1,4 +1,4 @@
-// Souris - Existing Appointment service editing screen
+// BeautIzzy - Existing Appointment service editing screen
 //
 // ONE continuous editor: editable Date/Heure context, the retained
 // AppointmentItem stack (snapshot hydration only), and the shared grouped
@@ -20,9 +20,9 @@
 // store re-verifies it. An edit that does not lower the total is never held
 // back by the deposits.
 //
-// Presented in the canonical Souris sheet shell; swipe-to-dismiss is off
+// Presented in the canonical BeautIzzy sheet shell; swipe-to-dismiss is off
 // (route options). A dirty draft is guarded against « Annuler » and the
-// hardware back by the shared Souris confirmation dialog.
+// hardware back by the shared BeautIzzy confirmation dialog.
 //
 // Layout (DESIGN_OVERRIDES.md §27): an iOS editing header (« Annuler » leading,
 // title), ONE vertical scroll — Rendez-vous rows, Prestations sélectionnées as

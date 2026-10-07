@@ -1,4 +1,4 @@
-// Souris — Business presentation helpers (French labels, never persisted)
+// BeautIzzy — Business presentation helpers (French labels, never persisted)
 
 import type { BusinessActivityType, BusinessProfile } from '@/domain/business';
 

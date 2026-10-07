@@ -1,4 +1,4 @@
-// Souris — Business identity (domain)
+// BeautIzzy — Business identity (domain)
 //
 // A Business is the owner boundary of every operational record (Services,
 // Appointments, Products, Sales carry its `businessId`). V1 relationship:
@@ -29,7 +29,7 @@ export function isBusinessActivityType(value: unknown): value is BusinessActivit
 }
 
 /**
- * The Business as the application knows it — cached locally so Souris opens
+ * The Business as the application knows it — cached locally so BeautIzzy opens
  * offline once onboarding completed. The owner's email is Auth identity and
  * is deliberately not duplicated here.
  */

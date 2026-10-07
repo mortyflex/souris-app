@@ -1,4 +1,4 @@
-// Souris — communications gateway boundary (Lot B)
+// BeautIzzy — communications gateway boundary (Lot B)
 //
 // The narrow app surface of appointment email reminders. The server is
 // authoritative for everything here: the app reads and edits ONE owner-scoped

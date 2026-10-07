@@ -1,6 +1,6 @@
-// Souris — ShareCardCanvas
+// BeautIzzy — ShareCardCanvas
 //
-// THE canvas of the Souris share images (DESIGN_OVERRIDES.md §35): what an
+// THE canvas of the BeautIzzy share images (DESIGN_OVERRIDES.md §35): what an
 // `ImageExportFrame` captures for « Enregistrer l’image » and « Partager ».
 // Flat warm receipt paper FULL-BLEED across the whole image — never a rounded
 // card floating on another ground — laid out at 360 dp wide, with the

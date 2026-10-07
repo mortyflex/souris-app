@@ -1,4 +1,4 @@
-// Souris — globally unique runtime identities
+// BeautIzzy — globally unique runtime identities
 //
 // The ONE source of new top-level record ids (Client, Service, Appointment,
 // Product, Sale). Every id is a random UUID v4 (RFC 4122, 122 random bits)

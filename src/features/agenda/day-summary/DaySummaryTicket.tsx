@@ -1,4 +1,4 @@
-// Souris — DaySummaryTicket
+// BeautIzzy — DaySummaryTicket
 //
 // « Résumé du jour » of the day the Agenda is showing: reads the sessions,
 // asks the domain for the day summary, words it, and hands the receipt to the

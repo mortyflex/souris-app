@@ -1,4 +1,4 @@
-// Souris — Product form rules (create + edit)
+// BeautIzzy — Product form rules (create + edit)
 //
 // Fast entry: Nom required; Marque / Catégorie / Code-barres optional;
 // Prix required (finite >= 0, French decimal input); Stock required
@@ -21,7 +21,7 @@ import {
 
 import type { ProductPhotoChange } from '../session/types';
 
-/** Largest quantity the stock selector offers for normal Souris use. */
+/** Largest quantity the stock selector offers for normal BeautIzzy use. */
 export const STOCK_SELECTOR_MAX = 30;
 export const STOCK_SELECTOR_MIN = 0;
 

@@ -1,4 +1,4 @@
-# Souris — Cloud Sync
+# BeautIzzy — Cloud Sync
 
 ## 1. Purpose and status
 
@@ -1613,7 +1613,7 @@ create or replace function public.sync_pull_business_aggregates(..) clients[] ob
 - **Order of deployment: apply the migration BEFORE shipping the build that writes notes.** Against
   the previous functions, `jsonb_to_record` silently ignores the unknown `notes` key: the push is
   acknowledged while the note never reaches the cloud, and a later restore would not contain it.
-  The migration is applied by hand, like every Souris migration.
+  The migration is applied by hand, like every BeautIzzy migration.
 
 Verified in the out-of-repo PGlite harness (§13 policy): the migration applied on a POPULATED
 database written by the previous functions — existing rows byte-identical (ids, `sync_version`,
@@ -1673,7 +1673,7 @@ create or replace function public.sync_pull_business_aggregates(..) appointments
 - **Order of deployment: apply the migration BEFORE shipping the build that writes discounts.**
   Against the previous functions, `jsonb_to_record` silently ignores the unknown keys: the push is
   acknowledged while the discount never reaches the cloud, and a later restore would not contain it.
-  The migration is applied by hand, like every Souris migration.
+  The migration is applied by hand, like every BeautIzzy migration.
 
 Verified in the out-of-repo PGlite harness (§13 policy): the migration applied on a POPULATED database
 written by the previous functions — existing Appointments and items byte-identical (ids, payment,
@@ -1755,7 +1755,7 @@ section, and the cloud reads that as zero blocks". It cannot happen here, by con
   `22023` (`REJECTED`): the entry stays pending with a bounded backoff, the run continues with the
   other aggregates, and the block leaves at the first run after the migration. Nothing is lost, but
   until then it reaches neither the cloud nor another device —
-  **apply the migration BEFORE shipping the build.** It is applied by hand, like every Souris migration.
+  **apply the migration BEFORE shipping the build.** It is applied by hand, like every BeautIzzy migration.
 
 Verified in the out-of-repo PGlite harness (§13 policy), 61 checks: the migration applied on a
 POPULATED database written by the §19 functions — every existing table byte-identical (rows, ids,
@@ -1808,7 +1808,7 @@ create or replace function public.sync_pull_business_aggregates(..)   a seventh 
   `paid_at`, `status`, `voided_at`, `recorded_at` (the device's entry instant; remote `created_at` stays
   server-owned). Integer cents, exact instants, no conversion.
 - **VOIDED is a status, not a tombstone.** Voiding is an ordinary `UPSERT` under the acknowledged
-  version (one new revision). Souris never sends a DELETE for a deposit. The engine contract still
+  version (one new revision). BeautIzzy never sends a DELETE for a deposit. The engine contract still
   holds: a remote tombstone (an administrator's) removes the local row without a guard, since nothing
   references a deposit.
 - **Local side.** `SYNC_AGGREGATE_TYPES` gains `APPOINTMENT_DEPOSIT`; SQLite schema v12 rebuilds the two
@@ -1908,7 +1908,7 @@ the local rules still hold on every device, and a merged invalid state is still 
   `22023` (`REJECTED`): the entry stays pending with a bounded backoff, the other aggregates keep syncing,
   and the deposit leaves at the first run after the migration. Nothing is lost, but until then it reaches
   neither the cloud nor another device — **apply the migration BEFORE shipping the build.** It is applied by
-  hand, like every Souris migration.
+  hand, like every BeautIzzy migration.
 
 Verified in the out-of-repo PGlite harness (§13 policy), 67 checks: the migration applied on a POPULATED
 database written by the §20 functions — every existing table byte-identical, policies / grants / function

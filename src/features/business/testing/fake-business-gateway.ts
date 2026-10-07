@@ -1,4 +1,4 @@
-// Souris — deterministic BusinessGateway for tests (never imported by app code)
+// BeautIzzy — deterministic BusinessGateway for tests (never imported by app code)
 
 import type { BusinessProfile, BusinessSetupInput } from '@/domain/business';
 

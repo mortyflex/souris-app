@@ -1,4 +1,4 @@
-// Souris — Auth boundary (domain-facing)
+// BeautIzzy — Auth boundary (domain-facing)
 //
 // Screens and providers depend on this contract only. Production binds it to
 // Supabase (src/infrastructure/supabase/auth-gateway.ts); tests bind it to
@@ -66,7 +66,7 @@ export interface AuthGateway {
   restoreSession(): Promise<RestoredSession>;
   signUp(credentials: AuthCredentials): Promise<SignUpOutcome>;
   signIn(credentials: AuthCredentials): Promise<SignInOutcome>;
-  /** Clears the persisted session; never touches Souris local data. */
+  /** Clears the persisted session; never touches BeautIzzy local data. */
   signOut(): Promise<void>;
   resendSignUpConfirmation(email: string): Promise<ResendOutcome>;
   /** Session changes after the initial restoration; returns the cleanup function. */

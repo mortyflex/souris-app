@@ -1,4 +1,4 @@
-// Souris — Product editor screen (create + details + edit)
+// BeautIzzy — Product editor screen (create + details + edit)
 //
 // Modes:
 // - create: empty shared Product form, "Ajouter le produit";
@@ -19,10 +19,10 @@
 // (SQLite first, then state, then sync), with the same selector rules as the
 // form; a failed write keeps the persisted count and alerts.
 //
-// Presented in the canonical Souris sheet shell, sized to its content: the
+// Presented in the canonical BeautIzzy sheet shell, sized to its content: the
 // read-first details never leave a blank middle area, and the form grows up
 // to the standard detent. The keyboard stays closed until a field is tapped.
-// Deactivation and deletion use the shared Souris confirmation dialog.
+// Deactivation and deletion use the shared BeautIzzy confirmation dialog.
 // Swipe-to-dismiss is allowed while reading and disabled while a draft is
 // being edited (`dismissible` on the sheet shell).
 

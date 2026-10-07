@@ -1,4 +1,4 @@
-// Souris — Appointment domain types
+// BeautIzzy — Appointment domain types
 //
 // Source: docs/domain/APPOINTMENTS.md
 //
@@ -131,7 +131,7 @@ export type AppointmentDiscount =
   | { readonly type: "FIXED"; readonly amountCents: number };
 
 /**
- * How money was received — THE Souris vocabulary, shared by the checkout
+ * How money was received — THE BeautIzzy vocabulary, shared by the checkout
  * split, the Appointment deposits and the Cash Register breakdown.
  */
 export type PaymentMethod = "CARD" | "CASH";

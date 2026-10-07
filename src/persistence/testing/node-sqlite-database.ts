@@ -1,4 +1,4 @@
-// Souris — test database (Node built-in SQLite)
+// BeautIzzy — test database (Node built-in SQLite)
 //
 // Jest runs on Node, where `node:sqlite` provides a real SQLite engine with
 // no extra dependency. Every test opens its own in-memory database, so

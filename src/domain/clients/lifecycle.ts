@@ -1,4 +1,4 @@
-// Souris — Client lifecycle rules
+// BeautIzzy — Client lifecycle rules
 //
 // Archive is the normal removal mechanism: a reversible state change that
 // keeps every historical relationship intact. Active state is derived —

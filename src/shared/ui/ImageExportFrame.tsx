@@ -1,4 +1,4 @@
-// Souris — ImageExportFrame
+// BeautIzzy — ImageExportFrame
 //
 // The surface an exported image is captured from (`shareViewAsImage`). Its
 // content is laid out ONCE, at a fixed logical size (`layoutSize`), then

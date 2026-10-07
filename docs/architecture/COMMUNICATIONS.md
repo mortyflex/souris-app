@@ -1,4 +1,4 @@
-# Souris — Communication Core
+# BeautIzzy — Communication Core
 
 ## 1. Purpose and status
 
@@ -29,7 +29,7 @@ Pivot   SMS = client lifecycle channel     Phase 1 done (§31) — appointment S
 ```
 
 **Global safety rule, unchanged by Lot B:** everything defaults OFF. No existing Business is
-opted in by a migration or a deployment; zero email leaves Souris until the professional
+opted in by a migration or a deployment; zero email leaves BeautIzzy until the professional
 explicitly enables reminders — and even then only for eligible future appointments.
 
 ## 2. Boundaries
@@ -188,8 +188,11 @@ Worker authentication uses the CURRENT Supabase secret-key model, not the legacy
 the dedicated server-side secret key named `communications_worker` (an `sb_secret_…` key
 (named Secret Keys allow lowercase letters, digits and underscore only)
 created in the Dashboard, sent on the `apikey` header) and refuses publishable keys, user JWTs
-and unauthenticated calls with a 401 before the handler runs. Secret keys are not JWTs, so
-`verify_jwt` is disabled for this function; the secret-key check replaces it. The handler's
+and unauthenticated calls with a 401 before the handler runs. `verify_jwt` stays ENABLED on
+the deployed function (the deploy default; verified in production): the gateway accepts a valid
+new-style API key on the `apikey` header in place of a JWT — exactly what the pg_cron call
+sends — and rejects requests with no key, an invalid key or a malformed JWT; the secret-key check
+then narrows access to the one named key. Never deploy with `--no-verify-jwt`. The handler's
 `ctx.supabaseAdmin` is the privileged server client — it still resolves to the Postgres
 `service_role` ROLE, which keeps its EXECUTE grants on the `communications_*` functions
 unchanged (the SQL privilege architecture is the database-role layer; the HTTP credential is a

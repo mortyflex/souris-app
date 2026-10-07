@@ -1,4 +1,4 @@
-// Souris — Sortable row list (Appointment service rows)
+// BeautIzzy — Sortable row list (Appointment service rows)
 //
 // THE drag-and-drop reordering of Appointment service rows, shared by the
 // creation Résumé, « Modifier le rendez-vous » (through SortableDraftList)

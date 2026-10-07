@@ -1,4 +1,4 @@
-// Souris — Cloud Sync V1B: local outbox behavior through the real stores
+// BeautIzzy — Cloud Sync V1B: local outbox behavior through the real stores
 // (docs/architecture/CLOUD_SYNC.md §10, PERSISTENCE.md §4 / §7c)
 
 import type { Sale } from '@/domain/sales';

@@ -1,4 +1,4 @@
-// Souris — client import review
+// BeautIzzy — client import review
 //
 // The shared review of every import source:
 //

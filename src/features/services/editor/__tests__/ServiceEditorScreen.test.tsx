@@ -835,7 +835,7 @@ describe("ServiceEditorScreen", () => {
     expect(view.getByText("35 min")).toBeTruthy();
   });
 
-  it("deletes only after the shared Souris confirmation, never a native alert", async () => {
+  it("deletes only after the shared BeautIzzy confirmation, never a native alert", async () => {
     const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     const view = await renderEditor(
       <ServiceEditorScreen

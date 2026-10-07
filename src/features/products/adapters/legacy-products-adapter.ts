@@ -1,4 +1,4 @@
-// Souris — Legacy products adapter
+// BeautIzzy — Legacy products adapter
 //
 // Source: src/features/products/data/legacy-products.ts
 // Target: canonical Product (src/domain/products/types.ts)

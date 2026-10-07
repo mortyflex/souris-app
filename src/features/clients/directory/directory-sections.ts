@@ -1,4 +1,4 @@
-// Souris — Client directory grouping
+// BeautIzzy — Client directory grouping
 //
 // The Clientes tab groups the complete Client source into:
 //

@@ -1,4 +1,4 @@
-// Souris — client import result copy (fictional data)
+// BeautIzzy — client import result copy (fictional data)
 
 import { importedClientDetail, importedClientsTitle } from '../presentation';
 

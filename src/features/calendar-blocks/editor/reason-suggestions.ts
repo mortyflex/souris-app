@@ -1,4 +1,4 @@
-// Souris — Calendar Block reason shortcuts
+// BeautIzzy — Calendar Block reason shortcuts
 //
 // The quick suggestions are a UX shortcut ONLY: what is saved is ordinary
 // text (`CalendarBlock.reason`), never an enum. « Autre » is not a reason —

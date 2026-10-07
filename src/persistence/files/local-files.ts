@@ -1,4 +1,4 @@
-// Souris — local file boundary
+// BeautIzzy — local file boundary
 //
 // The minimal file surface needed to keep Product images durable. Production
 // binds it to expo-file-system (expo-local-files.ts); tests use an in-memory

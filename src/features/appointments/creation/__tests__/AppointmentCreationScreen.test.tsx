@@ -1,4 +1,4 @@
-// Souris — Appointment Creation screen integration test
+// BeautIzzy — Appointment Creation screen integration test
 //
 // Runs the real screen against the normalized synthetic address book and the
 // catalog. Proves the key creation behaviors end to end:
@@ -443,7 +443,7 @@ describe('AppointmentCreationScreen', () => {
     expect(view.getByText('Ajouter un client')).toBeTruthy();
   });
 
-  it('opens in the canonical Souris sheet shell with a scrollable Client list and no auto-focus', async () => {
+  it('opens in the canonical BeautIzzy sheet shell with a scrollable Client list and no auto-focus', async () => {
     const view = await renderCreation();
 
     expect(view.getByTestId('appointment-creation-sheet')).toBeTruthy();

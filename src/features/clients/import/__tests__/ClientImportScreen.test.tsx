@@ -1,4 +1,4 @@
-// Souris — « Importer ma clientèle » screen (fictional data only)
+// BeautIzzy — « Importer ma clientèle » screen (fictional data only)
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { StyleSheet, Text } from 'react-native';

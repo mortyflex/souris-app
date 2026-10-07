@@ -1,4 +1,4 @@
-// Souris — the authoritative Product photo: path, display precedence, processing settings
+// BeautIzzy — the authoritative Product photo: path, display precedence, processing settings
 
 import { prepareProductPhoto, PRODUCT_PHOTO_MAX_SIDE } from '../product-photo-processing';
 import { createProductPhotoPath, selectProductImageUri } from '../product-photo-storage';

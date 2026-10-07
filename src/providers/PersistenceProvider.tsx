@@ -1,4 +1,4 @@
-// Souris — application persistence boundary
+// BeautIzzy — application persistence boundary
 //
 // The single bootstrap state of the app:
 //

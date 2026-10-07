@@ -1,4 +1,4 @@
-// Souris — Stock stepper (Product form)
+// BeautIzzy — Stock stepper (Product form)
 //
 // The stock selector: a [−] n [+] control with the same visual language as
 // the Sale line stepper, bounded to 0–30 for normal use. Holding a button

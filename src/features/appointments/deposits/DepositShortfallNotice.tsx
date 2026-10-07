@@ -1,4 +1,4 @@
-// Souris — deposit shortfall / financial conflict notice
+// BeautIzzy — deposit shortfall / financial conflict notice
 //
 // `shortfall` (default): the inline message shown when a change would take the
 // expected total of an Appointment below the deposits already received

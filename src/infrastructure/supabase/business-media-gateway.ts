@@ -1,4 +1,4 @@
-// Souris — Business media (Client and Product photos) in Supabase Storage
+// BeautIzzy — Business media (Client and Product photos) in Supabase Storage
 //
 // Binds the BusinessMediaRemote boundary to the private `business-media`
 // bucket (supabase/migrations/20260925120000_add_client_photos.sql, PNG

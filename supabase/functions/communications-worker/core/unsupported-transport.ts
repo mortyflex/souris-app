@@ -1,4 +1,4 @@
-// Souris — Communication Core (Lot B): the explicit refusal of a channel
+// BeautIzzy — Communication Core (Lot B): the explicit refusal of a channel
 // that has NO production transport.
 //
 // SMS is Lot C. A queue record that somehow carries channel SMS must not be

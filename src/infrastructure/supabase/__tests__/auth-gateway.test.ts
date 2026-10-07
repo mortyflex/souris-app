@@ -106,7 +106,7 @@ describe('createSupabaseAuthGateway', () => {
     expect(await failing.signUp({ email: 'a@b.fr', password: 'short' })).toEqual({ kind: 'failed', failure: { code: 'WEAK_PASSWORD' } });
   });
 
-  it('sends the confirmation link back to the Souris app, never to the Supabase Site URL', async () => {
+  it('sends the confirmation link back to the BeautIzzy app, never to the Supabase Site URL', async () => {
     expect(EMAIL_CONFIRMATION_REDIRECT_URL).toBe(`${appConfig.expo.scheme}://sign-in`);
 
     const api = createAuthApi();

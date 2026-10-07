@@ -1,4 +1,4 @@
-// Souris — NavigationChevron
+// BeautIzzy — NavigationChevron
 //
 // The trailing « opens a detail » affordance of a directory row (Produits,
 // Clientes): a small muted chevron at the end of the shared directory grid

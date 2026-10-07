@@ -1,4 +1,4 @@
-// Souris — reminder wording (Lot B)
+// BeautIzzy — reminder wording (Lot B)
 //
 // French copy of the reminder feature, in one place: the Settings rows, the
 // per-appointment toggle, the missing-email warning and the Details status

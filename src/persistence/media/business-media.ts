@@ -1,4 +1,4 @@
-// Souris — Business media storage (Client photos, Product photos)
+// BeautIzzy — Business media storage (Client photos, Product photos)
 //
 // A photo that must survive a reinstall and reach every device of the
 // Business lives in the Business media storage (Supabase Storage, private

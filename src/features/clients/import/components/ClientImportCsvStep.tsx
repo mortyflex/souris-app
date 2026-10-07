@@ -1,4 +1,4 @@
-// Souris — client import: choose a CSV file
+// BeautIzzy — client import: choose a CSV file
 //
 // The CSV source step. The system file picker opens as soon as the source is
 // chosen and again from « Choisir un fichier »; this step is what stays on

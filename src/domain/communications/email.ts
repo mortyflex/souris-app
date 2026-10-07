@@ -1,4 +1,4 @@
-// Souris — communication email rules (Lot B)
+// BeautIzzy — communication email rules (Lot B)
 //
 // THE email-usability rule of client communications, in one place. The same
 // shape check exists server-side (`communications_is_valid_email` in the Lot B

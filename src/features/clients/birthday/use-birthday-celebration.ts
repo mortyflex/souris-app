@@ -1,4 +1,4 @@
-// Souris — Client Profile birthday celebration
+// BeautIzzy — Client Profile birthday celebration
 //
 // Decides the two things the profile needs:
 //

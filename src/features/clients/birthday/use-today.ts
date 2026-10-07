@@ -1,4 +1,4 @@
-// Souris — today's local calendar date, kept current
+// BeautIzzy — today's local calendar date, kept current
 //
 // The Clientes directory lives in a tab that can stay mounted for days, so
 // « today » cannot be read once and kept: it is refreshed at the next local

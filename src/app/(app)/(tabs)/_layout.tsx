@@ -1,11 +1,11 @@
-// Souris — main navigation
+// BeautIzzy — main navigation
 //
 // The five canonical tabs (Accueil · Agenda · Clientèle · Produits · Plus —
 // Accueil is the landing tab) on the
 // platform's own tab bar through Expo Router's NativeTabs: UIKit's tab bar on
 // iOS (Apple's Liquid Glass on iOS 26 when the binary is built with Xcode 26),
 // Material bottom navigation on Android. The system owns the bar's material,
-// layout, labels and selected state; Souris only lends it its violet for the
+// layout, labels and selected state; BeautIzzy only lends it its violet for the
 // selected tab. No imitation glass, no custom bar, static tabs, and no
 // minimize-on-scroll yet (deliberately left to a later evaluation).
 //
@@ -26,7 +26,7 @@ export default function TabsLayout() {
   return (
     <ThemeProvider value={sourisNavigationTheme}>
       <NativeTabs
-        // Souris's main screens keep a fixed header above their list, so the
+        // BeautIzzy's main screens keep a fixed header above their list, so the
         // list is never the first view UIKit inspects for scroll-edge
         // detection: without this, iOS 18 and earlier would treat every tab
         // as permanently "at the edge" and draw a transparent bar. Liquid

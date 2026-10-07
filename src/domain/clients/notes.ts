@@ -1,6 +1,6 @@
-// Souris — Client notes
+// BeautIzzy — Client notes
 //
-// One optional free-text note per Client, written in Souris by the
+// One optional free-text note per Client, written in BeautIzzy by the
 // professional: allergies, product sensitivities, preferences, practical
 // context (docs/domain/CLIENTS.md §2). Plain text — no categories, no
 // medical model, never imported from a legacy address book.

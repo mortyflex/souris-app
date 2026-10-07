@@ -1,4 +1,4 @@
-// Souris — a Product photo changed on ANOTHER device, while this one stays open
+// BeautIzzy — a Product photo changed on ANOTHER device, while this one stays open
 //
 // The chain under test, end to end on device B:
 //

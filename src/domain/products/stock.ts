@@ -1,4 +1,4 @@
-// Souris — Product stock rules
+// BeautIzzy — Product stock rules
 //
 // Pure stock decrement / restoration over the canonical Product collection.
 // Canonical stock can NEVER become negative: the whole batch is validated

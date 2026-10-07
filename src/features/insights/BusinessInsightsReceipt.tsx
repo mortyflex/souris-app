@@ -1,4 +1,4 @@
-// Souris — BusinessInsightsReceipt
+// BeautIzzy — BusinessInsightsReceipt
 //
 // The paper of « Tops & tendances » (DESIGN_OVERRIDES.md §34), the same warm
 // torn slip as « Résumé du jour », but visual and comparative rather than a
@@ -12,7 +12,7 @@
 //              a Top 3 podium (`InsightsPodium`)
 //   pagination four short pills, the current one plum/lilac; tappable, and
 //              ONE adjustable element for VoiceOver / TalkBack
-//   footer     the Souris wordmark, clear of the torn edge
+//   footer     the BeautIzzy wordmark, clear of the torn edge
 //
 // Horizontal paging is THE interaction. Nothing scrolls vertically while the
 // content fits; only an unusually tall layout (the largest text sizes on a

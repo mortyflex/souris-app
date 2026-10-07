@@ -1,4 +1,4 @@
-// Souris — birthday reminder card
+// BeautIzzy — birthday reminder card
 //
 // The ONE visual of a birthday reminder, shared by the Client Profile
 // (« Joyeux anniversaire ») and the Appointment editors (« Anniversaire de

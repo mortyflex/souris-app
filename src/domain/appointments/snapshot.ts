@@ -1,4 +1,4 @@
-// Souris — Appointment item snapshot
+// BeautIzzy — Appointment item snapshot
 //
 // Source: docs/domain/APPOINTMENTS.md §12–§13
 //

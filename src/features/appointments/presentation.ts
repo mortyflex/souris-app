@@ -1,4 +1,4 @@
-// Souris — Appointment presentation helpers
+// BeautIzzy — Appointment presentation helpers
 //
 // Framework-independent formatting shared by Appointment surfaces
 // (Details, Client Profile history) and the Agenda week summary.

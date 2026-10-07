@@ -1,7 +1,7 @@
-// Souris — main navigation (NativeTabs) contract
+// BeautIzzy — main navigation (NativeTabs) contract
 //
 // Checks the declaration handed to Expo Router's native tabs: exactly the
-// five canonical triggers in order, their labels and system icons, the Souris
+// five canonical triggers in order, their labels and system icons, the BeautIzzy
 // tint, the scroll-edge decision, the navigation theme and what must stay
 // absent (a creation tab, minimize-on-scroll). Apple's glass rendering is a
 // real-device matter, not a Jest one.
@@ -70,7 +70,7 @@ describe('main navigation (NativeTabs)', () => {
     }
   });
 
-  it('uses system symbols on both platforms with the current Souris semantics', async () => {
+  it('uses system symbols on both platforms with the current BeautIzzy semantics', async () => {
     const view = await render(<TabsLayout />);
 
     const icons = view.getAllByTestId('trigger-icon').map(({ props }) => ({ sf: props.sf, md: props.md }));
@@ -89,7 +89,7 @@ describe('main navigation (NativeTabs)', () => {
     }
   });
 
-  it('lends only the Souris accent to the native bar and keeps the bar stable', async () => {
+  it('lends only the BeautIzzy accent to the native bar and keeps the bar stable', async () => {
     const view = await render(<TabsLayout />);
     const tabs = view.getByTestId('native-tabs');
 
@@ -105,7 +105,7 @@ describe('main navigation (NativeTabs)', () => {
     expect(tabs.props.hidden).toBeUndefined();
   });
 
-  it('wraps the tabs in the light Souris navigation theme on the app background so no foreign background shows', async () => {
+  it('wraps the tabs in the light BeautIzzy navigation theme on the app background so no foreign background shows', async () => {
     const view = await render(<TabsLayout />);
 
     expect(view.getByTestId('native-tabs').props.themeBackground).toBe(semanticColors.screen);

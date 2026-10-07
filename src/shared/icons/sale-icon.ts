@@ -1,4 +1,4 @@
-// Souris — retail sale icon
+// BeautIzzy — retail sale icon
 //
 // Appointment Details and « Vendre un produit » on the Client Profile. SF
 // Symbols on iOS, Material Symbols on Android; never emoji.

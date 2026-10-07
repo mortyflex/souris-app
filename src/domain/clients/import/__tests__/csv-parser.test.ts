@@ -1,4 +1,4 @@
-// Souris — client import CSV adapter (fictional data only)
+// BeautIzzy — client import CSV adapter (fictional data only)
 
 import type { Client } from '../../types';
 import { classifyClientImportCandidates } from '../classification';

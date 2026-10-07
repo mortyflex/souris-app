@@ -1,9 +1,9 @@
-// Souris — share or save a rendered view as an image
+// BeautIzzy — share or save a rendered view as an image
 //
 // Captures ONE mounted view (`react-native-view-shot`) into a temporary PNG,
 // then either:
 //   - hands it to the native share sheet (`expo-sharing`): Messages,
-//     WhatsApp, Instagram… are the platform's own targets, Souris integrates
+//     WhatsApp, Instagram… are the platform's own targets, BeautIzzy integrates
 //     none of them. The sheet reports no outcome, so nothing is inferred
 //     from it;
 //   - or saves it to the Photos library (`expo-media-library`), after asking

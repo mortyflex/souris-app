@@ -1,4 +1,4 @@
-// Souris — Communication Core (SMS pivot Phase 2): client lifecycle SMS content
+// BeautIzzy — Communication Core (SMS pivot Phase 2): client lifecycle SMS content
 //
 // The provider-neutral SMS renderer injected into the SMS transport. It
 // supports EXACTLY the two client lifecycle kinds:

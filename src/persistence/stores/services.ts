@@ -1,4 +1,4 @@
-// Souris — Service catalog store
+// BeautIzzy — Service catalog store
 //
 // A Service and its ordered phases are written together. Phases are stored
 // by position and reloaded in that exact order; a Service edit replaces the

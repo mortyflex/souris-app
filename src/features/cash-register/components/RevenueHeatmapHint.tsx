@@ -1,4 +1,4 @@
-// Souris — Caisse revenue heatmap hint
+// BeautIzzy — Caisse revenue heatmap hint
 //
 // What the halos of the Caisse month calendar mean, in one compact card that
 // floats over the lower part of the days: a title, one sentence — RELATIVE

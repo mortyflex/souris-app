@@ -1,4 +1,4 @@
-// Souris — Accueil primary figure
+// BeautIzzy — Accueil primary figure
 //
 // One of the two strong figures of Accueil: an accent glyph, the VALUE large
 // and dominant, a short label under it. The two cards are a pair: the same

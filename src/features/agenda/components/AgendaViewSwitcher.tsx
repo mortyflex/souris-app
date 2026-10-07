@@ -1,4 +1,4 @@
-// Souris — AgendaViewSwitcher
+// BeautIzzy — AgendaViewSwitcher
 //
 // The Jour / Semaine switch of the Agenda header: the shared light-glass
 // SegmentedControl (DESIGN_OVERRIDES.md §21) with the Agenda's own two views.

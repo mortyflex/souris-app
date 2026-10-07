@@ -1,4 +1,4 @@
-// Souris — TabBarGlassScrollEdge
+// BeautIzzy — TabBarGlassScrollEdge
 //
 // Wraps the ONE vertical ScrollView of a main tab screen whose content runs
 // beneath the native tab bar.

@@ -1,6 +1,6 @@
-// Souris — Client appointment history
+// BeautIzzy — Client appointment history
 //
-// The complete Souris Appointment history of one Client, pushed from the
+// The complete BeautIzzy Appointment history of one Client, pushed from the
 // profile « Voir les N rendez-vous ». Same source as the profile preview
 // (getClientActivitySummary over the Appointment session): nothing is
 // copied. `Tous | À venir | Passés` only picks the existing upcoming /

@@ -1,4 +1,4 @@
-// Souris — Development Agenda fixtures
+// BeautIzzy — Development Agenda fixtures
 //
 // Initial in-memory Agenda data; history and persistence are intentionally
 // absent. Every fixture is seeded SCHEDULED: status is raw seed data only.

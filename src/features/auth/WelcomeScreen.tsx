@@ -1,4 +1,4 @@
-// Souris — Welcome
+// BeautIzzy — Welcome
 //
 // The first screen of a fresh install: the primary brand logo, one promise,
 // one primary action. No carousel, no marketing. The logo spans about three

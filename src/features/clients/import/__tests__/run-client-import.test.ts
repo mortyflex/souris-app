@@ -1,4 +1,4 @@
-// Souris — chunked client import run over the real SQLite store (fictional data)
+// BeautIzzy — chunked client import run over the real SQLite store (fictional data)
 
 import type { Client } from '@/domain/clients';
 import { bootstrapPersistence } from '@/persistence/bootstrap';

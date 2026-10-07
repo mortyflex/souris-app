@@ -1,4 +1,4 @@
-// Souris — SheetScreen
+// BeautIzzy — SheetScreen
 //
 // The shell of a sheet ROUTE, so a workflow presented as a route reads exactly
 // like a drawer presented by state. Two presentations, chosen by `fit` and

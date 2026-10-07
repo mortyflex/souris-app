@@ -1,4 +1,4 @@
-// Souris — Caisse month calendar decoration
+// BeautIzzy — Caisse month calendar decoration
 //
 // The Caisse day picker is the shared MonthCalendarSheet; this module turns
 // the money received per local day (`getCashRegisterDailyTotals`, the SAME

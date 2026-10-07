@@ -1,10 +1,10 @@
-// Souris — Legacy techniques adapter
+// BeautIzzy — Legacy techniques adapter
 //
 // Source: src/features/services/data/legacy-techniques.ts
-// Target: Canonical Souris Service (src/domain/appointments/types.ts)
+// Target: Canonical BeautIzzy Service (src/domain/appointments/types.ts)
 //
 // This adapter transforms the legacy TECHNIQUE records into canonical
-// Souris Service objects. Techniques may have processing time (break > 0)
+// BeautIzzy Service objects. Techniques may have processing time (break > 0)
 // where the professional is not actively required.
 
 import type { Service, ServicePhase } from '@/domain/appointments';

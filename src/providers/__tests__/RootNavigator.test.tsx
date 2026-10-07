@@ -1,4 +1,4 @@
-// Souris — root gate: protected content never mounts before the session resolved
+// BeautIzzy — root gate: protected content never mounts before the session resolved
 
 import { act, render, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';

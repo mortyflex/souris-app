@@ -14,7 +14,7 @@ pour la table complète preuve → règle.
 
 ## 1. Thème visuel & atmosphère
 
-Souris est une application mobile native de gestion quotidienne pour les professionnelles de la
+BeautIzzy est une application mobile native de gestion quotidienne pour les professionnelles de la
 beauté travaillant sur rendez-vous : d'abord une coiffeuse, mais le produit vise aussi les
 prothésistes ongulaires, esthéticiennes et spécialistes lashes/brows.
 
@@ -82,7 +82,7 @@ Fichier de référence : `colors_and_type.css`. Source : bloc `:root` de `assets
 
 Une seule famille : **Plus Jakarta Sans**, en quatre graisses (400 / 500 / 600 / 700), chargée
 au démarrage via `@expo-google-fonts/plus-jakarta-sans` (`src/app/_layout.tsx`). C'est la typographie
-UI approuvée de Souris ; l'échelle native de référence est celle de `DESIGN_OVERRIDES.md` §12 et de
+UI approuvée de BeautIzzy ; l'échelle native de référence est celle de `DESIGN_OVERRIDES.md` §12 et de
 `src/shared/ui/theme/typography.ts`. Ce choix mono-famille est assumé : le brief est utilitaire et
 dense en données ; le contraste vient de la graisse, de la taille et de l'interlettrage, pas d'un
 second caractère.
@@ -150,7 +150,7 @@ barre de défilement masquée) → barre d'onglets `.tabs`. Le FAB et les feuill
 dans `.app`, jamais dans le flux.
 
 L'en-tête révèle un filet d'un pixel dès que le contenu défile (`.hd[data-scrolled="true"]`, piloté par
-`Souris.stickyHeader()`). C'est la seule séparation qui apparaît en cours de lecture.
+`BeautIzzy.stickyHeader()`). C'est la seule séparation qui apparaît en cours de lecture.
 
 ### Hiérarchie sans cartes — règle structurante
 
@@ -237,13 +237,13 @@ sans jamais coder une information par la seule couleur.
 Toute création, tout détail et toute édition passent par une feuille ancrée en bas, jamais par une
 nouvelle page. Poignée, en-tête avec titre et fermeture, corps défilant, pied fixe avec au plus
 **un** bouton plein. Ouverture en `.28s cubic-bezier(.32,.72,0,1)`, scrim `oklch(0.25 0.05 285 / 0.34)`.
-Accessibilité gérée par `Souris.sheets()` : `role="dialog"`, `aria-modal`, fermeture par Échap et par
+Accessibilité gérée par `BeautIzzy.sheets()` : `role="dialog"`, `aria-modal`, fermeture par Échap et par
 le scrim, focus placé à l'ouverture et restitué à la fermeture.
 
-Runtime natif : la coquille canonique (surface blanche, poignée Souris, `SheetHeader`,
+Runtime natif : la coquille canonique (surface blanche, poignée BeautIzzy, `SheetHeader`,
 `SheetActionBar`, scrim navy 16 %, fermeture par glissement vers le bas puis démontage, politique
-de gestes explicite, jamais de clavier automatique) et la boîte de confirmation Souris sont
-définies dans `DESIGN_OVERRIDES.md` §16 — pas d'`Alert` natif pour les confirmations Souris.
+de gestes explicite, jamais de clavier automatique) et la boîte de confirmation BeautIzzy sont
+définies dans `DESIGN_OVERRIDES.md` §16 — pas d'`Alert` natif pour les confirmations BeautIzzy.
 
 ### États
 
@@ -279,10 +279,10 @@ colorés sur fond transparent) :
 | `assets/brand/logo-editorial.png` (1514 × 580) | **EDITORIAL** — le nom, le symbole tenant lieu d'initiale | en-tête d'Accueil, bloc identité de Plus, tickets, pied « Créé avec » des images partagées |
 | `assets/brand/symbol.png` (811 × 1097) | **SYMBOL** — le symbole seul | usages réduits : écrans d'état de compte, en-tête de l'estimation et de la carte de partage |
 
-L'icône et le splash natifs dérivent des mêmes fichiers (voir plus bas) ; les anciens fichiers Souris
-(`logo-lockup.png`, `logo-mark.png`, `logo-wordmark.png`, `Souris.icon`, `assets/images/`) ne sont
-plus référencés et attendent leur suppression. Les variantes sur fond sombre de
-`docs/design/brand/` sont des références, jamais chargées par l'app.
+L'icône et le splash natifs dérivent des mêmes fichiers (voir plus bas) ; les fichiers de
+l'ancienne identité Souris (logos, document d'icône, icônes raster) ont été supprimés du dépôt.
+`docs/design/brand/` contient les références sur fond sombre, jamais chargées par l'app ;
+`symbol-on-dark.png` y est le maître du symbole utilisé dans les e-mails.
 
 Règles :
 
@@ -367,7 +367,7 @@ Concise, humaine, directe. Peu de mots. Les actions sont formulées simplement e
 
 1. **Une carte par section.** Typographie, espace et filets d'abord ; le conteneur est un dernier recours.
 2. Des cartes dans des cartes dans des cartes.
-3. Un dashboard SaaS générique, ou une grille responsive desktop : Souris est une application mobile native.
+3. Un dashboard SaaS générique, ou une grille responsive desktop : BeautIzzy est une application mobile native.
 4. Des dégradés violets omniprésents, du glassmorphism, des blobs décoratifs, des ombres lourdes.
 5. Tous les contrôles transformés en pilules. Le segmenté est le seul contrôle arrondi ; sur Android
    la pilule est réservée aux boutons, par convention Material.

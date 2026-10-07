@@ -1,4 +1,4 @@
-// Souris — « Tops & tendances » share card model
+// BeautIzzy — « Tops & tendances » share card model
 //
 // What the social card shows for the period and the category the
 // professional is looking at. It is built from the already-computed

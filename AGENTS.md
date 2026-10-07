@@ -1,6 +1,6 @@
-# Souris — Agent Workflow
+# BeautIzzy — Agent Workflow
 
-This file defines the working procedure for coding agents operating in the Souris repository.
+This file defines the working procedure for coding agents operating in the BeautIzzy repository.
 
 Always read `CLAUDE.md` first.
 
@@ -22,7 +22,7 @@ Before modifying code:
 6. Inspect existing tests related to the task.
 7. Identify the smallest coherent change necessary.
 
-Do not assume another Souris repository or previous PWA implementation exists here.
+Do not assume another BeautIzzy repository or previous PWA implementation exists here.
 
 The current repository is the implementation source of truth.
 
@@ -74,7 +74,7 @@ A skill never overrides:
 - `CLAUDE.md`;
 - `AGENTS.md`;
 - approved project documentation;
-- existing Souris architecture.
+- existing BeautIzzy architecture.
 
 Do not introduce new architecture or dependencies merely because a skill suggests them.
 
@@ -194,7 +194,7 @@ for UI convenience.
 
 # 9. Processing Time
 
-Processing / unattended phases are central to Souris.
+Processing / unattended phases are central to BeautIzzy.
 
 A phase with:
 
@@ -272,7 +272,7 @@ Never import legacy:
 - notes;
 - no-show history.
 
-Souris-generated history begins from zero.
+BeautIzzy-generated history begins from zero.
 
 Do not invent missing values.
 

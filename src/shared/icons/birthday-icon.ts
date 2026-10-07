@@ -1,4 +1,4 @@
-// Souris — Client birthday icon
+// BeautIzzy — Client birthday icon
 //
 // The ONE glyph that marks a Client birthday, shared by the Clientes
 // directory row and the Client Profile. SF Symbols on iOS, Material Symbols

@@ -1,4 +1,4 @@
-// Souris — Welcome physics
+// BeautIzzy — Welcome physics
 //
 // The weightless objects of the Welcome hero can be pushed and thrown. Each
 // object is a tiny body — an offset from its resting place, a velocity and a

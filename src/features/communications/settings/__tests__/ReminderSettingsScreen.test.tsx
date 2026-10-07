@@ -1,4 +1,4 @@
-// Souris — Rappels clients Settings screen (Lot B)
+// BeautIzzy — Rappels clients Settings screen (Lot B)
 //
 // The real screen against the fake gateway: OFF by default, enabling
 // requires a valid Reply-To (prefilled from the account email), the fixed

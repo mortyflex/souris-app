@@ -1,6 +1,6 @@
-// Souris — SheetActionBar
+// BeautIzzy — SheetActionBar
 //
-// The ONE fixed action area of Souris sheets: no divider and no fill of its own
+// The ONE fixed action area of BeautIzzy sheets: no divider and no fill of its own
 // (it never overlays the body), so the body, the actions and the bottom safe
 // area read as ONE continuous sheet material; platform gutter, one canonical breathing
 // room below the actions, and no bottom safe-area handling of its own (the

@@ -1,4 +1,4 @@
-// Souris — SQLite schema
+// BeautIzzy — SQLite schema
 //
 // Each entry is one forward-only migration. `PRAGMA user_version` records the
 // last applied version; a database is never wiped on mismatch. Add a new
@@ -141,7 +141,7 @@ ALTER TABLE clients ADD COLUMN archived_at TEXT;
 /**
  * Schema v3 — local account binding. ONE row (enforced by the `singleton`
  * primary key) caches the Business this device's data belongs to, together
- * with the owning Auth user id, so Souris opens offline once onboarding
+ * with the owning Auth user id, so BeautIzzy opens offline once onboarding
  * completed. Existing rows in every other table are untouched; the row is
  * created only when the owner completes (or reconnects to) Business setup.
  * Never stores tokens or the owner's email — Auth identity stays inside the

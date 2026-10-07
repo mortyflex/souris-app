@@ -1,4 +1,4 @@
-// Souris — incremental pull (Cloud Sync V1D)
+// BeautIzzy — incremental pull (Cloud Sync V1D)
 //
 // Downloads what changed remotely for a Business that ALREADY synchronizes and
 // applies it to SQLite under the conservative contract of CLOUD_SYNC.md §9.

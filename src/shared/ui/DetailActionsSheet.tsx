@@ -1,7 +1,7 @@
-// Souris — DetailActionsSheet
+// BeautIzzy — DetailActionsSheet
 //
 // The « ••• » secondary actions of a DETAIL sheet (Product, Prestation), on
-// the canonical Souris drawer (BottomSheet) like Appointment Details: groups
+// the canonical BeautIzzy drawer (BottomSheet) like Appointment Details: groups
 // of action rows, each group its own white surface (the shared ActionGroup),
 // destructive actions in rose. The groups and their order are the caller's.
 //

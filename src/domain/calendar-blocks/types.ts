@@ -1,4 +1,4 @@
-// Souris — Calendar Block domain types
+// BeautIzzy — Calendar Block domain types
 //
 // Source: docs/domain/CALENDAR_BLOCKS.md
 //

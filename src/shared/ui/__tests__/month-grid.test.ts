@@ -1,4 +1,4 @@
-// Souris — the shared month grid: six Monday-first weeks of real local days.
+// BeautIzzy — the shared month grid: six Monday-first weeks of real local days.
 
 import {
   addLocalMonths,

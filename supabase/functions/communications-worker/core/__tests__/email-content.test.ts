@@ -1,4 +1,4 @@
-// Souris — Communication Core (Lot B): the fixed French appointment templates
+// BeautIzzy — Communication Core (Lot B): the fixed French appointment templates
 
 import {
   escapeHtml,
@@ -144,10 +144,10 @@ describe('the cancelled template', () => {
 });
 
 describe('the footer logo', () => {
-  const LOGO = 'https://example.supabase.co/storage/v1/object/public/brand/logo-mark.png';
+  const LOGO = 'https://example.supabase.co/storage/v1/object/public/brand/beautizzy-email-symbol.png';
   // The EXACT public production asset, byte for byte.
   const PRODUCTION_LOGO =
-    'https://oxfqcgbtihczubisjyek.supabase.co/storage/v1/object/public/brand/logo-mark.png';
+    'https://oxfqcgbtihczubisjyek.supabase.co/storage/v1/object/public/brand/beautizzy-email-symbol.png';
 
   it('accepts the exact production URL verbatim and renders the exact symbol markup', () => {
     expect(normalizeEmailLogoUrl(PRODUCTION_LOGO)).toBe(PRODUCTION_LOGO);
@@ -247,7 +247,7 @@ describe('the footer logo', () => {
     for (const bad of [
       'http://insecure.example/logo.png',
       'data:image/png;base64,AAAA',
-      'file:///assets/brand/logo-mark.png',
+      'file:///assets/brand/email/symbol-on-dark.png',
       '   ',
       'https://bad url/logo.png',
     ]) {

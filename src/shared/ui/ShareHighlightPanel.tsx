@@ -1,6 +1,6 @@
-// Souris — ShareHighlightPanel
+// BeautIzzy — ShareHighlightPanel
 //
-// The highlighted panel of the Souris share images: a soft lavender surface
+// The highlighted panel of the BeautIzzy share images: a soft lavender surface
 // (lav050), large continuous corners, no border, no gradient, content
 // centred. « Tops & tendances » frames « Encaissé sur la période » in it;
 // « Estimation tarifaire » frames « Total estimé ». Only the container is

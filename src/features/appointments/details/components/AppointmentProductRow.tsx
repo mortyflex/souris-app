@@ -1,4 +1,4 @@
-// Souris — one Product row of « Produits vendus », swipeable to delete
+// BeautIzzy — one Product row of « Produits vendus », swipeable to delete
 //
 // The Product is the visual unit: snapshot name, aggregated quantity ×
 // snapshot unit price, aggregated line total. No permanently visible

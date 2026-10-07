@@ -1,4 +1,4 @@
-// Souris — Client photo storage lifecycle (upload → commit → cleanup)
+// BeautIzzy — Client photo storage lifecycle (upload → commit → cleanup)
 
 import { createMemoryLocalFiles, type MemoryLocalFiles } from '@/persistence/testing/memory-local-files';
 

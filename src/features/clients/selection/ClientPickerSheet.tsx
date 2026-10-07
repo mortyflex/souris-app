@@ -1,4 +1,4 @@
-// Souris — Client picker sheet (shared Client selection)
+// BeautIzzy — Client picker sheet (shared Client selection)
 //
 // The ONE bottom-sheet Client picker used wherever a screen needs to choose or
 // reassign a Client after it is open: Appointment Editing and Sale creation.

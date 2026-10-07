@@ -1,4 +1,4 @@
-// Souris — Client purchase history
+// BeautIzzy — Client purchase history
 //
 // Every completed Sale of one Client, newest first, pushed from the profile
 // « Voir les N achats ». Same source as the profile preview (getClientSales

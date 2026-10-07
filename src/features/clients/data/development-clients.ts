@@ -1,4 +1,4 @@
-// Souris — Development client seed
+// BeautIzzy — Development client seed
 //
 // The clients genuinely used by the current Agenda appointment fixtures.
 // Their ids match the clientId values already referenced by those fixtures,

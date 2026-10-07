@@ -1,4 +1,4 @@
-// Souris — Communication Core: the queue port bound to the communications_* functions
+// BeautIzzy — Communication Core: the queue port bound to the communications_* functions
 //
 // The worker's only database surface. Every call goes through the RPCs of
 // 20260926130000_create_communication_core.sql under the service role; no

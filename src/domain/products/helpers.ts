@@ -1,4 +1,4 @@
-// Souris — Product domain helpers
+// BeautIzzy — Product domain helpers
 //
 // Pure validation rules for canonical Product values. The same rules are
 // used by the Product form and the legacy import diagnostics.

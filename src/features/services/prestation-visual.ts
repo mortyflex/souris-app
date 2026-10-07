@@ -1,4 +1,4 @@
-// Souris — Prestation family pictogram (presentation only)
+// BeautIzzy — Prestation family pictogram (presentation only)
 //
 // Prestations are recognised by an ICON, never a photo. The Service model
 // holds no family field (legacy categories are not imported — only their

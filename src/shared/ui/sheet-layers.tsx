@@ -1,4 +1,4 @@
-// Souris — sheet layers
+// BeautIzzy — sheet layers
 //
 // Only the TOP sheet reacts to the keyboard. Keyboard events are global: a
 // sheet presented from inside another one (the checkout drawer over

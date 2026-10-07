@@ -1,4 +1,4 @@
-// Souris — schema v10: Appointment discount (docs/architecture/PERSISTENCE.md §4)
+// BeautIzzy — schema v10: Appointment discount (docs/architecture/PERSISTENCE.md §4)
 
 import { getAppointmentExpectedTotal } from '@/domain/appointments';
 import { getCashRegisterDaySummary } from '@/domain/cash-register';

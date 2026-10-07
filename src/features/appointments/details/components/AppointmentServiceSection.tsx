@@ -1,4 +1,4 @@
-// Souris — Appointment Details service accordion
+// BeautIzzy — Appointment Details service accordion
 //
 // One row of the grouped « Prestations » list: the list owns the white
 // surface, each row after the first draws its own inset separator. Collapsed:

@@ -1,4 +1,4 @@
-// Souris — DaySummaryReceipt
+// BeautIzzy — DaySummaryReceipt
 //
 // The paper of « Résumé du jour » and « Résumé de la semaine »
 // (DESIGN_OVERRIDES.md §25): a warm near-white slip with torn edges, read top
@@ -11,7 +11,7 @@
 //   breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen
 //
 // It renders the receipt model as is and computes nothing. On a long day only
-// the LIST scrolls: the header and the totals never leave the paper. Souris
+// the LIST scrolls: the header and the totals never leave the paper. BeautIzzy
 // typography and tokens throughout — no texture, no grain, no serif.
 
 import { SymbolView } from 'expo-symbols';

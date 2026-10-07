@@ -1,4 +1,4 @@
-// Souris — Appointment Editing startAt draft helpers
+// BeautIzzy — Appointment Editing startAt draft helpers
 //
 // Pure local-date/time arithmetic for the Appointment Editing draft. Local
 // civil calendar semantics are preserved: dates are rebuilt with the local

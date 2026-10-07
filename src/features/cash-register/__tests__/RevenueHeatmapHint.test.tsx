@@ -1,4 +1,4 @@
-// Souris — Caisse heatmap hint: its legend IS the calendar halo, never a
+// BeautIzzy — Caisse heatmap hint: its legend IS the calendar halo, never a
 // copy; it materialises and leaves through ONE animated wrapper, and Reduce
 // Motion keeps a fade alone. Animations are asserted by their configuration,
 // never by waiting real milliseconds.

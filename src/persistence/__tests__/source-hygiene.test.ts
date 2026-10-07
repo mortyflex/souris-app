@@ -1,4 +1,4 @@
-// Souris — source hygiene: a TypeScript store must stay a text file.
+// BeautIzzy — source hygiene: a TypeScript store must stay a text file.
 //
 // `stores/appointments.ts` once embedded a literal NUL byte in its item key
 // separator, which made Git treat the file as binary. The separator is now

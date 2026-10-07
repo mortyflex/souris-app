@@ -1,8 +1,8 @@
-# Souris — Appointment Domain
+# BeautIzzy — Appointment Domain
 
 ## 1. Purpose
 
-This document defines the scheduling rules of Souris.
+This document defines the scheduling rules of BeautIzzy.
 
 Appointment behavior is business-critical.
 
@@ -14,7 +14,7 @@ The Appointment domain must remain independent from React Native, Expo, persiste
 
 # 2. Core Model
 
-A Souris Appointment is NOT defined only by:
+A BeautIzzy Appointment is NOT defined only by:
 
 ```text
 start time + duration
@@ -993,7 +993,7 @@ NO_SHOW
 ```
 
 Lifecycle V1 deliberately avoids a complex state machine and does not expose a `Démarrer` action.
-`IN_PROGRESS` remains a supported compatibility state, but Souris V1 creates no transition into it.
+`IN_PROGRESS` remains a supported compatibility state, but BeautIzzy V1 creates no transition into it.
 
 The permitted V1 transitions are:
 
@@ -1034,7 +1034,7 @@ time slot visually free and never reduce the width of another appointment at the
 ## 25b. Checkout and Payment (« Encaisser »)
 
 Manual completion from Appointment Details is a **checkout**: the professional confirms the Appointment is
-finished AND records how much was actually received. This is not payment processing — Souris never charges a
+finished AND records how much was actually received. This is not payment processing — BeautIzzy never charges a
 card, talks to a terminal, or acts as a fiscal point of sale.
 
 The Appointment owns its payment; there is no parallel payment subsystem:
@@ -1063,7 +1063,7 @@ Rules:
   carries no payment yet (« Enregistrer un encaissement » — status stays `COMPLETED`);
 - `CANCELLED` and `NO_SHOW` can never be checked out; an already paid Appointment cannot be checked out twice;
 - **automatic previous-local-day completion never records a payment**: it only sets `status = COMPLETED`.
-  Existing `COMPLETED` Appointments keep `payment = undefined`; Souris never fabricates historical revenue;
+  Existing `COMPLETED` Appointments keep `payment = undefined`; BeautIzzy never fabricates historical revenue;
 - a checkout is atomic: `status = COMPLETED` and the payment are written together in ONE transaction, and
   the session state changes only after the commit. On failure nothing changes and nothing appears in the
   Cash Register;
@@ -1179,7 +1179,7 @@ the 20 € Product gives `Total attendu 80 €` while `Encaissement 100 €` sta
 amount, and the Cash Register follows that payment alone.
 
 The **Cash Register** (`src/domain/cash-register`) derives ONLY from money explicitly recorded through
-Souris: every `appointment.payment`, `sale.payment` of STANDALONE Sales (no `appointmentId`,
+BeautIzzy: every `appointment.payment`, `sale.payment` of STANDALONE Sales (no `appointmentId`,
 `docs/domain/SALES.md` §4b), and every ACTIVE Appointment deposit on its own `paidAt` (§25d). A Sale sold during an Appointment is never counted separately — the Appointment
 checkout already recorded that money (services 75 € + linked products 20 € recorded as 95 € → Caisse 95 €, not
 115 €). Each payment is grouped by the device-local civil day or calendar month of its own `paidAt` — never
@@ -1643,4 +1643,4 @@ The following must remain true unless an explicit product decision changes them:
 18. Appointment phase timing is snapshot data: creating, editing, or re-timing an Appointment never changes the Service catalog (only Prestations & tarifs does), and a zero-minute phase is valid.
 ```
 
-These invariants are the foundation of Souris scheduling.
+These invariants are the foundation of BeautIzzy scheduling.

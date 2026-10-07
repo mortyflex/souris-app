@@ -1,4 +1,4 @@
-// Souris — schema v3 + local account binding
+// BeautIzzy — schema v3 + local account binding
 //
 // A genuine schema-v2 database (as Persistence V2 left it on a device) is
 // migrated to v3 and then bound to a remote Business. Every operational row

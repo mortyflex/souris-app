@@ -1,4 +1,4 @@
-// Souris — Sale draft rules (pure)
+// BeautIzzy — Sale draft rules (pure)
 //
 // The creation screen owns ONE draft: ordered lines keyed by Product. Adding a
 // Product already present increments its quantity instead of creating a

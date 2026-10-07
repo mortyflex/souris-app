@@ -1,11 +1,11 @@
-// Souris — AppText
+// BeautIzzy — AppText
 //
 // Shared typography primitive.
 //
 // - resolves the approved typography tokens from src/shared/ui/theme;
 // - maps each weight to the concrete Plus Jakarta Sans family loaded at
 //   startup in src/app/_layout.tsx (see theme/typography.ts `fontFamilies`);
-// - provides strongly typed Souris variants only (no arbitrary type scale).
+// - provides strongly typed BeautIzzy variants only (no arbitrary type scale).
 //
 // The resolved style deliberately carries no `fontWeight`: the concrete
 // family already encodes the weight, and adding fontWeight can make iOS
@@ -32,7 +32,7 @@ export type AppTextVariant =
   | 'agendaQuarter'
   | 'tab';
 
-/** Souris distinguishes only iOS and Android in its typography contract. */
+/** BeautIzzy distinguishes only iOS and Android in its typography contract. */
 export type AppTextPlatform = 'ios' | 'android';
 
 type FontWeightToken = keyof typeof fontFamilies;
@@ -89,7 +89,7 @@ const secondaryVariants: ReadonlySet<AppTextVariant> = new Set([
 ]);
 
 /**
- * Resolves the complete React Native text style for a Souris variant.
+ * Resolves the complete React Native text style for a BeautIzzy variant.
  * Pure and exported so the variant/platform mapping can be verified directly.
  */
 export function getAppTextStyle(

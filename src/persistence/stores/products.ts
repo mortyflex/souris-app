@@ -1,4 +1,4 @@
-// Souris — Product catalog store
+// BeautIzzy — Product catalog store
 //
 // barcode is TEXT (leading zeroes preserved); stock_quantity is an integer
 // with a >= 0 CHECK, so the database itself refuses negative stock.

@@ -3,7 +3,7 @@ Pod::Spec.new do |s|
   s.version        = '1.0.0'
   s.summary        = 'Local Apple Vision background removal for Product photos'
   s.description    = 'Keeps optional Product image processing on-device.'
-  s.author         = 'Souris'
+  s.author         = 'BeautIzzy'
   s.homepage       = 'https://docs.expo.dev/modules/'
   s.platforms      = { :ios => '16.4' }
   s.source         = { :git => '' }

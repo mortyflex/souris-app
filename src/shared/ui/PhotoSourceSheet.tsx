@@ -1,4 +1,4 @@
-// Souris — photo source sheet
+// BeautIzzy — photo source sheet
 //
 // Compact action list on the shared BottomSheet: camera, library, and remove
 // when a photo exists. It never touches business state, never asks for a

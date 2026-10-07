@@ -1,4 +1,4 @@
-// Souris — first sync of a bound Business (Cloud Sync V1C–V1D.1, CLOUD_SYNC.md §11)
+// BeautIzzy — first sync of a bound Business (Cloud Sync V1C–V1D.1, CLOUD_SYNC.md §11)
 //
 // Before anything is pushed, the device decides what the first sync of its
 // Business is, from the population of BOTH sides:

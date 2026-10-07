@@ -1,4 +1,4 @@
-// Souris — what a Calendar Block card says at a given height
+// BeautIzzy — what a Calendar Block card says at a given height
 //
 // « Indisponible » is the primary information and the reason is secondary —
 // never a client, a service or a price. The densities are the ones of the

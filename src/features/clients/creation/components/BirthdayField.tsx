@@ -1,4 +1,4 @@
-// Souris — Birthday field (day + month, no year)
+// BeautIzzy — Birthday field (day + month, no year)
 //
 // One form row (« Anniversaire ») that expands INLINE into the two-column
 // day / month wheel (BirthdayWheelPicker). No keyboard, no year, no nested

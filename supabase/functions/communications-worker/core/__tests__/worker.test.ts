@@ -256,7 +256,7 @@ describe('the delivery surface stays contained (Lot B)', () => {
     // The exact deployed chain: the same factory the Edge entry calls, fed by
     // the same secret names, down to the HTML posted to the (mocked) provider.
     const PRODUCTION_LOGO =
-      'https://oxfqcgbtihczubisjyek.supabase.co/storage/v1/object/public/brand/logo-mark.png';
+      'https://oxfqcgbtihczubisjyek.supabase.co/storage/v1/object/public/brand/beautizzy-email-symbol.png';
     const env: Record<string, string> = {
       RESEND_API_KEY: 'test-key',
       RESEND_FROM_EMAIL: 'rappels@souris.test',
@@ -288,7 +288,7 @@ describe('the delivery surface stays contained (Lot B)', () => {
 
     expect(result.status).toBe('SENT');
     const html = (JSON.parse(requests[0].body) as { html: string }).html;
-    expect(html).toContain('logo-mark.png');
+    expect(html).toContain('beautizzy-email-symbol.png');
     expect(html).toContain(`<img src="${PRODUCTION_LOGO}"`);
   });
 

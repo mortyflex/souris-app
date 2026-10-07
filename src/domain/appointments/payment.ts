@@ -1,4 +1,4 @@
-// Souris — Appointment checkout and payment rules
+// BeautIzzy — Appointment checkout and payment rules
 //
 // Source: docs/domain/APPOINTMENTS.md §25b (checkout)
 //

@@ -1,4 +1,4 @@
-// Souris — client import review selection (fictional data)
+// BeautIzzy — client import review selection (fictional data)
 
 import type { Client } from '@/domain/clients';
 import {

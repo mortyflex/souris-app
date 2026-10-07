@@ -1,4 +1,4 @@
-// Souris — Calendar Block editor: times, reason shortcuts and wording (pure)
+// BeautIzzy — Calendar Block editor: times, reason shortcuts and wording (pure)
 
 import type { CalendarBlock } from '@/domain/calendar-blocks';
 

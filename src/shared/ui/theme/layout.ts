@@ -1,4 +1,4 @@
-// Souris design tokens — Layout
+// BeautIzzy design tokens — Layout
 //
 // Source: docs/design/DESIGN.md §5 (Agenda grid), docs/design/reference-export/tokens.css,
 //         docs/design/DESIGN_OVERRIDES.md §16 (overlay consistency)
@@ -33,7 +33,7 @@ export const touchTarget = {
   android: 48,
 } as const;
 
-// Canonical Souris sheet shell — shared by the JS BottomSheet (Modal) and the
+// Canonical BeautIzzy sheet shell — shared by the JS BottomSheet (Modal) and the
 // native form-sheet routes so both read as ONE presentation.
 export const sheet = {
   /** Max height of a JS drawer and of a content-fit native sheet, as a fraction of the window. */
@@ -52,7 +52,7 @@ export const sheet = {
   dismissThreshold: 96,
 } as const;
 
-// Canonical Souris confirmation dialog card.
+// Canonical BeautIzzy confirmation dialog card.
 export const dialog = {
   maxWidth: 360,
 } as const;

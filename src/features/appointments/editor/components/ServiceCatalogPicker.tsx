@@ -1,4 +1,4 @@
-// Souris — Prestation catalogue (shared by creation and editing)
+// BeautIzzy — Prestation catalogue (shared by creation and editing)
 //
 // THE prestation picker of « Nouveau rendez-vous » (Prestations step) and
 // « Modifier le rendez-vous » (Ajouter des prestations): search, then the

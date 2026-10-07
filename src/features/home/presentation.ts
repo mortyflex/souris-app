@@ -1,4 +1,4 @@
-// Souris — Accueil presentation
+// BeautIzzy — Accueil presentation
 //
 // Wording and selection for the Accueil tab. Nothing is computed about money
 // or time here: the figures come from the domain day summary

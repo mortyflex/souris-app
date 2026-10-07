@@ -1,4 +1,4 @@
-// Souris — Birthday wheel picker (day + month, no year)
+// BeautIzzy — Birthday wheel picker (day + month, no year)
 //
 // A native-feeling two-column wheel on the shared `WheelColumn` mechanics
 // (snapping, highlighted center row, one haptic per committed change). Two

@@ -1,15 +1,15 @@
-// Souris — navigation theme
+// BeautIzzy — navigation theme
 //
-// The ONE React Navigation theme handed to Souris's native navigators.
+// The ONE React Navigation theme handed to BeautIzzy's native navigators.
 //
 // Expo Router paints the backdrop of every native tab screen with
 // `theme.colors.background`, and the default theme's is a foreign grey, so
-// without this a tab switch could briefly show a colour that is not Souris's
+// without this a tab switch could briefly show a colour that is not BeautIzzy's
 // (the "white flash" the Native Tabs documentation warns about). The theme
-// therefore carries the canonical Souris app background (`semanticColors.screen`); the iOS 26 Liquid
+// therefore carries the canonical BeautIzzy app background (`semanticColors.screen`); the iOS 26 Liquid
 // Glass bar then always samples the real page beneath it.
 //
-// Light appearance only — Souris has no dark mode yet, so no colour-scheme
+// Light appearance only — BeautIzzy has no dark mode yet, so no colour-scheme
 // switching lives here.
 
 import { DefaultTheme, type Theme } from 'expo-router';

@@ -1,8 +1,8 @@
-// Souris — Accueil
+// BeautIzzy — Accueil
 //
 // The landing tab: what today holds, read top-down.
 //
-//   [ Souris wordmark ]              Lundi 5 octobre
+//   [ BeautIzzy wordmark ]              Lundi 5 octobre
 //   Bonjour
 //   Votre journée en un coup d’œil.
 //   [ PROCHAIN RENDEZ-VOUS — the one tinted hero card ]   → Appointment Details
@@ -16,7 +16,7 @@
 //   Pilotage
 //   [ Créer une estimation › / Tops & tendances › ]       existing tools, consulted
 //
-// A composition of what Souris already knows — never a second Agenda and
+// A composition of what BeautIzzy already knows — never a second Agenda and
 // never new analytics. Today's figures are the domain day summary
 // (`getAppointmentDaySummary`), the week's are the domain period summary of
 // the Agenda week (`getAppointmentPeriodSummary`, Monday → Sunday) — the very

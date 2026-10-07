@@ -1,6 +1,6 @@
-// Souris — Client appointment history row
+// BeautIzzy — Client appointment history row
 //
-// One Souris Appointment of a Client, shared by the profile preview and the
+// One BeautIzzy Appointment of a Client, shared by the profile preview and the
 // complete « Rendez-vous » history: date + time, prestation summary, amount
 // and chevron in one grouped row. Only an exceptional outcome (cancellation,
 // no-show) is named, in rose: a completed or upcoming Appointment shows no

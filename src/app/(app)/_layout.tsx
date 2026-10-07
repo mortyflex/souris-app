@@ -1,4 +1,4 @@
-// Souris — protected application group
+// BeautIzzy — protected application group
 //
 // Mounted only while the root gate resolves to `app` (signed in + bound
 // Business). It owns the operational session providers, so no Client,
@@ -7,7 +7,7 @@
 // Business through CurrentBusinessProvider.
 //
 // Every workflow route is a native form sheet configured ONCE in
-// src/providers/sheet-route-options.ts with the canonical Souris shell and an
+// src/providers/sheet-route-options.ts with the canonical BeautIzzy shell and an
 // explicit gesture policy (workflows with long scrolling bodies never dismiss
 // on a swipe — closing goes through their « Annuler »).
 

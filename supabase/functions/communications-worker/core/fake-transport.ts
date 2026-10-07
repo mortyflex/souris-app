@@ -1,4 +1,4 @@
-// Souris — Communication Core: the Lot A transport — fake, deterministic, offline
+// BeautIzzy — Communication Core: the Lot A transport — fake, deterministic, offline
 //
 // The ONLY transport that exists in Lot A. It never touches the network and
 // can therefore never email or SMS anyone. Tests (and a deployed Lot A

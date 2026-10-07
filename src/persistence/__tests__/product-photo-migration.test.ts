@@ -1,4 +1,4 @@
-// Souris — schema v14: Product photo reference (docs/architecture/PERSISTENCE.md §4)
+// BeautIzzy — schema v14: Product photo reference (docs/architecture/PERSISTENCE.md §4)
 
 import { bootstrapPersistence, loadSnapshot } from '../bootstrap';
 import { migrateDatabase, readSchemaVersion } from '../migrations';

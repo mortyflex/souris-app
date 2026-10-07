@@ -1,4 +1,4 @@
-// Souris design tokens — Typography
+// BeautIzzy design tokens — Typography
 //
 // Source: docs/design/DESIGN_OVERRIDES.md §12 (native runtime typography),
 //         docs/design/DESIGN.md §3 (Plus Jakarta Sans; the export scale is kept there as history)

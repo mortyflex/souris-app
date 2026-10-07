@@ -1,4 +1,4 @@
-// Souris — swipe-to-delete rules (pure)
+// BeautIzzy — swipe-to-delete rules (pure)
 //
 // The distances and the discoverability rule of the shared SwipeToDeleteRow,
 // shared by the UI-thread worklets and their tests:

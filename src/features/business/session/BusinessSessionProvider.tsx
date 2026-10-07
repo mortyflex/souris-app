@@ -1,6 +1,6 @@
-// Souris — Business session boundary
+// BeautIzzy — Business session boundary
 //
-// Answers: which Souris Business does the signed-in user own, is onboarding
+// Answers: which BeautIzzy Business does the signed-in user own, is onboarding
 // completed, and is the local database bound to it? It follows the Auth
 // state (idle while nobody is signed in) and runs the pure resolution in
 // resolve-business-session.ts. Creation is idempotent: a remote Business

@@ -1,4 +1,4 @@
-// Souris — Welcome force field
+// BeautIzzy — Welcome force field
 //
 // The finger's field in the Welcome hero: how strongly a finger is felt at a
 // distance (used by welcome-physics to push and throw the floating objects),

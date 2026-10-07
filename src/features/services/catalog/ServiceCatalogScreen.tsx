@@ -1,4 +1,4 @@
-// Souris — Prestations & tarifs (management list)
+// BeautIzzy — Prestations & tarifs (management list)
 //
 // Gestion › Prestations & tarifs: the pushed-screen top bar, the title, then
 // the Services / Techniques segment (the category taxonomy, with the SAME

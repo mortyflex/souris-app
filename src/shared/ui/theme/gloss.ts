@@ -1,8 +1,8 @@
-// Souris design tokens — Gloss
+// BeautIzzy design tokens — Gloss
 //
 // Source: docs/design/DESIGN_OVERRIDES.md §20, §21 (Agenda cards are flat: §19)
 //
-// The restrained polished finishes of Souris: white light falling from the top
+// The restrained polished finishes of BeautIzzy: white light falling from the top
 // edge, never a blur view. Every layer is a plain overlay drawn above a flat
 // token fill, so the surface stays correct wherever gradients are unavailable,
 // and dark text only ever gains contrast under it.

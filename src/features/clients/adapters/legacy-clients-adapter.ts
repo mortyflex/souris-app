@@ -1,9 +1,9 @@
-// Souris — Legacy clients import boundary
+// BeautIzzy — Legacy clients import boundary
 //
 // Source: a legacy address-book export. The repository only ever tracks the
 //         synthetic one (src/features/clients/data/synthetic-legacy-clients.ts);
 //         a real address book never enters the source tree.
-// Target: canonical Souris Client (src/domain/clients)
+// Target: canonical BeautIzzy Client (src/domain/clients)
 //
 // The STRICT import rule (docs/domain/CLIENTS.md §Legacy import contract):
 //
@@ -20,7 +20,7 @@
 // EVERYTHING ELSE is discarded. Legacy commercial history (visits, spend,
 // average basket, last visit, no-show history), notes, imported visit notes,
 // age, address and other bookkeeping fields never cross this boundary.
-// Souris commercial and appointment history starts from zero.
+// BeautIzzy commercial and appointment history starts from zero.
 
 import { birthdayFromCivilDate, type Client, type ClientBirthday } from '@/domain/clients';
 

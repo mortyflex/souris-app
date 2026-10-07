@@ -1,4 +1,4 @@
-// Souris — communication phone rules (Lot C1)
+// BeautIzzy — communication phone rules (Lot C1)
 //
 // Table-driven, and deliberately the SAME representative cases as the SQL
 // harness of `communications_client_phone_e164` /

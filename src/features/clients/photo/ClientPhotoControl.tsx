@@ -1,4 +1,4 @@
-// Souris — Client photo control (Client Profile)
+// BeautIzzy — Client photo control (Client Profile)
 //
 // The validated portrait ClientAvatar, made editable in place: the whole
 // frame is the button, with a small camera badge on its bottom-right corner.

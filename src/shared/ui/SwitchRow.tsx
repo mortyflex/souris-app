@@ -1,4 +1,4 @@
-// Souris — a labeled native switch row
+// BeautIzzy — a labeled native switch row
 //
 // The ONE on/off row of the product (settings rows, the per-appointment
 // reminder toggle): label (and optional supporting line) on the left, the

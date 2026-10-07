@@ -1,4 +1,4 @@
-// Souris — Cloud Sync V1C: bootstrap + incremental push through the real
+// BeautIzzy — Cloud Sync V1C: bootstrap + incremental push through the real
 // stores and a contract-faithful in-memory remote
 // (docs/architecture/CLOUD_SYNC.md §10.8, §11, §15)
 

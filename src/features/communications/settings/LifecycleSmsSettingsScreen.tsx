@@ -1,4 +1,4 @@
-// Souris — SMS fidélisation (Settings, SMS pivot Phase 2)
+// BeautIzzy — SMS fidélisation (Settings, SMS pivot Phase 2)
 //
 // Plus › SMS fidélisation: the two client lifecycle SMS automations — the
 // birthday offer and the inactive-client win-back — each ONE switch plus its

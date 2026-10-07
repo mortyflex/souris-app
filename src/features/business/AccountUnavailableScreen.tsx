@@ -1,4 +1,4 @@
-// Souris — recoverable account state (Auth or Business resolution failed)
+// BeautIzzy — recoverable account state (Auth or Business resolution failed)
 
 import { AccountStateScreen } from '@/features/auth/components/AccountStateScreen';
 import { formatAuthFailure } from '@/features/auth/messages';

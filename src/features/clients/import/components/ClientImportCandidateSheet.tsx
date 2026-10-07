@@ -1,4 +1,4 @@
-// Souris — client import: review one candidate
+// BeautIzzy — client import: review one candidate
 //
 // The correction drawer of the review. It edits STAGING state only: saving
 // hands the new values back to the review, which re-runs validation, issues,

@@ -1,4 +1,4 @@
-// Souris — Caisse (Cash Register)
+// BeautIzzy — Caisse (Cash Register)
 //
 // In ONE glance: the money ACTUALLY received on the selected local day or
 // calendar month — « Total encaissé », its card / cash split, then the

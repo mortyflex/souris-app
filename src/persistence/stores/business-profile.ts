@@ -1,4 +1,4 @@
-// Souris — local Business profile and account binding
+// BeautIzzy — local Business profile and account binding
 //
 // The single `business_profile` row is the device's account binding: it
 // records which Business (and which owning Auth user) the local database
@@ -133,7 +133,7 @@ export function bindLocalDatabaseToBusiness(db: SourisDatabase, profile: Busines
     ) {
       throw new LocalAccountBindingError(
         'ALREADY_BOUND_TO_OTHER_ACCOUNT',
-        'This device is already bound to another Souris account',
+        'This device is already bound to another BeautIzzy account',
       );
     }
 

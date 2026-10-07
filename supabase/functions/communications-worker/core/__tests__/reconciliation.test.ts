@@ -1,4 +1,4 @@
-// Souris — Communication Core (Lot B hardening): the reconciliation retry pass
+// BeautIzzy — Communication Core (Lot B hardening): the reconciliation retry pass
 
 import { COMMUNICATION_RETRY_POLICY } from '../retry-policy';
 import {

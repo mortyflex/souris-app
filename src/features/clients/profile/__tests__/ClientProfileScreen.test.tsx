@@ -430,7 +430,7 @@ describe('ClientProfileScreen', () => {
     expect(view.getByText('Client introuvable')).toBeTruthy();
   });
 
-  it('shows identity and Souris appointments for a fixture client', async () => {
+  it('shows identity and BeautIzzy appointments for a fixture client', async () => {
     const view = await renderProfile('client-agenda-lea');
 
     expect(view.getByText('Léa Martin')).toBeTruthy();

@@ -1,4 +1,4 @@
-// Souris — CommunicationsGateway bound to the Lot B owner RPCs
+// BeautIzzy — CommunicationsGateway bound to the Lot B owner RPCs
 //
 // Three narrow SECURITY DEFINER functions
 // (supabase/migrations/20260927120000_add_appointment_email_reminders.sql):

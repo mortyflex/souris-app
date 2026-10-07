@@ -1,6 +1,6 @@
-// Souris — the data of this account could not be fetched yet
+// BeautIzzy — the data of this account could not be fetched yet
 //
-// Shown INSTEAD of the application on a device that holds no data while Souris
+// Shown INSTEAD of the application on a device that holds no data while BeautIzzy
 // could not establish what the account already holds (first launch after a
 // sign-in, a reinstall, a new phone — offline or on a failing network).
 // Opening an empty application there would let the user create a first record

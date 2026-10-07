@@ -3,7 +3,7 @@ import { overlayMaterial, radii, sheet } from '@/shared/ui/theme';
 import { contentSheet, editorSheet, workflowSheet } from '../sheet-route-options';
 
 describe('sheet route options', () => {
-  it('presents workflows as a native form sheet with the Souris surface, radius and grabber', () => {
+  it('presents workflows as a native form sheet with the BeautIzzy surface, radius and grabber', () => {
     expect(workflowSheet.presentation).toBe('formSheet');
     expect(workflowSheet.headerShown).toBe(false);
     expect(workflowSheet.contentStyle).toEqual({ backgroundColor: overlayMaterial.surface });

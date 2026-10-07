@@ -1,4 +1,4 @@
-// Souris — password field with a native visibility toggle
+// BeautIzzy — password field with a native visibility toggle
 
 import { SymbolView } from 'expo-symbols';
 import { useState, type Ref } from 'react';

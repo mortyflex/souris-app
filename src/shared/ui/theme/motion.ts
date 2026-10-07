@@ -1,4 +1,4 @@
-// Souris design tokens — Motion
+// BeautIzzy design tokens — Motion
 //
 // Source: docs/design/DESIGN.md §7, docs/design/reference-export/tokens.css
 //

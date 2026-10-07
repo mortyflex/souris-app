@@ -1,4 +1,4 @@
-// Souris — expo-sqlite binding of the SourisDatabase boundary
+// BeautIzzy — expo-sqlite binding of the SourisDatabase boundary
 //
 // Only the application root opens the real device database. Tests never
 // import this module.
@@ -27,7 +27,7 @@ export function wrapSqliteDatabase(native: SQLiteDatabase): SourisDatabase {
   };
 }
 
-/** Opens (or creates) the device database with the connection settings Souris relies on. */
+/** Opens (or creates) the device database with the connection settings BeautIzzy relies on. */
 export function openSourisDatabase(): SourisDatabase {
   const native = openDatabaseSync(SOURIS_DATABASE_NAME);
   native.execSync('PRAGMA journal_mode = WAL;');

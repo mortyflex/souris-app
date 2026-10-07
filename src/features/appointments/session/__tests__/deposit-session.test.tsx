@@ -1,4 +1,4 @@
-// Souris — Appointment deposits through the Appointment session
+// BeautIzzy — Appointment deposits through the Appointment session
 // (docs/domain/APPOINTMENTS.md §25d): state follows SQLite, the stored rows
 // are the authority, and money is never counted twice.
 

@@ -1,4 +1,4 @@
-// Souris — Business setup form rules (pure)
+// BeautIzzy — Business setup form rules (pure)
 
 import type { BusinessActivityType, BusinessSetupInput } from '@/domain/business';
 

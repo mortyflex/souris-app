@@ -1,4 +1,4 @@
-// Souris — acknowledged remote revisions (Cloud Sync V1B)
+// BeautIzzy — acknowledged remote revisions (Cloud Sync V1B)
 //
 // `sync_state` records, per aggregate, the remote `sync_version` this device
 // last acknowledged (after a successful push or an applied pull) and when.

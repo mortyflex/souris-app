@@ -1,4 +1,4 @@
-// Souris — Appointment deposit store (« Acomptes », schema v12)
+// BeautIzzy — Appointment deposit store (« Acomptes », schema v12)
 //
 // One row per deposit. A deposit is never deleted by a user action: a
 // mistake is VOIDED (status + voided_at) and a new deposit recorded. Every

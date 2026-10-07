@@ -1,4 +1,4 @@
-// Souris — test helpers for the shared wheels (never imported by app code)
+// BeautIzzy — test helpers for the shared wheels (never imported by app code)
 //
 // Under Jest there is no native scrolling: a test settles a wheel column the
 // way the platform reports it, with the momentum-end event of the snapped row.

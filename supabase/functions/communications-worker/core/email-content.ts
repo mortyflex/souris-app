@@ -1,4 +1,4 @@
-// Souris — Communication Core (Lot B): the appointment email content
+// BeautIzzy — Communication Core (Lot B): the appointment email content
 //
 // Fixed V1 transactional templates, French only, one per appointment kind:
 //
@@ -17,14 +17,14 @@
 // no script, no external asset — with a plain-text alternative. The visual
 // identity is a restrained BeautIzzy: warm surface, white card, plum accent.
 
-const EMAIL_ACCENT = '#654199'; // Souris plum (lavender lav700)
+const EMAIL_ACCENT = '#654199'; // BeautIzzy plum (lavender lav700)
 const EMAIL_FOREGROUND = '#19163F';
 const EMAIL_SOFT = '#5D5A7A';
 const EMAIL_SURFACE = '#FAF7F2'; // warm screen
 const EMAIL_CARD = '#FFFFFF';
 
 /**
- * V1 display timezone of the professional's agenda. Souris V1 ships for one
+ * V1 display timezone of the professional's agenda. BeautIzzy V1 ships for one
  * French pilot market and stores no business timezone; when one exists it
  * belongs in the payload, not here.
  */

@@ -1,4 +1,4 @@
-// Souris — Client presentation at application level
+// BeautIzzy — Client presentation at application level
 //
 // Resolution of appointment clientIds against the coherent Client source.
 // The fallback reveals data inconsistency without inventing an identity.

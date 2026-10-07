@@ -1,6 +1,6 @@
-// Souris — the data of this account is on its way
+// BeautIzzy — the data of this account is on its way
 //
-// Shown INSTEAD of the application on a device that holds no data, while Souris
+// Shown INSTEAD of the application on a device that holds no data, while BeautIzzy
 // finds out what the account already holds and brings it back (first launch
 // after a sign-in, a reinstall, a new phone). Usually a moment; a large account
 // on a slow network takes longer, hence a real waiting state rather than the

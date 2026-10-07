@@ -1,4 +1,4 @@
-// Souris — Appointment start-time picker
+// BeautIzzy — Appointment start-time picker
 //
 // THE control that chooses an Appointment START time, shared by Appointment
 // creation (context row, Summary step) and Appointment editing: the shared

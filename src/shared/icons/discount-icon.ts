@@ -1,4 +1,4 @@
-// Souris — Appointment discount icon
+// BeautIzzy — Appointment discount icon
 //
 // The ONE glyph that marks « Réduction » on an Appointment: a price tag,
 // which reads the same for a percentage and for a fixed amount. SF Symbols on

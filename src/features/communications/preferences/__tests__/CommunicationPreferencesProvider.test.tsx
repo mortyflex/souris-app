@@ -1,4 +1,4 @@
-// Souris — the app-side copy of the server reminder preference (Lot B)
+// BeautIzzy — the app-side copy of the server reminder preference (Lot B)
 //
 // The server is authoritative; the provider mirrors it, keeps the
 // Business-scoped cache fresh, falls back to that cache offline, and fails

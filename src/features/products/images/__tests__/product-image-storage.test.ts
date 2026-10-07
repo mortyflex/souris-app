@@ -20,7 +20,7 @@ function createFiles() {
 }
 
 describe('legacy device-local product images', () => {
-  it('discards only Souris-owned legacy images', () => {
+  it('discards only BeautIzzy-owned legacy images', () => {
     const files = createFiles();
     const owned = `${OWNED_PREFIX}p-1700000000000-1.jpg`;
     files.addFile(owned, 'legacy');

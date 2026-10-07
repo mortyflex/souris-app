@@ -1,4 +1,4 @@
-// Souris — Product domain public entry point
+// BeautIzzy — Product domain public entry point
 
 export type { Product } from "./types";
 export {

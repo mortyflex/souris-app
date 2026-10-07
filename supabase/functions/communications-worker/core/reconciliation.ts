@@ -1,4 +1,4 @@
-// Souris — Communication Core (Lot B hardening): reconciliation retry pass
+// BeautIzzy — Communication Core (Lot B hardening): reconciliation retry pass
 //
 // A trigger reconciliation that failed left a durable job
 // (`communication_reconciliation_jobs`). This pass re-runs the SAME

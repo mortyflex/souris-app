@@ -1,4 +1,4 @@
-// Souris — remote schema types (hand-written, V1 scope)
+// BeautIzzy — remote schema types (hand-written, V1 scope)
 //
 // Covers the `businesses` table, the two Cloud Sync V1C push functions
 // (supabase/migrations/20260917120000_…) and the V1D pull function

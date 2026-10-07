@@ -1,6 +1,6 @@
-// Souris — Checkout sheet (« Encaisser »)
+// BeautIzzy — Checkout sheet (« Encaisser »)
 //
-// The ONE canonical Souris drawer where the professional records what was
+// The ONE canonical BeautIzzy drawer where the professional records what was
 // actually received by card and/or cash — for an Appointment checkout, its
 // correction, or a standalone Product Sale. Not payment processing: nothing
 // is charged.
@@ -420,7 +420,7 @@ function PaymentMethodField({
       <View style={styles.amountShell}>
         <TextInput
           accessibilityLabel={`Montant ${label.toLowerCase()}`}
-          // The decimal pad has no return key: the compact Souris « OK »
+          // The decimal pad has no return key: the compact BeautIzzy « OK »
           // replaces React Native's full-width system toolbar.
           inputAccessoryViewID={keyboardAccessoryID}
           keyboardType="decimal-pad"

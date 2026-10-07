@@ -1,4 +1,4 @@
-// Souris — the ONE photo normalization pipeline (Client and Product settings)
+// BeautIzzy — the ONE photo normalization pipeline (Client and Product settings)
 
 import { centeredSquareCrop, fitWithin, normalizePhoto } from '../photo-normalization';
 

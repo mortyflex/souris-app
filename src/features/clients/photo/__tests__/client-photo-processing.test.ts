@@ -1,4 +1,4 @@
-// Souris — Client photo normalization (orientation, square crop, size, JPEG)
+// BeautIzzy — Client photo normalization (orientation, square crop, size, JPEG)
 
 import { centeredSquareCrop, prepareClientPhoto } from '../client-photo-processing';
 

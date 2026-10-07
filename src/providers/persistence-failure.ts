@@ -1,4 +1,4 @@
-// Souris — recoverable persistence failure feedback
+// BeautIzzy — recoverable persistence failure feedback
 //
 // A write that reaches the database and fails leaves React state untouched
 // (providers update state only after a successful write). Screens report

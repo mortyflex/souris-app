@@ -1,6 +1,6 @@
-// Souris — ReceiptPrinter
+// BeautIzzy — ReceiptPrinter
 //
-// The signature presentation of the Souris receipts — « Résumé du jour » and
+// The signature presentation of the BeautIzzy receipts — « Résumé du jour » and
 // « Tops & tendances » (DESIGN_OVERRIDES.md §25, §34):
 // the Agenda dims, a small light-glass printer capsule lands under the top safe
 // area, and the receipt feeds DOWN out of its groove like paper being printed,
@@ -111,7 +111,7 @@ const presenceEasing = Easing.bezier(...easing.out);
 /** Small drop travelled by the capsule while it appears, and by the paper while it leaves (pt). */
 const PRESENCE_TRAVEL = 8;
 
-// Known before any Modal mounts (Souris is portrait-locked): a safe-area view
+// Known before any Modal mounts (BeautIzzy is portrait-locked): a safe-area view
 // mounted while a Modal is being presented may still measure 0.
 const topInset = initialWindowMetrics?.insets.top ?? 0;
 const bottomInset = initialWindowMetrics?.insets.bottom ?? 0;

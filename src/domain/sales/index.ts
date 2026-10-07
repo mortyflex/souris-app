@@ -1,4 +1,4 @@
-// Souris — Sale domain public entry point
+// BeautIzzy — Sale domain public entry point
 
 export type { Sale, SaleItem } from './types';
 export type { SalePayment, SalePaymentAmounts } from './payment';

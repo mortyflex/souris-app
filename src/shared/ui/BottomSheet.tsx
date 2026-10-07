@@ -1,4 +1,4 @@
-// Souris — BottomSheet
+// BeautIzzy — BottomSheet
 //
 // The ONE canonical bottom-anchored drawer opened by STATE
 // (docs/design/DESIGN_OVERRIDES.md §16). Every small drawer — confirmations,

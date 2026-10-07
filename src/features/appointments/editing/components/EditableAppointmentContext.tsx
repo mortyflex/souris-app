@@ -1,4 +1,4 @@
-// Souris — Editable appointment context (Appointment Editing)
+// BeautIzzy — Editable appointment context (Appointment Editing)
 //
 // The « Rendez-vous » group of « Modifier le rendez-vous » (DESIGN_OVERRIDES.md
 // §27): three tappable rows — Cliente, Date, Heure — on the white grouped

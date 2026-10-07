@@ -1,4 +1,4 @@
-// Souris — Sign up (email + password)
+// BeautIzzy — Sign up (email + password)
 //
 // Local validation avoids pointless round trips; Supabase remains the
 // authority. A failure keeps the entered email and password. When the

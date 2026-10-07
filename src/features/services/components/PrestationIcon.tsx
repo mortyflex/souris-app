@@ -1,4 +1,4 @@
-// Souris — Prestation pictogram tile
+// BeautIzzy — Prestation pictogram tile
 //
 // The compact, decorative family pictogram of a Prestation: a rounded square
 // on the category whisper, the family glyph in the category accent

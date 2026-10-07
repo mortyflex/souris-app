@@ -1,4 +1,4 @@
-// Souris — client import privacy guard
+// BeautIzzy — client import privacy guard
 //
 // An import carries personal data (names, phones, emails, birthdays). Its
 // sources must never log it, persist the pasted text or the staging

@@ -1,4 +1,4 @@
-// Souris — Client form sheet: canonical shell, keyboard rule, birthday wheel
+// BeautIzzy — Client form sheet: canonical shell, keyboard rule, birthday wheel
 //
 // The sheet opens with the keyboard closed (no field auto-focuses), the
 // birthday is a day + month wheel (no year, no keyboard), impossible dates

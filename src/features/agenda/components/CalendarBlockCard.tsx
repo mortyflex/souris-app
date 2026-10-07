@@ -1,4 +1,4 @@
-// Souris — Calendar Block card (Agenda Day)
+// BeautIzzy — Calendar Block card (Agenda Day)
 //
 // Personal unavailability on the timeline. Same card construction as an
 // Appointment — flat fill, solid left accent, height-following radius — so it

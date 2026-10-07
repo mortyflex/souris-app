@@ -1,4 +1,4 @@
-// Souris — Calendar Block icon
+// BeautIzzy — Calendar Block icon
 //
 // The ONE glyph that marks personal unavailability — Agenda block, Week row,
 // the creation form and the details sheet. Recognition never depends on it:

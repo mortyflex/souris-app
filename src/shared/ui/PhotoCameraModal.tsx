@@ -1,4 +1,4 @@
-// Souris — photo camera (dedicated large sheet)
+// BeautIzzy — photo camera (dedicated large sheet)
 //
 // Photography only (Product photos, Client photos): a generous live preview,
 // one instruction, one shutter. No barcode framing, no scanner language, no

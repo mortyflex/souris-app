@@ -1,4 +1,4 @@
-# Souris — Supabase
+# BeautIzzy — Supabase
 
 Remote scope today: **Auth identity + `businesses`** (Account & Onboarding V1), the **operational
 schema** of Cloud Sync V1A (`clients`, `services`, `service_phases`, `appointments`,
@@ -412,7 +412,7 @@ npx supabase secrets set SOURIS_EMAIL_LOGO_URL=https://<ref>.supabase.co/storage
 
 `SOURIS_EMAIL_LOGO_URL` is intentionally kept as the technical secret name; only its VALUE
 changes, and it must point to the BeautIzzy email symbol. A value still pointing at a previous
-image (the Souris mark, or the 360×138 BeautIzzy wordmark) would show that image, distorted, in
+image (the BeautIzzy mark, or the 360×138 BeautIzzy wordmark) would show that image, distorted, in
 the 23×30 slot.
 
 The URL must be plain `https://`; surrounding whitespace, a trailing newline or ONE layer of
@@ -440,14 +440,11 @@ secret key is only the HTTP credential that resolves to it.
    only). The worker (`withSupabase({ auth: 'secret:communications_worker' })`)
    accepts only that named key and refuses publishable keys, user JWTs and unauthenticated
    calls. If one component ever leaks its key, only that key is rotated.
-2. `npx supabase login` and `npx supabase link --project-ref <ref>` (writes `supabase/config.toml`;
-   review before committing). In `supabase/config.toml`, disable JWT verification for this
-   function — secret keys are not JWTs; the named-secret-key check replaces it:
-
-   ```toml
-   [functions.communications-worker]
-   verify_jwt = false
-   ```
+2. `npx supabase login` and `npx supabase link --project-ref <ref>`. Keep JWT verification
+   ENABLED (the deploy default — no `supabase/config.toml` entry, never `--no-verify-jwt`): the
+   gateway accepts the worker's `sb_secret_…` key on the `apikey` header in place of a JWT, and
+   the named-secret-key check then narrows access to that one key. This is the configuration
+   running in production (`verify_jwt: true`, scheduler calls answering 200).
 
    Then set the two Resend secrets (section above) and
    `npx supabase functions deploy communications-worker`.
@@ -527,7 +524,7 @@ at step 9 — and only for a Business whose owner explicitly enabled reminders (
  4. Resend: create the account, add and VERIFY the sending domain (SPF + DKIM)
  5. npx supabase secrets set RESEND_API_KEY=…
  6. npx supabase secrets set RESEND_FROM_EMAIL=…
- 7. Deploy the worker (verify_jwt = false) — deploying alone sends nothing without due records
+ 7. Deploy the worker (verify_jwt stays true) — deploying alone sends nothing without due records
  8. Enable pg_cron + pg_net (Dashboard › Extensions)
  9. Put the worker secret key in Vault and create the cron job (SQL above)
 10. End-to-end test with a DEDICATED test Business and a test client email:

@@ -1,4 +1,4 @@
-// Souris — estimation icon
+// BeautIzzy — estimation icon
 //
 // The glyph of « Estimation » in the Agenda + menu: a written document with a
 // price, available on every supported iOS version. SF Symbols on iOS,

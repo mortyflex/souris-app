@@ -1,4 +1,4 @@
-// Souris — Appointment expected total (pure)
+// BeautIzzy — Appointment expected total (pure)
 //
 // Source: docs/domain/APPOINTMENTS.md §25b
 //

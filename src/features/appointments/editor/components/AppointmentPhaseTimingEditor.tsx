@@ -1,4 +1,4 @@
-// Souris — Appointment phase timing editor
+// BeautIzzy — Appointment phase timing editor
 //
 // The compact per-phase timing block shared by the Appointment editor card
 // (Creation Résumé, Modifier le rendez-vous) and the expanded Service row of

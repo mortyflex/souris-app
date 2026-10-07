@@ -1,4 +1,4 @@
-// Souris — expo-file-system binding of the LocalFiles boundary
+// BeautIzzy — expo-file-system binding of the LocalFiles boundary
 //
 // Only the application root creates it. Tests never import this module.
 

@@ -1,4 +1,4 @@
-// Souris — recorded checkout of a completed Appointment
+// BeautIzzy — recorded checkout of a completed Appointment
 //
 // Replaces « Encaisser » once a payment exists: the received total, then
 // the card / cash split (a zero method is not listed), then the restrained

@@ -1,4 +1,4 @@
-// Souris — CreatedWithSouris
+// BeautIzzy — CreatedWithBeautIzzy
 //
 // The footer of the share images: « Créé avec » + the editorial BeautIzzy
 // logo (BrandMark, 58 pt), centred on one line, restrained at 85 % opacity. No
@@ -14,18 +14,18 @@ import { AppText } from './AppText';
 import { BrandMark } from './BrandMark';
 import { foregroundSoft, spacing } from './theme';
 
-export const CREATED_WITH_SOURIS_LABEL = 'Créé avec BeautIzzy';
+export const CREATED_WITH_BEAUTIZZY_LABEL = 'Créé avec BeautIzzy';
 
-interface CreatedWithSourisProps {
+interface CreatedWithBeautIzzyProps {
   readonly allowFontScaling?: boolean;
   readonly style?: StyleProp<ViewStyle>;
   readonly testID?: string;
 }
 
-export function CreatedWithSouris({ allowFontScaling, style, testID }: CreatedWithSourisProps) {
+export function CreatedWithBeautIzzy({ allowFontScaling, style, testID }: CreatedWithBeautIzzyProps) {
   return (
     <View
-      accessibilityLabel={CREATED_WITH_SOURIS_LABEL}
+      accessibilityLabel={CREATED_WITH_BEAUTIZZY_LABEL}
       accessible
       style={[styles.footer, style]}
       testID={testID}

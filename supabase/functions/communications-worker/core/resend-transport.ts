@@ -1,6 +1,6 @@
-// Souris — Communication Core (Lot B): the real EMAIL transport (Resend)
+// BeautIzzy — Communication Core (Lot B): the real EMAIL transport (Resend)
 //
-// The ONLY module that talks to the provider. It composes the fixed Souris
+// The ONLY module that talks to the provider. It composes the fixed BeautIzzy
 // templates (email-content.ts), posts them to the Resend REST API, and
 // translates the provider's answer into the three transport classes — nothing
 // provider-specific leaks past this file:

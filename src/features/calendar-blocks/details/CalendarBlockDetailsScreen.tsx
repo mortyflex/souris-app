@@ -1,4 +1,4 @@
-// Souris — Calendar Block details
+// BeautIzzy — Calendar Block details
 //
 // What a tap on an « Indisponible » block opens: a dedicated, deliberately
 // small sheet — NOT Appointment Details. It states that the slot is

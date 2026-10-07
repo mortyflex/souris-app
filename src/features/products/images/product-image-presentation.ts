@@ -1,4 +1,4 @@
-// Souris — Product image presentation heuristics
+// BeautIzzy — Product image presentation heuristics
 //
 // Pure helpers used by Product image components. The Product domain only
 // knows an optional `imageUri`; whether that image carries transparency is a

@@ -1,4 +1,4 @@
-// Souris — schema v15: per-appointment client reminder flag
+// BeautIzzy — schema v15: per-appointment client reminder flag
 // (docs/architecture/PERSISTENCE.md §4)
 
 import { isAppointmentClientReminderEnabled } from '@/domain/appointments';

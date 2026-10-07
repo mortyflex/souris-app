@@ -1,4 +1,4 @@
-// Souris — root navigation gate
+// BeautIzzy — root navigation gate
 //
 // Reads the Auth and Business session states, resolves ONE root route
 // (root-route.ts), and mounts only the matching route group through

@@ -1,4 +1,4 @@
-// Souris — Calendar Block form
+// BeautIzzy — Calendar Block form
 //
 // THE editor of personal unavailability, shared by creation (« Bloquer le
 // créneau ») and editing (« Enregistrer les modifications »). One compact,
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.base,
   },
-  // Subtle Souris-purple tint + a thicker accent border: selection never
+  // Subtle BeautIzzy-purple tint + a thicker accent border: selection never
   // rests on the fill colour alone (and the chip is a selected radio).
   chipSelected: {
     backgroundColor: semanticColors.surfaceLavender,

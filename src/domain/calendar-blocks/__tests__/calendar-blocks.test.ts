@@ -1,4 +1,4 @@
-// Souris — Calendar Block domain rules
+// BeautIzzy — Calendar Block domain rules
 //
 // Validity (start / end / reason), the staff-aware conflict rule against other
 // blocks and against the staff-required intervals of client Appointments, and

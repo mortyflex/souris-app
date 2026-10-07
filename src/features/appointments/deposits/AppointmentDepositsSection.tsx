@@ -1,4 +1,4 @@
-// Souris — « Acomptes » of Appointment Details
+// BeautIzzy — « Acomptes » of Appointment Details
 //
 // Compact on purpose — Details is not an accounting screen:
 //

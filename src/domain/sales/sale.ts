@@ -1,4 +1,4 @@
-// Souris — Sale domain rules
+// BeautIzzy — Sale domain rules
 //
 // Pure helpers over the canonical Sale model: quantity validation, derived
 // totals, and the SaleItem snapshot boundary. Nothing here mutates its input.

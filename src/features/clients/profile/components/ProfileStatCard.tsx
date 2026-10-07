@@ -1,4 +1,4 @@
-// Souris — Client Profile stat card
+// BeautIzzy — Client Profile stat card
 //
 // One glanceable figure of the profile's Activité grid: a small accent glyph
 // in a lavender disc, then the value in navy over a short soft label — the

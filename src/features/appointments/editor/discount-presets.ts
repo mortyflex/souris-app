@@ -1,4 +1,4 @@
-// Souris — Appointment discount presets (editor UI)
+// BeautIzzy — Appointment discount presets (editor UI)
 //
 // The quick choices the editor offers. They are a UI convenience only: an
 // Appointment stores the discount that was chosen, so changing these lists

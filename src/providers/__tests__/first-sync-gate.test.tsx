@@ -1,5 +1,5 @@
-// Souris — first-sync gate: an EMPTY device never becomes operational before
-// Souris knows what its account already holds (CLOUD_SYNC.md §17.3). The real
+// BeautIzzy — first-sync gate: an EMPTY device never becomes operational before
+// BeautIzzy knows what its account already holds (CLOUD_SYNC.md §17.3). The real
 // runner, the real root navigator, real SQLite and a contract-faithful remote.
 
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';

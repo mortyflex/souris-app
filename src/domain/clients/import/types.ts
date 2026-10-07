@@ -1,4 +1,4 @@
-// Souris — client import staging model
+// BeautIzzy — client import staging model
 //
 // ONE import pipeline, whatever the source:
 //

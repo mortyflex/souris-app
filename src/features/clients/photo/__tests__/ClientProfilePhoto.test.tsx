@@ -1,4 +1,4 @@
-// Souris — Client photo from the Client Profile: the portrait avatar opens the
+// BeautIzzy — Client photo from the Client Profile: the portrait avatar opens the
 // shared photo flow; a photo is normalized, uploaded, then referenced on the
 // Client; replacement never loses the previous photo; removal restores the
 // initials; another device resolves the same photo from its stable path.

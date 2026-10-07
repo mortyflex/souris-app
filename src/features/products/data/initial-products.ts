@@ -1,4 +1,4 @@
-// Souris — Initial (development) Product catalog
+// BeautIzzy — Initial (development) Product catalog
 //
 // The strictly-mapped legacy pilot products, reached only by the development
 // seed — a fresh production install starts empty. Legacy files are one-way import

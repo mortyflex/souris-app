@@ -1,4 +1,4 @@
-// Souris — Client email rules
+// BeautIzzy — Client email rules
 //
 // THE email rule of a Client, shared by manual creation / editing (the
 // Client form) and the client import review, so the two can never drift.

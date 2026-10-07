@@ -1,6 +1,6 @@
-// Souris — « Prendre un acompte » sheet
+// BeautIzzy — « Prendre un acompte » sheet
 //
-// The canonical Souris editing sheet (SheetEditingHeader: « Annuler » leading,
+// The canonical BeautIzzy editing sheet (SheetEditingHeader: « Annuler » leading,
 // the title, no eyebrow; drag handle, backdrop and swipe dismissal) in which
 // the professional records money received NOW, in advance, for an existing
 // Appointment. Nothing is written until « Encaisser l'acompte »; cancelling or

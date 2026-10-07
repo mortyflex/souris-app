@@ -1,4 +1,4 @@
-// Souris — client import: paste a list
+// BeautIzzy — client import: paste a list
 //
 // A plain multiline field filled with the system Paste action — no clipboard
 // API is read. The text stays in component memory only: never persisted,

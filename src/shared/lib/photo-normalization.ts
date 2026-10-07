@@ -1,6 +1,6 @@
-// Souris — photo normalization (Client photos, Product photos)
+// BeautIzzy — photo normalization (Client photos, Product photos)
 //
-// ONE pipeline for every photo Souris stores, configured per use:
+// ONE pipeline for every photo BeautIzzy stores, configured per use:
 //
 //   decode with its orientation applied (the pixels end up upright, so no
 //   EXIF rotation is needed anywhere downstream)

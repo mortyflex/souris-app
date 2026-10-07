@@ -1,6 +1,6 @@
-// Souris — DateNavigator
+// BeautIzzy — DateNavigator
 //
-// The ONE single-day navigation of Souris (Agenda Jour, Caisse Jour):
+// The ONE single-day navigation of BeautIzzy (Agenda Jour, Caisse Jour):
 //
 //   ╭────────────────────────────────────────────────╮
 //   │ ( ‹ )   Mercredi 16 sept.   ( calendar ) ( › ) │

@@ -1,4 +1,4 @@
-// Souris — Appointment creation: the « Client | Personnel » type choice
+// BeautIzzy — Appointment creation: the « Client | Personnel » type choice
 //
 // The sheet still opens on the unchanged client flow. « Personnel » replaces it
 // by ONE direct form that blocks the slot as unavailable — a Calendar Block:

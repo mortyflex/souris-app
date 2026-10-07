@@ -1,4 +1,4 @@
-// Souris — Screen
+// BeautIzzy — Screen
 //
 // Minimal shared screen wrapper.
 //

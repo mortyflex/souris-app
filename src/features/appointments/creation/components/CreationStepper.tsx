@@ -1,4 +1,4 @@
-// Souris — Creation stepper
+// BeautIzzy — Creation stepper
 //
 // Compact connected three-node stepper:
 //   ✓────────●────────○

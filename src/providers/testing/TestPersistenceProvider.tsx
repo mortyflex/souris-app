@@ -1,4 +1,4 @@
-// Souris — test persistence wrapper
+// BeautIzzy — test persistence wrapper
 //
 // Wraps the real PersistenceProvider around a fresh in-memory SQLite
 // database and in-memory files, seeded with the DEVELOPMENT seed (legacy

@@ -1,4 +1,4 @@
-// Souris — GlassSurface
+// BeautIzzy — GlassSurface
 //
 // The ONE light-glass material of the small floating controls — the back
 // button and Agenda previous / next (GlassIconButton), the floating + and the

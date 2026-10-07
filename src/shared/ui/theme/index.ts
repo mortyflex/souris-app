@@ -1,4 +1,4 @@
-// Souris — Native Design Tokens
+// BeautIzzy — Native Design Tokens
 //
 // Source of truth:
 //   docs/design/DESIGN_OVERRIDES.md
@@ -6,7 +6,7 @@
 //   docs/design/reference-export/tokens.css
 //   docs/design/reference-export/colors_and_type.css
 //
-// These tokens are the approved native runtime decisions for Souris. Canonical
+// These tokens are the approved native runtime decisions for BeautIzzy. Canonical
 // colors remain derived from the export; semantic aliases and native depth/motion
 // follow the newer runtime direction recorded in DESIGN_OVERRIDES.md.
 

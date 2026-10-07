@@ -1,4 +1,4 @@
-// Souris — Client picker step (shared Client selection)
+// BeautIzzy — Client picker step (shared Client selection)
 //
 // Search + virtualized list over the SHARED Client session source (the
 // ACTIVE Clients of the Clientes directory — archived Clients are excluded

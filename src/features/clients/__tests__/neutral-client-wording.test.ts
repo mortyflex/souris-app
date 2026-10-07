@@ -1,6 +1,6 @@
-// Souris — neutral client wording guard
+// BeautIzzy — neutral client wording guard
 //
-// Souris serves professionals whose clientele is women, men or both: the
+// BeautIzzy serves professionals whose clientele is women, men or both: the
 // visible wording is « Clientèle » for the directory and neutral « client »
 // for one person (« Ajouter un client », « Aucun client »). This guard keeps
 // the feminine « cliente » / « clientes » out of the copy a professional can

@@ -1,10 +1,10 @@
-// Souris — Legacy services adapter
+// BeautIzzy — Legacy services adapter
 //
 // Source: src/features/services/data/legacy-services.ts
-// Target: Canonical Souris Service (src/domain/appointments/types.ts)
+// Target: Canonical BeautIzzy Service (src/domain/appointments/types.ts)
 //
 // This adapter transforms the legacy SERVICE records into canonical
-// Souris Service objects. Services are simple staff-required work
+// BeautIzzy Service objects. Services are simple staff-required work
 // with no processing time (unlike TECHNIQUEs).
 
 import type { Service, ServicePhase } from '@/domain/appointments';

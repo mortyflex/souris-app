@@ -1,4 +1,4 @@
-// Souris — user-facing Auth wording (French)
+// BeautIzzy — user-facing Auth wording (French)
 //
 // Every failure code maps to one concise sentence. Provider error strings
 // never reach the UI.

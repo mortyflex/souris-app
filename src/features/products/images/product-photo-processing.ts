@@ -1,4 +1,4 @@
-// Souris — Product photo processing
+// BeautIzzy — Product photo processing
 //
 // Every new Product photo goes through the shared normalization
 // (shared/lib/photo-normalization.ts). Products are NOT cropped: the

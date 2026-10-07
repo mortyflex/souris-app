@@ -1,4 +1,4 @@
-// Souris — Communication Core (Lot B): the Resend EMAIL transport
+// BeautIzzy — Communication Core (Lot B): the Resend EMAIL transport
 //
 // Every provider call is a mocked fetch: no test ever reaches the network,
 // and the suite locks in the result mapping, the stable idempotency key and
@@ -105,12 +105,12 @@ describe('successful dispatch', () => {
     const transport = new ResendEmailTransport({
       apiKey: API_KEY,
       fromEmail: 'rappels@souris.test',
-      logoUrl: 'https://cdn.souris.test/brand/logo-mark.png',
+      logoUrl: 'https://cdn.souris.test/brand/beautizzy-email-symbol.png',
       fetchFn,
     });
     await transport.send(message);
     const body = JSON.parse(String(requests[0].init.body));
-    expect(body.html).toContain('<img src="https://cdn.souris.test/brand/logo-mark.png" width="23" height="30" alt="BeautIzzy"');
+    expect(body.html).toContain('<img src="https://cdn.souris.test/brand/beautizzy-email-symbol.png" width="23" height="30" alt="BeautIzzy"');
     expect(body.text).not.toContain('<img');
   });
 

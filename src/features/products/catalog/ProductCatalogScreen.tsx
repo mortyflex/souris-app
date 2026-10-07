@@ -1,4 +1,4 @@
-// Souris — Products catalog screen (Produits tab)
+// BeautIzzy — Products catalog screen (Produits tab)
 //
 // Light operational product catalog: search, Actifs/Inactifs, deterministic
 // French alphabetical order. With no inactive Product the list is the plain

@@ -1,4 +1,4 @@
-// Souris — Catalog adapter
+// BeautIzzy — Catalog adapter
 //
 // Combines the one-way legacy imports into canonical Service values.
 

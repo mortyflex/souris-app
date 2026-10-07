@@ -1,4 +1,4 @@
-// Souris — Appointment editing vs Calendar Blocks
+// BeautIzzy — Appointment editing vs Calendar Blocks
 //
 // A client Appointment cannot be MOVED into personal unavailability of its
 // staff member — judged on the staff-required phases only — while an edit that

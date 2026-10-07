@@ -1,4 +1,4 @@
-// Souris — cloud sync runner (Cloud Sync V1C push, V1D restore + pull, V1D.1 seamless bootstrap)
+// BeautIzzy — cloud sync runner (Cloud Sync V1C push, V1D restore + pull, V1D.1 seamless bootstrap)
 //
 // The ONLY place that decides WHEN the sync worker runs. It renders nothing
 // of its own (children pass through), owns no state the UI reads, and never

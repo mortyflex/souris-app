@@ -1,4 +1,4 @@
-// Souris — shared month calendar: French Monday-first grid, month browsing
+// BeautIzzy — shared month calendar: French Monday-first grid, month browsing
 // through the shared glass PeriodNavigator, caller-provided decorations (a
 // quiet dot, an intensity halo), today vs selected, and a direct tap on any
 // shown day.

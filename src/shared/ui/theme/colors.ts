@@ -1,4 +1,4 @@
-// Souris design tokens — Colors
+// BeautIzzy design tokens — Colors
 //
 // Source: docs/design/DESIGN.md §2, docs/design/reference-export/colors_and_type.css
 //
@@ -178,10 +178,11 @@ export const appointmentPastels = {
   },
 } as const;
 
-// Brand identity (assets/brand/logo-*.png) — the plum of the word "Souris".
-// Measured, not invented: the median opaque colour of the word in
-// logo-lockup.png. 12.1:1 on white. For brand-voiced text that sits with the
-// logo (the Welcome headline); everyday UI text stays `foreground`.
+// Brand plum. Historical value: it was measured on the wordmark of the
+// previous Souris identity (a logo file since removed) and is kept unchanged
+// until the BeautIzzy brand colour is decided. 12.1:1 on white. For
+// brand-voiced text that sits with the logo (the Welcome headline); everyday
+// UI text stays `foreground`.
 export const brand = {
   plum: "#5F1852",
 } as const;
@@ -215,7 +216,7 @@ export const receiptPaper = {
 //
 // Medals: muted metal discs — a warm antique gold, a pearl silver, a soft
 // bronze — each with a darker rim, a lighter inset ring and the digit written
-// on it (≥ 6:1 on its fill), hanging from two ribbon tails in the Souris
+// on it (≥ 6:1 on its fill), hanging from two ribbon tails in the BeautIzzy
 // lilac family. The colour never carries the rank alone: it is also written
 // and spoken.
 export const receiptMedal = {
@@ -258,7 +259,7 @@ export const receiptPodium = {
 export const foregroundSoft = "#4A496A";
 
 // Native runtime roles introduced by the soft editorial refresh.
-// Every role aliases an approved canonical or derived Souris color above.
+// Every role aliases an approved canonical or derived BeautIzzy color above.
 // Screens should use these names when the visual decision is semantic rather
 // than tied to a particular palette step.
 //
@@ -298,7 +299,7 @@ export const semanticColors = {
   surfaceLavender: lavender.lav050,
   surfaceLavenderStrong: lavender.lav100,
   // Media surface behind Product photos / stickers: dense enough for a white
-  // contour to read, still a light Souris lavender.
+  // contour to read, still a light BeautIzzy lavender.
   surfaceMedia: lavender.lav200,
   surfaceRose: rose.rose050,
   surfacePeach: peach.peach050,
@@ -313,7 +314,7 @@ export const semanticColors = {
 } as const;
 
 // Month calendar intensity (DESIGN_OVERRIDES.md §21) — the soft halo behind a
-// day number, three quiet strengths of the canonical Souris violet
+// day number, three quiet strengths of the canonical BeautIzzy violet
 // (`colors.accent`, rgb 115 84 199) — never a financial red / green, never a
 // gradient. Every step is stronger than the selected fill (`lav100`, about
 // 10 % of the violet), so a selected circle still reads inside its halo. The
@@ -340,7 +341,7 @@ export const calendarBlockColors = {
 
 // Prestation categories of the shared catalogue and « Modifier le
 // rendez-vous » (DESIGN_OVERRIDES.md §27, §28) — keyed by the domain
-// `ServiceType`. SERVICE keeps the Souris violet,
+// `ServiceType`. SERVICE keeps the BeautIzzy violet,
 // TECHNIQUE the complementary azure. Colour is never the only cue: the
 // segment label, the list context and the spoken category go with it.
 //   accent — small graphics: leading dot, selection check, hairline

@@ -1,4 +1,4 @@
-// Souris — the development sync control must never be part of a release.
+// BeautIzzy — the development sync control must never be part of a release.
 //
 // Jest always runs with `__DEV__ = true`, so the bundle boundary itself is
 // guarded at the source level (same approach as persistence/source-hygiene):

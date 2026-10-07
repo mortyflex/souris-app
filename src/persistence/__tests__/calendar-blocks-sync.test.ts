@@ -1,4 +1,4 @@
-// Souris — Calendar Blocks through the existing aggregate sync
+// BeautIzzy — Calendar Blocks through the existing aggregate sync
 // (docs/architecture/CLOUD_SYNC.md §20): real stores, the real worker, the
 // contract-faithful in-memory remote. No second sync engine: a block is one
 // more aggregate type of the same outbox → push → pull / restore pipeline.

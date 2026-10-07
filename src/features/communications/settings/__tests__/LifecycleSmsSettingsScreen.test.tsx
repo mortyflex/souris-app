@@ -1,4 +1,4 @@
-// Souris — SMS fidélisation Settings screen (SMS pivot Phase 2)
+// BeautIzzy — SMS fidélisation Settings screen (SMS pivot Phase 2)
 //
 // The real screen against the fake gateway: both automations OFF by
 // default with the server-returned knobs, each switch persisted server-side

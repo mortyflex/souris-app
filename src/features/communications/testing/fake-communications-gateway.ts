@@ -1,4 +1,4 @@
-// Souris — in-memory CommunicationsGateway (tests only)
+// BeautIzzy — in-memory CommunicationsGateway (tests only)
 //
 // The server contract of the three Lot B owner RPCs, deterministic and
 // offline: a per-Business preference row (disabled by default, like the

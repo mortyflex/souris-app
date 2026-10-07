@@ -1,4 +1,4 @@
-// Souris — DELIBERATELY BROKEN fixture for worklet-closures.test.ts.
+// BeautIzzy — DELIBERATELY BROKEN fixture for worklet-closures.test.ts.
 //
 // Never import this from application code. It reproduces the Welcome runtime
 // bug: `clamp` is declared inside a worklet, the React Compiler hoists it out

@@ -1,4 +1,4 @@
-// Souris — Appointment final checkout settlement (pure)
+// BeautIzzy — Appointment final checkout settlement (pure)
 //
 // Source: docs/domain/APPOINTMENTS.md §25b
 //

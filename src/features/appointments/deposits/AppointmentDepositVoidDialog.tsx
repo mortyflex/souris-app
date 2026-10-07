@@ -1,4 +1,4 @@
-// Souris — « Annuler l'acompte » confirmation
+// BeautIzzy — « Annuler l'acompte » confirmation
 //
 // Voiding CORRECTS a mistaken entry: it is not a refund, and the wording says
 // so. The deposit stays in the Appointment history as « Annulé » and stops

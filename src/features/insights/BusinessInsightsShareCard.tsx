@@ -1,11 +1,11 @@
-// Souris — BusinessInsightsShareCard
+// BeautIzzy — BusinessInsightsShareCard
 //
 // The shareable visual of « Tops & tendances »: a 9:16 story card of the period
 // and the category being browsed, exported as an image (DESIGN_OVERRIDES.md
 // §35). It is its own composition, never a capture of the private receipt:
 // no controls, no carousel, no printer, no dimmed Agenda — only the card.
 //
-//   top      the Souris mark (restrained) · « TOPS & TENDANCES » · the period
+//   top      the BeautIzzy mark (restrained) · « TOPS & TENDANCES » · the period
 //   summary  lavender panel: « ENCAISSÉ SUR LA PÉRIODE » over a frosted
 //            private amount · « 28 rendez-vous » ↔ « Panier moyen » and its
 //            frosted private amount — turnover is never printed on a public
@@ -13,9 +13,9 @@
 //   tear line
 //   highlight  the podium of the category on screen, as the ticket shows it
 //            (prestations, produits, clientes) · a calm line (empty period)
-//   footer   « Créé avec » + the Souris wordmark (shared CreatedWithSouris)
+//   footer   « Créé avec » + the BeautIzzy wordmark (shared CreatedWithBeautIzzy)
 //
-// The professional's result, powered by Souris: the brand frames the card,
+// The professional's result, powered by BeautIzzy: the brand frames the card,
 // the figures carry it. The warm paper runs full-bleed, edge to edge of the
 // image; generous margins keep text clear of the areas social apps crop or
 // cover.
@@ -29,7 +29,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
 import { BrandMark } from '@/shared/ui/BrandMark';
-import { CreatedWithSouris } from '@/shared/ui/CreatedWithSouris';
+import { CreatedWithBeautIzzy } from '@/shared/ui/CreatedWithBeautIzzy';
 import { ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
 import {
   SHARE_CARD_BACKGROUND,
@@ -106,7 +106,7 @@ export function BusinessInsightsShareCard({ model, testID }: BusinessInsightsSha
         <Highlight highlight={model.highlight} />
       </View>
 
-      <CreatedWithSouris {...FIXED} testID={testID ? `${testID}-footer` : undefined} />
+      <CreatedWithBeautIzzy {...FIXED} testID={testID ? `${testID}-footer` : undefined} />
     </ShareCardCanvas>
   );
 }

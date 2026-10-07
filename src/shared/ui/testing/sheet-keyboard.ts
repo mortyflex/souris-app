@@ -1,4 +1,4 @@
-// Souris — test helpers for keyboard-avoiding sheets (never imported by app code)
+// BeautIzzy — test helpers for keyboard-avoiding sheets (never imported by app code)
 //
 // Jest has no software keyboard: `captureKeyboardEvents` records every
 // Keyboard listener so a test can play a show / hide, and `sheetAnchor`

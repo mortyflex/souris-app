@@ -1,4 +1,4 @@
-// Souris — test helpers for shared-UI transitions (never imported by app code)
+// BeautIzzy — test helpers for shared-UI transitions (never imported by app code)
 //
 // The shared BottomSheet slides down before it unmounts and the floating
 // create button reveals shortly after focus. Under Jest the Animated

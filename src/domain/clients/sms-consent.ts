@@ -1,4 +1,4 @@
-// Souris — Client promotional SMS consent
+// BeautIzzy — Client promotional SMS consent
 //
 // Explicit consent for promotional lifecycle SMS (birthday offer, win-back —
 // docs/architecture/COMMUNICATIONS.md, SMS pivot Phase 2). Three states:

@@ -1,4 +1,4 @@
-// Souris — Product image
+// BeautIzzy — Product image
 //
 // One consistent primary-image treatment across catalog, details, and form
 // (docs/design/DESIGN_OVERRIDES.md §11 and §13).

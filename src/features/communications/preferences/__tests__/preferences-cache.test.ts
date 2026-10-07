@@ -1,4 +1,4 @@
-// Souris — Business-scoped reminder preference cache (Lots B/C1)
+// BeautIzzy — Business-scoped reminder preference cache (Lots B/C1)
 //
 // Backward compatibility of the cached JSON: a cache written by a build
 // that predates the SMS switch has no `smsRemindersEnabled` key and must

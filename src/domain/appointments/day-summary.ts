@@ -1,4 +1,4 @@
-// Souris — Appointment day / period summary (pure)
+// BeautIzzy — Appointment day / period summary (pure)
 //
 // Source: docs/domain/APPOINTMENTS.md §25c
 //

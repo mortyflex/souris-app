@@ -1,4 +1,4 @@
-// Souris — Appointment-linked Product deletion (pure)
+// BeautIzzy — Appointment-linked Product deletion (pure)
 //
 // Source: docs/domain/SALES.md §10
 //

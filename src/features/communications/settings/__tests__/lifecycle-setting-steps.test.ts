@@ -1,4 +1,4 @@
-// Souris — SMS fidélisation stepper rules
+// BeautIzzy — SMS fidélisation stepper rules
 
 import {
   canStepLifecycleSetting,

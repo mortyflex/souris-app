@@ -1,4 +1,4 @@
-// Souris — Sale domain types
+// BeautIzzy — Sale domain types
 //
 // Framework-independent canonical Product Sale model.
 // No React, React Native, Expo, or persistence imports.
@@ -21,7 +21,7 @@ export interface SaleItem {
   /** Stable Product identity at sale time; the Product may later disappear. */
   readonly productId: string;
   readonly productName: string;
-  /** Souris money convention: finite number >= 0, snapshotted at completion. */
+  /** BeautIzzy money convention: finite number >= 0, snapshotted at completion. */
   readonly unitPrice: number;
   /** Whole units: integer >= 1. */
   readonly quantity: number;

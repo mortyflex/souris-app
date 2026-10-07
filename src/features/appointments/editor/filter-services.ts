@@ -1,4 +1,4 @@
-// Souris — Catalog search for the Appointment service editor
+// BeautIzzy — Catalog search for the Appointment service editor
 //
 // Name-substring search over the normalized catalog, case- and
 // accent-insensitive. The full catalog is searched; no display cap is

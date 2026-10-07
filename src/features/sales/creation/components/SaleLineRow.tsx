@@ -1,4 +1,4 @@
-// Souris — Sale line row
+// BeautIzzy — Sale line row
 //
 // One draft line of « Produits ajoutés », drawn inside that section's
 // GroupedSurface (the surface owns the separators): thumbnail, name (two

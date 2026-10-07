@@ -1,4 +1,4 @@
-// Souris — Business resolution for an authenticated owner (pure orchestration)
+// BeautIzzy — Business resolution for an authenticated owner (pure orchestration)
 //
 //   local binding present
 //     ├─ same owner       → ready (no network needed: offline launches work)

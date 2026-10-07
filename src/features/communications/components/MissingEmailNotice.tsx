@@ -1,4 +1,4 @@
-// Souris — missing client email warning (appointment creation / editing)
+// BeautIzzy — missing client email warning (appointment creation / editing)
 //
 // Shown ONLY while everything else would send a reminder (global preference
 // on, appointment toggle on) but the selected Client has no usable email.

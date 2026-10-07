@@ -1,4 +1,4 @@
-// Souris — remote read → validated snapshot (Cloud Sync V1D)
+// BeautIzzy — remote read → validated snapshot (Cloud Sync V1D)
 //
 // Whatever `pullBusinessAggregates` returns is untrusted wire JSON. This
 // module is the gate between it and SQLite: the WHOLE answer is validated

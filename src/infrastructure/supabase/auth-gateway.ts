@@ -1,4 +1,4 @@
-// Souris — AuthGateway bound to Supabase Auth
+// BeautIzzy — AuthGateway bound to Supabase Auth
 //
 // Translates supabase-js calls and errors into the domain-facing contract.
 // Nothing here logs credentials, tokens, or session payloads.
@@ -30,7 +30,7 @@ export type SupabaseAuthApi = Pick<
 
 /**
  * Where the confirmation email link lands once Supabase verified the address:
- * the Souris app itself (app.json `scheme`), on the sign-in screen. Without it
+ * the BeautIzzy app itself (app.json `scheme`), on the sign-in screen. Without it
  * Supabase falls back to the project Site URL (localhost by default). The URL
  * must be allow-listed in Supabase › Authentication › URL Configuration.
  */

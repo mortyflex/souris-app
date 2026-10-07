@@ -1,4 +1,4 @@
-// Souris — schema v8: monetary values as integer cents (docs/architecture/PERSISTENCE.md §4)
+// BeautIzzy — schema v8: monetary values as integer cents (docs/architecture/PERSISTENCE.md §4)
 
 import { getAppointmentExpectedTotal } from '@/domain/appointments';
 import type { Appointment, Service } from '@/domain/appointments';

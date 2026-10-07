@@ -1,8 +1,8 @@
-# Souris — Architecture
+# BeautIzzy — Architecture
 
 ## 1. Purpose
 
-This document defines the architectural direction of Souris Native.
+This document defines the architectural direction of BeautIzzy Native.
 
 The goal is not to build a sophisticated enterprise architecture.
 
@@ -20,7 +20,7 @@ Architecture should reduce product risk, not create ceremony.
 
 # 2. Platform
 
-Souris is a native mobile application built with:
+BeautIzzy is a native mobile application built with:
 
 ```text
 React Native
@@ -94,7 +94,7 @@ route from the Auth and Business states (`src/providers/root-route.ts`) and guar
 The main navigation `(app)/(tabs)/_layout.tsx` is Expo Router's `NativeTabs`
 (`expo-router/unstable-native-tabs`): the platform's own tab bar (UIKit, Liquid Glass on iOS 26;
 Material bottom navigation on Android) with four static triggers — Agenda, Clientèle, Produits,
-Plus — wrapped in the Souris navigation theme (`src/providers/navigation-theme.ts`). Operational
+Plus — wrapped in the BeautIzzy navigation theme (`src/providers/navigation-theme.ts`). Operational
 workflows are pushed from the `(app)` Stack above the tabs, so the bar shows only on the four
 main screens. See `docs/design/DESIGN_OVERRIDES.md` §18.
 
@@ -807,7 +807,7 @@ Do not automatically begin later phases.
 
 # 31. Architectural Goal
 
-A developer opening Souris should be able to answer quickly:
+A developer opening BeautIzzy should be able to answer quickly:
 
 ```text
 Where is the business rule?
@@ -819,4 +819,4 @@ Where is the design specification?
 
 If answering these questions becomes difficult, the architecture is becoming too complicated.
 
-Souris should remain as simple internally as it aims to feel externally.
+BeautIzzy should remain as simple internally as it aims to feel externally.

@@ -1,4 +1,4 @@
-// Souris — standalone Sale payment rules
+// BeautIzzy — standalone Sale payment rules
 //
 // A Sale completed from Produits (« Nouvelle vente ») records how much was
 // actually received by card and/or cash — tracking only, never processing.

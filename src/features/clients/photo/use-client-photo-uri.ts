@@ -1,4 +1,4 @@
-// Souris — displayable URI of a stored Client photo
+// BeautIzzy — displayable URI of a stored Client photo
 //
 // Resolves the stable `photoPath` into a local file at presentation time
 // (the shared Business media cache): undefined while unavailable —

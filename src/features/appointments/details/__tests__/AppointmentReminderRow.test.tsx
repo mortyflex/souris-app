@@ -1,4 +1,4 @@
-// Souris — « Rappel client » status line of Appointment Details (Lot B)
+// BeautIzzy — « Rappel client » status line of Appointment Details (Lot B)
 //
 // The row against the fake gateway: every projection status renders its
 // French line, NONE and every failure render NOTHING (fail safe, no

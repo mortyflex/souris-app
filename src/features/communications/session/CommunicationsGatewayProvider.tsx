@@ -1,4 +1,4 @@
-// Souris — the ONE communications gateway of the session tree
+// BeautIzzy — the ONE communications gateway of the session tree
 //
 // Mounted at the account root (like the other gateways) so both onboarding
 // (which saves the opt-in right after the Business is created) and the

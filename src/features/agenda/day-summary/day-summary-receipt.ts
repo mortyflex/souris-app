@@ -1,4 +1,4 @@
-// Souris — « Résumé du jour » receipt model
+// BeautIzzy — « Résumé du jour » receipt model
 //
 // Turns the domain day summary (`getAppointmentDaySummary`) into the French
 // text the receipt renders. « Résumé de la semaine » (`week-summary-receipt.ts`)

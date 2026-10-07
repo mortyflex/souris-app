@@ -1,4 +1,4 @@
-// Souris — Agenda appointment card (DESIGN_OVERRIDES.md §19)
+// BeautIzzy — Agenda appointment card (DESIGN_OVERRIDES.md §19)
 //
 // One staff segment of an Appointment on the Day timeline. The pastel family,
 // the flat fill and the 3 pt accent are untouched; the composition follows

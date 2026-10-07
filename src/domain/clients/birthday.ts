@@ -1,6 +1,6 @@
-// Souris — Client birthday helpers
+// BeautIzzy — Client birthday helpers
 //
-// A Client birthday is a DAY + MONTH only (docs/domain/CLIENTS.md §2). Souris
+// A Client birthday is a DAY + MONTH only (docs/domain/CLIENTS.md §2). BeautIzzy
 // needs it to recognize an upcoming birthday, offer a birthday promotion and
 // show « 21 juillet »; it never needs the year or the age, and it never
 // invents one. The canonical domain value is:

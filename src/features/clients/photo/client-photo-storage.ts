@@ -1,4 +1,4 @@
-// Souris — Client photo storage
+// BeautIzzy — Client photo storage
 //
 // A Client photo is user data that must survive a reinstall and reach every
 // device of the Business: its bytes live in the Business media storage and

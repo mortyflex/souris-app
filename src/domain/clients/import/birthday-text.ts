@@ -1,4 +1,4 @@
-// Souris — client import birthday text
+// BeautIzzy — client import birthday text
 //
 // Reads a French birthday out of free text:
 //

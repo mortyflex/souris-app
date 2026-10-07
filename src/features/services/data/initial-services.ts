@@ -1,4 +1,4 @@
-// Souris - Initial (development) Service catalog
+// BeautIzzy - Initial (development) Service catalog
 //
 // Legacy pilot files are one-way import sources reached only by the
 // development seed — a fresh production install starts empty. Runtime features receive only the

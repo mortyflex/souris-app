@@ -1,4 +1,4 @@
-// Souris — Welcome motifs
+// BeautIzzy — Welcome motifs
 //
 // A small weightless scene around the brand logo: six approved beauty
 // objects (assets/brand/welcome-floating) — hairdryer, scissors, mirror,

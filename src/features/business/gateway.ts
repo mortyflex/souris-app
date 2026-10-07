@@ -1,4 +1,4 @@
-// Souris — remote Business boundary (domain-facing)
+// BeautIzzy — remote Business boundary (domain-facing)
 //
 // The account-level remote model: ONE Business per authenticated owner.
 // Production binds it to the Supabase `businesses` table (RLS-scoped to the

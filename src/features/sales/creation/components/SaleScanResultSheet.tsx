@@ -1,4 +1,4 @@
-// Souris — Sale scan result
+// BeautIzzy — Sale scan result
 //
 // The Sale-specific interpretation of one scanned barcode, presented in the
 // shared BottomSheet. A unique ACTIVE match never reaches this sheet (it is

@@ -1,8 +1,8 @@
-// Souris — sheet route options
+// BeautIzzy — sheet route options
 //
-// The ONE place that configures how Expo Router presents Souris sheet routes,
+// The ONE place that configures how Expo Router presents BeautIzzy sheet routes,
 // so every route shares the canonical shell drawn by `SheetScreen` (satin
-// overlay surface, sheet radius, Souris grabber) and an explicit gesture policy.
+// overlay surface, sheet radius, BeautIzzy grabber) and an explicit gesture policy.
 //
 //   workflowSheet  NATIVE form sheet on the system's large detent (the only one
 //                  iOS 26 keeps attached to the screen edges), swipe-to-dismiss

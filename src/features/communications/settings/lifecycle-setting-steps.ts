@@ -1,4 +1,4 @@
-// Souris — SMS fidélisation stepper rules
+// BeautIzzy — SMS fidélisation stepper rules
 //
 // The UI ranges of the lifecycle SMS numeric knobs — deliberately NARROWER
 // than the server CHECKs (percent 1–100, validity 1–365, inactivity 1–730),

@@ -1,4 +1,4 @@
-// Souris — user-facing Business session wording (French)
+// BeautIzzy — user-facing Business session wording (French)
 
 import type { BusinessSessionFailureCode } from './session/resolve-business-session';
 

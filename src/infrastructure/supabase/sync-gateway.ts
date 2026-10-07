@@ -1,4 +1,4 @@
-// Souris — SyncRemoteGateway bound to the Supabase sync functions
+// BeautIzzy — SyncRemoteGateway bound to the Supabase sync functions
 //
 // The whole operational write surface of the application is two RPCs
 // (supabase/migrations/20260917120000_create_sync_push_functions.sql). No

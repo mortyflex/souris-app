@@ -1,4 +1,4 @@
-// Souris — Business media storage, provided from the application root
+// BeautIzzy — Business media storage, provided from the application root
 //
 // The root layout binds it to Supabase Storage (infrastructure/supabase);
 // tests provide an in-memory fake. Absent (Supabase not configured, or no

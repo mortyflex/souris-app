@@ -1,4 +1,4 @@
-// Souris — EstimationTicket
+// BeautIzzy — EstimationTicket
 //
 // The generated « Estimation tarifaire », presented by the SAME receipt
 // printer as « Résumé du jour » and « Tops & tendances »: the page dims, the
@@ -7,7 +7,7 @@
 // ONE interior (EstimationDocument), two presentations — the exact pipeline
 // of « Tops & tendances » (BusinessInsightsTicket):
 //
-//   printer   `ReceiptPaper`, the torn-edge ticket every Souris receipt feeds
+//   printer   `ReceiptPaper`, the torn-edge ticket every BeautIzzy receipt feeds
 //             out of the printer (BusinessInsightsReceipt uses the same)
 //   export    `ImageExportFrame` on the shared share ground, holding the
 //             shared `ShareCardCanvas` (BusinessInsightsShareCard uses the
@@ -18,7 +18,7 @@
 //
 // Actions under the paper, in the export language of « Tops & tendances »:
 //
-//   Fermer       closes. Nothing is kept anywhere in Souris.
+//   Fermer       closes. Nothing is kept anywhere in BeautIzzy.
 //   Enregistrer  the image straight to Photos (add-only permission) through
 //                the shared `saveViewToPhotos`: « Image enregistrée dans
 //                Photos » and one success haptic once the library has it.

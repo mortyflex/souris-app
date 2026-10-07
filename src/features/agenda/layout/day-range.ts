@@ -1,4 +1,4 @@
-// Souris — Agenda Day visible range
+// BeautIzzy — Agenda Day visible range
 //
 // The Day timeline normally spans the operational day (08:00 → 20:00). It is
 // not a clipping boundary: a late or long Appointment extends the visible

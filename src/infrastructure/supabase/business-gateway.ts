@@ -1,4 +1,4 @@
-// Souris — BusinessGateway bound to the Supabase `businesses` table
+// BeautIzzy — BusinessGateway bound to the Supabase `businesses` table
 //
 // Row Level Security already scopes every query to the authenticated owner;
 // the explicit `owner_user_id` filter keeps the intent visible and the

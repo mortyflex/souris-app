@@ -1,8 +1,8 @@
-# Souris — Client Domain
+# BeautIzzy — Client Domain
 
 ## 1. Purpose
 
-This document defines the Client identity model of Souris.
+This document defines the Client identity model of BeautIzzy.
 
 A Client selected during Appointment creation is the SAME Client later used by:
 
@@ -43,7 +43,7 @@ lastName?   string
 phone?      string
 email?      string
 birthday?   { month, day }   day + month only, never a year
-notes?      string           free-text professional note written in Souris
+notes?      string           free-text professional note written in BeautIzzy
 smsMarketingConsent? record  explicit promotional SMS consent + audit pair, absent = UNKNOWN
 archivedAt? Date             lifecycle marker, absent while active
 ```
@@ -53,7 +53,7 @@ information is edited, archived, or restored.
 
 ### birthday
 
-Souris needs a Client birthday to recognize an upcoming birthday, offer a
+BeautIzzy needs a Client birthday to recognize an upcoming birthday, offer a
 birthday promotion and show it — never to compute an age. The canonical value
 is therefore a DAY + MONTH pair with no year:
 
@@ -156,7 +156,7 @@ Still NOT implemented:
 
 ### notes
 
-One optional free-text note per Client, written in Souris by the
+One optional free-text note per Client, written in BeautIzzy by the
 professional: allergies, product sensitivities, preferences, useful context,
 practical information. Rules (`src/domain/clients/notes.ts`):
 
@@ -171,13 +171,13 @@ practical information. Rules (`src/domain/clients/notes.ts`):
   preserved, absent when there is no note) and edited in the shared Client
   form. They never appear in the directory rows and are NOT searchable:
   search still matches names and phone only;
-- notes are Souris-created data. The legacy `notes` / `importedVisitNotes`
+- notes are BeautIzzy-created data. The legacy `notes` / `importedVisitNotes`
   fields are still never imported (§3);
 - notes and birthday never influence the active-Client count, archiving,
   ordering, or search results.
 
 Activity statistics (appointment counts, total spent, upcoming appointments)
-are never stored on the Client. They are always DERIVED from Souris
+are never stored on the Client. They are always DERIVED from BeautIzzy
 Appointment state through `clientId`.
 
 Purchased products are derived from Sales through `clientId` and never
@@ -215,7 +215,7 @@ smsMarketingConsent?: { status: OPTED_IN | OPTED_OUT, updatedAt: Date,
 
 ### photoPath
 
-One optional portrait per Client, taken or chosen in Souris
+One optional portrait per Client, taken or chosen in BeautIzzy
 (`src/features/clients/photo`):
 
 - the Client carries only `photoPath?: string` — the STABLE object path of
@@ -252,7 +252,7 @@ One optional portrait per Client, taken or chosen in Souris
 
 ## 3. Legacy Import Contract
 
-The old Souris address book may contain records with fields such as:
+The old BeautIzzy address book may contain records with fields such as:
 
 ```text
 _id
@@ -304,7 +304,7 @@ The only tracked legacy-shaped dataset is the synthetic development one
 phone numbers from the ranges reserved for fiction, `example.com` emails),
 which keeps this contract exercised by the development seed and the tests.
 
-EVERYTHING ELSE is ignored. In particular, Souris never imports:
+EVERYTHING ELSE is ignored. In particular, BeautIzzy never imports:
 
 ```text
 old visits
@@ -317,7 +317,7 @@ old notes
 old imported visit notes
 ```
 
-Souris commercial and appointment history starts from zero.
+BeautIzzy commercial and appointment history starts from zero.
 
 Empty optional values become `undefined`.
 
@@ -325,7 +325,7 @@ Empty optional values become `undefined`.
 
 ## 3b. Client Import — « Importer ma clientèle »
 
-The professional's own address book enters Souris through ONE shared import pipeline, whatever
+The professional's own address book enters BeautIzzy through ONE shared import pipeline, whatever
 the source:
 
 ```text
@@ -509,9 +509,9 @@ relationship and resolution both go through the stable id.
 
 ---
 
-## 5. Souris-Generated History
+## 5. BeautIzzy-Generated History
 
-A Client's appointment history contains only Appointments created in Souris:
+A Client's appointment history contains only Appointments created in BeautIzzy:
 
 ```text
 appointment.clientId === client.id
@@ -534,7 +534,7 @@ History is sorted by appointment date, newest first, and never mutated.
 
 ## 6. Derived Client Activity
 
-The following values are DERIVED from Souris Appointment state and are never
+The following values are DERIVED from BeautIzzy Appointment state and are never
 persisted on the Client:
 
 ```text

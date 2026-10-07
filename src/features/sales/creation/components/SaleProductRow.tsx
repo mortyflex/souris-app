@@ -1,4 +1,4 @@
-// Souris — Sale product result row
+// BeautIzzy — Sale product result row
 //
 // A search result inside Sale creation, drawn inside the « Résultats »
 // GroupedSurface (the surface owns the separators). Every row states where

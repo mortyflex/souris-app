@@ -1,7 +1,7 @@
-// Souris — permanent Client deletion dialog
+// BeautIzzy — permanent Client deletion dialog
 //
 // Reached only from an ARCHIVED Client profile, after the database-backed
-// eligibility check. Two shapes on the shared Souris confirmation dialog,
+// eligibility check. Two shapes on the shared BeautIzzy confirmation dialog,
 // never both:
 //
 //   confirm  → irreversible confirmation (Annuler / Supprimer)

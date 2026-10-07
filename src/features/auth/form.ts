@@ -1,4 +1,4 @@
-// Souris — credential form rules (pure)
+// BeautIzzy — credential form rules (pure)
 //
 // Email normalization and the minimal local validation shared by sign-up
 // and sign-in. Supabase remains the authority (its own rules are surfaced

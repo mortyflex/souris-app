@@ -1,4 +1,4 @@
-// Souris — Client Profile quick action
+// BeautIzzy — Client Profile quick action
 //
 // One compact tile of the profile's action row: an accent glyph in a quiet
 // lavender disc beside a navy label, on a white card. Tiles share the row

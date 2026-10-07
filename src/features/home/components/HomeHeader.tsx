@@ -1,4 +1,4 @@
-// Souris — Accueil welcome
+// BeautIzzy — Accueil welcome
 //
 // A compact branded welcome: the editorial BeautIzzy logo (BrandMark — the
 // one way the app draws its identity) with today's date facing it, then the

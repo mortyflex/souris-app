@@ -1,9 +1,9 @@
-// Souris — Client avatar
+// BeautIzzy — Client avatar
 //
 // The ONE identity frame of a Client. Two states, one frame:
 //
 // - photo: a portrait fills the frame (`cover`: cropped, never distorted);
-// - initials: up to two initials on the quiet lavender of Souris.
+// - initials: up to two initials on the quiet lavender of BeautIzzy.
 //
 // Three shapes of the same square: a `circle` for compact uses, the
 // softly rounded `portrait` of the Client Profile, large enough for a real

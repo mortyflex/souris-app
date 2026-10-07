@@ -1,4 +1,4 @@
-// Souris — Caisse heatmap hint: the device-local « seen » flag
+// BeautIzzy — Caisse heatmap hint: the device-local « seen » flag
 //
 // Whether the explanation of the month calendar's revenue halos was
 // understood on THIS installation. A UI preference, not business data: it

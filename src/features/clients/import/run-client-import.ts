@@ -1,4 +1,4 @@
-// Souris — confirmed client import run (chunked)
+// BeautIzzy — confirmed client import run (chunked)
 //
 // Writes the confirmed Clients in CHUNKS, one SQLite transaction each
 // (`ClientSessionValue.addClients`), yielding to the UI between two chunks

@@ -1,4 +1,4 @@
-// Souris — Communication Core (SMS pivot Phase 2): the Twilio SMS transport
+// BeautIzzy — Communication Core (SMS pivot Phase 2): the Twilio SMS transport
 //
 // Reusable provider infrastructure, tested with a DETERMINISTIC FAKE
 // renderer over the client LIFECYCLE kinds (the production renderer has its
@@ -20,7 +20,7 @@ const ACCOUNT_SID = 'AC-fake-account-sid';
 const AUTH_TOKEN = 'fake-auth-token';
 const FROM_NUMBER = '+15005550006';
 const FAKE_SID = `SM${'0'.repeat(32)}`;
-const FAKE_BODY = 'Bonjour de Souris (contenu de test).';
+const FAKE_BODY = 'Bonjour de BeautIzzy (contenu de test).';
 
 /**
  * Deterministic test renderer over the LIFECYCLE kinds (Phase 2): renders

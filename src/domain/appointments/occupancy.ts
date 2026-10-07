@@ -1,4 +1,4 @@
-// Souris — Appointment staff occupancy
+// BeautIzzy — Appointment staff occupancy
 //
 // Source: docs/domain/APPOINTMENTS.md §12, docs/domain/CALENDAR_BLOCKS.md §5
 //

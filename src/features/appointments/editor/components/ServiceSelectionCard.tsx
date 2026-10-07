@@ -1,4 +1,4 @@
-// Souris — Service selection card (shared prestation catalogue)
+// BeautIzzy — Service selection card (shared prestation catalogue)
 //
 // ONE selectable card for « Nouveau rendez-vous » and « Modifier le
 // rendez-vous » (DESIGN_OVERRIDES.md §22, §27): name (two lines at most),

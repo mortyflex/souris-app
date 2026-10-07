@@ -1,4 +1,4 @@
-// Souris — Communication Core: the worker pass
+// BeautIzzy — Communication Core: the worker pass
 //
 // One invocation = FIRST re-run any failed trigger reconciliations
 // (reconciliation.ts — a recovered reconciliation may enqueue an immediate

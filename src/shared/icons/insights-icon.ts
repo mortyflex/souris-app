@@ -1,4 +1,4 @@
-// Souris — insights icon
+// BeautIzzy — insights icon
 //
 // The ONE glyph of « Tops & tendances »: the Agenda + menu option and the
 // receipt header. A rising line chart — `chart.line.uptrend.xyaxis` ships

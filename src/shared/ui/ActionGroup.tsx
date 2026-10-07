@@ -1,8 +1,8 @@
-// Souris — ActionGroup
+// BeautIzzy — ActionGroup
 //
 // ONE white rounded surface of stacked action rows: accent glyph, navy label,
 // hairline separators aligned on the labels; destructive actions in rose.
-// The row language of every Souris action list — the « ••• » drawer of detail
+// The row language of every BeautIzzy action list — the « ••• » drawer of detail
 // screens (DetailActionsSheet) and the operational actions of the Client
 // Profile. Choosing a row only reports its key; behaviour stays with the
 // caller.

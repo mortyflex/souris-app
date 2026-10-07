@@ -1,4 +1,4 @@
-// Souris — DEVICE_ACCOUNT_CONFLICT
+// BeautIzzy — DEVICE_ACCOUNT_CONFLICT
 //
 // The local database already belongs to another account. V1 keeps ONE
 // Business per device: nothing from that Business is shown, rebound, or

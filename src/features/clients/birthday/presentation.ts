@@ -1,4 +1,4 @@
-// Souris — birthday copy
+// BeautIzzy — birthday copy
 //
 // The French wording of the birthday reminders. Friendly and professional,
 // never sentimental. No emoji: the shared cake glyph (birthday-icon) carries

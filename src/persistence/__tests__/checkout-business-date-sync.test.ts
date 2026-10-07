@@ -1,4 +1,4 @@
-// Souris — a late checkout dated « Jour du rendez-vous », recorded OFFLINE and
+// BeautIzzy — a late checkout dated « Jour du rendez-vous », recorded OFFLINE and
 // synced the next day: `paid_at` is the instant chosen on the device, carried
 // unchanged through push, pull and a fresh-device restore — never the record,
 // push or server insertion time — so the Caisse day never moves

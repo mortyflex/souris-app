@@ -1,6 +1,6 @@
-// Souris — WheelColumn
+// BeautIzzy — WheelColumn
 //
-// ONE vertically snapping wheel column, the mechanics shared by every Souris
+// ONE vertically snapping wheel column, the mechanics shared by every BeautIzzy
 // wheel (birthday day / month, appointment start time). Built with a plain
 // React Native ScrollView: the lists are short (no virtualization needed) and
 // a wheel usually lives inside a form's own vertical ScrollView, where a

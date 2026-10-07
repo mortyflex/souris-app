@@ -1,4 +1,4 @@
-// Souris — ScreenWatermarkIcon
+// BeautIzzy — ScreenWatermarkIcon
 //
 // The subtle identity element of the four main tabs: one large, low-contrast
 // semantic symbol anchored in the top-right corner of the page surface,

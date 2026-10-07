@@ -1,6 +1,6 @@
-// Souris — Appointment lifecycle sheets (cancellation, no-show)
+// BeautIzzy — Appointment lifecycle sheets (cancellation, no-show)
 //
-// Both use the canonical Souris drawer with the shared SheetEditingHeader
+// Both use the canonical BeautIzzy drawer with the shared SheetEditingHeader
 // (« Fermer » leading, one centered title, no eyebrow), a keyboard-safe
 // scrollable body and one fixed destructive action. The cancellation reason
 // field never auto-focuses: the keyboard opens only when the professional

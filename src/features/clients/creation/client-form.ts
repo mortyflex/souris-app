@@ -1,4 +1,4 @@
-// Souris — Client form rules (create + edit)
+// BeautIzzy — Client form rules (create + edit)
 //
 // Extremely fast entry: Prénom required, everything else optional.
 // Inputs are trimmed; empty optional fields become undefined on the

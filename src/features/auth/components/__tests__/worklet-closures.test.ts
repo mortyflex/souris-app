@@ -1,4 +1,4 @@
-// Souris — Welcome worklet boundary (static check of the REAL Babel output)
+// BeautIzzy — Welcome worklet boundary (static check of the REAL Babel output)
 //
 // What this is: the Welcome files are transpiled exactly as Metro does it
 // (babel-preset-expo with the React Compiler on, then the worklets plugin) and

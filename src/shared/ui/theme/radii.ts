@@ -1,4 +1,4 @@
-// Souris design tokens — Border Radii
+// BeautIzzy design tokens — Border Radii
 //
 // Source: docs/design/DESIGN.md §4, docs/design/reference-export/tokens.css
 //

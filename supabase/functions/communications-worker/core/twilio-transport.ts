@@ -1,4 +1,4 @@
-// Souris — Communication Core (SMS pivot Phase 1): the Twilio SMS transport
+// BeautIzzy — Communication Core (SMS pivot Phase 1): the Twilio SMS transport
 //
 // REUSABLE PROVIDER INFRASTRUCTURE, deliberately NOT bound into the
 // production transport registry yet: appointment SMS reminders are retired,

@@ -1,4 +1,4 @@
-// Souris — Appointment deposit wording (« Acomptes »)
+// BeautIzzy — Appointment deposit wording (« Acomptes »)
 //
 // French labels only: every amount comes from the domain deposit helpers.
 // A VOIDED deposit always says so in words (« Annulé »), never by colour alone.

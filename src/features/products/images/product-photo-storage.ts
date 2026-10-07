@@ -1,4 +1,4 @@
-// Souris — the authoritative Product photo
+// BeautIzzy — the authoritative Product photo
 //
 // A Product has ONE photo for the whole Business, identified by the Product
 // id (never a barcode, a SKU or a name). Its bytes live in the Business media
