@@ -2,17 +2,17 @@
 //
 // The landing tab: what today holds, read top-down.
 //
-//   [ BeautIzzy wordmark ]              Lundi 5 octobre
-//   Bonjour
-//   Votre journée en un coup d’œil.
+//   [ BeautIzzy logo ]
+//   [ Bonjour — Votre journée en un coup d’œil. ]         the white greeting card
 //   [ PROCHAIN RENDEZ-VOUS — the one tinted hero card ]   → Appointment Details
+//     (the two cards share one row, 35 : 65, on every phone)
 //   Aujourd’hui                       Résumé du jour ›
 //   [ 2  Rendez-vous ]   [ 100 €  CA potentiel ]          the two primary figures
 //   [ Encaissements du jour ›  0 € encaissé | 100 € restant ]   secondary → Caisse
 //   Actions rapides
 //   ( Rendez-vous ) ( Client ) ( Produit ) ( Vente )      light shortcuts: they CREATE
 //   Cette semaine                Résumé de la semaine ›
-//   [ 12 rendez-vous | Déjà encaissé 860 € · CA potentiel 1 120 € ]   secondary
+//   [ 5–11 octobre · 12 rendez-vous ]  [ Déjà encaissé 860 € / CA potentiel 1 120 € ]
 //   Pilotage
 //   [ Créer une estimation › / Tops & tendances › ]       existing tools, consulted
 //
@@ -27,7 +27,15 @@
 
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  AppState,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
@@ -35,8 +43,6 @@ import { getAppointmentDaySummary, getAppointmentPeriodSummary } from '@/domain/
 import { getWeekDays } from '@/features/agenda/calendar/week';
 import { DaySummaryTicket } from '@/features/agenda/day-summary/DaySummaryTicket';
 import { WeekSummaryTicket } from '@/features/agenda/day-summary/WeekSummaryTicket';
-import { formatDaySummaryDate } from '@/features/agenda/day-summary/day-summary-receipt';
-import { formatWeekSummaryRange } from '@/features/agenda/day-summary/week-summary-receipt';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
@@ -60,13 +66,14 @@ import {
 } from '@/shared/ui/theme';
 
 import { HomeCollectionSummary } from './components/HomeCollectionSummary';
+import { HomeGreetingCard } from './components/HomeGreetingCard';
 import { HomeHeader } from './components/HomeHeader';
 import { HomeKpiCard } from './components/HomeKpiCard';
 import { HomeQuickAction } from './components/HomeQuickAction';
 import { HOME_TOOL_ROW_SEPARATOR_INSET, HomeToolRow } from './components/HomeToolRow';
 import { HomeWeekSummary } from './components/HomeWeekSummary';
 import { NextAppointmentCard } from './components/NextAppointmentCard';
-import { formatHomeGreeting, getNextAppointment } from './presentation';
+import { formatHomeGreeting, formatHomeWeekRange, getNextAppointment } from './presentation';
 
 const statIcons = {
   appointments: { ios: 'calendar', android: 'calendar_today' },
@@ -84,11 +91,21 @@ const actionIcons = {
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 const bottomPadding = Platform.OS === 'android' ? bottomClearance.android : bottomClearance.ios;
 
+/**
+ * The greeting and the next appointment share ONE row on every phone at the
+ * usual text sizes — iPhone SE included. They only stack when enlarged
+ * accessibility text leaves less than this much room, in pt at the default
+ * text size (`width / fontScale`): « Bonsoir » would no longer fit its column.
+ */
+export const HOME_HERO_ROW_MIN_WIDTH = 340;
+const HERO_ROW_GAP = 10;
+
 export function HomeScreen() {
   const router = useRouter();
   const { appointments, deposits } = useAppointmentSession();
   const { sales } = useSaleSession();
   const { getClientById } = useClientSession();
+  const { width, fontScale } = useWindowDimensions();
   // The device clock, never frozen at mount: refreshed on focus, on return
   // from background and every minute, so « today » and « next » stay true.
   const [now, setNow] = useState(() => new Date());
@@ -119,6 +136,8 @@ export function HomeScreen() {
     lastDay: weekDays[6],
   });
   const next = getNextAppointment(appointments, now);
+  // One row whenever there is a next appointment to face the greeting.
+  const heroInRow = next !== undefined && width / fontScale >= HOME_HERO_ROW_MIN_WIDTH;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']} testID="home-screen">
@@ -130,33 +149,43 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          <HomeHeader dateLabel={formatDaySummaryDate(now)} greeting={formatHomeGreeting(now)} />
+          <View style={styles.top}>
+            <HomeHeader />
 
-          {next ? (
-            <NextAppointmentCard
-              appointment={next.appointment}
-              client={getClientById(next.appointment.clientId)}
-              now={now}
-              onPress={() =>
-                router.push({
-                  pathname: '/appointments/[appointmentId]',
-                  params: { appointmentId: next.appointment.id },
-                })
-              }
-            />
-          ) : (
-            // Nothing to come: one quiet line, never a hero-sized empty card.
-            <View accessible style={styles.emptyNext} testID="home-next-appointment-empty">
-              <SymbolView
-                name={statIcons.appointments}
-                size={16}
-                tintColor={semanticColors.foregroundMuted}
+            <View style={heroInRow ? styles.heroRow : styles.heroStack} testID="home-hero">
+              <HomeGreetingCard
+                compact={heroInRow}
+                greeting={formatHomeGreeting(now)}
+                style={heroInRow && styles.heroGreeting}
               />
-              <AppText variant="metadata" style={styles.emptyNextText}>
-                Aucun rendez-vous à venir.
-              </AppText>
+              {next ? (
+                <NextAppointmentCard
+                  appointment={next.appointment}
+                  client={getClientById(next.appointment.clientId)}
+                  now={now}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/appointments/[appointmentId]',
+                      params: { appointmentId: next.appointment.id },
+                    })
+                  }
+                  style={heroInRow && styles.heroNext}
+                />
+              ) : (
+                // Nothing to come: one quiet line, never a hero-sized empty card.
+                <View accessible style={styles.emptyNext} testID="home-next-appointment-empty">
+                  <SymbolView
+                    name={statIcons.appointments}
+                    size={16}
+                    tintColor={semanticColors.foregroundMuted}
+                  />
+                  <AppText variant="metadata" style={styles.emptyNextText}>
+                    Aucun rendez-vous à venir.
+                  </AppText>
+                </View>
+              )}
             </View>
-          )}
+          </View>
 
           <View>
             <SectionHeader style={styles.sectionHeader} title="Aujourd’hui">
@@ -239,7 +268,7 @@ export function HomeScreen() {
               appointmentCount={weekSummary.appointmentCount}
               collected={formatCompactEuroCents(weekSummary.collectedCents)}
               potential={formatCompactEuroCents(weekSummary.potentialRevenueCents)}
-              rangeLabel={formatWeekSummaryRange(weekDays[0])}
+              rangeLabel={formatHomeWeekRange(weekDays[0])}
             />
           </View>
 
@@ -325,12 +354,21 @@ function SectionLink({
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screen, flex: 1 },
   scrollContent: { paddingBottom: bottomPadding, paddingTop: spacing.base },
-  content: { gap: spacing.xl, paddingHorizontal: horizontalGutter },
+  // Generous between sections; the cards themselves stay compact.
+  content: { gap: spacing['2xl'], paddingHorizontal: horizontalGutter },
+  // The logo and the row it introduces read as one group.
+  top: { gap: spacing.lg },
   sectionHeader: { marginBottom: spacing.sm },
   figures: { gap: spacing.sm },
   // Borderless like every other card of the page.
   tools: { borderWidth: 0 },
   row: { flexDirection: 'row', gap: spacing.sm },
+  heroStack: { gap: spacing.sm },
+  // Asymmetrical, 35 : 65 — the greeting is the narrow column, the appointment
+  // the wide one — and one shared height, compact rather than hero-sized.
+  heroRow: { flexDirection: 'row', gap: HERO_ROW_GAP, minHeight: 136 },
+  heroGreeting: { flex: 35 },
+  heroNext: { flex: 65 },
   emptyNext: {
     alignItems: 'center',
     backgroundColor: semanticColors.surfaceElevated,

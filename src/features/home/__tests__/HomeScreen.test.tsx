@@ -1,5 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 
 import { getAppointmentDaySummary, getAppointmentPeriodSummary } from '@/domain/appointments';
 import { getWeekDays } from '@/features/agenda/calendar/week';
@@ -19,7 +19,8 @@ import { formatCompactEuroCents } from '@/shared/lib/money';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 import { semanticColors } from '@/shared/ui/theme';
 
-import { HomeScreen } from '../HomeScreen';
+import { HOME_HERO_ROW_MIN_WIDTH, HomeScreen } from '../HomeScreen';
+import { HOME_LOGO_SIZE } from '../components/HomeHeader';
 import { LABEL_OVERHANG } from '../components/HomeQuickAction';
 
 const mockPush = jest.fn();
@@ -115,17 +116,68 @@ describe('HomeScreen', () => {
     jest.useRealTimers();
   });
 
-  it('welcomes with the BeautIzzy logo, a compact greeting and a quiet date', async () => {
+  it('opens on the BeautIzzy logo alone: larger, and no date or text beside it', async () => {
     const view = await renderHome(seededDatabase());
 
     const header = within(view.getByTestId('home-header'));
     // The canonical brand asset, announced once.
-    expect(header.getByLabelText('BeautIzzy').props.accessibilityRole).toBe('image');
-    const greeting = header.getByRole('header', { name: 'Bonjour' });
+    const logo = header.getByLabelText('BeautIzzy');
+    expect(logo.props.accessibilityRole).toBe('image');
+    expect(logo).toHaveStyle({ width: HOME_LOGO_SIZE });
+    expect(HOME_LOGO_SIZE).toBeGreaterThan(125);
+    expect(header.queryAllByText(/./)).toHaveLength(0);
+    expect(view.queryByText('Lundi 1 juin')).toBeNull();
+  });
+
+  it('greets in a plain white card: a compact greeting and one quiet line', async () => {
+    const view = await renderHome(seededDatabase());
+
+    const card = view.getByTestId('home-greeting');
+    expect(card).toHaveStyle({ backgroundColor: semanticColors.surfaceElevated });
+    const greeting = within(card).getByRole('header', { name: 'Bonjour' });
     // One step under a screen title: important, never dominant.
     expect(greeting).toHaveStyle({ fontSize: 23 });
-    expect(header.getByText('Votre journée en un coup d’œil.')).toBeTruthy();
-    expect(header.getByText('Lundi 1 juin')).toHaveStyle({ fontSize: 13.5 });
+    expect(within(card).getByText('Votre journée en un coup d’œil.')).toBeTruthy();
+  });
+
+  it.each([
+    ['iPhone SE', 375],
+    ['iPhone 17', 402],
+    ['iPhone 17 Pro Max', 440],
+  ])('keeps the greeting and the next Appointment side by side on %s', async (_device, width) => {
+    const device = Dimensions.get('window');
+    Dimensions.set({ window: { ...device, fontScale: 1, width } });
+    const view = await renderHome(seededDatabase());
+
+    // One row, asymmetrical: the appointment is the wide, dominant column.
+    const hero = view.getByTestId('home-hero');
+    expect(hero).toHaveStyle({ flexDirection: 'row' });
+    const gap = StyleSheet.flatten(hero.props.style).gap as number;
+    expect(gap).toBeGreaterThanOrEqual(10);
+    expect(gap).toBeLessThanOrEqual(12);
+    expect(within(hero).getByTestId('home-greeting')).toHaveStyle({ flex: 35 });
+    expect(within(hero).getByTestId('home-next-appointment')).toHaveStyle({ flex: 65 });
+    // The quiet line is whole and free to wrap in its narrow column.
+    const subtitle = within(hero).getByText('Votre journée en un coup d’œil.');
+    expect(subtitle.props.numberOfLines).toBeUndefined();
+    await act(async () => {
+      Dimensions.set({ window: device });
+    });
+  });
+
+  it('stacks the two cards only for enlarged accessibility text', async () => {
+    const device = Dimensions.get('window');
+    Dimensions.set({ window: { ...device, fontScale: 1.5, width: 375 } });
+    const view = await renderHome(seededDatabase());
+
+    expect(375 / 1.5).toBeLessThan(HOME_HERO_ROW_MIN_WIDTH);
+    const hero = view.getByTestId('home-hero');
+    expect(StyleSheet.flatten(hero.props.style).flexDirection).toBeUndefined();
+    expect(within(hero).getByTestId('home-greeting')).not.toHaveStyle({ flex: 35 });
+    expect(within(hero).getByTestId('home-next-appointment')).not.toHaveStyle({ flex: 65 });
+    await act(async () => {
+      Dimensions.set({ window: device });
+    });
   });
 
   it('shows the next Appointment first and opens the existing Appointment Details', async () => {
@@ -137,7 +189,9 @@ describe('HomeScreen', () => {
 
     const card = view.getByTestId('home-next-appointment');
     expect(within(card).getByText('Prochain rendez-vous')).toBeTruthy();
-    expect(within(card).getByText(/^Aujourd’hui · \d{2}:\d{2}$/)).toBeTruthy();
+    // Today: the time alone, the day is not repeated.
+    expect(within(card).getByText(/^\d{2}:\d{2}$/)).toBeTruthy();
+    expect(within(card).queryByText(/Aujourd’hui/)).toBeNull();
     expect(card.props.accessibilityRole).toBe('button');
     await act(async () => fireEvent.press(card));
     expect(mockPush).toHaveBeenCalledWith({
@@ -152,13 +206,21 @@ describe('HomeScreen', () => {
     const card = view.getByTestId('home-next-appointment');
     expect(card).toHaveStyle({ backgroundColor: semanticColors.surfaceLavenderStrong });
     // The client is the identity of the appointment; when it starts supports it.
-    const when = within(card).getByText(/^Aujourd’hui · \d{2}:\d{2}$/);
+    const when = within(card).getByText(/^\d{2}:\d{2}$/);
     expect(when).toHaveStyle({ fontSize: 16 });
     const texts = within(card).getAllByText(/./);
-    const name = texts[texts.indexOf(when) + 1];
+    // Eyebrow, time, (initials), then the name and the prestation close the card.
+    const name = texts[texts.length - 2];
     expect(name).toHaveStyle({ fontSize: 21 });
-    expect(texts[texts.indexOf(when) + 2]).toHaveStyle({ fontSize: 13.5 });
-    expect(within(card).getByTestId('client-avatar')).toHaveStyle({ height: 56, width: 56 });
+    // In its column the name may wrap; only the prestation is ever cut.
+    expect(name.props.numberOfLines).toBe(2);
+    const summary = texts[texts.length - 1];
+    expect(summary).toHaveStyle({ fontSize: 13.5 });
+    expect(summary.props.numberOfLines).toBe(1);
+    // The time has a line of its own, right under the eyebrow.
+    expect(texts.indexOf(when)).toBe(1);
+    expect(when.props.numberOfLines).toBe(1);
+    expect(within(card).getByTestId('client-avatar')).toHaveStyle({ height: 44, width: 44 });
   });
 
   it('pairs two strong figures — Rendez-vous and CA potentiel — with the same large value', async () => {
@@ -250,6 +312,8 @@ describe('HomeScreen', () => {
 
     expect(view.queryByTestId('home-next-appointment')).toBeNull();
     expect(view.queryByText('Prochain rendez-vous')).toBeNull();
+    // The greeting card stays.
+    expect(within(view.getByTestId('home-greeting')).getByText('Bonjour')).toBeTruthy();
     const empty = view.getByTestId('home-next-appointment-empty');
     expect(within(empty).getByText('Aucun rendez-vous à venir.')).toBeTruthy();
     expect(empty).toHaveStyle({ flexDirection: 'row', minHeight: 44 });
@@ -305,7 +369,7 @@ describe('HomeScreen', () => {
     expect(view.queryByTestId('home-new-client-plus')).toBeNull();
   });
 
-  it('sums up the Agenda week in ONE card, from the domain period summary', async () => {
+  it('sums up the Agenda week in TWO cards, from the domain period summary', async () => {
     const database = seededDatabase();
     const weekDays = getWeekDays(NOW);
     const week = getAppointmentPeriodSummary(
@@ -319,22 +383,61 @@ describe('HomeScreen', () => {
     const view = await renderHome(database);
 
     expect(week.appointmentCount).toBeGreaterThan(todaySummary(database).appointmentCount);
-    const card = within(view.getByTestId('home-week-summary'));
-    expect(card.getByText('1 – 7 juin 2026')).toBeTruthy();
-    expect(card.getByTestId('home-week-appointments').props.children).toBe(week.appointmentCount);
-    expect(card.getByTestId('home-week-collected').props.children).toBe(
+    const section = view.getByTestId('home-week-summary');
+    expect(section).toHaveStyle({ flexDirection: 'row' });
+    // Card A: when and how many — the range without its year.
+    const countCard = within(view.getByTestId('home-week-appointments-card'));
+    expect(countCard.getByText('1–7 juin')).toBeTruthy();
+    expect(view.queryByText(/2026/)).toBeNull();
+    expect(countCard.getByTestId('home-week-appointments').props.children).toBe(
+      week.appointmentCount,
+    );
+    expect(countCard.getByText('rendez-vous')).toBeTruthy();
+    expect(countCard.queryByText(/€/)).toBeNull();
+    // Card B: money only.
+    const moneyCard = within(view.getByTestId('home-week-money-card'));
+    expect(moneyCard.getAllByText(/./).map((node) => node.props.children)).toEqual([
+      'Déjà encaissé',
       formatCompactEuroCents(week.collectedCents),
-    );
-    expect(card.getByTestId('home-week-potential').props.children).toBe(
+      'CA potentiel',
       formatCompactEuroCents(week.potentialRevenueCents),
-    );
-    // One strong number; the amounts stay quiet.
-    expect(card.getByTestId('home-week-appointments')).toHaveStyle({ fontSize: 26 });
-    expect(card.getByTestId('home-week-potential')).toHaveStyle({ fontSize: 16 });
-    expect(view.getByLabelText(`${week.appointmentCount} rendez-vous cette semaine`)).toBeTruthy();
+    ]);
+    // Two plain white columns, the money one a little wider; compact, never a fixed height.
+    expect(view.getByTestId('home-week-appointments-card')).toHaveStyle({ flex: 42 });
+    expect(view.getByTestId('home-week-money-card')).toHaveStyle({ flex: 58 });
+    for (const testID of ['home-week-appointments-card', 'home-week-money-card']) {
+      const card = view.getByTestId(testID);
+      expect(card).toHaveStyle({ backgroundColor: semanticColors.surfaceElevated });
+      expect(StyleSheet.flatten(card.props.style).height).toBeUndefined();
+    }
+    const sectionStyle = StyleSheet.flatten(section.props.style);
+    expect(sectionStyle.minHeight).toBeLessThanOrEqual(115);
+    // The count and its label share one baseline row.
+    const count = view.getByTestId('home-week-appointments');
+    expect(count).toHaveStyle({ fontSize: 26 });
+    expect(count.parent).toHaveStyle({ alignItems: 'baseline', flexDirection: 'row' });
+    // Each amount faces its label on one row: stronger than it, never auto-shrunk.
+    for (const [label, testID] of [
+      ['Déjà encaissé', 'home-week-collected'],
+      ['CA potentiel', 'home-week-potential'],
+    ]) {
+      const amount = view.getByTestId(testID);
+      expect(amount).toHaveStyle({ fontSize: 18, textAlign: 'right' });
+      expect(amount.props.adjustsFontSizeToFit).toBeUndefined();
+      expect(amount.parent).toHaveStyle({ flexDirection: 'row' });
+      expect(moneyCard.getByText(label)).toHaveStyle({ fontSize: 12.5 });
+    }
+    expect(
+      view.getByLabelText(`1–7 juin, ${week.appointmentCount} rendez-vous cette semaine`),
+    ).toBeTruthy();
+    expect(
+      view.getByLabelText(
+        `CA potentiel cette semaine, ${formatCompactEuroCents(week.potentialRevenueCents)}`,
+      ),
+    ).toBeTruthy();
   });
 
-  it('keeps the week card valid at zero', async () => {
+  it('keeps the week cards valid at zero', async () => {
     const database = seededDatabase();
     for (const appointment of loadAppointments(database)) deleteAppointment(database, appointment.id);
     const view = await renderHome(database);

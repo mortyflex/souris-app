@@ -1,7 +1,12 @@
 import type { Appointment } from '@/domain/appointments';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 
-import { formatHomeGreeting, formatNextAppointmentWhen, getNextAppointment } from '../presentation';
+import {
+  formatHomeGreeting,
+  formatHomeWeekRange,
+  formatNextAppointmentWhen,
+  getNextAppointment,
+} from '../presentation';
 
 const now = new Date(2027, 2, 15, 10, 0);
 
@@ -68,10 +73,16 @@ describe('Accueil presentation', () => {
     expect(getNextAppointment([], now)).toBeUndefined();
   });
 
-  it('words when the next Appointment starts: today, tomorrow, then the date', () => {
-    expect(formatNextAppointmentWhen(new Date(2027, 2, 15, 14, 5), now)).toBe('Aujourd’hui · 14:05');
+  it('words when the next Appointment starts: the time alone today, tomorrow, then the date', () => {
+    expect(formatNextAppointmentWhen(new Date(2027, 2, 15, 14, 5), now)).toBe('14:05');
     // Tomorrow by the civil calendar, even less than 24 h away.
     expect(formatNextAppointmentWhen(new Date(2027, 2, 16, 8, 0), now)).toBe('Demain · 08:00');
     expect(formatNextAppointmentWhen(new Date(2027, 2, 18, 9, 30), now)).toBe('Jeu. 18 mars · 09:30');
+  });
+
+  it('names the week without its year, and shortens the months when it spans two', () => {
+    expect(formatHomeWeekRange(new Date(2026, 9, 5))).toBe('5–11 octobre');
+    expect(formatHomeWeekRange(new Date(2026, 8, 28))).toBe('28 sept. – 4 oct.');
+    expect(formatHomeWeekRange(new Date(2026, 11, 28))).toBe('28 déc. – 3 janv.');
   });
 });

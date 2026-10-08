@@ -476,7 +476,7 @@ have been removed from the repository.
   1514 × 580 (56 px), `symbol.png` 811 × 1097 (41 px). `size` is the rendered box width; the
   height follows the intrinsic ratio with `resizeMode="contain"`, so nothing is ever stretched.
   `brandAssets[variant].inset` records the padding measured on each file and
-  `brandMarkInsets(variant, size)` gives it in dp (2–5 dp at the sizes used); only `HomeHeader`
+  `brandMarkInsets(variant, size)` gives it in dp (2–6 dp at the sizes used); only `HomeHeader`
   needs it, to set the artwork exactly on the gutter. The PNGs are transparent and coloured: they sit directly on the white
   background with no cream or tinted plate behind them, and there is no white-on-light variant.
 - **Where logos do NOT appear** — Agenda, Clientèle, Produits, Prestations, details, sheets, forms,
@@ -2138,22 +2138,42 @@ Accueil is a calm composition of existing data on the app background (`screen`).
 one page. Hierarchy comes from SURFACE and SIZE, never from new colours: one tinted hero card,
 two strong white figures, one lighter white summary, then shortcuts that are barely surfaces.
 
-- **Welcome** (`HomeHeader`). The editorial logo (`BrandMark`, 125 pt box — artwork about
-  116 × 39 pt — pulled back by its 5 pt transparent padding so the ARTWORK sits on the gutter) with
-  today's date facing it in quiet `metadata` (« Lundi 5 octobre »). Under them « Bonjour »
-  (« Bonsoir » from 18:00) in the 23 pt `summaryValue` role — the page header, deliberately not a
-  screen-sized title — and « Votre journée en un coup d’œil. » in soft `body`. No watermark, no
-  illustration, no mascot.
+- **Header** (`HomeHeader`). The editorial logo ALONE (`BrandMark`, 160 pt box — artwork about
+  148 × 49 pt — pulled back by its 6 pt transparent padding so the ARTWORK sits on the gutter).
+  No date, no text, no ornament beside it. No watermark, no illustration, no mascot.
+- **Top area** (`home-hero`): the greeting card and the next appointment on ONE row, 20 pt under
+  the logo (logo and row read as one group).
+  - *Layout.* SIDE BY SIDE on every phone at the usual text sizes — iPhone SE (375 pt), the
+    standard iPhones (393 / 402 pt) and the Pro Max (440 pt): asymmetrical 35 : 65 (flex, never a
+    device check), 10 pt apart, one shared height — 136 pt minimum, compact rather than
+    hero-sized; a two-line name takes it to about 141 pt. The appointment is the wide, dominant
+    column. Long content never stacks the row: it wraps or is cut inside the cards.
+  - *Accessibility fallback.* The two cards stack, full width each, only when enlarged text
+    leaves less than 340 pt of room at the default text size (`HOME_HERO_ROW_MIN_WIDTH`,
+    compared with `width / fontScale`) — « Bonsoir » would no longer fit its column — or when
+    there is no next appointment to face the greeting.
+  - *Greeting* (`HomeGreetingCard`): a plain white card (`surfaceElevated`, `radii.large`, no
+    shadow, 12 pt padding), content centred vertically. « Bonjour » (« Bonsoir » from 18:00) in
+    the 23 pt `summaryValue` role — the page header, deliberately not a screen-sized title — and
+    « Votre journée en un coup d’œil. » in soft `metadata`, free to wrap onto two or three lines
+    in its narrow column (three on the SE), never abbreviated. Stacked, the line is soft `body`.
 - **Prochain rendez-vous** (`NextAppointmentCard`) — the hero, and the ONLY tinted surface of the
-  page: `surfaceLavenderStrong`, `radii.large`, no shadow. An accent eyebrow « PROCHAIN
-  RENDEZ-VOUS », then a row: the 56 pt portrait `ClientAvatar` (photo from the shared media
-  cache, initials otherwise) in a 2 pt white ring, when it starts as a supporting line
-  (`control`, 16 pt semibold, `foregroundSoft` — « Aujourd’hui · 10:00 », « Demain · 09:30 »,
-  otherwise the date), the CLIENT NAME as the strongest text (`sheetTitle`, 21 pt bold, navy),
-  the prestation summary (`metadata`), an accent chevron. The whole card opens
-  Appointment Details. The next Appointment is the nearest one that occupies the schedule, is
-  not completed and starts now or later — today or any later day.
-- **Nothing to come.** ONE compact white line (44 pt minimum): a muted calendar glyph and
+  page: `surfaceLavenderStrong`, `radii.large`, no shadow, 12 pt padding. Built for a column of
+  about 210 pt (iPhone SE):
+  - an accent eyebrow « PROCHAIN RENDEZ-VOUS »;
+  - WHEN it starts on a line of its own (`control`, 16 pt semibold, `foregroundSoft`) — the time
+    alone today, « 10:00 », never « Aujourd’hui · »; « Demain · 09:30 »; otherwise the date,
+    « Jeu. 18 mars · 09:30 », which fits whole even on the SE — closed by the 14 pt accent
+    chevron at the right edge;
+  - a row: the 44 pt portrait `ClientAvatar` (photo from the shared media cache, initials
+    otherwise) in a 2 pt white ring, 8 pt, then the CLIENT NAME as the strongest text
+    (`sheetTitle`, 21 pt bold, navy, up to TWO lines) over the prestation summary (`metadata`,
+    one line, the only text that is ever cut).
+  The chevron sits on the time line so the row keeps its whole width: « Alicia Burel » and
+  « Coupe Brushing 2 » hold on one line each at 375 pt. The whole card opens Appointment
+  Details. The next Appointment is the nearest one that occupies the schedule, is not completed
+  and starts now or later — today or any later day.
+- **Nothing to come.** Under the full-width greeting card, 8 pt apart, ONE compact white line (44 pt minimum): a muted calendar glyph and
   « Aucun rendez-vous à venir. » Never a hero-sized empty card, no eyebrow. (Not « Aujourd’hui
   est calme »: the line also shows on a day whose appointments are simply over.)
 - **Aujourd’hui.** `SectionHeader` with a trailing accent link « Résumé du jour › » that opens
@@ -2185,12 +2205,22 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
   tile sets the same small accent plus, on a white knock-out disc, on the glyph's lower-right
   corner (`plusBadge`). One icon language, no second icon system.
 - **Cette semaine** (`HomeWeekSummary`). `SectionHeader` with the trailing link « Résumé de la
-  semaine › » (the existing receipt, §25, for the current week). ONE compact white card: the
-  week range in quiet `metadata` (« 5 – 11 octobre 2026 »), then a row — the appointment count
-  in navy 26 pt bold over « rendez-vous », a hairline, and two quiet label → value lines,
-  « Déjà encaissé » and « CA potentiel », values in 16 pt `control`. No glyph, no chart, no
-  trend, no percentage. The Agenda week (Monday → Sunday) of today, from the domain period
-  summary — the figures of « Résumé de la semaine ».
+  semaine › » (the existing receipt, §25, for the current week). TWO compact white cards side by
+  side at every width, 42 : 58, 8 pt apart, about 100 pt tall (a minimum, never a fixed height;
+  14 pt padding, `radii.large`, no shadow). Each spreads two lines over that height, so the
+  range faces « Déjà encaissé » and the count faces « CA potentiel ». Secondary labels are
+  12.5 pt — one step under `metadata` — which is what keeps every line whole at 375 pt.
+  - *Card A — when and how many*: the week range WITHOUT its year at the top (« 5–11 octobre »;
+    a week across two months shortens them, « 28 sept. – 4 oct. » — `formatHomeWeekRange`; the
+    receipt keeps its own full wording), and under it the appointment count in navy 26 pt bold
+    with « rendez-vous » on the SAME baseline (« 8 rendez-vous »). A count too wide for the
+    column lets the label drop under it.
+  - *Card B — money only*: two label → amount rows, « Déjà encaissé » and « CA potentiel », the
+    amounts right-aligned on one edge in navy 18 pt bold (`stateTitle`); an amount longer than
+    7 characters steps down to 16 pt `control`, never measured or auto-shrunk. If a row still
+    lacks room the LABEL wraps onto a second line; the amount is never cut.
+  No glyph, no chart, no trend, no percentage. The Agenda week (Monday → Sunday) of today, from
+  the domain period summary — the figures of « Résumé de la semaine ».
 - **Pilotage** (`HomeToolRow`). Existing business tools, consulted rather than created — never
   styled as quick actions: ONE borderless `GroupedSurface` of two 64 pt navigation rows split by
   an inset hairline (64 pt is a minimum). Each: accent glyph in a 36 pt `surfaceLavender` disc,
@@ -2200,7 +2230,9 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
   opens the existing insights receipt on the current month.
 - **Chevrons.** Every navigation chevron of Accueil — hero card, section links, Encaissements
   du jour, Pilotage rows — is the BeautIzzy accent, never the muted grey.
-- **Order.** Welcome, next appointment, the two figures, the collection summary, quick actions,
+- **Rhythm.** 28 pt between sections (`spacing['2xl']`), 8 pt between a section title and its
+  cards, 8 pt between sibling cards: generous between groups, compact inside them.
+- **Order.** Logo, greeting, next appointment, the two figures, the collection summary, quick actions,
   Cette semaine, Pilotage. Nothing else. Weight decreases down the page: the hero is the only
   tint, today owns the only 30 pt figures.
 - **No** day strip, day selection, timeline, chart, trend, low-stock block or ticket styling on

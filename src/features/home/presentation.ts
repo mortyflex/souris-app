@@ -49,10 +49,32 @@ function localDayDistance(from: Date, to: Date): number {
   return Math.round((end - start) / 86_400_000);
 }
 
-/** `Aujourd’hui · 10:00`, `Demain · 09:30`, otherwise `Mer. 7 octobre · 14:00`. */
+/**
+ * `10:00` today — the card is already about today, so the day is not said —
+ * `Demain · 09:30`, otherwise `Mer. 7 octobre · 14:00`.
+ */
 export function formatNextAppointmentWhen(startAt: Date, now: Date): string {
   const distance = localDayDistance(now, startAt);
-  const day =
-    distance === 0 ? 'Aujourd’hui' : distance === 1 ? 'Demain' : formatAppointmentDate(startAt);
-  return `${day} · ${formatAppointmentTime(startAt)}`;
+  const time = formatAppointmentTime(startAt);
+  if (distance === 0) return time;
+  return `${distance === 1 ? 'Demain' : formatAppointmentDate(startAt)} · ${time}`;
+}
+
+const dayLongMonthFormatter = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' });
+const dayShortMonthFormatter = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
+
+/**
+ * The seven days from `firstDay` for the « Cette semaine » card: never a year
+ * (the week is the current one), and short enough for half a row.
+ *
+ *   `5–11 octobre` · `28 sept. – 4 oct.` · `28 déc. – 3 janv.`
+ *
+ * « Résumé de la semaine » keeps its own full wording (`formatWeekSummaryRange`).
+ */
+export function formatHomeWeekRange(firstDay: Date): string {
+  const lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate() + 6);
+  if (firstDay.getMonth() === lastDay.getMonth()) {
+    return `${firstDay.getDate()}–${dayLongMonthFormatter.format(lastDay)}`;
+  }
+  return `${dayShortMonthFormatter.format(firstDay)} – ${dayShortMonthFormatter.format(lastDay)}`;
 }
