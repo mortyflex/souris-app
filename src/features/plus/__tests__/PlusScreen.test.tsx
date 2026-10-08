@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Alert, StyleSheet } from 'react-native';
 
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
@@ -160,15 +160,56 @@ describe('PlusScreen', () => {
     expect(watermark.props.accessibilityElementsHidden).toBe(true);
   });
 
-  it('keeps its non-scrolling content above the native tab bar through the bottom safe area', async () => {
+  it('is one vertical scroll whose content ends above the native tab bar', async () => {
     mockBottomInset = 83;
     try {
       const { view } = await renderPlus();
-      expect(StyleSheet.flatten(view.getByTestId('plus-content').props.style)).toMatchObject({
+      const scroll = view.getByTestId('plus-scroll');
+
+      expect(scroll.props.horizontal).toBeFalsy();
+      expect(scroll.props.scrollEnabled).not.toBe(false);
+      // The page grows to the viewport when it is shorter, and its last
+      // element clears the bar through the tab's bottom safe area.
+      expect(StyleSheet.flatten(scroll.props.contentContainerStyle)).toMatchObject({
+        flexGrow: 1,
         paddingBottom: 83,
       });
+      // The header scrolls with the page: nothing is pinned outside it.
+      expect(within(scroll).getByRole('header', { name: 'Plus' })).toBeTruthy();
     } finally {
       mockBottomInset = 0;
+    }
+  });
+
+  it('keeps every section and the BeautIzzy identity in the scroll flow, in order', async () => {
+    const { view } = await renderPlus();
+    const content = within(view.getByTestId('plus-scroll')).getByTestId('plus-content');
+    const flow = within(content);
+
+    expect(flow.getByText('Gestion')).toBeTruthy();
+    expect(flow.getByTestId('plus-account')).toBeTruthy();
+    expect(flow.getByTestId('development-reset-database')).toBeTruthy();
+    expect(flow.getByTestId('development-sync-open')).toBeTruthy();
+    expect(flow.getByText('Version 1.0.0')).toBeTruthy();
+
+    // The identity block is the last element of the flow, never an overlay.
+    const brand = flow.getByTestId('plus-brand');
+    const sections = content.children;
+    expect(sections[sections.length - 1]).toBe(brand);
+    expect(StyleSheet.flatten(brand.props.style).position).not.toBe('absolute');
+  });
+
+  it('production path: the identity block stays in the scroll flow without the development section', async () => {
+    const flags = globalThis as unknown as { __DEV__: boolean };
+    flags.__DEV__ = false;
+    try {
+      const { view } = await renderPlus();
+      const flow = within(view.getByTestId('plus-scroll'));
+      expect(flow.queryByText('Développement')).toBeNull();
+      expect(flow.getByTestId('plus-brand')).toBeTruthy();
+      expect(flow.getByText('Version 1.0.0')).toBeTruthy();
+    } finally {
+      flags.__DEV__ = true;
     }
   });
 

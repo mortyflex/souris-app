@@ -466,7 +466,7 @@ have been removed from the repository.
   the hero clips its content so nothing draws over the copy or the buttons.
 - **Account state screens** — `<BrandMark variant="symbol" size={54} decorative />` (the symbol
   above the state title; artwork ≈ 48 × 68 dp).
-- **Plus** — a compact identity block at the bottom of the screen:
+- **Plus** — a compact identity block, the last element of the page's scroll flow:
   `<BrandMark variant="editorial" size={125} />` (the single accessible "BeautIzzy"; artwork
   ≈ 116 × 39 dp), then
   `Version x.y.z` from the Expo manifest in muted metadata. It never competes with the management
@@ -748,17 +748,19 @@ is no longer reproduced natively.
 - **Theme**: the tabs are wrapped in the BeautIzzy navigation theme
   (`src/providers/navigation-theme.ts`, light only), whose background is the canonical white
   screen, so a tab switch never flashes a foreign colour behind the glass.
-- **Scroll edge**: `disableTransparentOnScrollEdge` is set because every main screen keeps its
-  fixed `MainScreenHeader` above its list — UIKit's scroll-edge detection therefore never finds
-  the list and, on iOS 18 and earlier, would draw a permanently transparent bar. Liquid Glass
-  ignores bar backgrounds, so iOS 26 keeps its native behaviour.
+- **Scroll edge**: `disableTransparentOnScrollEdge` is set because the list screens (Agenda,
+  Clientèle, Produits) keep a fixed `MainScreenHeader` above their list — UIKit's scroll-edge
+  detection therefore never finds the list and, on iOS 18 and earlier, would draw a permanently
+  transparent bar. Accueil and Plus have no fixed header: theirs scrolls with the page content.
+  Liquid Glass ignores bar backgrounds, so iOS 26 keeps its native behaviour.
 - **Minimize on scroll**: NOT enabled. The bar stays stable while the professional works; the
   minimize behaviour is evaluated separately later.
 - **Content under the bar (iOS)**: the bar overlays the page. The main lists (Agenda day / week,
   Clientèle, Produits) opt into the system content inset (`contentInsetAdjustmentBehavior`), and
-  keep `bottomClearance` above it so the last row scrolls above the floating +. Plus does not
-  scroll and pads its content by the tab's bottom safe area. No tab-bar height is measured,
-  hardcoded or guessed.
+  keep `bottomClearance` above it so the last row scrolls above the floating +. Plus is one
+  vertical scroll, header included, whose content ends with the tab's bottom safe area: it grows to
+  the viewport when it is shorter (identity block resting above the bar) and scrolls when it is
+  taller. No tab-bar height is measured, hardcoded or guessed.
 - **Floating creation** stays the `FloatingCreateButton` of §17, positioned by its own bottom
   safe-area edge — inside a native tab that edge already includes the system bar plus the home
   indicator. The Produits mini-menu anchors above the + and closes when the tab loses focus.
