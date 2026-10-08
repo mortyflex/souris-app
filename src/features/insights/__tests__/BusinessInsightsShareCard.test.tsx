@@ -204,7 +204,7 @@ describe('BusinessInsightsShareCard', () => {
     const highlight = within(view.getByTestId('card-highlight'));
     const metric = highlight.getByText('6 prestations', HIDDEN);
     expect(metric.props.numberOfLines).toBe(2);
-    expect(StyleSheet.flatten(metric.props.style).paddingHorizontal).toBe(0);
+    expect(StyleSheet.flatten(metric.props.style).paddingHorizontal).toBeUndefined();
     // #1 stands on 40 % of the width, #2 and #3 on 30 %: the plinths still touch.
     const places = view.container.queryAll(
       (node) => node.props.accessibilityLabel?.startsWith?.('Première place') ?? false,
@@ -212,13 +212,16 @@ describe('BusinessInsightsShareCard', () => {
     expect(StyleSheet.flatten(places[0]!.props.style).width).toBe('40%');
   });
 
-  it('keeps the in-app receipt podium exactly as it was', async () => {
+  it('keeps the in-app receipt podium on its 36 / 32 % places, its metrics never truncated either', async () => {
     const services = buildInsightsRankingSections(insights(), getClient)[0]!;
     const view = await render(<InsightsPodium section={services} testID="podium" />);
-    const place = within(view.getByTestId('podium-place-1'));
-    const metric = place.getByText('6 prestations');
-    expect(metric.props.numberOfLines).toBe(1);
-    expect(StyleSheet.flatten(metric.props.style).paddingHorizontal).toBe(4);
+    // Every place: the metric has its whole column, and a second line rather than an ellipsis.
+    for (const [rank, value] of [[1, '6 prestations'], [2, '4 prestations'], [3, '4 prestations']] as const) {
+      const metric = within(view.getByTestId(`podium-place-${rank}`)).getByText(value);
+      expect(metric.props.numberOfLines).toBe(2);
+      expect(metric.props.adjustsFontSizeToFit).toBeUndefined();
+      expect(StyleSheet.flatten(metric.props.style).paddingHorizontal).toBeUndefined();
+    }
     expect(StyleSheet.flatten(view.getByTestId('podium-place-1').props.style).width).toBe('36%');
     expect(StyleSheet.flatten(view.getByTestId('podium-place-2').props.style).width).toBe('32%');
   });

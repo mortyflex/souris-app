@@ -4,6 +4,9 @@
 // Pilotage surface: a quiet accent glyph, a title, one short line saying what
 // the tool does, an accent chevron (every navigation chevron of Accueil is). Deliberately NOT a quick action — a quick
 // action creates, a tool is consulted. Pressing only reports.
+//
+// The description is never cut short: on a narrow screen it wraps onto a
+// second line and the row grows with it, glyph and chevron staying centred.
 
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -35,7 +38,7 @@ export function HomeToolRow({ title, description, icon, onPress, testID }: HomeT
         <AppText variant="rowTitle" numberOfLines={1} style={styles.title}>
           {title}
         </AppText>
-        <AppText variant="metadata" numberOfLines={1} style={styles.description}>
+        <AppText variant="metadata" numberOfLines={2} style={styles.description}>
           {description}
         </AppText>
       </View>

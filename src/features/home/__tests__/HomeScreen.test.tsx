@@ -365,6 +365,14 @@ describe('HomeScreen', () => {
       'Tops & tendances, Voir ce qui fonctionne le mieux',
     ]);
     expect(within(view.getByTestId('home-quick-actions')).queryByText(/estimation|tendances/i)).toBeNull();
+    // A description wraps onto a second line on a narrow screen instead of being cut,
+    // and the row grows with it: a minimum height, never a fixed one.
+    for (const description of ['Chiffrer des prestations pour un client', 'Voir ce qui fonctionne le mieux']) {
+      expect(tools.getByText(description).props.numberOfLines).toBe(2);
+    }
+    const row = StyleSheet.flatten(view.getByTestId('home-estimation').props.style);
+    expect(row).toMatchObject({ alignItems: 'center', minHeight: 64 });
+    expect(row.height).toBeUndefined();
   });
 
   it('opens the existing estimation flow from Pilotage', async () => {

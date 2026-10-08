@@ -1707,7 +1707,9 @@ Data: `docs/domain/INSIGHTS.md` §7.
     its `story` layout: #1 on 40 % of the width, #2 / #3 on 30 % (the plinths still touch), and
     each metric uses its whole column. Measured in Plus Jakarta Sans, `312 prestations` fits #1 and
     `18 prestations` fits #2 / #3 on one line. A metric is NEVER truncated: at worst it wraps onto a
-    second line; it never shrinks. The receipt keeps its 36 / 32 % layout.
+    second line; it never shrinks. The receipt keeps its 36 / 32 % layout, with the same rule: its
+    metrics use their whole column too (no side padding), so `2 prestations` stays on one line under
+    #1 at 375 pt (iPhone SE), and a longer one wraps instead of ending in an ellipsis.
   - Empty category: its quiet centred message. Empty period: « Une période toute calme ✨ »
     (`sectionTitle`, foregroundSoft), no podium.
 - **Private amounts.** « Encaissé » and « Panier moyen » are frosted, never printed: a `lav100`
@@ -2180,8 +2182,9 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
   summary — the figures of « Résumé de la semaine ».
 - **Pilotage** (`HomeToolRow`). Existing business tools, consulted rather than created — never
   styled as quick actions: ONE borderless `GroupedSurface` of two 64 pt navigation rows split by
-  an inset hairline. Each: accent glyph in a 36 pt `surfaceLavender` disc, `rowTitle` title, one
-  `metadata` line, accent chevron. « Créer une estimation — Chiffrer des prestations pour un
+  an inset hairline (64 pt is a minimum). Each: accent glyph in a 36 pt `surfaceLavender` disc,
+  `rowTitle` title, one `metadata` description, accent chevron. The description is never cut: at
+  375 pt (iPhone SE) it wraps onto a second line and the row grows, glyph and chevron centred. « Créer une estimation — Chiffrer des prestations pour un
   client » pushes `/estimations/new`; « Tops & tendances — Voir ce qui fonctionne le mieux »
   opens the existing insights receipt on the current month.
 - **Chevrons.** Every navigation chevron of Accueil — hero card, section links, Encaissements

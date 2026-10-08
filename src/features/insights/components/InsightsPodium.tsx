@@ -26,9 +26,12 @@
 // its own, without the carousel or a capture of the private receipt. It sizes
 // itself from its container's width. Computes nothing.
 //
+// A metric (« 2 prestations ») uses the whole width of its column and is never
+// truncated or shrunk: at worst it wraps onto a second line. Only names keep a
+// side padding, so two neighbouring names never touch.
+//
 // Share-card options: `allowFontScaling={false}` keeps an exported bitmap independent from the
-// device text size; `layout="story"` gives the metrics the room they need on
-// the narrower card (below).
+// device text size; `layout="story"` widens #1 on the narrower card (below).
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -47,9 +50,7 @@ import type { InsightsRankingRow, InsightsRankingSection } from '../insights-rec
 
 /**
  * `receipt` — #1 36 %, #2 / #3 32 % of the page (the in-app ticket).
- * `story`   — the share card: #1 40 %, #2 / #3 30 %, and each metric uses
- *             its whole column. A metric is never truncated: at worst it wraps
- *             onto a second line, never shrinks.
+ * `story`   — the share card: #1 40 %, #2 / #3 30 %.
  */
 export type InsightsPodiumLayout = 'receipt' | 'story';
 
@@ -78,7 +79,7 @@ export function InsightsPodium({
 }: InsightsPodiumProps) {
   const [first, second, third] = section.rows;
   const story = layout === 'story';
-  const slot = { allowFontScaling, story, testID };
+  const slot = { allowFontScaling, testID };
 
   return (
     <View style={styles.root} testID={testID}>
@@ -120,13 +121,11 @@ function PodiumSlot({
   row,
   style,
   allowFontScaling,
-  story,
   testID,
 }: {
   readonly row: InsightsRankingRow;
   readonly style: StyleProp<ViewStyle>;
   readonly allowFontScaling: boolean;
-  readonly story: boolean;
   readonly testID?: string;
 }) {
   const winner = row.rank === 1;
@@ -150,8 +149,8 @@ function PodiumSlot({
       </AppText>
       <AppText
         allowFontScaling={allowFontScaling}
-        numberOfLines={story ? 2 : 1}
-        style={[styles.value, story && styles.storyValue, winner && styles.valueWinner]}
+        numberOfLines={2}
+        style={[styles.value, winner && styles.valueWinner]}
         variant={winner ? 'control' : 'metadata'}
       >
         {row.value}
@@ -263,8 +262,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   labelWinner: { fontFamily: fontFamilies['700'] },
-  value: { fontVariant: ['tabular-nums'], paddingHorizontal: spacing.xs, textAlign: 'center' },
-  storyValue: { paddingHorizontal: 0 },
+  value: { fontVariant: ['tabular-nums'], textAlign: 'center' },
   valueWinner: { color: semanticColors.brandForeground },
   plinth: {
     alignItems: 'center',
