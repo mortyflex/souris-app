@@ -168,8 +168,8 @@ const styles = StyleSheet.create({
   unmeasured: { opacity: 0 },
   logo: { position: 'absolute' },
   copy: { gap: spacing.md, paddingBottom: spacing['3xl'], paddingHorizontal: horizontalGutter },
-  // Colour only: the headline carries the brand plum under the logo.
-  headline: { color: semanticColors.brandForeground },
+  // The headline speaks in the navy of the logo above it.
+  headline: { color: semanticColors.foreground },
   subtitle: { color: semanticColors.foregroundSoft, maxWidth: 320 },
   actions: { gap: spacing.sm, paddingBottom: spacing.base, paddingHorizontal: horizontalGutter },
 });

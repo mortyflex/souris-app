@@ -17,7 +17,7 @@
 import { InputAccessoryView, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from './AppText';
-import { gutter, interaction, overlayMaterial, radii, semanticColors, spacing, touchTarget } from './theme';
+import { gutter, interaction, lavender, overlayMaterial, radii, semanticColors, spacing, touchTarget } from './theme';
 
 interface KeyboardDismissAccessoryProps {
   /** The `inputAccessoryViewID` of the ONE input it serves. */
@@ -66,5 +66,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   pressed: { opacity: interaction.pressedOpacity },
-  label: { color: semanticColors.brandForeground },
+  label: { color: lavender.lav700 },
 });

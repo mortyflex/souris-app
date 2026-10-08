@@ -32,7 +32,7 @@ import Animated, {
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { MonthCalendarIntensitySwatch, type MonthCalendarIntensity } from '@/shared/ui/MonthCalendarSheet';
-import { duration, easing, interaction, nativeShadows, radii, semanticColors, spacing } from '@/shared/ui/theme';
+import { duration, easing, interaction, lavender, nativeShadows, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 export const REVENUE_HEATMAP_HINT_TITLE = 'Intensité du chiffre d’affaires';
 export const REVENUE_HEATMAP_HINT_BODY =
@@ -232,7 +232,7 @@ interface RevenueHeatmapInfoButtonProps {
   readonly testID?: string;
 }
 
-/** A quiet plum ⓘ under the grid: secondary to the month arrows, a full touch target. */
+/** A quiet deep-violet ⓘ under the grid: secondary to the month arrows, a full touch target. */
 export const RevenueHeatmapInfoButton = forwardRef<View, RevenueHeatmapInfoButtonProps>(
   function RevenueHeatmapInfoButton({ onPress, testID = 'revenue-heatmap-info' }, ref) {
     return (
@@ -248,7 +248,7 @@ export const RevenueHeatmapInfoButton = forwardRef<View, RevenueHeatmapInfoButto
           <SymbolView
             name={{ ios: 'info.circle', android: 'info' }}
             size={20}
-            tintColor={semanticColors.brandForeground}
+            tintColor={lavender.lav700}
             weight="regular"
           />
         </Pressable>
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
   },
-  title: { color: semanticColors.brandForeground },
+  title: { color: lavender.lav700 },
   body: { color: semanticColors.foregroundSoft },
   legend: { columnGap: spacing.lg, flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.sm },
   legendItem: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },

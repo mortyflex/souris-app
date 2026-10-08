@@ -457,8 +457,11 @@ have been removed from the repository.
   module-level worklets, never functions declared inside a worklet (the React Compiler would hoist
   them out as non-worklets — guarded by `worklet-closures.test.ts`); the physics rules are
   unit-tested, the feel is validated by hand on simulator / device. The logo leans ≤ 2.5 dp. The
-  headline uses `semanticColors.brandForeground` (`brand.plum` `#5F1852`, measured on the previous
-  Souris lockup, 12.1:1 on white — to be re-checked against the BeautIzzy logo); the subtitle keeps `foregroundSoft`. Reduce Motion:
+  headline is `semanticColors.foreground` (`#19163F`, the navy of the logo above it, 15.5:1 on the
+  screen); the subtitle keeps `foregroundSoft`. Historical: the headline used to carry a
+  plum (`#5F1852`) measured on the previous Souris lockup. That plum is no longer a brand colour:
+  the `brand.plum` token and its `brandForeground` alias are gone, and the value survives only as
+  `mauve900`, the Calendar Block title (§24). Reduce Motion:
   still scene, touch field off. Decorative, pointer-transparent, hidden from assistive technology;
   the hero clips its content so nothing draws over the copy or the buttons.
 - **Account state screens** — `<BrandMark variant="symbol" size={54} decorative />` (the symbol
@@ -940,7 +943,7 @@ scrim, motion, gestures and dismissal policies of §16 are unchanged.
   shared `KeyboardDismissAccessory`: the native `InputAccessoryView`, drawn on the sheet's own
   overlay material (so the strip reads as the bottom of the active sheet and never uncovers what
   lies beneath), holding ONE compact right-aligned pill « OK » (≥ 44 pt, `surfaceLavenderStrong`
-  fill, lavender hairline, plum label, « Fermer le clavier » for assistive tech). It only
+  fill, lavender hairline, `lav700` label, « Fermer le clavier » for assistive tech). It only
   dismisses the keyboard: values stay, nothing is submitted. iOS binds one accessory view to ONE
   input (React Native attaches it to the first input carrying its `nativeID`, once, at mount), so
   every amount field (Carte, Espèces) renders its own instance with its own stable id — same
@@ -1000,7 +1003,7 @@ switcher. Navigation, hit targets, test IDs, accessibility and behaviour are unc
   lower part of the days — « Intensité du chiffre d’affaires », one sentence that the tint is
   relative to the other days of the month, a Faible / Moyen / Élevé legend drawn with the
   calendar's own halo (`MonthCalendarIntensitySwatch`), and « Compris ». Understood once per
-  device (`souris_metadata`, never synced); a quiet plum ⓘ under the grid, outside the glass
+  device (`souris_metadata`, never synced); a quiet `lav700` ⓘ under the grid, outside the glass
   month row, reopens it. Every appearance materialises in place (opacity 0 → 1, scale 0.96 → 1,
   10 pt → 0 on a nearly critically damped spring, the three legend samples fading in 35 ms
   apart); « Compris » leaves faster (160 ms fade, scale 0.98, 4 pt down). Reduce Motion: a short
@@ -1121,7 +1124,9 @@ WITHOUT looking like a client Appointment, and must read as the same product: ca
 fast — never a technical admin form, never a grey disabled state.
 
 - **One dedicated family — mauve.** `mauve` in `theme/colors.ts`, derived like every BeautIzzy scale from
-  OKLCH, at hue 326: between the structural lavender (300) and the brand plum (336).
+  OKLCH, at hue 326, next to the structural lavender (300). Its darkest step, `mauve900` `#5F1852`,
+  is the former Souris-derived plum (hue 336), kept unchanged for the block title and used nowhere
+  else: it is not a BeautIzzy brand colour.
 
   ```text
   mauve050  #FBEFFB  oklch(0.965 0.020 326)   form / details / conflict surface
@@ -1129,7 +1134,7 @@ fast — never a technical admin form, never a grey disabled state.
   mauve200  #EAC4EA  oklch(0.865 0.065 326)   pressed fill
   mauve600  #823F84  oklch(0.48 0.13 326)     accent: left border, glyph, Week marker
   mauve700  #68376A  oklch(0.42 0.10 326)     reason text
-  title     brand.plum #5F1852                « Indisponible »
+  title     mauve900 #5F1852                  « Indisponible »
   ```
 
   Screens use the SEMANTIC token `calendarBlockColors` (`background`, `backgroundPressed`, `accent`,
@@ -1144,7 +1149,7 @@ fast — never a technical admin form, never a grey disabled state.
   height-following radius, `cardPressedScale`), so it belongs to the same planning language:
 
   ```text
-  ≥ 32 pt    [glyph] Indisponible     rowTitle, plum          two lines
+  ≥ 32 pt    [glyph] Indisponible     rowTitle, mauve900      two lines
              Déplacement              metadata, mauve700
   16–32 pt   Indisponible · Pause     chip + metadata         ONE line — 15 to 25 minute blocks
   < 16 pt    colour only                                      never a squeezed or smaller font
@@ -1158,7 +1163,7 @@ fast — never a technical admin form, never a grey disabled state.
   « Indisponible » is always written, and the block is announced
   « Indisponible, Déplacement, de 10 heures à 11 heures 30 ».
 - **Agenda Week row.** The Week Appointment row construction (3 × 26 marker, 54 pt time column, two
-  lines, 56 pt minimum): mauve marker, glyph + « Indisponible » in plum, then
+  lines, 56 pt minimum): mauve marker, glyph + « Indisponible » in `mauve900`, then
   « Déplacement · jusqu'à 11:30 » in `mauve700`. Pressed: `mauve050`. Blocks are never counted in
   « n rendez-vous »; the day header says « 1 créneau indisponible » to assistive technologies.
 - **Creation — « Client | Personnel ».** The shared light-glass `SegmentedControl` (§21), directly
@@ -1178,7 +1183,7 @@ fast — never a technical admin form, never a grey disabled state.
     `accent` text, `accessibilityState.selected` (radio). « Autre » reveals the shared `TextField`
     (« Précisez le motif »), focused only when the professional tapped it;
   - the primary `AppButton` « Bloquer le créneau » in the shared `SheetActionBar`.
-- **Conflict notice.** `ScheduleConflictNotice` — `mauve050`, 28 pt badge, a plum `control` sentence and
+- **Conflict notice.** `ScheduleConflictNotice` — `mauve050`, 28 pt badge, a `mauve900` `control` sentence and
   a `mauve700` `metadata` line naming what is in the way. One accessible element, announced politely.
   Calm but obvious; never a dialog, never red — nothing went wrong, the slot is taken. The save action
   is disabled while it shows. Used by the block form AND by Appointment creation (above the Résumé
@@ -1228,7 +1233,8 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
   presentation fades. The haptic stays. Everything remains available.
 - **Paper** (`shared/ui/ReceiptPaper.tsx`, filled by `DaySummaryReceipt.tsx`). `receiptPaper.surface` `#FEFBF7` — oklch(0.99 0.006 80), a warm
   near-white, FLAT: no grain, no texture, no gradient, no serif, no handwriting. Contrast on it:
-  foreground 16.6:1, plum 11.7:1, foregroundSoft 8.3:1, mint700 7.8:1, accent 5.3:1. Square corners with
+  foreground 16.6:1, foregroundSoft 8.3:1, mint700 7.8:1, lav700 7.4:1 (the emphasis colour of
+  every document: dates, key amounts), accent 5.3:1. Square corners with
   torn top and bottom edges: a row of 45° paper-coloured squares clipped to their outer half, tiling
   the width exactly (`receiptPrinter.toothWidth`). `nativeShadows.lifted`. Width: the window minus
   26 pt on each side, 372 pt at most. Dashed tear lines (`receiptPaper.separator`) between sections.
@@ -1236,11 +1242,11 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
 
   ```text
   header     40 pt lavender100 disc + glyph · « Résumé du jour » sheetTitle (the header) ·
-             « Lundi 21 septembre » control, plum · « 7 rendez-vous » metadata        centred
+             « Lundi 21 septembre » control, lav700 · « 7 rendez-vous » metadata        centred
   list       09:00 chip, tabular │ services rowTitle + client metadata │ amount control, tabular
              a mint600 check before the amount of a checked-out Appointment
   total      lavender050 panel, radii.large: « CA POTENTIEL » eyebrow, accent ·
-             the amount in `display` 34 / 700, plum, tabular — THE strongest value
+             the amount in `display` 34 / 700, lav700, tabular — THE strongest value
   breakdown  Déjà encaissé (value mint700) · Reste à encaisser · Temps total · Panier moyen
              body label, foregroundSoft ↔ control value, tabular
   footer     the BeautIzzy SYMBOL alone (`BrandMark` symbol, `RECEIPT_SIGNATURE_SIZE` 24 pt wide,
@@ -1279,7 +1285,7 @@ no share or save (the daily receipt has none). Figures: `docs/domain/APPOINTMENT
 
 ```text
 header     disc + glyph · « Résumé de la semaine » (the header) ·
-           « 21 – 27 septembre 2026 » control, plum · « 18 rendez-vous » metadata
+           « 21 – 27 septembre 2026 » control, lav700 · « 18 rendez-vous » metadata
 activity   Réalisés · Prévus · Annulés · Absences — body label ↔ control value,
            each ONE spoken element (« 14 rendez-vous réalisés »)          in place of the list
 total      « CA POTENTIEL », exactly as §25
@@ -1581,7 +1587,7 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
   controls    stretched SegmentedControl  Jour | Sem. | Mois | Année  (Mois on opening; « Sem. »
               spoken « Semaine ») · PeriodNavigator without its surface: ‹ Septembre 2026 ›
   summary     compact lavender050 panel: « ENCAISSÉ » eyebrow, accent · the amount in `display`,
-              plum, tabular — THE strongest value · then one row: « 28 rendez-vous réalisés »
+              lav700, tabular — THE strongest value · then one row: « 28 rendez-vous réalisés »
               (metadata) ↔ « Panier moyen » / value (control) · optional quiet notes
   tear line
   rankings    ONE horizontal paged carousel bleeding to the paper edges, one category per page:
@@ -1609,13 +1615,13 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
   `#D8CAF5` (`receiptPodium`). Each carries its rank, understated, on its front face (#1
   `sectionTitle`, the others `control`, lilac, 80 % opacity) and no other text. Names are
   `rowTitle`, centred, 2 lines then ellipsis, never auto-shrunk; #1's name is Bold, one weight
-  stronger, not larger. Metrics: #1 `control` plum, #2 and #3 `metadata`. No card, no gradient.
+  stronger, not larger. Metrics: #1 `control` lav700, #2 and #3 `metadata`. No card, no gradient.
 - **Medals** (`receiptMedal`, Views only, no image or SVG). Each medal is a flat metal disc with a 1.5 pt
   darker rim, a 1 pt lighter inset ring and the digit centred on it (≥ 6:1), hanging from two
   ribbon tails that part outwards (±16°), each cut with a swallow-tail notch in paper colour. The
   tails are in the BeautIzzy lilac family, with a darker left tail and a lighter right one for depth.
   - #1 antique gold: `#E6CD8C` fill, `#B48F3E` rim, `#F3E4B8` ring, `#5A4213` digit. 48 pt disc,
-    `sectionTitle` digit, plum `#654199` / `#7C5FC9` tails 12 × 18 pt.
+    `sectionTitle` digit, `#654199` / `#7C5FC9` tails 12 × 18 pt.
   - #2 pearl silver: `#DEDCE7`, `#9E9BB2`, `#EFEEF4`, `#3F3D55`. 38 pt, `control` digit, lilac
     `#9A85D6` / `#B2A1E2` tails 10 × 14 pt.
   - #3 soft bronze: `#E2BFA2`, `#A6704B`, `#F0D8C4`, `#5B331A`. 38 pt, same tails as #2.
@@ -1689,7 +1695,7 @@ Data: `docs/domain/INSIGHTS.md` §7.
   ```text
   brand       symbol, 25 pt, decorative — restrained
   kicker      « TOPS & TENDANCES » eyebrow, accent
-  period      « Septembre 2026 » screenTitle, plum, one line
+  period      « Septembre 2026 » screenTitle, lav700, one line
   summary     lavender050 panel, radii.large: « ENCAISSÉ SUR LA PÉRIODE » eyebrow accent over a
               frosted private amount · « 28 rendez-vous » ↔ « Panier moyen » + a small frosted
               private amount, on one line. The receipt keeps « ENCAISSÉ », its amounts and
@@ -1840,16 +1846,16 @@ administrative form:
 ```text
              [symbol 25 pt]               decorative, restrained
           ESTIMATION TARIFAIRE            eyebrow, accent
-               Maison Léa                 screenTitle, plum, wraps
+               Maison Léa                 screenTitle, lav700, wraps
             24 septembre 2026             metadata, soft — generation date, no time
 - - - - - - - - - - - - - - - - - - - - - ReceiptTearLine
-Prestations                               rowTitle, plum, header
+Prestations                               rowTitle, lav700, header
 Coupe brushing                      45 €  body ↔ control tabular
 ───────────────────────────────────────── subtle hairline between lines
 Balayage 1                          70 €
 ╭───────────────────────────────────────╮
 │             TOTAL ESTIMÉ              │ ShareHighlightPanel (lav050, radii.large):
-│                 115 €                 │ eyebrow accent over display, plum
+│                 115 €                 │ eyebrow accent over display, lav700
 ╰───────────────────────────────────────╯
 Estimation indicative basée sur les prestations sélectionnées.   metadata, soft, centred
           Créé avec [BeautIzzy logo]      CreatedWithBeautIzzy (68 pt, 85 %)

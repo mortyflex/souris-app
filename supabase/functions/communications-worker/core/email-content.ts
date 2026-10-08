@@ -15,9 +15,9 @@
 // arbitrary user text and must never become markup. The HTML itself is
 // deliberately email-safe — one centered table, inline styles, system fonts,
 // no script, no external asset — with a plain-text alternative. The visual
-// identity is a restrained BeautIzzy: warm surface, white card, plum accent.
+// identity is a restrained BeautIzzy: warm surface, white card, deep lavender accent.
 
-const EMAIL_ACCENT = '#654199'; // BeautIzzy plum (lavender lav700)
+const EMAIL_ACCENT = '#654199'; // BeautIzzy deep lavender (lavender lav700)
 const EMAIL_FOREGROUND = '#19163F';
 const EMAIL_SOFT = '#5D5A7A';
 const EMAIL_SURFACE = '#FAF7F2'; // warm screen

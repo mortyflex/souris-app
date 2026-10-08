@@ -8,7 +8,7 @@ import type { CalendarBlock } from '@/domain/calendar-blocks';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
-import { agenda, appointmentPastels, calendarBlockColors } from '@/shared/ui/theme';
+import { agenda, appointmentPastels, calendarBlockColors, mauve } from '@/shared/ui/theme';
 
 import { resolveAgendaAppointmentPalettes } from '../appointment-palette';
 import { getCalendarBlockCardContent } from '../calendar-block-content';
@@ -217,6 +217,9 @@ describe('Calendar Block theme', () => {
       Object.values(appointmentPastels).flatMap((family) => Object.values(family)),
     );
 
+    // The title keeps its value; it belongs to the mauve family, not to the brand.
+    expect(calendarBlockColors.title).toBe(mauve.mauve900);
+    expect(calendarBlockColors.title).toBe('#5F1852');
     for (const colour of [calendarBlockColors.background, calendarBlockColors.accent, calendarBlockColors.title, calendarBlockColors.subtitle]) {
       expect(clientColours.has(colour)).toBe(false);
     }

@@ -6,13 +6,13 @@
 // structurally simple, with no analytics.
 //
 //   header    the BeautIzzy mark (56 pt, restrained) · « ESTIMATION TARIFAIRE »
-//             eyebrow in accent · Business name in plum (screenTitle) ·
+//             eyebrow in accent · Business name in lav700 (screenTitle) ·
 //             generation date
 //   tear line the dashed ReceiptTearLine of the share card
 //   services  « Prestations » · one calm line per Service: name ↔ price, a
 //             subtle hairline between lines; a long name wraps, never cut
 //   total     the shared lavender highlight panel: « Total estimé » eyebrow
-//             over the amount, large and plum — the focal point
+//             over the amount, large and lav700 — the focal point
 //   note      the indicative disclaimer, secondary
 //   footer    the shared « Créé avec » + BeautIzzy wordmark
 //
@@ -37,7 +37,7 @@ import { BrandMark } from '@/shared/ui/BrandMark';
 import { CreatedWithBeautIzzy } from '@/shared/ui/CreatedWithBeautIzzy';
 import { ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
 import { ShareHighlightPanel } from '@/shared/ui/ShareHighlightPanel';
-import { foregroundSoft, semanticColors, spacing } from '@/shared/ui/theme';
+import { foregroundSoft, lavender, semanticColors, spacing } from '@/shared/ui/theme';
 
 import type { EstimationDocumentModel } from './estimation-document';
 
@@ -142,10 +142,10 @@ const styles = StyleSheet.create({
   spacer: { flexGrow: 1 },
   header: { alignItems: 'center' },
   kicker: { color: semanticColors.accent, marginTop: spacing.xs, textAlign: 'center' },
-  business: { color: semanticColors.brandForeground, marginTop: 2, textAlign: 'center' },
+  business: { color: lavender.lav700, marginTop: 2, textAlign: 'center' },
   soft: { color: foregroundSoft, marginTop: 2, textAlign: 'center' },
   tearLine: { marginVertical: spacing.lg },
-  sectionTitle: { color: semanticColors.brandForeground, marginBottom: spacing.xs },
+  sectionTitle: { color: lavender.lav700, marginBottom: spacing.xs },
   line: {
     alignItems: 'flex-start',
     flexDirection: 'row',
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   total: { gap: spacing.xs, marginTop: spacing.lg, paddingVertical: spacing.base },
   totalLabel: { color: semanticColors.accent, textAlign: 'center' },
   totalValue: {
-    color: semanticColors.brandForeground,
+    color: lavender.lav700,
     fontVariant: ['tabular-nums'],
     textAlign: 'center',
   },

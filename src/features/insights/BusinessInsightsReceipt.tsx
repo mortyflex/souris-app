@@ -10,7 +10,7 @@
 //              Panier moyen · optional notes                       compact
 //   rankings   ONE horizontally paged carousel, one category per page, each
 //              a Top 3 podium (`InsightsPodium`)
-//   pagination four short pills, the current one plum/lilac; tappable, and
+//   pagination four short pills, the current one accent violet; tappable, and
 //              ONE adjustable element for VoiceOver / TalkBack
 //   footer     the BeautIzzy symbol, the closing signature, clear of the torn edge
 //
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   },
   totalLabel: { color: semanticColors.accent },
   totalValue: {
-    color: semanticColors.brandForeground,
+    color: lavender.lav700,
     fontVariant: ['tabular-nums'],
     textAlign: 'center',
   },

@@ -14,7 +14,7 @@ import {
   CREATED_WITH_LOGO_SIZE,
   CREATED_WITH_TEXT_SIZE,
 } from '@/shared/ui/CreatedWithBeautIzzy';
-import { lavender, radii, semanticColors } from '@/shared/ui/theme';
+import { lavender, radii } from '@/shared/ui/theme';
 
 import { EstimationDocument } from '../EstimationDocument';
 import { buildEstimationDocument } from '../estimation-document';
@@ -74,7 +74,7 @@ describe('EstimationDocument', () => {
     const mark = images.find((image) => image.props.source === brandAssets.symbol.source);
     expect(mark).toBeDefined();
     expect(style(mark!).width).toBe(25);
-    expect(style(view.getByTestId('estimation-document-business')).color).toBe(semanticColors.brandForeground);
+    expect(style(view.getByTestId('estimation-document-business')).color).toBe(lavender.lav700);
     // No fixed height anywhere: a long estimation is a taller card.
     expect(style(view.getByTestId('estimation-document')).height).toBeUndefined();
   });
@@ -88,7 +88,7 @@ describe('EstimationDocument', () => {
     expect(panel.height).toBeUndefined();
     const value = view.getByTestId('estimation-document-total-value');
     expect(value.props.children).toBe(model.total);
-    expect(style(value).color).toBe(semanticColors.brandForeground);
+    expect(style(value).color).toBe(lavender.lav700);
     // As large as the BeautIzzy display value, never clipped to one line.
     expect(style(value).fontSize).toBeGreaterThanOrEqual(30);
     expect(value.props.numberOfLines).toBeUndefined();

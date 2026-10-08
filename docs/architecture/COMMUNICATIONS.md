@@ -467,7 +467,7 @@ vocabulary, notes or provider data:
 Templates (`core/email-content.ts`) are FIXED V1 French transactional emails — reminder («
 Rappel de votre rendez-vous chez … »), rescheduled (« … a été modifié », with the NEW schedule),
 cancelled (« … a été annulé », date kept for context, no services) — one restrained
-BeautIzzy-branded HTML card (email-safe table + inline styles, plum accent, « Envoyé avec BeautIzzy »
+BeautIzzy-branded HTML card (email-safe table + inline styles, deep lavender (`lav700`) accent, « Envoyé avec BeautIzzy »
 footer: one centered presentation-table row reading « Envoyé avec [BeautIzzy symbol] » when the
 optional `SOURIS_EMAIL_LOGO_URL` secret names a public HTTPS copy of
 `assets/brand/email/symbol-on-dark.png` — the email-specific symbol, ONE image for light and dark

@@ -178,26 +178,22 @@ export const appointmentPastels = {
   },
 } as const;
 
-// Brand plum. Historical value: it was measured on the wordmark of the
-// previous Souris identity (a logo file since removed) and is kept unchanged
-// until the BeautIzzy brand colour is decided. 12.1:1 on white. For
-// brand-voiced text that sits with the logo (the Welcome headline); everyday
-// UI text stays `foreground`.
-export const brand = {
-  plum: "#5F1852",
-} as const;
-
 // Mauve — personal unavailability ONLY (Calendar Blocks, DESIGN_OVERRIDES.md
-// §24). Derived from oklch hue 326: between the structural lavender (300) and
-// the brand plum (336), and further from every client planning pastel than
-// those pastels are from one another. Never a client colour, never a status,
-// never a warning.
+// §24). Derived from oklch hue 326, next to the structural lavender (300) and
+// further from every client planning pastel than those pastels are from one
+// another. Never a client colour, never a status, never a warning — and never
+// a brand colour: BeautIzzy's identity is navy, violet and lavender.
+//
+// `mauve900` is the family's darkest step, the block title. Historically it
+// was the plum of the previous Souris wordmark (hue 336), once a brand token;
+// it survives ONLY here, unchanged, so Calendar Blocks look exactly as before.
 export const mauve = {
   mauve050: "#FBEFFB", // oklch(0.965 0.020 326) — form / details surface
   mauve100: "#F2D8F2", // oklch(0.910 0.045 326) — Agenda block fill
   mauve200: "#EAC4EA", // oklch(0.865 0.065 326) — selected reason chip, pressed fill
   mauve600: "#823F84", // oklch(0.48 0.13 326) — accent: left border, icon, marker
   mauve700: "#68376A", // oklch(0.42 0.10 326) — reason text (≥ 6.7:1 on mauve100)
+  mauve900: "#5F1852", // block title (9.1:1 on mauve100, 10.8:1 on mauve050)
 } as const;
 
 // Receipt paper — the « Résumé du jour » ticket ONLY (DESIGN_OVERRIDES.md §25).
@@ -308,7 +304,6 @@ export const semanticColors = {
   borderLavender: lavender.lav200,
   accent: colors.accent,
   foreground: colors.foreground,
-  brandForeground: brand.plum,
   foregroundSoft,
   foregroundMuted: colors.muted,
 } as const;
@@ -328,12 +323,12 @@ export const calendarIntensity = {
 // Calendar Block (personal unavailability) — ONE fixed family for every block
 // (DESIGN_OVERRIDES.md §24): same colour = "the professional is unavailable",
 // while the client pastels keep identifying clients. Painted flat, like the
-// planning cards. The title is the brand plum: 9.1:1 on the fill.
+// planning cards. The title is the darkest mauve: 9.1:1 on the fill.
 export const calendarBlockColors = {
   background: mauve.mauve100,
   backgroundPressed: mauve.mauve200,
   accent: mauve.mauve600,
-  title: brand.plum,
+  title: mauve.mauve900,
   subtitle: mauve.mauve700,
   /** Quiet surface of the editor context card and the details card. */
   surface: mauve.mauve050,

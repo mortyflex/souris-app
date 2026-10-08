@@ -38,6 +38,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { AppText } from '@/shared/ui/AppText';
 import {
   fontFamilies,
+  lavender,
   radii,
   receiptMedal,
   receiptPaper,
@@ -263,7 +264,7 @@ const styles = StyleSheet.create({
   },
   labelWinner: { fontFamily: fontFamilies['700'] },
   value: { fontVariant: ['tabular-nums'], textAlign: 'center' },
-  valueWinner: { color: semanticColors.brandForeground },
+  valueWinner: { color: lavender.lav700 },
   plinth: {
     alignItems: 'center',
     alignSelf: 'stretch',

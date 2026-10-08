@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     width: 40,
   },
-  date: { color: semanticColors.brandForeground, marginTop: 2 },
+  date: { color: lavender.lav700, marginTop: 2 },
   centered: { textAlign: 'center' },
   empty: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl },
   activity: { gap: spacing.sm, paddingVertical: spacing.xs },
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   },
   totalLabel: { color: semanticColors.accent },
   totalValue: {
-    color: semanticColors.brandForeground,
+    color: lavender.lav700,
     fontVariant: ['tabular-nums'],
     textAlign: 'center',
   },

@@ -150,7 +150,7 @@ function Highlight({ highlight }: { readonly highlight: InsightsShareHighlight }
 const styles = StyleSheet.create({
   header: { alignItems: 'center' },
   kicker: { color: semanticColors.accent, marginTop: spacing.xs },
-  period: { color: semanticColors.brandForeground, marginTop: 2, textAlign: 'center' },
+  period: { color: lavender.lav700, marginTop: 2, textAlign: 'center' },
   summary: { marginTop: spacing.lg },
   totalLabel: { color: semanticColors.accent },
   // Frosted private amount: soft lilac, no border, no gradient.
