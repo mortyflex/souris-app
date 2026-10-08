@@ -542,17 +542,37 @@ Rendez-vous réalisés  → appointments with status COMPLETED
 Annulations           → appointments with status CANCELLED
                         and cancellation.cancelledBy === CLIENT
 Absences              → appointments with status NO_SHOW
-Total dépensé         → sum of AppointmentItem snapshot prices for
-                        COMPLETED appointments only, net of each
-                        Appointment's discount
+Total dépensé         → everything the Client spent, whole history:
+                        value of COMPLETED appointments (services net of
+                        the discount + products sold during them)
+                        + paid standalone Sales of the Client
 ```
 
-`Total dépensé` reads the ONE domain services total (`getAppointmentServicesTotal`,
-`docs/domain/APPOINTMENTS.md` §15.3): gross snapshot prices minus the Appointment
-discount. An Appointment without a discount counts exactly the sum of its item
-snapshot prices. It uses AppointmentItem snapshot prices — never current catalog
-prices — and excludes SCHEDULED, CONFIRMED, IN_PROGRESS, CANCELLED, and
-NO_SHOW appointments.
+`Total dépensé` reads the ONE Client spending rule, `getClientTotalSpentCents`
+(`src/domain/clients/spending.ts`), over the whole BeautIzzy history:
+
+- **COMPLETED Appointments** — `getAppointmentExpectedTotal`
+  (`docs/domain/APPOINTMENTS.md` §25b): gross AppointmentItem snapshot prices minus the
+  Appointment discount (§15.3), plus the Sales sold during the Appointment (« Revente »).
+  The discount applies to the services only. SCHEDULED, CONFIRMED, IN_PROGRESS,
+  CANCELLED and NO_SHOW Appointments count nothing, and neither do the products sold
+  during them.
+- **Paid standalone Sales** — a Sale with this `clientId`, no `appointmentId` and a
+  recorded `payment`: its snapshot total (unit price × quantity).
+
+Each amount counts once. A Sale sold during an Appointment counts ONLY through that
+Appointment, whose checkout paid it; it is never added again as a Sale. A Sale without a
+Client belongs to no Client. A standalone Sale without a recorded payment (historical,
+created before payment tracking) is not counted, exactly as the Caisse ignores it:
+BeautIzzy never invents a payment for it, although it stays listed in `Produits achetés`.
+A deposit is a way of paying an Appointment and never adds to the total. Snapshots only —
+never current catalog prices.
+
+« Tops & tendances » ranks « Clients qui dépensent le plus » with the SAME rule
+(`getAppointmentClientSpendingCents`, `getSaleClientSpendingCents`), scoped to one
+civil period (`docs/domain/INSIGHTS.md` §3). The profile total is a lifetime amount, so
+the two numbers differ whenever the Client also spent outside the browsed period — and
+only for that reason.
 
 A `BUSINESS` cancellation remains visible in history with its actor and optional reason, but it does not increment
 the Client `Annulations` metric. That metric describes Client behavior only. `NO_SHOW` continues to increment
@@ -644,5 +664,5 @@ marketing automation remain future features built on the existing `birthday`
 field.
 
 Purchased-product history derives from the Sale domain through
-`sale.clientId` (`docs/domain/SALES.md`) — it is never stored on the Client,
-and it does not change the Appointment-derived activity metrics above.
+`sale.clientId` (`docs/domain/SALES.md`) — it is never stored on the Client.
+It changes no visit count; a paid Sale adds to `Total dépensé` as described above.

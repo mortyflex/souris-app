@@ -58,7 +58,7 @@ function figures(db: ReturnType<typeof openTestDatabase>) {
     cashRegisterMonth: getCashRegisterMonthSummary({ appointments, sales }, paidAt),
     payments: getCashRegisterPayments({ appointments, sales }),
     expectedTotals: appointments.map((appointment) => getAppointmentExpectedTotal(appointment, sales)),
-    clientActivity: getClientActivitySummary(entries, clientLea.id, now),
+    clientActivity: getClientActivitySummary(entries, sales, clientLea.id, now),
     purchasedProducts: getClientSales(sales, clientLea.id),
   };
 }

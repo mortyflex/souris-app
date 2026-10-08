@@ -25,10 +25,20 @@
 //                               Deposits are a way of paying it, never extra value.
 //      averageAppointmentValue  Σ appointment values / completed count, rounded
 //                               to the cent; 0 without completed Appointments.
-//      client spending          THE Client « Total dépensé » rule, scoped to the
-//                               period: services net of the discount
-//                               (`getAppointmentServicesTotal`) of COMPLETED
-//                               Appointments. No product Sale, no deposit.
+//      client spending          THE Client spending rule (`../clients/spending`),
+//                               the one behind the profile « Total dépensé »,
+//                               scoped to the period — services AND products,
+//                               each amount once:
+//                                 · the appointment value above of the client's
+//                                   COMPLETED Appointments, on the Appointment
+//                                   date (`getAppointmentClientSpendingCents`);
+//                                 · the client's PAID standalone Sales, on the
+//                                   Sale date (`getSaleClientSpendingCents`).
+//                               A Sale sold during an Appointment counts ONLY
+//                               through that Appointment, so never twice. A
+//                               Sale without a client belongs to nobody. No
+//                               deposit. Only the time scope differs from the
+//                               profile, which reads the whole history.
 //      top services             AppointmentItem snapshots of the completed
 //                               Appointments, one item = one performance.
 //
@@ -53,11 +63,11 @@
 import {
   findAppointmentDepositInvariantBreach,
   getAppointmentExpectedTotal,
-  getAppointmentServicesTotal,
   type Appointment,
   type AppointmentDeposit,
 } from '../appointments';
 import { getCashRegisterIntervalSummary, type CashRegisterSummary } from '../cash-register';
+import { getAppointmentClientSpendingCents, getSaleClientSpendingCents } from '../clients/spending';
 import type { Sale } from '../sales';
 import { isWithinInsightsPeriod, type InsightsPeriod } from './period';
 
@@ -87,8 +97,9 @@ export interface ProductRankingRow {
 
 export interface ClientRankingRow {
   readonly clientId: string;
-  /** Period « Total dépensé »: services net of discount, COMPLETED only. */
+  /** Client spending rule (`../clients/spending`) scoped to the period. */
   readonly spendingCents: number;
+  /** 0 for a client who only bought products. */
   readonly completedAppointmentCount: number;
 }
 
@@ -172,6 +183,14 @@ export function getBusinessInsights(
 
   const services = new Map<string, RankedName>();
   const clients = new Map<string, { spendingCents: number; completedAppointmentCount: number }>();
+  const clientOf = (clientId: string) => {
+    let client = clients.get(clientId);
+    if (!client) {
+      client = { spendingCents: 0, completedAppointmentCount: 0 };
+      clients.set(clientId, client);
+    }
+    return client;
+  };
   let completedAppointmentCount = 0;
   let completedAppointmentValueCents = 0;
   let financialConflictCount = 0;
@@ -198,10 +217,9 @@ export function getBusinessInsights(
       linkedSalesOf(appointment),
     ).expectedTotalCents;
 
-    const client = clients.get(appointment.clientId) ?? { spendingCents: 0, completedAppointmentCount: 0 };
-    client.spendingCents += getAppointmentServicesTotal(appointment).netCents;
+    const client = clientOf(appointment.clientId);
+    client.spendingCents += getAppointmentClientSpendingCents(appointment, linkedSalesOf(appointment));
     client.completedAppointmentCount += 1;
-    clients.set(appointment.clientId, client);
 
     for (const item of appointment.items) {
       tally(services, item.serviceId, item.serviceName, appointment.startAt.getTime(), 1);
@@ -215,6 +233,11 @@ export function getBusinessInsights(
     for (const item of sale.items) {
       tally(products, item.productId, item.productName, sale.completedAt.getTime(), item.quantity);
       soldProductUnitCount += item.quantity;
+    }
+    // A Sale sold during an Appointment was counted above, with that Appointment.
+    const spendingCents = getSaleClientSpendingCents(sale);
+    if (sale.clientId !== undefined && spendingCents > 0) {
+      clientOf(sale.clientId).spendingCents += spendingCents;
     }
   }
 
@@ -247,7 +270,8 @@ export function getBusinessInsights(
     )
     .slice(0, INSIGHTS_RANKING_SIZE);
 
-  const topLoyalClients = [...clientRows]
+  const topLoyalClients = clientRows
+    .filter((row) => row.completedAppointmentCount > 0)
     .sort(
       (a, b) =>
         b.completedAppointmentCount - a.completedAppointmentCount ||

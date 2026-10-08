@@ -2,11 +2,13 @@
 //
 // BeautIzzy-generated Appointment history and derived activity ONLY. Nothing
 // here is stored on the Client: every value is derived from Appointment
-// state through appointment.clientId. Summaries and totals come
-// exclusively from AppointmentItem snapshots (never the current catalog).
+// state through appointment.clientId — plus, for « Total dépensé », the
+// client's Sales. Summaries and totals come exclusively from snapshots
+// (never the current catalog).
 
+import { getClientTotalSpentCents } from '@/domain/clients';
+import type { Sale } from '@/domain/sales';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
-import { getAppointmentSnapshotTotal } from '@/features/appointments/presentation';
 
 const STATUSES_EXCLUDED_FROM_UPCOMING = new Set([
   'CANCELLED',
@@ -19,7 +21,11 @@ export interface ClientActivitySummary {
   readonly completedAppointmentCount: number;
   readonly cancelledAppointmentCount: number;
   readonly noShowAppointmentCount: number;
-  /** Sum of AppointmentItem snapshot prices for COMPLETED appointments only. */
+  /**
+   * Euros the client ever spent — THE domain rule (`getClientTotalSpentCents`):
+   * COMPLETED appointments (services net of discount + products sold during
+   * them) + paid standalone Sales.
+   */
   readonly totalSpent: number;
   readonly upcomingAppointments: readonly AppointmentSessionEntry[];
   readonly historicalAppointments: readonly AppointmentSessionEntry[];
@@ -90,10 +96,16 @@ export function getHistoricalClientAppointments(
  *   Rendez-vous réalisés  → COMPLETED only
  *   Annulations           → CANCELLED by CLIENT only
  *   Absences              → NO_SHOW only
- *   Total dépensé         → snapshot prices of COMPLETED only
+ *   Total dépensé         → `getClientTotalSpentCents` over the whole history:
+ *                           COMPLETED appointments with the products sold
+ *                           during them + the paid standalone `sales`
+ *
+ * `sales` is every Sale of the session and is REQUIRED: a total computed
+ * without the Sales would silently lose the products the client bought.
  */
 export function getClientActivitySummary(
   appointments: readonly AppointmentSessionEntry[],
+  sales: readonly Sale[],
   clientId: string,
   now: Date = new Date(),
 ): ClientActivitySummary {
@@ -104,12 +116,10 @@ export function getClientActivitySummary(
   let completedAppointmentCount = 0;
   let cancelledAppointmentCount = 0;
   let noShowAppointmentCount = 0;
-  let totalSpent = 0;
 
   for (const { appointment } of clientAppointments) {
     if (appointment.status === 'COMPLETED') {
       completedAppointmentCount += 1;
-      totalSpent += getAppointmentSnapshotTotal(appointment);
     } else if (
       appointment.status === 'CANCELLED' &&
       appointment.cancellation?.cancelledBy === 'CLIENT'
@@ -125,7 +135,11 @@ export function getClientActivitySummary(
     completedAppointmentCount,
     cancelledAppointmentCount,
     noShowAppointmentCount,
-    totalSpent,
+    totalSpent:
+      getClientTotalSpentCents(
+        { appointments: clientAppointments.map(({ appointment }) => appointment), sales },
+        clientId,
+      ) / 100,
     upcomingAppointments,
     historicalAppointments,
     nextAppointment: upcomingAppointments[0],

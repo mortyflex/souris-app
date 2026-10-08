@@ -2,7 +2,7 @@
 //
 // The complete BeautIzzy Appointment history of one Client, pushed from the
 // profile « Voir les N rendez-vous ». Same source as the profile preview
-// (getClientActivitySummary over the Appointment session): nothing is
+// (the profile's upcoming / historical selections over the Appointment session): nothing is
 // copied. `Tous | À venir | Passés` only picks the existing upcoming /
 // historical derivation. A virtualized grouped list keeps hundreds of rows
 // cheap; every row opens the existing Appointment Details.
@@ -21,7 +21,11 @@ import { GroupedSeparator } from '@/shared/ui/GroupedSurface';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import { bottomClearance, foregroundSoft, gutter, semanticColors, spacing } from '@/shared/ui/theme';
 
-import { getClientActivitySummary, type ClientAppointmentFilter } from '../profile/presentation';
+import {
+  getHistoricalClientAppointments,
+  getUpcomingClientAppointments,
+  type ClientAppointmentFilter,
+} from '../profile/presentation';
 import { ClientAppointmentRow } from './ClientAppointmentRow';
 import { ClientHistoryHeader } from './ClientHistoryHeader';
 import { ClientHistoryNotFound } from './ClientHistoryNotFound';
@@ -60,10 +64,10 @@ export function ClientAppointmentHistoryScreen({ clientId }: ClientAppointmentHi
 
   if (!client) return <ClientHistoryNotFound title="Rendez-vous" />;
 
-  const { upcomingAppointments, historicalAppointments } = getClientActivitySummary(
-    appointments,
-    client.id,
-  );
+  // Only the two lists: no activity figure is derived here.
+  const now = new Date();
+  const upcomingAppointments = getUpcomingClientAppointments(appointments, client.id, now);
+  const historicalAppointments = getHistoricalClientAppointments(appointments, client.id, now);
   // Section labels only when both groups share the list.
   const labelled = filter === 'ALL' && upcomingAppointments.length > 0 && historicalAppointments.length > 0;
   const sections: HistorySection[] = [

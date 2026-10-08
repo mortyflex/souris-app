@@ -33,3 +33,9 @@ export {
   type ClientSmsMarketingConsentSource,
   type ClientSmsMarketingConsentStatus,
 } from './sms-consent';
+export {
+  getAppointmentClientSpendingCents,
+  getClientTotalSpentCents,
+  getSaleClientSpendingCents,
+  type ClientSpendingSources,
+} from './spending';

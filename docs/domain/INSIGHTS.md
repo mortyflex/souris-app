@@ -75,9 +75,25 @@ averages and that Details shows. A deposit is a way of paying that value and nev
 the cent. It is `0` when no Appointment was completed. It is never the cash received divided by an
 appointment count.
 
-**Client spending.** This is the client « Total dépensé » rule (`docs/domain/CLIENTS.md` §6), scoped to
-the period. It sums the services net of the discount (`getAppointmentServicesTotal`) of the client's
-`COMPLETED` Appointments. It includes no product Sale and no deposit.
+**Client spending.** THE Client spending rule (`src/domain/clients/spending.ts`,
+`docs/domain/CLIENTS.md` §6) — the one behind the profile « Total dépensé » — scoped to the period.
+What an identified client spent with the business, services AND products, each amount counted once:
+
+- the appointment value above of the client's `COMPLETED` Appointments whose `startAt` falls in the
+  period: services net of the discount plus the Sales sold during the Appointment (« Revente »);
+- the snapshot total (unit price × quantity) of the client's PAID standalone Sales — `payment`
+  recorded, no `appointmentId` — whose `completedAt` falls in the period.
+
+A Sale sold during an Appointment counts ONLY through that Appointment: its checkout is what paid it.
+It is therefore never added a second time as a Sale, it follows the Appointment date, and it is not
+spending while the Appointment is `SCHEDULED`, `CONFIRMED`, `IN_PROGRESS`, `CANCELLED` or
+`NO_SHOW`. A standalone Sale with no recorded payment (historical) is not counted, exactly as the
+Caisse ignores it. A Sale without a client belongs to no client: it stays in « Encaissé » and in the
+products sold, never in a client ranking. A deposit is a way of paying and never adds to spending.
+
+The profile « Total dépensé » uses the same definition over the whole history. Only the time scope
+differs: for a period that holds everything the client ever spent the two amounts are equal; for a
+narrower period the ranking shows the part spent inside it.
 
 ### C. Products sold (by SALE date)
 
@@ -97,8 +113,8 @@ placeholders. Places are read-only.
 | --- | --- | --- |
 | Top prestations | one per `AppointmentItem` of a completed Appointment, grouped by `serviceId` | count ↓, name, id |
 | Top produits | units of the Sale lines of the period, grouped by `productId` | units ↓, name, id |
-| Clients qui dépensent le plus | period client spending (> 0 only) | spending ↓, completed visits ↓, client id |
-| Clients les plus fidèles | completed Appointments of the period | completed visits ↓, spending ↓, client id |
+| Clients qui dépensent le plus | period client spending, services + products (> 0 only) | spending ↓, completed visits ↓, client id |
+| Clients les plus fidèles | completed Appointments of the period (at least one) | completed visits ↓, spending ↓, client id |
 
 Names come from SNAPSHOTS: `AppointmentItem.serviceName` and `SaleItem.productName`. When a Service or
 Product was renamed within the period, the row shows the snapshot of its most recent occurrence in that

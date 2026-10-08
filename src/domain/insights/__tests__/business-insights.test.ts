@@ -210,9 +210,9 @@ describe('getBusinessInsights — appointment activity (by appointment date)', (
     });
     const insights = getBusinessInsights(data, SEPTEMBER);
     expect(insights.completedAppointmentValueCents).toBe(8000 + 1500);
-    // Client spending is « Total dépensé »: services net of discount only.
+    // Client spending is that same value: the checkout paid the product too.
     expect(insights.topSpendingClients).toEqual([
-      { clientId: 'client-a', spendingCents: 8000, completedAppointmentCount: 1 },
+      { clientId: 'client-a', spendingCents: 9500, completedAppointmentCount: 1 },
     ]);
   });
 
@@ -373,7 +373,7 @@ describe('getBusinessInsights — client rankings', () => {
   const visit = (id: string, clientId: string, price: number, overrides: Partial<Appointment> = {}) =>
     appointment(id, { clientId, items: [item('s', 'Soin', price)], ...overrides });
 
-  it('ranks spending with the « Total dépensé » rule, scoped to the period', () => {
+  it('ranks the service spending of COMPLETED Appointments, scoped to the period', () => {
     const data = sources({
       appointments: [
         visit('a1', 'amel', 300),
@@ -383,7 +383,7 @@ describe('getBusinessInsights — client rankings', () => {
         visit('x1', 'other', 100),
         visit('old', 'other', 9999, { startAt: new Date(2026, 7, 5) }),
       ],
-      // A standalone product Sale is not « Total dépensé ».
+      // A standalone Sale with no recorded payment is not money spent.
       sales: [sale('p', new Date(2026, 8, 3), [line('p', 'Huile', 1, 400)], { clientId: 'other' })],
     });
     expect(getBusinessInsights(data, SEPTEMBER).topSpendingClients).toEqual([
@@ -473,6 +473,197 @@ describe('getBusinessInsights — client rankings', () => {
     const insights = getBusinessInsights(sources({}), SEPTEMBER);
     expect(insights.topSpendingClients).toEqual([]);
     expect(insights.topLoyalClients).toEqual([]);
+  });
+});
+
+describe('getBusinessInsights — client spending = services + products', () => {
+  const visit = (id: string, clientId: string, price: number, overrides: Partial<Appointment> = {}) =>
+    appointment(id, { clientId, items: [item('s', 'Soin', price)], ...overrides });
+
+  /** A paid standalone Sale (Produits → Nouvelle vente) of `euros` for one client. */
+  const purchase = (id: string, clientId: string | undefined, euros: number, at = new Date(2026, 8, 15, 15, 0)) =>
+    sale(id, at, [line(`product-${id}`, 'Huile', 1, euros)], {
+      clientId,
+      payment: { paidAt: at, cardAmountCents: euros * 100, cashAmountCents: 0 },
+    });
+
+  const spending = (data: BusinessInsightsSources, period = SEPTEMBER) =>
+    getBusinessInsights(data, period).topSpendingClients;
+
+  it('a client with Appointments only spends her services', () => {
+    expect(spending(sources({ appointments: [visit('a', 'amel', 180)] }))).toEqual([
+      { clientId: 'amel', spendingCents: 18000, completedAppointmentCount: 1 },
+    ]);
+  });
+
+  it('a client with product purchases only is ranked on them, and is never « fidèle »', () => {
+    const insights = getBusinessInsights(
+      sources({
+        sales: [
+          sale('s', new Date(2026, 8, 15), [line('oil', 'Huile', 2, 25), line('mask', 'Masque', 1, 20)], {
+            clientId: 'nadia',
+            payment: { paidAt: new Date(2026, 8, 15), cardAmountCents: 7000, cashAmountCents: 0 },
+          }),
+        ],
+      }),
+      SEPTEMBER,
+    );
+    // Snapshot lines: 2 × 25 € + 1 × 20 €.
+    expect(insights.topSpendingClients).toEqual([
+      { clientId: 'nadia', spendingCents: 7000, completedAppointmentCount: 0 },
+    ]);
+    expect(insights.topLoyalClients).toEqual([]);
+  });
+
+  it('adds services and products of the same client', () => {
+    const data = sources({
+      appointments: [visit('a', 'amel', 180)],
+      sales: [purchase('s', 'amel', 70)],
+    });
+    expect(spending(data)).toEqual([
+      { clientId: 'amel', spendingCents: 25000, completedAppointmentCount: 1 },
+    ]);
+  });
+
+  it('product purchases move a client above one with more service spending', () => {
+    const appointments = [visit('a', 'client-a', 180), visit('b', 'client-b', 220)];
+    expect(spending(sources({ appointments })).map((row) => row.clientId)).toEqual(['client-b', 'client-a']);
+    expect(spending(sources({ appointments, sales: [purchase('s', 'client-a', 70)] }))).toEqual([
+      { clientId: 'client-a', spendingCents: 25000, completedAppointmentCount: 1 },
+      { clientId: 'client-b', spendingCents: 22000, completedAppointmentCount: 1 },
+    ]);
+  });
+
+  it('an anonymous Sale belongs to no client, and still counts as products sold', () => {
+    const insights = getBusinessInsights(
+      sources({ appointments: [visit('a', 'amel', 50)], sales: [purchase('walk-in', undefined, 400)] }),
+      SEPTEMBER,
+    );
+    expect(insights.topSpendingClients).toEqual([
+      { clientId: 'amel', spendingCents: 5000, completedAppointmentCount: 1 },
+    ]);
+    expect(insights.soldProductUnitCount).toBe(1);
+    expect(insights.cash.totalCents).toBe(40000);
+  });
+
+  it('a standalone Sale with no recorded payment is not money spent', () => {
+    const unpaid = sale('s', new Date(2026, 8, 15), [line('oil', 'Huile', 1, 400)], { clientId: 'nadia' });
+    expect(spending(sources({ sales: [unpaid] }))).toEqual([]);
+  });
+
+  it('a Sale sold during an Appointment is counted once, through that Appointment', () => {
+    const paidAt = new Date(2026, 8, 10, 11, 0);
+    const data = sources({
+      appointments: [
+        // The checkout received services + product together: 100 € + 30 €.
+        visit('a', 'amel', 100, { payment: { paidAt, cardAmountCents: 13000, cashAmountCents: 0 } }),
+      ],
+      sales: [sale('linked', paidAt, [line('mask', 'Masque', 1, 30)], { clientId: 'amel', appointmentId: 'a' })],
+    });
+    const insights = getBusinessInsights(data, SEPTEMBER);
+    expect(insights.topSpendingClients).toEqual([
+      { clientId: 'amel', spendingCents: 13000, completedAppointmentCount: 1 },
+    ]);
+    // Exactly the appointment value and the money received: nothing twice.
+    expect(insights.completedAppointmentValueCents).toBe(13000);
+    expect(insights.cash.totalCents).toBe(13000);
+  });
+
+  it('the discount still applies to the services only', () => {
+    const data = sources({
+      appointments: [visit('a', 'amel', 100, { discount: { type: 'PERCENT', percent: 10 } })],
+      sales: [
+        sale('linked', new Date(2026, 8, 10, 11), [line('mask', 'Masque', 1, 30)], {
+          clientId: 'amel',
+          appointmentId: 'a',
+        }),
+      ],
+    });
+    expect(spending(data)[0]?.spendingCents).toBe(12000);
+  });
+
+  it.each(['SCHEDULED', 'CANCELLED', 'NO_SHOW'] as const)(
+    'a Sale sold during a %s Appointment was never encashed: it is not spending',
+    (status) => {
+      const data = sources({
+        appointments: [visit('a', 'amel', 100, { status })],
+        sales: [
+          sale('linked', new Date(2026, 8, 10, 11), [line('mask', 'Masque', 1, 30)], {
+            clientId: 'amel',
+            appointmentId: 'a',
+          }),
+        ],
+      });
+      expect(spending(data)).toEqual([]);
+    },
+  );
+
+  it('respects the period bounds for both sources: start included, end excluded', () => {
+    const data = sources({
+      appointments: [
+        visit('in', 'amel', 10, { startAt: new Date(2026, 8, 1, 0, 0) }),
+        visit('before', 'amel', 1000, { startAt: new Date(2026, 7, 31, 23, 59) }),
+        visit('after', 'amel', 1000, { startAt: new Date(2026, 9, 1, 0, 0) }),
+      ],
+      sales: [
+        purchase('first', 'amel', 20, new Date(2026, 8, 1, 0, 0)),
+        purchase('last', 'amel', 30, new Date(2026, 8, 30, 23, 59)),
+        purchase('previous', 'amel', 500, new Date(2026, 7, 31, 23, 59)),
+        purchase('next', 'amel', 700, new Date(2026, 9, 1, 0, 0)),
+      ],
+    });
+    expect(spending(data)[0]?.spendingCents).toBe(6000);
+    // October: the 1000 € visit and the 700 € purchase of 1 October.
+    expect(spending(data, OCTOBER)[0]?.spendingCents).toBe(170000);
+  });
+
+  it('a Sale sold during an Appointment follows the Appointment date, never its own', () => {
+    // Product added on 30 September to a visit of 5 October, checked out that day.
+    const data = sources({
+      appointments: [visit('a', 'amel', 100, { startAt: new Date(2026, 9, 5, 10, 0) })],
+      sales: [
+        sale('linked', new Date(2026, 8, 30, 18, 0), [line('mask', 'Masque', 1, 30)], {
+          clientId: 'amel',
+          appointmentId: 'a',
+        }),
+      ],
+    });
+    expect(spending(data, SEPTEMBER)).toEqual([]);
+    expect(spending(data, OCTOBER)[0]?.spendingCents).toBe(13000);
+  });
+
+  it('aggregates by client id and keeps three rows', () => {
+    const data = sources({
+      appointments: [visit('a', 'c1', 10), visit('b', 'c2', 20), visit('c', 'c3', 30), visit('d', 'c4', 40)],
+      sales: [purchase('s1', 'c1', 15), purchase('s2', 'c1', 25)],
+    });
+    expect(spending(data)).toEqual([
+      { clientId: 'c1', spendingCents: 5000, completedAppointmentCount: 1 },
+      { clientId: 'c4', spendingCents: 4000, completedAppointmentCount: 1 },
+      { clientId: 'c3', spendingCents: 3000, completedAppointmentCount: 1 },
+    ]);
+  });
+
+  it('changes nothing else: activity, cash and product figures ignore the client rule', () => {
+    const paidAt = new Date(2026, 8, 15, 15, 0);
+    const insights = getBusinessInsights(
+      sources({
+        appointments: [visit('a', 'amel', 100, { payment: { paidAt, cardAmountCents: 10000, cashAmountCents: 0 } })],
+        sales: [purchase('s', 'amel', 70)],
+      }),
+      SEPTEMBER,
+    );
+    expect(insights.cash.totalCents).toBe(17000);
+    expect(insights.completedAppointmentCount).toBe(1);
+    // The standalone purchase is not part of any appointment value.
+    expect(insights.completedAppointmentValueCents).toBe(10000);
+    expect(insights.averageAppointmentValueCents).toBe(10000);
+    expect(insights.soldProductUnitCount).toBe(1);
+    expect(insights.topServices).toEqual([{ serviceId: 's', serviceName: 'Soin', count: 1 }]);
+    expect(insights.topProducts).toEqual([{ productId: 'product-s', productName: 'Huile', unitCount: 1 }]);
+    expect(insights.topLoyalClients).toEqual([
+      { clientId: 'amel', spendingCents: 17000, completedAppointmentCount: 1 },
+    ]);
   });
 });
 

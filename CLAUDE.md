@@ -852,13 +852,30 @@ The profile `Activité` section shows:
 - no-shows;
 - cancellations made by the client.
 
-Total spent is the sum of appointment item snapshot prices of `COMPLETED` appointments only.
+Total spent (`Total dépensé`) is everything the identified client spent, over the whole BeautIzzy history.
 
-It is net of each appointment's discount (`docs/domain/APPOINTMENTS.md` §15.3).
+ONE domain rule decides: `src/domain/clients/spending.ts` (`getClientTotalSpentCents`).
+
+It includes:
+
+- the value of `COMPLETED` appointments: services net of each appointment's discount (`docs/domain/APPOINTMENTS.md` §15.3);
+- the products sold during those appointments (« Revente »), counted once, through the appointment;
+- paid standalone product sales attributed to the client (`clientId`, no `appointmentId`, a recorded `payment`).
+
+It never includes:
+
+- a non-completed, cancelled or no-show appointment, nor the products sold during it;
+- a sale without a client;
+- a standalone sale without a recorded payment (historical); no payment is ever invented for it;
+- a deposit as extra spending: it is a way of paying the appointment.
 
 It never uses current catalog prices.
 
-It does not include product sales.
+Tops & tendances « Clients qui dépensent le plus » reads the SAME rule, scoped to its period.
+
+The two amounts may differ only because of that time scope.
+
+Never reimplement client spending in a screen or in Insights.
 
 The section stays visible at zero.
 

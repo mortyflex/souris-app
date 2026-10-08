@@ -7,7 +7,8 @@
 // derived activity as four small stat cards + ONE switchable history preview
 // (Rendez-vous | Produits achetés, 3 records at most, the complete histories
 // on their own pushed screens) + the remaining information + notes. Nothing here is
-// stored on the Client — activity is derived from Appointment state and
+// stored on the Client — activity is derived from Appointment state (and,
+// for « Total dépensé », the client's paid Sales) and
 // purchases from Sale snapshots through clientId. No dashboard KPIs, no fake
 // metrics, no edit/delete traps.
 //
@@ -194,7 +195,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     );
   }
 
-  const activity = getClientActivitySummary(appointments, client.id);
+  const activity = getClientActivitySummary(appointments, sales, client.id);
   const purchases = getClientSales(sales, client.id);
   // Phone and email live in the identity block; the rest stays below.
   const hasMoreInfo = Boolean(client.birthday || client.smsMarketingConsent);

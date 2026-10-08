@@ -54,7 +54,7 @@ describe('Development Agenda fixture statuses + reconciliation', () => {
     expect(anaïs?.items).toHaveLength(1);
     expect(anaïs?.items[0]?.price).toBe(42);
 
-    const summary = getClientActivitySummary(reconciled, 'client-agenda-anais', anchor);
+    const summary = getClientActivitySummary(reconciled, [], 'client-agenda-anais', anchor);
 
     expect(summary.completedAppointmentCount).toBe(1);
     expect(summary.totalSpent).toBe(42);
@@ -62,7 +62,7 @@ describe('Development Agenda fixture statuses + reconciliation', () => {
   });
 
   it('derives Julie activity from her two reconciled snapshot items', () => {
-    const summary = getClientActivitySummary(reconciled, 'client-agenda-julie', anchor);
+    const summary = getClientActivitySummary(reconciled, [], 'client-agenda-julie', anchor);
 
     expect(summary.completedAppointmentCount).toBe(1);
     expect(summary.totalSpent).toBe(137);
@@ -71,6 +71,7 @@ describe('Development Agenda fixture statuses + reconciliation', () => {
   it('derives the anchor-day Léa appointment as upcoming, not completed', () => {
     const summary = getClientActivitySummary(
       reconciled,
+      [],
       'client-agenda-lea',
       new Date(2026, 7, 29, 8, 0),
     );

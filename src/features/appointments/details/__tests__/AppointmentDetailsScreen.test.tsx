@@ -393,9 +393,10 @@ function DiscountProbe() {
 /** Sofia's derived « Total dépensé » (euros), exactly as her profile reads it. */
 function SpendingProbe() {
   const { appointments } = useAppointmentSession();
+  const { sales } = useSaleSession();
   return (
     <Text testID="sofia-total-spent">
-      {getClientActivitySummary(appointments, "client-agenda-sofia").totalSpent}
+      {getClientActivitySummary(appointments, sales, "client-agenda-sofia").totalSpent}
     </Text>
   );
 }
@@ -2296,7 +2297,7 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(1900)}`);
       expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(7600));
       expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(7600));
-      // Caisse reads the recorded payment; « Total dépensé » the net services.
+      // Caisse reads the recorded payment; « Total dépensé » the net appointment value.
       expect(Number(view.getByTestId("caisse-day-total").props.children)).toBe(caisseBefore + 7600);
       expect(Number(view.getByTestId("sofia-total-spent").props.children)).toBe(spentBefore + 76);
       // Checkout keeps its own single feedback; the editor adds nothing on confirm.

@@ -1185,9 +1185,10 @@ checkout already recorded that money (services 75 € + linked products 20 € r
 115 €). Each payment is grouped by the device-local civil day or calendar month of its own `paidAt` — never
 from status alone, from the Client `Total dépensé` metric, or from Sale snapshot totals. Totals are never stored.
 
-Client activity keeps its existing semantics: `Total dépensé` remains the services total of `COMPLETED`
-Appointments from their snapshots, independent of any recorded payment — NET of the Appointment discount
-(§15.3), so a `100 €` Appointment with `20 %` counts `80 €`. An Appointment without a discount counts
+Client `Total dépensé` (`docs/domain/CLIENTS.md` §6) is independent of any recorded payment: for
+Appointments it reads the expected total of `COMPLETED` Appointments from their snapshots — services NET of
+the Appointment discount (§15.3) plus the Products sold during the Appointment — so a `100 €` Appointment
+with `20 %` counts `80 €`. An Appointment without a discount counts
 exactly the sum of its item snapshot prices, as before.
 
 ## 25c. Day Summary (« Résumé du jour »)
@@ -1350,8 +1351,8 @@ card deposit received on 22 September counts on 22 September (card total, « Aco
 opens the Appointment), never again on the Appointment day; the final checkout on 5 October records only the
 `70 €` still due.
 
-**Client spending.** Deposits are not an input of `Total dépensé`: it stays the net value of `COMPLETED`
-Appointments (`100 €` paid as `30 €` + `70 €` counts `100 €`, never `130 €`). They create no Client history row
+**Client spending.** Deposits are not an input of `Total dépensé`: an Appointment counts its expected total
+once `COMPLETED` (`100 €` paid as `30 €` + `70 €` counts `100 €`, never `130 €`). They create no Client history row
 either.
 
 **Deletion.** An Appointment holding a deposit — even a VOIDED one — cannot be permanently deleted (§28).

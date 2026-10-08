@@ -746,8 +746,9 @@ is no BeautIzzy history.
 
 Activity rules are explicit: completed and no-show counts come from their status; `Annulations` counts only
 `CANCELLED` appointments whose recorded actor is `CLIENT`. A `BUSINESS` cancellation remains visible in history as
-`Annulé par vous` but does not count against the Client. `Total dépensé` is the sum of AppointmentItem snapshot
-prices for COMPLETED appointments only, net of each Appointment's discount (§15). History rows open the existing Appointment Details. Permanently deleting an
+`Annulé par vous` but does not count against the Client. `Total dépensé` is everything the Client spent: the value of
+COMPLETED appointments (AppointmentItem snapshot prices net of each Appointment's discount (§15), plus the
+Products sold during them, once) and the paid standalone Sales of the Client (`docs/domain/CLIENTS.md` §6). History rows open the existing Appointment Details. Permanently deleting an
 Appointment removes its history row and all derived count or spending contributions without mutating the Client.
 
 ### Client lifecycle — archive, reactivate, permanent deletion
@@ -850,8 +851,8 @@ The profile shares ONE history area between `Rendez-vous` and `Produits
 achetés` (a segmented control with both counts) and previews at most three
 records of the selected history; `Voir les N rendez-vous` / `Voir les N
 achats` push the complete history screens, where a multi-product Sale lists
-every line. It is never stored on the Client, and it does not change the
-Appointment-derived `Total dépensé` metric.
+every line. It is never stored on the Client. A paid Sale of the Client adds to
+`Total dépensé`; a Sale without a recorded payment is listed but adds nothing.
 
 ### Legacy import
 
@@ -1263,7 +1264,7 @@ encaissé aujourd’hui                     (« encaissé ce jour » / « encais
 - an empty day or month simply shows `0,00 €` with `Carte 0,00 €` / `Espèces 0,00 €` — no illustration;
 - no chart, accounting table, VAT, expense, or profit view. Not V1.
 
-The Client `Total dépensé` metric is unchanged and independent from the Cash Register: deposits never add to
+The Client `Total dépensé` metric is independent from the Cash Register: deposits never add to
 it (`100 €` paid as `30 €` + `70 €` counts `100 €`).
 
 Account & Onboarding V1: a `Compte` section shows the Business identity

@@ -296,9 +296,10 @@ sale.clientId === client.id
 
 sorted newest first, rendered exclusively from snapshots. It exposes its own per-sale total.
 The profile previews the three newest Sales; the complete list is the pushed
-client purchase history, read from the same derivation. It
-does NOT change the Appointment-derived `Total dépensé` metric, which stays the sum of
-AppointmentItem snapshot prices for COMPLETED appointments only.
+client purchase history, read from the same derivation. A
+Sale adds to the Client `Total dépensé` (`docs/domain/CLIENTS.md` §6) exactly once: a paid
+standalone Sale on its own, a Sale sold during an Appointment through that Appointment once it is
+COMPLETED. A standalone Sale without a recorded payment is listed here but adds nothing.
 
 ---
 

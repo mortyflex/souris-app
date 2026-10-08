@@ -321,6 +321,31 @@ function SessionProbe() {
         }
       />
       <Pressable
+        testID="sell-lea-paid"
+        onPress={() =>
+          completeSale({
+            ...saleDraft(
+              'sale-lea-paid',
+              12,
+              [{ id: 'sale-lea-paid-item-1', productId: 'product-care', quantity: 2 }],
+              'client-agenda-lea',
+            ),
+            payment: { cardAmountCents: 3600, cashAmountCents: 0 },
+          })
+        }
+      />
+      <Pressable
+        testID="sell-walk-in-paid"
+        onPress={() =>
+          completeSale({
+            ...saleDraft('sale-walk-in-paid', 12, [
+              { id: 'sale-walk-in-paid-item-1', productId: 'product-shampoo', quantity: 1 },
+            ]),
+            payment: { cardAmountCents: 2000, cashAmountCents: 0 },
+          })
+        }
+      />
+      <Pressable
         testID="sell-walk-in"
         onPress={() =>
           completeSale(
@@ -718,8 +743,25 @@ describe('ClientProfileScreen', () => {
     // All two purchases are already visible: no « Voir les … ».
     expect(view.queryByTestId('open-client-purchase-history')).toBeNull();
 
-    // Product purchases never redefine the Appointment-derived KPI.
+    // These Sales carry no recorded payment: listed, never money spent.
     expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(0));
+  });
+
+  it('adds a paid standalone Sale of the Client to Total dépensé, and nobody else’s', async () => {
+    const view = await renderProfile('client-agenda-lea');
+    await seedSales(view);
+    expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(0));
+
+    for (const step of ['sell-lea-paid', 'sell-walk-in-paid']) {
+      await act(async () => {
+        fireEvent.press(view.getByTestId(step));
+      });
+    }
+
+    // 2 × 18 € paid by Léa; the paid walk-in Sale belongs to no Client.
+    expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(36));
+    // A purchase is not a visit.
+    expect(view.getByTestId('metric-completed').props.children).toBe('0');
   });
 
   it('keeps purchase history unchanged after Product edits and deletion', async () => {

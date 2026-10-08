@@ -4,6 +4,7 @@ import type {
   AppointmentItem,
   AppointmentStatus,
 } from '@/domain/appointments';
+import type { Sale } from '@/domain/sales';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 import { removeAppointmentEntryById } from '@/features/appointments/session/deletion';
 
@@ -76,6 +77,9 @@ function entry(value: Appointment): AppointmentSessionEntry {
 
 const now = new Date(2026, 7, 25, 12, 0);
 
+/** The Client bought nothing: the Sale collection is empty, never omitted. */
+const noSales: readonly Sale[] = [];
+
 describe('getClientAppointments', () => {
   it('keeps only appointments with the matching clientId', () => {
     const history = getClientAppointments(
@@ -138,7 +142,7 @@ describe('getClientActivitySummary', () => {
   ];
 
   it('counts completed appointments, client cancellations, and no-shows explicitly', () => {
-    const summary = getClientActivitySummary(mixed, 'client-x', now);
+    const summary = getClientActivitySummary(mixed, noSales, 'client-x', now);
 
     expect(summary.completedAppointmentCount).toBe(2);
     expect(summary.cancelledAppointmentCount).toBe(1);
@@ -147,14 +151,14 @@ describe('getClientActivitySummary', () => {
   });
 
   it('computes total spent from COMPLETED snapshot prices only', () => {
-    const summary = getClientActivitySummary(mixed, 'client-x', now);
+    const summary = getClientActivitySummary(mixed, noSales, 'client-x', now);
 
     // 50 + 30 — the SCHEDULED/CONFIRMED/CANCELLED/NO_SHOW prices are excluded.
     expect(summary.totalSpent).toBe(80);
   });
 
   it('excludes appointments of other clients entirely', () => {
-    const summary = getClientActivitySummary(mixed, 'client-x', now);
+    const summary = getClientActivitySummary(mixed, noSales, 'client-x', now);
 
     expect(summary.completedAppointmentCount).toBe(2);
     expect(summary.totalSpent).toBe(80);
@@ -166,7 +170,7 @@ describe('getClientActivitySummary', () => {
   });
 
   it('finds the nearest upcoming appointment by startAt', () => {
-    const summary = getClientActivitySummary(mixed, 'client-x', now);
+    const summary = getClientActivitySummary(mixed, noSales, 'client-x', now);
 
     expect(summary.nextAppointment?.appointment.id).toBe('scheduled-future');
     expect(summary.upcomingAppointments.map(({ appointment: value }) => value.id)).toEqual([
@@ -176,7 +180,7 @@ describe('getClientActivitySummary', () => {
   });
 
   it('partitions historical appointments (newest first) excluding upcoming', () => {
-    const summary = getClientActivitySummary(mixed, 'client-x', now);
+    const summary = getClientActivitySummary(mixed, noSales, 'client-x', now);
 
     expect(summary.historicalAppointments.map(({ appointment: value }) => value.id)).toEqual([
       'no-show',
@@ -189,7 +193,7 @@ describe('getClientActivitySummary', () => {
   });
 
   it('keeps both cancellation actors in history without penalizing a salon cancellation', () => {
-    const summary = getClientActivitySummary(mixed, 'client-x', now);
+    const summary = getClientActivitySummary(mixed, noSales, 'client-x', now);
     const cancellations = summary.historicalAppointments
       .map(({ appointment: value }) => value)
       .filter((value) => value.status === 'CANCELLED');
@@ -208,7 +212,7 @@ describe('getClientActivitySummary', () => {
   it('does not mutate the source array', () => {
     const source = [...mixed];
 
-    getClientActivitySummary(source, 'client-x', now);
+    getClientActivitySummary(source, noSales, 'client-x', now);
 
     expect(source.map(({ appointment: value }) => value.id)).toEqual(
       mixed.map(({ appointment: value }) => value.id),
@@ -233,11 +237,11 @@ describe('client activity after permanent Appointment deletion', () => {
     );
     const source = [kept, erroneous];
 
-    expect(getClientActivitySummary(source, 'client-x', now).completedAppointmentCount).toBe(2);
-    expect(getClientActivitySummary(source, 'client-x', now).totalSpent).toBe(120);
+    expect(getClientActivitySummary(source, noSales, 'client-x', now).completedAppointmentCount).toBe(2);
+    expect(getClientActivitySummary(source, noSales, 'client-x', now).totalSpent).toBe(120);
 
     const remaining = removeAppointmentEntryById(source, 'completed-erroneous');
-    const summary = getClientActivitySummary(remaining, 'client-x', now);
+    const summary = getClientActivitySummary(remaining, noSales, 'client-x', now);
 
     expect(summary.completedAppointmentCount).toBe(1);
     expect(summary.totalSpent).toBe(80);
@@ -277,6 +281,7 @@ describe('client activity after permanent Appointment deletion', () => {
     );
     const afterCancellation = getClientActivitySummary(
       withoutCancellation,
+      noSales,
       'client-x',
       now,
     );
@@ -288,7 +293,7 @@ describe('client activity after permanent Appointment deletion', () => {
     ).toEqual(['no-show']);
 
     const withoutNoShow = removeAppointmentEntryById(withoutCancellation, 'no-show');
-    const afterNoShow = getClientActivitySummary(withoutNoShow, 'client-x', now);
+    const afterNoShow = getClientActivitySummary(withoutNoShow, noSales, 'client-x', now);
 
     expect(afterNoShow.noShowAppointmentCount).toBe(0);
     expect(afterNoShow.historicalAppointments).toEqual([]);
@@ -353,7 +358,7 @@ describe('snapshot-based history summary', () => {
     // Snapshot recorded at booking time: 80 €.
     const booked = appointment('a1', 'client-x', new Date(2026, 6, 1, 10), 'COMPLETED', 'Balayage', 80);
     // The same service costs 95 € in the current catalog — irrelevant here.
-    const summary = getClientActivitySummary([entry(booked)], 'client-x', now);
+    const summary = getClientActivitySummary([entry(booked)], noSales, 'client-x', now);
 
     expect(summary.totalSpent).toBe(80);
   });
@@ -365,8 +370,8 @@ describe('snapshot-based history summary', () => {
     };
     const plain = appointment('plain', 'client-x', new Date(2026, 7, 21, 10), 'COMPLETED', 'Coupe', 40);
 
-    expect(getClientActivitySummary([entry(discounted), entry(plain)], 'client-x', now).totalSpent).toBe(120);
-    expect(getClientActivitySummary([entry(plain)], 'client-x', now).totalSpent).toBe(40);
+    expect(getClientActivitySummary([entry(discounted), entry(plain)], noSales, 'client-x', now).totalSpent).toBe(120);
+    expect(getClientActivitySummary([entry(plain)], noSales, 'client-x', now).totalSpent).toBe(40);
   });
 
   it('summarizes multiple snapshot services without catalog access', () => {
@@ -416,7 +421,7 @@ describe('client history preview', () => {
   ];
 
   it('reads upcoming appointments nearest first, then history newest first', () => {
-    const timeline = getClientAppointmentTimeline(getClientActivitySummary(entries, 'client-a', now));
+    const timeline = getClientAppointmentTimeline(getClientActivitySummary(entries, noSales, 'client-a', now));
 
     expect(timeline.map(({ appointment: value }) => value.id)).toEqual([
       'future-near',
@@ -449,6 +454,75 @@ describe('client history preview', () => {
   });
 });
 
+describe('« Total dépensé » — services and products', () => {
+  const paidAt = new Date(2026, 6, 2, 15);
+  const soldLine = (id: string, unitPrice: number, quantity = 1) => ({
+    id: `${id}-line`,
+    productId: `product-${id}`,
+    productName: 'Huile',
+    unitPrice,
+    quantity,
+  });
+  const sale = (id: string, euros: number, overrides: Partial<Sale> = {}): Sale => ({
+    id,
+    businessId: 'business-a',
+    clientId: 'client-x',
+    completedAt: paidAt,
+    items: [soldLine(id, euros)],
+    ...overrides,
+  });
+  const paid = (id: string, euros: number, overrides: Partial<Sale> = {}) =>
+    sale(id, euros, { payment: { paidAt, cardAmountCents: euros * 100, cashAmountCents: 0 }, ...overrides });
+  const completed = (id: string, price: number) =>
+    appointment(id, 'client-x', new Date(2026, 6, 1, 10), 'COMPLETED', 'Balayage', price);
+  const spent = (appointments: readonly Appointment[], sales: readonly Sale[]) =>
+    getClientActivitySummary(appointments.map(entry), sales, 'client-x', now).totalSpent;
+
+  it('services only', () => {
+    expect(spent([completed('a', 180)], [])).toBe(180);
+  });
+
+  it('a paid standalone purchase only — and it is not a completed visit', () => {
+    const summary = getClientActivitySummary([], [paid('s', 70)], 'client-x', now);
+    expect(summary.totalSpent).toBe(70);
+    expect(summary.completedAppointmentCount).toBe(0);
+  });
+
+  it('services and products together: 180 € + 70 € = 250 €', () => {
+    expect(spent([completed('a', 180)], [paid('s', 70)])).toBe(250);
+  });
+
+  it('a product sold during the Appointment is counted once', () => {
+    expect(spent([completed('a', 100)], [sale('linked', 30, { appointmentId: 'a' })])).toBe(130);
+  });
+
+  it('the discount reduces the services only', () => {
+    const discounted: Appointment = { ...completed('a', 100), discount: { type: 'PERCENT', percent: 20 } };
+    expect(spent([discounted], [sale('linked', 30, { appointmentId: 'a' }), paid('s', 50)])).toBe(160);
+  });
+
+  it('excludes an unpaid standalone Sale, an anonymous Sale and another Client’s Sale', () => {
+    expect(
+      spent(
+        [completed('a', 40)],
+        [sale('unpaid', 400), paid('walk-in', 300, { clientId: undefined }), paid('other', 200, { clientId: 'client-y' })],
+      ),
+    ).toBe(40);
+  });
+
+  it.each<AppointmentStatus>(['CANCELLED', 'NO_SHOW', 'SCHEDULED'])(
+    'excludes a %s Appointment and the products sold during it',
+    (status) => {
+      const missed = appointment('m', 'client-x', new Date(2026, 6, 3, 10), status, 'Coupe', 90, 'CLIENT');
+      expect(spent([missed, completed('a', 40)], [sale('linked', 30, { appointmentId: 'm' })])).toBe(40);
+    },
+  );
+
+  it('without any Sale the total is the completed Appointments alone', () => {
+    expect(spent([completed('a', 180)], [])).toBe(180);
+  });
+});
+
 describe('« Total dépensé » and deposits', () => {
   it('counts the appointment value once: 100 € paid as 30 € deposit + 70 € final payment is 100 €, never 130 €', () => {
     const paid: Appointment = {
@@ -459,7 +533,7 @@ describe('« Total dépensé » and deposits', () => {
     const prepaid = appointment('prepaid', 'client-x', new Date(2026, 6, 8, 10), 'COMPLETED', 'Coupe', 40);
 
     // Deposits are not an input of the Client derivation at all: nothing to add, nothing to skip.
-    const summary = getClientActivitySummary([entry(paid), entry(prepaid)], 'client-x', now);
+    const summary = getClientActivitySummary([entry(paid), entry(prepaid)], noSales, 'client-x', now);
 
     expect(summary.totalSpent).toBe(140);
     expect(summary.completedAppointmentCount).toBe(2);
