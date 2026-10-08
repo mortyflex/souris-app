@@ -10,7 +10,7 @@
 //   total      « CA potentiel » — THE strongest value of the paper
 //   breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen
 //
-//   footer     the BeautIzzy wordmark, inside the paper
+//   footer     the BeautIzzy symbol, the closing signature, inside the paper
 //
 // It renders the receipt model as is and computes nothing. The paper is as
 // tall as its content — nothing scrolls inside it: on a long day or a short
@@ -23,7 +23,7 @@ import { StyleSheet, View } from 'react-native';
 import { daySummaryIcon } from '@/shared/icons/day-summary-icon';
 import { AppText } from '@/shared/ui/AppText';
 import { BrandMark } from '@/shared/ui/BrandMark';
-import { ReceiptPaper, ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
+import { RECEIPT_SIGNATURE_SIZE, ReceiptPaper, ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
 import {
   foregroundSoft,
   lavender,
@@ -135,7 +135,7 @@ export function DaySummaryReceipt({
         ))}
       </View>
 
-      <BrandMark decorative size={75} style={styles.brand} variant="editorial" />
+      <BrandMark decorative size={RECEIPT_SIGNATURE_SIZE} style={styles.brand} variant="symbol" />
     </ReceiptPaper>
   );
 }

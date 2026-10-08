@@ -3,6 +3,8 @@ import { StyleSheet } from 'react-native';
 
 import { getInsightsPeriod, type BusinessInsights } from '@/domain/insights';
 import { haptics } from '@/shared/lib/haptics';
+import { brandAssets } from '@/shared/ui/BrandMark';
+import { RECEIPT_SIGNATURE_SIZE } from '@/shared/ui/ReceiptPaper';
 
 import { BusinessInsightsReceipt } from '../BusinessInsightsReceipt';
 import { InsightsPodium } from '../components/InsightsPodium';
@@ -11,6 +13,11 @@ import { buildInsightsReceipt, type InsightsRankingSection } from '../insights-r
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
 const WIDTH = 320;
+// The symbol is taller than wide; the wordmark is not.
+const SYMBOL_SIGNATURE = {
+  width: RECEIPT_SIGNATURE_SIZE,
+  height: Math.round((RECEIPT_SIGNATURE_SIZE * brandAssets.symbol.height) / brandAssets.symbol.width),
+};
 
 function insights(overrides: Partial<BusinessInsights> = {}): BusinessInsights {
   return {
@@ -160,9 +167,11 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
     const scrollViews = receipt.queryAll((node) => node.type === 'RCTScrollView');
     expect(scrollViews.map((node) => node.props.testID)).toEqual(['business-insights-rankings']);
     expect(StyleSheet.flatten(receipt.props.style).maxHeight).toBeUndefined();
-    // The BeautIzzy wordmark is part of the paper, after the pagination.
+    // The closing signature — the BeautIzzy symbol alone, never the wordmark — is part of
+    // the paper, after the pagination.
     const footer = receipt.queryAll((node) => node.props.resizeMode === 'contain');
     expect(footer).toHaveLength(1);
+    expect(StyleSheet.flatten(footer[0]!.props.style)).toMatchObject(SYMBOL_SIGNATURE);
     const order = receipt.queryAll(
       (node) => node === footer[0] || node.props.testID === 'business-insights-pagination',
     );

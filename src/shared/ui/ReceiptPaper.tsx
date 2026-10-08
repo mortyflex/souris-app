@@ -15,6 +15,13 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { nativeShadows, receiptPaper, receiptPrinter, spacing } from './theme';
 
+/**
+ * Width (dp) of the closing signature of a receipt: the BeautIzzy SYMBOL alone
+ * (`BrandMark variant="symbol"`), last on the paper, above the torn edge. The
+ * paper is already BeautIzzy's: the wordmark is not repeated there.
+ */
+export const RECEIPT_SIGNATURE_SIZE = 24;
+
 interface ReceiptPaperProps {
   readonly width: number;
   readonly children: ReactNode;

@@ -9,7 +9,11 @@ import { render, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 import { brandAssets } from '@/shared/ui/BrandMark';
-import { CREATED_WITH_BEAUTIZZY_LABEL } from '@/shared/ui/CreatedWithBeautIzzy';
+import {
+  CREATED_WITH_BEAUTIZZY_LABEL,
+  CREATED_WITH_LOGO_SIZE,
+  CREATED_WITH_TEXT_SIZE,
+} from '@/shared/ui/CreatedWithBeautIzzy';
 import { lavender, radii, semanticColors } from '@/shared/ui/theme';
 
 import { EstimationDocument } from '../EstimationDocument';
@@ -116,7 +120,9 @@ describe('EstimationDocument', () => {
     while (ancestor && ancestor.props.testID !== 'estimation-document-branding') ancestor = ancestor.parent;
     expect(ancestor).toBeTruthy();
     expect(wordmark[0]!.props.accessible).toBe(false);
-    expect(style(wordmark[0]!).width).toBe(58);
+    expect(style(wordmark[0]!).width).toBe(CREATED_WITH_LOGO_SIZE);
+    // The wordmark leads; « Créé avec » is the quieter of the two.
+    expect(style(within(footer).getByText('Créé avec')).fontSize).toBe(CREATED_WITH_TEXT_SIZE);
   });
 
   it('follows the device text size on screen', async () => {

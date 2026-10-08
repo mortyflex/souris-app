@@ -1243,7 +1243,9 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
              the amount in `display` 34 / 700, plum, tabular — THE strongest value
   breakdown  Déjà encaissé (value mint700) · Reste à encaisser · Temps total · Panier moyen
              body label, foregroundSoft ↔ control value, tabular
-  footer     the editorial BeautIzzy logo, 75 pt box, decorative
+  footer     the BeautIzzy SYMBOL alone (`BrandMark` symbol, `RECEIPT_SIGNATURE_SIZE` 24 pt wide,
+             85 % opacity), decorative — the closing signature of every receipt; the wordmark
+             is not repeated on a paper that is already BeautIzzy's
   ```
 
   The paper is ONE continuous document at its NATURAL height: header, list, total, breakdown and
@@ -1282,7 +1284,7 @@ activity   Réalisés · Prévus · Annulés · Absences — body label ↔ cont
            each ONE spoken element (« 14 rendez-vous réalisés »)          in place of the list
 total      « CA POTENTIEL », exactly as §25
 breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen, exactly as §25
-footer     the editorial BeautIzzy logo
+footer     the BeautIzzy symbol, exactly as §25
 ```
 
 - **Range.** Months written in full, the year once: `21 – 27 septembre 2026`,
@@ -1586,15 +1588,15 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
               Top prestations → Top produits → Clients qui dépensent le plus → Clients les plus
               fidèles, each an `InsightsPodium`
   pagination  four short pills, lav200; the current one a 16 pt accent pill
-  footer      the editorial BeautIzzy logo, 67 pt box, decorative, `spacing.md` above it, clear of
+  footer      the BeautIzzy symbol, exactly as §25, decorative, `spacing.md` above it, clear of
               the torn edge
   ```
 
 - **Fit.** The whole paper is visible at once on a standard 6.1" iPhone (844 / 852 pt), even with
   two-line podium names: the section gaps are compact — controls `spacing.sm` under the header,
   summary rows `spacing.xs` apart, the tear line `spacing.md` above and below, pagination
-  `spacing.md` under the podium, wordmark `spacing.md` under the pagination, no extra padding under
-  it beyond the paper's own. Text sizes, podium, medals and wordmark size are unchanged. Only
+  `spacing.md` under the podium, signature `spacing.md` under the pagination, no extra padding under
+  it beyond the paper's own. Text sizes, podium and medals are unchanged. Only
   larger text sizes or a small phone (iPhone SE) make the printer scroll the whole paper (§25).
 
 - **Podium** (`features/insights/components/InsightsPodium.tsx`), the visual signature of the
@@ -1695,7 +1697,8 @@ Data: `docs/domain/INSIGHTS.md` §7.
   tear line   the receipt's dashed `ReceiptTearLine`
   highlight   centred in the remaining height, raised by a 24 pt bottom padding so the podium
               stays close to the summary (below)
-  footer      « Créé avec » metadata + logo-editorial 58 pt, 85 % opacity
+  footer      « Créé avec » metadata at 12 pt + logo-editorial 68 pt, 85 % opacity — the wordmark
+              leads, the words are secondary
   ```
 
 - **Highlight.**
@@ -1849,7 +1852,7 @@ Balayage 1                          70 €
 │                 115 €                 │ eyebrow accent over display, plum
 ╰───────────────────────────────────────╯
 Estimation indicative basée sur les prestations sélectionnées.   metadata, soft, centred
-          Créé avec [BeautIzzy logo]      CreatedWithBeautIzzy (58 pt, 85 %)
+          Créé avec [BeautIzzy logo]      CreatedWithBeautIzzy (68 pt, 85 %)
 ```
 
 - **Two presentations, one interior** — exactly the « Tops & tendances » pipeline (§34, §35).

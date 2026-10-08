@@ -12,13 +12,13 @@
 //              a Top 3 podium (`InsightsPodium`)
 //   pagination four short pills, the current one plum/lilac; tappable, and
 //              ONE adjustable element for VoiceOver / TalkBack
-//   footer     the BeautIzzy wordmark, clear of the torn edge
+//   footer     the BeautIzzy symbol, the closing signature, clear of the torn edge
 //
 // Horizontal paging is THE interaction. Nothing scrolls vertically inside the
 // paper: it is as tall as its content, and on a short screen (iPhone SE, the
-// largest text sizes) the printer scrolls the whole receipt, wordmark
+// largest text sizes) the printer scrolls the whole receipt, signature
 // included. The gaps between the sections are deliberately compact so that the
-// whole paper — two-line podium names, pagination, wordmark and torn edge
+// whole paper — two-line podium names, pagination, signature and torn edge
 // included — fits at once on a standard 6.1" iPhone.
 //
 // It renders the receipt model as is and computes nothing. The carousel page
@@ -44,7 +44,7 @@ import { haptics } from '@/shared/lib/haptics';
 import { AppText } from '@/shared/ui/AppText';
 import { BrandMark } from '@/shared/ui/BrandMark';
 import { PeriodNavigator, PeriodNavigatorCopy } from '@/shared/ui/PeriodNavigator';
-import { ReceiptPaper, ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
+import { RECEIPT_SIGNATURE_SIZE, ReceiptPaper, ReceiptTearLine } from '@/shared/ui/ReceiptPaper';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { useReduceMotion } from '@/shared/ui/useReduceMotion';
 import {
@@ -266,7 +266,7 @@ export function BusinessInsightsReceipt({
         ))}
       </View>
 
-      <BrandMark decorative size={67} style={styles.brand} variant="editorial" />
+      <BrandMark decorative size={RECEIPT_SIGNATURE_SIZE} style={styles.brand} variant="symbol" />
     </ReceiptPaper>
   );
 }
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
   pill: { backgroundColor: lavender.lav200, borderRadius: radii.pill, height: 5, width: 5 },
   pillActive: { backgroundColor: semanticColors.accent, width: 16 },
   tearLine: { marginVertical: spacing.md },
-  // The wordmark PNG carries its own transparent padding: a short margin
+  // The symbol PNG carries its own transparent padding: a short margin
   // already reads as breathing room under the pagination. The paper's own
   // bottom padding keeps it clear of the torn edge.
   brand: { alignSelf: 'center', marginTop: spacing.md, opacity: 0.85 },

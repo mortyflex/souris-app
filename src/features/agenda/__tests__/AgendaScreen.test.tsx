@@ -11,6 +11,8 @@ import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvide
 import type { SourisDatabase } from '@/persistence/database';
 import { TestPersistenceProvider, testBusiness } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
+import { brandAssets } from '@/shared/ui/BrandMark';
+import { RECEIPT_SIGNATURE_SIZE } from '@/shared/ui/ReceiptPaper';
 import { formatEuroCents } from '@/shared/lib/money';
 import { insertCalendarBlock } from '@/persistence/stores/calendar-blocks';
 import { loadAppointmentDeposits, insertAppointmentDeposit } from '@/persistence/stores/appointment-deposits';
@@ -488,6 +490,11 @@ describe('AgendaScreen — day navigation', () => {
     );
     expect(tail).toHaveLength(2);
     expect(tail[1]!.props.resizeMode).toBe('contain');
+    // The closing signature is the BeautIzzy symbol alone (taller than wide), never the wordmark.
+    expect(StyleSheet.flatten(tail[1]!.props.style)).toMatchObject({
+      width: RECEIPT_SIGNATURE_SIZE,
+      height: Math.round((RECEIPT_SIGNATURE_SIZE * brandAssets.symbol.height) / brandAssets.symbol.width),
+    });
   });
 
   it('still prints a neutral summary on a free day', async () => {

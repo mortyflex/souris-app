@@ -5,7 +5,11 @@ import type { Client } from '@/domain/clients';
 import { getInsightsPeriod, type BusinessInsights } from '@/domain/insights';
 import { formatCompactEuroCents, formatEuroCents } from '@/shared/lib/money';
 
-import { CREATED_WITH_BEAUTIZZY_LABEL } from '@/shared/ui/CreatedWithBeautIzzy';
+import {
+  CREATED_WITH_BEAUTIZZY_LABEL,
+  CREATED_WITH_LOGO_SIZE,
+  CREATED_WITH_TEXT_SIZE,
+} from '@/shared/ui/CreatedWithBeautIzzy';
 import { lavender, radii, receiptPaper, spacing } from '@/shared/ui/theme';
 
 import {
@@ -106,11 +110,15 @@ describe('BusinessInsightsShareCard', () => {
       paddingHorizontal: spacing.base,
       paddingVertical: spacing.md,
     });
-    // The footer: « Créé avec » + the 64 pt wordmark at 85 %, fixed text size.
+    // The footer: a quiet « Créé avec » + the leading wordmark at 85 %, fixed text size.
     const footer = view.getByTestId('card-footer');
     expect(footer.props.accessibilityLabel).toBe(CREATED_WITH_BEAUTIZZY_LABEL);
     expect(StyleSheet.flatten(footer.props.style)).toMatchObject({ flexDirection: 'row', opacity: 0.85 });
-    expect(within(footer).getByText('Créé avec').props.allowFontScaling).toBe(false);
+    const words = within(footer).getByText('Créé avec');
+    expect(words.props.allowFontScaling).toBe(false);
+    expect(StyleSheet.flatten(words.props.style).fontSize).toBe(CREATED_WITH_TEXT_SIZE);
+    const [wordmark] = footer.queryAll((node) => node.props.resizeMode === 'contain');
+    expect(StyleSheet.flatten(wordmark!.props.style).width).toBe(CREATED_WITH_LOGO_SIZE);
   });
 
   it('keeps a long service name on two lines at most, with its metric', async () => {
