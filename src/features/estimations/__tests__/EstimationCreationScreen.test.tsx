@@ -13,7 +13,7 @@
 // - Fermer / Enregistrer / Partager reuse the shared export boundary.
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { PixelRatio, Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { eurosToCents, formatCompactEuroCents } from '@/shared/lib/money';
 import { haptics } from '@/shared/lib/haptics';
@@ -43,6 +43,9 @@ jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
 // Native image capture, share sheet and Photos: the shared export boundary, observed.
 jest.mock('react-native-view-shot', () => ({ captureRef: jest.fn(), releaseCapture: jest.fn() }));
+// The captured file is measured natively: here it always has the export size already.
+jest.mock('@/shared/lib/image-pixel-size', () => ({ fitImageToPixelSize: jest.fn(async () => undefined) }));
+const mockFitImageToPixelSize = jest.requireMock('@/shared/lib/image-pixel-size').fitImageToPixelSize as jest.Mock;
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
 jest.mock('expo-media-library', () => ({ requestPermissionsAsync: jest.fn(), Asset: { create: jest.fn() } }));
 const mockMediaLibrary = jest.requireMock('expo-media-library') as {
@@ -398,12 +401,14 @@ describe('EstimationCreationScreen', () => {
     expect(StyleSheet.flatten(canvas.props.style).borderRadius).toBeUndefined();
 
     await press(view, 'estimation-save');
-    // The capture is exactly the Tops & tendances image: 1080 × 1920 px.
-    const ratio = PixelRatio.get();
+    // The frame is the Tops & tendances layout, whatever the screen density; the capture
+    // is then given exactly its image size: 1080 × 1920 px.
     expect(StyleSheet.flatten(frame.props.style)).toMatchObject({
-      width: INSIGHTS_SHARE_IMAGE_SIZE.width / ratio,
-      height: INSIGHTS_SHARE_IMAGE_SIZE.height / ratio,
+      width: INSIGHTS_SHARE_CARD_SIZE.width,
+      height: INSIGHTS_SHARE_CARD_SIZE.height,
     });
+    expect(StyleSheet.flatten(frame.props.style).transform).toBeUndefined();
+    expect(mockFitImageToPixelSize).toHaveBeenLastCalledWith(expect.any(String), INSIGHTS_SHARE_IMAGE_SIZE);
     const [target] = mockViewShot.captureRef.mock.calls[0] as [{ current: { props: { testID?: string } } }];
     expect(target.current.props.testID).toBe('estimation-export-frame');
   });
@@ -506,12 +511,12 @@ describe('EstimationCreationScreen', () => {
 
     await press(view, 'estimation-share');
     expect(mockSharing.shareAsync).toHaveBeenCalledTimes(1);
-    // The frame measures 1080 × (1481 × 3) device pixels: the whole document, sharp.
-    const ratio = PixelRatio.get();
+    // The frame is the whole document, 360 × 1481 dp; the image is 1080 × (1481 × 3) px.
     const frame = view.getByTestId('estimation-export-frame', HIDDEN);
-    expect(StyleSheet.flatten(frame.props.style)).toMatchObject({
-      height: (1481 * 3) / ratio,
-      width: 1080 / ratio,
+    expect(StyleSheet.flatten(frame.props.style)).toMatchObject({ height: 1481, width: 360 });
+    expect(mockFitImageToPixelSize).toHaveBeenLastCalledWith(expect.any(String), {
+      height: 1481 * 3,
+      width: 1080,
     });
   });
 

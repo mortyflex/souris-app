@@ -10,24 +10,27 @@
 //     for the minimum permission: add-only on iOS, images only on Android.
 //     Only this path knows, and can say, that the image was saved.
 //
-// The captured view is expected to be an `ImageExportFrame`, whose size in
-// pixels is the export size: the output never depends on where, or whether,
-// the view is visible on screen. iOS renders the layer tree directly
-// (`useRenderInContext`), which does not need the view to be on screen.
+// The captured view is expected to be an `ImageExportFrame`: laid out at a
+// fixed logical size, the same on every phone. The capture comes out at the
+// pixel density of the screen, so it is then given the export size exactly
+// (`fitImageToPixelSize`): the image has the same pixels and the same
+// composition on a 2× and on a 3× phone. The output never depends on where,
+// or whether, the view is visible on screen: iOS renders the layer tree
+// directly (`useRenderInContext`), which does not need it to be.
 //
-// The temporary file lives only for the share or the save: it is released
+// The temporary files live only for the share or the save: they are released
 // as soon as either is over, whatever the outcome.
 
+import { File } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import type { RefObject } from 'react';
 import { Platform, type View } from 'react-native';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
 
-export interface ImagePixelSize {
-  readonly width: number;
-  readonly height: number;
-}
+import { fitImageToPixelSize, type ImagePixelSize } from './image-pixel-size';
+
+export type { ImagePixelSize };
 
 /** The person declined (or restricted) adding photos: nothing was captured or saved. */
 export class PhotosPermissionError extends Error {
@@ -37,7 +40,7 @@ export class PhotosPermissionError extends Error {
   }
 }
 
-/** Captures the view into a temporary PNG, lends its file URL to `handOver`, then releases it. */
+/** Captures the view into a temporary PNG of exactly `size`, lends its file URL to `handOver`, then releases it. */
 async function withCapturedImage(
   view: RefObject<View | null>,
   size: ImagePixelSize,
@@ -48,15 +51,28 @@ async function withCapturedImage(
     format: 'png',
     result: 'tmpfile',
     // Android sizes the bitmap in pixels: pin it to the export size. iOS
-    // already renders the frame at exactly that many pixels.
+    // renders the frame at the density of the screen.
     ...(Platform.OS === 'android' ? { width: size.width, height: size.height } : {}),
     useRenderInContext: Platform.OS === 'ios',
   });
+  let fitted: string | undefined;
   try {
     // iOS answers with a bare temporary path; share sheet and Photos take a file URL.
-    await handOver(uri.startsWith('/') ? `file://${uri}` : uri);
+    const captured = uri.startsWith('/') ? `file://${uri}` : uri;
+    fitted = await fitImageToPixelSize(captured, size);
+    await handOver(fitted ?? captured);
   } finally {
     releaseCapture(uri);
+    if (fitted !== undefined) discard(fitted);
+  }
+}
+
+/** Best effort: a temporary file that cannot be removed is left to the system cache. */
+function discard(fileUrl: string): void {
+  try {
+    new File(fileUrl).delete();
+  } catch {
+    // Nothing to do: the cache directory is purged by the system.
   }
 }
 

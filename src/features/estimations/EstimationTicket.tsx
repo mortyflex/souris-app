@@ -146,7 +146,6 @@ export function EstimationTicket({ visible, model, onClose }: EstimationTicketPr
           <ImageExportFrame
             backgroundColor={SHARE_CARD_BACKGROUND}
             layoutSize={{ width: SHARE_CARD_SIZE.width, height: exportHeight ?? 0 }}
-            pixelSize={pixelSize ?? getShareImagePixelSize(0)}
             ref={exportFrame}
             testID="estimation-export-frame"
           >

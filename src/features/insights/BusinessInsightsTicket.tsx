@@ -147,7 +147,6 @@ export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessIns
           <ImageExportFrame
             backgroundColor={INSIGHTS_SHARE_BACKGROUND}
             layoutSize={INSIGHTS_SHARE_CARD_SIZE}
-            pixelSize={INSIGHTS_SHARE_IMAGE_SIZE}
             ref={exportFrame}
             testID="business-insights-share-frame"
           >

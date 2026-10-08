@@ -247,7 +247,8 @@ plugin) or adds it to Photos (`saveViewToPhotos`, `expo-media-library` `Asset.cr
 add-only permission on iOS / images-only on Android; its config plugin carries the French
 `NSPhotoLibraryAddUsageDescription`). Either way the file is released as soon as the operation is
 over. Only the save path can confirm an outcome: the share sheet reports none. The captured view is a `shared/ui/ImageExportFrame`, which lays its
-content out at a fixed logical size and scales it to an exact pixel size, so an export never depends
+content out at a fixed logical size with no transform and no density maths; the boundary then gives the
+captured file the exact export pixel size (`shared/lib/image-pixel-size`), so an export never depends
 on the device. Features build the view; the boundary knows nothing about them. Both are native
 modules: a new development build is required.
 

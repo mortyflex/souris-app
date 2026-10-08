@@ -42,6 +42,8 @@ jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
 // Native image capture and share sheet: observed, never real.
 jest.mock('react-native-view-shot', () => ({ captureRef: jest.fn(), releaseCapture: jest.fn() }));
+// The captured file is measured natively: here it always has the export size already.
+jest.mock('@/shared/lib/image-pixel-size', () => ({ fitImageToPixelSize: jest.fn(async () => undefined) }));
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
 jest.mock('expo-media-library', () => ({ requestPermissionsAsync: jest.fn(), Asset: { create: jest.fn() } }));
 const mockMediaLibrary = jest.requireMock('expo-media-library') as {

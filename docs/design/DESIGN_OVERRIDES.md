@@ -1672,8 +1672,10 @@ screenshot.
 Data: `docs/domain/INSIGHTS.md` §7.
 
 - **Format.** 9:16 story. Laid out once at 360 × 640 dp, every text `allowFontScaling={false}`,
-  exported at 1080 × 1920 px PNG through `ImageExportFrame` (content scaled from the top-left corner
-  to the exact pixel size). The image is the same on every device and never includes the printer,
+  exported at 1080 × 1920 px PNG through `ImageExportFrame`. The frame IS the 360 × 640 dp layout —
+  no transform, nothing read from the screen density — and the captured file is then given the
+  exact pixel size (`shared/lib/image-pixel-size`): a 2× phone captures 720 × 1280 px, resampled
+  to 1080 × 1920; a 3× phone captures 1080 × 1920 directly. The image is the same on every device and never includes the printer,
   the dimmed Agenda, the carousel or the actions.
 - **Surface.** Flat warm receipt paper (`receiptPaper.surface`) FULL-BLEED across the whole
   1080 × 1920 image — painted by the card and under it by `ImageExportFrame`, so no pixel is
