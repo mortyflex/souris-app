@@ -2141,8 +2141,10 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
 - **Header** (`HomeHeader`). The editorial logo ALONE (`BrandMark`, 160 pt box — artwork about
   148 × 49 pt — pulled back by its 6 pt transparent padding so the ARTWORK sits on the gutter).
   No date, no text, no ornament beside it. No watermark, no illustration, no mascot.
-- **Top area** (`home-hero`): the greeting card and the next appointment on ONE row, 20 pt under
-  the logo (logo and row read as one group).
+- **Top area** (`home-hero`): the greeting card and the next-appointment SLOT on ONE row, 20 pt
+  under the logo (logo and row read as one group). The slot always holds a card: the next
+  appointment, or its empty version when nothing is to come. The top area is one stable module —
+  greeting left, appointment state right — and never falls back to a full-width row.
   - *Layout.* SIDE BY SIDE on every phone at the usual text sizes — iPhone SE (375 pt), the
     standard iPhones (393 / 402 pt) and the Pro Max (440 pt): asymmetrical 35 : 65 (flex, never a
     device check), 10 pt apart, one shared height — 136 pt minimum, compact rather than
@@ -2150,15 +2152,15 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
     column. Long content never stacks the row: it wraps or is cut inside the cards.
   - *Accessibility fallback.* The two cards stack, full width each, only when enlarged text
     leaves less than 340 pt of room at the default text size (`HOME_HERO_ROW_MIN_WIDTH`,
-    compared with `width / fontScale`) — « Bonsoir » would no longer fit its column — or when
-    there is no next appointment to face the greeting.
+    compared with `width / fontScale`) — « Bonsoir » would no longer fit its column. Text size
+    is the ONLY reason to stack: an empty slot never stacks the row.
   - *Greeting* (`HomeGreetingCard`): a plain white card (`surfaceElevated`, `radii.large`, no
     shadow, 12 pt padding), content centred vertically. « Bonjour » (« Bonsoir » from 18:00) in
     the 23 pt `summaryValue` role — the page header, deliberately not a screen-sized title — and
     « Votre journée en un coup d’œil. » in soft `metadata`, free to wrap onto two or three lines
     in its narrow column (three on the SE), never abbreviated. Stacked, the line is soft `body`.
-- **Prochain rendez-vous** (`NextAppointmentCard`) — the hero, and the ONLY tinted surface of the
-  page: `surfaceLavenderStrong`, `radii.large`, no shadow, 12 pt padding. Built for a column of
+- **Prochain rendez-vous** (`NextAppointmentCard`) — the hero, and the ONLY tinted surface
+  of the page (its empty version included): `surfaceLavenderStrong`, `radii.large`, no shadow, 12 pt padding. Built for a column of
   about 210 pt (iPhone SE):
   - an accent eyebrow « PROCHAIN RENDEZ-VOUS »;
   - WHEN it starts on a line of its own (`control`, 16 pt semibold, `foregroundSoft`) — the time
@@ -2173,9 +2175,15 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
   « Coupe Brushing 2 » hold on one line each at 375 pt. The whole card opens Appointment
   Details. The next Appointment is the nearest one that occupies the schedule, is not completed
   and starts now or later — today or any later day.
-- **Nothing to come.** Under the full-width greeting card, 8 pt apart, ONE compact white line (44 pt minimum): a muted calendar glyph and
-  « Aucun rendez-vous à venir. » Never a hero-sized empty card, no eyebrow. (Not « Aujourd’hui
-  est calme »: the line also shows on a day whose appointments are simply over.)
+- **Nothing to come** (`NextAppointmentEmptyCard`). The empty version of the SAME slot: it takes
+  the wide column of the row (flex 65, the shared 136 pt minimum height), or the second place of
+  the stack with enlarged text. It is the same card as the hero — `surfaceLavenderStrong`,
+  `radii.large`, no shadow, 12 pt padding — holding ONE statement, centred vertically in the
+  card: an accent calendar glyph in a 36 pt white disc, 8 pt, then « Aucun rendez-vous à venir. »
+  in soft `body`, free to wrap onto two lines, never cut. No eyebrow (« Prochain rendez-vous »
+  over that message would say it twice), no secondary text, no chevron, no press, no action —
+  « Rendez-vous » in Actions rapides creates one. Spoken once: « Aucun rendez-vous à venir ». (Not
+  « Aujourd’hui est calme »: it also shows on a day whose appointments are simply over.)
 - **Aujourd’hui.** `SectionHeader` with a trailing accent link « Résumé du jour › » that opens
   the existing receipt (§25) for today.
   - *Primary pair* (`HomeKpiCard`): two white cards, each an accent glyph in a 36 pt

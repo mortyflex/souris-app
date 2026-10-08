@@ -76,6 +76,13 @@ function seededDatabase(): SourisDatabase {
   return database;
 }
 
+/** The seed with every Appointment removed: nothing to come, nothing today. */
+function emptyDatabase(): SourisDatabase {
+  const database = seededDatabase();
+  for (const appointment of loadAppointments(database)) deleteAppointment(database, appointment.id);
+  return database;
+}
+
 function todaySummary(database: SourisDatabase) {
   return getAppointmentDaySummary(
     {
@@ -160,6 +167,42 @@ describe('HomeScreen', () => {
     // The quiet line is whole and free to wrap in its narrow column.
     const subtitle = within(hero).getByText('Votre journée en un coup d’œil.');
     expect(subtitle.props.numberOfLines).toBeUndefined();
+    await act(async () => {
+      Dimensions.set({ window: device });
+    });
+  });
+
+  it.each([
+    ['iPhone SE', 375],
+    ['iPhone 17', 402],
+    ['iPhone 17 Pro Max', 440],
+  ])('keeps the two cards side by side on %s when nothing is to come', async (_device, width) => {
+    const device = Dimensions.get('window');
+    Dimensions.set({ window: { ...device, fontScale: 1, width } });
+    const view = await renderHome(emptyDatabase());
+
+    // The very row of the usual state: same direction, gap, height and 35 : 65.
+    const hero = view.getByTestId('home-hero');
+    expect(hero).toHaveStyle({ flexDirection: 'row', gap: 10, minHeight: 136 });
+    expect(hero.children).toHaveLength(2);
+    expect(within(hero).getByTestId('home-greeting')).toHaveStyle({ flex: 35 });
+    expect(within(hero).getByTestId('home-next-appointment-empty')).toHaveStyle({ flex: 65 });
+    // The greeting keeps its compact quiet line, as beside an appointment.
+    expect(within(hero).getByText('Votre journée en un coup d’œil.')).toHaveStyle({ fontSize: 13.5 });
+    await act(async () => {
+      Dimensions.set({ window: device });
+    });
+  });
+
+  it('stacks the greeting and the empty card for enlarged accessibility text', async () => {
+    const device = Dimensions.get('window');
+    Dimensions.set({ window: { ...device, fontScale: 1.5, width: 375 } });
+    const view = await renderHome(emptyDatabase());
+
+    const hero = view.getByTestId('home-hero');
+    expect(StyleSheet.flatten(hero.props.style).flexDirection).toBeUndefined();
+    expect(within(hero).getByTestId('home-greeting')).not.toHaveStyle({ flex: 35 });
+    expect(within(hero).getByTestId('home-next-appointment-empty')).not.toHaveStyle({ flex: 65 });
     await act(async () => {
       Dimensions.set({ window: device });
     });
@@ -305,18 +348,28 @@ describe('HomeScreen', () => {
     ]);
   });
 
-  it('stays calm on an empty day: one compact line instead of a hero card, and zeros', async () => {
-    const database = seededDatabase();
-    for (const appointment of loadAppointments(database)) deleteAppointment(database, appointment.id);
-    const view = await renderHome(database);
+  it('stays calm on an empty day: the empty card takes the appointment slot, and zeros', async () => {
+    const view = await renderHome(emptyDatabase());
 
     expect(view.queryByTestId('home-next-appointment')).toBeNull();
-    expect(view.queryByText('Prochain rendez-vous')).toBeNull();
     // The greeting card stays.
     expect(within(view.getByTestId('home-greeting')).getByText('Bonjour')).toBeTruthy();
     const empty = view.getByTestId('home-next-appointment-empty');
-    expect(within(empty).getByText('Aucun rendez-vous à venir.')).toBeTruthy();
-    expect(empty).toHaveStyle({ flexDirection: 'row', minHeight: 44 });
+    // The same card surface as a real appointment, holding ONE statement:
+    // no eyebrow repeating it, free to wrap, centred beside its glyph.
+    expect(view.queryByText('Prochain rendez-vous')).toBeNull();
+    expect(within(empty).getAllByText(/./)).toHaveLength(1);
+    const message = within(empty).getByText('Aucun rendez-vous à venir.');
+    expect(message.props.numberOfLines).toBeUndefined();
+    expect(empty).toHaveStyle({
+      alignItems: 'center',
+      backgroundColor: semanticColors.surfaceLavenderStrong,
+      flexDirection: 'row',
+    });
+    expect(empty.props.accessibilityLabel).toBe('Aucun rendez-vous à venir');
+    // A statement, not a button: it opens nothing.
+    expect(empty.props.accessibilityRole).toBeUndefined();
+    expect(empty.props.onPress).toBeUndefined();
     expect(view.getByTestId('home-stat-appointments').props.children).toBe('0');
     expect(view.getByTestId('home-stat-potential').props.children).toBe(formatCompactEuroCents(0));
     expect(view.getByTestId('home-stat-collected').props.children).toBe(formatCompactEuroCents(0));

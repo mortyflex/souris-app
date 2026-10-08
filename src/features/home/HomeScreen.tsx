@@ -5,7 +5,8 @@
 //   [ BeautIzzy logo ]
 //   [ Bonjour — Votre journée en un coup d’œil. ]         the white greeting card
 //   [ PROCHAIN RENDEZ-VOUS — the one tinted hero card ]   → Appointment Details
-//     (the two cards share one row, 35 : 65, on every phone)
+//     (the two cards share one row, 35 : 65, on every phone; with nothing to
+//     come the same slot holds its quiet empty card, never a row of its own)
 //   Aujourd’hui                       Résumé du jour ›
 //   [ 2  Rendez-vous ]   [ 100 €  CA potentiel ]          the two primary figures
 //   [ Encaissements du jour ›  0 € encaissé | 100 € restant ]   secondary → Caisse
@@ -57,10 +58,8 @@ import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import {
   bottomClearance,
-  foregroundSoft,
   gutter,
   interaction,
-  radii,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
@@ -73,6 +72,7 @@ import { HomeQuickAction } from './components/HomeQuickAction';
 import { HOME_TOOL_ROW_SEPARATOR_INSET, HomeToolRow } from './components/HomeToolRow';
 import { HomeWeekSummary } from './components/HomeWeekSummary';
 import { NextAppointmentCard } from './components/NextAppointmentCard';
+import { NextAppointmentEmptyCard } from './components/NextAppointmentEmptyCard';
 import { formatHomeGreeting, formatHomeWeekRange, getNextAppointment } from './presentation';
 
 const statIcons = {
@@ -92,7 +92,8 @@ const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios
 const bottomPadding = Platform.OS === 'android' ? bottomClearance.android : bottomClearance.ios;
 
 /**
- * The greeting and the next appointment share ONE row on every phone at the
+ * The greeting and the next-appointment slot — the appointment, or its empty
+ * card — share ONE row on every phone at the
  * usual text sizes — iPhone SE included. They only stack when enlarged
  * accessibility text leaves less than this much room, in pt at the default
  * text size (`width / fontScale`): « Bonsoir » would no longer fit its column.
@@ -136,8 +137,8 @@ export function HomeScreen() {
     lastDay: weekDays[6],
   });
   const next = getNextAppointment(appointments, now);
-  // One row whenever there is a next appointment to face the greeting.
-  const heroInRow = next !== undefined && width / fontScale >= HOME_HERO_ROW_MIN_WIDTH;
+  // One row whatever the slot holds: an empty day keeps the two cards.
+  const heroInRow = width / fontScale >= HOME_HERO_ROW_MIN_WIDTH;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']} testID="home-screen">
@@ -172,17 +173,8 @@ export function HomeScreen() {
                   style={heroInRow && styles.heroNext}
                 />
               ) : (
-                // Nothing to come: one quiet line, never a hero-sized empty card.
-                <View accessible style={styles.emptyNext} testID="home-next-appointment-empty">
-                  <SymbolView
-                    name={statIcons.appointments}
-                    size={16}
-                    tintColor={semanticColors.foregroundMuted}
-                  />
-                  <AppText variant="metadata" style={styles.emptyNextText}>
-                    Aucun rendez-vous à venir.
-                  </AppText>
-                </View>
+                // Nothing to come: the same slot, in its quiet empty version.
+                <NextAppointmentEmptyCard style={heroInRow && styles.heroNext} />
               )}
             </View>
           </View>
@@ -369,18 +361,6 @@ const styles = StyleSheet.create({
   heroRow: { flexDirection: 'row', gap: HERO_ROW_GAP, minHeight: 136 },
   heroGreeting: { flex: 35 },
   heroNext: { flex: 65 },
-  emptyNext: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceElevated,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 44,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-  },
-  emptyNextText: { color: foregroundSoft },
   link: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs },
   linkPressed: { opacity: interaction.pressedOpacity },
   linkText: { color: semanticColors.accent },
