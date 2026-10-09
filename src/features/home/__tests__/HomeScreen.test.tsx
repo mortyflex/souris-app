@@ -10,14 +10,20 @@ import { ProductCatalogProvider } from '@/features/products/session/ProductCatal
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
 import { bootstrapPersistence } from '@/persistence/bootstrap';
 import type { SourisDatabase } from '@/persistence/database';
+import { getClientDisplayName } from '@/domain/clients';
 import { loadAppointmentDeposits } from '@/persistence/stores/appointment-deposits';
-import { deleteAppointment, loadAppointments } from '@/persistence/stores/appointments';
+import {
+  checkoutAppointment,
+  deleteAppointment,
+  loadAppointments,
+} from '@/persistence/stores/appointments';
+import { loadClients } from '@/persistence/stores/clients';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { createDevelopmentSeed } from '@/providers/development-seed';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { formatCompactEuroCents } from '@/shared/lib/money';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
-import { semanticColors } from '@/shared/ui/theme';
+import { fontFamilies, foregroundSoft, semanticColors } from '@/shared/ui/theme';
 
 import { HOME_HERO_ROW_MIN_WIDTH, HomeScreen } from '../HomeScreen';
 import { HOME_LOGO_SIZE } from '../components/HomeHeader';
@@ -145,6 +151,141 @@ describe('HomeScreen', () => {
     // One step under a screen title: important, never dominant.
     expect(greeting).toHaveStyle({ fontSize: 23 });
     expect(within(card).getByText('Votre journée en un coup d’œil.')).toBeTruthy();
+  });
+
+  // The seed's morning: « agenda-lea » 09:00 → 10:15 (95 €) and « agenda-camille »
+  // 09:20 → 10:05 (42 €). With the 15-minute grace Camille is due from 10:20,
+  // Léa from 10:30.
+  describe('reminds of an Appointment left to collect', () => {
+    const at = (hour: number, minute: number) => new Date(2026, 5, 1, hour, minute);
+    const collect = (database: SourisDatabase, appointmentId: string, cents: number) =>
+      checkoutAppointment(database, appointmentId, {
+        paidAt: at(10, 16),
+        cardAmountCents: cents,
+        cashAmountCents: 0,
+      });
+
+    it('keeps the quiet line, and no button, until the grace period has elapsed', async () => {
+      jest.setSystemTime(at(10, 19));
+      const view = await renderHome(seededDatabase());
+
+      const card = view.getByTestId('home-greeting');
+      expect(within(card).getByText('Votre journée en un coup d’œil.')).toBeTruthy();
+      expect(within(card).getByRole('header', { name: 'Bonjour' })).toBeTruthy();
+      expect(card.props.accessibilityRole).toBeUndefined();
+      await act(async () => fireEvent.press(card));
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('names the one Appointment by time and client and opens its Details', async () => {
+      jest.setSystemTime(at(10, 20));
+      const database = seededDatabase();
+      const camille = loadAppointments(database).find(({ id }) => id === 'agenda-camille');
+      const client = loadClients(database).find(({ id }) => id === camille?.clientId);
+      if (!client?.lastName) throw new Error('the seeded client needs a surname');
+      const view = await renderHome(database);
+
+      const card = view.getByTestId('home-greeting');
+      expect(within(card).queryByText('Votre journée en un coup d’œil.')).toBeNull();
+      // Same surface and greeting: a nudge, never an alert.
+      expect(card).toHaveStyle({ backgroundColor: semanticColors.surfaceElevated });
+      expect(within(card).getByText('Bonjour')).toHaveStyle({ fontSize: 23 });
+      // The first name alone, whatever the phone: the surname is only spoken.
+      const detail = within(card).getByText(`09:20 · ${client.firstName}`);
+      expect(detail.props.numberOfLines).toBe(1);
+      expect(detail).toHaveStyle({ color: foregroundSoft });
+      expect(within(card).getByText('Reste à encaisser')).toHaveStyle({
+        color: semanticColors.accent,
+        fontFamily: fontFamilies['600'],
+      });
+      // ONE button saying it all, the client name in full; no nested header.
+      const clientName = getClientDisplayName(client);
+      expect(clientName).not.toBe(client.firstName);
+      expect(card.props.accessibilityRole).toBe('button');
+      expect(card.props.accessibilityLabel).toBe(
+        `Bonjour. Rendez-vous de 09:20 avec ${clientName}. Reste à encaisser. Ouvrir le rendez-vous.`,
+      );
+      expect(within(card).queryByRole('header')).toBeNull();
+
+      await act(async () => fireEvent.press(card));
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/appointments/[appointmentId]',
+        params: { appointmentId: 'agenda-camille' },
+      });
+    });
+
+    it('counts several Appointments and opens the oldest one', async () => {
+      jest.setSystemTime(at(10, 30));
+      const view = await renderHome(seededDatabase());
+
+      const card = view.getByTestId('home-greeting');
+      expect(within(card).getByText('2 rendez-vous')).toBeTruthy();
+      expect(within(card).getByText('restent à encaisser')).toHaveStyle({
+        color: semanticColors.accent,
+      });
+      expect(within(card).queryByText(/·/)).toBeNull();
+      expect(card.props.accessibilityLabel).toBe(
+        'Bonjour. 2 rendez-vous restent à encaisser. Ouvrir le plus ancien.',
+      );
+
+      // Léa started first, although Camille ended first.
+      await act(async () => fireEvent.press(card));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/appointments/[appointmentId]',
+        params: { appointmentId: 'agenda-lea' },
+      });
+    });
+
+    it('moves on to the next outstanding Appointment once the oldest is collected', async () => {
+      jest.setSystemTime(at(10, 30));
+      const database = seededDatabase();
+      collect(database, 'agenda-lea', 9500);
+      const view = await renderHome(database);
+
+      const card = view.getByTestId('home-greeting');
+      expect(within(card).getByText(/^09:20 · .+/)).toBeTruthy();
+      await act(async () => fireEvent.press(card));
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/appointments/[appointmentId]',
+        params: { appointmentId: 'agenda-camille' },
+      });
+    });
+
+    it('returns to the quiet line once everything is collected', async () => {
+      jest.setSystemTime(at(10, 30));
+      const database = seededDatabase();
+      collect(database, 'agenda-lea', 9500);
+      collect(database, 'agenda-camille', 4200);
+      const view = await renderHome(database);
+
+      const card = view.getByTestId('home-greeting');
+      expect(within(card).getByText('Votre journée en un coup d’œil.')).toBeTruthy();
+      expect(card.props.accessibilityRole).toBeUndefined();
+    });
+
+    it.each([
+      ['iPhone SE', 375],
+      ['iPhone 17', 402],
+      ['iPhone 17 Pro Max', 440],
+    ])('keeps the 35 : 65 row on %s', async (_device, width) => {
+      jest.setSystemTime(at(10, 20));
+      const device = Dimensions.get('window');
+      Dimensions.set({ window: { ...device, fontScale: 1, width } });
+      const view = await renderHome(seededDatabase());
+
+      const hero = view.getByTestId('home-hero');
+      expect(hero).toHaveStyle({ flexDirection: 'row', gap: 10, minHeight: 136 });
+      expect(hero.children).toHaveLength(2);
+      expect(within(hero).getByTestId('home-greeting')).toHaveStyle({ flex: 35 });
+      expect(within(hero).getByTestId('home-next-appointment')).toHaveStyle({ flex: 65 });
+      // The compact lines of the narrow column, whatever the phone.
+      expect(within(hero).getByText(/^09:20 · .+/)).toHaveStyle({ fontSize: 13.5 });
+      expect(within(hero).getByText('Reste à encaisser')).toHaveStyle({ fontSize: 13.5 });
+      await act(async () => {
+        Dimensions.set({ window: device });
+      });
+    });
   });
 
   it.each([

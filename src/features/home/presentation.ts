@@ -3,13 +3,24 @@
 // Wording and selection for the Accueil tab. Nothing is computed about money
 // or time here: the figures come from the domain day summary
 // (`getAppointmentDaySummary`), the same source as « Résumé du jour ».
+//
+// The one rule of its own is WHEN the greeting card reminds of an Appointment
+// left to collect (`getHomeEncashmentInsight`): it reads the day summary rows
+// as they are and only adds a moment — the planned end plus a grace period.
 
-import { doesAppointmentOccupySchedule } from '@/domain/appointments';
+import {
+  doesAppointmentOccupySchedule,
+  getAppointmentEndAt,
+  type Appointment,
+  type AppointmentDaySummaryRow,
+} from '@/domain/appointments';
+import type { Client } from '@/domain/clients';
 import {
   formatAppointmentDate,
   formatAppointmentTime,
 } from '@/features/appointments/presentation';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
+import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 
 /** « Bonsoir » from 18:00, « Bonjour » before. */
 export function formatHomeGreeting(now: Date): string {
@@ -41,6 +52,92 @@ export function getNextAppointment(
     }
   }
   return next;
+}
+
+/**
+ * BeautIzzy stores no actual end of an Appointment, only its planned one, and
+ * the professional may simply be running late. The greeting card therefore
+ * waits this long after the planned end before it reminds of anything. A Home
+ * presentation rule: the Appointment lifecycle knows nothing of it.
+ */
+export const HOME_ENCASHMENT_GRACE_MINUTES = 15;
+
+export interface HomeEncashmentInsight {
+  /** The OLDEST Appointment left to collect: the one the card opens. */
+  readonly appointment: Appointment;
+  /** How many Appointments of today are left to collect, the oldest included. */
+  readonly count: number;
+}
+
+/**
+ * The Appointments of TODAY that still have money to collect, from the rows of
+ * the day summary (`getAppointmentDaySummary`) — which already leave out
+ * cancellations and no-shows and already know what is settled and what is
+ * left. Nothing about money is decided here. A row qualifies when:
+ *
+ *   - it is not settled (`collected === false`);
+ *   - something is left (`remainingCents > 0`): a fully prepaid visit awaits
+ *     « Terminer », not a payment, and a free one owes nothing;
+ *   - its planned end (`getAppointmentEndAt`, processing included) is at least
+ *     `HOME_ENCASHMENT_GRACE_MINUTES` behind `now`.
+ *
+ * Whatever its status: an Appointment nobody completed by hand qualifies too.
+ * The oldest by start time is the target (ties by id); undefined without any.
+ */
+export function getHomeEncashmentInsight(
+  rows: readonly AppointmentDaySummaryRow[],
+  now: Date,
+): HomeEncashmentInsight | undefined {
+  const latestEnd = now.getTime() - HOME_ENCASHMENT_GRACE_MINUTES * 60_000;
+  const outstanding = rows
+    .filter(
+      (row) =>
+        !row.collected &&
+        row.remainingCents > 0 &&
+        getAppointmentEndAt(row.appointment).getTime() <= latestEnd,
+    )
+    .map((row) => row.appointment)
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime() || a.id.localeCompare(b.id));
+  if (outstanding.length === 0) return undefined;
+  return { appointment: outstanding[0], count: outstanding.length };
+}
+
+/** The two lines the greeting card shows under « Bonjour », and what it says aloud. */
+export interface HomeEncashmentReminder {
+  /** Secondary, ONE visual line: `09:00 · Alicia` (first name only), or `2 rendez-vous`. */
+  readonly detail: string;
+  /** The emphasis line: « Reste à encaisser » / « restent à encaisser ». */
+  readonly emphasis: string;
+  /** The whole reminder and its action, with the client name in full. */
+  readonly accessibilityLabel: string;
+}
+
+/**
+ * One Appointment is named by its time and its client; several are counted.
+ * The narrow card SHOWS the first name alone, on every phone — the surname
+ * would be cut on most of them — and SAYS the full display name. A client
+ * without a first name, or one that no longer exists, keeps the display name.
+ * « Reste à encaisser », never « pas encore encaissé »: a deposit may already
+ * have been received.
+ */
+export function formatHomeEncashmentReminder(
+  insight: HomeEncashmentInsight,
+  client: Client | undefined,
+): HomeEncashmentReminder {
+  if (insight.count > 1) {
+    return {
+      detail: `${insight.count} rendez-vous`,
+      emphasis: 'restent à encaisser',
+      accessibilityLabel: `${insight.count} rendez-vous restent à encaisser. Ouvrir le plus ancien.`,
+    };
+  }
+  const time = formatAppointmentTime(insight.appointment.startAt);
+  const clientName = getResolvedClientDisplayName(client);
+  return {
+    detail: `${time} · ${client?.firstName.trim() || clientName}`,
+    emphasis: 'Reste à encaisser',
+    accessibilityLabel: `Rendez-vous de ${time} avec ${clientName}. Reste à encaisser. Ouvrir le rendez-vous.`,
+  };
 }
 
 function localDayDistance(from: Date, to: Date): number {

@@ -4,6 +4,8 @@
 //
 //   [ BeautIzzy logo ]
 //   [ Bonjour — Votre journée en un coup d’œil. ]         the white greeting card
+//     (or, once an Appointment of today is left to collect: « 09:00 · Alicia —
+//     Reste à encaisser », and the card opens that Appointment)
 //   [ PROCHAIN RENDEZ-VOUS — the one tinted hero card ]   → Appointment Details
 //     (the two cards share one row, 35 : 65, on every phone; with nothing to
 //     come the same slot holds its quiet empty card, never a row of its own)
@@ -73,7 +75,13 @@ import { HOME_TOOL_ROW_SEPARATOR_INSET, HomeToolRow } from './components/HomeToo
 import { HomeWeekSummary } from './components/HomeWeekSummary';
 import { NextAppointmentCard } from './components/NextAppointmentCard';
 import { NextAppointmentEmptyCard } from './components/NextAppointmentEmptyCard';
-import { formatHomeGreeting, formatHomeWeekRange, getNextAppointment } from './presentation';
+import {
+  formatHomeEncashmentReminder,
+  formatHomeGreeting,
+  formatHomeWeekRange,
+  getHomeEncashmentInsight,
+  getNextAppointment,
+} from './presentation';
 
 const statIcons = {
   appointments: { ios: 'calendar', android: 'calendar_today' },
@@ -137,6 +145,10 @@ export function HomeScreen() {
     lastDay: weekDays[6],
   });
   const next = getNextAppointment(appointments, now);
+  // From the rows « Résumé du jour » already holds: no second money rule.
+  const encashment = getHomeEncashmentInsight(summary.rows, now);
+  const openAppointment = (appointmentId: string) =>
+    router.push({ pathname: '/appointments/[appointmentId]', params: { appointmentId } });
   // One row whatever the slot holds: an empty day keeps the two cards.
   const heroInRow = width / fontScale >= HOME_HERO_ROW_MIN_WIDTH;
 
@@ -157,6 +169,16 @@ export function HomeScreen() {
               <HomeGreetingCard
                 compact={heroInRow}
                 greeting={formatHomeGreeting(now)}
+                onPress={
+                  encashment ? () => openAppointment(encashment.appointment.id) : undefined
+                }
+                reminder={
+                  encashment &&
+                  formatHomeEncashmentReminder(
+                    encashment,
+                    getClientById(encashment.appointment.clientId),
+                  )
+                }
                 style={heroInRow && styles.heroGreeting}
               />
               {next ? (
@@ -164,12 +186,7 @@ export function HomeScreen() {
                   appointment={next.appointment}
                   client={getClientById(next.appointment.clientId)}
                   now={now}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/appointments/[appointmentId]',
-                      params: { appointmentId: next.appointment.id },
-                    })
-                  }
+                  onPress={() => openAppointment(next.appointment.id)}
                   style={heroInRow && styles.heroNext}
                 />
               ) : (

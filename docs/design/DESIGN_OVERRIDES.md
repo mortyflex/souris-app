@@ -2159,6 +2159,36 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
     the 23 pt `summaryValue` role — the page header, deliberately not a screen-sized title — and
     « Votre journée en un coup d’œil. » in soft `metadata`, free to wrap onto two or three lines
     in its narrow column (three on the SE), never abbreviated. Stacked, the line is soft `body`.
+  - *Contextual greeting* — the card shows ONE state: an Appointment left to collect, otherwise
+    the quiet line above, unchanged and NOT pressable. No other insight exists.
+    - *Rule* (`getHomeEncashmentInsight`, `features/home/presentation.ts`). Read from the rows of
+      the day summary (`getAppointmentDaySummary`, the figures of « Résumé du jour ») — no second
+      money rule. An Appointment of TODAY qualifies when it is not settled (`collected === false`),
+      something is left (`remainingCents > 0`) and its planned end is at least 15 minutes old:
+      `getAppointmentEndAt(appointment) + 15 min <= now`. Cancellations and no-shows are already
+      out of the summary; a fully prepaid visit and a free one owe nothing; the status does not
+      matter otherwise — an Appointment never completed by hand qualifies.
+    - *The 15-minute grace* (`HOME_ENCASHMENT_GRACE_MINUTES`). BeautIzzy stores no actual end, only
+      the planned one, and the professional may simply be running late: the card never reminds at
+      the theoretical end. A Home presentation rule only — the Appointment lifecycle is untouched.
+    - *One Appointment*: under the greeting, « 09:00 · Alicia » — the time of
+      `formatAppointmentTime` and the client's FIRST NAME ONLY, on every phone, never the surname
+      on a wider one (the display name only for a client without a first name) — in the soft
+      quiet-line role, on ONE line: a very long first name is cut, never shrunk. Then « Reste à
+      encaisser » in the same size, semibold `accent`. Never « pas encore encaissé »: a deposit
+      may already have been received.
+    - *Several*: « 2 rendez-vous » (the real count) then « restent à encaisser », same two roles.
+    - *Action.* The whole card is one button — the pressed feedback of the next-appointment card,
+      no chevron in so narrow a column — and opens Appointment Details of the OLDEST outstanding
+      Appointment (by start time), where the checkout footer is. Never the Caisse, « Résumé du
+      jour » or the Agenda. Once it is collected, the next one becomes the target; with none
+      left, the quiet line returns. Home's own clock (focus, foreground, every minute) drives it.
+    - *Look.* Same white surface, greeting, 35 % column and row height. The accent is the page's
+      link colour: a calm nudge, never a red or orange alert.
+    - *Accessibility.* One label, the client name in full: « Bonsoir. Rendez-vous de 09:00 avec
+      Alicia Burel. Reste à encaisser. Ouvrir le rendez-vous. » (« Bonsoir. 2 rendez-vous restent à
+      encaisser. Ouvrir le plus ancien. »). The greeting is the page `header` only in the static
+      state; as a button the card announces everything once.
 - **Prochain rendez-vous** (`NextAppointmentCard`) — the hero, and the ONLY tinted surface
   of the page (its empty version included): `surfaceLavenderStrong`, `radii.large`, no shadow, 12 pt padding. Built for a column of
   about 210 pt (iPhone SE):
