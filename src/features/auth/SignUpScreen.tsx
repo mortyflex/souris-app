@@ -12,10 +12,10 @@ import { StyleSheet, type TextInput } from 'react-native';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { OnboardingStepLayout } from '@/shared/ui/OnboardingStepLayout';
 import { TextField } from '@/shared/ui/TextField';
 import { rose, spacing } from '@/shared/ui/theme';
 
-import { AuthScreenLayout } from './components/AuthScreenLayout';
 import { PasswordField } from './components/PasswordField';
 import {
   EMPTY_CREDENTIALS,
@@ -24,6 +24,7 @@ import {
   validateCredentials,
   type CredentialFormValues,
 } from './form';
+import { welcomeIllustration } from './illustrations';
 import { formatAuthFailure } from './messages';
 import { useAuth } from './session/AuthProvider';
 
@@ -64,8 +65,9 @@ export function SignUpScreen() {
   };
 
   return (
-    <AuthScreenLayout
+    <OnboardingStepLayout
       eyebrow="COMPTE"
+      illustration={welcomeIllustration}
       footer={
         <>
           <AppButton
@@ -83,9 +85,10 @@ export function SignUpScreen() {
         </>
       }
       onBack={() => router.back()}
-      subtitle="Votre compte vous permet de retrouver BeautIzzy sur cet appareil."
+      subtitle="Quelques secondes suffisent pour commencer avec BeautIzzy."
       testID="sign-up-screen"
-      title="Créer mon compte"
+      title="Créons votre compte"
+      topBarBrand
     >
       <TextField
         accessibilityLabel="Email"
@@ -119,7 +122,7 @@ export function SignUpScreen() {
           {failure}
         </AppText>
       )}
-    </AuthScreenLayout>
+    </OnboardingStepLayout>
   );
 }
 

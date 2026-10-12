@@ -316,12 +316,16 @@ Règles :
 - **Splash natif** : `logo-primary.png` sur blanc, `imageWidth` 252 (iOS), identique à la surface de
   démarrage ; Android affiche le symbole coloré sur une marge sûre (`android-splash.png`, fichier dédié, distinct
   du premier plan de l'icône adaptative).
-- **Welcome** : le logo principal occupe la zone de marque (dessin ≈ 291 × 91 dp sur un écran de
-  393 dp) ; six
-  objets beauté validés (`assets/brand/welcome-floating/` : sèche-cheveux, ciseaux, miroir, pinceau,
-  peigne, vernis) flottent lentement autour, s'écartent doucement du doigt et reviennent en ressort
-  souple ; scène immobile si « Réduire les animations » est actif. Ils accompagnent le logo, jamais
-  l'inverse, et ne recouvrent jamais le mot. Ces PNG ne sont ni redessinés ni recolorés.
+- **Welcome** : le seul Welcome du premier lancement, dans le cadre commun des écrans de premier
+  parcours (`OnboardingStepLayout`) : le logo principal (150 dp sur un iPhone SE, 176 dp ailleurs)
+  au-dessus de l'illustration héros validée (`assets/illustrations/onboarding/welcome.png`, dessinée
+  telle quelle, `contain`, ≈ 40 % de la hauteur, 30 % sur un petit écran, plafonnée à 340 dp),
+  la promesse « Votre activité beauté, c’est easy. » en violet de marque (`semanticColors.accent`,
+  le titre seul : le paragraphe reste marine), `Commencer` et « J’ai déjà un compte ». Les
+  anciens objets beauté flottants (`assets/brand/welcome-floating/`) ne font plus partie du
+  parcours d'entrée. Les écrans de compte (création, connexion, confirmation d'e-mail) gardent le
+  même cadre : bouton retour en verre, logo éditorial compact centré en haut, eyebrow « COMPTE ».
+  Le PNG héros n'est ni redessiné ni recoloré.
 - **Ne pas multiplier les souris illustrées.**
 
 ---

@@ -87,16 +87,23 @@ describe('development sync control — production boundary', () => {
     expect(screen).not.toMatch(/persistence|providers\/|useCloudSyncControl/);
   });
 
-  it('only the sync worker can restore, and only the cloud sync runner re-hydrates the UI after it', () => {
+  it('only the sync worker can restore, and only the cloud sync runner and onboarding re-hydrate the UI', () => {
     const restoreCallers = files
       .filter((file) => /\brestoreBusiness(FromRemote|Snapshot)\s*\(/.test(file.source))
       .map((file) => file.path);
     expect(restoreCallers.sort()).toEqual(['persistence/sync/push-worker.ts', 'persistence/sync/restore.ts']);
 
+    // Two callers only: the runner after a run that wrote rows for the remote,
+    // and onboarding after writing the starter prestations of a NEW Business
+    // (so the (app) providers mounted right after know them). Neither the
+    // development tools nor any other screen re-reads the snapshot.
     const reloadCallers = files
       .filter((file) => /\breloadSnapshot\s*\(\)/.test(file.source))
       .map((file) => file.path);
-    expect(reloadCallers).toEqual(['providers/CloudSyncRunner.tsx']);
+    expect(reloadCallers.sort()).toEqual([
+      'features/business/setup/BusinessSetupScreen.tsx',
+      'providers/CloudSyncRunner.tsx',
+    ]);
   });
 
   it('the restore / pull path hardcodes no account and no Business: it serves whichever Business the device is bound to', () => {

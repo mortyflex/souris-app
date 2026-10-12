@@ -526,16 +526,21 @@ src/infrastructure/supabase/communications-gateway.ts   the three RPCs
   timing (no customization in V1), the Reply-To (prefilled from the account email, validated
   locally AND by the server). Every change is persisted server-side before the UI claims it; the
   server trigger does the reconciliation.
-- **Onboarding** (NEW businesses only): one optional « Rappels automatiques » step after the
-  Business form — « Activer les rappels » (Reply-To prefilled, editable) or « Plus tard ».
-  « Plus tard » saves NOTHING (the OFF default stands). Activation NEVER claims success the
-  server did not confirm: the Business is created with the session's `deferEntry` (created and
-  bound, but onboarding stays mounted), the preference is saved, and only an accepted save — or
-  an explicit « Continuer sans les rappels » — enters the app. A failed save shows a calm
-  lavender notice (« Impossible d’activer les rappels pour le moment. / Votre activité a bien
-  été créée, mais les rappels restent désactivés. ») with « Réessayer »: the creation is never
-  rolled back, a retry never duplicates the Business (the created one is reused; the gateway
-  reuses an ALREADY_EXISTS one), and the safe fallback stays OFF. Existing users never see the
+- **Onboarding** (NEW businesses only): step 3 of the five-step setup, « Moins d’oublis, plus
+  de tranquillité » — ONE recommended option card, « Activer les rappels par e-mail »
+  (preselected, Reply-To prefilled from the account email and editable), « Continuer », and
+  « Je préfère configurer ça plus tard ». The wording names EMAIL explicitly: it is the only
+  client reminder channel BeautIzzy sends (appointment SMS is retired, §31), and nothing here
+  requests a push-notification permission. « Plus tard » — or an unchecked card — saves NOTHING
+  (the OFF default stands). Activation NEVER claims success the server did not confirm: the
+  Business is created with the session's `deferEntry` (created and bound, but onboarding stays
+  mounted), the preference is saved, and only an accepted save — or an explicit « Continuer sans
+  les rappels » — reaches the next step. A failed save shows a calm lavender notice
+  (« Impossible d’activer les rappels pour le moment. / Votre activité a bien été créée, mais
+  les rappels restent désactivés. ») with « Réessayer »: the creation is never rolled back, a
+  retry never duplicates the Business (the created one is reused; the gateway reuses an
+  ALREADY_EXISTS one), and the safe fallback stays OFF. The recap of the last step reads
+  « Rappels activés » or « À configurer plus tard » accordingly. Existing users never see the
   step (onboarding only mounts while no Business exists).
 - **Appointment creation and editing**: while the global preference is ON, an Options row
   « Rappel client » (native switch, ON by default; editing hydrates from the stored flag). The

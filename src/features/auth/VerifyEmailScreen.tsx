@@ -4,17 +4,20 @@
 // states what happened and offers the way back to sign-in; the resend action
 // is restrained and reports its own outcome. No token handling: the link
 // confirms the address in the browser, returns to the app on the sign-in
-// screen (sourisapp://sign-in), and the owner signs in normally.
+// screen (sourisapp://sign-in), and the owner signs in normally. Drawn in
+// the same first-run frame as Welcome and the account forms.
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
-import { rose, semanticColors, spacing } from '@/shared/ui/theme';
+import { OnboardingStepLayout } from '@/shared/ui/OnboardingStepLayout';
+import { radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
-import { AuthScreenLayout } from './components/AuthScreenLayout';
+import { welcomeIllustration } from './illustrations';
 import { formatAuthFailure } from './messages';
 import { useAuth } from './session/AuthProvider';
 
@@ -42,8 +45,9 @@ export function VerifyEmailScreen({ email }: VerifyEmailScreenProps) {
   };
 
   return (
-    <AuthScreenLayout
+    <OnboardingStepLayout
       eyebrow="COMPTE"
+      illustration={welcomeIllustration}
       footer={
         <>
           <AppButton
@@ -61,14 +65,31 @@ export function VerifyEmailScreen({ email }: VerifyEmailScreenProps) {
       }
       subtitle="Ouvrez le lien pour confirmer votre adresse, puis connectez-vous."
       testID="verify-email-screen"
-      title="Vérifiez votre boîte mail"
+      // A no-break space keeps the sparkle with « mail » on a narrow phone.
+      title={'Vérifiez votre boîte mail\u00a0✨'}
+      topBarBrand
     >
-      <AppText variant="body" style={styles.copy}>
-        Nous vous avons envoyé un lien à
-      </AppText>
-      <AppText variant="rowTitle" testID="verify-email-address">
-        {email}
-      </AppText>
+      <View
+        accessible
+        accessibilityLabel={`Nous vous avons envoyé un lien à ${email}`}
+        style={styles.notice}
+      >
+        <View style={styles.glyph}>
+          <SymbolView
+            name={{ ios: 'envelope', android: 'mail' }}
+            size={20}
+            tintColor={semanticColors.accent}
+          />
+        </View>
+        <View style={styles.noticeCopy}>
+          <AppText variant="metadata" style={styles.copy}>
+            Nous vous avons envoyé un lien à
+          </AppText>
+          <AppText variant="rowTitle" testID="verify-email-address">
+            {email}
+          </AppText>
+        </View>
+      </View>
       {notice && (
         <AppText
           variant="metadata"
@@ -78,13 +99,33 @@ export function VerifyEmailScreen({ email }: VerifyEmailScreenProps) {
           {notice.text}
         </AppText>
       )}
-    </AuthScreenLayout>
+    </OnboardingStepLayout>
   );
 }
 
 const styles = StyleSheet.create({
+  // The same calm lavender notice as the setup steps: nothing went wrong.
+  notice: {
+    alignItems: 'center',
+    backgroundColor: semanticColors.surfaceLavender,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+  },
+  glyph: {
+    alignItems: 'center',
+    backgroundColor: semanticColors.surfaceLavenderStrong,
+    borderRadius: radii.pill,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  noticeCopy: { flex: 1, gap: 2, minWidth: 0 },
   copy: { color: semanticColors.foregroundSoft },
-  info: { color: semanticColors.foregroundSoft, paddingTop: spacing.sm },
+  info: { color: semanticColors.foregroundSoft },
   // Text on the app background: rose600 falls to ~4.3:1 there.
-  error: { color: rose.rose700, paddingTop: spacing.sm },
+  error: { color: rose.rose700 },
 });

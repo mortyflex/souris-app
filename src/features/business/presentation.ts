@@ -8,6 +8,8 @@ const activityLabels: Record<BusinessActivityType, string> = {
   NAILS: 'Onglerie',
   ESTHETICS: 'Esthétique',
   LASHES_BROWS: 'Cils & sourcils',
+  MAKEUP: 'Maquillage',
+  WELLNESS: 'Bien-être',
   OTHER: 'Autre',
 };
 

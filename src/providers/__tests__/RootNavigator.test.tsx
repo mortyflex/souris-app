@@ -8,6 +8,7 @@ import { createFakeAuthGateway, fakeUser, type FakeAuthGateway } from '@/feature
 import { BusinessSessionProvider } from '@/features/business/session/BusinessSessionProvider';
 import { createFakeBusinessGateway, createRemoteBusiness, type FakeBusinessGateway } from '@/features/business/testing/fake-business-gateway';
 import { bindLocalDatabaseToBusiness } from '@/persistence/stores/business-profile';
+import { loadServices } from '@/persistence/stores/services';
 import { migrateDatabase } from '@/persistence/migrations';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { createFirstRunSeed } from '@/providers/first-run-seed';
@@ -91,6 +92,20 @@ describe('RootNavigator', () => {
     await waitFor(() => expect(app.getByTestId('route-(app)')).toBeTruthy());
     expect(app.queryByTestId('route-(auth)')).toBeNull();
     expect(app.queryByTestId('route-(onboarding)')).toBeNull();
+  });
+
+  it('an existing account on a new device never meets onboarding and never receives starter prestations', async () => {
+    const database = openTestDatabase();
+    const auth = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
+    const business = createFakeBusinessGateway([createRemoteBusiness({ activityType: 'HAIRDRESSING' })]);
+    const view = await renderGate({ auth, business, database });
+
+    // Remote discovery → local binding → the app, straight away.
+    await waitFor(() => expect(view.getByTestId('route-(app)')).toBeTruthy());
+    expect(view.queryByTestId('route-(onboarding)')).toBeNull();
+    expect(business.calls.create).toBe(0);
+    // The catalogue is exactly what the restore brings: nothing was seeded for the activity.
+    expect(loadServices(database)).toHaveLength(0);
   });
 
   it('drops the protected group as soon as the session ends, and opens offline from the local binding', async () => {

@@ -1284,19 +1284,70 @@ They describe product direction, not current implementation scope.
 
 Onboarding should be short.
 
-Implemented (Account & Onboarding V1) — four steps, no tutorial carousel:
+Implemented — ONE continuous first run: the Welcome and the account screens (`features/auth`),
+then a five-step guided setup on ONE route (`src/features/business/setup/BusinessSetupScreen.tsx`),
+for NEW businesses only. Every screen draws the same frame (`src/shared/ui/OnboardingStepLayout.tsx`:
+safe areas, the warm background, a glass back button, the brand, title and copy, a keyboard-safe
+body, the bottom actions, the same quiet entrance), so the professional perceives one flow even
+though auth and setup are different route groups. No tutorial carousel, no dots, no « Passer »:
+every step either says what BeautIzzy does or configures something useful.
 
 ```text
-1. Welcome        brand composition, one promise, `Commencer` / `J'ai déjà un compte`
-2. Account        email + password (create or sign in; email confirmation handled when enabled)
-3. Business setup prénom *, nom, nom de votre activité *, votre activité *, téléphone professionnel
-4. App
+Welcome   « Votre activité beauté, c’est easy. » — brand mark, the hero illustration
+          (`welcome.png`), `Commencer` → Créer un compte / `J’ai déjà un compte` → Se connecter.
+          The ONLY Welcome of the first run: it belongs to the first-entry experience and is
+          never repeated inside business setup.
+
+Account   « Créons votre compte » (email + password) → email confirmation when the project
+          requires it (« Vérifiez votre boîte mail ✨ », the link opens in the browser and brings
+          the owner back to sign-in) — or « Se connecter » for an existing account. Back returns
+          to Welcome.
+
+Setup     1. Primary activity   ONE activity, 2-column grid, required — `Continuer`
+          2. Business details   prénom *, nom, nom de votre activité *, téléphone (the chosen
+                                activity recalled as a read-only chip)
+          3. Client reminders   the recommended EMAIL opt-in (« Activer les rappels par e-mail »,
+                                Reply-To prefilled) or « Je préfère configurer ça plus tard »
+                                → the Business is created and bound HERE, exactly once
+          4. Starter services   the base proposed for the activity, each kept or removed; only the
+                                kept ones are written — « Ajouter ces prestations » /
+                                « Continuer sans prestations » / « Je préfère ajouter mes
+                                prestations moi-même »
+          5. Setup complete     « Votre espace BeautIzzy est prêt ✨ » + the personalised recap
+                                (activity · rappels activés / à configurer plus tard · N prestations
+                                prêtes / prestations à ajouter plus tard) — `Continuer`
+App
 ```
 
+An existing account signing in never meets setup: root routing restores its Business (local
+binding or remote discovery) and opens the app; only an account with no Business reaches step 1.
+
+A quiet progress bar runs over the five setup steps (spoken as « Étape n sur 5 »). Back is offered
+on steps 2–3 only: nothing precedes step 1 inside setup (the account screens are not a step), and
+once the Business exists (step 3 onward) nothing before it can be revisited, so a creation is never
+edited or repeated. Each step has its approved illustration (`assets/illustrations/onboarding`,
+drawn as supplied); the reserve illustrations and the paywall one are not used.
+
+The primary activity is a SINGLE value — the stable vocabulary is `HAIRDRESSING | BARBER | NAILS |
+ESTHETICS | LASHES_BROWS | MAKEUP | WELLNESS | OTHER` (Coiffure, Barbier, Onglerie, Esthétique,
+Cils & sourcils, Maquillage, Bien-être, Autre). Multi-profession support is not
+implemented. It personalises the starter services, their pictograms and a few examples only — never
+Home, Agenda, Clientèle, Produits, Caisse, navigation or a business rule.
+
+Starter services are offered ONLY on this step of a NEWLY created Business, written through the
+normal Service store with fresh ids (they sync like hand-made prestations), at the neutral 0 € price
+the professional then sets in Prestations & tarifs; « Autre » proposes nothing. An existing Business
+never receives them: no « catalogue empty → seed » rule exists anywhere, and an existing account on a
+new device goes through remote discovery, binding and restore — never through onboarding.
+
 Wording: "Nom de votre activité" (never "Nom du salon") — BeautIzzy serves every appointment-based
-beauty profession and independent workers; placeholders never imply hairdressing only. Activities:
-Coiffure, Barbier, Onglerie, Esthétique, Cils & sourcils, Autre. Nothing else is asked at first run
-(no address, SIRET, VAT, hours, social links, logo, staff, banking, subscription).
+beauty profession and independent workers; placeholders never imply hairdressing only. Nothing else
+is asked at first run (no address, SIRET, VAT, hours, social links, logo, staff, banking).
+
+Subscription / paywall: deliberately NOT part of this onboarding. The future subscription gate is a
+separate implementation phase, inserted at ROOT routing after setup completes (which is why the last
+step says « Continuer », not « Accéder à BeautIzzy »). No placeholder route, entitlement flag or local
+trial timer exists.
 
 A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
 existing install keeps its local data; completing Business setup binds that data to the new

@@ -7,7 +7,7 @@
 
 import type { PostgrestError } from '@supabase/supabase-js';
 
-import { isBusinessActivityType, type BusinessProfile, type BusinessSetupInput } from '@/domain/business';
+import { toBusinessActivityType, type BusinessProfile, type BusinessSetupInput } from '@/domain/business';
 import { BusinessGateway, BusinessGatewayError } from '@/features/business/gateway';
 
 import type { SourisSupabaseClient } from './client';
@@ -45,18 +45,20 @@ function toInstant(value: string): Date {
   return date;
 }
 
-/** Exported for tests: remote row → domain profile, validating the activity vocabulary. */
+/**
+ * Exported for tests: remote row → domain profile. The activity is decoded
+ * tolerantly: a value introduced by a newer build reads as OTHER, so an older
+ * build still finds, binds and opens the Business (the stored value is never
+ * rewritten by the app, so nothing is lost).
+ */
 export function toBusinessProfile(row: BusinessRow): BusinessProfile {
-  if (!isBusinessActivityType(row.activity_type)) {
-    throw new BusinessGatewayError('INVALID', `Unknown activity_type "${row.activity_type}"`);
-  }
   return {
     id: row.id,
     ownerUserId: row.owner_user_id,
     ownerFirstName: row.owner_first_name,
     ...(row.owner_last_name !== null && { ownerLastName: row.owner_last_name }),
     name: row.name,
-    activityType: row.activity_type,
+    activityType: toBusinessActivityType(row.activity_type),
     ...(row.phone !== null && { phone: row.phone }),
     createdAt: toInstant(row.created_at),
     updatedAt: toInstant(row.updated_at),

@@ -133,10 +133,24 @@ Changing ids would unnecessarily break identity stability.
 
 The current fresh-session import yields **8 Services / 8 Techniques**: Services = Brushing 1/2/3,
 Coupe Femme / Homme, Chignon, Coupe Brushing 1/2/3; Techniques = Balayage 1/2/3, Couleur Racines,
-Dose Supplémentaire, Soin Classique, Soin Profond, Traitement SOS. The catalog is seeded into
-SQLite once, on the very first launch; afterwards the persisted catalog is the only source, so a
-classification change in the legacy adapters affects fresh installs (or a development reset)
-only. The application never reclassifies rendered Services dynamically.
+Dose Supplémentaire, Soin Classique, Soin Profond, Traitement SOS. This pilot catalogue is
+DEVELOPMENT data only (`src/providers/development-seed.ts`, the `__DEV__` reset): the production
+first-run seed is empty (PERSISTENCE.md §5), so a real install never receives it. Once persisted,
+the catalog is the only source: a classification change in the legacy adapters affects a
+development reset only. The application never reclassifies rendered Services dynamically.
+
+### Onboarding starter services
+
+The ONLY automatic catalogue entries of a real install are the starter prestations the new
+onboarding proposes (`src/features/business/setup/starter-services.ts`): a designed base per primary
+activity (Coiffure, Onglerie, Esthétique, Cils & sourcils, Maquillage, Barbier, Bien-être — nothing
+for Autre), shown ONCE, right after a NEW Business was created, each kept or removed before anything
+is written. Only the kept ones are inserted, through the normal Service store, with fresh UUIDs, at
+the neutral price `0` the professional sets afterwards; they sync like hand-made prestations. The
+onboarding step is the eligibility boundary: there is NO « catalogue empty → seed » rule, so an
+existing Business (including one being restored on a new, temporarily empty device) never receives
+them. Types follow §3: a SERVICE is one staff-required phase; only work where the client genuinely
+waits with something in place is a TECHNIQUE (Application → Temps de pose → Finition).
 
 ---
 
@@ -155,7 +169,7 @@ legacy-techniques ─┘                                    │
 
 It exposes only what this phase needs: `services`, `activeServices`, `getServiceById`, `addService`, `updateService`, `setServiceActive`. New runtime identities follow the existing session-ID pattern (`service-{timestamp}-{sequence}`).
 
-The provider seeds a fresh, deep-copied import on every session start; the raw legacy module state is never mutated.
+The provider hydrates from the persisted snapshot (PERSISTENCE.md §6) — the legacy import only ever reaches a database through the development seed; the raw legacy module state is never mutated.
 
 `deleteService(serviceId)` removes the exact record immutably; the raw legacy sources and the
 session seed factory are never mutated by any catalog operation.

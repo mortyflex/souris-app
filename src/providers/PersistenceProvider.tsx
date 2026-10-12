@@ -60,10 +60,12 @@ export interface PersistenceValue {
    * navigation, open sheets, scroll positions and every draft (a Sale being
    * composed, an Appointment being created or edited, a form being filled)
    * stay exactly as they are, while the session providers adopt the fresh
-   * persisted state (`useSnapshotRefresh`). The ONLY caller is the cloud sync
+   * persisted state (`useSnapshotRefresh`). Two callers: the cloud sync
    * runner, after a run that wrote operational rows on behalf of the remote
-   * (a new-device restore, an applied pull). A run that changed nothing never
-   * calls it, so an idle periodic pull re-renders nothing.
+   * (a new-device restore, an applied pull) — a run that changed nothing never
+   * calls it, so an idle periodic pull re-renders nothing — and onboarding,
+   * once its starter prestations are written, so the (app) providers that
+   * mount right after hydrate from a snapshot that knows them.
    */
   readonly reloadSnapshot: () => void;
 }

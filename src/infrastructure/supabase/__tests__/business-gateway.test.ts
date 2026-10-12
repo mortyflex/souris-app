@@ -1,5 +1,3 @@
-import { BusinessGatewayError } from '@/features/business/gateway';
-
 import {
   createSupabaseBusinessGateway,
   mapPostgrestError,
@@ -51,7 +49,7 @@ describe('mapPostgrestError', () => {
 });
 
 describe('toBusinessProfile', () => {
-  it('converts a row and refuses an unknown activity vocabulary', () => {
+  it('converts a row, keeps every known activity, and reads an unknown one as OTHER', () => {
     expect(toBusinessProfile(row)).toEqual({
       id: row.id,
       ownerUserId: 'user-lea',
@@ -62,7 +60,12 @@ describe('toBusinessProfile', () => {
       createdAt: new Date('2026-09-12T10:00:00.000Z'),
       updatedAt: new Date('2026-09-12T10:00:00.000Z'),
     });
-    expect(() => toBusinessProfile({ ...row, activity_type: 'Coiffure' })).toThrow(BusinessGatewayError);
+    for (const activityType of ['MAKEUP', 'WELLNESS', 'BARBER'] as const) {
+      expect(toBusinessProfile({ ...row, activity_type: activityType }).activityType).toBe(activityType);
+    }
+    // A value stored by a newer build: the Business still resolves, as OTHER.
+    expect(toBusinessProfile({ ...row, activity_type: 'TATTOO' }).activityType).toBe('OTHER');
+    expect(toBusinessProfile({ ...row, activity_type: 'Coiffure' }).activityType).toBe('OTHER');
   });
 });
 

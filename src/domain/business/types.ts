@@ -7,8 +7,10 @@
 // explicit so they remain cheap to add later.
 
 /**
- * Stable, storage-facing vocabulary of what the professional does. Persisted
- * as-is (remote and local); French labels are presentation only.
+ * Stable, storage-facing vocabulary of what the professional does — ONE
+ * primary activity per Business. Persisted as-is (remote and local); French
+ * labels are presentation only. The onboarding grid orders these its own
+ * way (`src/features/business/setup/activity-options.ts`).
  */
 export const BUSINESS_ACTIVITY_TYPES = [
   'HAIRDRESSING',
@@ -16,6 +18,8 @@ export const BUSINESS_ACTIVITY_TYPES = [
   'NAILS',
   'ESTHETICS',
   'LASHES_BROWS',
+  'MAKEUP',
+  'WELLNESS',
   'OTHER',
 ] as const;
 
@@ -26,6 +30,17 @@ export function isBusinessActivityType(value: unknown): value is BusinessActivit
     typeof value === 'string' &&
     (BUSINESS_ACTIVITY_TYPES as readonly string[]).includes(value)
   );
+}
+
+/**
+ * Decodes a STORED activity value at a boundary (remote row, local row). A
+ * known value is kept as is; anything else — typically a value introduced by
+ * a newer build — reads as `OTHER`, so an older build never fails to open a
+ * Business it cannot name. The stored remote value is never rewritten by
+ * the app, so nothing is lost: a build that knows the value reads it again.
+ */
+export function toBusinessActivityType(value: unknown): BusinessActivityType {
+  return isBusinessActivityType(value) ? value : 'OTHER';
 }
 
 /**

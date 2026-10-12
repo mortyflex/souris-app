@@ -269,6 +269,20 @@ describe('account binding', () => {
     expect(listLocalBusinessIds(db)).toEqual(['another-business', BUSINESS_ID]);
   });
 
+  it('reads a stored activity this build does not know as OTHER instead of failing the bootstrap', () => {
+    const db = openTestDatabase();
+    migrateDatabase(db);
+    bindLocalDatabaseToBusiness(db, { ...remoteProfile, activityType: 'WELLNESS' });
+    expect(readBusinessProfile(db)?.activityType).toBe('WELLNESS');
+
+    // A newer build stored a value this vocabulary lacks: the device still opens.
+    db.runSync('UPDATE business_profile SET activity_type = ? WHERE singleton = 1', ['TATTOO']);
+    const profile = readBusinessProfile(db);
+    expect(profile?.id).toBe(remoteProfile.id);
+    expect(profile?.activityType).toBe('OTHER');
+    expect(() => bootstrapPersistence(db, createTestSeed)).not.toThrow();
+  });
+
   it('rolls everything back when a rewrite fails midway', () => {
     const inner = openSchemaV2Database();
     migrateDatabase(inner);

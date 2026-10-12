@@ -42,9 +42,15 @@ BusinessSessionProvider   which Business does this user own? src/features/busine
 profile or SQLite. `BusinessProfile` (`src/domain/business`) = `{ id, ownerUserId, ownerFirstName,
 ownerLastName?, name, activityType, phone?, createdAt, updatedAt }`.
 
-`BusinessActivityType` is a stable, storage-facing vocabulary: `HAIRDRESSING | BARBER | NAILS |
-ESTHETICS | LASHES_BROWS | OTHER`. French labels (Coiffure, Barbier, Onglerie, Esthétique,
-Cils & sourcils, Autre) are presentation only (`src/features/business/presentation.ts`).
+`BusinessActivityType` is a stable, storage-facing vocabulary of ONE primary activity:
+`HAIRDRESSING | BARBER | NAILS | ESTHETICS | LASHES_BROWS | MAKEUP | WELLNESS | OTHER`. French
+labels (Coiffure, Barbier, Onglerie, Esthétique, Cils & sourcils, Maquillage, Bien-être, Autre) are
+presentation only (`src/features/business/presentation.ts`). Both columns are plain text, so adding
+a value needs no migration. Decoding is tolerant at both boundaries (`toBusinessActivityType`, in the
+Supabase gateway and the local `business_profile` store): a stored value this build does not know —
+one a newer build introduced — reads as `OTHER`, so the Business still resolves, binds and opens
+instead of failing the bootstrap. The app never writes the activity back, so the stored value is
+preserved for builds that know it; the local cache written at binding time holds the decoded value.
 
 ---
 
@@ -124,18 +130,31 @@ authenticated user
       more than one   → error MULTIPLE_REMOTE_BUSINESSES (invariant violation, never guessed)
 ```
 
-Business setup submit (`createBusiness`):
+Business setup is the five-step onboarding of `docs/product/PRODUCT.md` §17 (activity → details →
+reminders → starter services → setup complete), entered right after authentication: the Welcome is
+the first-entry screen of the `(auth)` group and is never repeated here. The creation
+(`createBusiness`, with `deferEntry`) happens at the reminders decision — step 3 — and nowhere else:
 
-1. local validation (`business-form.ts`);
+1. local validation (`business-form.ts`, the details step cannot continue while invalid);
 2. remote insert with `owner_user_id = auth user`;
 3. local binding (`bindLocalDatabaseToBusiness`, one SQLite transaction — see PERSISTENCE.md §4b);
-4. state becomes `ready` only after the transaction committed → the root gate enters the app.
+4. the Business exists, the state stays `setup-required`: the optional reminder activation runs,
+   the starter services are written against the bound Business id (normal Service store, fresh
+   ids, `reloadSnapshot` so the `(app)` providers hydrate with them), the recap is shown;
+5. `enterCreatedBusiness` on the last step turns the state `ready` → the root gate enters the app.
+   The future subscription gate will sit at that root decision, after `ready`.
 
-Idempotence: if the remote insert fails, nothing is bound and the form keeps its draft. If the
-remote row exists but binding failed, `retry` runs the resolution (lookup → bind) and a
-re-submitted form receiving `ALREADY_EXISTS` (unique `owner_user_id`) also resolves to the existing
-row. A second Business is never created. A row whose owner is not the signed-in user is refused
-(`OWNER_MISMATCH`).
+Killing the app between steps 3 and 5 loses nothing: the Business exists remotely and locally, the
+next launch resolves `ready` from the binding and opens the app (no onboarding again); starter
+services not yet written are simply added by hand later.
+
+Idempotence: if the remote insert fails, nothing is bound and the form keeps its draft (the
+professional may go back to the details). If the remote row exists but binding failed, `retry` runs
+the resolution (lookup → bind) and a re-submitted form receiving `ALREADY_EXISTS` (unique
+`owner_user_id`) also resolves to the existing row. Once the Business exists, onboarding keeps it in
+state and offers no way back to the earlier steps (`canGoBack` in `onboarding-steps.ts`): a retry of
+the reminder activation or of the starter write reuses it. A second Business is never created. A row
+whose owner is not the signed-in user is refused (`OWNER_MISMATCH`).
 
 ---
 
@@ -159,8 +178,10 @@ mounts only the matching Expo Router group through `Stack.Protected` guards:
 
 ```text
 booting                   branded boot surface (same composition as the native splash)
-auth                      (auth): Welcome → sign-up / sign-in / verify-email
-onboarding                (onboarding)/business
+auth                      (auth): Welcome (the single Welcome of the first run) → sign-up /
+                          sign-in / verify-email — all in the shared first-run frame
+onboarding               (onboarding)/business — the five-step setup of a NEW Business, starting
+                          at the primary activity (no second Welcome)
 app                       (app): tabs + every existing sheet route, with the operational
                           providers and CurrentBusinessProvider (bound Business id)
 device-account-conflict   AccountConflictScreen

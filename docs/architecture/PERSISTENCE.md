@@ -593,7 +593,7 @@ with the v1 column set, migrates, and asserts version, rows, and NULL lifecycle.
 
 ```text
 first launch:  empty database
-               → migrate to the current schema (v8)
+               → migrate to the current schema (v16)
                → seed_version absent → run the production seed ONCE, in one transaction
                    Clients / Services / Products / Appointments / Sales = []   (EMPTY)
                → write souris_metadata.seed_version = 1
@@ -614,6 +614,13 @@ never consulted again and the pilot data they already hold stays exactly as it i
 
 The seed marker — not row counts — decides. A professional who deletes every record is NOT
 re-seeded.
+
+The starter prestations of onboarding (SERVICES.md §5, « Onboarding starter services ») are NOT a
+seed: they are ordinary Service rows written through `insertService` — outbox entry included — on the
+starter step of a NEWLY created Business, after the binding, only for the entries the professional
+kept, and never again. Nothing is keyed on an empty catalogue, so a device restoring an existing
+Business is never seeded while it is temporarily empty. Onboarding then calls `reloadSnapshot` so
+the `(app)` providers hydrate with them.
 
 The legacy data and the development fixtures (the `client-agenda-*` clients and the relative-day
 Agenda Appointments) live in `src/providers/development-seed.ts`, stamped with a `businessId`. They

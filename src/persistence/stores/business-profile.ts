@@ -18,7 +18,7 @@
 // leaves the database exactly as it was.
 
 import type { BusinessProfile } from '@/domain/business';
-import { isBusinessActivityType } from '@/domain/business';
+import { toBusinessActivityType } from '@/domain/business';
 
 import { runInTransaction, type SourisDatabase } from '../database';
 import { BUSINESS_SCOPED_TABLES } from '../schema';
@@ -52,10 +52,12 @@ export class LocalAccountBindingError extends Error {
   }
 }
 
+/**
+ * Row → profile. The activity is decoded tolerantly: a value this build does
+ * not know (stored by a newer build) reads as OTHER instead of failing the
+ * bootstrap of a device that holds the professional's data.
+ */
 function toBusinessProfile(row: BusinessProfileRow): BusinessProfile {
-  if (!isBusinessActivityType(row.activity_type)) {
-    throw new RangeError(`business_profile: unknown activity_type "${row.activity_type}"`);
-  }
   const ownerLastName = fromSqlOptional(row.owner_last_name);
   const phone = fromSqlOptional(row.phone);
   return {
@@ -64,7 +66,7 @@ function toBusinessProfile(row: BusinessProfileRow): BusinessProfile {
     ownerFirstName: row.owner_first_name,
     ...(ownerLastName !== undefined && { ownerLastName }),
     name: row.name,
-    activityType: row.activity_type,
+    activityType: toBusinessActivityType(row.activity_type),
     ...(phone !== undefined && { phone }),
     createdAt: fromSqlInstant(row.created_at),
     updatedAt: fromSqlInstant(row.updated_at),

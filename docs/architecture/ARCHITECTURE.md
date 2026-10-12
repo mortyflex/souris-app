@@ -81,7 +81,8 @@ Route groups (Account & Onboarding V1):
 
 ```text
 src/app/(auth)/          Welcome, sign-up, sign-in, verify-email      — no session
-src/app/(onboarding)/    business setup                               — session, no Business
+src/app/(onboarding)/    five-step business setup (one route)         — session, no Business
+                         (starts at the primary activity: the Welcome is owned by (auth))
 src/app/(app)/           tabs + every operational sheet route         — session + bound Business
 ```
 

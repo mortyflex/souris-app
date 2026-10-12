@@ -437,33 +437,36 @@ have been removed from the repository.
   settled and the router is committed; the root view shares the splash white and the boot surface
   renders `<BrandMark variant="primary" size={252} decorative />` (artwork ≈ 233 × 73 dp), the same
   box as the native splash, so no intermediate unbranded surface or jump exists.
-- **Welcome** — the primary logo is the hero: box width 314 dp on the 393 dp reference screen
-  (artwork ≈ 291 × 91 dp), scaled with the screen width (capped at 430 dp); it stays the single
-  accessible "BeautIzzy". Its obstacle ellipse is 145 × 45 dp. Around it, `WelcomeMotifs` floats the six approved PNGs of
-  `assets/brand/welcome-floating/` (hairdryer, scissors, mirror, brush, comb, nail polish) — drawn as
-  supplied with `contain`, no plate, no shadow, boxes of 58–90 dp (hairdryer largest, nail polish
-  smallest), staggered around the logo and never over the word. A short hero pulls the objects in
-  and shrinks them rather than the logo. Idle: each object drifts on its own 5.2–7.4 s sine loop
-  (±5–7 dp vertical, ±2–4 dp horizontal, ±2–3.5° tilt), fading out while the object is in flight.
-  Touch: the hero — and only the hero — owns a pan gesture, and every object is a small physical
-  body (`welcome-physics.ts`): a finger within 130 dp pushes it away and hands it a share of its
-  own velocity, so a slow finger nudges and a fast swipe throws (≈ 135–160 dp in free space). A thrown
-  object coasts on a light drag, bounces softly off the hero's edges (artwork radius included) and
-  off the logo (an ellipse), is reined in past 110 dp from rest, then drifts home on a pull that
-  firms up as it slows and settles without wobbling (≈ 4 s). It leans with its horizontal speed,
-  per object (scissors most, mirror and nail polish least), never spinning. One frame callback per
-  object, running only between the first touch and the return home; everything else stays on the
-  UI thread with no React render while the finger moves. Helpers called by a worklet are
-  module-level worklets, never functions declared inside a worklet (the React Compiler would hoist
-  them out as non-worklets — guarded by `worklet-closures.test.ts`); the physics rules are
-  unit-tested, the feel is validated by hand on simulator / device. The logo leans ≤ 2.5 dp. The
-  headline is `semanticColors.foreground` (`#19163F`, the navy of the logo above it, 15.5:1 on the
-  screen); the subtitle keeps `foregroundSoft`. Historical: the headline used to carry a
-  plum (`#5F1852`) measured on the previous Souris lockup. That plum is no longer a brand colour:
-  the `brand.plum` token and its `brandForeground` alias are gone, and the value survives only as
-  `mauve900`, the Calendar Block title (§24). Reduce Motion:
-  still scene, touch field off. Decorative, pointer-transparent, hidden from assistive technology;
-  the hero clips its content so nothing draws over the copy or the buttons.
+- **Welcome and the account screens** — the single Welcome of the first run and the three account
+  screens (sign-up, sign-in, email confirmation) draw the same frame as business setup,
+  `src/shared/ui/OnboardingStepLayout.tsx`: top and bottom safe areas on `semanticColors.screen`,
+  a quiet top bar (the `GlassIconButton` back on the left; in the centre the setup progress, or on
+  the account screens `<BrandMark variant="editorial" size={112} />` as the single accessible
+  "BeautIzzy"), an optional illustration, an optional accent uppercase eyebrow (« COMPTE »), the
+  title (`display` centred on Welcome and setup complete, `screenTitle` leading elsewhere) and its
+  `foregroundSoft` supporting line, the screen's content, and a fixed footer with the primary
+  `AppButton` and its tertiary secondary. The body scrolls and avoids the keyboard; the two framing
+  steps centre a short composition. Entrance: four groups (illustration with a 10 dp rise, header,
+  content, footer) fade in over 260 ms each, staggered 0 / 60 / 120 / 180 ms, `easing.out`;
+  Reduce Motion renders in place. Welcome: `<BrandMark variant="primary" size={176} />` (150 on a
+  small phone) above the hero `assets/illustrations/onboarding/welcome.png` (drawn as supplied,
+  `contain`, hidden from assistive technology; side = 40 % of the window height, 30 % under
+  700 pt, clamped 180–340), « Votre activité beauté, c’est easy. », `Commencer` (→ sign-up, one
+  light-impact haptic) and « J’ai déjà un compte » (→ sign-in). Sign-up: « Créons votre compte »,
+  « Quelques secondes suffisent pour commencer avec BeautIzzy. », Email, Mot de passe (visibility
+  toggle), `Créer mon compte`, « J’ai déjà un compte »; sign-in: « Se connecter », « Retrouvez
+  votre espace BeautIzzy. »; email confirmation: « Vérifiez votre boîte mail ✨ », the address in a
+  lavender notice with an envelope glyph, « Retour à la connexion », « Renvoyer l’email ». The
+  account screens reuse `welcome.png` at the compact size (0.22 × the window height, 0.17 under
+  700 pt, clamped 112–200) above the eyebrow; the brand mark carries the top bar and the form
+  stays above the fold. The Welcome headline alone is `semanticColors.accent` (`#7354C7`, the brand
+  violet of the eyebrows and primary actions, 4.9:1 on the screen at display size); every other
+  title of the frame, Welcome’s subtitle included, stays navy. Historical: the previous Welcome
+  floated six beauty objects (`assets/brand/welcome-floating/`) around the logo with a touch
+  physics scene; that scene is gone from the entry flow (the PNGs are no longer rendered anywhere).
+  The old plum (`#5F1852`) is no longer a brand colour: the `brand.plum` token and its
+  `brandForeground` alias are gone, and the value survives only as `mauve900`, the
+  Calendar Block title (§24).
 - **Account state screens** — `<BrandMark variant="symbol" size={54} decorative />` (the symbol
   above the state title; artwork ≈ 48 × 68 dp).
 - **Plus** — a compact identity block, the last element of the page's scroll flow:
