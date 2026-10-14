@@ -33,19 +33,29 @@ describe('discovery slides', () => {
     ]);
   });
 
-  it('map the approved masters: starter services, products, clients — never the paywall one', () => {
+  it('map the approved inclusive masters: activity duo, products man, clients duo — never a paywall one', () => {
     expect(DISCOVERY_SLIDES.map((slide) => slide.illustration)).toEqual([
       discoveryIllustrations.organisation,
       discoveryIllustrations.products,
       discoveryIllustrations.insights,
     ]);
     expect(discoveryIllustrations.organisation).toBe(
-      require('../../../../../assets/illustrations/onboarding/starter-services.png'),
+      require('../../../../../assets/illustrations/onboarding/activity-duo.png'),
     );
-    expect(discoveryIllustrations.products).toBe(require('../../../../../assets/illustrations/onboarding/products.png'));
-    expect(discoveryIllustrations.insights).toBe(require('../../../../../assets/illustrations/onboarding/clients.png'));
-    const growth = require('../../../../../assets/illustrations/paywall/growth.png');
-    expect(DISCOVERY_SLIDES.some((slide) => slide.illustration === growth)).toBe(false);
+    expect(discoveryIllustrations.products).toBe(
+      require('../../../../../assets/illustrations/onboarding/products-man.png'),
+    );
+    expect(discoveryIllustrations.insights).toBe(require('../../../../../assets/illustrations/onboarding/clients-duo.png'));
+    const paywallMasters = [
+      require('../../../../../assets/illustrations/paywall/growth.png'),
+      require('../../../../../assets/illustrations/paywall/growth-duo.png'),
+      require('../../../../../assets/illustrations/paywall/growth-man.png'),
+    ];
+    for (const master of paywallMasters) {
+      expect(DISCOVERY_SLIDES.some((slide) => slide.illustration === master)).toBe(false);
+    }
+    // The same masters for everyone: three fixed sources, none chosen at runtime.
+    expect(new Set(DISCOVERY_SLIDES.map((slide) => slide.illustration)).size).toBe(3);
   });
 
   it('never claim a payment is processed, and never use a gendered client word', () => {

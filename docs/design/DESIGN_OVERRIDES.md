@@ -459,9 +459,14 @@ have been removed from the repository.
   the 624 pt the top bar, the mark, a two-line title, a three-line description, the pills and both
   actions take with notched safe areas — ≈ 250 on an iPhone 17, capped at 300, floored at 156 on
   an iPhone SE, where the slot and header paddings tighten to `spacing.xs` / `spacing.sm`), a
-  `display` title and the `foregroundSoft` line, centred, `maxWidth` 360. Masters:
-  `starter-services.png` (approved reuse of setup step 4), `products.png`, `clients.png` — never
-  `growth.png`. Every title of the frame is navy (`semanticColors.foreground`), the three Discovery
+  `display` title and the `foregroundSoft` line, centred, `maxWidth` 360. Masters, the inclusive
+  set (men and women of several beauty occupations; a fixed mapping for everyone, never a variant
+  by gender, activity or chance): `activity-duo.png`, `products-man.png`, `clients-duo.png` —
+  never a paywall master; `clients-man.png`, `clients.png`, `products.png` and
+  `starter-services.png` (setup step 4) stay in reserve. The new masters fill their square
+  almost edge to edge (≈ 62–69 % opaque, against ≈ 45–50 % for the originals), so they read
+  denser at the same side; the side rule is unchanged. Every title of the frame is navy
+  (`semanticColors.foreground`), the three Discovery
   headlines included: the brand violet is carried by the mark, the primary action, « Passer », the
   sign-in link and the current pill, never by a headline. The footer, identical on every slide,
   stacks

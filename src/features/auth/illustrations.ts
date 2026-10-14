@@ -2,21 +2,28 @@
 //
 // Approved masters (assets/illustrations/onboarding), drawn as supplied
 // (`contain`, sized at render time, never cropped, recoloured or re-encoded).
+// Every master is a square 1254 × 1254 transparent PNG.
 //
 //   welcome.png            the compact accent of the account screens, so
 //                          they read as the same flow as the setup steps
-//   starter-services.png   Discovery slide 1 (daily organisation) — ALSO the
-//                          setup step 4 master: that limited reuse is approved
-//   products.png           Discovery slide 2 (products, stock, sales)
-//   clients.png            Discovery slide 3 (clients and business insights)
+//   activity-duo.png       Discovery slide 1 (organisation): two professionals
+//                          with appointment elements
+//   products-man.png       Discovery slide 2 (products, stock, sales)
+//   clients-duo.png        Discovery slide 3 (clients and business insights)
 //
-// The paywall master (assets/illustrations/paywall/growth.png) is reserved
-// for the BeautIzzy Plus gate and is never used by the first-launch screens.
+// The mapping is FIXED for everyone: the two-character and single-character
+// masters show that one BeautIzzy serves every beauty occupation, never a
+// profile of the person. Nothing selects a variant by gender, activity,
+// randomness or launch count. Reserved, deliberately not bundled here:
+// clients-man.png, clients.png, products.png and starter-services.png (the
+// setup step 4 master) stay available as alternatives; the paywall masters
+// (assets/illustrations/paywall: growth-duo.png preferred, growth.png,
+// growth-man.png) belong to the future BeautIzzy Plus gate.
 
 export const welcomeIllustration = require('../../../assets/illustrations/onboarding/welcome.png');
 
 export const discoveryIllustrations = {
-  organisation: require('../../../assets/illustrations/onboarding/starter-services.png'),
-  products: require('../../../assets/illustrations/onboarding/products.png'),
-  insights: require('../../../assets/illustrations/onboarding/clients.png'),
+  organisation: require('../../../assets/illustrations/onboarding/activity-duo.png'),
+  products: require('../../../assets/illustrations/onboarding/products-man.png'),
+  insights: require('../../../assets/illustrations/onboarding/clients-duo.png'),
 } as const;

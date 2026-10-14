@@ -325,8 +325,13 @@ Règles :
   validée (dessinée telle quelle, `contain`, dimensionnée à la
   hauteur que laissent le logo, le titre, la description et les deux actions : ≈ 250 dp sur un
   iPhone 17, plafonnée à 300 dp, plancher 156 dp sur un iPhone SE), le titre `display` centré et
-  la ligne d'appui `foregroundSoft`. Page 1 : `starter-services.png` et le slogan « Votre activité,
-  c’est easy. » ; pages 2 et 3 : `products.png`, `clients.png`. Les trois titres sont marine
+  la ligne d'appui `foregroundSoft`. Page 1 : `activity-duo.png` et le slogan « Votre activité,
+  c’est easy. » ; pages 2 et 3 : `products-man.png`, `clients-duo.png` — la série inclusive :
+  des hommes et des femmes de plusieurs métiers de la beauté, le même BeautIzzy pour toutes et
+  tous. Correspondance fixe pour chaque personne : aucune variante choisie selon le genre,
+  l'activité, le hasard ou le lancement ; `clients-man.png`, `clients.png`, `products.png` et
+  `starter-services.png` (étape 4 de la configuration) restent disponibles. Les trois titres sont
+  marine
   (`semanticColors.foreground`) : le violet de marque est porté par le logo, les actions et la
   pagination, jamais par un titre. Trois pastilles de pagination
   lavande (la courante en violet), `Continuer` puis `Créer mon compte`, et sous l'action

@@ -1301,17 +1301,22 @@ progress, never persisted and never repeated.
 Discovery The signed-out entry (`(auth)/index` → `src/features/auth/discovery`): three horizontal
           slides, each an approved master, a `display` title and one supporting line — every
           claim an existing capability. The editorial brand mark sits above the pager on every
-          slide and carries the brand colour; every headline is navy:
+          slide and carries the brand colour; every headline is navy. The masters are the
+          inclusive set: men and women of several beauty occupations, so one BeautIzzy visibly
+          serves barbers, hairstylists, nail technicians, estheticians and other specialists —
+          a FIXED mapping for everyone, never a variant chosen by gender, activity, randomness
+          or launch count, and no gender question anywhere. A duo never implies a team: the
+          copy stays about one professional's own activity:
           1. « Votre activité, c’est easy. » — « Rendez-vous, prestations et clientèle : gérez
-             tout votre quotidien au même endroit, simplement. » (`starter-services.png`, also
-             setup step 4: approved reuse)
+             tout votre quotidien au même endroit, simplement. » (`activity-duo.png`: two
+             professionals with appointment elements)
           2. « Vos produits, votre stock, vos ventes. » — « Gérez votre catalogue, suivez
              votre stock et enregistrez vos ventes de produits en quelques gestes. »
-             (`products.png`)
+             (`products-man.png`)
           3. « Découvrez ce qui fait votre succès. » — « Identifiez vos clients qui dépensent
              le plus, repérez vos meilleures ventes et suivez l’évolution de votre activité. »
-             (`clients.png`; backed by « Tops & tendances »: Clients qui dépensent le plus,
-             Top prestations / produits, Encaissé per period)
+             (`clients-duo.png`; backed by « Tops & tendances »: Clients qui dépensent le
+             plus, Top prestations / produits, Encaissé per period)
           Footer on every slide: three pagination pills (tappable, adjustable for VoiceOver,
           spoken « Écran n sur 3 »), the primary action — `Continuer` (slides 1–2),
           `Créer mon compte` (slide 3, PUSH → Créer un compte, so back returns to slide 3) —
@@ -1320,7 +1325,9 @@ Discovery The signed-out entry (`(auth)/index` → `src/features/auth/discovery`
           tour to slide 1 and PUSHES Créer un compte, so back from sign-up lands on slide 1,
           never on a declined slide. Back: previous slide; none on slide 1 (the root of the
           signed-out stack). BeautIzzy records amounts and payment methods: no slide implies
-          payment processing. The paywall master (`growth.png`) is never used here.
+          payment processing. No paywall master (`growth*.png`) is ever used here. Reserved,
+          not bundled: `clients-man.png`, `clients.png`, `products.png` (alternatives), and
+          `starter-services.png`, which stays the setup step 4 master.
 
 Account   « Créons votre compte » (email + password) → email confirmation when the project
           requires it (« Vérifiez votre boîte mail ✨ », the link opens in the browser and brings
@@ -1351,8 +1358,8 @@ A quiet progress bar runs over the five setup steps (spoken as « Étape n sur 5
 on steps 2–3 only: nothing precedes step 1 inside setup (the account screens are not a step), and
 once the Business exists (step 3 onward) nothing before it can be revisited, so a creation is never
 edited or repeated. Each step has its approved illustration (`assets/illustrations/onboarding`,
-drawn as supplied); Discovery draws `starter-services.png`, `products.png` and `clients.png`;
-`welcome.png` is the compact accent of the account screens; the paywall master is not used
+drawn as supplied); Discovery draws `activity-duo.png`, `products-man.png` and `clients-duo.png`;
+`welcome.png` is the compact accent of the account screens; the paywall masters are not used
 anywhere in the first run.
 
 The primary activity is a SINGLE value — the stable vocabulary is `HAIRDRESSING | BARBER | NAILS |
@@ -1374,7 +1381,9 @@ is asked at first run (no address, SIRET, VAT, hours, social links, logo, staff,
 Subscription / paywall: deliberately NOT part of this onboarding. The future subscription gate is a
 separate implementation phase, inserted at ROOT routing after setup completes (which is why the last
 step says « Continuer », not « Accéder à BeautIzzy »). No placeholder route, entitlement flag or local
-trial timer exists.
+trial timer exists. Visual direction for that gate, decided now: its master is
+`assets/illustrations/paywall/growth-duo.png`; `growth.png` (the original) and `growth-man.png`
+stay available as alternatives. None of the three is bundled until the gate is built.
 
 A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
 existing install keeps its local data; completing Business setup binds that data to the new
