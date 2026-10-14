@@ -3,9 +3,10 @@
 // One transparent PNG master per step (assets/illustrations/onboarding),
 // drawn as supplied: `contain`, sized at render time, never cropped,
 // recoloured or re-encoded. Every master is square (1254 × 1254). The
-// Welcome master belongs to the first-entry screen (features/auth), and the
-// reserve illustrations (clients, products) and the paywall one (growth)
-// are deliberately NOT referenced here.
+// account-screen accent (welcome) and the Product Discovery masters (clients,
+// products, and starter-services shared with step 4) belong to the first-launch
+// screens (features/auth); the paywall one (growth) is deliberately NOT referenced
+// anywhere in the first run.
 
 import type { OnboardingStep } from './onboarding-steps';
 

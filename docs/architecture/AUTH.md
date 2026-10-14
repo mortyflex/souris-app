@@ -131,8 +131,9 @@ authenticated user
 ```
 
 Business setup is the five-step onboarding of `docs/product/PRODUCT.md` §17 (activity → details →
-reminders → starter services → setup complete), entered right after authentication: the Welcome is
-the first-entry screen of the `(auth)` group and is never repeated here. The creation
+reminders → starter services → setup complete), entered right after authentication: the Product
+Discovery slides (the signed-out entry — there is no separate Welcome) belong to the `(auth)` group
+and are never repeated here. The creation
 (`createBusiness`, with `deferEntry`) happens at the reminders decision — step 3 — and nowhere else:
 
 1. local validation (`business-form.ts`, the details step cannot continue while invalid);
@@ -178,10 +179,12 @@ mounts only the matching Expo Router group through `Stack.Protected` guards:
 
 ```text
 booting                   branded boot surface (same composition as the native splash)
-auth                      (auth): Welcome (the single Welcome of the first run) → sign-up /
-                          sign-in / verify-email — all in the shared first-run frame
+auth                      (auth): index = Product Discovery (three optional slides, skippable,
+                          the signed-out entry — no separate Welcome) → sign-up / sign-in /
+                          verify-email — all in the shared first-run frame; « Déjà un compte ?
+                          Se connecter » goes straight to sign-in from every slide
 onboarding               (onboarding)/business — the five-step setup of a NEW Business, starting
-                          at the primary activity (no second Welcome)
+                          at the primary activity (no Welcome, no Discovery)
 app                       (app): tabs + every existing sheet route, with the operational
                           providers and CurrentBusinessProvider (bound Business id)
 device-account-conflict   AccountConflictScreen
@@ -225,7 +228,7 @@ Signing out clears the Supabase session (supabase-js clears the local session ev
 server call fails offline). Local SQLite data is untouched. Wording: "Les données restent
 enregistrées sur cet appareil." — which is exactly what happens, whether or not the Business was
 synchronized (sign-out neither uploads nor removes anything). After sign-out the
-root gate returns to Welcome; the same owner signing back in reconnects immediately to the local
+root gate returns to Discovery (the signed-out entry); the same owner signing back in reconnects immediately to the local
 binding; a different owner gets DEVICE_ACCOUNT_CONFLICT.
 
 ---

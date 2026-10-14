@@ -2,7 +2,6 @@
 
 import { act, fireEvent, render } from '@testing-library/react-native';
 
-import { haptics } from '@/shared/lib/haptics';
 import { semanticColors } from '@/shared/ui/theme';
 
 import { AuthProvider } from '../session/AuthProvider';
@@ -10,14 +9,14 @@ import { createFakeAuthGateway, fakeUser, type FakeAuthGateway } from '../testin
 import { SignInScreen } from '../SignInScreen';
 import { SignUpScreen } from '../SignUpScreen';
 import { VerifyEmailScreen } from '../VerifyEmailScreen';
-import { WelcomeScreen } from '../WelcomeScreen';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
+const mockCanGoBack = jest.fn(() => true);
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, replace: mockReplace, back: mockBack }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace, back: mockBack, canGoBack: mockCanGoBack }),
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
@@ -56,67 +55,16 @@ beforeEach(() => {
   mockPush.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
-});
-
-describe('WelcomeScreen — the single Welcome of the first run', () => {
-  it('shows the brand once, the finalized promise and the hero illustration, then routes to sign-up or sign-in', async () => {
-    const action = jest.spyOn(haptics, 'action');
-    const view = await render(<WelcomeScreen />);
-
-    expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
-    expect(view.getByRole('header', { name: 'Votre activité beauté, c’est easy.' })).toBeTruthy();
-    expect(
-      view.getByText(
-        'Rendez-vous, clientèle, produits et chiffres : tout ce qu’il faut pour gérer votre activité, simplement.',
-      ),
-    ).toBeTruthy();
-    // The approved illustration is the hero, drawn as supplied and silent for VoiceOver.
-    const illustration = view.getByTestId('onboarding-illustration', { includeHiddenElements: true });
-    expect(illustration.props.resizeMode).toBe('contain');
-    expect(illustration.props.accessibilityElementsHidden).toBe(true);
-    // No progress, no back: nothing has been asked yet.
-    expect(view.queryByTestId('onboarding-progress')).toBeNull();
-    expect(view.queryByTestId('onboarding-back')).toBeNull();
-    expect(view.queryByText(/sauvegard|synchronis/i)).toBeNull();
-
-    await press(view.getByText('Commencer'));
-    expect(mockPush).toHaveBeenCalledWith('/sign-up');
-    await press(view.getByText('J’ai déjà un compte'));
-    expect(mockPush).toHaveBeenCalledWith('/sign-in');
-    expect(action).toHaveBeenCalledTimes(2);
-    action.mockRestore();
-  });
-
-  it('speaks the headline in the brand accent and keeps the supporting line navy', async () => {
-    const view = await render(<WelcomeScreen />);
-
-    const headline = view.getByRole('header', { name: 'Votre activité beauté, c’est easy.' });
-    expect(headline).toHaveStyle({ color: semanticColors.accent, textAlign: 'center' });
-    expect(
-      view.getByText(
-        'Rendez-vous, clientèle, produits et chiffres : tout ce qu’il faut pour gérer votre activité, simplement.',
-      ),
-    ).toHaveStyle({ color: semanticColors.foregroundSoft });
-  });
-
-  it('no longer renders the old floating beauty-tool motifs', async () => {
-    const view = await render(<WelcomeScreen />);
-
-    expect(view.queryByTestId('welcome-motifs', { includeHiddenElements: true })).toBeNull();
-    for (const kind of ['hairdryer', 'scissors', 'mirror', 'brush', 'comb', 'nailPolish']) {
-      expect(view.queryByTestId(`welcome-motif-${kind}`, { includeHiddenElements: true })).toBeNull();
-    }
-    // Exactly two images: the brand mark and the hero illustration.
-    expect(view.container.queryAll((node) => node.type === 'Image')).toHaveLength(2);
-  });
+  mockCanGoBack.mockReset();
+  mockCanGoBack.mockReturnValue(true);
 });
 
 describe('SignUpScreen', () => {
-  it('belongs to the first-run frame: brand, « Créons votre compte », and a back to Welcome', async () => {
+  it('belongs to the first-run frame: brand, « Créons votre compte », and a back to Discovery', async () => {
     const view = await renderWithAuth(createFakeAuthGateway(), <SignUpScreen />);
 
     expect(view.getByRole('header', { name: 'Créons votre compte' })).toBeTruthy();
-    // The accent headline belongs to Welcome alone.
+    // The accent headline belongs to the first Discovery slide alone.
     expect(view.getByRole('header', { name: 'Créons votre compte' })).toHaveStyle({ color: semanticColors.foreground });
     expect(view.getByText('Quelques secondes suffisent pour commencer avec BeautIzzy.')).toBeTruthy();
     expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
@@ -126,6 +74,16 @@ describe('SignUpScreen', () => {
 
     await press(view.getByTestId('onboarding-back'));
     expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('opened cold (the confirmation link), back goes to the Discovery entry instead of nowhere', async () => {
+    mockCanGoBack.mockReturnValue(false);
+    const view = await renderWithAuth(createFakeAuthGateway(), <SignUpScreen />);
+
+    await press(view.getByTestId('onboarding-back'));
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith('/');
   });
 
   it('validates inline before calling the gateway', async () => {
@@ -194,7 +152,7 @@ describe('SignUpScreen', () => {
 });
 
 describe('SignInScreen', () => {
-  it('belongs to the first-run frame too, with a back to Welcome', async () => {
+  it('belongs to the first-run frame too, with a back to Discovery (or its entry without history)', async () => {
     const view = await renderWithAuth(createFakeAuthGateway(), <SignInScreen />);
 
     expect(view.getByRole('header', { name: 'Se connecter' })).toBeTruthy();
@@ -204,6 +162,10 @@ describe('SignInScreen', () => {
 
     await press(view.getByTestId('onboarding-back'));
     expect(mockBack).toHaveBeenCalledTimes(1);
+
+    mockCanGoBack.mockReturnValue(false);
+    await press(view.getByTestId('onboarding-back'));
+    expect(mockReplace).toHaveBeenCalledWith('/');
   });
 
   it('requires both fields, reports wrong credentials, then signs in', async () => {

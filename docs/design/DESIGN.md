@@ -275,8 +275,8 @@ colorés sur fond transparent) :
 
 | Fichier | Rôle | Contextes approuvés |
 | --- | --- | --- |
-| `assets/brand/logo-primary.png` (1489 × 541) | **PRIMARY** — logo horizontal principal : le symbole, puis le nom complet « BeautIzzy » | surface de démarrage, écran d'accueil (Welcome) |
-| `assets/brand/logo-editorial.png` (1514 × 580) | **EDITORIAL** — le nom, le symbole tenant lieu d'initiale | en-tête d'Accueil, bloc identité de Plus, tickets, pied « Créé avec » des images partagées |
+| `assets/brand/logo-primary.png` (1489 × 541) | **PRIMARY** — logo horizontal principal : le symbole, puis le nom complet « BeautIzzy » | surface de démarrage |
+| `assets/brand/logo-editorial.png` (1514 × 580) | **EDITORIAL** — le nom, le symbole tenant lieu d'initiale | en-tête d'Accueil, découverte produit (232 dp) et écrans de compte (112 dp), bloc identité de Plus, tickets, pied « Créé avec » des images partagées |
 | `assets/brand/symbol.png` (811 × 1097) | **SYMBOL** — le symbole seul | usages réduits : écrans d'état de compte, en-tête de l'estimation et de la carte de partage |
 
 L'icône et le splash natifs dérivent des mêmes fichiers (voir plus bas) ; les fichiers de
@@ -296,7 +296,8 @@ Règles :
   `brandMarkInsets` donne cette marge en dp à l'écran qui doit poser le dessin exactement sur un
   bord (en-tête d'Accueil) ;
 - les logos apparaissent seulement aux moments de marque : icône, splash natif, surface de
-  démarrage, Welcome, écrans d'état de compte, bloc identité de Plus. **Aucun logo ni en-tête
+  démarrage, découverte produit, écrans de compte, écrans d'état de compte, bloc identité de
+  Plus. **Aucun logo ni en-tête
   « BeautIzzy » sur Agenda, Clientèle, Produits, les détails, les feuilles ou les formulaires** — les
   titres restent `Agenda`, `Clientèle`, `Produits`, `Plus` ;
 - accessibilité : un seul élément annonce « BeautIzzy » ; un symbole posé à côté d'un texte ou d'un
@@ -316,16 +317,25 @@ Règles :
 - **Splash natif** : `logo-primary.png` sur blanc, `imageWidth` 252 (iOS), identique à la surface de
   démarrage ; Android affiche le symbole coloré sur une marge sûre (`android-splash.png`, fichier dédié, distinct
   du premier plan de l'icône adaptative).
-- **Welcome** : le seul Welcome du premier lancement, dans le cadre commun des écrans de premier
-  parcours (`OnboardingStepLayout`) : le logo principal (150 dp sur un iPhone SE, 176 dp ailleurs)
-  au-dessus de l'illustration héros validée (`assets/illustrations/onboarding/welcome.png`, dessinée
-  telle quelle, `contain`, ≈ 40 % de la hauteur, 30 % sur un petit écran, plafonnée à 340 dp),
-  la promesse « Votre activité beauté, c’est easy. » en violet de marque (`semanticColors.accent`,
-  le titre seul : le paragraphe reste marine), `Commencer` et « J’ai déjà un compte ». Les
+- **Découverte produit (premier lancement)** : l'écran d'entrée hors session — il n'y a plus de
+  Welcome séparé. Trois pages horizontales dans le cadre commun des écrans de premier parcours
+  (`OnboardingStepLayout`) : le logo éditorial au-dessus du pager (rendu 232 dp de large, soit
+  ≈ 215 dp d'artwork visible ; 194 dp sur un iPhone SE, ≈ 180 dp visibles — la marge transparente
+  verticale du PNG est compensée, l'illustration garde sa place), puis par page l'illustration
+  validée (dessinée telle quelle, `contain`, dimensionnée à la
+  hauteur que laissent le logo, le titre, la description et les deux actions : ≈ 250 dp sur un
+  iPhone 17, plafonnée à 300 dp, plancher 156 dp sur un iPhone SE), le titre `display` centré et
+  la ligne d'appui `foregroundSoft`. Page 1 : `starter-services.png` et le slogan « Votre activité,
+  c’est easy. » ; pages 2 et 3 : `products.png`, `clients.png`. Les trois titres sont marine
+  (`semanticColors.foreground`) : le violet de marque est porté par le logo, les actions et la
+  pagination, jamais par un titre. Trois pastilles de pagination
+  lavande (la courante en violet), `Continuer` puis `Créer mon compte`, et sous l'action
+  principale le lien violet « Déjà un compte ? Se connecter » sur chaque page. « Passer » en haut
+  à droite sur les deux premières pages, retour en verre sur les pages 2 et 3 seulement. Les
   anciens objets beauté flottants (`assets/brand/welcome-floating/`) ne font plus partie du
   parcours d'entrée. Les écrans de compte (création, connexion, confirmation d'e-mail) gardent le
-  même cadre : bouton retour en verre, logo éditorial compact centré en haut, eyebrow « COMPTE ».
-  Le PNG héros n'est ni redessiné ni recoloré.
+  même cadre : bouton retour en verre, logo éditorial compact centré en haut, eyebrow « COMPTE »,
+  `welcome.png` en accent compact. Aucun PNG n'est redessiné ni recoloré.
 - **Ne pas multiplier les souris illustrées.**
 
 ---

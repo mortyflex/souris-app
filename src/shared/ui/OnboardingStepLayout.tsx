@@ -54,7 +54,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from './AppText';
-import { BrandMark } from './BrandMark';
+import { BrandMark, brandMarkInsets } from './BrandMark';
 import { GlassIconButton, glassIcons, glassIconButtonSize } from './GlassIconButton';
 import { easing, gutter, radii, semanticColors, spacing } from './theme';
 
@@ -69,8 +69,16 @@ const entranceEasing = Easing.bezier(...easing.out);
 /** Delays of the four entrance groups: the last one starts well under half a second in. */
 const entranceDelays = { illustration: 0, header: 60, content: 120, footer: 180 } as const;
 
-/** Width of the brand mark in the top bar of the account screens. */
+/** Width of the editorial brand mark in the top bar of the account screens. */
 const TOP_BAR_BRAND_WIDTH = 112;
+/**
+ * Rendered width of the editorial brand mark above the Discovery pager. The PNG
+ * carries ~3.7 % of transparent padding on each side, so the ARTWORK reads
+ * ≈ 215 dp wide (≈ 180 on a small phone); its vertical padding is pulled back
+ * with negative margins, so the layout spends only the visible height.
+ */
+const COMPACT_BRAND_WIDTH = 232;
+const COMPACT_BRAND_WIDTH_SMALL = 194;
 
 export type OnboardingIllustrationSize = 'hero' | 'compact';
 
@@ -122,6 +130,19 @@ function Entrance({ delay, rise = false, children, style }: EntranceProps) {
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }
 
+/** The editorial mark of Discovery, its transparent vertical padding pulled back. */
+function CompactBrandMark({ small }: { readonly small: boolean }) {
+  const width = small ? COMPACT_BRAND_WIDTH_SMALL : COMPACT_BRAND_WIDTH;
+  const insets = brandMarkInsets('editorial', width);
+  return (
+    <BrandMark
+      size={width}
+      style={{ marginBottom: -insets.bottom, marginTop: -insets.top }}
+      variant="editorial"
+    />
+  );
+}
+
 /** The quiet setup progress: a thin lavender track, the accent fill. Spoken as a step count. */
 function ProgressBar({ current, total }: OnboardingProgress) {
   const reducedMotion = useReducedMotion();
@@ -155,21 +176,25 @@ interface OnboardingStepLayoutProps {
   readonly illustrationSize?: OnboardingIllustrationSize;
   /** Optional uppercase eyebrow above the title (the account screens: « COMPTE »). */
   readonly eyebrow?: string;
-  readonly title: string;
+  /** Absent on Discovery, whose pages carry their own title and copy. */
+  readonly title?: string;
   /**
    * Colour of the title only: `foreground` (navy) everywhere, `accent` on Welcome, where the
    * promise speaks in the brand violet under the logo. Typography and layout never change.
    */
   readonly titleTone?: OnboardingTitleTone;
-  readonly subtitle: string;
+  readonly subtitle?: string;
   /** Title and subtitle alignment: centred on the two framing steps, leading on the working ones. */
   readonly align?: 'center' | 'start';
-  /** Shown on Welcome only, above the illustration. */
+  /** The brand mark above the content: the primary lockup (`hero`), or the editorial mark rendered 232 dp wide — 194 on a small phone (`compact`, Discovery). */
   readonly brand?: boolean;
+  readonly brandSize?: 'hero' | 'compact';
   /** A compact brand mark in the centre of the top bar (the account screens). Exclusive with `progress`. */
   readonly topBarBrand?: boolean;
   readonly progress?: OnboardingProgress;
   readonly onBack?: () => void;
+  /** A compact action at the end of the top bar (Discovery: « Passer »). */
+  readonly topBarEnd?: ReactNode;
   readonly children?: ReactNode;
   readonly footer: ReactNode;
   readonly testID?: string;
@@ -184,9 +209,11 @@ export function OnboardingStepLayout({
   subtitle,
   align = 'start',
   brand = false,
+  brandSize = 'hero',
   topBarBrand = false,
   progress,
   onBack,
+  topBarEnd,
   children,
   footer,
   testID,
@@ -195,7 +222,8 @@ export function OnboardingStepLayout({
   const side = resolveIllustrationSide(windowHeight, illustrationSize);
   const small = windowHeight <= SMALL_WINDOW_HEIGHT;
   const centred = align === 'center';
-  const hasTopBar = onBack !== undefined || progress !== undefined || topBarBrand;
+  const hasTopBar = onBack !== undefined || progress !== undefined || topBarBrand || topBarEnd !== undefined;
+  const hasHeader = eyebrow !== undefined || title !== undefined || subtitle !== undefined;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']} testID={testID}>
@@ -219,7 +247,7 @@ export function OnboardingStepLayout({
               {progress && <ProgressBar {...progress} />}
               {topBarBrand && !progress && <BrandMark variant="editorial" size={TOP_BAR_BRAND_WIDTH} />}
             </View>
-            <View style={styles.topBarSide} />
+            <View style={[styles.topBarSide, topBarEnd !== undefined && styles.topBarEnd]}>{topBarEnd}</View>
           </View>
         )}
         <ScrollView
@@ -235,8 +263,15 @@ export function OnboardingStepLayout({
           testID="onboarding-scroll"
         >
           {brand && (
-            <Entrance delay={entranceDelays.illustration} style={styles.brand}>
-              <BrandMark variant="primary" size={small ? 150 : 176} />
+            <Entrance
+              delay={entranceDelays.illustration}
+              style={[styles.brand, brandSize === 'compact' && styles.brandCompact, brandSize === 'compact' && small && styles.brandCompactSmall]}
+            >
+              {brandSize === 'compact' ? (
+                <CompactBrandMark small={small} />
+              ) : (
+                <BrandMark variant="primary" size={small ? 150 : 176} />
+              )}
             </Entrance>
           )}
           {illustration !== undefined && (
@@ -252,23 +287,25 @@ export function OnboardingStepLayout({
               />
             </Entrance>
           )}
-          <Entrance delay={entranceDelays.header} style={[styles.header, centred && styles.headerCentred]}>
-            {eyebrow !== undefined && (
-              <AppText style={styles.eyebrow} variant="eyebrow">
-                {eyebrow}
+          {hasHeader && (
+            <Entrance delay={entranceDelays.header} style={[styles.header, centred && styles.headerCentred]}>
+              {eyebrow !== undefined && (
+                <AppText style={styles.eyebrow} variant="eyebrow">
+                  {eyebrow}
+                </AppText>
+              )}
+              <AppText
+                accessibilityRole="header"
+                style={[styles.title, titleTone === 'accent' && styles.titleAccent, centred && styles.textCentred]}
+                variant={centred ? 'display' : 'screenTitle'}
+              >
+                {title}
               </AppText>
-            )}
-            <AppText
-              accessibilityRole="header"
-              style={[styles.title, titleTone === 'accent' && styles.titleAccent, centred && styles.textCentred]}
-              variant={centred ? 'display' : 'screenTitle'}
-            >
-              {title}
-            </AppText>
-            <AppText variant="body" style={[styles.subtitle, centred && styles.textCentred]}>
-              {subtitle}
-            </AppText>
-          </Entrance>
+              <AppText variant="body" style={[styles.subtitle, centred && styles.textCentred]}>
+                {subtitle}
+              </AppText>
+            </Entrance>
+          )}
           {children !== undefined && (
             <Entrance delay={entranceDelays.content} rise style={styles.body}>
               {children}
@@ -295,6 +332,8 @@ const styles = StyleSheet.create({
   },
   // Both sides reserve the button's width so the centre stays centred.
   topBarSide: { width: glassIconButtonSize },
+  // A text action is wider than the glass button: the slot grows, trailing-aligned.
+  topBarEnd: { alignItems: 'flex-end', minWidth: glassIconButtonSize, width: undefined },
   topBarCentre: { alignItems: 'center', flex: 1, paddingHorizontal: spacing.lg },
   progressTrack: {
     backgroundColor: semanticColors.surfaceLavenderStrong,
@@ -318,6 +357,9 @@ const styles = StyleSheet.create({
   // otherwise leave a bottom-heavy blank); a taller composition scrolls as usual.
   scrollContentCentred: { justifyContent: 'center' },
   brand: { alignItems: 'center', paddingTop: spacing.lg },
+  // Discovery: closer to the top bar, the illustration keeps its room.
+  brandCompact: { paddingTop: spacing.md },
+  brandCompactSmall: { paddingTop: spacing.xs },
   illustrationSlot: { alignItems: 'center', paddingVertical: spacing.sm },
   header: { gap: spacing.sm, paddingTop: spacing.md },
   headerCentred: { alignItems: 'center' },

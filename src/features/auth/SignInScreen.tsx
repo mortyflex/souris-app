@@ -81,7 +81,7 @@ export function SignInScreen() {
           />
         </>
       }
-      onBack={() => router.back()}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
       subtitle="Retrouvez votre espace BeautIzzy."
       testID="sign-in-screen"
       title="Se connecter"

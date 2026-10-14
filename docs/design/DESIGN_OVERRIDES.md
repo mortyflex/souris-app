@@ -437,33 +437,54 @@ have been removed from the repository.
   settled and the router is committed; the root view shares the splash white and the boot surface
   renders `<BrandMark variant="primary" size={252} decorative />` (artwork ≈ 233 × 73 dp), the same
   box as the native splash, so no intermediate unbranded surface or jump exists.
-- **Welcome and the account screens** — the single Welcome of the first run and the three account
-  screens (sign-up, sign-in, email confirmation) draw the same frame as business setup,
-  `src/shared/ui/OnboardingStepLayout.tsx`: top and bottom safe areas on `semanticColors.screen`,
-  a quiet top bar (the `GlassIconButton` back on the left; in the centre the setup progress, or on
+- **Discovery and the account screens** — the signed-out entry (Product Discovery, three slides;
+  there is no separate Welcome) and the three account screens (sign-up, sign-in, email
+  confirmation) draw the same frame as business setup, `src/shared/ui/OnboardingStepLayout.tsx`:
+  top and bottom safe areas on `semanticColors.screen`, a quiet top bar (the `GlassIconButton`
+  back on the left when something precedes the screen; in the centre the setup progress, or on
   the account screens `<BrandMark variant="editorial" size={112} />` as the single accessible
-  "BeautIzzy"), an optional illustration, an optional accent uppercase eyebrow (« COMPTE »), the
-  title (`display` centred on Welcome and setup complete, `screenTitle` leading elsewhere) and its
+  "BeautIzzy"; an optional trailing text action — Discovery's « Passer »), an optional brand mark
+  above the content (`brandSize="compact"`, Discovery: the editorial mark rendered 232 dp wide —
+  ≈ 215 dp of visible artwork — 194 on a small phone, its transparent vertical padding pulled
+  back with negative margins, `spacing.md` under the top bar, `spacing.xs` on a small phone), an
+  optional illustration, an optional accent uppercase eyebrow (« COMPTE »), an optional title
+  (`display` centred on the framing screens, `screenTitle` leading elsewhere) and its
   `foregroundSoft` supporting line, the screen's content, and a fixed footer with the primary
-  `AppButton` and its tertiary secondary. The body scrolls and avoids the keyboard; the two framing
-  steps centre a short composition. Entrance: four groups (illustration with a 10 dp rise, header,
+  `AppButton` and its tertiary secondary. The body scrolls and avoids the keyboard; the framing
+  screens centre a short composition. Entrance: four groups (illustration with a 10 dp rise, header,
   content, footer) fade in over 260 ms each, staggered 0 / 60 / 120 / 180 ms, `easing.out`;
-  Reduce Motion renders in place. Welcome: `<BrandMark variant="primary" size={176} />` (150 on a
-  small phone) above the hero `assets/illustrations/onboarding/welcome.png` (drawn as supplied,
-  `contain`, hidden from assistive technology; side = 40 % of the window height, 30 % under
-  700 pt, clamped 180–340), « Votre activité beauté, c’est easy. », `Commencer` (→ sign-up, one
-  light-impact haptic) and « J’ai déjà un compte » (→ sign-in). Sign-up: « Créons votre compte »,
-  « Quelques secondes suffisent pour commencer avec BeautIzzy. », Email, Mot de passe (visibility
-  toggle), `Créer mon compte`, « J’ai déjà un compte »; sign-in: « Se connecter », « Retrouvez
-  votre espace BeautIzzy. »; email confirmation: « Vérifiez votre boîte mail ✨ », the address in a
-  lavender notice with an envelope glyph, « Retour à la connexion », « Renvoyer l’email ». The
-  account screens reuse `welcome.png` at the compact size (0.22 × the window height, 0.17 under
-  700 pt, clamped 112–200) above the eyebrow; the brand mark carries the top bar and the form
-  stays above the fold. The Welcome headline alone is `semanticColors.accent` (`#7354C7`, the brand
-  violet of the eyebrows and primary actions, 4.9:1 on the screen at display size); every other
-  title of the frame, Welcome’s subtitle included, stays navy. Historical: the previous Welcome
-  floated six beauty objects (`assets/brand/welcome-floating/`) around the logo with a touch
-  physics scene; that scene is gone from the entry flow (the PNGs are no longer rendered anywhere).
+  Reduce Motion renders in place. Discovery (`src/features/auth/discovery`): the editorial mark
+  above ONE horizontal paged `ScrollView` bleeding to the window edges, one window-wide page per
+  slide: the master (`contain`, hidden from assistive technology; side = the window height minus
+  the 624 pt the top bar, the mark, a two-line title, a three-line description, the pills and both
+  actions take with notched safe areas — ≈ 250 on an iPhone 17, capped at 300, floored at 156 on
+  an iPhone SE, where the slot and header paddings tighten to `spacing.xs` / `spacing.sm`), a
+  `display` title and the `foregroundSoft` line, centred, `maxWidth` 360. Masters:
+  `starter-services.png` (approved reuse of setup step 4), `products.png`, `clients.png` — never
+  `growth.png`. Every title of the frame is navy (`semanticColors.foreground`), the three Discovery
+  headlines included: the brand violet is carried by the mark, the primary action, « Passer », the
+  sign-in link and the current pill, never by a headline. The footer, identical on every slide,
+  stacks
+  three pagination pills (5 pt `lav200`, the current one a 16 pt accent pill, tappable with
+  44 pt slop, the row `adjustable` and spoken « Écran n sur 3, <title> »), the single primary
+  action (`Continuer`, then `Créer mon compte` on slide 3) and the tertiary link « Déjà un
+  compte ? Se connecter » (→ sign-in from any slide). « Passer » (slides 1–2) returns the tour to
+  slide 1 without animation and pushes sign-up; the glass back (slides 2–3) goes to the previous
+  slide. Only the current page is exposed to VoiceOver. A finger swipe updates pills and label as
+  the nearest page passes the midpoint; a programmatic move sets the page at once, scrolls with
+  the native paging animation, or jumps under Reduce Motion. Haptics: `action` on « Passer », the
+  primary and the sign-in link, `selection` on a pill, nothing on a swipe. Sign-up: « Créons votre
+  compte », « Quelques secondes suffisent pour commencer avec BeautIzzy. », Email, Mot de passe
+  (visibility toggle), `Créer mon compte`, « J’ai déjà un compte »; sign-in: « Se connecter »,
+  « Retrouvez votre espace BeautIzzy. »; email confirmation: « Vérifiez votre boîte mail ✨ », the
+  address in a lavender notice with an envelope glyph, « Retour à la connexion », « Renvoyer
+  l’email ». The account screens reuse `welcome.png` at the compact size (0.22 × the window
+  height, 0.17 under 700 pt, clamped 112–200) above the eyebrow; the brand mark carries the top
+  bar and the form stays above the fold; their back returns to Discovery, or replaces to its entry
+  when the screen was opened without history (the confirmation link). Historical: the previous
+  Welcome floated six beauty objects (`assets/brand/welcome-floating/`) around the logo with a
+  touch physics scene; that scene is gone from the entry flow (the PNGs are no longer rendered
+  anywhere).
   The old plum (`#5F1852`) is no longer a brand colour: the `brand.plum` token and its
   `brandForeground` alias are gone, and the value survives only as `mauve900`, the
   Calendar Block title (§24).
@@ -1914,7 +1935,7 @@ that wording. Supersedes every feminine Client quote of the earlier sections.
 - **Sales and Caisse** — `Client`, « Choisir un client », « Vente sans client ».
 - **Communications** — « Rappels clients », « Rappel client », « Clients inactifs », « Inactif
   depuis » (the row sits under « Clients inactifs », so the noun is not repeated).
-- **Everywhere else** — « Agenda, clientèle, prestations et ventes » (Welcome), « Clients qui
+- **Everywhere else** — « Rendez-vous, prestations et clientèle » (Discovery), « Clients qui
   dépensent le plus », « Clients les plus fidèles » (Tops & tendances), and the native photo /
   camera permission prompts (« photos de vos clients et de vos produits »).
 - Future onboarding completion copy reads « Tout est prêt », never a gendered « Prête ».

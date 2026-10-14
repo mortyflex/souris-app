@@ -84,7 +84,7 @@ export function SignUpScreen() {
           />
         </>
       }
-      onBack={() => router.back()}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
       subtitle="Quelques secondes suffisent pour commencer avec BeautIzzy."
       testID="sign-up-screen"
       title="Créons votre compte"

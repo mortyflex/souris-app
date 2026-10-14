@@ -1284,24 +1284,49 @@ They describe product direction, not current implementation scope.
 
 Onboarding should be short.
 
-Implemented — ONE continuous first run: the Welcome and the account screens (`features/auth`),
-then a five-step guided setup on ONE route (`src/features/business/setup/BusinessSetupScreen.tsx`),
-for NEW businesses only. Every screen draws the same frame (`src/shared/ui/OnboardingStepLayout.tsx`:
-safe areas, the warm background, a glass back button, the brand, title and copy, a keyboard-safe
-body, the bottom actions, the same quiet entrance), so the professional perceives one flow even
-though auth and setup are different route groups. No tutorial carousel, no dots, no « Passer »:
-every step either says what BeautIzzy does or configures something useful.
+Implemented — ONE continuous first run: Product Discovery and the account screens
+(`features/auth`), then a five-step guided setup on ONE route
+(`src/features/business/setup/BusinessSetupScreen.tsx`), for NEW businesses only. Every screen draws
+the same frame (`src/shared/ui/OnboardingStepLayout.tsx`: safe areas, the warm background, a glass
+back button, the brand, title and copy, a keyboard-safe body, the bottom actions, the same quiet
+entrance), so the professional perceives one flow even though auth and setup are different route
+groups.
+
+Product rule: the signed-out first-launch experience is a three-slide, OPTIONAL product discovery
+carousel. There is no separate Welcome step. Existing users can access sign-in directly from
+every slide. Discovery is product education, not a setup step: it is never counted in the setup
+progress, never persisted and never repeated.
 
 ```text
-Welcome   « Votre activité beauté, c’est easy. » — brand mark, the hero illustration
-          (`welcome.png`), `Commencer` → Créer un compte / `J’ai déjà un compte` → Se connecter.
-          The ONLY Welcome of the first run: it belongs to the first-entry experience and is
-          never repeated inside business setup.
+Discovery The signed-out entry (`(auth)/index` → `src/features/auth/discovery`): three horizontal
+          slides, each an approved master, a `display` title and one supporting line — every
+          claim an existing capability. The editorial brand mark sits above the pager on every
+          slide and carries the brand colour; every headline is navy:
+          1. « Votre activité, c’est easy. » — « Rendez-vous, prestations et clientèle : gérez
+             tout votre quotidien au même endroit, simplement. » (`starter-services.png`, also
+             setup step 4: approved reuse)
+          2. « Vos produits, votre stock, vos ventes. » — « Gérez votre catalogue, suivez
+             votre stock et enregistrez vos ventes de produits en quelques gestes. »
+             (`products.png`)
+          3. « Découvrez ce qui fait votre succès. » — « Identifiez vos clients qui dépensent
+             le plus, repérez vos meilleures ventes et suivez l’évolution de votre activité. »
+             (`clients.png`; backed by « Tops & tendances »: Clients qui dépensent le plus,
+             Top prestations / produits, Encaissé per period)
+          Footer on every slide: three pagination pills (tappable, adjustable for VoiceOver,
+          spoken « Écran n sur 3 »), the primary action — `Continuer` (slides 1–2),
+          `Créer mon compte` (slide 3, PUSH → Créer un compte, so back returns to slide 3) —
+          and the direct link « Déjà un compte ? Se connecter » (PUSH → Se connecter from any
+          slide; back returns to that slide). « Passer » (top bar, slides 1–2 only) returns the
+          tour to slide 1 and PUSHES Créer un compte, so back from sign-up lands on slide 1,
+          never on a declined slide. Back: previous slide; none on slide 1 (the root of the
+          signed-out stack). BeautIzzy records amounts and payment methods: no slide implies
+          payment processing. The paywall master (`growth.png`) is never used here.
 
 Account   « Créons votre compte » (email + password) → email confirmation when the project
           requires it (« Vérifiez votre boîte mail ✨ », the link opens in the browser and brings
           the owner back to sign-in) — or « Se connecter » for an existing account. Back returns
-          to Welcome.
+          to Discovery; opened without history (the confirmation link), back goes to the
+          Discovery entry.
 
 Setup     1. Primary activity   ONE activity, 2-column grid, required — `Continuer`
           2. Business details   prénom *, nom, nom de votre activité *, téléphone (the chosen
@@ -1326,7 +1351,9 @@ A quiet progress bar runs over the five setup steps (spoken as « Étape n sur 5
 on steps 2–3 only: nothing precedes step 1 inside setup (the account screens are not a step), and
 once the Business exists (step 3 onward) nothing before it can be revisited, so a creation is never
 edited or repeated. Each step has its approved illustration (`assets/illustrations/onboarding`,
-drawn as supplied); the reserve illustrations and the paywall one are not used.
+drawn as supplied); Discovery draws `starter-services.png`, `products.png` and `clients.png`;
+`welcome.png` is the compact accent of the account screens; the paywall master is not used
+anywhere in the first run.
 
 The primary activity is a SINGLE value — the stable vocabulary is `HAIRDRESSING | BARBER | NAILS |
 ESTHETICS | LASHES_BROWS | MAKEUP | WELLNESS | OTHER` (Coiffure, Barbier, Onglerie, Esthétique,
