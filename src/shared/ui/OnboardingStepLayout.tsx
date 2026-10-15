@@ -72,13 +72,22 @@ const entranceDelays = { illustration: 0, header: 60, content: 120, footer: 180 
 /** Width of the editorial brand mark in the top bar of the account screens. */
 const TOP_BAR_BRAND_WIDTH = 112;
 /**
- * Rendered width of the editorial brand mark above the Discovery pager. The PNG
- * carries ~3.7 % of transparent padding on each side, so the ARTWORK reads
- * ≈ 215 dp wide (≈ 180 on a small phone); its vertical padding is pulled back
- * with negative margins, so the layout spends only the visible height.
+ * Rendered widths of the editorial brand mark above the content. The PNG carries
+ * ~3.7 % of transparent padding on each side, so the ARTWORK reads about 7 %
+ * narrower than the rendered width; its vertical padding is pulled back with
+ * negative margins, so the layout spends only the visible height.
+ *
+ *   compact  Discovery, above the pager: ≈ 215 dp of artwork (≈ 180 small)
+ *   large    the anchor of sign-in and the email confirmation, which carry no
+ *            illustration: ≈ 252 dp of artwork (≈ 215 small — the SE content
+ *            width is 287 dp)
  */
-const COMPACT_BRAND_WIDTH = 232;
-const COMPACT_BRAND_WIDTH_SMALL = 194;
+const EDITORIAL_BRAND_WIDTH = {
+  compact: { regular: 232, small: 194 },
+  large: { regular: 272, small: 232 },
+} as const;
+
+export type OnboardingBrandSize = 'hero' | 'compact' | 'large';
 
 export type OnboardingIllustrationSize = 'hero' | 'compact';
 
@@ -130,9 +139,9 @@ function Entrance({ delay, rise = false, children, style }: EntranceProps) {
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }
 
-/** The editorial mark of Discovery, its transparent vertical padding pulled back. */
-function CompactBrandMark({ small }: { readonly small: boolean }) {
-  const width = small ? COMPACT_BRAND_WIDTH_SMALL : COMPACT_BRAND_WIDTH;
+/** The editorial mark above the content, its transparent vertical padding pulled back. */
+function EditorialBrandMark({ size, small }: { readonly size: 'compact' | 'large'; readonly small: boolean }) {
+  const width = EDITORIAL_BRAND_WIDTH[size][small ? 'small' : 'regular'];
   const insets = brandMarkInsets('editorial', width);
   return (
     <BrandMark
@@ -186,9 +195,13 @@ interface OnboardingStepLayoutProps {
   readonly subtitle?: string;
   /** Title and subtitle alignment: centred on the two framing steps, leading on the working ones. */
   readonly align?: 'center' | 'start';
-  /** The brand mark above the content: the primary lockup (`hero`), or the editorial mark rendered 232 dp wide — 194 on a small phone (`compact`, Discovery). */
+  /**
+   * The brand mark above the content: the primary lockup (`hero`), or the
+   * editorial mark — `compact` above the Discovery pager, `large` as the
+   * anchor of a screen without illustration (sign-in, email confirmation).
+   */
   readonly brand?: boolean;
-  readonly brandSize?: 'hero' | 'compact';
+  readonly brandSize?: OnboardingBrandSize;
   /** A compact brand mark in the centre of the top bar (the account screens). Exclusive with `progress`. */
   readonly topBarBrand?: boolean;
   readonly progress?: OnboardingProgress;
@@ -265,12 +278,18 @@ export function OnboardingStepLayout({
           {brand && (
             <Entrance
               delay={entranceDelays.illustration}
-              style={[styles.brand, brandSize === 'compact' && styles.brandCompact, brandSize === 'compact' && small && styles.brandCompactSmall]}
+              style={[
+                styles.brand,
+                brandSize === 'compact' && styles.brandCompact,
+                brandSize === 'compact' && small && styles.brandCompactSmall,
+                brandSize === 'large' && styles.brandLarge,
+                brandSize === 'large' && small && styles.brandLargeSmall,
+              ]}
             >
-              {brandSize === 'compact' ? (
-                <CompactBrandMark small={small} />
-              ) : (
+              {brandSize === 'hero' ? (
                 <BrandMark variant="primary" size={small ? 150 : 176} />
+              ) : (
+                <EditorialBrandMark size={brandSize} small={small} />
               )}
             </Entrance>
           )}
@@ -360,6 +379,10 @@ const styles = StyleSheet.create({
   // Discovery: closer to the top bar, the illustration keeps its room.
   brandCompact: { paddingTop: spacing.md },
   brandCompactSmall: { paddingTop: spacing.xs },
+  // Sign-in and the email confirmation: the mark anchors the upper third, the
+  // header block follows after one comfortable gap (the header adds `spacing.md`).
+  brandLarge: { paddingBottom: spacing.lg, paddingTop: spacing['3xl'] },
+  brandLargeSmall: { paddingBottom: spacing.sm, paddingTop: spacing.lg },
   illustrationSlot: { alignItems: 'center', paddingVertical: spacing.sm },
   header: { gap: spacing.sm, paddingTop: spacing.md },
   headerCentred: { alignItems: 'center' },

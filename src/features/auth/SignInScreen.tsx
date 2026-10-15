@@ -3,6 +3,9 @@
 // Wrong credentials, unconfirmed accounts, and network failures each get one
 // concise sentence; the entered email survives every failure. Password
 // recovery is intentionally absent in V1 (see docs/architecture/AUTH.md).
+// The returning-user screen carries no illustration: the large editorial
+// brand mark anchors it, then the title, the line and the two fields form one
+// block above the actions. The celebration master belongs to sign-up.
 
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
@@ -23,7 +26,6 @@ import {
   validateCredentials,
   type CredentialFormValues,
 } from './form';
-import { welcomeIllustration } from './illustrations';
 import { formatAuthFailure } from './messages';
 import { useAuth } from './session/AuthProvider';
 
@@ -63,8 +65,9 @@ export function SignInScreen() {
 
   return (
     <OnboardingStepLayout
+      brand
+      brandSize="large"
       eyebrow="COMPTE"
-      illustration={welcomeIllustration}
       footer={
         <>
           <AppButton
@@ -85,7 +88,6 @@ export function SignInScreen() {
       subtitle="Retrouvez votre espace BeautIzzy."
       testID="sign-in-screen"
       title="Se connecter"
-      topBarBrand
     >
       <TextField
         accessibilityLabel="Email"

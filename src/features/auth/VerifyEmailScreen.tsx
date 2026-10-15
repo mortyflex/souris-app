@@ -5,7 +5,9 @@
 // is restrained and reports its own outcome. No token handling: the link
 // confirms the address in the browser, returns to the app on the sign-in
 // screen (sourisapp://sign-in), and the owner signs in normally. Drawn in
-// the same first-run frame as Welcome and the account forms.
+// the same first-run frame as the account forms, without the celebration
+// master of sign-up: the large editorial brand mark anchors the screen and
+// the lavender notice carries the envelope glyph and the address.
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -17,7 +19,6 @@ import { AppText } from '@/shared/ui/AppText';
 import { OnboardingStepLayout } from '@/shared/ui/OnboardingStepLayout';
 import { radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
-import { welcomeIllustration } from './illustrations';
 import { formatAuthFailure } from './messages';
 import { useAuth } from './session/AuthProvider';
 
@@ -46,8 +47,9 @@ export function VerifyEmailScreen({ email }: VerifyEmailScreenProps) {
 
   return (
     <OnboardingStepLayout
+      brand
+      brandSize="large"
       eyebrow="COMPTE"
-      illustration={welcomeIllustration}
       footer={
         <>
           <AppButton
@@ -67,7 +69,6 @@ export function VerifyEmailScreen({ email }: VerifyEmailScreenProps) {
       testID="verify-email-screen"
       // A no-break space keeps the sparkle with « mail » on a narrow phone.
       title={'Vérifiez votre boîte mail\u00a0✨'}
-      topBarBrand
     >
       <View
         accessible

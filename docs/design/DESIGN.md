@@ -338,9 +338,12 @@ Règles :
   principale le lien violet « Déjà un compte ? Se connecter » sur chaque page. « Passer » en haut
   à droite sur les deux premières pages, retour en verre sur les pages 2 et 3 seulement. Les
   anciens objets beauté flottants (`assets/brand/welcome-floating/`) ne font plus partie du
-  parcours d'entrée. Les écrans de compte (création, connexion, confirmation d'e-mail) gardent le
-  même cadre : bouton retour en verre, logo éditorial compact centré en haut, eyebrow « COMPTE »,
-  `welcome.png` en accent compact. Aucun PNG n'est redessiné ni recoloré.
+  parcours d'entrée. Les écrans de compte gardent le même cadre : bouton retour en verre, eyebrow
+  « COMPTE ». La création de compte conserve `welcome.png` en accent compact et le logo éditorial
+  (112 dp) centré en haut ; la connexion et la confirmation d'e-mail n'ont pas d'illustration : le
+  logo éditorial, grand (272 dp rendus, ≈ 252 dp visibles ; 232 dp sur un iPhone SE), ancre le
+  haut de l'écran, puis titre, ligne d'appui et champs forment un seul bloc au-dessus des actions.
+  Aucun PNG n'est redessiné ni recoloré.
 - **Ne pas multiplier les souris illustrées.**
 
 ---

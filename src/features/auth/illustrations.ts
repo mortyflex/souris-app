@@ -4,8 +4,8 @@
 // (`contain`, sized at render time, never cropped, recoloured or re-encoded).
 // Every master is a square 1254 × 1254 transparent PNG.
 //
-//   welcome.png            the compact accent of the account screens, so
-//                          they read as the same flow as the setup steps
+//   welcome.png            the compact accent of sign-up (sign-in and the email
+//                          confirmation are anchored by the brand mark instead)
 //   activity-duo.png       Discovery slide 1 (organisation): two professionals
 //                          with appointment elements
 //   products-man.png       Discovery slide 2 (products, stock, sales)

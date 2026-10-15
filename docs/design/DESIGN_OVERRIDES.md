@@ -483,10 +483,17 @@ have been removed from the repository.
   (visibility toggle), `Créer mon compte`, « J’ai déjà un compte »; sign-in: « Se connecter »,
   « Retrouvez votre espace BeautIzzy. »; email confirmation: « Vérifiez votre boîte mail ✨ », the
   address in a lavender notice with an envelope glyph, « Retour à la connexion », « Renvoyer
-  l’email ». The account screens reuse `welcome.png` at the compact size (0.22 × the window
-  height, 0.17 under 700 pt, clamped 112–200) above the eyebrow; the brand mark carries the top
-  bar and the form stays above the fold; their back returns to Discovery, or replaces to its entry
-  when the screen was opened without history (the confirmation link). Historical: the previous
+  l’email ». Sign-up alone keeps `welcome.png` at the compact size (0.22 × the window height,
+  0.17 under 700 pt, clamped 112–200) above the eyebrow, with the 112 dp mark in its top bar.
+  Sign-in and the email confirmation carry no illustration: the editorial mark is their anchor
+  (`brandSize="large"`: rendered 272 dp, ≈ 252 dp of artwork; 232 / ≈ 215 on a small phone,
+  where the content width is 287 dp), `spacing.3xl` (32 dp) under the top bar and `spacing.lg`
+  above the header (`spacing.lg` / `spacing.sm` on a small phone), so the mark holds the upper
+  third and
+  the eyebrow, title, line and fields read as one block above the actions; the email
+  confirmation keeps its lavender notice with the envelope glyph. Every form stays above the
+  fold; their back returns to Discovery, or replaces to its entry when the screen was opened
+  without history (the confirmation link). Historical: the previous
   Welcome floated six beauty objects (`assets/brand/welcome-floating/`) around the logo with a
   touch physics scene; that scene is gone from the entry flow (the PNGs are no longer rendered
   anywhere).

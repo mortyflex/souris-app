@@ -67,7 +67,10 @@ describe('SignUpScreen', () => {
     // The accent headline belongs to the first Discovery slide alone.
     expect(view.getByRole('header', { name: 'Créons votre compte' })).toHaveStyle({ color: semanticColors.foreground });
     expect(view.getByText('Quelques secondes suffisent pour commencer avec BeautIzzy.')).toBeTruthy();
+    // Sign-up keeps the celebration master and the compact mark in the top bar.
+    expect(view.getByTestId('onboarding-illustration', { includeHiddenElements: true })).toBeTruthy();
     expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
+    expect(view.getByLabelText('BeautIzzy')).toHaveStyle({ width: 112 });
     expect(view.queryByTestId('onboarding-progress')).toBeNull();
     expect(view.getByLabelText('Email')).toBeTruthy();
     expect(view.getByLabelText('Mot de passe')).toBeTruthy();
@@ -157,7 +160,11 @@ describe('SignInScreen', () => {
 
     expect(view.getByRole('header', { name: 'Se connecter' })).toBeTruthy();
     expect(view.getByRole('header', { name: 'Se connecter' })).toHaveStyle({ color: semanticColors.foreground });
+    expect(view.getByText('Retrouvez votre espace BeautIzzy.')).toBeTruthy();
+    // No illustration: the large editorial mark (272 dp on the regular jest window) is the anchor.
+    expect(view.queryByTestId('onboarding-illustration', { includeHiddenElements: true })).toBeNull();
     expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
+    expect(view.getByLabelText('BeautIzzy')).toHaveStyle({ width: 272 });
     expect(view.queryByTestId('onboarding-progress')).toBeNull();
 
     await press(view.getByTestId('onboarding-back'));
@@ -230,7 +237,10 @@ describe('VerifyEmailScreen', () => {
     expect(view.getByTestId('verify-email-address').props.children).toBe('new@example.com');
     expect(view.getByRole('header', { name: 'Vérifiez votre boîte mail\u00a0✨' })).toBeTruthy();
     expect(view.getByText('Ouvrez le lien pour confirmer votre adresse, puis connectez-vous.')).toBeTruthy();
+    // Same anchor as sign-in, no repeated celebration master.
+    expect(view.queryByTestId('onboarding-illustration', { includeHiddenElements: true })).toBeNull();
     expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
+    expect(view.getByLabelText('BeautIzzy')).toHaveStyle({ width: 272 });
     // The link is opened outside the app: no automatic verification is claimed.
     expect(view.queryByText(/automatique|vérifi(é|ons) pour vous/i)).toBeNull();
 

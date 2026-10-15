@@ -1359,7 +1359,8 @@ on steps 2–3 only: nothing precedes step 1 inside setup (the account screens a
 once the Business exists (step 3 onward) nothing before it can be revisited, so a creation is never
 edited or repeated. Each step has its approved illustration (`assets/illustrations/onboarding`,
 drawn as supplied); Discovery draws `activity-duo.png`, `products-man.png` and `clients-duo.png`;
-`welcome.png` is the compact accent of the account screens; the paywall masters are not used
+`welcome.png` is the compact accent of sign-up only (sign-in and the email confirmation are
+anchored by the large editorial brand mark); the paywall masters are not used
 anywhere in the first run.
 
 The primary activity is a SINGLE value — the stable vocabulary is `HAIRDRESSING | BARBER | NAILS |
