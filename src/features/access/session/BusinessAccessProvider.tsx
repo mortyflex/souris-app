@@ -1,0 +1,267 @@
+// BeautIzzy — Business access session boundary (BeautIzzy Plus)
+//
+// Answers ONE question: what may the signed-in professional do with her
+// business data right now — `full` or `read-only`? It follows the Auth state
+// (like BusinessSessionProvider), asks the SubscriptionSource for a
+// verification, keeps the in-memory entitlement evidence of the session, and
+// lets THE domain rule decide (`resolveBusinessAccess`). Nothing here
+// compares a date or knows a plan.
+//
+// Mounted at the account root, below BusinessSessionProvider and above
+// RootNavigator, so the root gate and the (app) providers can both read it
+// later. In this phase nothing consumes it: enforcement is DISABLED
+// (`SUBSCRIPTION_ENFORCEMENT`) and the source is the unconfigured one, so
+// `access` is always full and `writeRefusal` always undefined.
+//
+// Account isolation: the state is keyed by the signed-in user id. Another
+// user — or nobody — reads a fresh pending session, never the previous one's
+// verification or evidence; a verification that lands after the user changed
+// is dropped (session generation); a push from the store reaches only the
+// session it was subscribed for. Evidence lives in memory only and dies with
+// the session: nothing is persisted in this phase, so after a restart the
+// offline policy starts without a proof until the store answers again.
+//
+// Time awareness. The answer is re-resolved for the current instant, with a
+// fresh verification requested, at every deadline the domain announces
+// (`nextBusinessAccessDeadline`: the end of the entitlement in force, then
+// the end of the 72-hour offline grace) and whenever the app returns to the
+// foreground — a deadline missed while suspended is caught up on there. A
+// store answer that reached the end of the entitlement it reported is lapsed
+// (`isVerificationCurrent`) and the proof speaks instead, so an expired
+// subscription can never stay `full` just because the app stayed open, and a
+// renewal that cannot be verified gets exactly the grace the domain grants.
+// Deadlines are properties of the proof: re-arming the timer, repeating
+// `refresh()` or a failed verification never moves them.
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from 'react';
+import { AppState } from 'react-native';
+
+import {
+  canMutateBusinessData,
+  isVerificationCurrent,
+  nextBusinessAccessDeadline,
+  resolveBusinessAccess,
+  updateEntitlementEvidence,
+  type AccessEnforcement,
+  type BusinessAccess,
+  type BusinessAccessInput,
+  type EntitlementEvidence,
+  type ReadOnlyReason,
+  type SubscriptionVerification,
+} from '@/domain/access';
+import { useAuth } from '@/features/auth/session/AuthProvider';
+
+import type { SubscriptionSource } from '../subscription-source';
+
+export interface BusinessAccessValue {
+  /** The effective permission, resolved by the domain for the last resolution instant. */
+  readonly access: BusinessAccess;
+  /** `access.mode === 'full'`: business mutations are permitted. */
+  readonly canMutate: boolean;
+  /** Undefined while mutations are permitted, the reason otherwise. The future write guards read this. */
+  readonly writeRefusal: ReadOnlyReason | undefined;
+  /**
+   * The latest answer of THIS session; undefined while the first one is in
+   * flight, or signed out. Once the entitlement it reports has ended, `access`
+   * rests on the proof instead (offline policy) until the next answer.
+   */
+  readonly verification: SubscriptionVerification | undefined;
+  readonly enforcement: AccessEnforcement;
+  /** Verifies again through the source. Resolves once the answer is applied — or dropped as stale. */
+  readonly refresh: () => Promise<void>;
+}
+
+const BusinessAccessContext = createContext<BusinessAccessValue | null>(null);
+
+const UNAVAILABLE: SubscriptionVerification = { kind: 'unavailable' };
+
+/** The longest delay a JavaScript timer honours; a farther deadline is reached in steps. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+const defaultClock = () => new Date();
+
+interface AccessSession {
+  readonly userId: string | undefined;
+  readonly verification: SubscriptionVerification | undefined;
+  readonly evidence: EntitlementEvidence | undefined;
+  /** The instant of the last resolution: a verification landing, a deadline, a foreground return. */
+  readonly resolvedAt: Date;
+}
+
+interface BusinessAccessProviderProps {
+  readonly enforcement: AccessEnforcement;
+  /** Undefined behaves like the unconfigured source: every verification is unavailable. */
+  readonly source: SubscriptionSource | undefined;
+  /** Injected for deterministic tests; the application uses the system clock. */
+  readonly clock?: () => Date;
+}
+
+export function BusinessAccessProvider({
+  enforcement,
+  source,
+  clock = defaultClock,
+  children,
+}: PropsWithChildren<BusinessAccessProviderProps>) {
+  const { state: auth } = useAuth();
+  const userId = auth.status === 'authenticated' ? auth.user.id : undefined;
+
+  const clockRef = useRef(clock);
+  useEffect(() => {
+    clockRef.current = clock;
+  }, [clock]);
+
+  const [session, setSession] = useState<AccessSession>(() => ({
+    userId: undefined,
+    verification: undefined,
+    evidence: undefined,
+    resolvedAt: clock(),
+  }));
+  // Bumped whenever the signed-in user changes: an answer, a push or a timer
+  // from an older session is dropped. Within a session, only the latest
+  // `verify` applies.
+  const sessionGeneration = useRef(0);
+  const verifySequence = useRef(0);
+
+  // Derived while the stored session belongs to another user (sign-in,
+  // account change, sign-out): pending, with no evidence — never theirs.
+  const current: AccessSession =
+    session.userId === userId
+      ? session
+      : { userId, verification: undefined, evidence: undefined, resolvedAt: session.resolvedAt };
+
+  const apply = useCallback((forUserId: string, verification: SubscriptionVerification) => {
+    const now = clockRef.current();
+    setSession((previous) => {
+      const evidence = previous.userId === forUserId ? previous.evidence : undefined;
+      return {
+        userId: forUserId,
+        verification,
+        evidence: updateEntitlementEvidence(evidence, verification, now),
+        resolvedAt: now,
+      };
+    });
+  }, []);
+
+  /** Re-resolves the session for the current instant; the answer and the proof stay exactly as they are. */
+  const reevaluate = useCallback((forUserId: string) => {
+    const now = clockRef.current();
+    setSession((previous) => (previous.userId === forUserId ? { ...previous, resolvedAt: now } : previous));
+  }, []);
+
+  const verify = useCallback(
+    async (forUserId: string, generation: number) => {
+      verifySequence.current += 1;
+      const sequence = verifySequence.current;
+      let verification: SubscriptionVerification;
+      try {
+        verification = source ? await source.verify(forUserId) : UNAVAILABLE;
+      } catch {
+        verification = UNAVAILABLE;
+      }
+      if (generation !== sessionGeneration.current) return;
+      if (sequence !== verifySequence.current) return;
+      apply(forUserId, verification);
+    },
+    [source, apply],
+  );
+
+  useEffect(() => {
+    if (!userId) return;
+    sessionGeneration.current += 1;
+    const generation = sessionGeneration.current;
+    void verify(userId, generation);
+    const unsubscribe = source?.onVerificationChange?.(userId, (verification) => {
+      if (generation === sessionGeneration.current) apply(userId, verification);
+    });
+    // Back in the foreground: the clock may have jumped past a deadline while
+    // the app was suspended, and the store may have news. One listener per
+    // session; renders never re-subscribe.
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || generation !== sessionGeneration.current) return;
+      reevaluate(userId);
+      void verify(userId, generation);
+    });
+    return () => {
+      sessionGeneration.current += 1;
+      appState.remove();
+      unsubscribe?.();
+    };
+  }, [userId, source, verify, apply, reevaluate]);
+
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    await verify(userId, sessionGeneration.current);
+  }, [userId, verify]);
+
+  const input = useMemo<BusinessAccessInput>(
+    () => ({
+      now: current.resolvedAt,
+      enforcement,
+      verification:
+        current.verification !== undefined && isVerificationCurrent(current.verification, current.resolvedAt)
+          ? current.verification
+          : UNAVAILABLE,
+      lastVerifiedEntitlement: current.evidence,
+    }),
+    [current.resolvedAt, current.verification, current.evidence, enforcement],
+  );
+
+  const access = useMemo(() => resolveBusinessAccess(input), [input]);
+  const deadlineMs = useMemo(() => nextBusinessAccessDeadline(input)?.getTime(), [input]);
+
+  // ONE timer, aimed at the next deadline the domain announced. Reaching it
+  // re-resolves for the current instant and asks the store again (a renewal
+  // must be checked; `unavailable` keeps the proof and its grace). A deadline
+  // farther than a timer can reach is approached in steps; a timer that runs
+  // early — or late, after a suspension — is judged by the clock, never by
+  // its own delay. An already-passed deadline is handled at once, and every
+  // resolution past it yields a later deadline or none, so nothing spins.
+  useEffect(() => {
+    if (!userId || deadlineMs === undefined) return;
+    const generation = sessionGeneration.current;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const reach = () => {
+      const remaining = deadlineMs - clockRef.current().getTime();
+      if (remaining > 0) {
+        timer = setTimeout(reach, Math.min(remaining, MAX_TIMER_DELAY_MS));
+        return;
+      }
+      if (generation !== sessionGeneration.current) return;
+      reevaluate(userId);
+      void verify(userId, generation);
+    };
+    reach();
+    return () => clearTimeout(timer);
+  }, [userId, deadlineMs, reevaluate, verify]);
+
+  const value = useMemo<BusinessAccessValue>(
+    () => ({
+      access,
+      canMutate: canMutateBusinessData(access),
+      writeRefusal: access.mode === 'read-only' ? access.reason : undefined,
+      verification: current.verification,
+      enforcement,
+      refresh,
+    }),
+    [access, current.verification, enforcement, refresh],
+  );
+
+  return <BusinessAccessContext.Provider value={value}>{children}</BusinessAccessContext.Provider>;
+}
+
+export function useBusinessAccess(): BusinessAccessValue {
+  const value = useContext(BusinessAccessContext);
+  if (!value) {
+    throw new Error('useBusinessAccess must be used inside BusinessAccessProvider');
+  }
+  return value;
+}

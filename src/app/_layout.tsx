@@ -11,6 +11,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { SUBSCRIPTION_ENFORCEMENT } from '@/features/access/enforcement';
+import { BusinessAccessProvider } from '@/features/access/session/BusinessAccessProvider';
+import { unconfiguredSubscriptionSource } from '@/features/access/subscription-source';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { BusinessSessionProvider } from '@/features/business/session/BusinessSessionProvider';
 import { CommunicationsGatewayProvider } from '@/features/communications/session/CommunicationsGatewayProvider';
@@ -97,9 +100,11 @@ export default function RootLayout() {
 }
 
 /**
- * Auth → Business → root gate. Lives below PersistenceProvider because the
- * offline session fallback and the Business resolution both read the local
- * account binding.
+ * Auth → Business → Access → root gate. Lives below PersistenceProvider
+ * because the offline session fallback and the Business resolution both read
+ * the local account binding. Business access (BeautIzzy Plus) sits above the
+ * root gate so routing and the (app) providers can both read it later; today
+ * enforcement is disabled and the source unconfigured: nothing is restricted.
  */
 function AccountSession({ gateways }: { readonly gateways: AccountGateways }) {
   const { database } = usePersistence();
@@ -111,14 +116,19 @@ function AccountSession({ gateways }: { readonly gateways: AccountGateways }) {
   return (
     <AuthProvider gateway={gateways.auth} resolveLocalOwner={resolveLocalOwner}>
       <BusinessSessionProvider gateway={gateways.business}>
-        {/* Renders nothing of its own; pushes local data only once the live session is bound to its Business. */}
-        <CloudSyncRunner gateway={gateways.sync}>
-          <BusinessMediaProvider remote={gateways.media}>
-            <CommunicationsGatewayProvider gateway={gateways.communications}>
-              <RootNavigator />
-            </CommunicationsGatewayProvider>
-          </BusinessMediaProvider>
-        </CloudSyncRunner>
+        <BusinessAccessProvider
+          enforcement={SUBSCRIPTION_ENFORCEMENT}
+          source={unconfiguredSubscriptionSource}
+        >
+          {/* Renders nothing of its own; pushes local data only once the live session is bound to its Business. */}
+          <CloudSyncRunner gateway={gateways.sync}>
+            <BusinessMediaProvider remote={gateways.media}>
+              <CommunicationsGatewayProvider gateway={gateways.communications}>
+                <RootNavigator />
+              </CommunicationsGatewayProvider>
+            </BusinessMediaProvider>
+          </CloudSyncRunner>
+        </BusinessAccessProvider>
       </BusinessSessionProvider>
     </AuthProvider>
   );

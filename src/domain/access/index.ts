@@ -10,6 +10,7 @@ export type {
   SubscriptionStatus,
   SubscriptionVerification,
 } from './types';
+export { isVerificationCurrent, nextBusinessAccessDeadline } from './access-deadline';
 export {
   OFFLINE_ACCESS_GRACE_PERIOD_HOURS,
   OFFLINE_ACCESS_GRACE_PERIOD_MS,

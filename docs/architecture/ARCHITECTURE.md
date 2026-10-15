@@ -316,7 +316,25 @@ src/providers/persistence-failure.ts    the one concise "Enregistrement impossib
 src/features/auth/session/AuthProvider.tsx                     who is signed in?
 src/features/business/session/BusinessSessionProvider.tsx      which Business, onboarding, binding
 src/features/business/session/CurrentBusinessProvider.tsx      the bound Business for (app) screens
+src/features/access/session/BusinessAccessProvider.tsx         what the signed-in professional may do
+                                                               (BeautIzzy Plus): `full` / `read-only`,
+                                                               resolved by `src/domain/access`; mounted
+                                                               below BusinessSessionProvider, above the
+                                                               root gate. Enforcement DISABLED and the
+                                                               subscription source unconfigured until
+                                                               the paywall phase: nothing is restricted
 ```
+
+Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
+provider re-resolves it — and asks the subscription source again — at every deadline the domain
+announces (`nextBusinessAccessDeadline`: the end of the entitlement in force, then the end of the
+72-hour offline grace) and whenever the app returns to the foreground (`AppState`), which catches
+up on a deadline missed while suspended. One timer per session, aimed at the next deadline (in
+steps beyond what a JavaScript timer can wait); a store answer whose entitlement has ended lapses
+(`isVerificationCurrent`) and the in-memory proof speaks with the offline policy; a deadline is a
+property of the proof and never moves with a retry. Deferred: evidence persistence (after a
+restart the session starts without a proof until the store answers), the RevenueCat source, the
+write guards, the paywall and the root subscription gate.
 
 Auth and Business are deliberately two providers (see `docs/architecture/AUTH.md`). Examples may
 later include:

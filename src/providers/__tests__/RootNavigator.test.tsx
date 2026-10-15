@@ -3,6 +3,9 @@
 import { act, render, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
+import { SUBSCRIPTION_ENFORCEMENT } from '@/features/access/enforcement';
+import { BusinessAccessProvider } from '@/features/access/session/BusinessAccessProvider';
+import { createFakeSubscriptionSource, type FakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser, type FakeAuthGateway } from '@/features/auth/testing/fake-auth-gateway';
 import { BusinessSessionProvider } from '@/features/business/session/BusinessSessionProvider';
@@ -45,15 +48,31 @@ interface Options {
   readonly auth?: FakeAuthGateway;
   readonly business?: FakeBusinessGateway;
   readonly database?: ReturnType<typeof openTestDatabase>;
+  readonly subscription?: FakeSubscriptionSource;
 }
 
-async function renderGate({ auth = createFakeAuthGateway(), business = createFakeBusinessGateway(), database = openTestDatabase() }: Options = {}) {
+/** The store says the subscription ENDED: the harshest answer, which the shipped enforcement ignores. */
+function createExpiredSubscriptionSource(): FakeSubscriptionSource {
+  const source = createFakeSubscriptionSource();
+  source.respondWith({ kind: 'verified', status: { kind: 'expired' } });
+  return source;
+}
+
+// The same composition as the application root: Auth → Business → Access → gate.
+async function renderGate({
+  auth = createFakeAuthGateway(),
+  business = createFakeBusinessGateway(),
+  database = openTestDatabase(),
+  subscription = createExpiredSubscriptionSource(),
+}: Options = {}) {
   const view = await render(
     <TestPersistenceProvider createSeed={createFirstRunSeed} database={database}>
       <AuthProvider gateway={auth}>
         <BusinessSessionProvider gateway={business}>
-          <RootNavigator />
-          <Text testID="sibling">ok</Text>
+          <BusinessAccessProvider enforcement={SUBSCRIPTION_ENFORCEMENT} source={subscription}>
+            <RootNavigator />
+            <Text testID="sibling">ok</Text>
+          </BusinessAccessProvider>
         </BusinessSessionProvider>
       </AuthProvider>
     </TestPersistenceProvider>,
@@ -150,5 +169,27 @@ describe('RootNavigator', () => {
     await waitFor(() => expect(unavailable.getByTestId('account-unavailable-screen')).toBeTruthy());
     expect(unavailable.getByText('Réessayer')).toBeTruthy();
     expect(unavailable.queryByTestId('route-(app)')).toBeNull();
+  });
+
+  it('routes exactly as before whatever the subscription source answers (enforcement disabled)', async () => {
+    expect(SUBSCRIPTION_ENFORCEMENT).toBe('disabled');
+    const answers = [
+      { kind: 'verified', status: { kind: 'expired' } },
+      { kind: 'verified', status: { kind: 'never' } },
+      { kind: 'unavailable' },
+    ] as const;
+    for (const answer of answers) {
+      const subscription = createFakeSubscriptionSource();
+      subscription.respondWith(answer);
+      const auth = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
+      const view = await renderGate({ auth, business: createFakeBusinessGateway([createRemoteBusiness()]), subscription });
+      await waitFor(() => expect(view.getByTestId('route-(app)')).toBeTruthy());
+      expect(subscription.calls.verify).toEqual(['user-lea']);
+      expect(view.queryByTestId('route-(auth)')).toBeNull();
+      expect(view.queryByTestId('route-(onboarding)')).toBeNull();
+    }
+
+    const signedOut = await renderGate({ subscription: createExpiredSubscriptionSource() });
+    await waitFor(() => expect(signedOut.getByTestId('route-(auth)')).toBeTruthy());
   });
 });
