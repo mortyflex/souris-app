@@ -9,6 +9,8 @@
 
 import { act, fireEvent, render } from '@testing-library/react-native';
 
+import type { SubscriptionVerification } from '@/domain/access';
+import { createFakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
 import type { UpdateLifecycleSmsPreferencesResult } from '@/features/communications/gateway';
 
 import { CommunicationsGatewayProvider } from '@/features/communications/session/CommunicationsGatewayProvider';
@@ -411,5 +413,66 @@ describe('LifecycleSmsSettingsScreen', () => {
     for (const stepper of STEPPERS) {
       expect(isDisabled(view, `${stepper}-increment`)).toBe(true);
     }
+  });
+});
+
+// Business access (BeautIzzy Plus): the screen writes to the server directly,
+// so it holds the write guard itself. Under read-only access, switching an
+// automation OFF still reaches the server; turning one on or changing a knob
+// is refused before any call and reads as a failure, never as a saved change.
+describe('LifecycleSmsSettingsScreen — read-only business access', () => {
+  const EXPIRED: SubscriptionVerification = { kind: 'verified', status: { kind: 'expired' } };
+
+  async function renderReadOnly(gateway: FakeCommunicationsGateway) {
+    const source = createFakeSubscriptionSource();
+    source.respondWith(EXPIRED);
+    const view = await render(
+      <TestPersistenceProvider access={{ enforcement: 'enabled', source }}>
+        <CommunicationsGatewayProvider gateway={gateway}>
+          <LifecycleSmsSettingsScreen />
+        </CommunicationsGatewayProvider>
+      </TestPersistenceProvider>,
+    );
+    await act(async () => {});
+    return view;
+  }
+
+  it('switching an automation OFF still reaches the server', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    gateway.seedLifecycleSmsPreferences(testBusiness.id, {
+      ...DEFAULT_LIFECYCLE_SMS_PREFERENCES,
+      birthdaySmsEnabled: true,
+      winbackSmsEnabled: true,
+    });
+    const view = await renderReadOnly(gateway);
+
+    await toggle(view, 'lifecycle-birthday-toggle', false);
+
+    expect(gateway.calls.updateLifecycle).toBe(1);
+    expect(gateway.lifecycleUpdates[0]?.preferences).toMatchObject({ birthdaySmsEnabled: false, winbackSmsEnabled: true });
+    expect(view.getByTestId('lifecycle-birthday-toggle-switch').props.value).toBe(false);
+    expect(view.queryByText(/Impossible d’enregistrer/)).toBeNull();
+  });
+
+  it('turning an automation ON is refused before any server call and never reads as saved', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    const view = await renderReadOnly(gateway);
+
+    await toggle(view, 'lifecycle-winback-toggle', true);
+
+    expect(gateway.calls.updateLifecycle).toBe(0);
+    expect(view.getByTestId('lifecycle-winback-toggle-switch').props.value).toBe(false);
+    expect(view.getByText(/Impossible d’enregistrer le réglage/)).toBeTruthy();
+  });
+
+  it('changing a knob is refused before any server call and rolls back to the stored value', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    const view = await renderReadOnly(gateway);
+
+    await press(view, 'lifecycle-birthday-discount-increment');
+
+    expect(gateway.calls.updateLifecycle).toBe(0);
+    expect(valueOf(view, 'lifecycle-birthday-discount')).toBe('15 %');
+    expect(view.getByText(/Impossible d’enregistrer le réglage/)).toBeTruthy();
   });
 });

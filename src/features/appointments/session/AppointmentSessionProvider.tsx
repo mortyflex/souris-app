@@ -32,6 +32,7 @@ import {
   type AppointmentPaymentDate,
   type AppointmentPhaseDurationUpdate,
 } from '@/domain/appointments';
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { getLocalDateKey } from '@/features/agenda/calendar/week';
 import { runInTransaction, type SourisDatabase } from '@/persistence/database';
 import {
@@ -106,8 +107,11 @@ function millisecondsUntilNextLocalDay(now: Date): number {
 
 /**
  * The Appointment session boundary, hydrated once from the persisted
- * snapshot. Every mutation is written to SQLite first (parent + items +
- * phases in one transaction) and reflected in state only after success.
+ * snapshot. Every user-initiated mutation passes the business write guard
+ * first (features/access/write-guard.ts), is written to SQLite next (parent +
+ * items + phases in one transaction) and is reflected in state only after
+ * success. The automatic previous-day finalization below is NOT user-initiated
+ * and never goes through the guard: a read-only session keeps its history true.
  *
  * Appointment deposits live in the same session: they belong to the
  * Appointment's financial state, and every surface that reads it (Details,
@@ -123,6 +127,7 @@ function millisecondsUntilNextLocalDay(now: Date): number {
  */
 export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   const { database, snapshot } = usePersistence();
+  const requireWriteAccess = useBusinessWriteGuard();
   const [initialState] = useState(() =>
     createInitialSessionState(database, snapshot.appointments),
   );
@@ -196,6 +201,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   };
 
   const addAppointment = (entry: AppointmentSessionEntry) => {
+    requireWriteAccess('appointments.addAppointment');
     const reconciledEntry = reconcileAppointmentEntriesForLocalDay([entry], new Date())[0] ?? entry;
     // ONE transaction: appointment + items + phases. Snapshot only — the
     // Service catalog is never written from Appointment workflows.
@@ -204,6 +210,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   };
 
   const updateAppointment = (entry: AppointmentSessionEntry) => {
+    requireWriteAccess('appointments.updateAppointment');
     const reconciledEntry = reconcileAppointmentEntriesForLocalDay([entry], new Date())[0] ?? entry;
     persistAppointment(database, reconciledEntry.appointment);
     commit(
@@ -239,6 +246,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     appointmentItemId: string,
     updates: readonly AppointmentPhaseDurationUpdate[],
   ) => {
+    requireWriteAccess('appointments.updateAppointmentItemTiming');
     const appointment = requireAppointment(appointmentId, 'updateAppointmentItemTiming');
     if (!canEditAppointment(appointment)) {
       throw new Error(
@@ -255,6 +263,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   // writes it after re-verifying editability, and state changes only after
   // the commit. Linked Sales, payment and the catalog are never involved.
   const reorderAppointmentItems = (appointmentId: string, orderedItemIds: readonly string[]) => {
+    requireWriteAccess('appointments.reorderAppointmentItems');
     const appointment = requireAppointment(appointmentId, 'reorderAppointmentItems');
     if (!canEditAppointment(appointment)) {
       throw new Error(`reorderAppointmentItems: Appointment "${appointmentId}" is no longer editable`);
@@ -265,6 +274,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   };
 
   const removeAppointmentItem = (appointmentId: string, appointmentItemId: string) => {
+    requireWriteAccess('appointments.removeAppointmentItem');
     const appointment = requireAppointment(appointmentId, 'removeAppointmentItem');
     if (!canEditAppointment(appointment)) {
       throw new Error(`removeAppointmentItem: Appointment "${appointmentId}" is no longer editable`);
@@ -282,6 +292,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     appointmentId: string,
     discount: AppointmentDiscount | undefined,
   ) => {
+    requireWriteAccess('appointments.setAppointmentDiscount');
     const appointment = requireAppointment(appointmentId, 'setAppointmentDiscount');
     if (!canEditAppointment(appointment)) {
       throw new Error(`setAppointmentDiscount: Appointment "${appointmentId}" is no longer editable`);
@@ -304,6 +315,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     finalDiscount?: AppointmentCheckoutDiscount,
     paymentDate: AppointmentPaymentDate = 'TODAY',
   ) => {
+    requireWriteAccess('appointments.checkoutAppointment');
     const appointment = requireAppointment(appointmentId, 'checkoutAppointment');
     const discount = finalDiscount ? finalDiscount.discount : appointment.discount;
     const now = new Date();
@@ -337,6 +349,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     appointmentId: string,
     finalDiscount?: AppointmentCheckoutDiscount,
   ) => {
+    requireWriteAccess('appointments.completePrepaidAppointment');
     const appointment = requireAppointment(appointmentId, 'completePrepaidAppointment');
     if (appointment.status === 'COMPLETED') {
       const discount = finalDiscount ? finalDiscount.discount : appointment.discount;
@@ -366,6 +379,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     appointmentId: string,
     amounts: AppointmentPaymentAmounts,
   ) => {
+    requireWriteAccess('appointments.updateAppointmentPayment');
     const appointment = requireAppointment(appointmentId, 'updateAppointmentPayment');
     const next = correctPayment(appointment, amounts);
     if (next === appointment) {
@@ -381,6 +395,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   };
 
   const deleteAppointment = (appointmentId: string) => {
+    requireWriteAccess('appointments.deleteAppointment');
     const next = removeAppointmentEntryById(committed.current, appointmentId);
     if (next === committed.current) return;
     removeAppointment(database, appointmentId);
@@ -391,6 +406,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   // re-verifies the Appointment (open, enough left to collect) and refuses a
   // second write of the same id, so a double submission never duplicates.
   const recordAppointmentDeposit = (input: AppointmentDepositInput): AppointmentDeposit => {
+    requireWriteAccess('appointments.recordAppointmentDeposit');
     const appointment = requireAppointment(input.appointmentId, 'recordAppointmentDeposit');
     if (committedDeposits.current.some((deposit) => deposit.id === input.id)) {
       throw new AppointmentDepositConflictError(input.id, 'DUPLICATE_DEPOSIT');
@@ -412,6 +428,7 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
   };
 
   const voidAppointmentDeposit = (depositId: string) => {
+    requireWriteAccess('appointments.voidAppointmentDeposit');
     const deposit = committedDeposits.current.find((candidate) => candidate.id === depositId);
     if (!deposit) throw new AppointmentDepositConflictError(depositId, 'DEPOSIT_NOT_FOUND');
     const appointment = requireAppointment(deposit.appointmentId, 'voidAppointmentDeposit');

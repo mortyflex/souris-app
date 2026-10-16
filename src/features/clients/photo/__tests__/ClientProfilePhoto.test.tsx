@@ -7,6 +7,7 @@ import { act, fireEvent, render, waitFor, within } from '@testing-library/react-
 import { Pressable } from 'react-native';
 
 import type { CameraAccess, PhotoPickResult } from '@/shared/lib/photo-acquisition';
+import { createFakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
@@ -465,5 +466,58 @@ describe('Client photo from the Client Profile', () => {
     await waitFor(() => expect(displayedPhotoUri(view)).toBe(getClientPhotoCacheUri(mockFiles, path)));
     expect(view.getByTestId('client-archived-indicator')).toBeTruthy();
     expect(view.getByLabelText('Réactiver le client')).toBeTruthy();
+  });
+});
+
+// Business access (BeautIzzy Plus): the photo save runs the write guard
+// BEFORE preparing or uploading anything, so a read-only professional's
+// attempt uploads no object, writes no row and reads as a failure.
+describe('Client photo under read-only business access', () => {
+  let db: SourisDatabase;
+  let remote: FakeClientPhotoRemote;
+
+  beforeEach(() => {
+    mockFiles = createMemoryLocalFiles();
+    remote = createFakeClientPhotoRemote(mockFiles);
+    db = seededDatabase();
+    mockCameraAccess = 'granted';
+    mockProcessingFails = false;
+    mockPreparedCount = 0;
+    mockPrepareClientPhoto.mockClear();
+    successHaptic.mockClear();
+  });
+
+  function renderReadOnlyProfile() {
+    const source = createFakeSubscriptionSource();
+    source.respondWith({ kind: 'verified', status: { kind: 'expired' } });
+    return render(
+      <TestPersistenceProvider access={{ enforcement: 'enabled', source }} database={db} files={mockFiles}>
+        <BusinessMediaProvider remote={remote}>
+          <ClientSessionProvider>
+            <ProductCatalogProvider>
+              <SaleSessionProvider>
+                <AppointmentSessionProvider>
+                  <ClientProfileScreen clientId={CLIENT_ID} />
+                </AppointmentSessionProvider>
+              </SaleSessionProvider>
+            </ProductCatalogProvider>
+          </ClientSessionProvider>
+        </BusinessMediaProvider>
+      </TestPersistenceProvider>,
+    );
+  }
+
+  it('a capture is refused before it is prepared or uploaded; nothing is stored and the failure is shown', async () => {
+    const view = await renderReadOnlyProfile();
+    await act(async () => {});
+
+    await takePhoto(view);
+
+    await waitFor(() => expect(view.getByText('Impossible d’enregistrer la photo.')).toBeTruthy());
+    expect(mockPrepareClientPhoto).not.toHaveBeenCalled();
+    expect(remote.objects.size).toBe(0);
+    expect(storedPhotoPath(db)).toBeNull();
+    expect(displayedPhotoUri(view)).toBeUndefined();
+    expect(successHaptic).not.toHaveBeenCalled();
   });
 });

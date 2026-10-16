@@ -10,6 +10,13 @@
 // Updating goes to the server FIRST (the server reconciles the queue), then
 // mirrors the accepted state here and in the cache. Nothing is ever queued
 // from the device.
+//
+// Business access (BeautIzzy Plus): ENABLING reminders — or saving an enabled
+// preference — is a business mutation and passes the write guard before the
+// server is called. Switching reminders OFF is a consent withdrawal and is
+// never refused: a read-only professional can always stop communications.
+// The server's own entitlement check on what it sends is a separate,
+// not-yet-implemented requirement; nothing here replaces it.
 
 import {
   createContext,
@@ -21,6 +28,7 @@ import {
   type PropsWithChildren,
 } from 'react';
 
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { usePersistence } from '@/providers/PersistenceProvider';
 
@@ -83,6 +91,7 @@ export function CommunicationPreferencesProvider({ children }: PropsWithChildren
   const gateway = useCommunicationsGateway();
   const business = useCurrentBusiness();
   const { database } = usePersistence();
+  const requireWriteAccess = useBusinessWriteGuard();
   const [state, setState] = useState<CommunicationPreferencesState>(() => ({
     status: 'loading',
     preferences: readCachedCommunicationPreferences(database, business.id),
@@ -106,6 +115,10 @@ export function CommunicationPreferencesProvider({ children }: PropsWithChildren
 
   const update = useCallback<CommunicationPreferencesValue['update']>(
     async (preferences) => {
+      // Opt-out is never gated; enabling is a business mutation, judged before any server call.
+      if (preferences.emailRemindersEnabled) {
+        requireWriteAccess('communications.enableEmailReminders');
+      }
       if (!gateway) throw new Error('communications gateway unavailable');
       const result = await gateway.updatePreferences(business.id, preferences);
       if (result.status === 'UPDATED') {
@@ -114,7 +127,7 @@ export function CommunicationPreferencesProvider({ children }: PropsWithChildren
       }
       return result;
     },
-    [business.id, database, gateway],
+    [business.id, database, gateway, requireWriteAccess],
   );
 
   const refresh = useCallback(() => {

@@ -7,6 +7,7 @@ import {
   type Sale,
   type SaleDraft,
 } from '@/domain/sales';
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
 import {
   completeSale as persistSaleCompletion,
@@ -39,9 +40,13 @@ const SaleSessionContext = createContext<SaleSessionValue | null>(null);
  *
  * A validation failure returns the issues and touches nothing. A database
  * failure rolls the transaction back and throws before any state changes.
+ * Both operations pass the business write guard FIRST
+ * (features/access/write-guard.ts): refused, they throw before the draft is
+ * even validated — never a Sale without its stock decrements, or the reverse.
  */
 export function SaleSessionProvider({ children }: PropsWithChildren) {
   const { database, snapshot } = usePersistence();
+  const requireWriteAccess = useBusinessWriteGuard();
   const { products, applyCommittedStockDecrements, applyCommittedStockRestorations } =
     useProductCatalog();
   const [sales, setSales] = useState<readonly Sale[]>(snapshot.sales);
@@ -60,6 +65,7 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
   };
 
   const completeSale = (draft: SaleDraft) => {
+    requireWriteAccess('sales.completeSale');
     const result = prepareSaleCompletion(draft, products);
     if (!result.ok) return result;
     if (committed.current.some((sale) => sale.id === result.sale.id)) {
@@ -76,6 +82,7 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
     appointmentId: string,
     identity: AppointmentProductIdentity,
   ) => {
+    requireWriteAccess('sales.deleteAppointmentProduct');
     const result = removeAppointmentProduct(committed.current, appointmentId, identity);
     if (!result.ok) {
       throw new Error(

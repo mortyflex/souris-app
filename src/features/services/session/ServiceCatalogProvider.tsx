@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 
 import type { Service } from '@/domain/appointments';
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import {
   deleteService as removeService,
   insertService,
@@ -22,11 +23,13 @@ function copyService(service: Service): Service {
 
 /**
  * The single Service source shared by management and Appointments. Hydrated
- * once from the persisted snapshot; every mutation is written to SQLite
- * first and reflected in state only after success.
+ * once from the persisted snapshot; every mutation passes the business write
+ * guard first (features/access/write-guard.ts), is written to SQLite next,
+ * and is reflected in state only after success.
  */
 export function ServiceCatalogProvider({ children }: PropsWithChildren) {
   const { database, snapshot } = usePersistence();
+  const requireWriteAccess = useBusinessWriteGuard();
   const [services, setServices] = useState<readonly Service[]>(() =>
     snapshot.services.map(copyService),
   );
@@ -39,6 +42,7 @@ export function ServiceCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const addService = (service: Service) => {
+    requireWriteAccess('services.addService');
     if (services.some((candidate) => candidate.id === service.id)) {
       throw new Error(`A Service with id "${service.id}" already exists`);
     }
@@ -48,6 +52,7 @@ export function ServiceCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const updateService = (service: Service) => {
+    requireWriteAccess('services.updateService');
     const existing = services.find((candidate) => candidate.id === service.id);
     if (!existing) return;
     const next = copyService({
@@ -62,6 +67,7 @@ export function ServiceCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const setServiceActive = (serviceId: string, active: boolean) => {
+    requireWriteAccess('services.setServiceActive');
     persistServiceActive(database, serviceId, active);
     setServices((current) =>
       current.map((service) =>
@@ -71,6 +77,7 @@ export function ServiceCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const deleteService = (serviceId: string) => {
+    requireWriteAccess('services.deleteService');
     removeService(database, serviceId);
     setServices((current) =>
       current.filter((service) => service.id !== serviceId),

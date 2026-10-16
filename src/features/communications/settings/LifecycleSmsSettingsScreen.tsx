@@ -34,6 +34,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
@@ -66,6 +67,7 @@ import {
   LIFECYCLE_VALIDITY_DAYS_RANGE,
   WINBACK_AFTER_DAYS_RANGE,
 } from './lifecycle-setting-steps';
+import { isLifecycleSmsOptOut } from './lifecycle-sms-write-access';
 import { LifecycleSettingStepperRow } from './LifecycleSettingStepperRow';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
@@ -86,6 +88,7 @@ export function LifecycleSmsSettingsScreen() {
   const router = useRouter();
   const gateway = useCommunicationsGateway();
   const business = useCurrentBusiness();
+  const requireWriteAccess = useBusinessWriteGuard();
   /** The last server-confirmed preferences; undefined until a read succeeds. */
   const [preferences, setPreferences] = useState<LifecycleSmsPreferences>();
   /** The optimistic knob of the write in flight, shown over `preferences`. */
@@ -146,6 +149,13 @@ export function LifecycleSmsSettingsScreen() {
     setPendingKnob(knob);
     void (async () => {
       try {
+        // This screen writes to the server directly (no session provider owns
+        // the lifecycle preference), so it holds the write guard itself:
+        // enabling an automation or changing a knob is a business mutation;
+        // switching one OFF is a consent withdrawal and is never refused.
+        if (!isLifecycleSmsOptOut(preferences, next)) {
+          requireWriteAccess('communications.updateLifecycleSmsPreferences');
+        }
         const result = await gateway.updateLifecycleSmsPreferences(business.id, next);
         if (result.status !== 'UPDATED') {
           setFailure('INVALID_VALUE');

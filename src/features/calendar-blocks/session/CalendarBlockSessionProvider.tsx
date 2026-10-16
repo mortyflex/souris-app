@@ -6,6 +6,7 @@ import {
   type CalendarBlock,
   type CalendarBlockConflict,
 } from '@/domain/calendar-blocks';
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import {
   deleteCalendarBlock as removeCalendarBlock,
@@ -54,10 +55,12 @@ const CalendarBlockSessionContext = createContext<CalendarBlockSessionValue | nu
  * snapshot. It is a SEPARATE session on purpose: the Appointment session is
  * what the Cash Register, the Client profile and every total read, and a
  * block must never be reachable from there. It reads the Appointment session
- * for one thing only — the schedule-conflict rule.
+ * for one thing only — the schedule-conflict rule. Every mutation passes the
+ * business write guard first (features/access/write-guard.ts).
  */
 export function CalendarBlockSessionProvider({ children }: PropsWithChildren) {
   const { database, snapshot } = usePersistence();
+  const requireWriteAccess = useBusinessWriteGuard();
   const { appointments } = useAppointmentSession();
   const [calendarBlocks, setCalendarBlocks] = useState<readonly CalendarBlock[]>(
     snapshot.calendarBlocks,
@@ -92,6 +95,7 @@ export function CalendarBlockSessionProvider({ children }: PropsWithChildren) {
       : calendarBlocks.find((calendarBlock) => calendarBlock.id === calendarBlockId);
 
   const addCalendarBlock = (calendarBlock: CalendarBlock) => {
+    requireWriteAccess('calendarBlocks.addCalendarBlock');
     const valid = createCalendarBlock(calendarBlock);
     assertFree(valid);
     insertCalendarBlock(database, valid);
@@ -99,6 +103,7 @@ export function CalendarBlockSessionProvider({ children }: PropsWithChildren) {
   };
 
   const updateCalendarBlock = (calendarBlock: CalendarBlock) => {
+    requireWriteAccess('calendarBlocks.updateCalendarBlock');
     const current = committed.current.find((candidate) => candidate.id === calendarBlock.id);
     if (!current) throw new Error(`updateCalendarBlock: Calendar Block "${calendarBlock.id}" not found`);
     // Identity, Business and staff member never change through an edit.
@@ -114,6 +119,7 @@ export function CalendarBlockSessionProvider({ children }: PropsWithChildren) {
   };
 
   const deleteCalendarBlock = (calendarBlockId: string) => {
+    requireWriteAccess('calendarBlocks.deleteCalendarBlock');
     if (!committed.current.some((candidate) => candidate.id === calendarBlockId)) return;
     removeCalendarBlock(database, calendarBlockId);
     commit(committed.current.filter((candidate) => candidate.id !== calendarBlockId));

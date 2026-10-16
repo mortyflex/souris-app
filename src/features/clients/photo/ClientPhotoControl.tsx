@@ -22,6 +22,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import { getClientDisplayName, type Client } from '@/domain/clients';
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { ClientAvatar } from '@/features/clients/avatar/ClientAvatar';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
@@ -51,6 +52,7 @@ export function ClientPhotoControl({ client, size }: ClientPhotoControlProps) {
   const remote = useBusinessMediaRemote();
   const business = useCurrentBusiness();
   const { setClientPhoto } = useClientSession();
+  const requireWriteAccess = useBusinessWriteGuard();
   const storedUri = useClientPhotoUri(client.photoPath);
   const [sourceVisible, setSourceVisible] = useState(false);
   const [previewUri, setPreviewUri] = useState<string>();
@@ -64,6 +66,10 @@ export function ClientPhotoControl({ client, size }: ClientPhotoControlProps) {
   const savePhoto = async (sourceUri: string) => {
     setBusy(true);
     try {
+      // The row write (`setClientPhoto`) holds the guard too; judged here
+      // FIRST so a refused save never prepares nor uploads a photo. Removal
+      // needs no pre-check: its commit runs before anything is discarded.
+      requireWriteAccess('clients.setClientPhoto');
       const preparedUri = await prepareClientPhoto(sourceUri);
       if (preparedUri !== sourceUri) discardTemporaryPhoto(files, sourceUri);
       setPreviewUri(preparedUri);

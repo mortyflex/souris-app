@@ -17,6 +17,7 @@ import {
   setClientPhotoPath as persistPhotoPath,
   updateClient as persistClient,
 } from '@/persistence/stores/clients';
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { usePersistence, useSnapshotRefresh } from '@/providers/PersistenceProvider';
 
 import type { ClientSessionValue } from './types';
@@ -27,13 +28,15 @@ const ClientSessionContext = createContext<ClientSessionValue | null>(null);
  * The single Client source shared by the Clientes directory, the
  * Appointment Creation picker, Agenda, Appointment Details/Editing, and the
  * Client Profile. Hydrated once from the persisted snapshot; every mutation
- * is written to SQLite first and reflected in state only after success.
+ * passes the business write guard first (features/access/write-guard.ts), is
+ * written to SQLite next, and is reflected in state only after success.
  *
  * Archived Clients stay in `clients` (history keeps resolving them) and are
  * simply excluded from `activeClients`, the only selectable collection.
  */
 export function ClientSessionProvider({ children }: PropsWithChildren) {
   const { database, snapshot } = usePersistence();
+  const requireWriteAccess = useBusinessWriteGuard();
   const [clients, setClients] = useState<readonly Client[]>(snapshot.clients);
   // Remote changes applied by the sync runner, adopted in place.
   useSnapshotRefresh((fresh) => setClients(fresh.clients));
@@ -61,11 +64,15 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
   };
 
   const addClient = (client: Client) => {
+    requireWriteAccess('clients.addClient');
     insertClient(database, client);
     setClients((current) => [...current, client]);
   };
 
   const addClients = (batch: readonly Client[]) => {
+    // Checked per chunk, before its transaction: an import refused at its
+    // first chunk writes nothing (run-client-import.ts stops at the failure).
+    requireWriteAccess('clients.addClients');
     const inserted = insertClients(database, batch);
     if (inserted.length > 0) {
       // ONE state update per batch; an id already in the session (a retried
@@ -79,6 +86,7 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
   };
 
   const updateClient = (client: Client) => {
+    requireWriteAccess('clients.updateClient');
     persistClient(database, client);
     // Identity edits never touch the lifecycle nor the photo: the stored
     // archived_at and photo_path are left as-is, so the in-memory record
@@ -94,6 +102,7 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
   };
 
   const setClientPhoto = (clientId: string, photoPath: string | undefined) => {
+    requireWriteAccess('clients.setClientPhoto');
     persistPhotoPath(database, clientId, photoPath);
     replaceClient(clientId, (current) => {
       const { photoPath: _previous, ...rest } = current;
@@ -102,12 +111,14 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
   };
 
   const archiveClient = (clientId: string) => {
+    requireWriteAccess('clients.archiveClient');
     const archivedAt = new Date();
     persistArchive(database, clientId, archivedAt);
     replaceClient(clientId, (current) => archiveClientRecord(current, archivedAt));
   };
 
   const restoreClient = (clientId: string) => {
+    requireWriteAccess('clients.restoreClient');
     persistRestore(database, clientId);
     replaceClient(clientId, restoreClientRecord);
   };
@@ -118,6 +129,7 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
   };
 
   const deleteClientPermanently = (clientId: string) => {
+    requireWriteAccess('clients.deleteClientPermanently');
     persistDelete(database, clientId);
     setClients((current) => current.filter((client) => client.id !== clientId));
   };

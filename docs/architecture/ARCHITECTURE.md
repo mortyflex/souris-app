@@ -323,7 +323,31 @@ src/features/access/session/BusinessAccessProvider.tsx         what the signed-i
                                                                root gate. Enforcement DISABLED and the
                                                                subscription source unconfigured until
                                                                the paywall phase: nothing is restricted
+src/features/access/write-guard.ts                             THE refusal of a business mutation under
+                                                               read-only access: `useBusinessWriteGuard`
+                                                               (called first by every user-initiated
+                                                               mutation of the business providers) and
+                                                               the typed `BusinessAccessDeniedError`
 ```
+
+Business mutation protection. Every user-initiated mutation exposed by the six (app) business
+providers (Clients, Services, Products, Sales, Appointments and deposits, Calendar Blocks) and the
+ENABLING of a reminder preference calls the write guard as its first statement — before any read
+of the committed collection, SQLite write, outbox entry, upload, gateway call or state change — so a
+refused operation is refused whole, and an operation legitimately started while access was full is
+never rolled back by a later change. The refusal is thrown (`BusinessAccessDeniedError`, carrying
+the domain's `ReadOnlyReason` and the operation), like every other refused write: screens already
+catch at the call site, so a refusal can never read as a successful save. Two user-facing writes
+outside the providers hold the same guard themselves: the Client photo save (before preparing or
+uploading the photo) and the lifecycle SMS settings (the screen writes to the server directly).
+Never guarded, on purpose and narrowly: remote changes adopted from the sync runner, the push of
+entries already queued, previous-day Appointment finalization, local cache writes, the
+development reset, onboarding's Business creation and starter catalog, Auth/session housekeeping,
+and the WITHDRAWAL of a communication consent (reminders OFF, a lifecycle automation OFF). Tests
+mount the real provider through `TestPersistenceProvider` (enforcement disabled by default — the
+production state —, enabled with a fake `SubscriptionSource` to validate a refusal). The future
+read-only message / paywall upsell intercepts `BusinessAccessDeniedError` where screens catch
+today (they all funnel into `alertPersistenceFailure`); with enforcement disabled nothing is refused.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
@@ -334,7 +358,9 @@ steps beyond what a JavaScript timer can wait); a store answer whose entitlement
 (`isVerificationCurrent`) and the in-memory proof speaks with the offline policy; a deadline is a
 property of the proof and never moves with a retry. Deferred: evidence persistence (after a
 restart the session starts without a proof until the store answers), the RevenueCat source, the
-write guards, the paywall and the root subscription gate.
+paywall and the root subscription gate, and — REQUIRED before enforcement is enabled — the
+server-side mirror of the verified entitlement with server enforcement of paid business
+mutations, reminders and SMS: the client-side guards are a product boundary, not a security one.
 
 Auth and Business are deliberately two providers (see `docs/architecture/AUTH.md`). Examples may
 later include:

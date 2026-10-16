@@ -7,6 +7,8 @@
 
 import { act, fireEvent, render } from '@testing-library/react-native';
 
+import type { SubscriptionVerification } from '@/domain/access';
+import { createFakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser } from '@/features/auth/testing/fake-auth-gateway';
 import { CommunicationPreferencesProvider } from '@/features/communications/preferences/CommunicationPreferencesProvider';
@@ -173,5 +175,60 @@ describe('ReminderSettingsScreen', () => {
 
     expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(false);
     expect(view.getByText(/Connexion indisponible/)).toBeTruthy();
+  });
+});
+
+// Business access (BeautIzzy Plus): the reminder preference goes through
+// CommunicationPreferencesProvider, whose `update` holds the write guard for
+// ENABLING only. A read-only professional can always switch reminders OFF.
+describe('ReminderSettingsScreen — read-only business access', () => {
+  const EXPIRED: SubscriptionVerification = { kind: 'verified', status: { kind: 'expired' } };
+
+  async function renderReadOnly(gateway: FakeCommunicationsGateway) {
+    const auth = createFakeAuthGateway({
+      restore: async () => ({ kind: 'authenticated', user: fakeUser }),
+    });
+    const source = createFakeSubscriptionSource();
+    source.respondWith(EXPIRED);
+    const view = await render(
+      <TestPersistenceProvider access={{ enforcement: 'enabled', source }}>
+        <AuthProvider gateway={auth}>
+          <CommunicationsGatewayProvider gateway={gateway}>
+            <CommunicationPreferencesProvider>
+              <ReminderSettingsScreen />
+            </CommunicationPreferencesProvider>
+          </CommunicationsGatewayProvider>
+        </AuthProvider>
+      </TestPersistenceProvider>,
+    );
+    await act(async () => {});
+    return view;
+  }
+
+  it('disabling reminders still reaches the server', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    gateway.seedPreferences(testBusiness.id, {
+      emailRemindersEnabled: true,
+      replyToEmail: 'salon@example.test',
+    });
+    const view = await renderReadOnly(gateway);
+    expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(true);
+
+    await toggleTo(view, false);
+
+    expect(gateway.calls.update).toBe(1);
+    expect(gateway.updates[0]?.preferences.emailRemindersEnabled).toBe(false);
+    expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(false);
+  });
+
+  it('enabling reminders is refused before any server call and never reads as saved', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    const view = await renderReadOnly(gateway);
+
+    await toggleTo(view, true);
+
+    expect(gateway.calls.update).toBe(0);
+    expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(false);
+    expect(view.getByText('Impossible d’enregistrer le réglage pour le moment. Réessayez.')).toBeTruthy();
   });
 });

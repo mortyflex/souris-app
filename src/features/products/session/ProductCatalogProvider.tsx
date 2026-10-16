@@ -10,6 +10,7 @@ import {
   type StockDecrement,
   type StockRestoration,
 } from '@/domain/products';
+import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import {
   deleteProduct as removeProduct,
   findProduct,
@@ -78,8 +79,9 @@ function assertValidProduct(product: Product) {
 /**
  * The single Product source shared by the Produits tab and Sale
  * creation/completion. Hydrated once from the persisted snapshot; every
- * mutation is written to SQLite first and reflected in state only after
- * success.
+ * mutation passes the business write guard first (features/access/
+ * write-guard.ts — before a photo is prepared or uploaded), is written to
+ * SQLite next, and is reflected in state only after success.
  *
  * Product photo (docs/domain/PRODUCTS.md, CLOUD_SYNC.md §23): a NEW photo,
  * explicitly taken or chosen, becomes the ONE shared photo on Save —
@@ -97,6 +99,7 @@ function assertValidProduct(product: Product) {
 export function ProductCatalogProvider({ children }: PropsWithChildren) {
   const { database, files, snapshot } = usePersistence();
   const remote = useBusinessMediaRemote();
+  const requireWriteAccess = useBusinessWriteGuard();
   const [products, setProducts] = useState<readonly Product[]>(() =>
     snapshot.products.map(copyProduct),
   );
@@ -161,6 +164,9 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const addProduct = async (product: Product, photo?: ProductPhotoChange) => {
+    // Judged ONCE, at entry: a save whose upload is in flight when access
+    // changes finishes as it started.
+    requireWriteAccess('products.addProduct');
     assertValidProduct(product);
     if (committed.current.some((candidate) => candidate.id === product.id)) {
       throw new Error(`A Product with id "${product.id}" already exists`);
@@ -198,6 +204,7 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const updateProduct = async (product: Product, photo?: ProductPhotoChange) => {
+    requireWriteAccess('products.updateProduct');
     assertValidProduct(product);
     const existing = committed.current.find((candidate) => candidate.id === product.id);
     if (!existing) return;
@@ -231,6 +238,7 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const setProductActive = (productId: string, active: boolean) => {
+    requireWriteAccess('products.setProductActive');
     persistProductActive(database, productId, active);
     commit(
       committed.current.map((product) =>
@@ -240,6 +248,7 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const setProductStock = (productId: string, stockQuantity: number) => {
+    requireWriteAccess('products.setProductStock');
     if (!isValidStockQuantity(stockQuantity)) {
       throw new Error('Invalid Product stock quantity');
     }
@@ -251,6 +260,9 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
     );
   };
 
+  // Not mutation entry points: both reflect stock rows the Sale session
+  // ALREADY committed behind its own guarded operation. Guarding them would
+  // let memory diverge from SQLite; they stay unguarded on purpose.
   const applyCommittedStockDecrements = (decrements: readonly StockDecrement[]) => {
     commit(applyStockDecrements(committed.current, decrements));
   };
@@ -260,6 +272,7 @@ export function ProductCatalogProvider({ children }: PropsWithChildren) {
   };
 
   const deleteProduct = (productId: string) => {
+    requireWriteAccess('products.deleteProduct');
     const existing = committed.current.find((product) => product.id === productId);
     if (!existing) return;
     removeProduct(database, productId);
