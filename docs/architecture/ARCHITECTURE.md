@@ -311,7 +311,8 @@ src/providers/RootNavigator.tsx         root navigation gate over the Auth + Bus
 src/providers/root-route.ts             pure route resolution (booting / auth / onboarding / app / …)
 src/providers/first-run-seed.ts         one-time production seed (EMPTY since Account V1)
 src/providers/development-seed.ts       synthetic clients, pilot catalogs + Agenda fixtures (__DEV__ reset / tests)
-src/providers/persistence-failure.ts    the one concise "Enregistrement impossible" alert
+src/providers/persistence-failure.ts    the one concise "Enregistrement impossible" alert — and, given a
+                                        `BusinessAccessDeniedError`, the BeautIzzy Plus explanation instead
 
 src/features/auth/session/AuthProvider.tsx                     who is signed in?
 src/features/business/session/BusinessSessionProvider.tsx      which Business, onboarding, binding
@@ -328,6 +329,14 @@ src/features/access/write-guard.ts                             THE refusal of a 
                                                                (called first by every user-initiated
                                                                mutation of the business providers) and
                                                                the typed `BusinessAccessDeniedError`
+src/features/access/read-only-copy.ts                          ONE vocabulary for read-only access: a
+                                                               sentence per `ReadOnlyReason`, the status
+                                                               card lines, the denial alert copy
+src/features/access/read-only/ReadOnlyStatusCard.tsx           the subtle read-only status of Accueil,
+                                                               from `useBusinessAccess` only
+src/features/access/paywall/                                   the BeautIzzy Plus paywall PRESENTATION:
+                                                               offering boundary, pure presentation rules,
+                                                               approved copy, screen and components
 ```
 
 Business mutation protection. Every user-initiated mutation exposed by the six (app) business
@@ -345,9 +354,58 @@ entries already queued, previous-day Appointment finalization, local cache write
 development reset, onboarding's Business creation and starter catalog, Auth/session housekeeping,
 and the WITHDRAWAL of a communication consent (reminders OFF, a lifecycle automation OFF). Tests
 mount the real provider through `TestPersistenceProvider` (enforcement disabled by default — the
-production state —, enabled with a fake `SubscriptionSource` to validate a refusal). The future
-read-only message / paywall upsell intercepts `BusinessAccessDeniedError` where screens catch
-today (they all funnel into `alertPersistenceFailure`); with enforcement disabled nothing is refused.
+production state —, enabled with a fake `SubscriptionSource` to validate a refusal). With
+enforcement disabled nothing is refused.
+
+Read-only experience (Phase 5). Every catch site that reports a refused write passes its error to
+`alertPersistenceFailure`, the ONE connection point: a `BusinessAccessDeniedError` is explained as
+subscription access (« Action réservée à BeautIzzy Plus », the domain reason worded by
+`read-only-copy.ts` — expired says "no longer active", never-subscribed stays generic, an
+unverified subscription is "could not be verified", never expired, never a payment failure), every
+other error keeps the generic alert exactly as before. No subscription-specific alert lives in a
+feature screen. Accueil shows `ReadOnlyStatusCard` under its top area ONLY while `useBusinessAccess`
+reports read-only with enforcement enabled: data kept, reading possible, modifications need Plus,
+subscription management to come. No « Découvrir BeautIzzy Plus » action exists yet: it needs the
+paywall routing below to lead somewhere real.
+
+Paywall presentation (Phase 5, `src/features/access/paywall/`). A presentation boundary, not a
+billing integration:
+
+```text
+paywall-offering.ts        PaywallOffering — what a store offers THIS user: `loading`, `unavailable`
+                           (not-configured | store-unavailable) or `available` with one PaywallPlanOffer
+                           per plan (amount, ISO currency, the store's own formatted string, an optional
+                           free trial with its store-answered ELIGIBILITY). `unconfiguredPaywallOffering`
+                           is the application's only default.
+paywall-presentation.ts    pure rules: valid offers only, annual first and preselected, « Recommandé »
+                           only when both plans are offered, « Économisez n % » only when comparable and
+                           real, the equivalent monthly price of the annual plan, the trial only when
+                           eligible, the primary action (subscribe / loading / not-configured / none),
+                           the copy of each PaywallContext (initial-offer, read-only + reason, entitled,
+                           verifying).
+paywall-copy.ts            the approved copy; no price, period or trial length anywhere in product code.
+PaywallScreen.tsx          props in, callbacks out: `onSubscribe(plan)`, `onContinueReadOnly`, `onClose`,
+                           `onBack`, `onRestorePurchases`, `onOpenTerms`, `onOpenPrivacy`,
+                           `onRetryOffering`. A missing callback renders no control.
+testing/paywall-fixtures   the intended French prices and the 14-day trial — tests and the __DEV__
+                           preview (Plus › Développement) only; guarded by `paywall-boundary.test.ts`.
+```
+
+Ownership: prices, currencies, billing periods and trial eligibility belong to the store adapter
+that will map RevenueCat offerings into `PaywallOffering`; the UI formats (the store string first,
+`Intl.NumberFormat` otherwise) and never fetches, purchases, restores or writes subscription state.
+Where the next phases connect: purchase and restore through `onSubscribe` / `onRestorePurchases`
+(the adapter then pushes the verification through `SubscriptionSource`); the account-scoped routing
+decides the `PaywallContext` and mounts the screen — after setup completes, for a read-only
+existing account, never for an active subscriber — and wires « Explorer sans abonnement » to
+entering read-only use without writing any entitlement. No product route mounts the paywall today.
+
+Production activation still requires: the RevenueCat integration and real App Store / Google Play
+offerings; purchase and restore handling; account-scoped entitlement verification with persisted
+verified evidence and correct offline startup; the backend entitlement mirror with server-side
+enforcement of business mutations and server-controlled reminder / SMS suppression; real privacy
+and terms URLs; account deletion and privacy-data export. `SUBSCRIPTION_ENFORCEMENT` stays
+`disabled` until then.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain

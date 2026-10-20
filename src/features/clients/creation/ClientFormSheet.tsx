@@ -88,8 +88,8 @@ export function ClientFormSheet({
       } else {
         addClient(nextClient);
       }
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.success();

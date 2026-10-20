@@ -115,8 +115,8 @@ export function CalendarBlockDetailsScreen({ calendarBlockId }: CalendarBlockDet
   const save = (values: CalendarBlockFormValues) => {
     try {
       updateCalendarBlock({ ...calendarBlock, ...values });
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.success();
@@ -127,8 +127,8 @@ export function CalendarBlockDetailsScreen({ calendarBlockId }: CalendarBlockDet
     setDeletionRequested(false);
     try {
       deleteCalendarBlock(calendarBlock.id);
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     setDeletedBlock(calendarBlock);

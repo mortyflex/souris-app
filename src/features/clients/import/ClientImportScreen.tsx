@@ -266,8 +266,8 @@ export function ClientImportScreen() {
     let stored: readonly Client[];
     try {
       stored = loadClients(database);
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     const fresh = classifyClientImportCandidates(candidates, stored);

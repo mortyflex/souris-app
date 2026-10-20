@@ -215,8 +215,8 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     try {
       task();
       return true;
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return false;
     }
   };
@@ -238,8 +238,8 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     try {
       const eligibility = getClientDeletionEligibility(client.id);
       setDeletionMode(eligibility.deletable ? 'confirm' : 'blocked');
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
     }
   };
 
@@ -251,7 +251,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
       if (error instanceof ClientDeleteConflictError) {
         setDeletionMode('blocked');
       } else {
-        alertPersistenceFailure();
+        alertPersistenceFailure(error);
       }
       return;
     }

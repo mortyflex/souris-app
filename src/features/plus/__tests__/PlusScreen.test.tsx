@@ -16,6 +16,12 @@ jest.mock('expo-router', () => ({
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
+// The development paywall preview (loaded under __DEV__, which Jest sets) draws
+// the first-run frame, whose entrance runs on Reanimated: tests render it settled.
+jest.mock('react-native-reanimated', () =>
+  jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'),
+);
+
 jest.mock('expo-constants', () => ({
   __esModule: true,
   default: { expoConfig: { name: 'BeautIzzy', version: '1.0.0' } },
@@ -120,6 +126,19 @@ describe('PlusScreen', () => {
     expect(view.getByTestId('development-sync-run').props.accessibilityState?.disabled).toBe(true);
   });
 
+  it('development builds: the Développement section opens the BeautIzzy Plus preview on its scenario list', async () => {
+    const { view } = await renderPlus();
+
+    expect(view.queryByTestId('paywall-preview-sheet')).toBeNull();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('development-paywall-preview-open'));
+    });
+    expect(view.getByTestId('paywall-preview-sheet')).toBeTruthy();
+    expect(view.getByText('Première offre — essai éligible')).toBeTruthy();
+    // The list alone: the paywall is presented only once the list is dismissed.
+    expect(view.queryByTestId('paywall-preview-screen')).toBeNull();
+  });
+
   it('production path: no development section, no sync control', async () => {
     const flags = globalThis as unknown as { __DEV__: boolean };
     flags.__DEV__ = false;
@@ -130,6 +149,8 @@ describe('PlusScreen', () => {
       expect(view.queryByTestId('development-reset-database')).toBeNull();
       expect(view.queryByTestId('development-sync-open')).toBeNull();
       expect(view.queryByTestId('development-sync-sheet')).toBeNull();
+      expect(view.queryByTestId('development-paywall-preview-open')).toBeNull();
+      expect(view.queryByTestId('paywall-preview-sheet')).toBeNull();
     } finally {
       flags.__DEV__ = true;
     }

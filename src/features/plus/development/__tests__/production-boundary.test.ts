@@ -45,10 +45,14 @@ describe('development sync control — production boundary', () => {
     const plus = files.find((file) => file.path === 'features/plus/PlusScreen.tsx')!.source;
     // No static (bundled) import of the control…
     expect(plus).not.toMatch(/^import[^;]*['"]\.\/development\//m);
-    // …exactly one runtime load, guarded by __DEV__ with `undefined` otherwise.
-    expect(plus.match(/require\(/g)).toHaveLength(1);
+    // …exactly two runtime loads (this control and the BeautIzzy Plus paywall
+    // preview), each guarded by __DEV__ with `undefined` otherwise.
+    expect(plus.match(/require\(/g)).toHaveLength(2);
     expect(plus).toMatch(
       /const DevelopmentSyncSheet = __DEV__\s*\?[^;]*require\('\.\/development\/DevelopmentSyncSheet'\)[^;]*:\s*undefined;/,
+    );
+    expect(plus).toMatch(
+      /const PaywallPreviewSheet = __DEV__\s*\?[^;]*require\('@\/features\/access\/paywall\/development\/PaywallPreviewSheet'\)[^;]*:\s*undefined;/,
     );
     // The section that renders it exists only under __DEV__ as well.
     expect(plus).toContain('{__DEV__ && <DevelopmentSection />}');

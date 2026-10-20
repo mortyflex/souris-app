@@ -2311,3 +2311,124 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
   tint, today owns the only 30 pt figures.
 - **No** day strip, day selection, timeline, chart, trend, low-stock block or ticket styling on
   the page itself. Browsing days belongs to the Agenda.
+
+---
+
+## 43. BeautIzzy Plus — Paywall Presentation and Read-Only Status
+
+Product decision (October 2026, Phase 5): the BeautIzzy Plus paywall exists as a PRESENTATION
+(`src/features/access/paywall`), reachable from no product route until the subscription routing
+phase; the read-only experience is a quiet status, never an alarm. Enforcement stays disabled, so
+no existing account sees any of it. Premium, warm, approachable: a polished App Store product,
+never a subscription template.
+
+- **Frame.** The paywall draws the first-run frame (`OnboardingStepLayout`, §17): top and bottom
+  safe areas on `screen`, the quiet top bar (the glass back on the left and / or the glass close
+  — `glassIcons.close`, spoken « Fermer » — at the end, each only when the caller handles it), a
+  scrolling body (`bodySpacing="compact"`: 8 pt under the top bar instead of the 24 pt a frame
+  header would need) and a fixed footer. It reads as the continuation of Discovery and setup.
+  The ORDER is the decision first: hero (badge, illustration, headline, one short lead or the
+  contextual notice), the plan cards, then the benefits — on a regular iPhone the selected annual
+  card and the top of the monthly card are in the first viewport; a large phone shows both; an
+  iPhone SE shows the annual card. Small phones (window height ≤ 700) tighten the hero gaps
+  (4 pt; 8 pt otherwise); nothing is absolutely positioned, the body scrolls, the footer never
+  covers content.
+- **Brand.** « BeautIzzy Plus » is ONE lavender capsule (`PlusBrandBadge`): the canonical symbol
+  (`BrandMark`, decorative, 14 pt wide) and the name in `control` accent, centred above the
+  illustration. Spoken once: « BeautIzzy Plus ». No redrawn logo, no gradient.
+- **Illustration.** `growth-duo.png`, `contain`, hidden from assistive technology; an ACCENT,
+  never the hero: square side = 15 % of the window height, bounded 112–150 pt on a regular phone
+  (≈ 131 pt on an iPhone 17 Pro, so a Pro Max never inflates it) and 92–112 pt on a small one
+  (100 pt on an iPhone SE). The artwork fills its PNG, so the rendered side is the visible side.
+- **Headline.** « Faites grandir votre activité, simplement. » in navy `screenTitle` (30 / 36 pt
+  iOS, 27 / 33 Android — one step under the `display` of Welcome, still editorial), centred, the
+  page `header`; it wraps on two lines from the SE up. The violet is carried by the badge, the
+  primary action, the chips and the selected card — never by a headline. Under it, either the
+  lead (`body`, `foregroundSoft`, max 360 pt) or the contextual notice. The brand badge above is
+  30 pt high.
+- **Benefits.** Three rows (`PaywallBenefitRow`), UNDER the plan cards, 8 pt apart: an accent
+  glyph (16 pt) in a 30 pt `surfaceLavenderStrong` disc (calendar · bar chart · clock) and the
+  approved sentence in `rowTitle` — « Tout votre
+  quotidien au même endroit. », « Gardez le contrôle sur vos chiffres. », « Gagnez du temps chaque
+  jour. ». Nothing else is claimed.
+- **Plan cards** (`PaywallPlanCard`) — ONE white card per plan the store offers, the shape of the
+  onboarding option card: `surfaceElevated`, 1.5 pt `borderSubtle`, `radii.large`, 16 pt
+  padding, 8 pt apart, annual FIRST. A 24 pt selection ring on the left (hairline at rest; the
+  accent fill with a white check once selected), the plan name (`rowTitle`: « Annuel »,
+  « Mensuel »), the price in `summaryValue` (23 pt bold, tabular) with « par an » / « par mois »
+  in soft `metadata` on the same baseline, the annual « soit 10,75 € par mois » line, then quiet
+  chips (`surfaceLavenderStrong`, accent `chip` text): « Économisez 17 % » and « 14 jours
+  gratuits ». Selected: `surfaceLavender` fill and the accent border, no shadow, no glow. The
+  « Recommandé » badge (accent fill, white `chip`) sits beside the annual name ONLY when both plans
+  are offered: a recommendation compares, it never claims alone.
+  - *Every figure is store-derived* (`paywall-presentation.ts`): the store's own price string when
+    it provides one, `Intl.NumberFormat` for the storefront locale otherwise, cents only when there
+    are some (« 129 € », « 12,99 € », « $14.99 »). Savings appear only when both plans share a
+    currency and the annual price is really under twelve monthly ones (a whole percentage); the
+    trial only for an offer the store marked ELIGIBLE (« unknown » and « ineligible » show
+    nothing). An invalid offer (a non-positive amount, a malformed currency, a fractional trial)
+    is dropped, never shown with a phantom price. The annual plan is preselected whenever it is
+    offered; one plan alone is preselected, with neither badge nor savings.
+  - *Accessibility.* The group is a `radiogroup`, each card a `radio` with `checked` /
+    `selected`; the label says everything the card shows: « Formule annuelle, 129 € par an, soit
+    10,75 € par mois, Économisez 17 %, 14 jours gratuits, recommandée ». Selecting ticks
+    `haptics.selection`; re-pressing the selected card does nothing.
+- **Footer.** The primary `AppButton` — « Essayer gratuitement 14 jours » when the selected plan
+  carries an eligible trial, « S’abonner à BeautIzzy Plus » otherwise — over a centred `metadata`
+  footnote 4 pt under it (« Puis 129 € par an. » / « 129 € par an. »), the two never
+  disagreeing with the selected card. While the offering loads the action is
+  disabled and reads « Chargement des offres… »; without a purchase entry point it is disabled and
+  the footnote says « Achat non disponible dans cette version. »; with an unavailable offering
+  there is NO primary action at all. Then the tertiary way out — « Explorer sans abonnement »
+  (first offer; spoken « Explorer sans abonnement, en lecture seule », with the read-only limit
+  as the quiet `metadata` caption INSIDE the same control, spoken as its hint: « Sans
+  abonnement, vous pouvez consulter votre activité, sans la modifier. »), « Revenir à mes données »
+  (an existing read-only account) or « Continuer » (active subscriber, pending verification; drawn
+  primary when nothing is sold) — visible at once, never hidden behind a second tap. Last, the
+  accent `metadata` links « Restaurer mes achats », « Conditions d’abonnement »,
+  « Confidentialité », each ONLY once its integration provides the callback: no link leads
+  nowhere, no URL is invented.
+- **Offering states** (`PaywallNotice`, a white card with an accent glyph or a small spinner — never
+  red, never a warning icon): « Offres bientôt disponibles — Les formules BeautIzzy Plus ne sont pas
+  encore proposées dans cette version. Vos données restent consultables. » (no store adapter,
+  the application's default), « Offres indisponibles pour le moment » with a `secondary`
+  « Réessayer » only when the caller can retry (store unreachable, no valid plan), and the
+  pending « Chargement des offres… ». No phantom price, no checkout.
+- **Contexts** (`PaywallContext`, chosen by the caller):
+  - *Première offre* (setup just completed): headline, the one-line lead « Votre espace est prêt.
+    Profitez pleinement de BeautIzzy Plus. », plans, benefits, the action, « Explorer sans
+    abonnement » and its caption. The read-only limit is said there, next to the action, not in
+    the lead.
+  - *Compte existant en lecture seule*: the reassuring notice « Vos données sont conservées. » +
+    the policy's sentence (« Votre abonnement BeautIzzy Plus n’est plus actif. » only when the
+    store confirmed the end; « Votre compte n’a pas d’abonnement BeautIzzy Plus. »; « Votre
+    abonnement n’a pas pu être vérifié pour le moment / depuis plusieurs jours. » — never
+    "expired", never a payment failure) + « Vous pouvez toujours consulter vos rendez-vous, votre
+    clientèle et vos chiffres. Les modifications nécessitent BeautIzzy Plus. », then plans,
+    benefits, the action and « Revenir à mes données » (no caption: the notice already said it).
+  - *Abonnement actif*: « Votre abonnement BeautIzzy Plus est actif. » / « Merci de faire grandir
+    votre activité avec BeautIzzy. », no plan, no price, no benefit list, one primary
+    « Continuer ». An active subscriber is never routed into a forced upsell.
+  - *Vérification en cours*: the pending notice « Vérification de votre abonnement… », benefits,
+    no plan and no action — nothing claims a subscription or its absence — and « Continuer », so
+    an unreachable store never leaves the professional on a spinner.
+- **Read-only status** (`ReadOnlyStatusCard`, Accueil, §42 unchanged otherwise): a white card
+  under the top row, before « Aujourd’hui », ONLY while the access policy reports read-only with
+  enforcement enabled — an accent eye glyph in a 36 pt `surfaceLavender` disc, « Votre activité
+  est en lecture seule. » (`rowTitle`) and four soft `metadata` lines: « Vous pouvez toujours
+  consulter vos rendez-vous, votre clientèle et vos chiffres. », the policy's sentence, « Vos
+  données sont conservées. Les modifications nécessitent BeautIzzy Plus. », « La gestion de
+  l’abonnement sera bientôt disponible dans l’application. ». No button, no red, no modal, no
+  repetition on other screens; spoken once as one element.
+- **Refused modification** (`alertPersistenceFailure`): « Action réservée à BeautIzzy Plus — Vous
+  pouvez toujours consulter vos données. Un abonnement BeautIzzy Plus est nécessaire pour les
+  modifier. », preceded by the policy's sentence when it adds something (expired, unverified).
+  Every other failure keeps « Enregistrement impossible » exactly as before. No success is ever
+  shown for a refused write.
+- **Development preview** (Plus › Développement › « Aperçu BeautIzzy Plus (test) », `__DEV__`
+  only): every state above with fictional offers (the intended French prices and the 14-day
+  trial, held in test fixtures). Its purchase action buys nothing and says so. One native modal
+  at a time (§16): the scenario list slides down, then the paywall is presented from its
+  `onDismissed`; closing the paywall brings the list back once it is really dismissed.
+- **No** gradient, glass effect, animation beyond the frame's entrance, countdown, strike-through
+  price, « most popular » claim, hard-coded price, or fake purchase.

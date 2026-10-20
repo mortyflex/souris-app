@@ -293,8 +293,8 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
           ...(reminderChanged ? { clientReminderEnabled: draftReminderEnabled } : {}),
         },
       });
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.success();

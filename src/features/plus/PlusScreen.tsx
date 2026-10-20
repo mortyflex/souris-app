@@ -35,6 +35,14 @@ const DevelopmentSyncSheet = __DEV__
       .DevelopmentSyncSheet
   : undefined;
 
+// BeautIzzy Plus paywall preview (design test bench, fixtures included):
+// the same release boundary — a `require` inside a `__DEV__` branch only.
+const PaywallPreviewSheet = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/features/access/paywall/development/PaywallPreviewSheet') as typeof import('@/features/access/paywall/development/PaywallPreviewSheet'))
+      .PaywallPreviewSheet
+  : undefined;
+
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 export function PlusScreen() {
@@ -251,6 +259,7 @@ function BrandSection({ version }: { readonly version: string | undefined }) {
 function DevelopmentSection() {
   const { resetForDevelopment } = usePersistence();
   const [syncControlVisible, setSyncControlVisible] = useState(false);
+  const [paywallPreviewVisible, setPaywallPreviewVisible] = useState(false);
 
   const requestReset = () => {
     Alert.alert(
@@ -303,6 +312,30 @@ function DevelopmentSection() {
           <DevelopmentSyncSheet
             onClose={() => setSyncControlVisible(false)}
             visible={syncControlVisible}
+          />
+        </>
+      )}
+      {PaywallPreviewSheet && (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Aperçu BeautIzzy Plus, développement"
+            onPress={() => setPaywallPreviewVisible(true)}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            testID="development-paywall-preview-open"
+          >
+            <View style={styles.copy}>
+              <AppText variant="rowTitle" style={styles.developmentTitle}>
+                Aperçu BeautIzzy Plus (test)
+              </AppText>
+              <AppText variant="metadata" style={styles.meta}>
+                États du paywall avec des offres fictives, sans achat
+              </AppText>
+            </View>
+          </Pressable>
+          <PaywallPreviewSheet
+            onClose={() => setPaywallPreviewVisible(false)}
+            visible={paywallPreviewVisible}
           />
         </>
       )}

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
 
 import { getAppointmentDaySummary, getAppointmentPeriodSummary } from '@/domain/appointments';
@@ -19,8 +19,10 @@ import {
 } from '@/persistence/stores/appointments';
 import { loadClients } from '@/persistence/stores/clients';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
+import { SUBSCRIPTION_ENFORCEMENT } from '@/features/access/enforcement';
+import { createFakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
 import { createDevelopmentSeed } from '@/providers/development-seed';
-import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { TestPersistenceProvider, type TestBusinessAccessOptions } from '@/providers/testing/TestPersistenceProvider';
 import { formatCompactEuroCents } from '@/shared/lib/money';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 import { fontFamilies, foregroundSoft, semanticColors } from '@/shared/ui/theme';
@@ -100,9 +102,9 @@ function todaySummary(database: SourisDatabase) {
   );
 }
 
-function renderHome(database: SourisDatabase) {
+function renderHome(database: SourisDatabase, access?: TestBusinessAccessOptions) {
   return render(
-    <TestPersistenceProvider database={database}>
+    <TestPersistenceProvider access={access} database={database}>
       <ClientSessionProvider>
         <AppointmentSessionProvider>
           <ProductCatalogProvider>
@@ -731,5 +733,36 @@ describe('HomeScreen', () => {
 
     const scrollViews = view.container.queryAll((node) => node.type === 'RCTScrollView');
     expect(scrollViews[0].props.contentInsetAdjustmentBehavior).toBe('automatic');
+  });
+
+  it('shows no read-only status with enforcement disabled, whatever the store says (the shipped state)', async () => {
+    expect(SUBSCRIPTION_ENFORCEMENT).toBe('disabled');
+    const source = createFakeSubscriptionSource();
+    source.respondWith({ kind: 'verified', status: { kind: 'expired' } });
+    const view = await renderHome(seededDatabase(), { enforcement: SUBSCRIPTION_ENFORCEMENT, source });
+
+    await waitFor(() => expect(source.calls.verify).toHaveLength(1));
+    expect(view.queryByTestId('read-only-status')).toBeNull();
+    expect(view.getByTestId('home-hero')).toBeTruthy();
+    expect(view.getByTestId('home-quick-actions')).toBeTruthy();
+  });
+
+  it('shows the subtle read-only status under enforced read-only access, under the top area, with everything else intact', async () => {
+    const source = createFakeSubscriptionSource();
+    source.respondWith({ kind: 'verified', status: { kind: 'expired' } });
+    const view = await renderHome(seededDatabase(), { enforcement: 'enabled', source });
+
+    const status = await view.findByTestId('read-only-status');
+    expect(within(status).getByText('Votre activité est en lecture seule.')).toBeTruthy();
+    expect(within(status).getByText('Votre abonnement BeautIzzy Plus n’est plus actif.')).toBeTruthy();
+    // Under the hero row, before « Aujourd’hui »: the page keeps reading top-down.
+    const tree = JSON.stringify(view.toJSON());
+    const order = ['home-hero', 'read-only-status', 'home-stat-appointments'].map((id) =>
+      tree.indexOf(`"testID":"${id}"`),
+    );
+    expect(order[0]).toBeLessThan(order[1]!);
+    expect(order[1]).toBeLessThan(order[2]!);
+    expect(view.getByTestId('home-quick-actions')).toBeTruthy();
+    expect(view.getByTestId('home-tools')).toBeTruthy();
   });
 });

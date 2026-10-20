@@ -32,6 +32,11 @@ interface AppButtonProps extends Omit<PressableProps, 'children' | 'style'> {
    * accent violet of the « Revente » action.
    */
   readonly icon?: PlatformSymbolName;
+  /**
+   * Optional quiet line under the title, inside the same control (the paywall's
+   * « Explorer sans abonnement » and its read-only limit). Spoken as the hint.
+   */
+  readonly caption?: string;
   readonly style?: StyleProp<ViewStyle>;
 }
 
@@ -41,6 +46,7 @@ export function AppButton({
   title,
   variant = 'primary',
   icon,
+  caption,
   disabled,
   accessibilityState,
   style,
@@ -51,6 +57,7 @@ export function AppButton({
 
   return (
     <Pressable
+      accessibilityHint={caption}
       {...rest}
       accessibilityRole="button"
       accessibilityState={{ ...accessibilityState, disabled: Boolean(disabled) }}
@@ -58,6 +65,7 @@ export function AppButton({
       style={({ pressed }) => [
         styles.base,
         icon !== undefined && styles.withIcon,
+        caption !== undefined && styles.withCaption,
         variants[variant],
         disabled && styles.disabled,
         pressed && !disabled && pressedVariants[variant],
@@ -68,6 +76,11 @@ export function AppButton({
       <AppText variant="control" style={textStyle}>
         {title}
       </AppText>
+      {caption !== undefined && (
+        <AppText style={styles.caption} variant="metadata">
+          {caption}
+        </AppText>
+      )}
     </Pressable>
   );
 }
@@ -82,6 +95,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
   },
   withIcon: { flexDirection: 'row', gap: spacing.sm },
+  withCaption: { paddingVertical: spacing.sm },
+  caption: { color: semanticColors.foregroundSoft, textAlign: 'center' },
   disabled: {
     backgroundColor: semanticColors.surface,
     borderColor: semanticColors.borderSubtle,

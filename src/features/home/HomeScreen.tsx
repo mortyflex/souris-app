@@ -47,6 +47,7 @@ import { getWeekDays } from '@/features/agenda/calendar/week';
 import { DaySummaryTicket } from '@/features/agenda/day-summary/DaySummaryTicket';
 import { WeekSummaryTicket } from '@/features/agenda/day-summary/WeekSummaryTicket';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
+import { ReadOnlyStatusCard } from '@/features/access/read-only/ReadOnlyStatusCard';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { BusinessInsightsTicket } from '@/features/insights/BusinessInsightsTicket';
@@ -194,6 +195,8 @@ export function HomeScreen() {
                 <NextAppointmentEmptyCard style={heroInRow && styles.heroNext} />
               )}
             </View>
+            {/* BeautIzzy Plus: only while the access policy reports read-only with enforcement enabled. */}
+            <ReadOnlyStatusCard />
           </View>
 
           <View>

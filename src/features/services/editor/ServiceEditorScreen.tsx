@@ -237,8 +237,8 @@ export function ServiceEditorScreen({
       } else {
         updateService(nextService);
       }
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
 
@@ -258,8 +258,8 @@ export function ServiceEditorScreen({
     if (!service) return;
     try {
       setServiceActive(service.id, active);
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.selection();
@@ -301,8 +301,8 @@ export function ServiceEditorScreen({
     setConfirmation(undefined);
     try {
       deleteService(service.id);
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.warning();

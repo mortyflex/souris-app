@@ -284,8 +284,8 @@ export function AppointmentDetailsScreen({
     try {
       task();
       return true;
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return false;
     }
   };

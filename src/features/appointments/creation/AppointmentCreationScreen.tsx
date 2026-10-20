@@ -315,8 +315,8 @@ export function AppointmentCreationScreen({
     // Official Service timing is edited from Prestations & tarifs alone.
     try {
       addAppointment({ appointment });
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.success();
@@ -334,8 +334,8 @@ export function AppointmentCreationScreen({
         staffMemberId: currentStaffMemberId,
         ...values,
       });
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.success();

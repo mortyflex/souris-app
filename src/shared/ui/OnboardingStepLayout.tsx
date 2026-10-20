@@ -209,6 +209,11 @@ interface OnboardingStepLayoutProps {
   /** A compact action at the end of the top bar (Discovery: « Passer »). */
   readonly topBarEnd?: ReactNode;
   readonly children?: ReactNode;
+  /**
+   * Top spacing of the content: `regular` under the frame's own header, `compact`
+   * when the content IS the screen (the paywall: its badge sits right under the top bar).
+   */
+  readonly bodySpacing?: 'regular' | 'compact';
   readonly footer: ReactNode;
   readonly testID?: string;
 }
@@ -228,6 +233,7 @@ export function OnboardingStepLayout({
   onBack,
   topBarEnd,
   children,
+  bodySpacing = 'regular',
   footer,
   testID,
 }: OnboardingStepLayoutProps) {
@@ -326,7 +332,11 @@ export function OnboardingStepLayout({
             </Entrance>
           )}
           {children !== undefined && (
-            <Entrance delay={entranceDelays.content} rise style={styles.body}>
+            <Entrance
+              delay={entranceDelays.content}
+              rise
+              style={[styles.body, bodySpacing === 'compact' && styles.bodyCompact]}
+            >
               {children}
             </Entrance>
           )}
@@ -393,6 +403,7 @@ const styles = StyleSheet.create({
   subtitle: { color: semanticColors.foregroundSoft, maxWidth: 360 },
   textCentred: { textAlign: 'center' },
   body: { gap: spacing.base, paddingTop: spacing.xl },
+  bodyCompact: { paddingTop: spacing.sm },
   footer: {
     gap: spacing.sm,
     paddingBottom: spacing.base,

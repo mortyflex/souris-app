@@ -325,8 +325,8 @@ export function SaleCreationScreen({
     let result: ReturnType<typeof completeSale>;
     try {
       result = completeSale(buildDraft(new Date(), payment));
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     if (!result.ok) {

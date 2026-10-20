@@ -1379,12 +1379,29 @@ Wording: "Nom de votre activité" (never "Nom du salon") — BeautIzzy serves ev
 beauty profession and independent workers; placeholders never imply hairdressing only. Nothing else
 is asked at first run (no address, SIRET, VAT, hours, social links, logo, staff, banking).
 
-Subscription / paywall: deliberately NOT part of this onboarding. The future subscription gate is a
+Subscription / paywall: deliberately NOT part of this onboarding. The subscription gate is a
 separate implementation phase, inserted at ROOT routing after setup completes (which is why the last
 step says « Continuer », not « Accéder à BeautIzzy »). No placeholder route, entitlement flag or local
-trial timer exists. Visual direction for that gate, decided now: its master is
-`assets/illustrations/paywall/growth-duo.png`; `growth.png` (the original) and `growth-man.png`
-stay available as alternatives. None of the three is bundled until the gate is built.
+trial timer exists. Its master is `assets/illustrations/paywall/growth-duo.png`; `growth.png` (the
+original) and `growth-man.png` stay available as alternatives and are not bundled.
+
+**BeautIzzy Plus — paywall presentation (October 2026, Phase 5).** The paywall screen exists as a
+presentation (`src/features/access/paywall`, docs/design/DESIGN_OVERRIDES.md §43) and is reachable
+from no product route yet: « BeautIzzy Plus », the growth-duo master, the approved headline « Faites
+grandir votre activité, simplement. », the three approved benefits (« Tout votre quotidien au même
+endroit. », « Gardez le contrôle sur vos chiffres. », « Gagnez du temps chaque jour. »), one card per
+plan the STORE offers (annual first, preselected and « Recommandé » when both are offered), the
+primary action, and the approved way to continue without subscribing, « Explorer sans abonnement »,
+which makes the existing business READ-ONLY — not a free tier. Prices, currency, billing period and
+free-trial eligibility come only from the store offering (the intended French products — 12,99 € a
+month, 129 € a year, a 14-day trial — are planning information held in test fixtures, never in the
+app); without a store the offering is "not configured" and no purchase can be initiated. Under
+read-only access the professional keeps reading everything; a refused modification is explained as
+« Action réservée à BeautIzzy Plus » and Accueil shows a quiet read-only status. Enforcement stays
+disabled: no existing account meets any of this. Still to come, in their own phases: RevenueCat and
+the real store offerings, purchase and restore, the account-scoped paywall routing, persisted
+entitlement evidence, the backend entitlement mirror and server-side enforcement, real terms and
+privacy URLs, account deletion and privacy-data export.
 
 A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
 existing install keeps its local data; completing Business setup binds that data to the new

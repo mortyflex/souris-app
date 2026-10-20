@@ -259,7 +259,7 @@ export function ProductEditorScreen({
           "Vérifiez votre connexion, puis réessayez. Le produit n’a pas été modifié.",
         );
       } else {
-        alertPersistenceFailure();
+        alertPersistenceFailure(error);
       }
     } finally {
       setSaving(false);
@@ -270,8 +270,8 @@ export function ProductEditorScreen({
     if (!product) return;
     try {
       setProductActive(product.id, active);
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.selection();
@@ -306,8 +306,8 @@ export function ProductEditorScreen({
     if (!product) return false;
     try {
       setProductStock(product.id, stockQuantity);
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return false;
     }
     haptics.selection();
@@ -332,8 +332,8 @@ export function ProductEditorScreen({
     setConfirmation(undefined);
     try {
       deleteProduct(product.id);
-    } catch {
-      alertPersistenceFailure();
+    } catch (error) {
+      alertPersistenceFailure(error);
       return;
     }
     haptics.warning();
