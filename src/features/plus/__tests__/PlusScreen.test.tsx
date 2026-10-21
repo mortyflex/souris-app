@@ -6,6 +6,9 @@ import { createFakeAuthGateway, fakeUser } from '@/features/auth/testing/fake-au
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 
+import type { SubscriptionVerification } from '@/domain/access';
+import { createFakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
+
 import { formatAppVersion, PlusScreen } from '../PlusScreen';
 
 const mockPush = jest.fn();
@@ -151,6 +154,12 @@ describe('PlusScreen', () => {
       expect(view.queryByTestId('development-sync-sheet')).toBeNull();
       expect(view.queryByTestId('development-paywall-preview-open')).toBeNull();
       expect(view.queryByTestId('paywall-preview-sheet')).toBeNull();
+      expect(view.queryByTestId('development-subscription-status-preview-open')).toBeNull();
+      expect(view.queryByTestId('subscription-status-preview-sheet')).toBeNull();
+      expect(view.queryByTestId('development-home-brand-preview-open')).toBeNull();
+      expect(view.queryByTestId('home-brand-preview-sheet')).toBeNull();
+      // « Mon abonnement » is product UI: it stays.
+      expect(view.getByText('Mon abonnement')).toBeTruthy();
     } finally {
       flags.__DEV__ = true;
     }
@@ -239,5 +248,90 @@ describe('PlusScreen', () => {
     expect(formatAppVersion(' 2.1.0 ')).toBe('Version 2.1.0');
     expect(formatAppVersion('')).toBeUndefined();
     expect(formatAppVersion(undefined)).toBeUndefined();
+  });
+});
+
+describe('PlusScreen — « Mon abonnement » (Phase 6.2)', () => {
+  const ACTIVE: SubscriptionVerification = {
+    kind: 'verified',
+    status: { kind: 'active', plan: 'monthly', expiresAt: new Date('2099-01-15T10:00:00.000Z') },
+  };
+
+  async function renderPlusWithAccess(verification: SubscriptionVerification) {
+    const source = createFakeSubscriptionSource();
+    source.respondWith(verification);
+    const view = await render(
+      <TestPersistenceProvider access={{ enforcement: 'disabled', source }}>
+        <ServiceCatalogProvider>
+          <PlusScreen />
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
+    );
+    await act(async () => {});
+    return view;
+  }
+
+  it('shows the section between Compte and the identity block, with no action', async () => {
+    const { view } = await renderPlus();
+    const content = within(view.getByTestId('plus-scroll')).getByTestId('plus-content');
+    const flow = within(content);
+    expect(flow.getByText('Mon abonnement')).toBeTruthy();
+    const section = flow.getByTestId('subscription-section');
+    const children = Array.from(content.children);
+    expect(children.indexOf(section)).toBeGreaterThan(children.indexOf(flow.getByTestId('plus-account').parent!));
+    expect(children.indexOf(section)).toBeLessThan(children.indexOf(flow.getByTestId('plus-brand')));
+    expect(within(section).queryAllByRole('button')).toHaveLength(0);
+    expect(within(section).queryByText(/Gérer/)).toBeNull();
+  });
+
+  it('never infers Plus from full access: the default fixture (enforcement disabled, nothing verified) shows no badge', async () => {
+    const { view } = await renderPlus();
+    expect(view.queryByTestId('subscription-status-badge')).toBeNull();
+    expect(view.queryByText('Abonnement actif')).toBeNull();
+  });
+
+  it('shows the badge and the plan for a verified active subscription', async () => {
+    const view = await renderPlusWithAccess(ACTIVE);
+    expect(view.getByTestId('subscription-status-badge')).toBeTruthy();
+    expect(view.getByText('Abonnement actif')).toBeTruthy();
+    expect(view.getByText('Mensuel')).toBeTruthy();
+    expect(view.getByText(/Période en cours jusqu’au 15 janvier 2099\./)).toBeTruthy();
+    // The badge adds a second accessible "BeautIzzy Plus", never a second "BeautIzzy".
+    expect(view.getAllByLabelText('BeautIzzy')).toHaveLength(1);
+  });
+
+  it('shows a quiet neutral state for a verified never-subscribed account', async () => {
+    const view = await renderPlusWithAccess({ kind: 'verified', status: { kind: 'never' } });
+    expect(view.queryByTestId('subscription-status-badge')).toBeNull();
+    expect(view.getByText('Aucun abonnement actif')).toBeTruthy();
+    expect(view.getByText('Toutes les fonctionnalités restent disponibles.')).toBeTruthy();
+    expect(view.queryByText(/lecture seule|bloqu/i)).toBeNull();
+  });
+
+  it('development builds: the Développement section opens the Accueil brand row preview, both states, one sheet', async () => {
+    const { view } = await renderPlus();
+    expect(view.queryByTestId('home-brand-preview-sheet')).toBeNull();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('development-home-brand-preview-open'));
+    });
+    expect(view.getByTestId('home-brand-preview-sheet')).toBeTruthy();
+    expect(view.getByTestId('home-brand-preview-without-plus-row')).toBeTruthy();
+    expect(view.getByTestId('home-brand-preview-with-plus-mark')).toBeTruthy();
+    expect(view.queryByTestId('home-brand-preview-without-plus-mark')).toBeNull();
+    // Nothing of the product shows a Plus: the preview never touches the session.
+    expect(view.queryByTestId('subscription-status-badge')).toBeNull();
+  });
+
+  it('development builds: the Développement section opens the subscription status preview, one sheet, every fixture', async () => {
+    const { view } = await renderPlus();
+    expect(view.queryByTestId('subscription-status-preview-sheet')).toBeNull();
+    await act(async () => {
+      fireEvent.press(view.getByTestId('development-subscription-status-preview-open'));
+    });
+    expect(view.getByTestId('subscription-status-preview-sheet')).toBeTruthy();
+    expect(view.getByTestId('subscription-status-preview-active-monthly-card')).toBeTruthy();
+    expect(view.getByTestId('subscription-status-preview-complimentary-card')).toBeTruthy();
+    // The product section is untouched by the fixtures.
+    expect(within(view.getByTestId('subscription-section')).queryByTestId('subscription-status-badge')).toBeNull();
   });
 });

@@ -10,6 +10,17 @@ import type { CustomerInfo, LogInResult } from '../sdk';
 import { createRevenueCatSubscriptionSource } from '../subscription-source';
 import { customerInfo, NEXT_MONTH, NOW, plusEntitlement } from '../testing/customer-info-fixtures';
 import { createFakeRevenueCatSdk, type FakeRevenueCatSdkOptions } from '../testing/fake-revenuecat-sdk';
+import {
+  ELIGIBLE,
+  INELIGIBLE,
+  appStoreEligibility,
+  appStoreOfferings,
+  offering,
+  offerings,
+  rcPackage,
+  storeProduct,
+  testStoreOfferings,
+} from '../testing/offering-fixtures';
 
 const API_KEY = 'test_FakeTestStoreKeyForUnitTestsOnly';
 const LEA = 'user-lea';
@@ -301,5 +312,137 @@ describe('createRevenueCatSubscriptionSource — pushes', () => {
     await flush();
     expect(received).toEqual([]);
     unsubscribe();
+  });
+});
+
+describe('createRevenueCatSubscriptionSource — offerings (Phase 6.2)', () => {
+  const STORE_UNAVAILABLE = { status: 'unavailable', reason: 'store-unavailable' } as const;
+
+  function offeringHarness(options: FakeRevenueCatSdkOptions = {}) {
+    const { sdk, source } = harness(options);
+    sdk.setOfferings(LEA, appStoreOfferings);
+    sdk.setIntroEligibility(LEA, appStoreEligibility(ELIGIBLE));
+    sdk.setOfferings(NOA, testStoreOfferings);
+    return { sdk, source };
+  }
+
+  it('configures the SDK once, with the user id, and maps the current offering of that user with its trial eligibility', async () => {
+    const { sdk, source } = offeringHarness();
+    const result = await source.loadOffering!(LEA);
+    expect(result.status).toBe('available');
+    expect(result.status === 'available' && result.plans.map((plan) => [plan.plan, plan.price.formatted, plan.freeTrial?.eligibility])).toEqual([
+      ['annual', '99,00 €', 'eligible'],
+      ['monthly', '9,99 €', 'eligible'],
+    ]);
+    expect(sdk.calls.configure).toEqual([{ apiKey: API_KEY, appUserID: LEA }]);
+    expect(sdk.calls.getOfferings).toBe(1);
+    expect(sdk.calls.checkTrialOrIntroductoryPriceEligibility).toEqual([
+      [appStoreOfferings.current!.annual!.product.identifier, appStoreOfferings.current!.monthly!.product.identifier],
+    ]);
+  });
+
+  it('never configures twice: a verification then an offering, or the reverse, share the one identity', async () => {
+    const { sdk, source } = offeringHarness();
+    await source.verify(LEA);
+    await source.loadOffering!(LEA);
+    await source.verify(LEA);
+    expect(sdk.calls.configure).toHaveLength(1);
+    expect(sdk.calls.logIn).toEqual([]);
+  });
+
+  it('switches to another account with logIn and answers that account’s offering only', async () => {
+    const { sdk, source } = offeringHarness();
+    await source.loadOffering!(LEA);
+    const result = await source.loadOffering!(NOA);
+    expect(result.status === 'available' && result.plans.map((plan) => plan.price.formatted)).toEqual(['$49.99', '$4.99']);
+    expect(sdk.calls.logIn).toEqual([NOA]);
+    expect(sdk.calls.configure).toHaveLength(1);
+  });
+
+  it('serializes a switch and the offering requests: an offering requested for A before the switch to B is A’s', async () => {
+    const { sdk, source } = offeringHarness();
+    await source.loadOffering!(LEA);
+    const lea = source.loadOffering!(LEA);
+    const noa = source.loadOffering!(NOA);
+    const leaAgain = source.loadOffering!(LEA);
+    const [first, second, third] = await Promise.all([lea, noa, leaAgain]);
+    expect(first.status === 'available' && first.plans[0]!.price.currencyCode).toBe('EUR');
+    expect(second.status === 'available' && second.plans[0]!.price.currencyCode).toBe('USD');
+    expect(third.status === 'available' && third.plans[0]!.price.currencyCode).toBe('EUR');
+    expect(sdk.calls.logIn).toEqual([NOA, LEA]);
+  });
+
+  it('answers store-unavailable — and reads nothing — when the switch to the new account fails', async () => {
+    const { sdk, source } = offeringHarness({ logIn: () => Promise.reject(new Error('offline')) });
+    await source.loadOffering!(LEA);
+    const reads = sdk.calls.getOfferings;
+    await expect(source.loadOffering!(NOA)).resolves.toEqual(STORE_UNAVAILABLE);
+    expect(sdk.calls.getOfferings).toBe(reads);
+  });
+
+  it('answers store-unavailable when the SDK does not hold the requested identity', async () => {
+    const sdk = createFakeRevenueCatSdk({ configure: () => undefined });
+    sdk.setOfferings(LEA, appStoreOfferings);
+    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, clock: () => NOW });
+    await expect(source.loadOffering!(LEA)).resolves.toMatchObject({ status: 'available' });
+    sdk.configure({ apiKey: API_KEY, appUserID: NOA });
+    await expect(source.loadOffering!(LEA)).resolves.toEqual(STORE_UNAVAILABLE);
+  });
+
+  it('answers store-unavailable without crashing when the native module is absent', async () => {
+    const { sdk, source } = offeringHarness({
+      configure: () => {
+        throw new Error('react-native-purchases: native module not available');
+      },
+    });
+    await expect(source.loadOffering!(LEA)).resolves.toEqual(STORE_UNAVAILABLE);
+    expect(sdk.calls.getOfferings).toBe(0);
+  });
+
+  it('answers store-unavailable when the SDK rejects the offerings request', async () => {
+    const { sdk, source } = offeringHarness();
+    sdk.setOfferings(LEA, undefined);
+    await expect(source.loadOffering!(LEA)).resolves.toEqual(STORE_UNAVAILABLE);
+  });
+
+  it('hands over an empty offering when the dashboard has no current offering or no valid package', async () => {
+    const { sdk, source } = offeringHarness();
+    sdk.setOfferings(LEA, offerings(null));
+    await expect(source.loadOffering!(LEA)).resolves.toEqual({ status: 'available', plans: [] });
+    sdk.setOfferings(LEA, offerings(offering({ monthly: null, annual: null })));
+    await expect(source.loadOffering!(LEA)).resolves.toEqual({ status: 'available', plans: [] });
+    expect(sdk.calls.checkTrialOrIntroductoryPriceEligibility).toEqual([]);
+  });
+
+  it('a failed eligibility check leaves the trials unknown and keeps the offering', async () => {
+    const { sdk, source } = offeringHarness();
+    sdk.setIntroEligibility(LEA, undefined);
+    const result = await source.loadOffering!(LEA);
+    expect(result.status === 'available' && result.plans.map((plan) => plan.freeTrial?.eligibility)).toEqual(['unknown', 'unknown']);
+  });
+
+  it('reports an ineligible account as such, and skips the check when no product has a free trial', async () => {
+    const { sdk, source } = offeringHarness();
+    sdk.setIntroEligibility(LEA, appStoreEligibility(INELIGIBLE));
+    const result = await source.loadOffering!(LEA);
+    expect(result.status === 'available' && result.plans.map((plan) => plan.freeTrial?.eligibility)).toEqual(['ineligible', 'ineligible']);
+
+    const noTrial = await source.loadOffering!(NOA);
+    expect(noTrial.status === 'available' && noTrial.plans.every((plan) => plan.freeTrial === undefined)).toBe(true);
+    expect(sdk.calls.checkTrialOrIntroductoryPriceEligibility).toHaveLength(1);
+  });
+
+  it('checks the eligibility of the products that carry a free trial only', async () => {
+    const { sdk, source } = offeringHarness();
+    const withoutTrial = storeProduct({ identifier: 'plain.monthly', subscriptionPeriod: 'P1M' });
+    sdk.setOfferings(LEA, offerings(offering({ monthly: rcPackage('monthly', withoutTrial) })));
+    await source.loadOffering!(LEA);
+    expect(sdk.calls.checkTrialOrIntroductoryPriceEligibility).toEqual([[appStoreOfferings.current!.annual!.product.identifier]]);
+  });
+
+  it('never purchases, restores or syncs: the facade exposes nothing of the kind', async () => {
+    const { sdk, source } = offeringHarness();
+    await source.loadOffering!(LEA);
+    expect(Object.keys(sdk).some((key) => /purchase|restore|sync/i.test(key))).toBe(false);
   });
 });

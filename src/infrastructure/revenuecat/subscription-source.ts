@@ -37,12 +37,27 @@
 // cache and fetched again, so a fresh answer or `unavailable` results — never
 // a stale one. Every failure — no native module, offline, rejected call,
 // identity mismatch — answers `unavailable`.
+//
+// Offerings (Phase 6.2). `loadOffering` runs on the SAME chain, after the
+// same identification: the SDK is made to hold the requested user (configure
+// or logIn, never a second configure), the identity is checked, then the
+// offerings are read and — for the products that carry a free trial — the
+// introductory-offer eligibility of that user. The eligibility check is
+// best-effort: its failure never fails the offering, it only leaves every
+// trial `unknown` (nothing advertised). The mapping is pure
+// (`offering.ts`). Every other failure answers `store-unavailable`. Nothing
+// here purchases, restores or syncs.
 
 import type { SubscriptionVerification } from '@/domain/access';
+import {
+  storeUnavailablePaywallOffering,
+  type StorePaywallOffering,
+} from '@/features/access/paywall/paywall-offering';
 import type { SubscriptionSource } from '@/features/access/subscription-source';
 
 import { isCustomerInfoFresh, mapCustomerInfoToVerification } from './customer-info';
-import type { CustomerInfo, CustomerInfoUpdateListener, RevenueCatSdk } from './sdk';
+import { mapOfferingsToPaywallOffering, productIdentifiersWithFreeTrial } from './offering';
+import type { CustomerInfo, CustomerInfoUpdateListener, IntroEligibilityByProduct, RevenueCatSdk } from './sdk';
 
 export interface RevenueCatSubscriptionSourceOptions {
   readonly sdk: RevenueCatSdk;
@@ -106,11 +121,7 @@ export function createRevenueCatSubscriptionSource({
 
   /** The CustomerInfo of `userId`, read only once the SDK confirms it holds that identity. */
   async function readCustomerInfo(userId: string): Promise<CustomerInfo> {
-    const appUserId = await sdk.getAppUserID();
-    if (appUserId !== userId) {
-      identifiedUserId = undefined;
-      throw new Error('RevenueCat identity mismatch');
-    }
+    await assertIdentified(userId);
     return sdk.getCustomerInfo();
   }
 
@@ -126,6 +137,36 @@ export function createRevenueCatSubscriptionSource({
       return mapCustomerInfoToVerification(info, clock());
     } catch {
       return UNAVAILABLE;
+    }
+  }
+
+  /** Confirms the SDK holds `userId`; a drift leaves the source identified as nobody. */
+  async function assertIdentified(userId: string): Promise<void> {
+    const appUserId = await sdk.getAppUserID();
+    if (appUserId !== userId) {
+      identifiedUserId = undefined;
+      throw new Error('RevenueCat identity mismatch');
+    }
+  }
+
+  async function loadOfferingOnChain(userId: string): Promise<StorePaywallOffering> {
+    if (unusable) return storeUnavailablePaywallOffering;
+    try {
+      await identify(userId);
+      await assertIdentified(userId);
+      const offerings = await sdk.getOfferings();
+      const trialProducts = productIdentifiersWithFreeTrial(offerings.current);
+      let eligibility: IntroEligibilityByProduct | undefined;
+      if (trialProducts.length > 0) {
+        try {
+          eligibility = await sdk.checkTrialOrIntroductoryPriceEligibility(trialProducts);
+        } catch {
+          eligibility = undefined;
+        }
+      }
+      return mapOfferingsToPaywallOffering(offerings, eligibility);
+    } catch {
+      return storeUnavailablePaywallOffering;
     }
   }
 
@@ -153,6 +194,7 @@ export function createRevenueCatSubscriptionSource({
 
   return {
     verify: (userId) => run(() => verifyOnChain(userId)),
+    loadOffering: (userId) => run(() => loadOfferingOnChain(userId)),
     onVerificationChange: (userId, listener) => {
       const set = subscribers.get(userId) ?? new Set<VerificationListener>();
       set.add(listener);

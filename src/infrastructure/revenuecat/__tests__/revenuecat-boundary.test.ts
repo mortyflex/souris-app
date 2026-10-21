@@ -1,8 +1,9 @@
-// BeautIzzy — Phase 6.1 stays a verification integration (source-level guard,
-// like paywall-boundary.test.ts): one module binds the SDK, no product module
+// BeautIzzy — Phases 6.1 and 6.2 stay a READ integration (source-level guard,
+// like paywall-boundary.test.ts): one module binds the SDK, offerings and the
+// eligibility check are read through that module only, no product module
 // purchases, restores, syncs or logs out, no key or account is hardcoded, the
-// environment files stay out of git, the paywall and the enforcement switch
-// are untouched.
+// environment files stay out of git, the root wiring and the enforcement
+// switch are untouched.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,13 +33,14 @@ const files: readonly SourceFile[] = listSourceFiles(SRC).map((path) => ({
   source: readFileSync(path, 'utf8'),
 }));
 
-describe('RevenueCat integration — Phase 6.1 boundary', () => {
+describe('RevenueCat integration — Phase 6.1 / 6.2 boundary', () => {
   it('scans the application sources', () => {
     expect(files.length).toBeGreaterThan(150);
     expect(files.map((file) => file.path).filter((path) => path.startsWith('infrastructure/revenuecat/')).sort()).toEqual([
       'infrastructure/revenuecat/config.ts',
       'infrastructure/revenuecat/customer-info.ts',
       'infrastructure/revenuecat/index.ts',
+      'infrastructure/revenuecat/offering.ts',
       'infrastructure/revenuecat/sdk.ts',
       'infrastructure/revenuecat/subscription-source.ts',
     ]);
@@ -59,13 +61,34 @@ describe('RevenueCat integration — Phase 6.1 boundary', () => {
     expect(anyImporters.every((path) => path.startsWith('infrastructure/revenuecat/'))).toBe(true);
   });
 
-  it('purchases, restores, syncs, fetches offerings and logs out nowhere', () => {
+  it('purchases, restores, syncs and logs out nowhere', () => {
     for (const file of files) {
       expect({
         path: file.path,
-        billing: /\b(purchasePackage|purchaseProduct|purchaseStoreProduct|purchaseDiscountedPackage|restorePurchases|syncPurchases|syncPurchasesForResult|getOfferings|logOut|presentCodeRedemptionSheet)\s*\(/.test(file.source),
+        billing: /\b(purchasePackage|purchaseProduct|purchaseStoreProduct|purchaseSubscriptionOption|purchaseDiscountedPackage|purchasePackageWithWinBackOffer|restorePurchases|syncPurchases|syncPurchasesForResult|logOut|presentCodeRedemptionSheet|getPromotionalOffer)\s*\(/.test(file.source),
       }).toEqual({ path: file.path, billing: false });
     }
+  });
+
+  it('reads the offerings and the trial eligibility through the SDK facade only, from the source only', () => {
+    const sdkReaders = files
+      .filter((file) => /\bPurchases\.(getOfferings|checkTrialOrIntroductoryPriceEligibility)\s*\(/.test(file.source))
+      .map((file) => file.path);
+    expect(sdkReaders).toEqual(['infrastructure/revenuecat/sdk.ts']);
+    const facadeReaders = files
+      .filter((file) => /\bsdk\.(getOfferings|checkTrialOrIntroductoryPriceEligibility)\s*\(/.test(file.source))
+      .map((file) => file.path);
+    expect(facadeReaders).toEqual(['infrastructure/revenuecat/subscription-source.ts']);
+    // The paywall learns the offering through the provider's `loadOffering`, never from the SDK.
+    const offeringConsumers = files
+      .filter((file) => /\bloadOffering\b/.test(file.source) && !file.path.startsWith('infrastructure/revenuecat/'))
+      .map((file) => file.path)
+      .sort();
+    expect(offeringConsumers).toEqual([
+      'features/access/session/BusinessAccessProvider.tsx',
+      'features/access/session/use-paywall-offering.ts',
+      'features/access/subscription-source.ts',
+    ]);
   });
 
   it('the root wires the source through the provider only: no second subscription state, no routing change', () => {

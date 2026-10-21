@@ -8,6 +8,9 @@
 //   * the development preview — the only product-side consumer of the
 //     fixtures — is loaded by PlusScreen alone, through a `require` inside a
 //     `__DEV__` branch, so Metro drops it (and the fixtures) from releases;
+//     its live entry reads the real offering through `usePaywallOffering`
+//     (the provider's `loadOffering`), never through a store SDK, and can
+//     call no purchase API because none is bound;
 //   * the paywall modules fetch nothing, initialize no store SDK, purchase
 //     nothing, write no subscription state and never touch the enforcement
 //     switch, which stays `disabled`;
@@ -96,6 +99,9 @@ describe('paywall presentation — production boundary', () => {
     const preview = files.find((file) => file.path === 'features/access/paywall/development/PaywallPreviewSheet.tsx')!.source;
     expect(preview).toMatch(/if \(!__DEV__\) return null;/);
     expect(preview).not.toMatch(/SUBSCRIPTION_ENFORCEMENT|useBusinessAccess|resolveBusinessAccess/);
+    // The live entry: the offering hook only — no purchase, no restore, no SDK.
+    expect(preview).toContain("from '../../session/use-paywall-offering'");
+    expect(preview).not.toMatch(/purchase[A-Z]\w*\(|restorePurchases|infrastructure\/revenuecat/);
   });
 
   it('the paywall modules touch no store, no network, no persistence and no access state', () => {

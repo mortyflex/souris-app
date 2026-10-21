@@ -79,8 +79,31 @@ describe('PaywallScreen — branding and approved copy', () => {
     expect(illustration.props.importantForAccessibility).toBe('no-hide-descendants');
     const { width, height } = StyleSheet.flatten(illustration.props.style);
     expect(width).toBe(height);
-    expect(width).toBeGreaterThanOrEqual(92);
-    expect(width).toBeLessThanOrEqual(150);
+    expect(width).toBeGreaterThanOrEqual(80);
+    expect(width).toBeLessThanOrEqual(116);
+  });
+
+  it('gives the brand its presence in the hero capsule: 30 pt, the 16 pt semibold name, the symbol 16 pt wide — under the headline', async () => {
+    const view = await renderPaywall();
+    const badge = StyleSheet.flatten(view.getByTestId('paywall-brand').props.style);
+    expect(badge.minHeight).toBe(30);
+    expect(badge.paddingHorizontal).toBe(12);
+    expect(badge.alignSelf).toBe('center');
+    const name = within(view.getByTestId('paywall-brand')).getByText('BeautIzzy Plus');
+    const nameStyle = StyleSheet.flatten(name.props.style);
+    expect(nameStyle.fontSize).toBe(getAppTextStyle('control', 'ios').fontSize);
+    expect(nameStyle.fontSize).toBe(16);
+    expect(nameStyle.fontFamily).toBe(getAppTextStyle('control', Platform.OS === 'android' ? 'android' : 'ios').fontFamily);
+    expect(nameStyle.color).toBe(semanticColors.accent);
+    // The symbol is the one image inside the capsule, 16 pt wide (its height follows the PNG).
+    const images = view.container.queryAll((node) => node.type === 'Image');
+    const symbol = images.find((image) => StyleSheet.flatten(image.props.style).width === 16);
+    expect(symbol).toBeDefined();
+    expect(StyleSheet.flatten(symbol!.props.style).height).toBeGreaterThan(16);
+    const title = StyleSheet.flatten(view.getByTestId('paywall-title').props.style);
+    // The brand is a recognisable product, never as large as the headline.
+    expect(nameStyle.fontSize).toBeLessThan(title.fontSize ?? 0);
+    expect((title.fontSize ?? 0) / nameStyle.fontSize).toBeGreaterThanOrEqual(1.4);
   });
 
   it('puts the offer before the benefits: hero, lead, plans, then the three benefits', async () => {
@@ -97,19 +120,23 @@ describe('PaywallScreen — branding and approved copy', () => {
     expect(view.getByTestId('paywall-lead').props.children).toBe('Votre espace est prêt. Profitez pleinement de BeautIzzy Plus.');
   });
 
-  it('keeps the hero compact: no top padding of its own, tight gaps, the body flush under the top bar', async () => {
+  it('keeps the hero compact: no top padding of its own, 4 pt gaps, the body flush under the top bar', async () => {
     const view = await renderPaywall();
     const hero = StyleSheet.flatten(view.getByTestId('paywall-hero').props.style);
     expect(hero.paddingTop).toBeUndefined();
-    expect(hero.gap).toBeLessThanOrEqual(8);
+    expect(hero.gap).toBe(4);
     const title = StyleSheet.flatten(view.getByTestId('paywall-title').props.style);
-    // One step under the display of Welcome: the screen title role, still bold and navy.
-    expect(title.fontSize).toBe(getAppTextStyle('screenTitle', Platform.OS === 'android' ? 'android' : 'ios').fontSize);
+    // The 27 / 33 screen-title step on both platforms: one notch under the iOS
+    // screen title, two under the display of Welcome, still bold and navy.
+    expect(title.fontSize).toBe(getAppTextStyle('screenTitle', 'android').fontSize);
+    expect(title.lineHeight).toBe(getAppTextStyle('screenTitle', 'android').lineHeight);
+    expect(title.fontSize).toBeLessThan(getAppTextStyle('screenTitle', 'ios').fontSize ?? 0);
     expect(title.fontSize).toBeLessThan(getAppTextStyle('display', 'ios').fontSize ?? 0);
     expect(title.fontSize).toBeGreaterThanOrEqual(26);
+    expect(title.fontFamily).toBe(getAppTextStyle('screenTitle', Platform.OS === 'android' ? 'android' : 'ios').fontFamily);
     let body = view.getByTestId('paywall-hero').parent;
     while (body && typeof body.type !== 'string') body = body.parent;
-    expect(StyleSheet.flatten(body!.props.style).paddingTop).toBe(8);
+    expect(StyleSheet.flatten(body!.props.style).paddingTop).toBe(4);
   });
 
   it('keeps the headline navy and centred: the violet is carried by the badge and the actions', async () => {

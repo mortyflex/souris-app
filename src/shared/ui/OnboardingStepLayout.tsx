@@ -211,7 +211,7 @@ interface OnboardingStepLayoutProps {
   readonly children?: ReactNode;
   /**
    * Top spacing of the content: `regular` under the frame's own header, `compact`
-   * when the content IS the screen (the paywall: its badge sits right under the top bar).
+   * when the content IS the screen (the paywall: its badge sits right under the top bar, 4 pt).
    */
   readonly bodySpacing?: 'regular' | 'compact';
   readonly footer: ReactNode;
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
   subtitle: { color: semanticColors.foregroundSoft, maxWidth: 360 },
   textCentred: { textAlign: 'center' },
   body: { gap: spacing.base, paddingTop: spacing.xl },
-  bodyCompact: { paddingTop: spacing.sm },
+  bodyCompact: { paddingTop: spacing.xs },
   footer: {
     gap: spacing.sm,
     paddingBottom: spacing.base,

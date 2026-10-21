@@ -63,7 +63,11 @@ there too: a release build without it boots normally but cannot verify the subsc
 (`unavailable`; nothing is restricted while enforcement is disabled). The Test Store key
 (`EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY`) is for development bundles only and is never used by a
 release build, so it need not be pushed; `env:push --path .env` would push it harmlessly. Never a
-RevenueCat secret key, and never an Apple `.p8` file in the repository.
+RevenueCat secret key, and never an Apple `.p8` file in the repository. Since Phase 6.2 the
+offering a build reads follows the same key: a TestFlight build shows the real App Store products
+and prices in the development-only preview of a debug bundle only — a release bundle has no
+preview and no paywall route — while a debug bundle shows the Test Store products, whose prices
+may differ from Apple's; this is expected.
 
 ## 3. Supabase Dashboard (manual)
 

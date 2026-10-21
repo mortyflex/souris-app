@@ -1,33 +1,32 @@
 // BeautIzzy — Accueil header
 //
-// The brand, alone: the editorial BeautIzzy logo (BrandMark — the one way the
-// app draws its identity) set on the page gutter. No date, no text, no
-// ornament: the greeting lives in its own card below (HomeGreetingCard).
+// The brand row (`HomeBrandRow`): the editorial BeautIzzy logo and — ONLY
+// while the session's verification confirms a BeautIzzy Plus entitlement in
+// force — the small « Plus » mark beside it. In every other state the logo is
+// alone: no date, no text, no ornament; the greeting lives in its own card
+// below (HomeGreetingCard).
+//
+// The decision follows `useBusinessAccess().verification` through THE rule
+// `hasVerifiedPlusEntitlement` — never the effective permission (with
+// enforcement disabled every account has full access), never a store read,
+// never a test-bench override: the preview draws the row with its own
+// explicit flag and this header never reads it.
 
-import { StyleSheet, View } from 'react-native';
+import { useBusinessAccess } from '@/features/access/session/BusinessAccessProvider';
+import { hasVerifiedPlusEntitlement } from '@/features/access/status/subscription-status-presentation';
 
-import { BrandMark, brandMarkInsets } from '@/shared/ui/BrandMark';
+import { HomeBrandRow } from './HomeBrandRow';
 
-/** Rendered width of the logo box; its artwork is about 148 × 49 pt. */
-export const HOME_LOGO_SIZE = 160;
-// The canonical PNG carries a thin transparent safe padding around the artwork
-// (BrandMark). Pulling the box back by it sets the ARTWORK, not the box, on
-// the page gutter and on the top of the header.
-const LOGO_INSETS = brandMarkInsets('editorial', HOME_LOGO_SIZE);
+export { HOME_LOGO_SIZE } from './HomeBrandRow';
 
-export function HomeHeader() {
-  return (
-    <View style={styles.header} testID="home-header">
-      <BrandMark size={HOME_LOGO_SIZE} style={styles.logo} variant="editorial" />
-    </View>
-  );
+interface HomeHeaderProps {
+  /** Injected for deterministic tests; the application uses the system clock. */
+  readonly clock?: () => Date;
 }
 
-const styles = StyleSheet.create({
-  header: { alignItems: 'flex-start' },
-  logo: {
-    marginBottom: -LOGO_INSETS.bottom,
-    marginLeft: -LOGO_INSETS.left,
-    marginTop: -LOGO_INSETS.top,
-  },
-});
+const defaultClock = () => new Date();
+
+export function HomeHeader({ clock = defaultClock }: HomeHeaderProps) {
+  const { verification } = useBusinessAccess();
+  return <HomeBrandRow showPlus={hasVerifiedPlusEntitlement(verification, clock())} />;
+}

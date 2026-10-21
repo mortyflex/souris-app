@@ -5,9 +5,12 @@
 // a fixed footer), so it reads as a continuation of Discovery and setup:
 //
 //   top bar      the glass back and / or close, when the caller provides one;
-//   body         a compact hero — the « BeautIzzy Plus » badge, the growth
-//                illustration (an accent, about 15 % of the window), the
-//                approved headline (navy, screen title) and one short lead —
+//   body         a compact hero — the « BeautIzzy Plus » badge (the brand,
+//                30 pt hero capsule), the growth illustration (an accent, about
+//                13 % of the window), the approved headline (navy, the 27 / 33
+//                screen-title step on both platforms: one notch under the iOS
+//                screen title, so the brand and the headline read as one
+//                hierarchy) and one short lead —
 //                or, for an existing account, the contextual notice; THEN the
 //                offer: one card per plan the store offers — annual first,
 //                preselected and « Recommandé » when both are offered — so
@@ -41,7 +44,7 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
 import { OnboardingStepLayout } from '@/shared/ui/OnboardingStepLayout';
-import { interaction, semanticColors, spacing } from '@/shared/ui/theme';
+import { interaction, semanticColors, spacing, typography } from '@/shared/ui/theme';
 
 import { PaywallBenefitRow } from './components/PaywallBenefitRow';
 import { PaywallNotice } from './components/PaywallNotice';
@@ -61,9 +64,9 @@ import { paywallIllustration } from './paywall-illustration';
 import type { PaywallOffering } from './paywall-offering';
 import {
   PAYWALL_DEFAULT_LOCALE,
-  PAYWALL_SMALL_WINDOW_HEIGHT,
   buildPaywallPlans,
   describePaywallContext,
+  isRetryablePaywallReason,
   resolvePaywallAction,
   resolvePaywallIllustrationSide,
   resolveSelectedPaywallPlan,
@@ -121,7 +124,6 @@ export function PaywallScreen({
   const selectedPlan = plans ? resolveSelectedPaywallPlan(plans, requestedPlan) : undefined;
   const action = plans ? resolvePaywallAction(plans, selectedPlan, onSubscribe !== undefined) : { kind: 'none' as const };
   const side = resolvePaywallIllustrationSide(height);
-  const small = height <= PAYWALL_SMALL_WINDOW_HEIGHT;
 
   const selectPlan = (plan: SubscriptionPlan) => {
     if (plan === selectedPlan) return;
@@ -206,8 +208,8 @@ export function PaywallScreen({
         )
       }
     >
-      <View style={[styles.hero, small && styles.heroSmall]} testID="paywall-hero">
-        <PlusBrandBadge />
+      <View style={styles.hero} testID="paywall-hero">
+        <PlusBrandBadge variant="hero" />
         <Image
           accessible={false}
           accessibilityElementsHidden
@@ -259,7 +261,7 @@ export function PaywallScreen({
             title={PAYWALL_OFFERS_UNAVAILABLE[plans.reason].title}
             tone="reassuring"
           />
-          {onRetryOffering !== undefined && plans.reason !== 'not-configured' && (
+          {onRetryOffering !== undefined && isRetryablePaywallReason(plans.reason) && (
             <AppButton
               onPress={onRetryOffering}
               style={styles.retry}
@@ -287,11 +289,18 @@ export function PaywallScreen({
   );
 }
 
+/** The headline step: the 27 / 33 screen title (the Android token) on both platforms. */
+const headlineMetrics = {
+  fontSize: typography.screenTitleAndroid.fontSize,
+  letterSpacing: typography.screenTitleAndroid.letterSpacing,
+  lineHeight: typography.screenTitleAndroid.lineHeight,
+} as const;
+
 const styles = StyleSheet.create({
-  // Tight vertical rhythm: the hero is an introduction, the plans the decision.
-  hero: { alignItems: 'center', gap: spacing.sm },
-  heroSmall: { gap: spacing.xs },
-  title: { color: semanticColors.foreground, textAlign: 'center' },
+  // Tight vertical rhythm on every phone: the hero is an introduction, the
+  // plans the decision — both cards belong to the first viewport.
+  hero: { alignItems: 'center', gap: spacing.xs },
+  title: { ...headlineMetrics, color: semanticColors.foreground, textAlign: 'center' },
   lead: { color: semanticColors.foregroundSoft, maxWidth: 360, textAlign: 'center' },
   benefits: { gap: spacing.sm, paddingHorizontal: spacing.xs, paddingTop: spacing.xs },
   plans: { gap: spacing.sm },

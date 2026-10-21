@@ -335,13 +335,20 @@ src/features/access/read-only-copy.ts                          ONE vocabulary fo
                                                                card lines, the denial alert copy
 src/features/access/read-only/ReadOnlyStatusCard.tsx           the subtle read-only status of Accueil,
                                                                from `useBusinessAccess` only
+src/features/access/status/                                    « Mon abonnement » (Plus): the verified
+                                                               subscription status — pure wording from the
+                                                               session's verification, the card, the section
+src/features/access/session/use-paywall-offering.ts            the offering of the signed-in user: ONE
+                                                               loading lifecycle over the provider's
+                                                               `loadOffering`, account-isolated
 src/features/access/paywall/                                   the BeautIzzy Plus paywall PRESENTATION:
                                                                offering boundary, pure presentation rules,
                                                                approved copy, screen and components
-src/infrastructure/revenuecat/                                 the RevenueCat integration (Phase 6.1):
+src/infrastructure/revenuecat/                                 the RevenueCat integration (Phases 6.1–6.2):
                                                                key selection per build, the ONE SDK
                                                                binding, CustomerInfo → domain mapping,
-                                                               the identified-only SubscriptionSource
+                                                               offerings → PaywallOffering mapping, the
+                                                               identified-only SubscriptionSource
 ```
 
 Business mutation protection. Every user-initiated mutation exposed by the six (app) business
@@ -405,13 +412,12 @@ decides the `PaywallContext` and mounts the screen — after setup completes, fo
 existing account, never for an active subscriber — and wires « Explorer sans abonnement » to
 entering read-only use without writing any entitlement. No product route mounts the paywall today.
 
-Production activation still requires: the real App Store / Google Play offerings mapped into
-`PaywallOffering` (the SDK, the identity and the verification exist since Phase 6.1 below);
-purchase and restore handling; account-scoped entitlement verification with persisted
-verified evidence and correct offline startup; the backend entitlement mirror with server-side
-enforcement of business mutations and server-controlled reminder / SMS suppression; real privacy
-and terms URLs; account deletion and privacy-data export. `SUBSCRIPTION_ENFORCEMENT` stays
-`disabled` until then.
+Production activation still requires: purchase and restore handling (the real App Store
+offering is mapped into `PaywallOffering` since Phase 6.2 below; Google Play is not configured);
+the account-scoped paywall routing; persisted verified evidence and correct offline startup; the
+backend entitlement mirror with server-side enforcement of business mutations and
+server-controlled reminder / SMS suppression; real privacy and terms URLs; account deletion and
+privacy-data export. `SUBSCRIPTION_ENFORCEMENT` stays `disabled` until then.
 
 RevenueCat integration (Phase 6.1, `src/infrastructure/revenuecat/`). The first technical step of
 the store integration: SDK, identity and READ-ONLY verification. No purchase, restore, offering,
@@ -462,6 +468,84 @@ Client-side verification is not a security boundary: the backend entitlement mir
 server-side enforcement remain mandatory before activation. A native development build must be
 rebuilt after adding the SDK (`npx expo run:ios` with `APP_VARIANT=development`); a build that
 predates it answers unavailable without crashing.
+
+RevenueCat offerings and the subscription status (Phase 6.2). Still a READ integration: no
+purchase, restore, routing or enforcement change.
+
+```text
+sdk.ts                     adds `getOfferings` and `checkTrialOrIntroductoryPriceEligibility` — the SDK's
+                           own calls, bound here only — and re-exports the SDK enumerations the mapping
+                           compares. Still no purchase, restore, sync or logOut.
+offering.ts                pure: RevenueCat offerings → `StorePaywallOffering`. `offerings.current` only
+                           (dashboard targeting works without a release); the two plans are the predefined
+                           packages `$rc_monthly` / `$rc_annual`, read through the offering's `monthly` and
+                           `annual` slots and confirmed by their package type — never the array order, a
+                           price, a title or a localized name. Every figure comes from the store product:
+                           `price` (decimal), `currencyCode` (ISO 4217), `priceString` (the storefront's own
+                           string, preferred by the UI), `subscriptionPeriod` (a product whose period
+                           contradicts its plan is dropped). A missing, malformed or contradictory package is
+                           absent from `plans`; no current offering is an EMPTY offering, never a fabricated
+                           plan. A trial exists only when `introPrice` exists AND is free (a paid introductory
+                           price is a discount, never a trial); its length is the store's period — unit and
+                           count × cycles — never a number written in the app.
+subscription-source.ts     `loadOffering(userId)` on the SAME serial chain and the same identification as
+                           `verify` (configure once / logIn, `getAppUserID` checked): the offerings, then —
+                           for the products that carry a free trial only — the eligibility of THAT user. A
+                           failed eligibility check keeps the offering and leaves every trial `unknown`;
+                           every other failure (no native module, offline, rejected call, identity drift)
+                           answers `store-unavailable`.
+```
+
+Trial eligibility rule. A free trial is ADVERTISED (« n jours gratuits », « Essayer gratuitement
+n jours ») only when BOTH hold: the store product carries a free introductory period AND the SDK's
+eligibility answer for that product identifier is ELIGIBLE. INELIGIBLE, UNKNOWN, a contradictory
+NO_INTRO_OFFER_EXISTS, a missing entry or a failed check are `unknown` / `ineligible` and show the
+standard price with no trial copy. The check is best-effort (Android always answers UNKNOWN; the
+Test Store may too): the store's purchase sheet decides in the end. Dashboard configuration alone
+never shows a trial.
+
+Test Store versus Apple. A debug bundle uses the Test Store key (`config.ts`), so the current
+offering it reads holds RevenueCat's Test Store products: other identifiers (the plan is then
+`unknown` in a verification), possibly other amounts and currency, and possibly no introductory
+offer or no eligibility. This is expected, never a defect: the mapping hands over whatever the
+store says. TestFlight and App Store builds use the Apple key and read the real App Store
+products and prices; Google Play stays unconfigured.
+
+The feature side. `SubscriptionSource.loadOffering?` is the optional store half of the ONE boundary
+(a source without a store has none). `BusinessAccessProvider.loadOffering()` binds it to the
+signed-in user: `no-account` signed out, `not-configured` without a store, `store-unavailable` on a
+rejection — it loads nothing of its own and keeps no offering state. `usePaywallOffering()` owns
+the loading lifecycle for a screen: one request per signed-in user (and per `retry`), an explicit
+`loading` / `unavailable` / `available` state keyed by the user id, the answer of an older request,
+of another user's request or of an unmounted screen dropped — nobody ever reads a previous
+account's plans, and nothing is fetched on a render. The paywall presentation is unchanged except
+that a trial is a store period (`PaywallTrialPeriod`: day / week / month / year × count; weeks are
+said in days) and `no-account` joined the unavailable reasons. The only consumer today is the
+development preview's « Offre RevenueCat actuelle » entry (Plus › Développement, `__DEV__` only):
+the same `PaywallScreen` over the real offering, with a primary action that says purchases are not
+enabled. No product route mounts the paywall.
+
+Subscription status UI (Plus › « Mon abonnement », `src/features/access/status/`). The verified
+status, from `useBusinessAccess().verification` ONLY — never from `access.mode` or `canMutate`:
+with enforcement disabled every account has full access, which proves no subscription. Pure
+wording (`describeSubscriptionStatus`): a verified entitlement shows the « BeautIzzy Plus » badge
+(`PlusBrandBadge`) with « Abonnement actif » + plan + « Période en cours jusqu’au … » (no renewal or
+payment promised), « Essai gratuit » + « Fin de l’essai le … », « Actif jusqu’au … » + « Sans
+renouvellement automatique. » for a cancelled-but-active subscription, « Accès offert » with
+« Jusqu’au … » only when an end exists (no billing implied, no date invented); a verified `expired`
+or `never` shows no badge, « Aucun abonnement actif », the read-only vocabulary's own sentence and —
+while enforcement is disabled — « Toutes les fonctionnalités restent disponibles. »; a pending or
+`unavailable` verification, or a lapsed entitlement (`isVerificationCurrent`), is a neutral
+verification state: never "free", never expired, never active. The plan is written only when the
+store established it (`unknown` for a Test Store product writes none). Dates: `Intl.DateTimeFormat
+('fr-FR')`, day / long month / year. Read-only: no action is drawn (no inert « Gérer mon
+abonnement »), no navigation, nothing persisted. Development fixtures of every status feed a
+`__DEV__`-only preview sheet (Plus › Développement › « Statut BeautIzzy Plus (test) ») and the
+tests; none reaches the provider.
+
+Unavailable until purchases are implemented: buying, restoring, Store checkout, the production
+paywall route and the onboarding-to-paywall redirect, subscription management links, Google Play,
+the server mirror and enforcement.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain

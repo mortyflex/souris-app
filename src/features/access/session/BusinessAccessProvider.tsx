@@ -32,6 +32,14 @@
 // renewal that cannot be verified gets exactly the grace the domain grants.
 // Deadlines are properties of the proof: re-arming the timer, repeating
 // `refresh()` or a failed verification never moves them.
+//
+// Offering (Phase 6.2). `loadOffering` asks the source what the store sells
+// the signed-in user — through the same source and the same identity, never a
+// second SDK path. It is bound to the user signed in when it is called:
+// nobody signed in answers `no-account`, a source without a store answers
+// `not-configured`, a rejection `store-unavailable`. It loads nothing of its
+// own and keeps no offering state: `usePaywallOffering` owns the loading
+// lifecycle and drops the answers of a session that ended.
 
 import {
   createContext,
@@ -60,6 +68,12 @@ import {
 } from '@/domain/access';
 import { useAuth } from '@/features/auth/session/AuthProvider';
 
+import {
+  noAccountPaywallOffering,
+  storeUnavailablePaywallOffering,
+  unconfiguredPaywallOffering,
+  type PaywallOffering,
+} from '../paywall/paywall-offering';
 import type { SubscriptionSource } from '../subscription-source';
 
 export interface BusinessAccessValue {
@@ -78,6 +92,11 @@ export interface BusinessAccessValue {
   readonly enforcement: AccessEnforcement;
   /** Verifies again through the source. Resolves once the answer is applied — or dropped as stale. */
   readonly refresh: () => Promise<void>;
+  /**
+   * The offering the store makes to the signed-in user, read for that
+   * identity only. Never `loading`; never rejects. Purchases nothing.
+   */
+  readonly loadOffering: () => Promise<PaywallOffering>;
 }
 
 const BusinessAccessContext = createContext<BusinessAccessValue | null>(null);
@@ -202,6 +221,17 @@ export function BusinessAccessProvider({
     await verify(userId, sessionGeneration.current);
   }, [userId, verify]);
 
+  const loadOffering = useCallback(async (): Promise<PaywallOffering> => {
+    if (!userId) return noAccountPaywallOffering;
+    const load = source?.loadOffering;
+    if (load === undefined) return unconfiguredPaywallOffering;
+    try {
+      return await load(userId);
+    } catch {
+      return storeUnavailablePaywallOffering;
+    }
+  }, [userId, source]);
+
   const input = useMemo<BusinessAccessInput>(
     () => ({
       now: current.resolvedAt,
@@ -251,8 +281,9 @@ export function BusinessAccessProvider({
       verification: current.verification,
       enforcement,
       refresh,
+      loadOffering,
     }),
-    [access, current.verification, enforcement, refresh],
+    [access, current.verification, enforcement, refresh, loadOffering],
   );
 
   return <BusinessAccessContext.Provider value={value}>{children}</BusinessAccessContext.Provider>;

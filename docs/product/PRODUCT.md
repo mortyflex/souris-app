@@ -1398,10 +1398,18 @@ month, 129 € a year, a 14-day trial — are planning information held in test 
 app); without a store the offering is "not configured" and no purchase can be initiated. Under
 read-only access the professional keeps reading everything; a refused modification is explained as
 « Action réservée à BeautIzzy Plus » and Accueil shows a quiet read-only status. Enforcement stays
-disabled: no existing account meets any of this. Still to come, in their own phases: RevenueCat and
-the real store offerings, purchase and restore, the account-scoped paywall routing, persisted
-entitlement evidence, the backend entitlement mirror and server-side enforcement, real terms and
-privacy URLs, account deletion and privacy-data export.
+disabled: no existing account meets any of this. Since Phase 6.2 (October 2026) the real
+RevenueCat offering of the signed-in account — the current offering, its App Store prices (the
+Test Store's in a debug build), the account's trial eligibility — is read through the SDK and
+shown in the development preview only; a free trial is advertised solely when the store product
+carries one AND the store confirmed this account eligible, for the store's own length. Plus also
+shows « Mon abonnement »: the « BeautIzzy Plus » badge and the verified status (active with its
+plan and the end of the current period, free trial and its end, cancelled-but-active until its
+end, complimentary access, or a quiet "no active subscription" / "not verified" state) — from the
+store's verification only, never from the fact that enforcement is disabled; read-only, with no
+action yet. Still to come, in their own phases: purchase and restore, the account-scoped paywall
+routing, persisted entitlement evidence, the backend entitlement mirror and server-side
+enforcement, real terms and privacy URLs, account deletion and privacy-data export, Google Play.
 
 A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
 existing install keeps its local data; completing Business setup binds that data to the new

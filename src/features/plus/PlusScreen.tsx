@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SubscriptionStatusSection } from '@/features/access/status/SubscriptionStatusSection';
 import { formatBusinessActivityType } from '@/features/business/presentation';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
@@ -41,6 +42,22 @@ const PaywallPreviewSheet = __DEV__
   ? // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('@/features/access/paywall/development/PaywallPreviewSheet') as typeof import('@/features/access/paywall/development/PaywallPreviewSheet'))
       .PaywallPreviewSheet
+  : undefined;
+
+// Accueil brand row preview (the « Plus » mark beside the logo, both states):
+// the same release boundary — a `require` inside a `__DEV__` branch only.
+const HomeBrandPreviewSheet = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/features/home/development/HomeBrandPreviewSheet') as typeof import('@/features/home/development/HomeBrandPreviewSheet'))
+      .HomeBrandPreviewSheet
+  : undefined;
+
+// BeautIzzy Plus subscription status preview (every status over fixtures):
+// the same release boundary — a `require` inside a `__DEV__` branch only.
+const SubscriptionStatusPreviewSheet = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('@/features/access/status/development/SubscriptionStatusPreviewSheet') as typeof import('@/features/access/status/development/SubscriptionStatusPreviewSheet'))
+      .SubscriptionStatusPreviewSheet
   : undefined;
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
@@ -217,6 +234,8 @@ export function PlusScreen() {
               />
             </Pressable>
           </View>
+          {/* The verified BeautIzzy Plus status of the signed-in account: read-only, no action yet. */}
+          <SubscriptionStatusSection />
           {__DEV__ && <DevelopmentSection />}
           <BrandSection version={Constants.expoConfig?.version} />
         </View>
@@ -260,6 +279,8 @@ function DevelopmentSection() {
   const { resetForDevelopment } = usePersistence();
   const [syncControlVisible, setSyncControlVisible] = useState(false);
   const [paywallPreviewVisible, setPaywallPreviewVisible] = useState(false);
+  const [statusPreviewVisible, setStatusPreviewVisible] = useState(false);
+  const [brandPreviewVisible, setBrandPreviewVisible] = useState(false);
 
   const requestReset = () => {
     Alert.alert(
@@ -329,7 +350,7 @@ function DevelopmentSection() {
                 Aperçu BeautIzzy Plus (test)
               </AppText>
               <AppText variant="metadata" style={styles.meta}>
-                États du paywall avec des offres fictives, sans achat
+                États du paywall, offres fictives ou offre RevenueCat réelle, sans achat
               </AppText>
             </View>
           </Pressable>
@@ -337,6 +358,51 @@ function DevelopmentSection() {
             onClose={() => setPaywallPreviewVisible(false)}
             visible={paywallPreviewVisible}
           />
+        </>
+      )}
+      {SubscriptionStatusPreviewSheet && (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Statut BeautIzzy Plus, développement"
+            onPress={() => setStatusPreviewVisible(true)}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            testID="development-subscription-status-preview-open"
+          >
+            <View style={styles.copy}>
+              <AppText variant="rowTitle" style={styles.developmentTitle}>
+                Statut BeautIzzy Plus (test)
+              </AppText>
+              <AppText variant="metadata" style={styles.meta}>
+                États de « Mon abonnement » avec des statuts fictifs
+              </AppText>
+            </View>
+          </Pressable>
+          <SubscriptionStatusPreviewSheet
+            onClose={() => setStatusPreviewVisible(false)}
+            visible={statusPreviewVisible}
+          />
+        </>
+      )}
+      {HomeBrandPreviewSheet && (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Aperçu badge Plus, développement"
+            onPress={() => setBrandPreviewVisible(true)}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            testID="development-home-brand-preview-open"
+          >
+            <View style={styles.copy}>
+              <AppText variant="rowTitle" style={styles.developmentTitle}>
+                Aperçu badge Plus (test)
+              </AppText>
+              <AppText variant="metadata" style={styles.meta}>
+                Logo d’Accueil avec et sans le badge « Plus »
+              </AppText>
+            </View>
+          </Pressable>
+          <HomeBrandPreviewSheet onClose={() => setBrandPreviewVisible(false)} visible={brandPreviewVisible} />
         </>
       )}
     </View>

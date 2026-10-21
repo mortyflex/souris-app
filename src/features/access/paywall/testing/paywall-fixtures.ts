@@ -6,21 +6,22 @@
 // would hand the paywall. The application's own default is
 // `unconfiguredPaywallOffering`: no price is ever substituted at runtime.
 
-import type { PaywallOffering, PaywallPlanOffer } from '../paywall-offering';
+import type { PaywallOffering, PaywallPlanOffer, PaywallTrialPeriod } from '../paywall-offering';
 import type { PaywallContext } from '../paywall-presentation';
 
-export const FIXTURE_TRIAL_DAYS = 14;
+/** The intended 14-day trial, as the App Store reports it: two weeks. */
+export const FIXTURE_TRIAL_PERIOD: PaywallTrialPeriod = { unit: 'week', count: 2 };
 
 export const fixtureMonthlyOffer: PaywallPlanOffer = {
   plan: 'monthly',
   price: { amount: 12.99, currencyCode: 'EUR' },
-  freeTrial: { days: FIXTURE_TRIAL_DAYS, eligibility: 'eligible' },
+  freeTrial: { period: FIXTURE_TRIAL_PERIOD, eligibility: 'eligible' },
 };
 
 export const fixtureAnnualOffer: PaywallPlanOffer = {
   plan: 'annual',
   price: { amount: 129, currencyCode: 'EUR' },
-  freeTrial: { days: FIXTURE_TRIAL_DAYS, eligibility: 'eligible' },
+  freeTrial: { period: FIXTURE_TRIAL_PERIOD, eligibility: 'eligible' },
 };
 
 function withoutTrial(offer: PaywallPlanOffer): PaywallPlanOffer {
@@ -28,7 +29,7 @@ function withoutTrial(offer: PaywallPlanOffer): PaywallPlanOffer {
 }
 
 function ineligibleTrial(offer: PaywallPlanOffer): PaywallPlanOffer {
-  return { ...offer, freeTrial: { days: FIXTURE_TRIAL_DAYS, eligibility: 'ineligible' } };
+  return { ...offer, freeTrial: { period: FIXTURE_TRIAL_PERIOD, eligibility: 'ineligible' } };
 }
 
 export const paywallOfferingFixtures = {

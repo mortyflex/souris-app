@@ -10,8 +10,15 @@
 // `verify` must resolve; a rejection is read as `unavailable` by the provider.
 // An adapter must never report an entitlement already expired as active (see
 // the resolver's header): the store's extended expiration is the one to pass.
+//
+// `loadOffering` (Phase 6.2) is the same boundary for what the store SELLS
+// that user: the plans, their store prices and the user's trial eligibility,
+// as `StorePaywallOffering`. Optional: a source without a store has none, and
+// the provider answers `not-configured`. It never purchases.
 
 import type { SubscriptionVerification } from '@/domain/access';
+
+import type { StorePaywallOffering } from './paywall/paywall-offering';
 
 export interface SubscriptionSource {
   /** Verifies the subscription of the signed-in user. */
@@ -25,6 +32,11 @@ export interface SubscriptionSource {
     userId: string,
     listener: (verification: SubscriptionVerification) => void,
   ) => () => void;
+  /**
+   * The offering the store makes to that user, read for that identity only.
+   * Must resolve; a rejection is read as `store-unavailable` by the provider.
+   */
+  readonly loadOffering?: (userId: string) => Promise<StorePaywallOffering>;
 }
 
 /**

@@ -12,6 +12,42 @@
 
 const notConfigured = () => Promise.reject(new Error('react-native-purchases mock: not configured'));
 
+// The SDK's enumerations the mapping compares (values copied from the installed
+// @revenuecat/purchases-typescript-internal declarations).
+export const PACKAGE_TYPE = {
+  UNKNOWN: 'UNKNOWN',
+  CUSTOM: 'CUSTOM',
+  LIFETIME: 'LIFETIME',
+  ANNUAL: 'ANNUAL',
+  SIX_MONTH: 'SIX_MONTH',
+  THREE_MONTH: 'THREE_MONTH',
+  TWO_MONTH: 'TWO_MONTH',
+  MONTHLY: 'MONTHLY',
+  WEEKLY: 'WEEKLY',
+} as const;
+
+export const PRODUCT_CATEGORY = {
+  NON_SUBSCRIPTION: 'NON_SUBSCRIPTION',
+  SUBSCRIPTION: 'SUBSCRIPTION',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+export const PRODUCT_TYPE = {
+  CONSUMABLE: 'CONSUMABLE',
+  NON_CONSUMABLE: 'NON_CONSUMABLE',
+  NON_RENEWABLE_SUBSCRIPTION: 'NON_RENEWABLE_SUBSCRIPTION',
+  AUTO_RENEWABLE_SUBSCRIPTION: 'AUTO_RENEWABLE_SUBSCRIPTION',
+  PREPAID_SUBSCRIPTION: 'PREPAID_SUBSCRIPTION',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+export const INTRO_ELIGIBILITY_STATUS = {
+  INTRO_ELIGIBILITY_STATUS_UNKNOWN: 0,
+  INTRO_ELIGIBILITY_STATUS_INELIGIBLE: 1,
+  INTRO_ELIGIBILITY_STATUS_ELIGIBLE: 2,
+  INTRO_ELIGIBILITY_STATUS_NO_INTRO_OFFER_EXISTS: 3,
+} as const;
+
 const Purchases = {
   configure: jest.fn(),
   isConfigured: jest.fn(() => Promise.resolve(false)),
@@ -21,6 +57,8 @@ const Purchases = {
   invalidateCustomerInfoCache: jest.fn(notConfigured),
   addCustomerInfoUpdateListener: jest.fn(),
   removeCustomerInfoUpdateListener: jest.fn(() => false),
+  getOfferings: jest.fn(notConfigured),
+  checkTrialOrIntroductoryPriceEligibility: jest.fn(notConfigured),
 };
 
 export default Purchases;

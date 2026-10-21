@@ -9,12 +9,22 @@
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { useState } from 'react';
-import { Alert, Pressable } from 'react-native';
+import { Alert, Pressable, StyleSheet } from 'react-native';
 
+import { AuthProvider } from '@/features/auth/session/AuthProvider';
+import { createFakeAuthGateway, fakeUser } from '@/features/auth/testing/fake-auth-gateway';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
-import { PaywallPreviewSheet } from '../PaywallPreviewSheet';
+import { BusinessAccessProvider } from '../../../session/BusinessAccessProvider';
+import { createFakeSubscriptionSource, type FakeSubscriptionSource } from '../../../testing/fake-subscription-source';
+import type { StorePaywallOffering } from '../../paywall-offering';
 import { paywallPreviewScenarios } from '../../testing/paywall-fixtures';
+import {
+  LIVE_OFFERING_PREVIEW_KEY,
+  LIVE_OFFERING_PREVIEW_TITLE,
+  PURCHASES_NOT_ENABLED_MESSAGE,
+  PaywallPreviewSheet,
+} from '../PaywallPreviewSheet';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
@@ -200,6 +210,38 @@ describe('PaywallPreviewSheet — presentation', () => {
     expect(view.queryByTestId('paywall-preview-screen')).toBeNull();
   });
 
+  it('lists the scenarios in a scrolling body so every entry is reachable, and scrolling never dismisses the list', async () => {
+    const view = await renderPreview();
+    await openList(view);
+
+    // The only scroll container on screen is the sheet's body: the list lives in it.
+    const scrollViews = view.container.queryAll((node) => node.type === 'RCTScrollView');
+    expect(scrollViews).toHaveLength(1);
+    const [list] = scrollViews;
+    expect(list!.props.horizontal).toBeFalsy();
+    expect(list!.props.scrollEnabled).not.toBe(false);
+    expect(list!.props.keyboardShouldPersistTaps).toBe('handled');
+    // The scroll container keeps the sheet's content-fit layout: it shrinks to the detent, never collapses.
+    expect(StyleSheet.flatten(list!.props.style)).toMatchObject({ flexShrink: 1 });
+    // Every scenario — the live entry and the last fixture included — is inside the scrolling body.
+    expect(within(list!).getByTestId(`paywall-preview-${LIVE_OFFERING_PREVIEW_KEY}`)).toBeTruthy();
+    for (const scenario of paywallPreviewScenarios) {
+      expect(within(list!).getByTestId(`paywall-preview-${scenario.key}`)).toBeTruthy();
+    }
+
+    await act(async () => {
+      fireEvent.scroll(list!, { nativeEvent: { contentOffset: { y: 900 } } });
+    });
+    expect(view.getByTestId('paywall-preview-sheet')).toBeTruthy();
+    expect(presentedModals(view)).toHaveLength(1);
+
+    // The last entry is selectable after the scroll, with the usual one-modal sequencing.
+    const last = paywallPreviewScenarios[paywallPreviewScenarios.length - 1]!;
+    await openScenario(view, last.key);
+    scenarioEvidence[last.key]!(view);
+    await closePaywall(view);
+  });
+
   it('every scenario is covered by an identifying expectation', () => {
     expect(Object.keys(scenarioEvidence).sort()).toEqual(paywallPreviewScenarios.map((s) => s.key).sort());
   });
@@ -334,5 +376,165 @@ describe('PaywallPreviewSheet — production', () => {
     } finally {
       flags.__DEV__ = true;
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// « Offre RevenueCat actuelle » — the live entry draws the REAL offering of
+// the signed-in account through the provider: store prices and trial state
+// from the source, loading and unavailable states, the same one-modal
+// lifecycle, and a primary action that explains purchases are not enabled.
+// ---------------------------------------------------------------------------
+
+const LIVE_OFFERING: StorePaywallOffering = {
+  status: 'available',
+  plans: [
+    { plan: 'annual', price: { amount: 49.99, currencyCode: 'USD', formatted: '$49.99' } },
+    {
+      plan: 'monthly',
+      price: { amount: 4.99, currencyCode: 'USD', formatted: '$4.99' },
+      freeTrial: { period: { unit: 'week', count: 1 }, eligibility: 'eligible' },
+    },
+  ],
+};
+
+function LiveHost({ source }: { readonly source: FakeSubscriptionSource }) {
+  const [auth] = useState(() => createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) }));
+  return (
+    <AuthProvider gateway={auth}>
+      <BusinessAccessProvider enforcement="disabled" source={source}>
+        <Host />
+      </BusinessAccessProvider>
+    </AuthProvider>
+  );
+}
+
+async function renderLivePreview(source: FakeSubscriptionSource) {
+  const view = await render(<LiveHost source={source} />);
+  await act(async () => {});
+  return view;
+}
+
+describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering)', () => {
+  it('lists the live entry first, clearly labelled as the real offering of the signed-in account, without touching the fixtures', async () => {
+    const source = createFakeSubscriptionSource({ offerings: true });
+    const view = await renderLivePreview(source);
+    await openList(view);
+    expect(view.getByTestId(`paywall-preview-${LIVE_OFFERING_PREVIEW_KEY}`)).toBeTruthy();
+    expect(view.getByText(LIVE_OFFERING_PREVIEW_TITLE)).toBeTruthy();
+    expect(view.getByText(/Offre réelle du compte connecté/)).toBeTruthy();
+    // Nothing is asked of the store while the list is up.
+    expect(source.calls.loadOffering).toEqual([]);
+    for (const scenario of paywallPreviewScenarios) {
+      expect(view.getByTestId(`paywall-preview-${scenario.key}`)).toBeTruthy();
+    }
+  });
+
+  it('presents the paywall over the store offering: real prices, annual preselected, the eligible trial of the monthly plan only', async () => {
+    const source = createFakeSubscriptionSource({ offerings: true });
+    source.respondWithOffering(LIVE_OFFERING);
+    const view = await renderLivePreview(source);
+    await openList(view);
+
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    expect(source.calls.loadOffering).toEqual(['user-lea']);
+    expect(plain(String(view.getByTestId('paywall-plan-annual-price').props.children))).toBe('$49.99');
+    expect(plain(String(view.getByTestId('paywall-plan-monthly-price').props.children))).toBe('$4.99');
+    expect(view.getByTestId('paywall-plan-annual').props.accessibilityState.selected).toBe(true);
+    expect(view.getByTestId('paywall-plan-annual-recommended')).toBeTruthy();
+    expect(view.queryByText('7 jours gratuits')).toBeTruthy();
+    // The annual plan carries no trial: the preselected action sells it at its price.
+    expect(within(view.getByTestId('paywall-subscribe')).queryByText(/gratuit/)).toBeNull();
+    // No fixture price reached the screen.
+    expect(view.queryByText(/12,99|129 €/)).toBeNull();
+
+    await closePaywall(view);
+  });
+
+  it('shows the loading state while the store answers, then the offering', async () => {
+    let release: ((offering: StorePaywallOffering) => void) | undefined;
+    const source = createFakeSubscriptionSource({
+      loadOffering: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    });
+    const view = await renderLivePreview(source);
+    await openList(view);
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    expect(view.getByTestId('paywall-plans-loading')).toBeTruthy();
+    expect(view.getByTestId('paywall-subscribe').props.accessibilityState?.disabled).toBe(true);
+
+    await act(async () => release!(LIVE_OFFERING));
+    expect(view.queryByTestId('paywall-plans-loading')).toBeNull();
+    expect(view.getByTestId('paywall-plan-annual')).toBeTruthy();
+    await closePaywall(view);
+  });
+
+  it('shows a meaningful unavailable state with a retry that asks the store again', async () => {
+    const source = createFakeSubscriptionSource({ offerings: true });
+    const view = await renderLivePreview(source);
+    await openList(view);
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    expect(view.getByTestId('paywall-plans-unavailable')).toBeTruthy();
+    expect(view.getByText('Offres indisponibles pour le moment')).toBeTruthy();
+    expect(view.queryByTestId('paywall-subscribe')).toBeNull();
+
+    source.respondWithOffering(LIVE_OFFERING);
+    await press(view.getByTestId('paywall-retry-offering'));
+    expect(source.calls.loadOffering).toEqual(['user-lea', 'user-lea']);
+    expect(view.getByTestId('paywall-plan-annual')).toBeTruthy();
+    await closePaywall(view);
+  });
+
+  it('the primary action buys nothing: it says purchases are not enabled yet, and the paywall stays', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const source = createFakeSubscriptionSource({ offerings: true });
+    source.respondWithOffering(LIVE_OFFERING);
+    const view = await renderLivePreview(source);
+    await openList(view);
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+
+    await press(view.getByTestId('paywall-subscribe'));
+    expect(alert).toHaveBeenCalledWith('Aperçu de développement', PURCHASES_NOT_ENABLED_MESSAGE);
+    expect(view.getByTestId('paywall-preview-screen')).toBeTruthy();
+    expect(source.calls.loadOffering).toEqual(['user-lea']);
+    await closePaywall(view);
+  });
+
+  it('keeps one modal host at a time across the live entry and the fixtures, and reloads on each opening', async () => {
+    const source = createFakeSubscriptionSource({ offerings: true });
+    source.respondWithOffering(LIVE_OFFERING);
+    const view = await renderLivePreview(source);
+    await openList(view);
+
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    await closePaywall(view);
+    await openScenario(view, 'initial-trial');
+    scenarioEvidence['initial-trial']!(view);
+    await closePaywall(view);
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    expect(plain(String(view.getByTestId('paywall-plan-annual-price').props.children))).toBe('$49.99');
+    await closePaywall(view);
+    expect(source.calls.loadOffering).toEqual(['user-lea', 'user-lea']);
+  });
+
+  it('a late store answer after the paywall closed lands nowhere', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    let release: ((offering: StorePaywallOffering) => void) | undefined;
+    const source = createFakeSubscriptionSource({
+      loadOffering: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    });
+    const view = await renderLivePreview(source);
+    await openList(view);
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    await closePaywall(view);
+    await act(async () => release!(LIVE_OFFERING));
+    expect(view.queryByTestId('paywall-preview-screen')).toBeNull();
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 });

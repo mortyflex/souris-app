@@ -324,3 +324,36 @@ describe('BusinessAccessProvider', () => {
     jest.restoreAllMocks();
   });
 });
+
+describe('BusinessAccessProvider — loadOffering (Phase 6.2)', () => {
+  it('asks the source for the signed-in user only, through the same source as the verification', async () => {
+    const source = createFakeSubscriptionSource({ offerings: true });
+    source.respondWithOffering({ status: 'available', plans: [] });
+    await renderAccess({ source, enforcement: 'disabled' });
+    await expect(latest!.loadOffering()).resolves.toEqual({ status: 'available', plans: [] });
+    expect(source.calls.loadOffering).toEqual(['user-lea']);
+    expect(source.calls.verify).toEqual(['user-lea']);
+  });
+
+  it('answers not-configured without a store, store-unavailable on a rejection, and no-account signed out', async () => {
+    await renderAccess({ source: unconfiguredSubscriptionSource, enforcement: 'disabled' });
+    await expect(latest!.loadOffering()).resolves.toEqual({ status: 'unavailable', reason: 'not-configured' });
+
+    const rejecting = createFakeSubscriptionSource({ loadOffering: () => Promise.reject(new Error('offline')) });
+    await renderAccess({ source: rejecting, enforcement: 'disabled' });
+    await expect(latest!.loadOffering()).resolves.toEqual({ status: 'unavailable', reason: 'store-unavailable' });
+
+    const source = createFakeSubscriptionSource({ offerings: true });
+    await renderAccess({ auth: createFakeAuthGateway(), source, enforcement: 'disabled' });
+    await expect(latest!.loadOffering()).resolves.toEqual({ status: 'unavailable', reason: 'no-account' });
+    expect(source.calls.loadOffering).toEqual([]);
+  });
+
+  it('loads nothing of its own: no offering request happens without a caller, whatever the verification', async () => {
+    const source = createFakeSubscriptionSource({ offerings: true });
+    source.respondWith(ACTIVE);
+    await renderAccess({ source });
+    expect(source.calls.verify).toEqual(['user-lea']);
+    expect(source.calls.loadOffering).toEqual([]);
+  });
+});

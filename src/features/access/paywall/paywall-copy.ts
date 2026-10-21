@@ -70,6 +70,10 @@ export const PAYWALL_OFFERS_UNAVAILABLE = {
     title: 'Offres indisponibles pour le moment',
     detail: 'Aucune formule valide n’a été trouvée. Réessayez plus tard.',
   },
+  'no-account': {
+    title: 'Offres indisponibles pour le moment',
+    detail: 'Connectez-vous pour consulter les formules BeautIzzy Plus.',
+  },
 } as const;
 
 export const PAYWALL_RETRY_OFFERS_TITLE = 'Réessayer';

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
 
@@ -8,6 +11,7 @@ import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
+import type { SubscriptionVerification } from '@/domain/access';
 import { bootstrapPersistence } from '@/persistence/bootstrap';
 import type { SourisDatabase } from '@/persistence/database';
 import { getClientDisplayName } from '@/domain/clients';
@@ -141,7 +145,79 @@ describe('HomeScreen', () => {
     expect(logo).toHaveStyle({ width: HOME_LOGO_SIZE });
     expect(HOME_LOGO_SIZE).toBeGreaterThan(125);
     expect(header.queryAllByText(/./)).toHaveLength(0);
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
     expect(view.queryByText('Lundi 1 juin')).toBeNull();
+  });
+
+  describe('the « Plus » mark beside the logo', () => {
+    const FUTURE = new Date('2099-01-15T10:00:00.000Z');
+    const verified = (status: Extract<SubscriptionVerification, { kind: 'verified' }>['status']): SubscriptionVerification => ({
+      kind: 'verified',
+      status,
+    });
+
+    async function renderWith(verification: SubscriptionVerification) {
+      const source = createFakeSubscriptionSource();
+      source.respondWith(verification);
+      const view = await renderHome(seededDatabase(), { enforcement: SUBSCRIPTION_ENFORCEMENT, source });
+      await waitFor(() => expect(source.calls.verify).toHaveLength(1));
+      await act(async () => {});
+      return view;
+    }
+
+    it.each([
+      ['active monthly', verified({ kind: 'active', plan: 'monthly', expiresAt: FUTURE })],
+      ['active annual', verified({ kind: 'active', plan: 'annual', expiresAt: FUTURE })],
+      ['trial', verified({ kind: 'trial', plan: 'monthly', expiresAt: FUTURE })],
+      ['complimentary', verified({ kind: 'complimentary' })],
+      ['cancelled but still active', verified({ kind: 'cancelled-active', plan: 'annual', expiresAt: FUTURE })],
+    ])('shows a small secondary « Plus » pill beside the logo for a verified %s entitlement', async (_label, verification) => {
+      const view = await renderWith(verification);
+      const header = within(view.getByTestId('home-header'));
+      const mark = header.getByTestId('home-plus-mark');
+      expect(within(mark).getByText('Plus')).toBeTruthy();
+      expect(mark.props.accessibilityLabel).toBe('BeautIzzy Plus');
+      // Smaller and lighter than the paywall capsule (30 pt): a mark beside the logo, in the chip role.
+      expect(StyleSheet.flatten(mark.props.style)).toMatchObject({ minHeight: 20, backgroundColor: semanticColors.surfaceLavenderStrong });
+      expect(StyleSheet.flatten(within(mark).getByText('Plus').props.style).fontSize).toBe(12);
+      // The logo stays the identity, exactly as before, on one row with the mark.
+      expect(header.getByLabelText('BeautIzzy')).toHaveStyle({ width: HOME_LOGO_SIZE });
+      expect(StyleSheet.flatten(view.getByTestId('home-header').props.style)).toMatchObject({ flexDirection: 'row' });
+      expect(view.getByTestId('home-hero')).toBeTruthy();
+      expect(view.getByTestId('home-quick-actions')).toBeTruthy();
+    });
+
+    it.each([
+      ['never subscribed', verified({ kind: 'never' })],
+      ['expired', verified({ kind: 'expired' })],
+      ['unavailable', { kind: 'unavailable' } as SubscriptionVerification],
+      ['lapsed (ended before now)', verified({ kind: 'active', plan: 'monthly', expiresAt: new Date(NOW.getTime() - 1) })],
+    ])('shows no mark for a %s verification, whatever the (full, enforcement-disabled) access says', async (_label, verification) => {
+      const view = await renderWith(verification);
+      expect(view.queryByTestId('home-plus-mark')).toBeNull();
+      expect(within(view.getByTestId('home-header')).queryAllByText(/./)).toHaveLength(0);
+    });
+
+    it('reads the session boundary only: no store SDK, no RevenueCat module, no access-mode shortcut in the header', () => {
+      const source = readFileSync(join(__dirname, '..', 'components', 'HomeHeader.tsx'), 'utf8');
+      expect(source).toContain("from '@/features/access/session/BusinessAccessProvider'");
+      expect(source).toMatch(/showPlus=\{hasVerifiedPlusEntitlement\(verification, clock\(\)\)\}/);
+      expect(source).not.toMatch(/react-native-purchases|revenuecat|Purchases\.|canMutate|access\.mode|development|__DEV__/);
+      const row = readFileSync(join(__dirname, '..', 'components', 'HomeBrandRow.tsx'), 'utf8');
+      expect(row).not.toMatch(/useBusinessAccess|hasVerifiedPlusEntitlement|revenuecat|__DEV__/);
+    });
+
+    it('shows no mark while the verification is pending, nor without an account', async () => {
+      const pending = createFakeSubscriptionSource({ verify: () => new Promise(() => undefined) });
+      const view = await renderHome(seededDatabase(), { enforcement: SUBSCRIPTION_ENFORCEMENT, source: pending });
+      await act(async () => {});
+      expect(view.queryByTestId('home-plus-mark')).toBeNull();
+
+      // Nobody signed in to the access session: the default fixture.
+      const signedOut = await renderHome(seededDatabase());
+      await act(async () => {});
+      expect(signedOut.queryByTestId('home-plus-mark')).toBeNull();
+    });
   });
 
   it('greets in a plain white card: a compact greeting and one quiet line', async () => {

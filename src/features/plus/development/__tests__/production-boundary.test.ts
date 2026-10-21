@@ -45,15 +45,27 @@ describe('development sync control — production boundary', () => {
     const plus = files.find((file) => file.path === 'features/plus/PlusScreen.tsx')!.source;
     // No static (bundled) import of the control…
     expect(plus).not.toMatch(/^import[^;]*['"]\.\/development\//m);
-    // …exactly two runtime loads (this control and the BeautIzzy Plus paywall
+    // …exactly four runtime loads (this control, the BeautIzzy Plus paywall
+    // preview, the subscription status preview and the Accueil brand row
     // preview), each guarded by __DEV__ with `undefined` otherwise.
-    expect(plus.match(/require\(/g)).toHaveLength(2);
+    expect(plus.match(/require\(/g)).toHaveLength(4);
     expect(plus).toMatch(
       /const DevelopmentSyncSheet = __DEV__\s*\?[^;]*require\('\.\/development\/DevelopmentSyncSheet'\)[^;]*:\s*undefined;/,
     );
     expect(plus).toMatch(
       /const PaywallPreviewSheet = __DEV__\s*\?[^;]*require\('@\/features\/access\/paywall\/development\/PaywallPreviewSheet'\)[^;]*:\s*undefined;/,
     );
+    expect(plus).toMatch(
+      /const SubscriptionStatusPreviewSheet = __DEV__\s*\?[^;]*require\('@\/features\/access\/status\/development\/SubscriptionStatusPreviewSheet'\)[^;]*:\s*undefined;/,
+    );
+    expect(plus).toMatch(
+      /const HomeBrandPreviewSheet = __DEV__\s*\?[^;]*require\('@\/features\/home\/development\/HomeBrandPreviewSheet'\)[^;]*:\s*undefined;/,
+    );
+    // The Accueil preview is loaded by PlusScreen only; Accueil itself never knows it.
+    const brandPreviewReferences = files
+      .filter((file) => /home\/development\/HomeBrandPreviewSheet/.test(file.source))
+      .map((file) => file.path);
+    expect(brandPreviewReferences).toEqual(['features/plus/PlusScreen.tsx']);
     // The section that renders it exists only under __DEV__ as well.
     expect(plus).toContain('{__DEV__ && <DevelopmentSection />}');
   });

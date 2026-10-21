@@ -6,7 +6,7 @@
 // invent no rule of their own.
 //
 //   plans        the valid offers only (a finite positive amount, a currency
-//                code, a whole positive trial length), one per plan, annual
+//                code, a whole positive trial period), one per plan, annual
 //                first; an invalid offer is dropped, never shown with a
 //                phantom price;
 //   default      annual when offered, otherwise the only plan;
@@ -16,7 +16,10 @@
 //                the annual price is really under twelve monthly ones;
 //   equivalent   « soit 10,75 € par mois » for the annual plan: the annual
 //                price over twelve, nothing more;
-//   trial        shown only for an offer the store marked ELIGIBLE;
+//   trial        shown only for an offer the store marked ELIGIBLE, for the
+//                store's own period: weeks are said in days (« n jours
+//                gratuits »), months and years in their unit (« 1 mois
+//                gratuit »);
 //   action       subscribe when a valid plan is selected AND a purchase entry
 //                point exists; otherwise disabled and said so. An unavailable
 //                offering has no action at all: nothing can be initiated.
@@ -50,7 +53,13 @@ import {
   PAYWALL_VERIFYING_NOTICE_DETAIL,
   PAYWALL_VERIFYING_NOTICE_TITLE,
 } from './paywall-copy';
-import type { PaywallOffering, PaywallPlanOffer, PaywallPrice } from './paywall-offering';
+import type {
+  PaywallOffering,
+  PaywallOfferingUnavailableReason,
+  PaywallPlanOffer,
+  PaywallPrice,
+  PaywallTrialPeriod,
+} from './paywall-offering';
 
 export const PAYWALL_DEFAULT_LOCALE = 'fr-FR';
 
@@ -59,15 +68,45 @@ const PLAN_ORDER: readonly SubscriptionPlan[] = ['annual', 'monthly'];
 
 const CURRENCY_CODE = /^[A-Z]{3}$/;
 
+const TRIAL_UNITS: readonly PaywallTrialPeriod['unit'][] = ['day', 'week', 'month', 'year'];
+
+export function isValidTrialPeriod(period: PaywallTrialPeriod): boolean {
+  return TRIAL_UNITS.includes(period.unit) && Number.isInteger(period.count) && period.count > 0;
+}
+
 export function isValidPlanOffer(offer: PaywallPlanOffer): boolean {
   const { amount, currencyCode } = offer.price;
   if (!Number.isFinite(amount) || amount <= 0) return false;
   if (!CURRENCY_CODE.test(currencyCode)) return false;
-  if (offer.freeTrial !== undefined) {
-    const { days } = offer.freeTrial;
-    if (!Number.isInteger(days) || days <= 0) return false;
-  }
+  if (offer.freeTrial !== undefined && !isValidTrialPeriod(offer.freeTrial.period)) return false;
   return true;
+}
+
+/**
+ * The store's free period, in words: weeks are said in days — the store
+ * counts a two-week trial in weeks, the professional reads it in days —,
+ * months and years in their own unit. « n jours », « 1 mois », « 2 ans ».
+ */
+export function formatTrialPeriod(period: PaywallTrialPeriod): string {
+  const plural = (count: number, singular: string, pluralForm: string) => (count > 1 ? pluralForm : singular);
+  switch (period.unit) {
+    case 'day':
+      return `${period.count} ${plural(period.count, 'jour', 'jours')}`;
+    case 'week': {
+      const days = period.count * 7;
+      return `${days} ${plural(days, 'jour', 'jours')}`;
+    }
+    case 'month':
+      return `${period.count} mois`;
+    case 'year':
+      return `${period.count} ${plural(period.count, 'an', 'ans')}`;
+  }
+}
+
+/** « n jours gratuits », « 1 mois gratuit », « 2 ans gratuits ». */
+export function formatFreeTrial(period: PaywallTrialPeriod): string {
+  const plural = period.unit === 'month' ? period.count > 1 : (period.unit === 'week' ? period.count * 7 : period.count) > 1;
+  return `${formatTrialPeriod(period)} ${plural ? 'gratuits' : 'gratuit'}`;
 }
 
 /** The store's string when it has one; otherwise the locale's currency format, cents only when there are some. */
@@ -112,12 +151,18 @@ export interface PaywallPlanCardModel {
   readonly savings?: string;
   /** « n jours gratuits », only for an offer the store marked eligible. */
   readonly trial?: string;
-  readonly trialDays?: number;
+  /** The store's free period behind `trial`; set together with it. */
+  readonly trialPeriod?: PaywallTrialPeriod;
   readonly recommended: boolean;
   readonly accessibilityLabel: string;
 }
 
-export type PaywallPlansUnavailableReason = 'not-configured' | 'store-unavailable' | 'no-valid-plan';
+export type PaywallPlansUnavailableReason = PaywallOfferingUnavailableReason | 'no-valid-plan';
+
+/** Whether asking the store again can change the outcome: not without an adapter, not without an account. */
+export function isRetryablePaywallReason(reason: PaywallPlansUnavailableReason): boolean {
+  return reason === 'store-unavailable' || reason === 'no-valid-plan';
+}
 
 export type PaywallPlansModel =
   | { readonly status: 'loading' }
@@ -137,10 +182,6 @@ function validOffersByPlan(offers: readonly PaywallPlanOffer[]): Map<Subscriptio
   return byPlan;
 }
 
-function formatTrial(days: number): string {
-  return `${days} jour${days > 1 ? 's' : ''} gratuit${days > 1 ? 's' : ''}`;
-}
-
 function buildCard(
   offer: PaywallPlanOffer,
   options: { readonly recommended: boolean; readonly savingsPercent: number | undefined },
@@ -155,7 +196,7 @@ function buildCard(
   const savings =
     offer.plan === 'annual' && options.savingsPercent !== undefined ? `Économisez ${options.savingsPercent} %` : undefined;
   const eligibleTrial = offer.freeTrial?.eligibility === 'eligible' ? offer.freeTrial : undefined;
-  const trial = eligibleTrial ? formatTrial(eligibleTrial.days) : undefined;
+  const trial = eligibleTrial ? formatFreeTrial(eligibleTrial.period) : undefined;
   const spoken = [
     PAYWALL_PLAN_SPOKEN[offer.plan],
     `${price} ${period}`,
@@ -173,7 +214,7 @@ function buildCard(
     equivalent,
     savings,
     trial,
-    trialDays: eligibleTrial?.days,
+    trialPeriod: eligibleTrial?.period,
     recommended: options.recommended,
     accessibilityLabel: spoken.join(', '),
   };
@@ -230,11 +271,11 @@ export function resolvePaywallAction(
   if (!purchasable) {
     return { kind: 'not-configured', title: PAYWALL_SUBSCRIBE_TITLE, footnote: PAYWALL_NOT_CONFIGURED_FOOTNOTE };
   }
-  if (card.trialDays !== undefined) {
+  if (card.trialPeriod !== undefined) {
     return {
       kind: 'subscribe',
       plan: card.plan,
-      title: `Essayer gratuitement ${card.trialDays} jour${card.trialDays > 1 ? 's' : ''}`,
+      title: `Essayer gratuitement ${formatTrialPeriod(card.trialPeriod)}`,
       footnote: `Puis ${card.price} ${card.period}.`,
     };
   }
@@ -334,15 +375,17 @@ export function describePaywallContext(context: PaywallContext): PaywallContextM
 export const PAYWALL_SMALL_WINDOW_HEIGHT = 700;
 
 /**
- * Side of the square illustration: about 15 % of the window height — an
- * accent above the headline, never the hero — bounded on each class of
- * phone (112–150 pt on a regular one, so a Pro Max never inflates it;
- * 92–112 pt on a small one), so the plan cards reach the first viewport.
+ * Side of the square illustration: about 12.7 % of the window height — a
+ * present accent between the brand and the headline, never the hero —
+ * bounded on each class of phone (100–116 pt on a regular one: 108 pt on an
+ * iPhone 17, capped so a Pro Max never inflates it; 80–96 pt on a small one),
+ * so the names and prices of BOTH plans reach the first viewport of a regular
+ * phone above the fixed footer.
  */
 export function resolvePaywallIllustrationSide(windowHeight: number): number {
-  const share = windowHeight * 0.15;
+  const share = windowHeight * 0.127;
   if (windowHeight <= PAYWALL_SMALL_WINDOW_HEIGHT) {
-    return Math.round(Math.min(112, Math.max(92, share)));
+    return Math.round(Math.min(96, Math.max(80, share)));
   }
-  return Math.round(Math.min(150, Math.max(112, share)));
+  return Math.round(Math.min(116, Math.max(100, share)));
 }

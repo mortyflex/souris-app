@@ -13,11 +13,20 @@ import {
   PAYWALL_EXPLORE_TITLE,
   PLUS_BRAND_NAME,
 } from '../paywall-copy';
-import { unconfiguredPaywallOffering, type PaywallOffering, type PaywallPlanOffer } from '../paywall-offering';
+import {
+  noAccountPaywallOffering,
+  unconfiguredPaywallOffering,
+  type PaywallOffering,
+  type PaywallPlanOffer,
+  type PaywallTrialPeriod,
+} from '../paywall-offering';
 import {
   buildPaywallPlans,
   describePaywallContext,
+  formatFreeTrial,
   formatPaywallPrice,
+  formatTrialPeriod,
+  isRetryablePaywallReason,
   isValidPlanOffer,
   resolveAnnualSavingsPercent,
   resolvePaywallAction,
@@ -76,8 +85,9 @@ describe('plan validity', () => {
     ['an infinite amount', { ...fixtureMonthlyOffer, price: { amount: Number.POSITIVE_INFINITY, currencyCode: 'EUR' } }],
     ['an empty currency', { ...fixtureMonthlyOffer, price: { amount: 12.99, currencyCode: '' } }],
     ['a malformed currency', { ...fixtureMonthlyOffer, price: { amount: 12.99, currencyCode: 'euro' } }],
-    ['a zero-day trial', { ...fixtureMonthlyOffer, freeTrial: { days: 0, eligibility: 'eligible' as const } }],
-    ['a fractional trial', { ...fixtureMonthlyOffer, freeTrial: { days: 1.5, eligibility: 'eligible' as const } }],
+    ['a zero-length trial', { ...fixtureMonthlyOffer, freeTrial: { period: { unit: 'day' as const, count: 0 }, eligibility: 'eligible' as const } }],
+    ['a fractional trial', { ...fixtureMonthlyOffer, freeTrial: { period: { unit: 'day' as const, count: 1.5 }, eligibility: 'eligible' as const } }],
+    ['a trial in an unknown unit', { ...fixtureMonthlyOffer, freeTrial: { period: { unit: 'hour' as unknown as 'day', count: 3 }, eligibility: 'eligible' as const } }],
   ])('rejects an offer with %s', (_label, offer) => {
     expect(isValidPlanOffer(offer)).toBe(false);
     expect(buildPaywallPlans(available(offer))).toEqual({ status: 'unavailable', reason: 'no-valid-plan' });
@@ -103,7 +113,13 @@ describe('plans', () => {
     expect(plans.defaultPlan).toBe('annual');
     expect(plans.cards.map((card) => card.plan)).toEqual(['annual', 'monthly']);
     const [annual, monthly] = plans.cards;
-    expect(annual).toMatchObject({ title: 'Annuel', period: 'par an', recommended: true, trial: '14 jours gratuits', trialDays: 14 });
+    expect(annual).toMatchObject({
+      title: 'Annuel',
+      period: 'par an',
+      recommended: true,
+      trial: '14 jours gratuits',
+      trialPeriod: { unit: 'week', count: 2 },
+    });
     expect(plain(annual!.price)).toBe('129 €');
     expect(plain(annual!.equivalent)).toBe('soit 10,75 € par mois');
     expect(annual!.savings).toBe('Économisez 17 %');
@@ -125,17 +141,17 @@ describe('plans', () => {
     for (const offering of [paywallOfferingFixtures.frenchTrialIneligible, paywallOfferingFixtures.frenchNoTrial]) {
       for (const card of cards(offering).cards) {
         expect(card.trial).toBeUndefined();
-        expect(card.trialDays).toBeUndefined();
+        expect(card.trialPeriod).toBeUndefined();
         expect(card.accessibilityLabel).not.toContain('gratuit');
       }
     }
-    const unknown = cards(available({ ...fixtureAnnualOffer, freeTrial: { days: 14, eligibility: 'unknown' } }));
+    const unknown = cards(available({ ...fixtureAnnualOffer, freeTrial: { period: { unit: 'week', count: 2 }, eligibility: 'unknown' } }));
     expect(unknown.cards[0]!.trial).toBeUndefined();
   });
 
   it('shows a trial for an eligible offer only, plan by plan', () => {
     const plans = cards(
-      available(fixtureMonthlyOffer, { ...fixtureAnnualOffer, freeTrial: { days: 7, eligibility: 'ineligible' } }),
+      available(fixtureMonthlyOffer, { ...fixtureAnnualOffer, freeTrial: { period: { unit: 'day', count: 7 }, eligibility: 'ineligible' } }),
     );
     expect(plans.cards.find((card) => card.plan === 'annual')!.trial).toBeUndefined();
     expect(plans.cards.find((card) => card.plan === 'monthly')!.trial).toBe('14 jours gratuits');
@@ -166,7 +182,48 @@ describe('plans', () => {
     expect(buildPaywallPlans(paywallOfferingFixtures.loading)).toEqual({ status: 'loading' });
     expect(buildPaywallPlans(paywallOfferingFixtures.storeUnavailable)).toEqual({ status: 'unavailable', reason: 'store-unavailable' });
     expect(buildPaywallPlans(unconfiguredPaywallOffering)).toEqual({ status: 'unavailable', reason: 'not-configured' });
+    expect(buildPaywallPlans(noAccountPaywallOffering)).toEqual({ status: 'unavailable', reason: 'no-account' });
     expect(buildPaywallPlans(available())).toEqual({ status: 'unavailable', reason: 'no-valid-plan' });
+  });
+
+  it('asking the store again only helps when a store and an account exist', () => {
+    expect(isRetryablePaywallReason('store-unavailable')).toBe(true);
+    expect(isRetryablePaywallReason('no-valid-plan')).toBe(true);
+    expect(isRetryablePaywallReason('not-configured')).toBe(false);
+    expect(isRetryablePaywallReason('no-account')).toBe(false);
+  });
+});
+
+describe('trial period wording — the store defines the length, never the app', () => {
+  const trial = (period: PaywallTrialPeriod): PaywallPlanOffer => ({
+    ...fixtureAnnualOffer,
+    freeTrial: { period, eligibility: 'eligible' },
+  });
+
+  it.each<[PaywallTrialPeriod, string, string]>([
+    [{ unit: 'day', count: 1 }, '1 jour', '1 jour gratuit'],
+    [{ unit: 'day', count: 3 }, '3 jours', '3 jours gratuits'],
+    [{ unit: 'week', count: 1 }, '7 jours', '7 jours gratuits'],
+    [{ unit: 'week', count: 2 }, '14 jours', '14 jours gratuits'],
+    [{ unit: 'month', count: 1 }, '1 mois', '1 mois gratuit'],
+    [{ unit: 'month', count: 3 }, '3 mois', '3 mois gratuits'],
+    [{ unit: 'year', count: 1 }, '1 an', '1 an gratuit'],
+    [{ unit: 'year', count: 2 }, '2 ans', '2 ans gratuits'],
+  ])('says %j as « %s » and « %s »', (period, duration, chip) => {
+    expect(formatTrialPeriod(period)).toBe(duration);
+    expect(formatFreeTrial(period)).toBe(chip);
+    const plans = cards(available(trial(period)));
+    expect(plans.cards[0]).toMatchObject({ trial: chip, trialPeriod: period });
+    expect(resolvePaywallAction(plans, 'annual', true)).toMatchObject({
+      kind: 'subscribe',
+      title: `Essayer gratuitement ${duration}`,
+    });
+  });
+
+  it('never writes a trial length of its own: the chip and the action follow the period they are given', () => {
+    const plans = cards(available(trial({ unit: 'month', count: 1 })));
+    expect(JSON.stringify(plans)).not.toContain('14');
+    expect(resolvePaywallAction(plans, 'annual', true)).toMatchObject({ title: 'Essayer gratuitement 1 mois' });
   });
 });
 
@@ -316,21 +373,29 @@ describe('contexts', () => {
 });
 
 describe('illustration side', () => {
-  it('is an accent of about 15 % of the window, bounded per class of phone', () => {
-    expect(resolvePaywallIllustrationSide(667)).toBe(100); // iPhone SE
-    expect(resolvePaywallIllustrationSide(600)).toBe(92); // never smaller on a small phone
-    expect(resolvePaywallIllustrationSide(700)).toBe(105); // the last small height
-    expect(resolvePaywallIllustrationSide(852)).toBe(128); // iPhone 17
-    expect(resolvePaywallIllustrationSide(874)).toBe(131); // iPhone 17 Pro
-    expect(resolvePaywallIllustrationSide(932)).toBe(140); // Plus / Pro Max
-    expect(resolvePaywallIllustrationSide(701)).toBe(112); // never smaller on a regular phone
-    expect(resolvePaywallIllustrationSide(1200)).toBe(150); // a tablet-sized window never inflates it
+  it('is a present accent of about 12.7 % of the window, bounded per class of phone', () => {
+    expect(resolvePaywallIllustrationSide(667)).toBe(85); // iPhone SE
+    expect(resolvePaywallIllustrationSide(600)).toBe(80); // never smaller on a small phone
+    expect(resolvePaywallIllustrationSide(700)).toBe(89); // the last small height
+    expect(resolvePaywallIllustrationSide(812)).toBe(103); // iPhone 13 mini
+    expect(resolvePaywallIllustrationSide(852)).toBe(108); // iPhone 17
+    expect(resolvePaywallIllustrationSide(874)).toBe(111); // iPhone 17 Pro
+    expect(resolvePaywallIllustrationSide(932)).toBe(116); // Plus / Pro Max: capped
+    expect(resolvePaywallIllustrationSide(701)).toBe(100); // never smaller on a regular phone
+    expect(resolvePaywallIllustrationSide(1200)).toBe(116); // a tablet-sized window never inflates it
   });
 
-  it('never exceeds the former quarter-of-the-window hero on any height', () => {
+  it('stays an accent on every height: never above 116 pt, never under 80 pt', () => {
     for (const height of [568, 667, 736, 812, 852, 874, 932, 956, 1024, 1366]) {
-      expect(resolvePaywallIllustrationSide(height)).toBeLessThanOrEqual(150);
-      expect(resolvePaywallIllustrationSide(height)).toBeGreaterThanOrEqual(92);
+      expect(resolvePaywallIllustrationSide(height)).toBeLessThanOrEqual(116);
+      expect(resolvePaywallIllustrationSide(height)).toBeGreaterThanOrEqual(80);
     }
+  });
+
+  it('on an iPhone 17 sits between the former 15 % hero and the over-reduced 10.5 % accent', () => {
+    const side = resolvePaywallIllustrationSide(852);
+    expect(side).toBeGreaterThanOrEqual(108);
+    expect(side).toBeLessThanOrEqual(115);
+    expect(side).toBeLessThan(Math.round(852 * 0.15));
   });
 });

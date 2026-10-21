@@ -2174,9 +2174,18 @@ Accueil is a calm composition of existing data on the app background (`screen`).
 one page. Hierarchy comes from SURFACE and SIZE, never from new colours: one tinted hero card,
 two strong white figures, one lighter white summary, then shortcuts that are barely surfaces.
 
-- **Header** (`HomeHeader`). The editorial logo ALONE (`BrandMark`, 160 pt box — artwork about
+- **Header** (`HomeHeader`). The editorial logo (`BrandMark`, 160 pt box — artwork about
   148 × 49 pt — pulled back by its 6 pt transparent padding so the ARTWORK sits on the gutter).
-  No date, no text, no ornament beside it. No watermark, no illustration, no mascot.
+  No date, no text, no ornament beside it — except, ONLY while the session's verification
+  confirms a BeautIzzy Plus entitlement in force (`hasVerifiedPlusEntitlement`: active, trial,
+  cancelled-but-active, complimentary; never pending, unavailable, expired, never, lapsed or
+  signed out, and never inferred from full access), the small « Plus » mark (`PlusMarkBadge`):
+  a 20 pt `surfaceLavenderStrong` pill, « Plus » in accent `chip`, 8 pt beside the logo and
+  centred on it, spoken « BeautIzzy Plus » — a mark clearly secondary to the logo, never the
+  paywall capsule. The row is `HomeBrandRow` (presentation, an explicit `showPlus`); a
+  `__DEV__`-only sheet (Plus › Développement › « Aperçu badge Plus (test) ») draws it in both
+  states on the page background, without touching the session. No watermark, no illustration,
+  no mascot.
 - **Top area** (`home-hero`): the greeting card and the next-appointment SLOT on ONE row, 20 pt
   under the logo (logo and row read as one group). The slot always holds a card: the next
   appointment, or its empty version when nothing is to come. The top area is one stable module —
@@ -2328,24 +2337,31 @@ never a subscription template.
   scrolling body (`bodySpacing="compact"`: 8 pt under the top bar instead of the 24 pt a frame
   header would need) and a fixed footer. It reads as the continuation of Discovery and setup.
   The ORDER is the decision first: hero (badge, illustration, headline, one short lead or the
-  contextual notice), the plan cards, then the benefits — on a regular iPhone the selected annual
-  card and the top of the monthly card are in the first viewport; a large phone shows both; an
-  iPhone SE shows the annual card. Small phones (window height ≤ 700) tighten the hero gaps
-  (4 pt; 8 pt otherwise); nothing is absolutely positioned, the body scrolls, the footer never
-  covers content.
-- **Brand.** « BeautIzzy Plus » is ONE lavender capsule (`PlusBrandBadge`): the canonical symbol
-  (`BrandMark`, decorative, 14 pt wide) and the name in `control` accent, centred above the
-  illustration. Spoken once: « BeautIzzy Plus ». No redrawn logo, no gradient.
-- **Illustration.** `growth-duo.png`, `contain`, hidden from assistive technology; an ACCENT,
-  never the hero: square side = 15 % of the window height, bounded 112–150 pt on a regular phone
-  (≈ 131 pt on an iPhone 17 Pro, so a Pro Max never inflates it) and 92–112 pt on a small one
-  (100 pt on an iPhone SE). The artwork fills its PNG, so the rendered side is the visible side.
-- **Headline.** « Faites grandir votre activité, simplement. » in navy `screenTitle` (30 / 36 pt
-  iOS, 27 / 33 Android — one step under the `display` of Welcome, still editorial), centred, the
-  page `header`; it wraps on two lines from the SE up. The violet is carried by the badge, the
+  contextual notice), the plan cards, then the benefits — the hero is compact (4 pt gaps on
+  every phone, the body 4 pt under the top bar) so that on a regular iPhone the selected annual
+  card AND the name and price of the monthly card are in the first viewport above the footer
+  (both cards whole on a Pro / Pro Max); an iPhone SE shows the annual card. Nothing is
+  absolutely positioned, the body scrolls, the footer never covers content.
+- **Brand.** « BeautIzzy Plus » is ONE lavender capsule (`PlusBrandBadge`), the canonical symbol
+  (`BrandMark`, decorative) and the name in accent semibold, in two weights because the brand
+  does not carry the same role everywhere: the paywall hero draws the HERO capsule — 30 pt
+  high, 12 pt side padding, the symbol 16 pt wide, the name in `control` (16 pt) — centred above
+  the illustration, the identity of the premium product and still clearly under the headline
+  (ratio ≥ 1.4); « Mon abonnement » draws the LABEL capsule — 24 pt, 10 pt side padding, the
+  symbol 13 pt wide, a 14 / 18 pt semibold name — a small brand label above the status, never
+  the focus of the card (the status title, the plan and the dated sentence are). Spoken once:
+  « BeautIzzy Plus ». No redrawn logo, no gradient.
+- **Illustration.** `growth-duo.png`, `contain`, hidden from assistive technology; a present
+  ACCENT, never the hero: square side = 12.7 % of the window height, bounded 100–116 pt on a
+  regular phone (108 pt on an iPhone 17, 111 on a 17 Pro, capped at 116 so a Pro Max never
+  inflates it) and 80–96 pt on a small one (85 pt on an iPhone SE). The artwork fills its PNG,
+  so the rendered side is the visible side.
+- **Headline.** « Faites grandir votre activité, simplement. » in navy, the 27 / 33 pt
+  screen-title step on BOTH platforms (the Android `screenTitle` metrics; one notch under the
+  iOS screen title, two under the `display` of Welcome, still editorial), centred, the page
+  `header`; it wraps on two lines from the SE up. The violet is carried by the badge, the
   primary action, the chips and the selected card — never by a headline. Under it, either the
-  lead (`body`, `foregroundSoft`, max 360 pt) or the contextual notice. The brand badge above is
-  30 pt high.
+  lead (`body`, `foregroundSoft`, max 360 pt) or the contextual notice.
 - **Benefits.** Three rows (`PaywallBenefitRow`), UNDER the plan cards, 8 pt apart: an accent
   glyph (16 pt) in a 30 pt `surfaceLavenderStrong` disc (calendar · bar chart · clock) and the
   approved sentence in `rowTitle` — « Tout votre
@@ -2427,8 +2443,33 @@ never a subscription template.
   shown for a refused write.
 - **Development preview** (Plus › Développement › « Aperçu BeautIzzy Plus (test) », `__DEV__`
   only): every state above with fictional offers (the intended French prices and the 14-day
-  trial, held in test fixtures). Its purchase action buys nothing and says so. One native modal
-  at a time (§16): the scenario list slides down, then the paywall is presented from its
-  `onDismissed`; closing the paywall brings the list back once it is really dismissed.
+  trial, held in test fixtures), and — first in the list, since Phase 6.2 — « Offre RevenueCat
+  actuelle »: the same screen over the REAL current offering of the signed-in account (store
+  prices, store trial eligibility; the Test Store in a debug build, whose prices may differ from
+  Apple's), with its loading and unavailable states and a « Réessayer » that asks again. Its
+  purchase action buys nothing and says so (« Les achats ne sont pas encore activés dans cette
+  version. »). One native modal at a time (§16): the scenario list slides down, then the paywall
+  is presented from its `onDismissed`; closing the paywall brings the list back once it is really
+  dismissed; the live entry's loader mounts and unmounts with the paywall.
+- **Trial wording** is the store's period, never a number of the app: weeks are said in days
+  (« 14 jours gratuits » for a two-week introductory period), months and years in their unit
+  (« 1 mois gratuit », « Essayer gratuitement 1 mois »). Shown only when the store marked THIS
+  account eligible; unknown or ineligible shows the standard price.
+- **« Mon abonnement »** (Plus, between « Compte » and the identity block; `SubscriptionStatusSection`,
+  Phase 6.2): the section header and ONE white card (`surfaceElevated`, `radii.large`, 16 pt
+  padding, no shadow, no icon, no button, no link): the « BeautIzzy Plus » capsule
+  (`PlusBrandBadge`, left-aligned) ONLY for a verified entitlement, the status in `rowTitle`
+  (« Abonnement actif », « Essai gratuit », « Actif jusqu’au 21 novembre 2026 », « Accès offert »),
+  the plan in accent `metadata` when the store established it (« Mensuel » / « Annuel »), then
+  one soft `metadata` detail with accurate wording (« Période en cours jusqu’au … » — never a
+  renewal or a payment promised; « Fin de l’essai le … »; « Sans renouvellement automatique. »;
+  « Jusqu’au … » for a dated complimentary access, nothing for an indefinite one). Without an
+  entitlement: no badge, « Aucun abonnement actif », the read-only vocabulary's sentence and,
+  while enforcement is disabled, « Toutes les fonctionnalités restent disponibles. » — quiet,
+  never a loss. Pending or unverifiable: « Vérification de l’abonnement… » / « Abonnement non
+  vérifié », never "free". The badge derives from the verification only, never from full access.
+  One accessible element, spoken as « BeautIzzy Plus, Abonnement actif, Mensuel, Période en cours
+  jusqu’au … ». A `__DEV__`-only sheet (Plus › Développement › « Statut BeautIzzy Plus (test) »)
+  draws every status from fixtures, in one sheet.
 - **No** gradient, glass effect, animation beyond the frame's entrance, countdown, strike-through
   price, « most popular » claim, hard-coded price, or fake purchase.

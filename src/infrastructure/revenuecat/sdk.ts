@@ -2,9 +2,10 @@
 //
 // The only module that imports `react-native-purchases`. It exposes the
 // narrow, process-global surface the subscription source needs — identity,
-// CustomerInfo, its update event — behind an interface tests implement with a
-// deterministic fake. A later phase extends this facade with offerings and
-// purchases; nothing here purchases, restores or syncs anything.
+// CustomerInfo, its update event, and (Phase 6.2) the offerings with the
+// introductory-offer eligibility — behind an interface tests implement with a
+// deterministic fake. A later phase extends this facade with purchases and
+// restores; nothing here purchases, restores or syncs anything.
 //
 // `Purchases.configure` throws when the native module is absent (a
 // development build that predates the SDK, Expo Go): the source turns that
@@ -13,12 +14,36 @@
 // integration never does (see subscription-source.ts).
 
 import Purchases, {
+  INTRO_ELIGIBILITY_STATUS,
+  PACKAGE_TYPE,
   type CustomerInfo,
   type CustomerInfoUpdateListener,
+  type IntroEligibility,
   type LogInResult,
+  type PurchasesIntroPrice,
+  type PurchasesOffering,
+  type PurchasesOfferings,
+  type PurchasesPackage,
+  type PurchasesStoreProduct,
 } from 'react-native-purchases';
 
-export type { CustomerInfo, CustomerInfoUpdateListener, LogInResult };
+export type {
+  CustomerInfo,
+  CustomerInfoUpdateListener,
+  IntroEligibility,
+  LogInResult,
+  PurchasesIntroPrice,
+  PurchasesOffering,
+  PurchasesOfferings,
+  PurchasesPackage,
+  PurchasesStoreProduct,
+};
+// The SDK's own enumerations, re-exported so the pure mapping compares
+// documented members and never a magic number or a bare string.
+export { INTRO_ELIGIBILITY_STATUS, PACKAGE_TYPE };
+
+/** The eligibility of the identified user for each product's introductory offer, keyed by product identifier. */
+export type IntroEligibilityByProduct = Readonly<Record<string, IntroEligibility>>;
 
 export interface RevenueCatIdentifiedConfiguration {
   readonly apiKey: string;
@@ -39,6 +64,14 @@ export interface RevenueCatSdk {
   invalidateCustomerInfoCache(): Promise<void>;
   addCustomerInfoUpdateListener(listener: CustomerInfoUpdateListener): void;
   removeCustomerInfoUpdateListener(listener: CustomerInfoUpdateListener): boolean;
+  /** The offerings configured in the dashboard for the identified user, with their store products; rejects when the store cannot answer. */
+  getOfferings(): Promise<PurchasesOfferings>;
+  /**
+   * Whether the identified user may take the introductory offer of each
+   * product. Best-effort: the SDK answers UNKNOWN when it cannot tell (always
+   * on Android), and the store's purchase sheet decides in the end.
+   */
+  checkTrialOrIntroductoryPriceEligibility(productIdentifiers: readonly string[]): Promise<IntroEligibilityByProduct>;
 }
 
 export const expoRevenueCatSdk: RevenueCatSdk = {
@@ -49,4 +82,7 @@ export const expoRevenueCatSdk: RevenueCatSdk = {
   invalidateCustomerInfoCache: () => Purchases.invalidateCustomerInfoCache(),
   addCustomerInfoUpdateListener: (listener) => Purchases.addCustomerInfoUpdateListener(listener),
   removeCustomerInfoUpdateListener: (listener) => Purchases.removeCustomerInfoUpdateListener(listener),
+  getOfferings: () => Purchases.getOfferings(),
+  checkTrialOrIntroductoryPriceEligibility: (productIdentifiers) =>
+    Purchases.checkTrialOrIntroductoryPriceEligibility([...productIdentifiers]),
 };
