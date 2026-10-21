@@ -4,6 +4,7 @@ export type {
   BusinessAccessInput,
   BusinessAccessMode,
   EntitlementEvidence,
+  EntitlementPlan,
   ReadOnlyReason,
   SubscriptionEntitlement,
   SubscriptionPlan,

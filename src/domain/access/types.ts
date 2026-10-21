@@ -23,6 +23,14 @@
 export type SubscriptionPlan = 'monthly' | 'annual';
 
 /**
+ * The plan of a verified entitlement. `unknown` when the store's product
+ * identifier does not establish it (a store test product, a product added
+ * later): access never depends on the plan, so an adapter must never guess
+ * one from an ambiguous identifier.
+ */
+export type EntitlementPlan = SubscriptionPlan | 'unknown';
+
+/**
  * A subscription state that grants full access, with the instant at which it
  * stops doing so as the store knows it.
  *
@@ -32,9 +40,9 @@ export type SubscriptionPlan = 'monthly' | 'annual';
  *   complimentary      pilot access granted individually; may have no end
  */
 export type SubscriptionEntitlement =
-  | { readonly kind: 'active'; readonly plan: SubscriptionPlan; readonly expiresAt: Date }
-  | { readonly kind: 'trial'; readonly plan: SubscriptionPlan; readonly expiresAt: Date }
-  | { readonly kind: 'cancelled-active'; readonly plan: SubscriptionPlan; readonly expiresAt: Date }
+  | { readonly kind: 'active'; readonly plan: EntitlementPlan; readonly expiresAt: Date }
+  | { readonly kind: 'trial'; readonly plan: EntitlementPlan; readonly expiresAt: Date }
+  | { readonly kind: 'cancelled-active'; readonly plan: EntitlementPlan; readonly expiresAt: Date }
   | { readonly kind: 'complimentary'; readonly expiresAt?: Date };
 
 /**

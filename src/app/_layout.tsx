@@ -13,10 +13,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { SUBSCRIPTION_ENFORCEMENT } from '@/features/access/enforcement';
 import { BusinessAccessProvider } from '@/features/access/session/BusinessAccessProvider';
-import { unconfiguredSubscriptionSource } from '@/features/access/subscription-source';
+import type { SubscriptionSource } from '@/features/access/subscription-source';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { BusinessSessionProvider } from '@/features/business/session/BusinessSessionProvider';
 import { CommunicationsGatewayProvider } from '@/features/communications/session/CommunicationsGatewayProvider';
+import { createAccountSubscriptionSource } from '@/infrastructure/revenuecat';
 import { createAccountGateways, type AccountGateways } from '@/infrastructure/supabase';
 import { openSourisDatabase } from '@/persistence/expo-database';
 import { createExpoLocalFiles } from '@/persistence/files/expo-local-files';
@@ -70,6 +71,7 @@ export default function RootLayout() {
   });
   const [files] = useState(createExpoLocalFiles);
   const [gateways] = useState(createAccountGateways);
+  const [subscriptionSource] = useState(createAccountSubscriptionSource);
   const [persistenceSettled, setPersistenceSettled] = useState(false);
   const fontsReady = fontsLoaded || fontError !== null;
 
@@ -92,7 +94,7 @@ export default function RootLayout() {
           onSettled={() => setPersistenceSettled(true)}
           openDatabase={openSourisDatabase}
         >
-          {fontsReady && <AccountSession gateways={gateways} />}
+          {fontsReady && <AccountSession gateways={gateways} subscriptionSource={subscriptionSource} />}
         </PersistenceProvider>
       </GestureHandlerRootView>
     </>
@@ -103,10 +105,18 @@ export default function RootLayout() {
  * Auth → Business → Access → root gate. Lives below PersistenceProvider
  * because the offline session fallback and the Business resolution both read
  * the local account binding. Business access (BeautIzzy Plus) sits above the
- * root gate so routing and the (app) providers can both read it later; today
- * enforcement is disabled and the source unconfigured: nothing is restricted.
+ * root gate so routing and the (app) providers can both read it later. The
+ * subscription source is the RevenueCat one when this build holds a valid SDK
+ * configuration (src/infrastructure/revenuecat), the unconfigured one
+ * otherwise; enforcement stays disabled either way: nothing is restricted.
  */
-function AccountSession({ gateways }: { readonly gateways: AccountGateways }) {
+function AccountSession({
+  gateways,
+  subscriptionSource,
+}: {
+  readonly gateways: AccountGateways;
+  readonly subscriptionSource: SubscriptionSource;
+}) {
   const { database } = usePersistence();
   const resolveLocalOwner = useCallback(() => {
     const profile = readBusinessProfile(database);
@@ -116,10 +126,7 @@ function AccountSession({ gateways }: { readonly gateways: AccountGateways }) {
   return (
     <AuthProvider gateway={gateways.auth} resolveLocalOwner={resolveLocalOwner}>
       <BusinessSessionProvider gateway={gateways.business}>
-        <BusinessAccessProvider
-          enforcement={SUBSCRIPTION_ENFORCEMENT}
-          source={unconfiguredSubscriptionSource}
-        >
+        <BusinessAccessProvider enforcement={SUBSCRIPTION_ENFORCEMENT} source={subscriptionSource}>
           {/* Renders nothing of its own; pushes local data only once the live session is bound to its Business. */}
           <CloudSyncRunner gateway={gateways.sync}>
             <BusinessMediaProvider remote={gateways.media}>

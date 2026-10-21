@@ -58,6 +58,13 @@ npx eas-cli@latest env:list production
 Only `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`)
 belong there. Never the secret key, `service_role`, or the database password.
 
+Since Phase 6.1, `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` (the Apple PUBLIC SDK key, `appl_…`) belongs
+there too: a release build without it boots normally but cannot verify the subscription
+(`unavailable`; nothing is restricted while enforcement is disabled). The Test Store key
+(`EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY`) is for development bundles only and is never used by a
+release build, so it need not be pushed; `env:push --path .env` would push it harmlessly. Never a
+RevenueCat secret key, and never an Apple `.p8` file in the repository.
+
 ## 3. Supabase Dashboard (manual)
 
 Authentication › URL Configuration:

@@ -321,9 +321,10 @@ src/features/access/session/BusinessAccessProvider.tsx         what the signed-i
                                                                (BeautIzzy Plus): `full` / `read-only`,
                                                                resolved by `src/domain/access`; mounted
                                                                below BusinessSessionProvider, above the
-                                                               root gate. Enforcement DISABLED and the
-                                                               subscription source unconfigured until
-                                                               the paywall phase: nothing is restricted
+                                                               root gate. Enforcement DISABLED: nothing
+                                                               is restricted. The source is the RevenueCat
+                                                               one when the build holds a valid SDK key
+                                                               (Phase 6.1 below), the unconfigured one otherwise
 src/features/access/write-guard.ts                             THE refusal of a business mutation under
                                                                read-only access: `useBusinessWriteGuard`
                                                                (called first by every user-initiated
@@ -337,6 +338,10 @@ src/features/access/read-only/ReadOnlyStatusCard.tsx           the subtle read-o
 src/features/access/paywall/                                   the BeautIzzy Plus paywall PRESENTATION:
                                                                offering boundary, pure presentation rules,
                                                                approved copy, screen and components
+src/infrastructure/revenuecat/                                 the RevenueCat integration (Phase 6.1):
+                                                               key selection per build, the ONE SDK
+                                                               binding, CustomerInfo → domain mapping,
+                                                               the identified-only SubscriptionSource
 ```
 
 Business mutation protection. Every user-initiated mutation exposed by the six (app) business
@@ -400,12 +405,63 @@ decides the `PaywallContext` and mounts the screen — after setup completes, fo
 existing account, never for an active subscriber — and wires « Explorer sans abonnement » to
 entering read-only use without writing any entitlement. No product route mounts the paywall today.
 
-Production activation still requires: the RevenueCat integration and real App Store / Google Play
-offerings; purchase and restore handling; account-scoped entitlement verification with persisted
+Production activation still requires: the real App Store / Google Play offerings mapped into
+`PaywallOffering` (the SDK, the identity and the verification exist since Phase 6.1 below);
+purchase and restore handling; account-scoped entitlement verification with persisted
 verified evidence and correct offline startup; the backend entitlement mirror with server-side
 enforcement of business mutations and server-controlled reminder / SMS suppression; real privacy
 and terms URLs; account deletion and privacy-data export. `SUBSCRIPTION_ENFORCEMENT` stays
 `disabled` until then.
+
+RevenueCat integration (Phase 6.1, `src/infrastructure/revenuecat/`). The first technical step of
+the store integration: SDK, identity and READ-ONLY verification. No purchase, restore, offering,
+routing or enforcement change: `SUBSCRIPTION_ENFORCEMENT` stays `disabled`, the paywall keeps its
+development fixtures and no product route mounts it.
+
+```text
+config.ts                  THE key rule, pure: a development bundle (`__DEV__`) uses the Test Store key
+                           (EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY); an iOS release — TestFlight included —
+                           the Apple key (EXPO_PUBLIC_REVENUECAT_IOS_API_KEY); an Android release nothing
+                           until Google Play exists. APP_VARIANT never decides: it selects identifiers, not
+                           the compilation. A missing key, a key of the wrong family (`test_` / `appl_`
+                           prefixes) or a secret key leaves the build UNCONFIGURED — the unconfigured source,
+                           never a crash, never a key in a message.
+sdk.ts                     the ONE module importing `react-native-purchases`: configure, logIn,
+                           getAppUserID, getCustomerInfo, invalidateCustomerInfoCache, the update listener.
+                           No logOut (it would create an anonymous identity), no purchase, no restore.
+customer-info.ts           pure: CustomerInfo → `SubscriptionVerification`. Only the entitlement `plus`
+                           grants. isActive false → expired; no record → never, or expired when a known Plus
+                           product was purchased, or unavailable when one is reported active without the
+                           entitlement; PROMOTIONAL → complimentary (indefinite only without expiration);
+                           TRIAL → trial; willRenew false → cancelled-active (a billing retry stays active
+                           with the extended expiration); an expiration already behind now, a missing
+                           expiration outside a promotional grant, a FAILED verification, a malformed record
+                           → unavailable. The plan comes from an EXACT App Store product identifier,
+                           `unknown` otherwise (a Test Store product): access never depends on it.
+                           Freshness: an answer whose `requestDate` is older than five minutes (the SDK's
+                           foreground cache lifetime) is unavailable, never a fresh revocation or renewal.
+subscription-source.ts     the SubscriptionSource over the process-global SDK. Identified-only: configured
+                           ONCE, at the first verification, with the Supabase user id as App User ID; another
+                           account is switched to with `logIn` (no aliasing from an identified user); sign-out
+                           touches the SDK in no way. Every operation runs on ONE serial chain, the SDK identity
+                           is checked (`getAppUserID`) before every read, a failed switch leaves the source
+                           identified as nobody and nothing is read as nobody. A stale cached answer is
+                           invalidated and fetched again; every failure is `unavailable`. The SDK's update
+                           event is a trigger, never a payload: the identified user is re-read on the chain and
+                           its subscribers notified with a fresh answer — ONE SDK listener, installed with the
+                           first subscriber, removed with the last.
+index.ts                   `createAccountSubscriptionSource()`: the root's source, built once in `_layout.tsx`
+                           and passed to `BusinessAccessProvider` exactly where the unconfigured one was.
+```
+
+Offline limitation, unchanged. The SDK's on-device CustomerInfo cache is read through the same
+freshness rule, so after a restart without network it is unavailable, not a proof: the 72-hour
+offline grace still rests on the in-memory evidence of the session and starts without one after a
+restart. Persisted, trusted entitlement evidence remains a requirement before enforcement.
+Client-side verification is not a security boundary: the backend entitlement mirror and
+server-side enforcement remain mandatory before activation. A native development build must be
+rebuilt after adding the SDK (`npx expo run:ios` with `APP_VARIANT=development`); a build that
+predates it answers unavailable without crashing.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
@@ -415,8 +471,8 @@ up on a deadline missed while suspended. One timer per session, aimed at the nex
 steps beyond what a JavaScript timer can wait); a store answer whose entitlement has ended lapses
 (`isVerificationCurrent`) and the in-memory proof speaks with the offline policy; a deadline is a
 property of the proof and never moves with a retry. Deferred: evidence persistence (after a
-restart the session starts without a proof until the store answers), the RevenueCat source, the
-paywall and the root subscription gate, and — REQUIRED before enforcement is enabled — the
+restart the session starts without a proof until the store answers), the paywall and the root
+subscription gate, and — REQUIRED before enforcement is enabled — the
 server-side mirror of the verified entitlement with server enforcement of paid business
 mutations, reminders and SMS: the client-side guards are a product boundary, not a security one.
 
