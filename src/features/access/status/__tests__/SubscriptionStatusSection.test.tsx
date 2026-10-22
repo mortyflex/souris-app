@@ -79,7 +79,8 @@ describe('SubscriptionStatusSection', () => {
     expect(access?.access).toEqual({ mode: 'full', reason: 'enforcement-disabled' });
     expect(hasBadge(view)).toBe(false);
     expect(title(view)).toBe('Aucun abonnement actif');
-    expect(view.getByText('Toutes les fonctionnalités restent disponibles.')).toBeTruthy();
+    expect(view.getByText('Vos données sont conservées et restent consultables.')).toBeTruthy();
+    expect(view.queryByText(/fonctionnalités/)).toBeNull();
   });
 
   it('an unverifiable subscription is neither free nor expired, whatever the access mode', async () => {
@@ -152,7 +153,7 @@ describe('SubscriptionStatusCard', () => {
   it.each(subscriptionStatusScenarios.map((scenario) => [scenario.key, scenario]))(
     'draws the « %s » fixture with its badge decision',
     async (_key, scenario) => {
-      const model = describeSubscriptionStatus({ verification: scenario.verification, now: STATUS_FIXTURE_NOW, enforcement: 'disabled' });
+      const model = describeSubscriptionStatus({ verification: scenario.verification, now: STATUS_FIXTURE_NOW });
       const view = await render(<SubscriptionStatusCard model={model} testID={`card-${scenario.key}`} />);
       await act(async () => {});
       expect(view.queryByTestId(`card-${scenario.key}-badge`) !== null).toBe(model.plus);

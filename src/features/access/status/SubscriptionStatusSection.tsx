@@ -2,8 +2,7 @@
 //
 // The one place of the product that shows the professional her BeautIzzy
 // Plus status: the section header and the status card, from `useBusinessAccess`
-// ONLY — its `verification` (what the store confirmed for this session) and
-// the enforcement switch (for the quiet "everything stays available" line).
+// ONLY — its `verification` (what the store confirmed for this session).
 // It never reads `canMutate` or the access mode: with enforcement disabled
 // every account has full access, which proves no subscription.
 //
@@ -28,8 +27,8 @@ interface SubscriptionStatusSectionProps {
 const defaultClock = () => new Date();
 
 export function SubscriptionStatusSection({ clock = defaultClock }: SubscriptionStatusSectionProps) {
-  const { verification, enforcement } = useBusinessAccess();
-  const model = describeSubscriptionStatus({ verification, now: clock(), enforcement });
+  const { verification } = useBusinessAccess();
+  const model = describeSubscriptionStatus({ verification, now: clock() });
 
   return (
     <View style={styles.section} testID="subscription-section">

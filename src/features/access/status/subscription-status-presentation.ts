@@ -13,8 +13,9 @@
 //   trial              badge · « Essai gratuit » · plan · « Fin de l’essai le … »
 //   cancelled-active   badge · « Actif jusqu’au … » · plan · « Sans renouvellement automatique. »
 //   complimentary      badge · « Accès offert » · « Jusqu’au … » only when an end exists
-//   expired, never     no badge · « Aucun abonnement actif » · the policy's own sentence, and —
-//                      while enforcement is disabled — that everything stays available
+//   expired, never     no badge · « Aucun abonnement actif » · the policy's own sentence · that the
+//                      data is kept and stays readable (true today, true once enforcement makes
+//                      such an account read-only — never a claim about permissions)
 //   pending            no badge · « Vérification de l’abonnement… » (nothing claimed either way)
 //   unavailable        no badge · « Abonnement non vérifié » (never "free", never "expired")
 //
@@ -27,12 +28,7 @@
 // Dates follow the application's convention: `Intl.DateTimeFormat('fr-FR')`,
 // day, long month, year — « 21 novembre 2026 ».
 
-import {
-  isVerificationCurrent,
-  type AccessEnforcement,
-  type EntitlementPlan,
-  type SubscriptionVerification,
-} from '@/domain/access';
+import { isVerificationCurrent, type EntitlementPlan, type SubscriptionVerification } from '@/domain/access';
 
 import { PLUS_BRAND_NAME } from '../paywall/paywall-copy';
 import { describeReadOnlyReason } from '../read-only-copy';
@@ -49,8 +45,8 @@ export const SUBSCRIPTION_STATUS_UNAVAILABLE = 'Abonnement non vérifié';
 export const SUBSCRIPTION_PENDING_DETAIL = 'Un instant, nous vérifions votre abonnement BeautIzzy Plus.';
 export const SUBSCRIPTION_UNAVAILABLE_DETAIL = 'Votre abonnement n’a pas pu être vérifié pour le moment.';
 export const SUBSCRIPTION_CANCELLED_DETAIL = 'Sans renouvellement automatique.';
-/** Enforcement disabled: true for every account, said quietly so an absence never reads as a loss. */
-export const SUBSCRIPTION_EVERYTHING_AVAILABLE = 'Toutes les fonctionnalités restent disponibles.';
+/** Without an entitlement: the data is kept and readable — true whatever the enforcement, no permission claimed. */
+export const SUBSCRIPTION_DATA_KEPT = 'Vos données sont conservées et restent consultables.';
 
 export const SUBSCRIPTION_PLAN_LABELS = { monthly: 'Mensuel', annual: 'Annuel' } as const;
 
@@ -78,7 +74,6 @@ export interface SubscriptionStatusInput {
   /** The latest answer of the session; undefined while the first one is in flight. */
   readonly verification: SubscriptionVerification | undefined;
   readonly now: Date;
-  readonly enforcement: AccessEnforcement;
 }
 
 const dateFormatter = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -120,14 +115,13 @@ function model(
   return { tone, plus, title, ...(plan === undefined ? {} : { plan }), details, accessibilityLabel: spoken.join(', ') };
 }
 
-export function describeSubscriptionStatus({ verification, now, enforcement }: SubscriptionStatusInput): SubscriptionStatusModel {
+export function describeSubscriptionStatus({ verification, now }: SubscriptionStatusInput): SubscriptionStatusModel {
   if (verification === undefined) return model('pending', SUBSCRIPTION_STATUS_PENDING, [SUBSCRIPTION_PENDING_DETAIL]);
   if (verification.kind === 'unavailable' || !isVerificationCurrent(verification, now)) {
     return model('pending', SUBSCRIPTION_STATUS_UNAVAILABLE, [SUBSCRIPTION_UNAVAILABLE_DETAIL]);
   }
 
   const { status } = verification;
-  const availability = enforcement === 'disabled' ? [SUBSCRIPTION_EVERYTHING_AVAILABLE] : [];
   switch (status.kind) {
     case 'active':
       return model(
@@ -157,8 +151,8 @@ export function describeSubscriptionStatus({ verification, now, enforcement }: S
         status.expiresAt === undefined ? [] : [`Jusqu’au ${formatSubscriptionDate(status.expiresAt)}.`],
       );
     case 'expired':
-      return model('none', SUBSCRIPTION_STATUS_NONE, [describeReadOnlyReason('subscription-expired'), ...availability]);
+      return model('none', SUBSCRIPTION_STATUS_NONE, [describeReadOnlyReason('subscription-expired'), SUBSCRIPTION_DATA_KEPT]);
     case 'never':
-      return model('none', SUBSCRIPTION_STATUS_NONE, [describeReadOnlyReason('never-subscribed'), ...availability]);
+      return model('none', SUBSCRIPTION_STATUS_NONE, [describeReadOnlyReason('never-subscribed'), SUBSCRIPTION_DATA_KEPT]);
   }
 }

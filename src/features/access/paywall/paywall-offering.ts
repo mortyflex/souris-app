@@ -68,8 +68,14 @@ export type PaywallOffering =
   /** The adapter is asking the store. The adapter — never the UI — turns a failure into `unavailable`. */
   | { readonly status: 'loading' }
   | { readonly status: 'unavailable'; readonly reason: PaywallOfferingUnavailableReason }
-  /** Whatever the store offers: both plans, one of them, or none that is valid. */
-  | { readonly status: 'available'; readonly plans: readonly PaywallPlanOffer[] };
+  /**
+   * Whatever the store offers: both plans, one of them, or none that is
+   * valid. `reference` is the opaque handle of THIS loaded offering, set by
+   * the store adapter: a purchase names it, so the adapter buys the exact
+   * store package it presented. Absent from fixtures and from an offering
+   * nobody can buy from: without it, nothing can be purchased.
+   */
+  | { readonly status: 'available'; readonly plans: readonly PaywallPlanOffer[]; readonly reference?: string };
 
 /**
  * What a store adapter answers for an identified user: the offering, or that
@@ -78,7 +84,7 @@ export type PaywallOffering =
  */
 export type StorePaywallOffering =
   | { readonly status: 'unavailable'; readonly reason: 'store-unavailable' }
-  | { readonly status: 'available'; readonly plans: readonly PaywallPlanOffer[] };
+  | { readonly status: 'available'; readonly plans: readonly PaywallPlanOffer[]; readonly reference?: string };
 
 /** The offering of the application until a store adapter is integrated. */
 export const unconfiguredPaywallOffering: PaywallOffering = {

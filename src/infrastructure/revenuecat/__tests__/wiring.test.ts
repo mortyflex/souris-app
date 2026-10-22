@@ -33,6 +33,14 @@ describe('createAccountSubscriptionSource', () => {
     expect(sdk.calls.configure).toEqual([{ apiKey: APPLE_KEY, appUserID: 'user-lea' }]);
   });
 
+  it('names the store the key belongs to, so the provider can refuse purchases outside the Test Store', () => {
+    const sdk = createFakeRevenueCatSdk();
+    const warn = jest.fn();
+    expect(createAccountSubscriptionSource({ environment: BOTH, build: { platform: 'ios', debug: true }, sdk, warn }).store).toBe('test-store');
+    expect(createAccountSubscriptionSource({ environment: BOTH, build: { platform: 'ios', debug: false }, sdk, warn }).store).toBe('app-store');
+    expect(unconfiguredSubscriptionSource.store).toBeUndefined();
+  });
+
   it('leaves an Android release and a build without keys unconfigured, without crashing', async () => {
     const sdk = createFakeRevenueCatSdk();
     const warn = jest.fn();

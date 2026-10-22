@@ -2,19 +2,57 @@
 //
 // Behaves like the process-global SDK: one identity at a time, a CustomerInfo
 // per App User ID (what the SDK would hold in its cache or obtain from the
-// store), an update event, the offerings per App User ID and the
-// introductory-offer eligibility of the identified user. A user without a
-// scripted CustomerInfo or offerings reads as a store that cannot answer
-// (rejection). Every call is recorded.
+// store), an update event, the offerings per App User ID, the introductory-
+// offer eligibility of the identified user, and the two transactions. A user
+// without a scripted CustomerInfo or offerings reads as a store that cannot
+// answer (rejection); a purchase answers what `scriptPurchase` scripted for
+// the identified user (rejecting "not scripted" otherwise — a real sheet is
+// never simulated by default); a restore answers the identified user's
+// scripted CustomerInfo unless overridden. Every call is recorded with the
+// package object the SDK received, so tests can assert the ORIGINAL package
+// was handed over.
 
 import type {
   CustomerInfo,
   CustomerInfoUpdateListener,
   IntroEligibilityByProduct,
   LogInResult,
+  MakePurchaseResult,
   PurchasesOfferings,
+  PurchasesPackage,
   RevenueCatSdk,
 } from '../sdk';
+
+/** A rejection shaped like the SDK's `PurchasesError`: a plain object, a numeric code string. */
+export function purchasesError(code: string, message = `RevenueCat error ${code}`): Record<string, unknown> {
+  return {
+    code,
+    message,
+    readableErrorCode: `ERROR_${code}`,
+    userInfo: { readableErrorCode: `ERROR_${code}` },
+    underlyingErrorMessage: '',
+    userCancelled: code === '1',
+  };
+}
+
+/** What a scripted purchase does with the package it receives. */
+export type ScriptedPurchase = (pkg: PurchasesPackage) => Promise<MakePurchaseResult>;
+
+/** The SDK's answer to a completed purchase of `productIdentifier`: the CustomerInfo the store returned, and the transaction. */
+export function makePurchaseResult(info: CustomerInfo, productIdentifier: string, purchaseDate = new Date(0)): MakePurchaseResult {
+  return {
+    productIdentifier,
+    customerInfo: info,
+    transaction: {
+      transactionIdentifier: 'txn-1',
+      productIdentifier,
+      purchaseDate: purchaseDate.toISOString(),
+      purchaseToken: null,
+      originalJson: null,
+      signature: null,
+    },
+  };
+}
 
 export interface FakeRevenueCatSdk extends RevenueCatSdk {
   /** The identity the SDK holds, as the native SDK would; undefined before `configure`. */
@@ -28,6 +66,8 @@ export interface FakeRevenueCatSdk extends RevenueCatSdk {
   setIntroEligibility(appUserId: string, eligibility: IntroEligibilityByProduct | undefined): void;
   /** Fires the SDK's CustomerInfo update event, as a renewal, a purchase or a background fetch would. */
   emit(info: CustomerInfo): void;
+  /** Scripts what `purchasePackage` does for `appUserId`; undefined makes it reject "not scripted". */
+  scriptPurchase(appUserId: string, purchase: ScriptedPurchase | undefined): void;
   readonly calls: {
     configure: { readonly apiKey: string; readonly appUserID: string }[];
     logIn: string[];
@@ -37,6 +77,10 @@ export interface FakeRevenueCatSdk extends RevenueCatSdk {
     getOfferings: number;
     /** The product identifiers of each eligibility check, in order. */
     checkTrialOrIntroductoryPriceEligibility: (readonly string[])[];
+    /** Each purchase: the identity the SDK held and the very package object it received. */
+    purchasePackage: { readonly appUserId: string | undefined; readonly pkg: PurchasesPackage }[];
+    /** Each restore: the identity the SDK held. */
+    restorePurchases: (string | undefined)[];
   };
 }
 
@@ -54,12 +98,15 @@ export interface FakeRevenueCatSdkOptions {
     appUserID: string,
     productIdentifiers: readonly string[],
   ) => Promise<IntroEligibilityByProduct>;
+  /** Overrides `restorePurchases` for the identified user; the default answers that user's scripted CustomerInfo. */
+  readonly restorePurchases?: (appUserID: string) => Promise<CustomerInfo>;
 }
 
 export function createFakeRevenueCatSdk(options: FakeRevenueCatSdkOptions = {}): FakeRevenueCatSdk {
   const infos = new Map<string, CustomerInfo>();
   const offerings = new Map<string, PurchasesOfferings>();
   const eligibilities = new Map<string, IntroEligibilityByProduct>();
+  const purchases = new Map<string, ScriptedPurchase>();
   const listeners = new Set<CustomerInfoUpdateListener>();
   let appUserId: string | undefined;
   const calls: FakeRevenueCatSdk['calls'] = {
@@ -70,6 +117,8 @@ export function createFakeRevenueCatSdk(options: FakeRevenueCatSdkOptions = {}):
     invalidateCustomerInfoCache: 0,
     getOfferings: 0,
     checkTrialOrIntroductoryPriceEligibility: [],
+    purchasePackage: [],
+    restorePurchases: [],
   };
 
   const answerFor = (id: string | undefined): Promise<CustomerInfo> => {
@@ -95,6 +144,10 @@ export function createFakeRevenueCatSdk(options: FakeRevenueCatSdkOptions = {}):
     },
     emit: (info) => {
       for (const listener of listeners) listener(info);
+    },
+    scriptPurchase: (id, purchase) => {
+      if (purchase) purchases.set(id, purchase);
+      else purchases.delete(id);
     },
     configure: ({ apiKey, appUserID }) => {
       calls.configure.push({ apiKey, appUserID });
@@ -146,6 +199,18 @@ export function createFakeRevenueCatSdk(options: FakeRevenueCatSdkOptions = {}):
       }
       const value = eligibilities.get(appUserId);
       return value ? Promise.resolve(value) : Promise.reject(new Error('RevenueCat: eligibility unavailable'));
+    },
+    purchasePackage: (pkg) => {
+      calls.purchasePackage.push({ appUserId, pkg });
+      if (appUserId === undefined) return Promise.reject(new Error('RevenueCat: not configured'));
+      const purchase = purchases.get(appUserId);
+      return purchase ? purchase(pkg) : Promise.reject(new Error('RevenueCat fake: purchase not scripted'));
+    },
+    restorePurchases: () => {
+      calls.restorePurchases.push(appUserId);
+      if (appUserId === undefined) return Promise.reject(new Error('RevenueCat: not configured'));
+      if (options.restorePurchases) return options.restorePurchases(appUserId);
+      return answerFor(appUserId);
     },
   };
 }

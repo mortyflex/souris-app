@@ -303,8 +303,8 @@ describe('BusinessAccessProvider', () => {
     await act(async () => resolvers[0]?.(NEVER));
     expect(stateOf(view)).toBe('read-only:never-subscribed:read:verified');
 
-    let first: Promise<void> | undefined;
-    let second: Promise<void> | undefined;
+    let first: ReturnType<BusinessAccessValue['refresh']> | undefined;
+    let second: ReturnType<BusinessAccessValue['refresh']> | undefined;
     await act(async () => {
       first = latest?.refresh();
       second = latest?.refresh();

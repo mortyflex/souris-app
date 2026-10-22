@@ -11,12 +11,20 @@ import { AppState, Text, type AppStateStatus } from 'react-native';
 
 import { SUBSCRIPTION_ENFORCEMENT } from '@/features/access/enforcement';
 import { BusinessAccessProvider, useBusinessAccess, type BusinessAccessValue } from '@/features/access/session/BusinessAccessProvider';
+import { usePlusCheckout, type PlusCheckoutResult, type PlusCheckoutSession } from '@/features/access/session/use-plus-checkout';
+import { usePaywallOffering, type PaywallOfferingSession } from '@/features/access/session/use-paywall-offering';
+import { SubscriptionStatusSection } from '@/features/access/status/SubscriptionStatusSection';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser, type FakeAuthGateway } from '@/features/auth/testing/fake-auth-gateway';
+import { HomeHeader } from '@/features/home/components/HomeHeader';
 
+import { PURCHASES_ERROR_CODE, type MakePurchaseResult } from '../sdk';
 import { createRevenueCatSubscriptionSource } from '../subscription-source';
-import { customerInfo, NOW, plusEntitlement } from '../testing/customer-info-fixtures';
-import { createFakeRevenueCatSdk, type FakeRevenueCatSdk } from '../testing/fake-revenuecat-sdk';
+import { customerInfo, NEXT_MONTH, NOW, plusEntitlement } from '../testing/customer-info-fixtures';
+import { createFakeRevenueCatSdk, makePurchaseResult, purchasesError, type FakeRevenueCatSdk } from '../testing/fake-revenuecat-sdk';
+import { appStoreOfferings, testStoreOfferings } from '../testing/offering-fixtures';
+
+jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
 const API_KEY = 'test_FakeTestStoreKeyForUnitTestsOnly';
 const LEA = fakeUser.id;
@@ -55,7 +63,7 @@ function scriptedSdk(): FakeRevenueCatSdk {
 }
 
 async function renderAccess(sdk: FakeRevenueCatSdk, auth: FakeAuthGateway, enforcement: 'enabled' | 'disabled' = 'enabled') {
-  const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, clock: () => NOW });
+  const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, store: 'test-store', clock: () => NOW });
   const view = await render(
     <AuthProvider gateway={auth}>
       <BusinessAccessProvider enforcement={enforcement} source={source} clock={() => NOW}>
@@ -162,5 +170,213 @@ describe('BusinessAccessProvider with the RevenueCat source', () => {
     sdk.setCustomerInfo(LEA, answer);
     const view = await renderAccess(sdk, signedIn(), SUBSCRIPTION_ENFORCEMENT);
     expect(stateOf(view)).toMatch(/^full:enforcement-disabled:write:/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End to end (Phase 6.3): the real source over the fake SDK, the real
+// provider, the real checkout hook, the real Accueil header and « Mon
+// abonnement ». A Test Store purchase ends with the badge and the active
+// status through the existing pipeline — THE rule `hasVerifiedPlusEntitlement`
+// — or with nothing, when the store confirmed nothing.
+// ---------------------------------------------------------------------------
+
+let checkout: PlusCheckoutSession | undefined;
+let offeringSession: PaywallOfferingSession | undefined;
+
+function CheckoutProbe() {
+  const session = usePlusCheckout({ clock: () => NOW });
+  const offering = usePaywallOffering();
+  useEffect(() => {
+    checkout = session;
+    offeringSession = offering;
+  });
+  return null;
+}
+
+async function renderProduct(sdk: FakeRevenueCatSdk, auth: FakeAuthGateway) {
+  const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, store: 'test-store', clock: () => NOW });
+  const view = await render(
+    <AuthProvider gateway={auth}>
+      <BusinessAccessProvider enforcement={SUBSCRIPTION_ENFORCEMENT} source={source} clock={() => NOW}>
+        <HomeHeader clock={() => NOW} />
+        <SubscriptionStatusSection clock={() => NOW} />
+        <Probe />
+        <CheckoutProbe />
+      </BusinessAccessProvider>
+    </AuthProvider>,
+  );
+  await settle();
+  await settle();
+  return view;
+}
+
+const purchased = (info: ReturnType<typeof customerInfo>, productIdentifier: string): MakePurchaseResult =>
+  makePurchaseResult(info, productIdentifier, NOW);
+
+/** A Test Store product in the `plus` record: the plan stays unknown, the access does not depend on it. */
+const testStoreEntitlement = (overrides: Parameters<typeof plusEntitlement>[0] = {}) =>
+  plusEntitlement({ productIdentifier: testStoreOfferings.current!.annual!.product.identifier, store: 'TEST_STORE' as never, ...overrides });
+
+async function runCheckout(action: () => Promise<PlusCheckoutResult | undefined>) {
+  let result: PlusCheckoutResult | undefined;
+  await act(async () => {
+    result = await action();
+  });
+  await settle();
+  return result;
+}
+
+describe('Test Store purchase — the whole chain (Phase 6.3)', () => {
+  beforeEach(() => {
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      appStateListeners.add(listener);
+      return { remove: () => appStateListeners.delete(listener) } as ReturnType<typeof AppState.addEventListener>;
+    });
+  });
+
+  afterEach(() => {
+    latest = undefined;
+    checkout = undefined;
+    offeringSession = undefined;
+    appStateListeners.clear();
+    jest.restoreAllMocks();
+  });
+
+  function neverSubscribedSdk() {
+    const sdk = createFakeRevenueCatSdk();
+    sdk.setCustomerInfo(LEA, customerInfo({ plus: null, originalAppUserId: LEA }));
+    sdk.setOfferings(LEA, testStoreOfferings);
+    return sdk;
+  }
+
+  it('a verified Test Store purchase: the ORIGINAL package is bought, the badge appears on Accueil and « Mon abonnement » reads active — through the existing pipeline', async () => {
+    const sdk = neverSubscribedSdk();
+    sdk.scriptPurchase(LEA, (pkg) => {
+      const info = customerInfo({ plus: testStoreEntitlement(), originalAppUserId: LEA });
+      sdk.setCustomerInfo(LEA, info);
+      sdk.emit(info); // the SDK fires its update event after a purchase
+      return Promise.resolve(purchased(info, pkg.product.identifier));
+    });
+    const view = await renderProduct(sdk, signedIn());
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+    expect(view.getByText('Aucun abonnement actif')).toBeTruthy();
+    await act(async () => {});
+    const offering = offeringSession!.offering;
+    expect(offering.status === 'available' && offering.reference).toBe('offering-1');
+
+    const result = await runCheckout(() => checkout!.purchase(offering, 'annual'));
+    expect(result).toEqual({ kind: 'activated' });
+    expect(sdk.calls.purchasePackage).toHaveLength(1);
+    expect(sdk.calls.purchasePackage[0]!.pkg).toBe(testStoreOfferings.current!.annual);
+    expect(sdk.calls.purchasePackage[0]!.appUserId).toBe(LEA);
+    expect(sdk.calls.configure).toHaveLength(1);
+    expect(sdk.listenerCount()).toBe(1);
+
+    // Accueil: the « Plus » mark, from the verification only (enforcement is disabled: access never changed).
+    expect(view.getByTestId('home-plus-mark')).toBeTruthy();
+    expect(stateOf(view)).toBe('full:enforcement-disabled:write:verified');
+    // « Mon abonnement »: active, the period end, no plan (a Test Store product establishes none).
+    expect(view.getByText('Abonnement actif')).toBeTruthy();
+    expect(view.getByText(/Période en cours jusqu’au 21 novembre 2026/)).toBeTruthy();
+    expect(view.queryByText('Annuel')).toBeNull();
+    expect(latest?.verification).toEqual({ kind: 'verified', status: { kind: 'active', plan: 'unknown', expiresAt: NEXT_MONTH } });
+    expect(checkout?.entitled).toBe(true);
+    expect(SUBSCRIPTION_ENFORCEMENT).toBe('disabled');
+  });
+
+  it('a cancelled purchase: no badge, « Mon abonnement » unchanged, the account untouched', async () => {
+    const sdk = neverSubscribedSdk();
+    sdk.scriptPurchase(LEA, () => Promise.reject(purchasesError(PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR)));
+    const view = await renderProduct(sdk, signedIn());
+    await act(async () => {});
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual'))).toEqual({ kind: 'cancelled' });
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+    expect(view.getByText('Aucun abonnement actif')).toBeTruthy();
+    expect(latest?.verification).toEqual({ kind: 'verified', status: { kind: 'never' } });
+  });
+
+  it('a completed purchase the store cannot confirm yet: no badge, a neutral status, then the badge once a re-verification confirms', async () => {
+    const sdk = neverSubscribedSdk();
+    const stale = new Date(NOW.getTime() - 10 * 60 * 1000);
+    sdk.scriptPurchase(LEA, (pkg) =>
+      Promise.resolve(purchased(customerInfo({ plus: testStoreEntitlement(), originalAppUserId: LEA, requestDate: stale }), pkg.product.identifier)),
+    );
+    const view = await renderProduct(sdk, signedIn());
+    await act(async () => {});
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual'))).toEqual({ kind: 'received' });
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+    expect(view.getByText('Abonnement non vérifié')).toBeTruthy();
+
+    // The store now answers fresh: « Vérifier à nouveau » — one verification, no second purchase.
+    sdk.setCustomerInfo(LEA, customerInfo({ plus: testStoreEntitlement(), originalAppUserId: LEA }));
+    expect(await runCheckout(() => checkout!.retryVerification())).toEqual({ kind: 'activated' });
+    expect(sdk.calls.purchasePackage).toHaveLength(1);
+    expect(view.getByTestId('home-plus-mark')).toBeTruthy();
+    expect(view.getByText('Abonnement actif')).toBeTruthy();
+  });
+
+  it('a sign-out during the purchase sheet: nothing of the result reaches the empty session, and the next account reads its own answer', async () => {
+    const sdk = neverSubscribedSdk();
+    sdk.setCustomerInfo(NOA, customerInfo({ plus: null, originalAppUserId: NOA }));
+    let finish: ((pkg: { product: { identifier: string } }) => void) | undefined;
+    sdk.scriptPurchase(
+      LEA,
+      (pkg) =>
+        new Promise((resolve) => {
+          finish = () => {
+            const info = customerInfo({ plus: testStoreEntitlement(), originalAppUserId: LEA });
+            sdk.setCustomerInfo(LEA, info);
+            resolve(purchased(info, pkg.product.identifier));
+          };
+        }),
+    );
+    const auth = signedIn();
+    const view = await renderProduct(sdk, auth);
+    await act(async () => {});
+    let pending: Promise<PlusCheckoutResult | undefined> | undefined;
+    await act(async () => {
+      pending = checkout!.purchase(offeringSession!.offering, 'annual');
+    });
+    await act(async () => auth.emitSession(null));
+    await act(async () => auth.emitSession({ id: NOA, email: 'noa@example.com' }));
+    await settle();
+    await act(async () => finish!({ product: { identifier: '' } }));
+    await settle();
+    await expect(pending).resolves.toEqual({ kind: 'account-changed' });
+    // Noa: her own answer (never), no badge; the switch to her waited for the transaction.
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+    expect(view.getByText('Aucun abonnement actif')).toBeTruthy();
+    expect(sdk.calls.logIn).toEqual([NOA]);
+    expect(sdk.calls.purchasePackage[0]!.appUserId).toBe(LEA);
+  });
+
+  it('a user-initiated restore with a Test Store entitlement reaches the badge the same way; nothing restores by itself', async () => {
+    const sdk = neverSubscribedSdk();
+    const view = await renderProduct(sdk, signedIn());
+    await foreground();
+    await settle();
+    expect(sdk.calls.restorePurchases).toEqual([]);
+    sdk.setCustomerInfo(LEA, customerInfo({ plus: testStoreEntitlement(), originalAppUserId: LEA }));
+    expect(await runCheckout(() => checkout!.restore())).toEqual({ kind: 'restored' });
+    expect(sdk.calls.restorePurchases).toEqual([LEA]);
+    expect(view.getByTestId('home-plus-mark')).toBeTruthy();
+    expect(view.getByText('Abonnement actif')).toBeTruthy();
+  });
+
+  it('an App Store offering bought in the Test Store flow is refused by nothing here, but the plan is read from the product only', async () => {
+    const sdk = createFakeRevenueCatSdk();
+    sdk.setCustomerInfo(LEA, customerInfo({ plus: null, originalAppUserId: LEA }));
+    sdk.setOfferings(LEA, appStoreOfferings);
+    sdk.scriptPurchase(LEA, (pkg) => {
+      const info = customerInfo({ plus: plusEntitlement({ productIdentifier: pkg.product.identifier }), originalAppUserId: LEA });
+      sdk.setCustomerInfo(LEA, info);
+      return Promise.resolve(purchased(info, pkg.product.identifier));
+    });
+    const view = await renderProduct(sdk, signedIn());
+    await act(async () => {});
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual'))).toEqual({ kind: 'activated' });
+    expect(view.getByText('Annuel')).toBeTruthy();
+    expect(latest?.verification).toEqual({ kind: 'verified', status: { kind: 'active', plan: 'annual', expiresAt: NEXT_MONTH } });
   });
 });

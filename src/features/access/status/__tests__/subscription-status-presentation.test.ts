@@ -7,7 +7,7 @@ import type { SubscriptionStatus, SubscriptionVerification } from '@/domain/acce
 
 import {
   SUBSCRIPTION_CANCELLED_DETAIL,
-  SUBSCRIPTION_EVERYTHING_AVAILABLE,
+  SUBSCRIPTION_DATA_KEPT,
   SUBSCRIPTION_PENDING_DETAIL,
   SUBSCRIPTION_STATUS_ACTIVE,
   SUBSCRIPTION_STATUS_COMPLIMENTARY,
@@ -24,8 +24,8 @@ import { STATUS_FIXTURE_END, STATUS_FIXTURE_FAR_END, STATUS_FIXTURE_NOW, subscri
 
 const verified = (status: SubscriptionStatus): SubscriptionVerification => ({ kind: 'verified', status });
 
-const describeAt = (verification: SubscriptionVerification | undefined, enforcement: 'enabled' | 'disabled' = 'disabled') =>
-  describeSubscriptionStatus({ verification, now: STATUS_FIXTURE_NOW, enforcement });
+const describeAt = (verification: SubscriptionVerification | undefined) =>
+  describeSubscriptionStatus({ verification, now: STATUS_FIXTURE_NOW });
 
 const END = formatSubscriptionDate(STATUS_FIXTURE_END);
 const FAR_END = formatSubscriptionDate(STATUS_FIXTURE_FAR_END);
@@ -94,38 +94,39 @@ describe('describeSubscriptionStatus — verified entitlements show the badge', 
 
   it('a verified entitlement whose end is behind now has lapsed: unverified, never active, never expired', () => {
     const lapsed = verified({ kind: 'active', plan: 'monthly', expiresAt: STATUS_FIXTURE_END });
-    const model = describeSubscriptionStatus({ verification: lapsed, now: new Date(STATUS_FIXTURE_END.getTime() + 1), enforcement: 'disabled' });
+    const model = describeSubscriptionStatus({ verification: lapsed, now: new Date(STATUS_FIXTURE_END.getTime() + 1) });
     expect(model).toMatchObject({ tone: 'pending', plus: false, title: SUBSCRIPTION_STATUS_UNAVAILABLE });
     expect(model.accessibilityLabel).not.toContain('BeautIzzy Plus,');
   });
 });
 
 describe('describeSubscriptionStatus — no entitlement, no badge', () => {
-  it('expired: no badge, the policy’s own sentence, and — enforcement disabled — that everything stays available', () => {
+  it('expired: no badge, the policy’s own sentence, and that the data is kept and readable', () => {
     const model = describeAt(verified({ kind: 'expired' }));
     expect(model).toEqual({
       tone: 'none',
       plus: false,
-      title: SUBSCRIPTION_STATUS_NONE,
-      details: ['Votre abonnement BeautIzzy Plus n’est plus actif.', SUBSCRIPTION_EVERYTHING_AVAILABLE],
-      accessibilityLabel: `${SUBSCRIPTION_STATUS_NONE}, Votre abonnement BeautIzzy Plus n’est plus actif., ${SUBSCRIPTION_EVERYTHING_AVAILABLE}`,
+      title: 'Aucun abonnement actif',
+      details: ['Votre abonnement BeautIzzy Plus n’est plus actif.', 'Vos données sont conservées et restent consultables.'],
+      accessibilityLabel: `${SUBSCRIPTION_STATUS_NONE}, Votre abonnement BeautIzzy Plus n’est plus actif., ${SUBSCRIPTION_DATA_KEPT}`,
     });
   });
 
-  it('never subscribed: no badge, never told its subscription expired, nothing blocked', () => {
+  it('never subscribed: no badge, never told its subscription expired, the same data reassurance', () => {
     const model = describeAt(verified({ kind: 'never' }));
     expect(model).toMatchObject({
       tone: 'none',
       plus: false,
       title: SUBSCRIPTION_STATUS_NONE,
-      details: ['Votre compte n’a pas d’abonnement BeautIzzy Plus.', SUBSCRIPTION_EVERYTHING_AVAILABLE],
+      details: ['Votre compte n’a pas d’abonnement BeautIzzy Plus.', SUBSCRIPTION_DATA_KEPT],
     });
     expect(JSON.stringify(model)).not.toMatch(/expir|bloqu|lecture seule|gratuit|free/i);
   });
 
-  it('with enforcement enabled the availability line is not claimed', () => {
-    expect(describeAt(verified({ kind: 'never' }), 'enabled').details).toEqual(['Votre compte n’a pas d’abonnement BeautIzzy Plus.']);
-    expect(describeAt(verified({ kind: 'expired' }), 'enabled').details).toEqual(['Votre abonnement BeautIzzy Plus n’est plus actif.']);
+  it('claims nothing about permissions: no "everything available", no "read-only", whatever the enforcement will be', () => {
+    for (const kind of ['expired', 'never'] as const) {
+      expect(JSON.stringify(describeAt(verified({ kind })))).not.toMatch(/fonctionnalités|disponibles|lecture seule|modifier/i);
+    }
   });
 });
 
@@ -150,8 +151,8 @@ describe('describeSubscriptionStatus — nothing confirmed', () => {
 
   it('takes no access mode and no mutation permission: full access proves nothing', () => {
     // The signature itself admits only the verification: there is no way to pass `canMutate` or an access result.
-    const input = { verification: { kind: 'unavailable' } as const, now: STATUS_FIXTURE_NOW, enforcement: 'disabled' as const };
-    expect(Object.keys(input).sort()).toEqual(['enforcement', 'now', 'verification']);
+    const input = { verification: { kind: 'unavailable' } as const, now: STATUS_FIXTURE_NOW };
+    expect(Object.keys(input).sort()).toEqual(['now', 'verification']);
     expect(describeSubscriptionStatus(input).plus).toBe(false);
   });
 });

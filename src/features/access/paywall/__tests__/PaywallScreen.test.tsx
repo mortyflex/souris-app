@@ -426,3 +426,56 @@ describe('PaywallScreen — contexts', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PaywallScreen — activity and environment notice (Phase 6.3)', () => {
+  it.each([
+    ['purchasing', 'Achat en cours…'],
+    ['restoring', 'Restauration en cours…'],
+    ['verifying', 'Vérification de l’abonnement…'],
+  ] as const)('with %s in progress, the primary action is disabled, named, without footnote, and starts nothing', async (activity, title) => {
+    const onSubscribe = jest.fn();
+    const onRestorePurchases = jest.fn();
+    const view = await renderPaywall({ activity, onSubscribe, onRestorePurchases });
+
+    const action = view.getByTestId('paywall-subscribe');
+    expect(action.props.accessibilityState.disabled).toBe(true);
+    expect(within(action).getByText(title)).toBeTruthy();
+    expect(view.queryByTestId('paywall-subscribe-footnote')).toBeNull();
+    await press(action);
+    expect(onSubscribe).not.toHaveBeenCalled();
+    // The restore link is inert as well: no second transaction from the paywall.
+    const restore = view.getByTestId('paywall-link-restore');
+    expect(restore.props.accessibilityState).toEqual({ disabled: true });
+    await press(restore);
+    expect(onRestorePurchases).not.toHaveBeenCalled();
+    // The plans stay drawn exactly as before: no redesign, the professional only waits.
+    expect(view.getByTestId('paywall-plan-annual')).toBeTruthy();
+    expect(view.getByTestId('paywall-plan-monthly')).toBeTruthy();
+    expect(view.getByTestId('paywall-hero')).toBeTruthy();
+  });
+
+  it('without an activity, the action and the restore link work as before', async () => {
+    const onSubscribe = jest.fn();
+    const onRestorePurchases = jest.fn();
+    const view = await renderPaywall({ onSubscribe, onRestorePurchases });
+    await press(view.getByTestId('paywall-subscribe'));
+    expect(onSubscribe).toHaveBeenCalledWith('annual');
+    expect(view.getByTestId('paywall-link-restore').props.accessibilityState?.disabled).toBeFalsy();
+    await press(view.getByTestId('paywall-link-restore'));
+    expect(onRestorePurchases).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws an environment notice as a quiet reassuring card under the hero, and none by default', async () => {
+    const view = await renderPaywall({
+      environmentNotice: { title: 'Achat de test — aucun paiement réel', lines: ['RevenueCat Test Store.'] },
+    });
+    const notice = view.getByTestId('paywall-environment-notice');
+    expect(within(notice).getByText('Achat de test — aucun paiement réel')).toBeTruthy();
+    expect(within(notice).getByText('RevenueCat Test Store.')).toBeTruthy();
+    expect(view.queryByTestId('paywall-environment-notice-pending')).toBeNull();
+    expect(view.getByTestId('paywall-plans')).toBeTruthy();
+
+    const none = await renderPaywall();
+    expect(none.queryByTestId('paywall-environment-notice')).toBeNull();
+  });
+});

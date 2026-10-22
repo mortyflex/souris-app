@@ -1,9 +1,11 @@
-// BeautIzzy — Phases 6.1 and 6.2 stay a READ integration (source-level guard,
-// like paywall-boundary.test.ts): one module binds the SDK, offerings and the
-// eligibility check are read through that module only, no product module
-// purchases, restores, syncs or logs out, no key or account is hardcoded, the
-// environment files stay out of git, the root wiring and the enforcement
-// switch are untouched.
+// BeautIzzy — the RevenueCat integration stays bounded (source-level guard,
+// like paywall-boundary.test.ts): one module binds the SDK; offerings, the
+// eligibility check, the package purchase and the restore go through that
+// module only, from the source only; no product module syncs or logs out; the
+// only purchase entry point is the development preview, through the provider;
+// purchases are enabled for the Test Store only; no key or account is
+// hardcoded; the environment files stay out of git; the root wiring and the
+// enforcement switch are untouched.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,6 +43,7 @@ describe('RevenueCat integration — Phase 6.1 / 6.2 boundary', () => {
       'infrastructure/revenuecat/customer-info.ts',
       'infrastructure/revenuecat/index.ts',
       'infrastructure/revenuecat/offering.ts',
+      'infrastructure/revenuecat/purchase-error.ts',
       'infrastructure/revenuecat/sdk.ts',
       'infrastructure/revenuecat/subscription-source.ts',
     ]);
@@ -61,13 +64,55 @@ describe('RevenueCat integration — Phase 6.1 / 6.2 boundary', () => {
     expect(anyImporters.every((path) => path.startsWith('infrastructure/revenuecat/'))).toBe(true);
   });
 
-  it('purchases, restores, syncs and logs out nowhere', () => {
+  it('buys a PACKAGE and restores through the SDK facade only, from the source only; every other billing call is bound nowhere', () => {
+    const sdkCallers = files
+      .filter((file) => /\bPurchases\.(purchasePackage|restorePurchases)\s*\(/.test(file.source))
+      .map((file) => file.path);
+    expect(sdkCallers).toEqual(['infrastructure/revenuecat/sdk.ts']);
+    const facadeCallers = files
+      .filter((file) => /\bsdk\.(purchasePackage|restorePurchases)\s*\(/.test(file.source))
+      .map((file) => file.path);
+    expect(facadeCallers).toEqual(['infrastructure/revenuecat/subscription-source.ts']);
     for (const file of files) {
       expect({
         path: file.path,
-        billing: /\b(purchasePackage|purchaseProduct|purchaseStoreProduct|purchaseSubscriptionOption|purchaseDiscountedPackage|purchasePackageWithWinBackOffer|restorePurchases|syncPurchases|syncPurchasesForResult|logOut|presentCodeRedemptionSheet|getPromotionalOffer)\s*\(/.test(file.source),
+        billing: /\b(purchaseProduct|purchaseStoreProduct|purchaseSubscriptionOption|purchaseDiscountedPackage|purchaseDiscountedProduct|purchasePackageWithWinBackOffer|purchaseProductWithWinBackOffer|syncPurchases|syncPurchasesForResult|logOut|presentCodeRedemptionSheet|getPromotionalOffer)\s*\(/.test(file.source),
       }).toEqual({ path: file.path, billing: false });
+      if (!file.path.startsWith('infrastructure/revenuecat/')) {
+        expect({ path: file.path, sdkBilling: /\b(purchasePackage|restorePurchases)\s*\(/.test(file.source) }).toEqual({ path: file.path, sdkBilling: false });
+      }
     }
+  });
+
+  it('the purchase and the restore reach the source through the provider only, and the ONLY purchase entry point is the development preview', () => {
+    const sourceCallers = files
+      .filter((file) => /\bsource\??\.(purchase|restore)\b/.test(file.source) && !file.path.startsWith('infrastructure/revenuecat/'))
+      .map((file) => file.path)
+      .sort();
+    expect(sourceCallers).toEqual(['features/access/session/BusinessAccessProvider.tsx']);
+    // The checkout hook is the only reader of the provider's transactions…
+    const providerCallers = files
+      .filter((file) => /accessRef\.current\.(purchase|restore)\(|\bpurchase: \(request/.test(file.source))
+      .map((file) => file.path)
+      .sort();
+    expect(providerCallers).toEqual(['features/access/session/BusinessAccessProvider.tsx', 'features/access/session/use-plus-checkout.ts']);
+    // …and the development preview its only consumer: no product screen, no route.
+    const checkoutConsumers = files.filter((file) => /usePlusCheckout\s*\(/.test(file.source)).map((file) => file.path).sort();
+    expect(checkoutConsumers).toEqual([
+      'features/access/paywall/development/PaywallPreviewSheet.tsx',
+      'features/access/session/use-plus-checkout.ts',
+    ]);
+  });
+
+  it('purchases are enabled for the RevenueCat Test Store only: a release bound to the App Store starts no transaction', () => {
+    const policy = files.find((file) => file.path === 'features/access/purchasable-stores.ts')!.source;
+    expect(policy).toMatch(/export const PURCHASABLE_STORES: readonly SubscriptionStoreKind\[\] = \['test-store'\];/);
+    const provider = files.find((file) => file.path === 'features/access/session/BusinessAccessProvider.tsx')!.source;
+    expect(provider).toMatch(/operation === 'purchase' && !isPurchasableStore\(store\)\) return failed\('not-enabled'\)/);
+    // Nothing restores automatically: the only `restore` calls are user-initiated through the hook.
+    expect(provider).not.toMatch(/restore\(\)/);
+    const hook = files.find((file) => file.path === 'features/access/session/use-plus-checkout.ts')!.source;
+    expect(hook).not.toMatch(/useEffect\([^)]*restore/);
   });
 
   it('reads the offerings and the trial eligibility through the SDK facade only, from the source only', () => {

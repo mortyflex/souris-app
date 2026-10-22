@@ -1,7 +1,9 @@
-// BeautIzzy — the SDK facade binds exactly the identified READ surface of
+// BeautIzzy — the SDK facade binds exactly the identified surface of
 // react-native-purchases: configure with an App User ID, logIn, the reads,
-// the listener, the offerings and the introductory-offer eligibility. No
-// purchase, restore, sync or logOut is bound.
+// the listener, the offerings, the introductory-offer eligibility and — since
+// Phase 6.3 — the purchase of an ORIGINAL package and the user-initiated
+// restore. No purchase by product, discount or option, no sync, no logOut is
+// bound.
 
 import { expoRevenueCatSdk } from '../sdk';
 
@@ -62,6 +64,30 @@ describe('expoRevenueCatSdk', () => {
     }
   });
 
+  it('buys the very package object it is given, and restores through the SDK; nothing else of the kind', async () => {
+    const pkg = { identifier: '$rc_annual', packageType: 'ANNUAL', product: { identifier: 'p' }, presentedOfferingContext: { offeringIdentifier: 'default' } };
+    const result = { productIdentifier: 'p', customerInfo: {}, transaction: {} };
+    purchases.purchasePackage.mockResolvedValue(result);
+    purchases.restorePurchases.mockResolvedValue({ requestDate: 'now' });
+
+    await expect(expoRevenueCatSdk.purchasePackage(pkg as never)).resolves.toBe(result);
+    expect(purchases.purchasePackage).toHaveBeenCalledTimes(1);
+    expect(purchases.purchasePackage.mock.calls[0]![0]).toBe(pkg);
+    expect(purchases.purchasePackage.mock.calls[0]).toHaveLength(1);
+
+    await expect(expoRevenueCatSdk.restorePurchases()).resolves.toEqual({ requestDate: 'now' });
+    expect(purchases.restorePurchases).toHaveBeenCalledWith();
+    for (const forbidden of ['purchaseProduct', 'purchaseStoreProduct', 'purchaseSubscriptionOption', 'logOut', 'syncPurchases']) {
+      expect(purchases[forbidden]).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes the SDK rejection through unchanged, whatever its shape', async () => {
+    const rejection = { code: '1', message: 'cancelled', userInfo: { readableErrorCode: 'PURCHASE_CANCELLED_ERROR' } };
+    purchases.purchasePackage.mockRejectedValue(rejection);
+    await expect(expoRevenueCatSdk.purchasePackage({} as never)).rejects.toBe(rejection);
+  });
+
   it('reads the offerings and the eligibility of a copied identifier list; nothing is bought or restored', async () => {
     const offerings = { all: {}, current: null };
     const eligibility = { 'product.a': { status: 0, description: 'unknown' } };
@@ -89,7 +115,7 @@ describe('expoRevenueCatSdk', () => {
     }
   });
 
-  it('binds no purchase, restore, sync or logOut entry point at all', () => {
+  it('binds the package purchase and the restore, and no other transaction, sync or logOut', () => {
     expect(Object.keys(expoRevenueCatSdk).sort()).toEqual([
       'addCustomerInfoUpdateListener',
       'checkTrialOrIntroductoryPriceEligibility',
@@ -99,7 +125,9 @@ describe('expoRevenueCatSdk', () => {
       'getOfferings',
       'invalidateCustomerInfoCache',
       'logIn',
+      'purchasePackage',
       'removeCustomerInfoUpdateListener',
+      'restorePurchases',
     ]);
   });
 });

@@ -173,6 +173,27 @@ export function productIdentifiersWithFreeTrial(offering: PurchasesOffering | nu
 }
 
 /**
+ * The store packages behind the plans of a mapped offering: for each plan
+ * listed in `plans`, the very package object of the offering's own slot —
+ * the one `planOfferOf` validated and the paywall priced. A purchase hands
+ * this object back to the SDK unchanged; nothing is rebuilt from an
+ * identifier, a price or a position.
+ */
+export function selectPlanPackages(
+  offerings: PurchasesOfferings,
+  plans: readonly PaywallPlanOffer[],
+): Partial<Record<SubscriptionPlan, PurchasesPackage>> {
+  const current = isRecord(offerings) ? offerings.current : undefined;
+  if (!isRecord(current)) return {};
+  const packages: Partial<Record<SubscriptionPlan, PurchasesPackage>> = {};
+  for (const offer of plans) {
+    const pkg = current[offer.plan];
+    if (isRecord(pkg) && pkg.packageType === PLAN_PACKAGE_TYPE[offer.plan]) packages[offer.plan] = pkg;
+  }
+  return packages;
+}
+
+/**
  * The paywall offering of the current RevenueCat offering. Always
  * `available`: the store answered. Missing, malformed or contradictory
  * packages are simply absent from `plans`; none at all is an empty list.

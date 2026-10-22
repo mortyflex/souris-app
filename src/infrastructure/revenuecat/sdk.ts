@@ -2,10 +2,14 @@
 //
 // The only module that imports `react-native-purchases`. It exposes the
 // narrow, process-global surface the subscription source needs — identity,
-// CustomerInfo, its update event, and (Phase 6.2) the offerings with the
-// introductory-offer eligibility — behind an interface tests implement with a
-// deterministic fake. A later phase extends this facade with purchases and
-// restores; nothing here purchases, restores or syncs anything.
+// CustomerInfo, its update event, the offerings with the introductory-offer
+// eligibility (Phase 6.2) and, since Phase 6.3, the two store transactions:
+// the purchase of a PACKAGE the SDK itself returned (`purchasePackage`: the
+// SDK sends the package identifier and its presented-offering context to the
+// native layer, so only an original package can be bought) and the user-
+// initiated restore (`restorePurchases`). Behind an interface tests implement
+// with a deterministic fake. Nothing here syncs, and no purchase by product,
+// by subscription option or with a discount is bound.
 //
 // `Purchases.configure` throws when the native module is absent (a
 // development build that predates the SDK, Expo Go): the source turns that
@@ -16,10 +20,12 @@
 import Purchases, {
   INTRO_ELIGIBILITY_STATUS,
   PACKAGE_TYPE,
+  PURCHASES_ERROR_CODE,
   type CustomerInfo,
   type CustomerInfoUpdateListener,
   type IntroEligibility,
   type LogInResult,
+  type MakePurchaseResult,
   type PurchasesIntroPrice,
   type PurchasesOffering,
   type PurchasesOfferings,
@@ -32,15 +38,16 @@ export type {
   CustomerInfoUpdateListener,
   IntroEligibility,
   LogInResult,
+  MakePurchaseResult,
   PurchasesIntroPrice,
   PurchasesOffering,
   PurchasesOfferings,
   PurchasesPackage,
   PurchasesStoreProduct,
 };
-// The SDK's own enumerations, re-exported so the pure mapping compares
+// The SDK's own enumerations, re-exported so the pure mappings compare
 // documented members and never a magic number or a bare string.
-export { INTRO_ELIGIBILITY_STATUS, PACKAGE_TYPE };
+export { INTRO_ELIGIBILITY_STATUS, PACKAGE_TYPE, PURCHASES_ERROR_CODE };
 
 /** The eligibility of the identified user for each product's introductory offer, keyed by product identifier. */
 export type IntroEligibilityByProduct = Readonly<Record<string, IntroEligibility>>;
@@ -72,6 +79,15 @@ export interface RevenueCatSdk {
    * on Android), and the store's purchase sheet decides in the end.
    */
   checkTrialOrIntroductoryPriceEligibility(productIdentifiers: readonly string[]): Promise<IntroEligibilityByProduct>;
+  /**
+   * Buys a package the SDK returned in an offering: the store's purchase
+   * sheet, then the CustomerInfo the store answered. Rejects with the SDK's
+   * `PurchasesError` shape (a numeric `code` string) on cancellation,
+   * deferral and every failure — see purchase-error.ts.
+   */
+  purchasePackage(pkg: PurchasesPackage): Promise<MakePurchaseResult>;
+  /** Asks the store for the identified user's previous purchases; resolves with the CustomerInfo the store answered. */
+  restorePurchases(): Promise<CustomerInfo>;
 }
 
 export const expoRevenueCatSdk: RevenueCatSdk = {
@@ -85,4 +101,6 @@ export const expoRevenueCatSdk: RevenueCatSdk = {
   getOfferings: () => Purchases.getOfferings(),
   checkTrialOrIntroductoryPriceEligibility: (productIdentifiers) =>
     Purchases.checkTrialOrIntroductoryPriceEligibility([...productIdentifiers]),
+  purchasePackage: (pkg) => Purchases.purchasePackage(pkg),
+  restorePurchases: () => Purchases.restorePurchases(),
 };

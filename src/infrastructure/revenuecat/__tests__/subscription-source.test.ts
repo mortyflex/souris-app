@@ -6,10 +6,15 @@
 import type { SubscriptionVerification } from '@/domain/access';
 
 import { CUSTOMER_INFO_FRESHNESS_MS } from '../customer-info';
-import type { CustomerInfo, LogInResult } from '../sdk';
+import { PURCHASES_ERROR_CODE, type CustomerInfo, type LogInResult, type MakePurchaseResult, type PurchasesPackage } from '../sdk';
 import { createRevenueCatSubscriptionSource } from '../subscription-source';
 import { customerInfo, NEXT_MONTH, NOW, plusEntitlement } from '../testing/customer-info-fixtures';
-import { createFakeRevenueCatSdk, type FakeRevenueCatSdkOptions } from '../testing/fake-revenuecat-sdk';
+import {
+  createFakeRevenueCatSdk,
+  makePurchaseResult,
+  purchasesError,
+  type FakeRevenueCatSdkOptions,
+} from '../testing/fake-revenuecat-sdk';
 import {
   ELIGIBLE,
   INELIGIBLE,
@@ -39,7 +44,7 @@ function harness(options: FakeRevenueCatSdkOptions = {}, clock: () => Date = () 
   const sdk = createFakeRevenueCatSdk(options);
   sdk.setCustomerInfo(LEA, customerInfo({ originalAppUserId: LEA }));
   sdk.setCustomerInfo(NOA, customerInfo({ plus: null, originalAppUserId: NOA }));
-  const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, clock });
+  const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, store: 'test-store', clock });
   return { sdk, source };
 }
 
@@ -101,7 +106,7 @@ describe('createRevenueCatSubscriptionSource — identity', () => {
   it('answers unavailable when the SDK does not hold the requested identity', async () => {
     const sdk = createFakeRevenueCatSdk({ configure: () => undefined });
     sdk.setCustomerInfo(LEA, customerInfo());
-    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, clock: () => NOW });
+    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, store: 'test-store', clock: () => NOW });
     await expect(source.verify(LEA)).resolves.toEqual(ACTIVE_MONTHLY);
     // The native SDK drifts to another identity behind the source's back.
     sdk.configure({ apiKey: API_KEY, appUserID: NOA });
@@ -383,7 +388,7 @@ describe('createRevenueCatSubscriptionSource — offerings (Phase 6.2)', () => {
   it('answers store-unavailable when the SDK does not hold the requested identity', async () => {
     const sdk = createFakeRevenueCatSdk({ configure: () => undefined });
     sdk.setOfferings(LEA, appStoreOfferings);
-    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, clock: () => NOW });
+    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, store: 'test-store', clock: () => NOW });
     await expect(source.loadOffering!(LEA)).resolves.toMatchObject({ status: 'available' });
     sdk.configure({ apiKey: API_KEY, appUserID: NOA });
     await expect(source.loadOffering!(LEA)).resolves.toEqual(STORE_UNAVAILABLE);
@@ -440,9 +445,250 @@ describe('createRevenueCatSubscriptionSource — offerings (Phase 6.2)', () => {
     expect(sdk.calls.checkTrialOrIntroductoryPriceEligibility).toEqual([[appStoreOfferings.current!.annual!.product.identifier]]);
   });
 
-  it('never purchases, restores or syncs: the facade exposes nothing of the kind', async () => {
+  it('returns an opaque reference with every available offering, a new one per load, none when unavailable', async () => {
     const { sdk, source } = offeringHarness();
+    const first = await source.loadOffering!(LEA);
+    const second = await source.loadOffering!(LEA);
+    expect(first.status === 'available' && typeof first.reference).toBe('string');
+    expect(second.status === 'available' && second.reference).not.toEqual(first.status === 'available' && first.reference);
+    sdk.setOfferings(LEA, undefined);
+    expect(await source.loadOffering!(LEA)).toEqual(STORE_UNAVAILABLE);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Transactions (Phase 6.3): the ORIGINAL package of the latest loaded
+// offering, for the identified account, on the serial chain; the SDK's
+// rejections classified; a completed transaction answers the verification
+// of the CustomerInfo the store returned; nothing granted here.
+// ---------------------------------------------------------------------------
+
+const UNAVAILABLE_OFFERING = { status: 'unavailable', reason: 'store-unavailable' } as const;
+
+const purchased = (info: CustomerInfo, pkg: PurchasesPackage): MakePurchaseResult =>
+  makePurchaseResult(info, pkg.product.identifier, NOW);
+
+function storeHarness(options: FakeRevenueCatSdkOptions = {}) {
+  const { sdk, source } = harness(options);
+  sdk.setOfferings(LEA, appStoreOfferings);
+  sdk.setIntroEligibility(LEA, appStoreEligibility(ELIGIBLE));
+  sdk.setOfferings(NOA, testStoreOfferings);
+  return { sdk, source };
+}
+
+async function transactionHarness(options: FakeRevenueCatSdkOptions = {}) {
+  const { sdk, source } = storeHarness(options);
+  const loaded = await source.loadOffering!(LEA);
+  const reference = loaded.status === 'available' ? loaded.reference! : '';
+  return { sdk, source, reference };
+}
+
+describe('createRevenueCatSubscriptionSource — purchase', () => {
+  it('buys the very package object of the loaded offering for the chosen plan — annual and monthly', async () => {
+    const { sdk, source, reference } = await transactionHarness();
+    sdk.scriptPurchase(LEA, (pkg) => Promise.resolve(purchased(customerInfo({ originalAppUserId: LEA }), pkg)));
+
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual({ kind: 'completed', verification: ACTIVE_MONTHLY });
+    await expect(source.purchase!(LEA, { reference, plan: 'monthly' })).resolves.toMatchObject({ kind: 'completed' });
+    expect(sdk.calls.purchasePackage).toHaveLength(2);
+    expect(sdk.calls.purchasePackage[0]!.pkg).toBe(appStoreOfferings.current!.annual);
+    expect(sdk.calls.purchasePackage[1]!.pkg).toBe(appStoreOfferings.current!.monthly);
+    expect(sdk.calls.purchasePackage.every((call) => call.appUserId === LEA)).toBe(true);
+  });
+
+  it('answers the verification mapped from the CustomerInfo the store returned with the purchase', async () => {
+    const { sdk, source, reference } = await transactionHarness();
+    sdk.scriptPurchase(LEA, (pkg) =>
+      Promise.resolve(purchased(customerInfo({ plus: plusEntitlement({ periodType: 'TRIAL' }), originalAppUserId: LEA }), pkg)),
+    );
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual({
+      kind: 'completed',
+      verification: { kind: 'verified', status: { kind: 'trial', plan: 'monthly', expiresAt: NEXT_MONTH } },
+    });
+  });
+
+  it('completes with an unavailable verification when the returned CustomerInfo confirms nothing: never a fabricated entitlement', async () => {
+    const { sdk, source, reference } = await transactionHarness();
+    const stale = new Date(NOW.getTime() - CUSTOMER_INFO_FRESHNESS_MS - 1);
+    sdk.scriptPurchase(LEA, (pkg) => Promise.resolve(purchased(customerInfo({ requestDate: stale, originalAppUserId: LEA }), pkg)));
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual({ kind: 'completed', verification: UNAVAILABLE });
+
+    sdk.scriptPurchase(LEA, (pkg) => Promise.resolve(purchased(customerInfo({ plus: null, originalAppUserId: LEA }), pkg)));
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual({ kind: 'completed', verification: NEVER });
+  });
+
+  it('refuses a reference that is not the latest loaded offering of that account, and buys nothing else instead', async () => {
+    const { sdk, source, reference } = await transactionHarness();
+    sdk.scriptPurchase(LEA, (pkg) => Promise.resolve(purchased(customerInfo({ originalAppUserId: LEA }), pkg)));
+
+    await expect(source.purchase!(LEA, { reference: 'offering-999', plan: 'annual' })).resolves.toEqual({ kind: 'failed', reason: 'stale-offering' });
+    await expect(source.purchase!(LEA, { reference: '', plan: 'annual' })).resolves.toEqual({ kind: 'failed', reason: 'stale-offering' });
+    // Loaded again since: the previous reference is gone.
     await source.loadOffering!(LEA);
-    expect(Object.keys(sdk).some((key) => /purchase|restore|sync/i.test(key))).toBe(false);
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual({ kind: 'failed', reason: 'stale-offering' });
+    // A failed load since: nothing shown, nothing to buy.
+    const latest = await source.loadOffering!(LEA);
+    sdk.setOfferings(LEA, undefined);
+    await source.loadOffering!(LEA);
+    await expect(source.purchase!(LEA, { reference: latest.status === 'available' ? latest.reference! : '', plan: 'annual' })).resolves.toEqual({
+      kind: 'failed',
+      reason: 'stale-offering',
+    });
+    expect(sdk.calls.purchasePackage).toEqual([]);
+  });
+
+  it('refuses a plan the loaded offering does not sell, and a reference of another account', async () => {
+    const sdk = createFakeRevenueCatSdk();
+    sdk.setCustomerInfo(LEA, customerInfo({ originalAppUserId: LEA }));
+    sdk.setCustomerInfo(NOA, customerInfo({ plus: null, originalAppUserId: NOA }));
+    sdk.setOfferings(LEA, offerings(offering({ monthly: null })));
+    sdk.setOfferings(NOA, testStoreOfferings);
+    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, store: 'test-store', clock: () => NOW });
+    const lea = await source.loadOffering!(LEA);
+    const leaReference = lea.status === 'available' ? lea.reference! : '';
+    await expect(source.purchase!(LEA, { reference: leaReference, plan: 'monthly' })).resolves.toEqual({ kind: 'failed', reason: 'stale-offering' });
+    const noa = await source.loadOffering!(NOA);
+    const noaReference = noa.status === 'available' ? noa.reference! : '';
+    await expect(source.purchase!(LEA, { reference: noaReference, plan: 'annual' })).resolves.toEqual({ kind: 'failed', reason: 'stale-offering' });
+    expect(sdk.calls.purchasePackage).toEqual([]);
+  });
+
+  it.each([
+    [PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR, { kind: 'cancelled' }],
+    [PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR, { kind: 'pending' }],
+    [PURCHASES_ERROR_CODE.STORE_PROBLEM_ERROR, { kind: 'failed', reason: 'store-problem' }],
+    [PURCHASES_ERROR_CODE.PRODUCT_NOT_AVAILABLE_FOR_PURCHASE_ERROR, { kind: 'failed', reason: 'product-unavailable' }],
+    [PURCHASES_ERROR_CODE.NETWORK_ERROR, { kind: 'failed', reason: 'network' }],
+    [PURCHASES_ERROR_CODE.PRODUCT_ALREADY_PURCHASED_ERROR, { kind: 'failed', reason: 'already-owned' }],
+    [PURCHASES_ERROR_CODE.UNKNOWN_ERROR, { kind: 'failed', reason: 'unexpected' }],
+  ])('classifies the SDK rejection %s as %o', async (code, outcome) => {
+    const { sdk, source, reference } = await transactionHarness();
+    sdk.scriptPurchase(LEA, () => Promise.reject(purchasesError(code)));
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual(outcome);
+  });
+
+  it('an unexpected SDK response (not an error shape) is a failure, never a crash', async () => {
+    const { sdk, source, reference } = await transactionHarness();
+    sdk.scriptPurchase(LEA, () => Promise.reject('something'));
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual({ kind: 'failed', reason: 'unexpected' });
+    sdk.scriptPurchase(LEA, () => Promise.resolve({ productIdentifier: 'p', customerInfo: {} as CustomerInfo, transaction: {} as never }));
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual({ kind: 'completed', verification: UNAVAILABLE });
+  });
+
+  it('answers sdk-unavailable when the native module is absent', async () => {
+    const sdk = createFakeRevenueCatSdk({
+      configure: () => {
+        throw new Error('react-native-purchases: native module not available');
+      },
+    });
+    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, store: 'test-store', clock: () => NOW });
+    await expect(source.loadOffering!(LEA)).resolves.toEqual(UNAVAILABLE_OFFERING);
+    await expect(source.purchase!(LEA, { reference: 'offering-1', plan: 'annual' })).resolves.toEqual({ kind: 'failed', reason: 'sdk-unavailable' });
+    await expect(source.restore!(LEA)).resolves.toEqual({ kind: 'failed', reason: 'sdk-unavailable' });
+    expect(sdk.calls.purchasePackage).toEqual([]);
+    expect(sdk.calls.restorePurchases).toEqual([]);
+  });
+
+  it('buys nothing when the SDK does not hold the requested account (identity-mismatch), then re-identifies with logIn', async () => {
+    const sdk = createFakeRevenueCatSdk({ configure: () => undefined });
+    sdk.setCustomerInfo(LEA, customerInfo({ originalAppUserId: LEA }));
+    sdk.setOfferings(LEA, appStoreOfferings);
+    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: API_KEY, store: 'test-store', clock: () => NOW });
+    const loaded = await source.loadOffering!(LEA);
+    const reference = loaded.status === 'available' ? loaded.reference! : '';
+    // The native SDK drifts to another identity behind the source's back.
+    sdk.configure({ apiKey: API_KEY, appUserID: NOA });
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toEqual({ kind: 'failed', reason: 'identity-mismatch' });
+    expect(sdk.calls.purchasePackage).toEqual([]);
+    expect(sdk.calls.logIn).toEqual([]);
+    // The source is identified as nobody now: the next operation switches back explicitly before acting.
+    await expect(source.restore!(LEA)).resolves.toEqual({ kind: 'completed', verification: ACTIVE_MONTHLY });
+    expect(sdk.calls.logIn).toEqual([LEA]);
+    expect(sdk.calls.restorePurchases).toEqual([LEA]);
+  });
+
+  it('switches back to the requested account before buying, with logIn, never a second configure', async () => {
+    const { sdk, source, reference } = await transactionHarness();
+    sdk.scriptPurchase(LEA, (pkg) => Promise.resolve(purchased(customerInfo({ originalAppUserId: LEA }), pkg)));
+    await source.verify(NOA);
+    expect(sdk.appUserId()).toBe(NOA);
+    await expect(source.purchase!(LEA, { reference, plan: 'annual' })).resolves.toMatchObject({ kind: 'completed' });
+    expect(sdk.calls.configure).toHaveLength(1);
+    expect(sdk.calls.logIn).toEqual([NOA, LEA]);
+    expect(sdk.calls.purchasePackage[0]!.appUserId).toBe(LEA);
+  });
+
+  it('serializes: an account switch requested during the purchase sheet waits for the transaction', async () => {
+    const { sdk, source, reference } = await transactionHarness();
+    let finish: ((result: MakePurchaseResult) => void) | undefined;
+    sdk.scriptPurchase(
+      LEA,
+      (pkg) =>
+        new Promise((resolve) => {
+          finish = (result) => resolve(result ?? purchased(customerInfo({ originalAppUserId: LEA }), pkg));
+        }),
+    );
+    const purchase = source.purchase!(LEA, { reference, plan: 'annual' });
+    await flush();
+    const switched = source.verify(NOA);
+    await flush();
+    expect(sdk.calls.logIn).toEqual([]);
+    expect(sdk.appUserId()).toBe(LEA);
+    finish!(undefined as never);
+    await expect(purchase).resolves.toEqual({ kind: 'completed', verification: ACTIVE_MONTHLY });
+    await expect(switched).resolves.toEqual(NEVER);
+    expect(sdk.calls.logIn).toEqual([NOA]);
+  });
+
+  it('the SDK update event after a purchase re-reads the identified account on the chain, once, with the one listener', async () => {
+    const { sdk, source, reference } = await transactionHarness();
+    const received: SubscriptionVerification[] = [];
+    source.onVerificationChange!(LEA, (verification) => received.push(verification));
+    await source.verify(LEA);
+    sdk.scriptPurchase(LEA, (pkg) => {
+      const info = customerInfo({ plus: plusEntitlement({ periodType: 'TRIAL' }), originalAppUserId: LEA });
+      sdk.setCustomerInfo(LEA, info);
+      sdk.emit(info);
+      return Promise.resolve(purchased(info, pkg));
+    });
+    await source.purchase!(LEA, { reference, plan: 'annual' });
+    await flush();
+    expect(received).toEqual([{ kind: 'verified', status: { kind: 'trial', plan: 'monthly', expiresAt: NEXT_MONTH } }]);
+    expect(sdk.listenerCount()).toBe(1);
+  });
+});
+
+describe('createRevenueCatSubscriptionSource — restore', () => {
+  it('asks the store for the identified account and answers the verification of what it returned', async () => {
+    const { sdk, source } = await transactionHarness();
+    await expect(source.restore!(LEA)).resolves.toEqual({ kind: 'completed', verification: ACTIVE_MONTHLY });
+    expect(sdk.calls.restorePurchases).toEqual([LEA]);
+  });
+
+  it('an account with nothing to restore completes with the confirmed absence — not an error', async () => {
+    const { sdk, source } = await transactionHarness();
+    sdk.setCustomerInfo(LEA, customerInfo({ plus: null, originalAppUserId: LEA }));
+    await expect(source.restore!(LEA)).resolves.toEqual({ kind: 'completed', verification: NEVER });
+  });
+
+  it.each([
+    [PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR, { kind: 'cancelled' }],
+    [PURCHASES_ERROR_CODE.NETWORK_ERROR, { kind: 'failed', reason: 'network' }],
+    [PURCHASES_ERROR_CODE.STORE_PROBLEM_ERROR, { kind: 'failed', reason: 'store-problem' }],
+    [PURCHASES_ERROR_CODE.RECEIPT_IN_USE_BY_OTHER_SUBSCRIBER_ERROR, { kind: 'failed', reason: 'linked-to-another-account' }],
+    [PURCHASES_ERROR_CODE.UNSUPPORTED_ERROR, { kind: 'failed', reason: 'unexpected' }],
+    [PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR, { kind: 'failed', reason: 'store-problem' }],
+  ])('classifies the SDK rejection %s as %o', async (code, outcome) => {
+    const { source } = await transactionHarness({ restorePurchases: () => Promise.reject(purchasesError(code)) });
+    await expect(source.restore!(LEA)).resolves.toEqual(outcome);
+  });
+
+  it('restores for the requested account only, after switching to it; never automatically', async () => {
+    const { sdk, source } = await transactionHarness();
+    await source.verify(NOA);
+    expect(sdk.calls.restorePurchases).toEqual([]);
+    await expect(source.restore!(LEA)).resolves.toEqual({ kind: 'completed', verification: ACTIVE_MONTHLY });
+    expect(sdk.calls.restorePurchases).toEqual([LEA]);
+    expect(sdk.calls.logIn).toEqual([NOA, LEA]);
   });
 });

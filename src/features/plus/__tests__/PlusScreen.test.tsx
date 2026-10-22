@@ -304,7 +304,7 @@ describe('PlusScreen — « Mon abonnement » (Phase 6.2)', () => {
     const view = await renderPlusWithAccess({ kind: 'verified', status: { kind: 'never' } });
     expect(view.queryByTestId('subscription-status-badge')).toBeNull();
     expect(view.getByText('Aucun abonnement actif')).toBeTruthy();
-    expect(view.getByText('Toutes les fonctionnalités restent disponibles.')).toBeTruthy();
+    expect(view.getByText('Vos données sont conservées et restent consultables.')).toBeTruthy();
     expect(view.queryByText(/lecture seule|bloqu/i)).toBeNull();
   });
 

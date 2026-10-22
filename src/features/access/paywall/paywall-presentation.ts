@@ -23,6 +23,9 @@
 //   action       subscribe when a valid plan is selected AND a purchase entry
 //                point exists; otherwise disabled and said so. An unavailable
 //                offering has no action at all: nothing can be initiated.
+//                While a transaction or a verification is in progress
+//                (`PaywallActivity`), the action is disabled and names it, so
+//                a second tap starts nothing.
 //
 // Formatting follows the store's own localized string when it provides one,
 // `Intl.NumberFormat` for the given locale and currency otherwise. No price
@@ -42,6 +45,7 @@ import {
   PAYWALL_INITIAL_LEAD,
   PAYWALL_LOADING_TITLE,
   PAYWALL_NOT_CONFIGURED_FOOTNOTE,
+  PAYWALL_ACTIVITY_TITLES,
   PAYWALL_PLAN_PERIODS,
   PAYWALL_PLAN_SPOKEN,
   PAYWALL_PLAN_TITLES,
@@ -249,11 +253,16 @@ export function resolveSelectedPaywallPlan(
   return plans.defaultPlan;
 }
 
+/** A transaction of the session, or a re-verification, in progress: the paywall waits for it. */
+export type PaywallActivity = 'purchasing' | 'restoring' | 'verifying';
+
 export type PaywallActionModel =
   /** A valid plan is selected and a purchase entry point exists. */
   | { readonly kind: 'subscribe'; readonly plan: SubscriptionPlan; readonly title: string; readonly footnote: string }
   /** The store is being asked: a disabled action that says so. */
   | { readonly kind: 'loading'; readonly title: string }
+  /** A purchase, a restore or a verification is in progress: a disabled action that names it. */
+  | { readonly kind: 'in-progress'; readonly activity: PaywallActivity; readonly title: string }
   /** Plans exist but no purchase integration does: a disabled action that says so. */
   | { readonly kind: 'not-configured'; readonly title: string; readonly footnote: string }
   /** Nothing can be initiated. */
@@ -263,11 +272,13 @@ export function resolvePaywallAction(
   plans: PaywallPlansModel,
   selectedPlan: SubscriptionPlan | undefined,
   purchasable: boolean,
+  activity?: PaywallActivity,
 ): PaywallActionModel {
   if (plans.status === 'loading') return { kind: 'loading', title: PAYWALL_LOADING_TITLE };
   if (plans.status === 'unavailable') return { kind: 'none' };
   const card = plans.cards.find((candidate) => candidate.plan === selectedPlan);
   if (card === undefined) return { kind: 'none' };
+  if (activity !== undefined) return { kind: 'in-progress', activity, title: PAYWALL_ACTIVITY_TITLES[activity] };
   if (!purchasable) {
     return { kind: 'not-configured', title: PAYWALL_SUBSCRIBE_TITLE, footnote: PAYWALL_NOT_CONFIGURED_FOOTNOTE };
   }

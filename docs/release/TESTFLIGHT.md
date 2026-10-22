@@ -67,7 +67,11 @@ RevenueCat secret key, and never an Apple `.p8` file in the repository. Since Ph
 offering a build reads follows the same key: a TestFlight build shows the real App Store products
 and prices in the development-only preview of a debug bundle only — a release bundle has no
 preview and no paywall route — while a debug bundle shows the Test Store products, whose prices
-may differ from Apple's; this is expected.
+may differ from Apple's; this is expected. Since Phase 6.3 the purchase and restore calls exist,
+but purchases are enabled for the RevenueCat Test Store ONLY (`PURCHASABLE_STORES`): a TestFlight
+or App Store build, bound to the Apple key, refuses every purchase (`not-enabled`) and exposes no
+purchase entry point — no real-money transaction can start from a release until the Apple
+Sandbox validation phase enables the App Store deliberately.
 
 ## 3. Supabase Dashboard (manual)
 

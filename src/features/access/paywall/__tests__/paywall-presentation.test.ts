@@ -399,3 +399,27 @@ describe('illustration side', () => {
     expect(side).toBeLessThan(Math.round(852 * 0.15));
   });
 });
+
+describe('primary action — a transaction or a verification in progress (Phase 6.3)', () => {
+  const plans = buildPaywallPlans(paywallOfferingFixtures.frenchWithTrial);
+
+  it.each([
+    ['purchasing', 'Achat en cours…'],
+    ['restoring', 'Restauration en cours…'],
+    ['verifying', 'Vérification de l’abonnement…'],
+  ] as const)('%s disables the action and names it, whatever the plan and the trial', (activity, title) => {
+    expect(resolvePaywallAction(plans, 'annual', true, activity)).toEqual({ kind: 'in-progress', activity, title });
+    expect(resolvePaywallAction(plans, 'monthly', true, activity)).toEqual({ kind: 'in-progress', activity, title });
+    // Even without a purchase entry point: the activity speaks first.
+    expect(resolvePaywallAction(plans, 'annual', false, activity)).toEqual({ kind: 'in-progress', activity, title });
+  });
+
+  it('changes nothing while the offering loads or is unavailable, and nothing without an activity', () => {
+    expect(resolvePaywallAction(buildPaywallPlans(paywallOfferingFixtures.loading), 'annual', true, 'purchasing')).toEqual({
+      kind: 'loading',
+      title: 'Chargement des offres…',
+    });
+    expect(resolvePaywallAction(buildPaywallPlans(paywallOfferingFixtures.storeUnavailable), 'annual', true, 'purchasing')).toEqual({ kind: 'none' });
+    expect(resolvePaywallAction(plans, 'annual', true, undefined)).toMatchObject({ kind: 'subscribe', plan: 'annual' });
+  });
+});

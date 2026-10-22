@@ -350,7 +350,7 @@ function DevelopmentSection() {
                 Aperçu BeautIzzy Plus (test)
               </AppText>
               <AppText variant="metadata" style={styles.meta}>
-                États du paywall, offres fictives ou offre RevenueCat réelle, sans achat
+                États du paywall, offres fictives sans achat, offre RevenueCat réelle avec achat de test
               </AppText>
             </View>
           </Pressable>

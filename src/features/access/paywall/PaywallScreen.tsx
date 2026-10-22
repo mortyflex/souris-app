@@ -29,7 +29,12 @@
 // professional's intent through callbacks. A callback that is not provided
 // renders no control: no button ever does nothing. Without a purchase entry
 // point the primary action is disabled and says so; with an unavailable
-// offering there is none at all.
+// offering there is none at all. While the caller reports an `activity`
+// (a purchase, a restore or a verification in progress) the primary action
+// is disabled and names it and the restore link is inert: a second tap
+// starts nothing. An optional `environmentNotice` (the development test
+// bench's « Achat de test — aucun paiement réel ») is drawn as a quiet
+// notice under the hero; the product passes none.
 //
 // Nothing here is persisted, and no navigation happens of its own: the
 // account-scoped paywall routing belongs to a later phase.
@@ -70,7 +75,9 @@ import {
   resolvePaywallAction,
   resolvePaywallIllustrationSide,
   resolveSelectedPaywallPlan,
+  type PaywallActivity,
   type PaywallContext,
+  type PaywallNoticeModel,
 } from './paywall-presentation';
 
 const BENEFIT_ICONS: readonly PlatformSymbolName[] = [
@@ -98,6 +105,10 @@ export interface PaywallScreenProps {
   readonly onOpenPrivacy?: () => void;
   /** Asks the adapter for the offering again when the store could not be reached. */
   readonly onRetryOffering?: () => void;
+  /** A transaction or a verification in progress: the primary action is disabled and names it. */
+  readonly activity?: PaywallActivity;
+  /** A quiet notice about the environment (the development test bench only); the product passes none. */
+  readonly environmentNotice?: Pick<PaywallNoticeModel, 'title' | 'lines'>;
   readonly testID?: string;
 }
 
@@ -114,6 +125,8 @@ export function PaywallScreen({
   onOpenTerms,
   onOpenPrivacy,
   onRetryOffering,
+  activity,
+  environmentNotice,
   testID = 'paywall-screen',
 }: PaywallScreenProps) {
   const { height } = useWindowDimensions();
@@ -122,7 +135,8 @@ export function PaywallScreen({
   const presentation = describePaywallContext(context);
   const plans = presentation.showsOffer ? buildPaywallPlans(offering, locale) : undefined;
   const selectedPlan = plans ? resolveSelectedPaywallPlan(plans, requestedPlan) : undefined;
-  const action = plans ? resolvePaywallAction(plans, selectedPlan, onSubscribe !== undefined) : { kind: 'none' as const };
+  const action = plans ? resolvePaywallAction(plans, selectedPlan, onSubscribe !== undefined, activity) : { kind: 'none' as const };
+  const busy = activity !== undefined;
   const side = resolvePaywallIllustrationSide(height);
 
   const selectPlan = (plan: SubscriptionPlan) => {
@@ -140,7 +154,13 @@ export function PaywallScreen({
   const secondary = presentation.secondaryAction;
   const onSecondary = secondary.kind === 'continue' ? onClose : onContinueReadOnly;
   const links = [
-    onRestorePurchases && { key: 'restore', title: PAYWALL_RESTORE_TITLE, onPress: onRestorePurchases },
+    onRestorePurchases && {
+      key: 'restore',
+      title: PAYWALL_RESTORE_TITLE,
+      onPress: () => {
+        if (!busy) onRestorePurchases();
+      },
+    },
     onOpenTerms && { key: 'terms', title: PAYWALL_TERMS_TITLE, onPress: onOpenTerms },
     onOpenPrivacy && { key: 'privacy', title: PAYWALL_PRIVACY_TITLE, onPress: onOpenPrivacy },
   ].filter((link): link is { key: string; title: string; onPress: () => void } => Boolean(link));
@@ -157,7 +177,7 @@ export function PaywallScreen({
                 testID="paywall-subscribe"
                 title={action.title}
               />
-              {action.kind !== 'loading' && (
+              {action.kind !== 'loading' && action.kind !== 'in-progress' && (
                 <AppText style={styles.footnote} variant="metadata" testID="paywall-subscribe-footnote">
                   {action.footnote}
                 </AppText>
@@ -179,6 +199,8 @@ export function PaywallScreen({
               {links.map((link) => (
                 <Pressable
                   accessibilityRole="link"
+                  accessibilityState={link.key === 'restore' && busy ? { disabled: true } : undefined}
+                  disabled={link.key === 'restore' && busy}
                   hitSlop={spacing.sm}
                   key={link.key}
                   onPress={link.onPress}
@@ -228,6 +250,15 @@ export function PaywallScreen({
           </AppText>
         )}
       </View>
+
+      {environmentNotice !== undefined && (
+        <PaywallNotice
+          lines={environmentNotice.lines}
+          testID="paywall-environment-notice"
+          title={environmentNotice.title}
+          tone="reassuring"
+        />
+      )}
 
       {presentation.notice !== undefined && (
         <PaywallNotice

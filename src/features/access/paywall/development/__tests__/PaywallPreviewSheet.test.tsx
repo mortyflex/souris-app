@@ -9,21 +9,29 @@
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet } from 'react-native';
 
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser } from '@/features/auth/testing/fake-auth-gateway';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
+import type { SubscriptionVerification } from '@/domain/access';
+
 import { BusinessAccessProvider } from '../../../session/BusinessAccessProvider';
 import { createFakeSubscriptionSource, type FakeSubscriptionSource } from '../../../testing/fake-subscription-source';
+import type { StorePurchaseOutcome, StoreRestoreOutcome } from '../../../subscription-source';
+import { CHECKOUT_VERIFY_AGAIN_TITLE } from '../../checkout-presentation';
 import type { StorePaywallOffering } from '../../paywall-offering';
 import { paywallPreviewScenarios } from '../../testing/paywall-fixtures';
 import {
   LIVE_OFFERING_PREVIEW_KEY,
   LIVE_OFFERING_PREVIEW_TITLE,
-  PURCHASES_NOT_ENABLED_MESSAGE,
   PaywallPreviewSheet,
+  TEST_PURCHASE_CONFIRM_TITLE,
+  TEST_PURCHASE_REFUSED_TITLE,
+  TEST_PURCHASE_TITLE,
+  TEST_RESTORE_CONFIRM_TITLE,
+  TEST_RESTORE_TITLE,
 } from '../PaywallPreviewSheet';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
@@ -41,6 +49,9 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+/** Dismissals the mock Modal holds back while `hold` is set, released by the test (the iOS animation in flight). */
+const mockModalDismissals: { hold: boolean; pending: (() => void)[] } = { hold: false, pending: [] };
+
 jest.mock('react-native/Libraries/Modal/Modal', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -55,7 +66,11 @@ jest.mock('react-native/Libraries/Modal/Modal', () => {
 
   class MockModal extends React.Component<MockModalProps> {
     componentDidUpdate(previous: MockModalProps) {
-      if (previous.visible && !this.props.visible) this.props.onDismiss?.();
+      if (previous.visible && !this.props.visible) {
+        const dismissed = () => this.props.onDismiss?.();
+        if (mockModalDismissals.hold) mockModalDismissals.pending.push(dismissed);
+        else dismissed();
+      }
     }
 
     render() {
@@ -84,8 +99,23 @@ function Host() {
   return (
     <>
       <Pressable accessibilityLabel="Ouvrir l’aperçu" onPress={() => setVisible(true)} />
+      <Pressable accessibilityLabel="Retirer l’aperçu" onPress={() => setVisible(false)} />
       <PaywallPreviewSheet onClose={() => setVisible(false)} visible={visible} />
     </>
+  );
+}
+
+/** The sheet lives under the session providers (it holds the checkout), as it does in Plus. */
+function SessionHost({ source, signedOut = false }: { readonly source: FakeSubscriptionSource; readonly signedOut?: boolean }) {
+  const [auth] = useState(() =>
+    createFakeAuthGateway({ restore: async () => (signedOut ? { kind: 'unauthenticated' } : { kind: 'authenticated', user: fakeUser }) }),
+  );
+  return (
+    <AuthProvider gateway={auth}>
+      <BusinessAccessProvider enforcement="disabled" source={source}>
+        <Host />
+      </BusinessAccessProvider>
+    </AuthProvider>
   );
 }
 
@@ -98,8 +128,8 @@ const press = (element: unknown) =>
 
 const presentedModals = (view: View) => view.queryAllByTestId('mock-modal');
 
-async function renderPreview() {
-  const view = await render(<Host />);
+async function renderPreview(source: FakeSubscriptionSource = createFakeSubscriptionSource({ offerings: true })) {
+  const view = await render(<SessionHost source={source} />);
   await act(async () => {});
   return view;
 }
@@ -193,6 +223,8 @@ const scenarioEvidence: Record<string, (view: View) => void> = {
 
 beforeEach(() => {
   jest.restoreAllMocks();
+  mockModalDismissals.hold = false;
+  mockModalDismissals.pending = [];
 });
 
 describe('PaywallPreviewSheet — presentation', () => {
@@ -369,7 +401,14 @@ describe('PaywallPreviewSheet — production', () => {
     const flags = globalThis as unknown as { __DEV__: boolean };
     flags.__DEV__ = false;
     try {
-      const view = await render(<PaywallPreviewSheet onClose={jest.fn()} visible />);
+      const [auth] = [createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) })];
+      const view = await render(
+        <AuthProvider gateway={auth}>
+          <BusinessAccessProvider enforcement="disabled" source={createFakeSubscriptionSource({ transactions: true })}>
+            <PaywallPreviewSheet onClose={jest.fn()} visible />
+          </BusinessAccessProvider>
+        </AuthProvider>,
+      );
       await act(async () => {});
       expect(view.queryByTestId('paywall-preview-sheet')).toBeNull();
       expect(presentedModals(view)).toHaveLength(0);
@@ -383,11 +422,15 @@ describe('PaywallPreviewSheet — production', () => {
 // « Offre RevenueCat actuelle » — the live entry draws the REAL offering of
 // the signed-in account through the provider: store prices and trial state
 // from the source, loading and unavailable states, the same one-modal
-// lifecycle, and a primary action that explains purchases are not enabled.
+// lifecycle — and, since Phase 6.3, the ONLY purchase entry point: a guarded,
+// confirmed Test Store purchase run by the sheet AFTER the paywall Modal is
+// really dismissed, so the SDK's dialog is the only presentation; each
+// outcome worded, nothing shown as active without a verified entitlement.
 // ---------------------------------------------------------------------------
 
 const LIVE_OFFERING: StorePaywallOffering = {
   status: 'available',
+  reference: 'offering-1',
   plans: [
     { plan: 'annual', price: { amount: 49.99, currencyCode: 'USD', formatted: '$49.99' } },
     {
@@ -398,31 +441,79 @@ const LIVE_OFFERING: StorePaywallOffering = {
   ],
 };
 
-function LiveHost({ source }: { readonly source: FakeSubscriptionSource }) {
-  const [auth] = useState(() => createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) }));
-  return (
-    <AuthProvider gateway={auth}>
-      <BusinessAccessProvider enforcement="disabled" source={source}>
-        <Host />
-      </BusinessAccessProvider>
-    </AuthProvider>
-  );
+const FUTURE = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+const ACTIVE: SubscriptionVerification = { kind: 'verified', status: { kind: 'active', plan: 'unknown', expiresAt: FUTURE } };
+const NEVER: SubscriptionVerification = { kind: 'verified', status: { kind: 'never' } };
+const UNAVAILABLE: SubscriptionVerification = { kind: 'unavailable' };
+
+/** A transacting source answering NEVER, selling the live offering. */
+function liveSource(verification: SubscriptionVerification = NEVER) {
+  const source = createFakeSubscriptionSource({ offerings: true, transactions: true });
+  source.respondWith(verification);
+  source.respondWithOffering(LIVE_OFFERING);
+  return source;
 }
 
-async function renderLivePreview(source: FakeSubscriptionSource) {
-  const view = await render(<LiveHost source={source} />);
-  await act(async () => {});
-  return view;
+interface AlertButton {
+  readonly text?: string;
+  readonly style?: string;
+  readonly onPress?: () => void;
+}
+
+/** The last alert shown: its title, message and buttons. */
+function lastAlert(alert: jest.SpyInstance) {
+  const call = alert.mock.calls[alert.mock.calls.length - 1] as [string, string | undefined, AlertButton[] | undefined] | undefined;
+  if (call === undefined) throw new Error('no alert shown');
+  return { title: call[0], message: call[1], buttons: call[2] ?? [] };
+}
+
+async function pressAlertButton(alert: jest.SpyInstance, text: string) {
+  const button = lastAlert(alert).buttons.find((candidate) => candidate.text === text);
+  if (button === undefined) throw new Error(`no alert button « ${text} »`);
+  await act(async () => {
+    button.onPress?.();
+  });
+}
+
+async function openLivePaywall(source: FakeSubscriptionSource) {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  const view = await renderPreview(source);
+  await openList(view);
+  await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+  return { view, alert };
+}
+
+/** Confirms the selected plan: the paywall slides down, the sheet buys once it is gone. */
+async function confirmPurchase(view: View, alert: jest.SpyInstance) {
+  await press(view.getByTestId('paywall-subscribe'));
+  await pressAlertButton(alert, TEST_PURCHASE_CONFIRM_TITLE);
+  await settleSheetTransition();
+}
+
+/** Nothing of ours is presented: no sheet, no paywall, no modal host. */
+function expectNothingPresented(view: View) {
+  expect(view.queryByTestId('paywall-preview-sheet')).toBeNull();
+  expect(view.queryByTestId('paywall-preview-screen')).toBeNull();
+  expect(presentedModals(view)).toHaveLength(0);
+}
+
+/** « OK » on the outcome alert presents the live paywall again. */
+async function returnFromResult(view: View, alert: jest.SpyInstance) {
+  await pressAlertButton(alert, 'OK');
+  await settleSheetTransition();
+  expect(view.getByTestId('paywall-preview-screen')).toBeTruthy();
+  expect(presentedModals(view)).toHaveLength(1);
+  expect(presentedModals(view)[0].props.accessibilityLabel).toBe('modal:fullScreen');
 }
 
 describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering)', () => {
-  it('lists the live entry first, clearly labelled as the real offering of the signed-in account, without touching the fixtures', async () => {
+  it('lists the live entry first, labelled as the real offering and the Test Store purchase, without touching the fixtures', async () => {
     const source = createFakeSubscriptionSource({ offerings: true });
-    const view = await renderLivePreview(source);
+    const view = await renderPreview(source);
     await openList(view);
     expect(view.getByTestId(`paywall-preview-${LIVE_OFFERING_PREVIEW_KEY}`)).toBeTruthy();
     expect(view.getByText(LIVE_OFFERING_PREVIEW_TITLE)).toBeTruthy();
-    expect(view.getByText(/Offre réelle du compte connecté/)).toBeTruthy();
+    expect(view.getByText(/Offre réelle du compte connecté. Achat de test sur le RevenueCat Test Store — aucun paiement réel./)).toBeTruthy();
     // Nothing is asked of the store while the list is up.
     expect(source.calls.loadOffering).toEqual([]);
     for (const scenario of paywallPreviewScenarios) {
@@ -430,10 +521,10 @@ describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering
     }
   });
 
-  it('presents the paywall over the store offering: real prices, annual preselected, the eligible trial of the monthly plan only', async () => {
+  it('presents the paywall over the store offering: real prices, annual preselected, the eligible trial of the monthly plan only, the Test Store notice', async () => {
     const source = createFakeSubscriptionSource({ offerings: true });
     source.respondWithOffering(LIVE_OFFERING);
-    const view = await renderLivePreview(source);
+    const view = await renderPreview(source);
     await openList(view);
 
     await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
@@ -447,6 +538,12 @@ describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering
     expect(within(view.getByTestId('paywall-subscribe')).queryByText(/gratuit/)).toBeNull();
     // No fixture price reached the screen.
     expect(view.queryByText(/12,99|129 €/)).toBeNull();
+    // The environment is said on the screen itself.
+    const notice = view.getByTestId('paywall-environment-notice');
+    expect(within(notice).getByText(TEST_PURCHASE_TITLE)).toBeTruthy();
+    expect(within(notice).getByText(/L’essai gratuit Apple n’existe pas dans le Test Store/)).toBeTruthy();
+    // The restore entry point exists on the live entry.
+    expect(view.getByTestId('paywall-link-restore')).toBeTruthy();
 
     await closePaywall(view);
   });
@@ -459,7 +556,7 @@ describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering
           release = resolve;
         }),
     });
-    const view = await renderLivePreview(source);
+    const view = await renderPreview(source);
     await openList(view);
     await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
     expect(view.getByTestId('paywall-plans-loading')).toBeTruthy();
@@ -473,7 +570,7 @@ describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering
 
   it('shows a meaningful unavailable state with a retry that asks the store again', async () => {
     const source = createFakeSubscriptionSource({ offerings: true });
-    const view = await renderLivePreview(source);
+    const view = await renderPreview(source);
     await openList(view);
     await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
     expect(view.getByTestId('paywall-plans-unavailable')).toBeTruthy();
@@ -487,25 +584,10 @@ describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering
     await closePaywall(view);
   });
 
-  it('the primary action buys nothing: it says purchases are not enabled yet, and the paywall stays', async () => {
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    const source = createFakeSubscriptionSource({ offerings: true });
-    source.respondWithOffering(LIVE_OFFERING);
-    const view = await renderLivePreview(source);
-    await openList(view);
-    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
-
-    await press(view.getByTestId('paywall-subscribe'));
-    expect(alert).toHaveBeenCalledWith('Aperçu de développement', PURCHASES_NOT_ENABLED_MESSAGE);
-    expect(view.getByTestId('paywall-preview-screen')).toBeTruthy();
-    expect(source.calls.loadOffering).toEqual(['user-lea']);
-    await closePaywall(view);
-  });
-
   it('keeps one modal host at a time across the live entry and the fixtures, and reloads on each opening', async () => {
     const source = createFakeSubscriptionSource({ offerings: true });
     source.respondWithOffering(LIVE_OFFERING);
-    const view = await renderLivePreview(source);
+    const view = await renderPreview(source);
     await openList(view);
 
     await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
@@ -528,7 +610,7 @@ describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering
           release = resolve;
         }),
     });
-    const view = await renderLivePreview(source);
+    const view = await renderPreview(source);
     await openList(view);
     await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
     await closePaywall(view);
@@ -536,5 +618,356 @@ describe('PaywallPreviewSheet — « Offre RevenueCat actuelle » (real offering
     expect(view.queryByTestId('paywall-preview-screen')).toBeNull();
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
+  });
+});
+
+describe('PaywallPreviewSheet — the Test Store purchase (Phase 6.3)', () => {
+  it('asks for an explicit confirmation naming the plan, the exact store price and the Test Store; nothing is bought before', async () => {
+    const source = liveSource();
+    const { view, alert } = await openLivePaywall(source);
+
+    await press(view.getByTestId('paywall-subscribe'));
+    const confirmation = lastAlert(alert);
+    expect(confirmation.title).toBe(TEST_PURCHASE_TITLE);
+    expect(plain(confirmation.message ?? '')).toContain('Annuel · $49.99 par an');
+    expect(confirmation.message).toContain('RevenueCat Test Store, compte connecté. Aucun paiement réel.');
+    expect(confirmation.message).toContain('L’essai gratuit Apple n’existe pas dans le Test Store.');
+    expect(confirmation.buttons.map((button) => button.text)).toEqual(['Annuler', TEST_PURCHASE_CONFIRM_TITLE]);
+    expect(source.calls.purchase).toEqual([]);
+    // The paywall is still presented: nothing moved before the confirmation.
+    expect(presentedModals(view)).toHaveLength(1);
+
+    // Declining buys nothing and leaves the paywall where it is.
+    await pressAlertButton(alert, 'Annuler');
+    await settleSheetTransition();
+    expect(source.calls.purchase).toEqual([]);
+    expect(view.getByTestId('paywall-preview-screen')).toBeTruthy();
+    expect(presentedModals(view)).toHaveLength(1);
+    await closePaywall(view);
+  });
+
+  it('on confirmation the paywall Modal is dismissed FIRST; the purchase starts only once the native dismissal completed, with nothing of ours presented', async () => {
+    const presentedAtPurchase: number[] = [];
+    let view: View | undefined;
+    const source = createFakeSubscriptionSource({
+      offerings: true,
+      purchase: () => {
+        presentedAtPurchase.push(presentedModals(view!).length);
+        return Promise.resolve({ kind: 'cancelled' });
+      },
+    });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const opened = await openLivePaywall(source);
+    view = opened.view;
+    const { alert } = opened;
+
+    // The iOS dismissal animation is in flight: the Modal has not reported its dismissal yet.
+    mockModalDismissals.hold = true;
+    await press(view.getByTestId('paywall-subscribe'));
+    await pressAlertButton(alert, TEST_PURCHASE_CONFIRM_TITLE);
+    await settleSheetTransition();
+    expect(presentedModals(view)).toHaveLength(0);
+    expect(view.queryByTestId('paywall-preview-screen')).toBeNull();
+    expect(source.calls.purchase).toEqual([]);
+    expect(mockModalDismissals.pending).toHaveLength(1);
+
+    // The real dismissal: now, and only now, the sheet buys — exactly once, over an empty screen.
+    await act(async () => {
+      mockModalDismissals.pending.splice(0).forEach((dismissed) => dismissed());
+    });
+    await settleSheetTransition();
+    expect(source.calls.purchase).toEqual([{ userId: 'user-lea', request: { reference: 'offering-1', plan: 'annual' } }]);
+    expect(presentedAtPurchase).toEqual([0]);
+    expect(lastAlert(alert).title).toBe('Achat annulé');
+    await returnFromResult(view, alert);
+  });
+
+  it('confirms the SELECTED plan: the monthly package by its reference, with the monthly store price', async () => {
+    const source = liveSource();
+    source.respondWithPurchase({ kind: 'cancelled' });
+    const { view, alert } = await openLivePaywall(source);
+    await press(view.getByTestId('paywall-plan-monthly'));
+    await press(view.getByTestId('paywall-subscribe'));
+    expect(plain(lastAlert(alert).message ?? '')).toContain('Mensuel · $4.99 par mois');
+    await pressAlertButton(alert, TEST_PURCHASE_CONFIRM_TITLE);
+    await settleSheetTransition();
+    expect(source.calls.purchase).toEqual([{ userId: 'user-lea', request: { reference: 'offering-1', plan: 'monthly' } }]);
+    await returnFromResult(view, alert);
+  });
+
+  it('a verified entitlement after the purchase: « Abonnement activé », then the live paywall returns in its ENTITLED context — nothing to buy twice', async () => {
+    const source = liveSource();
+    source.respondWithPurchase({ kind: 'completed', verification: ACTIVE });
+    const { view, alert } = await openLivePaywall(source);
+    expect(view.getByTestId('paywall-explore')).toBeTruthy();
+
+    await confirmPurchase(view, alert);
+    expect(source.calls.purchase).toEqual([{ userId: 'user-lea', request: { reference: 'offering-1', plan: 'annual' } }]);
+    expectNothingPresented(view);
+    expect(lastAlert(alert)).toMatchObject({ title: 'Abonnement activé', message: 'Votre accès BeautIzzy Plus est actif.' });
+    expect(lastAlert(alert).buttons.map((button) => button.text)).toEqual(['OK']);
+
+    await returnFromResult(view, alert);
+    // The same screen, now over an entitled account: no plan, no price, no purchase action; the loader ran again.
+    expect(view.getByText('Votre abonnement BeautIzzy Plus est actif.')).toBeTruthy();
+    expect(view.queryByTestId('paywall-plans')).toBeNull();
+    expect(view.queryByTestId('paywall-subscribe')).toBeNull();
+    expect(source.calls.loadOffering).toEqual(['user-lea', 'user-lea']);
+    expect(view.getByTestId('paywall-continue')).toBeTruthy();
+    await press(view.getByTestId('paywall-continue'));
+    await settleSheetTransition();
+    expect(view.queryByTestId('paywall-preview-screen')).toBeNull();
+    expect(view.getByTestId('paywall-preview-sheet')).toBeTruthy();
+  });
+
+  it('an account already entitled meets the entitled context at once and can start no purchase', async () => {
+    const source = liveSource(ACTIVE);
+    const { view } = await openLivePaywall(source);
+    expect(view.getByText('Votre abonnement BeautIzzy Plus est actif.')).toBeTruthy();
+    expect(view.queryByTestId('paywall-subscribe')).toBeNull();
+    expect(source.calls.purchase).toEqual([]);
+    await closePaywall(view);
+  });
+
+  it('a completed purchase the store has not confirmed: « Achat reçu », never activated, with a re-verification that buys nothing', async () => {
+    const source = liveSource();
+    source.respondWithPurchase({ kind: 'completed', verification: UNAVAILABLE });
+    const { view, alert } = await openLivePaywall(source);
+    await confirmPurchase(view, alert);
+    const received = lastAlert(alert);
+    expect(received.title).toBe('Achat reçu');
+    expect(received.message).toBe('Achat reçu. Vérification de votre abonnement en cours.');
+    expect(received.buttons.map((button) => button.text)).toEqual([CHECKOUT_VERIFY_AGAIN_TITLE, 'OK']);
+    expectNothingPresented(view);
+
+    // « Vérifier à nouveau »: one more verification, no transaction, the answer alerted again.
+    source.respondWith(ACTIVE);
+    await pressAlertButton(alert, CHECKOUT_VERIFY_AGAIN_TITLE);
+    expect(source.calls.purchase).toHaveLength(1);
+    expect(source.calls.verify).toEqual(['user-lea', 'user-lea']);
+    expect(lastAlert(alert).title).toBe('Abonnement activé');
+    await returnFromResult(view, alert);
+    expect(view.getByText('Votre abonnement BeautIzzy Plus est actif.')).toBeTruthy();
+  });
+
+  it('« OK » on « Achat reçu » returns to the live paywall, still selling: no entitlement was fabricated', async () => {
+    const source = liveSource();
+    source.respondWithPurchase({ kind: 'completed', verification: UNAVAILABLE });
+    const { view, alert } = await openLivePaywall(source);
+    await confirmPurchase(view, alert);
+    await returnFromResult(view, alert);
+    expect(view.getByTestId('paywall-subscribe').props.accessibilityState?.disabled).toBeFalsy();
+    expect(view.queryByText('Votre abonnement BeautIzzy Plus est actif.')).toBeNull();
+    await closePaywall(view);
+  });
+
+  it('a cancelled purchase is said calmly, and the paywall comes back as it was — never stuck in progress', async () => {
+    const source = liveSource();
+    source.respondWithPurchase({ kind: 'cancelled' });
+    const { view, alert } = await openLivePaywall(source);
+    await confirmPurchase(view, alert);
+    expect(lastAlert(alert)).toMatchObject({ title: 'Achat annulé', message: 'Aucun achat n’a été effectué.' });
+    await returnFromResult(view, alert);
+    const action = view.getByTestId('paywall-subscribe');
+    expect(action.props.accessibilityState?.disabled).toBeFalsy();
+    expect(within(action).queryByText('Achat en cours…')).toBeNull();
+    expect(view.queryByText('Votre abonnement BeautIzzy Plus est actif.')).toBeNull();
+    await closePaywall(view);
+  });
+
+  it.each([
+    [{ kind: 'pending' }, 'Achat en attente'],
+    [{ kind: 'failed', reason: 'store-problem' }, 'Achat impossible'],
+    [{ kind: 'failed', reason: 'network' }, 'Achat impossible'],
+    [{ kind: 'failed', reason: 'already-owned' }, 'Achat impossible'],
+  ] as const)('the outcome %o is worded « %s », nothing reads as active, and the preview is reachable again', async (outcome, title) => {
+    const source = liveSource();
+    source.respondWithPurchase(outcome);
+    const { view, alert } = await openLivePaywall(source);
+    await confirmPurchase(view, alert);
+    expect(lastAlert(alert).title).toBe(title);
+    expect(lastAlert(alert).message).not.toMatch(/activé|actif/);
+    await returnFromResult(view, alert);
+    expect(view.queryByText('Votre abonnement BeautIzzy Plus est actif.')).toBeNull();
+    await closePaywall(view);
+  });
+
+  it('while the SDK dialog is up, nothing of ours is presented and a second purchase cannot be started; the result waits for the SDK', async () => {
+    let release: ((outcome: StorePurchaseOutcome) => void) | undefined;
+    const source = createFakeSubscriptionSource({ offerings: true, purchase: () => new Promise((resolve) => (release = resolve)) });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const { view, alert } = await openLivePaywall(source);
+    await confirmPurchase(view, alert);
+
+    expectNothingPresented(view);
+    expect(source.calls.purchase).toHaveLength(1);
+    const alerts = alert.mock.calls.length;
+    // The preview list cannot be reopened over the SDK dialog, and nothing is alerted before the SDK answers.
+    await press(view.getByLabelText('Ouvrir l’aperçu'));
+    await settleSheetTransition();
+    expectNothingPresented(view);
+    expect(alert.mock.calls.length).toBe(alerts);
+    expect(source.calls.purchase).toHaveLength(1);
+
+    await act(async () => release!({ kind: 'cancelled' }));
+    expect(lastAlert(alert).title).toBe('Achat annulé');
+    await returnFromResult(view, alert);
+    expect(source.calls.purchase).toHaveLength(1);
+  });
+
+  it('a purchase confirmed, then the preview withdrawn by Plus: the outcome is applied by the provider, nothing is alerted or presented', async () => {
+    let release: ((outcome: StorePurchaseOutcome) => void) | undefined;
+    const source = createFakeSubscriptionSource({ offerings: true, purchase: () => new Promise((resolve) => (release = resolve)) });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const { view, alert } = await openLivePaywall(source);
+    await confirmPurchase(view, alert);
+    await press(view.getByLabelText('Retirer l’aperçu'));
+    const alerts = alert.mock.calls.length;
+    await act(async () => release!({ kind: 'completed', verification: ACTIVE }));
+    await settleSheetTransition();
+    expect(alert.mock.calls.length).toBe(alerts);
+    expectNothingPresented(view);
+    // Reopening the preview: the list, then the live entry in its entitled context — the provider holds the answer.
+    await openList(view);
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    expect(view.getByText('Votre abonnement BeautIzzy Plus est actif.')).toBeTruthy();
+    await closePaywall(view);
+  });
+
+  it('on Android the Modal hides with its prop: the purchase starts at once, still from the sheet, still once', async () => {
+    const os = Platform.OS;
+    (Platform as { OS: string }).OS = 'android';
+    try {
+      const source = liveSource();
+      source.respondWithPurchase({ kind: 'cancelled' });
+      const { view, alert } = await openLivePaywall(source);
+      await press(view.getByTestId('paywall-subscribe'));
+      await pressAlertButton(alert, TEST_PURCHASE_CONFIRM_TITLE);
+      await settleSheetTransition();
+      expect(source.calls.purchase).toHaveLength(1);
+      expectNothingPresented(view);
+      expect(lastAlert(alert).title).toBe('Achat annulé');
+      await returnFromResult(view, alert);
+    } finally {
+      (Platform as { OS: string }).OS = os;
+    }
+  });
+
+  it('refuses safely when the source is not bound to the Test Store, without asking anything or moving the paywall', async () => {
+    const source = createFakeSubscriptionSource({ offerings: true, transactions: true, store: 'app-store' });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const { view, alert } = await openLivePaywall(source);
+    await press(view.getByTestId('paywall-subscribe'));
+    expect(lastAlert(alert)).toMatchObject({ title: TEST_PURCHASE_REFUSED_TITLE });
+    expect(lastAlert(alert).message).toMatch(/Test Store/);
+    expect(lastAlert(alert).buttons).toEqual([]);
+    expect(source.calls.purchase).toEqual([]);
+    expect(presentedModals(view)).toHaveLength(1);
+    await closePaywall(view);
+  });
+
+  it('refuses safely outside a development bundle', async () => {
+    const source = liveSource();
+    const { view, alert } = await openLivePaywall(source);
+    const flags = globalThis as unknown as { __DEV__: boolean };
+    flags.__DEV__ = false;
+    try {
+      await press(view.getByTestId('paywall-subscribe'));
+    } finally {
+      flags.__DEV__ = true;
+    }
+    expect(lastAlert(alert)).toMatchObject({ title: TEST_PURCHASE_REFUSED_TITLE, message: 'Achat de test réservé aux bundles de développement.' });
+    expect(source.calls.purchase).toEqual([]);
+    await closePaywall(view);
+  });
+
+  it('the fixture scenarios still buy nothing: their action only explains, the paywall stays, and the sheet is never asked', async () => {
+    const source = liveSource();
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await renderPreview(source);
+    await openList(view);
+    for (const key of ['initial-trial', 'expired', 'usd']) {
+      await openScenario(view, key);
+      await press(view.getByTestId('paywall-subscribe'));
+      expect(lastAlert(alert)).toEqual({ title: 'Aperçu de développement', message: 'Aucun achat n’est effectué dans cet aperçu.', buttons: [] });
+      expect(view.getByTestId('paywall-preview-screen')).toBeTruthy();
+      expect(view.queryByTestId('paywall-link-restore')).toBeNull();
+      await closePaywall(view);
+    }
+    expect(source.calls.purchase).toEqual([]);
+    expect(source.calls.restore).toEqual([]);
+  });
+});
+
+describe('PaywallPreviewSheet — the Test Store restore (Phase 6.3)', () => {
+  it('explains the Test Store limitation and asks for confirmation; declining restores nothing', async () => {
+    const source = liveSource();
+    const { view, alert } = await openLivePaywall(source);
+    await press(view.getByTestId('paywall-link-restore'));
+    const confirmation = lastAlert(alert);
+    expect(confirmation.title).toBe(TEST_RESTORE_TITLE);
+    expect(confirmation.message).toMatch(/ne restaure pas un historique d’achats réel/);
+    expect(confirmation.message).toMatch(/Sandbox Apple \/ TestFlight/);
+    expect(confirmation.buttons.map((button) => button.text)).toEqual(['Annuler', TEST_RESTORE_CONFIRM_TITLE]);
+    await pressAlertButton(alert, 'Annuler');
+    expect(source.calls.restore).toEqual([]);
+    await closePaywall(view);
+  });
+
+  it.each([
+    [{ kind: 'completed', verification: ACTIVE }, 'Achats restaurés'],
+    [{ kind: 'completed', verification: NEVER }, 'Aucun achat à restaurer'],
+    [{ kind: 'completed', verification: UNAVAILABLE }, 'Restauration reçue'],
+    [{ kind: 'cancelled' }, 'Achat annulé'],
+    [{ kind: 'failed', reason: 'network' }, 'Restauration impossible'],
+  ] as const satisfies readonly (readonly [StoreRestoreOutcome, string])[])('confirming runs the user-initiated restore in place and words %o as « %s »', async (outcome, title) => {
+    const source = liveSource();
+    source.respondWithRestore(outcome);
+    const { view, alert } = await openLivePaywall(source);
+    await press(view.getByTestId('paywall-link-restore'));
+    await pressAlertButton(alert, TEST_RESTORE_CONFIRM_TITLE);
+    expect(source.calls.restore).toEqual(['user-lea']);
+    expect(lastAlert(alert).title).toBe(title);
+    // The restore presents nothing natively: the paywall stayed.
+    expect(presentedModals(view)).toHaveLength(1);
+    if (outcome.kind === 'completed' && outcome.verification === ACTIVE) {
+      expect(view.getByText('Votre abonnement BeautIzzy Plus est actif.')).toBeTruthy();
+    } else {
+      expect(view.queryByText('Votre abonnement BeautIzzy Plus est actif.')).toBeNull();
+      await closePaywall(view);
+    }
+  });
+
+  it('while the restore runs, the primary action is disabled and reads « Restauration en cours… », then frees', async () => {
+    let release: ((outcome: StoreRestoreOutcome) => void) | undefined;
+    const source = createFakeSubscriptionSource({ offerings: true, restore: () => new Promise((resolve) => (release = resolve)) });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const { view, alert } = await openLivePaywall(source);
+    await press(view.getByTestId('paywall-link-restore'));
+    await pressAlertButton(alert, TEST_RESTORE_CONFIRM_TITLE);
+    const action = view.getByTestId('paywall-subscribe');
+    expect(action.props.accessibilityState?.disabled).toBe(true);
+    expect(within(action).getByText('Restauration en cours…')).toBeTruthy();
+    const alerts = alert.mock.calls.length;
+    await press(action);
+    expect(alert.mock.calls.length).toBe(alerts);
+    await act(async () => release!({ kind: 'cancelled' }));
+    expect(view.getByTestId('paywall-subscribe').props.accessibilityState?.disabled).toBeFalsy();
+    await closePaywall(view);
+  });
+
+  it('never restores on opening, on loading or on closing the live entry', async () => {
+    const source = liveSource();
+    const { view } = await openLivePaywall(source);
+    await closePaywall(view);
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    await closePaywall(view);
+    expect(source.calls.restore).toEqual([]);
+    expect(source.calls.purchase).toEqual([]);
   });
 });

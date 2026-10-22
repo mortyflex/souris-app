@@ -341,14 +341,22 @@ src/features/access/status/                                    « Mon abonnement
 src/features/access/session/use-paywall-offering.ts            the offering of the signed-in user: ONE
                                                                loading lifecycle over the provider's
                                                                `loadOffering`, account-isolated
+src/features/access/session/use-plus-checkout.ts               the checkout of the signed-in user: the
+                                                               provider's `purchase` / `restore` worded as
+                                                               results by THE Plus rule; consumed by the
+                                                               development preview only (Phase 6.3)
+src/features/access/purchasable-stores.ts                      BUILD constant: the stores purchases are
+                                                               enabled for — the Test Store only
 src/features/access/paywall/                                   the BeautIzzy Plus paywall PRESENTATION:
                                                                offering boundary, pure presentation rules,
-                                                               approved copy, screen and components
-src/infrastructure/revenuecat/                                 the RevenueCat integration (Phases 6.1–6.2):
+                                                               approved copy, checkout wording, screen and
+                                                               components
+src/infrastructure/revenuecat/                                 the RevenueCat integration (Phases 6.1–6.3):
                                                                key selection per build, the ONE SDK
                                                                binding, CustomerInfo → domain mapping,
                                                                offerings → PaywallOffering mapping, the
-                                                               identified-only SubscriptionSource
+                                                               rejection classifier, the identified-only
+                                                               SubscriptionSource with its transactions
 ```
 
 Business mutation protection. Every user-initiated mutation exposed by the six (app) business
@@ -404,20 +412,23 @@ testing/paywall-fixtures   the intended French prices and the 14-day trial — t
 ```
 
 Ownership: prices, currencies, billing periods and trial eligibility belong to the store adapter
-that will map RevenueCat offerings into `PaywallOffering`; the UI formats (the store string first,
+that maps RevenueCat offerings into `PaywallOffering`; the UI formats (the store string first,
 `Intl.NumberFormat` otherwise) and never fetches, purchases, restores or writes subscription state.
-Where the next phases connect: purchase and restore through `onSubscribe` / `onRestorePurchases`
-(the adapter then pushes the verification through `SubscriptionSource`); the account-scoped routing
-decides the `PaywallContext` and mounts the screen — after setup completes, for a read-only
-existing account, never for an active subscriber — and wires « Explorer sans abonnement » to
-entering read-only use without writing any entitlement. No product route mounts the paywall today.
+The screen reports intent only: `onSubscribe(plan)` / `onRestorePurchases` are wired by its caller
+— today the development preview, through `usePlusCheckout` (Phase 6.3 below); an `activity`
+(purchasing / restoring / verifying) disables and names the primary action and makes the restore
+link inert. Where the next phase connects: the account-scoped routing decides the
+`PaywallContext` and mounts the screen — after setup completes, for a read-only existing account,
+never for an active subscriber — and wires « Explorer sans abonnement » to entering read-only use
+without writing any entitlement. No product route mounts the paywall today.
 
-Production activation still requires: purchase and restore handling (the real App Store
-offering is mapped into `PaywallOffering` since Phase 6.2 below; Google Play is not configured);
-the account-scoped paywall routing; persisted verified evidence and correct offline startup; the
-backend entitlement mirror with server-side enforcement of business mutations and
-server-controlled reminder / SMS suppression; real privacy and terms URLs; account deletion and
-privacy-data export. `SUBSCRIPTION_ENFORCEMENT` stays `disabled` until then.
+Production activation still requires: enabling the App Store in `PURCHASABLE_STORES` after the
+Apple Sandbox validation (purchase and restore exist since Phase 6.3 below, against the Test Store
+only; Google Play is not configured); the account-scoped paywall routing; persisted verified
+evidence and correct offline startup; the backend entitlement mirror with server-side enforcement
+of business mutations and server-controlled reminder / SMS suppression; real privacy and terms
+URLs; account deletion and privacy-data export. `SUBSCRIPTION_ENFORCEMENT` stays `disabled` until
+then.
 
 RevenueCat integration (Phase 6.1, `src/infrastructure/revenuecat/`). The first technical step of
 the store integration: SDK, identity and READ-ONLY verification. No purchase, restore, offering,
@@ -533,8 +544,9 @@ wording (`describeSubscriptionStatus`): a verified entitlement shows the « Beau
 payment promised), « Essai gratuit » + « Fin de l’essai le … », « Actif jusqu’au … » + « Sans
 renouvellement automatique. » for a cancelled-but-active subscription, « Accès offert » with
 « Jusqu’au … » only when an end exists (no billing implied, no date invented); a verified `expired`
-or `never` shows no badge, « Aucun abonnement actif », the read-only vocabulary's own sentence and —
-while enforcement is disabled — « Toutes les fonctionnalités restent disponibles. »; a pending or
+or `never` shows no badge, « Aucun abonnement actif », the read-only vocabulary's own sentence and
+« Vos données sont conservées et restent consultables. » (true whatever the enforcement: no
+permission claimed, no loss announced); a pending or
 `unavailable` verification, or a lapsed entitlement (`isVerificationCurrent`), is a neutral
 verification state: never "free", never expired, never active. The plan is written only when the
 store established it (`unknown` for a Test Store product writes none). Dates: `Intl.DateTimeFormat
@@ -543,9 +555,112 @@ abonnement »), no navigation, nothing persisted. Development fixtures of every 
 `__DEV__`-only preview sheet (Plus › Développement › « Statut BeautIzzy Plus (test) ») and the
 tests; none reaches the provider.
 
-Unavailable until purchases are implemented: buying, restoring, Store checkout, the production
-paywall route and the onboarding-to-paywall redirect, subscription management links, Google Play,
-the server mirror and enforcement.
+RevenueCat purchases and restoration (Phase 6.3). The store transactions exist, against the
+RevenueCat TEST STORE only, reachable from the development preview only. No routing or enforcement
+change: `SUBSCRIPTION_ENFORCEMENT` stays `disabled`, no product route mounts the paywall, no
+product screen can start a purchase.
+
+```text
+sdk.ts                     adds `purchasePackage(pkg)` — the SDK's own call, which sends the PACKAGE
+                           identifier and its presented-offering context to the native layer, so only an
+                           original package can be bought — and `restorePurchases()`. Re-exports
+                           PURCHASES_ERROR_CODE. Still no purchase by product, option or discount, no sync,
+                           no logOut.
+purchase-error.ts          pure: a rejected transaction → cancelled / pending / a named failure. The SDK
+                           rejects with a PLAIN OBJECT (not necessarily an Error) whose `code` is a NUMERIC
+                           string once normalized ("1" cancelled, "20" payment pending, "2" store problem,
+                           "5" product unavailable, "6" already purchased, "7" / "13" receipt of another
+                           account, "3" / "19" not allowed, "10" / "35" / "32" / "33" network, "15" in
+                           progress, "23" / "11" / "14" SDK unusable, "42" Test Store simulated failure);
+                           a code nested under `userInfo` is read too; the SDK's own "not configured"
+                           Error is `sdk-unavailable`; anything else `unexpected`. Nothing is logged.
+offering.ts                adds `selectPlanPackages`: the very package object of each presented plan's
+                           slot, confirmed by its package type — never a position, a price or a title.
+subscription-source.ts     every loaded offering that sells something becomes a SNAPSHOT for the user
+                           it was loaded for (the latest only): the package objects behind its plans under
+                           an opaque `reference` returned with the offering. `purchase(userId, {reference,
+                           plan})` buys the package of THAT snapshot and plan — a reference that is not the
+                           user's latest (loaded again since, failed since, another account's, never loaded,
+                           an empty offering) is `stale-offering`, and nothing else is bought instead — on
+                           the SAME serial chain as every other operation: the identity is confirmed
+                           (`getAppUserID`) before the sheet, and a `logIn` requested meanwhile waits for
+                           the transaction, so a purchase is always posted for the account it was requested
+                           for. A completed transaction answers the verification mapped from the CustomerInfo
+                           the store returned WITH it (fresh by construction; `unavailable` when it cannot
+                           be trusted, when the SDK drifted meanwhile, or when the record confirms nothing).
+                           `restore(userId)` does the same over `restorePurchases`; a restore is never
+                           "pending". Neither grants anything. The post-purchase SDK update event follows
+                           the existing listener path (one listener, re-read on the chain).
+index.ts                   passes the key's store (`test-store` / `app-store`) to the source as its `store`.
+```
+
+The feature side. `SubscriptionSource` gains `store`, `purchase?` and `restore?` (outcomes, never
+rejections). `BusinessAccessProvider.purchase(request)` / `.restore()` bind them to the signed-in
+user: `no-account`, `not-configured` (no transacting source), `not-enabled` (a purchase against a
+store absent from `PURCHASABLE_STORES` — the Test Store only in this phase, so an iOS release bound
+to the App Store starts no real-money transaction whatever calls it), `operation-in-progress`
+(ONE transaction at a time for the whole session, decided by a ref in the provider — never in a
+screen; `storeOperation` exposes it). A completed outcome's verification is applied through the
+SAME pipeline as every verification (`apply`, then THE domain rule) and supersedes any
+verification still in flight (dropped as stale); an outcome landing after the session changed
+(sign-out, another account) is applied to nobody and reported as `account-changed`: a transaction
+of account A never touches account B's state and is never reported as B's. Nothing restores at
+launch, sign-in or foreground: a restore is user-initiated only. `refresh()` now resolves with
+the verification it applied (undefined when dropped). `usePlusCheckout()` is the ONE hook a
+screen uses: `purchase(offering, plan)` (the offering must carry the adapter's `reference` — a
+fixture never does, so a fixture can never be bought from), `restore()`, `retryVerification()`
+(a re-verification, never a second purchase), `activity`, `entitled`. It words the outcome with
+THE rule of every Plus cue, `hasVerifiedPlusEntitlement`: `activated` / `restored` ONLY for a
+verified entitlement in force for this account; a completed transaction the store has not
+confirmed yet (unavailable, a lapsed record, no entitlement) is `received` / `restore-received`
+— never active, never failed — and offers the re-verification; `nothing-to-restore` is a
+confirmed absence, not an error; `cancelled`, `deferred` (a pending payment owns nothing),
+`account-changed`, `failed` with its reason. `checkout-presentation.ts` holds the wording
+(« Abonnement activé » for `activated` and nothing else; « Achat reçu. Vérification de votre
+abonnement en cours. »; « Aucun achat n’a été effectué. »). Accueil's badge and « Mon
+abonnement » change nothing: they keep reading the provider's verification.
+
+The development test bench (Plus › Développement › « Aperçu BeautIzzy Plus (test) » › « Offre
+RevenueCat actuelle », `__DEV__` only) is the ONLY purchase entry point of the application. Its
+primary action is guarded by `test-store-purchase.ts` — every condition, each with its sentence:
+a development bundle, a source bound to the TEST STORE (from the source's own `store`, never
+APP_VARIANT), an authenticated account, the store's own offering, the plan it sells, nothing in
+flight — then confirmed in an alert that names the plan, the exact store price and « Achat de test
+— aucun paiement réel » (the Apple trial does not exist in the Test Store, and the screen says
+so in an environment notice). The outcome is alerted; an inconclusive one offers « Vérifier à
+nouveau ». Once the account holds a verified entitlement the live entry draws the ENTITLED
+context (nothing to sell). The restore link runs the user-initiated restore in place, after an
+alert stating the Test Store limitation. Fixture scenarios keep their inert action. RevenueCat's
+server-side sandbox allowlist (« Allowed App User IDs only ») stays the primary account
+restriction; no account is named in code.
+
+The SDK dialog is a native presentation of its own, and the one-modal-at-a-time rule applies to
+it. On iOS the Test Store purchase is a `UIAlertController` the SDK presents on the key window's
+top-most presented view controller at the instant `purchasePackage` runs; React Native's `Alert`
+lives in a `UIWindow` of its own (alert level) hidden as its button callback is dispatched, and
+the paywall is a presented Modal. Started from the confirmation alert's callback over the
+paywall Modal, the dialog came up drawn but unreachable (iPhone 17 simulator). So the purchase is
+a STAGE of the preview sheet, the coordinator that stays mounted whatever is presented: the
+confirmation captures the plan and the store offering (its reference) into `checkout-closing`
+and the paywall Modal slides down; its real `onDismiss` (iOS; Android at once, the dialog goes
+with the prop) enters `checkout`, where nothing of ours is presented and an effect of the sheet
+starts the ONE purchase — never a callback of the unmounted paywall, never a timer; the SDK
+presents its dialog alone; the outcome is alerted and « OK » presents the live paywall again
+(its loader restarts, so an activated account meets the entitled context). The checkout hook is
+therefore held by the sheet, not by the paywall it presents. A preview withdrawn during a
+checkout drops the alert; the provider has still applied the outcome.
+
+Test Store limitations, stated: no real money, no Apple receipt, no introductory offer, product
+identifiers the mapping reads as plan `unknown`, and NO real store history — `restorePurchases`
+answers the current customer, so the restore is unit-tested and callable but NOT validated end to
+end there. Still required, in Apple Sandbox / TestFlight with the Apple key before `app-store`
+joins `PURCHASABLE_STORES`: a real StoreKit purchase sheet, the 14-day trial eligibility, a real
+restore on a second device / after reinstall, interrupted and deferred ("ask to buy")
+transactions, a renewal and an expiration observed through the listener, and the receipt-of-
+another-account case. Remaining before production subscriptions: that validation, the account-
+scoped paywall routing, persisted verified evidence, the backend entitlement mirror with server-
+side enforcement, real terms and privacy URLs, account deletion and privacy-data export, Google
+Play.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain

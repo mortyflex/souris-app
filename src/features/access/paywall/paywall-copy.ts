@@ -32,6 +32,12 @@ export const PAYWALL_BACK_LABEL = 'Retour';
 export const PAYWALL_SUBSCRIBE_TITLE = 'S’abonner à BeautIzzy Plus';
 export const PAYWALL_LOADING_TITLE = 'Chargement des offres…';
 export const PAYWALL_NOT_CONFIGURED_FOOTNOTE = 'Achat non disponible dans cette version.';
+/** The disabled primary action while the session's transaction, or a re-verification, runs. */
+export const PAYWALL_ACTIVITY_TITLES = {
+  purchasing: 'Achat en cours…',
+  restoring: 'Restauration en cours…',
+  verifying: 'Vérification de l’abonnement…',
+} as const;
 
 export const PAYWALL_RESTORE_TITLE = 'Restaurer mes achats';
 export const PAYWALL_TERMS_TITLE = 'Conditions d’abonnement';

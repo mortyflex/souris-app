@@ -2446,11 +2446,26 @@ never a subscription template.
   trial, held in test fixtures), and — first in the list, since Phase 6.2 — « Offre RevenueCat
   actuelle »: the same screen over the REAL current offering of the signed-in account (store
   prices, store trial eligibility; the Test Store in a debug build, whose prices may differ from
-  Apple's), with its loading and unavailable states and a « Réessayer » that asks again. Its
-  purchase action buys nothing and says so (« Les achats ne sont pas encore activés dans cette
-  version. »). One native modal at a time (§16): the scenario list slides down, then the paywall
-  is presented from its `onDismissed`; closing the paywall brings the list back once it is really
-  dismissed; the live entry's loader mounts and unmounts with the paywall.
+  Apple's), with its loading and unavailable states and a « Réessayer » that asks again. Since
+  Phase 6.3 the live entry is the ONLY purchase entry point: a quiet reassuring notice under the
+  hero reads « Achat de test — aucun paiement réel » (RevenueCat Test Store, no Apple trial); the
+  primary action asks for confirmation in a native alert naming the plan and the exact store
+  price (« Annuel · $49.99 par an »); on confirmation the paywall slides down FIRST, the Test
+  Store purchase starts once it is really dismissed, the SDK's own dialog is then the only thing
+  on screen, and « OK » on the outcome alert brings the live paywall back; during a restore,
+  which stays in place, the primary action is disabled and reads « Restauration en cours… »
+  (« Achat en cours… », « Vérification de l’abonnement… » exist for the other activities) with
+  no footnote and the restore link is inert; the outcome is one alert —
+  « Abonnement activé » only for a verified entitlement, « Achat reçu » with « Vérifier à nouveau »
+  when the store has not confirmed yet, « Achat annulé » calmly, « Achat en attente », « Achat
+  impossible » with one sentence per reason — and an entitled account meets the ENTITLED context
+  (nothing to buy twice). « Restaurer mes achats » on the live entry runs the user-initiated
+  restore after an alert stating that the Test Store keeps no real store history. Fixture
+  scenarios keep their inert purchase action (« Aucun achat n’est effectué dans cet aperçu. »).
+  One native modal at a time (§16): the scenario list slides down, then the paywall is presented
+  from its `onDismissed`; closing the paywall brings the list back once it is really dismissed;
+  the live entry's loader mounts and unmounts with the paywall; alerts are native dialogs, never
+  a second Modal.
 - **Trial wording** is the store's period, never a number of the app: weeks are said in days
   (« 14 jours gratuits » for a two-week introductory period), months and years in their unit
   (« 1 mois gratuit », « Essayer gratuitement 1 mois »). Shown only when the store marked THIS
@@ -2464,12 +2479,13 @@ never a subscription template.
   one soft `metadata` detail with accurate wording (« Période en cours jusqu’au … » — never a
   renewal or a payment promised; « Fin de l’essai le … »; « Sans renouvellement automatique. »;
   « Jusqu’au … » for a dated complimentary access, nothing for an indefinite one). Without an
-  entitlement: no badge, « Aucun abonnement actif », the read-only vocabulary's sentence and,
-  while enforcement is disabled, « Toutes les fonctionnalités restent disponibles. » — quiet,
-  never a loss. Pending or unverifiable: « Vérification de l’abonnement… » / « Abonnement non
+  entitlement: no badge, « Aucun abonnement actif », the read-only vocabulary's sentence and
+  « Vos données sont conservées et restent consultables. » — quiet, true whatever the
+  enforcement, never a claim about permissions. Pending or unverifiable: « Vérification de l’abonnement… » / « Abonnement non
   vérifié », never "free". The badge derives from the verification only, never from full access.
   One accessible element, spoken as « BeautIzzy Plus, Abonnement actif, Mensuel, Période en cours
   jusqu’au … ». A `__DEV__`-only sheet (Plus › Développement › « Statut BeautIzzy Plus (test) »)
   draws every status from fixtures, in one sheet.
 - **No** gradient, glass effect, animation beyond the frame's entrance, countdown, strike-through
-  price, « most popular » claim, hard-coded price, or fake purchase.
+  price, « most popular » claim, hard-coded price, fake purchase, or success shown before the
+  store confirmed an entitlement.

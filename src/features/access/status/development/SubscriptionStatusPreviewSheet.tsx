@@ -62,7 +62,6 @@ export function SubscriptionStatusPreviewSheet({ visible, onClose }: Subscriptio
               model={describeSubscriptionStatus({
                 verification: scenario.verification,
                 now: STATUS_FIXTURE_NOW,
-                enforcement: 'disabled',
               })}
               testID={`subscription-status-preview-${scenario.key}-card`}
             />

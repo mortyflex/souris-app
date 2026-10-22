@@ -51,5 +51,5 @@ export function createAccountSubscriptionSource({
     warn(describeUnconfiguredRevenueCat(configuration.reason));
     return unconfiguredSubscriptionSource;
   }
-  return createRevenueCatSubscriptionSource({ sdk, apiKey: configuration.apiKey, clock });
+  return createRevenueCatSubscriptionSource({ sdk, apiKey: configuration.apiKey, store: configuration.store, clock });
 }

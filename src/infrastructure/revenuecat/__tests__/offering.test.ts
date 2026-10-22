@@ -11,6 +11,7 @@ import {
   mapOfferingsToPaywallOffering,
   planOfferOf,
   productIdentifiersWithFreeTrial,
+  selectPlanPackages,
   trialEligibilityOf,
 } from '../offering';
 import { PACKAGE_TYPE, type PurchasesOfferings } from '../sdk';
@@ -260,5 +261,29 @@ describe('trial eligibility — only a definite answer of the SDK counts', () =>
       },
     ]);
     expect(appStoreMonthlyProduct.identifier).toBe(MONTHLY_ID);
+  });
+});
+
+describe('selectPlanPackages — the store package behind each presented plan', () => {
+  it('hands back the very package objects of the offering slots, for the mapped plans only', () => {
+    const mapped = mapOfferingsToPaywallOffering(appStoreOfferings, undefined);
+    const packages = selectPlanPackages(appStoreOfferings, mapped.status === 'available' ? mapped.plans : []);
+    expect(packages.annual).toBe(appStoreOfferings.current!.annual);
+    expect(packages.monthly).toBe(appStoreOfferings.current!.monthly);
+  });
+
+  it('selects nothing for a plan the mapping dropped, and nothing without a current offering', () => {
+    const packages = selectPlanPackages(appStoreOfferings, [{ plan: 'annual', price: { amount: 99, currencyCode: 'EUR' } }]);
+    expect(Object.keys(packages)).toEqual(['annual']);
+    expect(selectPlanPackages(offerings(null), [{ plan: 'annual', price: { amount: 99, currencyCode: 'EUR' } }])).toEqual({});
+    expect(selectPlanPackages({} as PurchasesOfferings, [])).toEqual({});
+  });
+
+  it('never selects a package by position, price or title: the slot must carry the plan type', () => {
+    const swapped = offerings(
+      offering({ monthly: rcPackage('monthly', appStoreMonthlyProduct, { packageType: PACKAGE_TYPE.ANNUAL }) }),
+    );
+    const packages = selectPlanPackages(swapped, [{ plan: 'monthly', price: { amount: 9.99, currencyCode: 'EUR' } }]);
+    expect(packages.monthly).toBeUndefined();
   });
 });

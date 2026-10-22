@@ -40,6 +40,24 @@
 // `not-configured`, a rejection `store-unavailable`. It loads nothing of its
 // own and keeps no offering state: `usePaywallOffering` owns the loading
 // lifecycle and drops the answers of a session that ended.
+//
+// Transactions (Phase 6.3). `purchase` and `restore` start the two store
+// transactions for the user signed in when they are called, through the same
+// source. ONE at a time for the whole session: a second call while one is in
+// flight is refused (`operation-in-progress`), whichever screen asks — the
+// exclusion lives here, never in a screen. A purchase is refused unless the
+// source's store is one purchases are enabled for (`purchasable-stores.ts`):
+// the RevenueCat Test Store only in this phase, so a release bound to the App
+// Store starts no real-money transaction whatever calls it. The outcome of a
+// completed transaction carries the verification the store answered: it is
+// applied through the SAME pipeline as every verification (`apply`, then THE
+// domain rule) — never a separate entitlement, never a UI flag — and it
+// supersedes any verification still in flight, which is dropped as stale. An
+// outcome that lands after the session changed (sign-out, another account)
+// is applied to nobody and reported as `account-changed`: a transaction of
+// account A never touches account B's state, and is never reported as B's.
+// A restore is user-initiated only: nothing here restores at launch, at
+// sign-in or on a foreground return.
 
 import {
   createContext,
@@ -74,7 +92,22 @@ import {
   unconfiguredPaywallOffering,
   type PaywallOffering,
 } from '../paywall/paywall-offering';
-import type { SubscriptionSource } from '../subscription-source';
+import { isPurchasableStore } from '../purchasable-stores';
+import type {
+  PurchaseRequest,
+  StorePurchaseOutcome,
+  StoreRestoreOutcome,
+  StoreTransactionFailure,
+  SubscriptionSource,
+  SubscriptionStoreKind,
+} from '../subscription-source';
+
+/** The store transaction in flight for the session, if any. */
+export type StoreOperation = 'purchase' | 'restore';
+
+/** The session changed while the transaction ran: its outcome was applied to nobody. */
+export type SessionPurchaseOutcome = StorePurchaseOutcome | { readonly kind: 'account-changed' };
+export type SessionRestoreOutcome = StoreRestoreOutcome | { readonly kind: 'account-changed' };
 
 export interface BusinessAccessValue {
   /** The effective permission, resolved by the domain for the last resolution instant. */
@@ -90,13 +123,29 @@ export interface BusinessAccessValue {
    */
   readonly verification: SubscriptionVerification | undefined;
   readonly enforcement: AccessEnforcement;
-  /** Verifies again through the source. Resolves once the answer is applied — or dropped as stale. */
-  readonly refresh: () => Promise<void>;
+  /**
+   * Verifies again through the source. Resolves with the answer once it is
+   * applied, or `undefined` when it was dropped as stale (the session
+   * changed, a later verification superseded it).
+   */
+  readonly refresh: () => Promise<SubscriptionVerification | undefined>;
   /**
    * The offering the store makes to the signed-in user, read for that
    * identity only. Never `loading`; never rejects. Purchases nothing.
    */
   readonly loadOffering: () => Promise<PaywallOffering>;
+  /** The store the source is bound to; undefined without one. */
+  readonly store: SubscriptionStoreKind | undefined;
+  /** The transaction in flight for the session, if any: screens disable their actions on it. */
+  readonly storeOperation: StoreOperation | undefined;
+  /**
+   * Buys, for the signed-in user, a plan of an offering the source loaded.
+   * One transaction at a time; never rejects; applies a completed outcome's
+   * verification through the session pipeline.
+   */
+  readonly purchase: (request: PurchaseRequest) => Promise<SessionPurchaseOutcome>;
+  /** Asks the store for the signed-in user's previous purchases. User-initiated only; never rejects. */
+  readonly restore: () => Promise<SessionRestoreOutcome>;
 }
 
 const BusinessAccessContext = createContext<BusinessAccessValue | null>(null);
@@ -138,6 +187,10 @@ export function BusinessAccessProvider({
     clockRef.current = clock;
   }, [clock]);
 
+  const [storeOperation, setStoreOperation] = useState<StoreOperation | undefined>(undefined);
+  // The exclusion itself: a ref, so two calls in the same tick cannot both pass.
+  const operationRef = useRef<StoreOperation | undefined>(undefined);
+
   const [session, setSession] = useState<AccessSession>(() => ({
     userId: undefined,
     verification: undefined,
@@ -177,7 +230,7 @@ export function BusinessAccessProvider({
   }, []);
 
   const verify = useCallback(
-    async (forUserId: string, generation: number) => {
+    async (forUserId: string, generation: number): Promise<SubscriptionVerification | undefined> => {
       verifySequence.current += 1;
       const sequence = verifySequence.current;
       let verification: SubscriptionVerification;
@@ -186,9 +239,10 @@ export function BusinessAccessProvider({
       } catch {
         verification = UNAVAILABLE;
       }
-      if (generation !== sessionGeneration.current) return;
-      if (sequence !== verifySequence.current) return;
+      if (generation !== sessionGeneration.current) return undefined;
+      if (sequence !== verifySequence.current) return undefined;
       apply(forUserId, verification);
+      return verification;
     },
     [source, apply],
   );
@@ -217,8 +271,8 @@ export function BusinessAccessProvider({
   }, [userId, source, verify, apply, reevaluate]);
 
   const refresh = useCallback(async () => {
-    if (!userId) return;
-    await verify(userId, sessionGeneration.current);
+    if (!userId) return undefined;
+    return verify(userId, sessionGeneration.current);
   }, [userId, verify]);
 
   const loadOffering = useCallback(async (): Promise<PaywallOffering> => {
@@ -231,6 +285,61 @@ export function BusinessAccessProvider({
       return storeUnavailablePaywallOffering;
     }
   }, [userId, source]);
+
+  const store = source?.store;
+
+  /** Runs ONE transaction for the signed-in user; the outcome is applied only to the session it started in. */
+  const transact = useCallback(
+    async <Outcome extends StorePurchaseOutcome | StoreRestoreOutcome>(
+      operation: StoreOperation,
+      start: ((forUserId: string) => Promise<Outcome>) | undefined,
+      failed: (reason: StoreTransactionFailure) => Outcome,
+    ): Promise<Outcome | { readonly kind: 'account-changed' }> => {
+      if (!userId) return failed('no-account');
+      if (start === undefined) return failed('not-configured');
+      if (operation === 'purchase' && !isPurchasableStore(store)) return failed('not-enabled');
+      if (operationRef.current !== undefined) return failed('operation-in-progress');
+      operationRef.current = operation;
+      setStoreOperation(operation);
+      const generation = sessionGeneration.current;
+      let outcome: Outcome;
+      try {
+        outcome = await start(userId);
+      } catch {
+        outcome = failed('unexpected');
+      } finally {
+        operationRef.current = undefined;
+        setStoreOperation(undefined);
+      }
+      if (generation !== sessionGeneration.current) return { kind: 'account-changed' };
+      if (outcome.kind === 'completed') {
+        // The store's answer to the transaction is the newest word: an older
+        // verification still in flight must not replace it.
+        verifySequence.current += 1;
+        apply(userId, outcome.verification);
+      }
+      return outcome;
+    },
+    [userId, store, apply],
+  );
+
+  const purchase = useCallback(
+    (request: PurchaseRequest): Promise<SessionPurchaseOutcome> => {
+      const start = source?.purchase;
+      return transact<StorePurchaseOutcome>(
+        'purchase',
+        start === undefined ? undefined : (forUserId) => start(forUserId, request),
+        (reason) => ({ kind: 'failed', reason }),
+      );
+    },
+    [source, transact],
+  );
+
+  const restore = useCallback(
+    (): Promise<SessionRestoreOutcome> =>
+      transact<StoreRestoreOutcome>('restore', source?.restore, (reason) => ({ kind: 'failed', reason })),
+    [source, transact],
+  );
 
   const input = useMemo<BusinessAccessInput>(
     () => ({
@@ -282,8 +391,12 @@ export function BusinessAccessProvider({
       enforcement,
       refresh,
       loadOffering,
+      store,
+      storeOperation,
+      purchase,
+      restore,
     }),
-    [access, current.verification, enforcement, refresh, loadOffering],
+    [access, current.verification, enforcement, refresh, loadOffering, store, storeOperation, purchase, restore],
   );
 
   return <BusinessAccessContext.Provider value={value}>{children}</BusinessAccessContext.Provider>;

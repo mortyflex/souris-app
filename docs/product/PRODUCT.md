@@ -1407,8 +1407,17 @@ shows « Mon abonnement »: the « BeautIzzy Plus » badge and the verified stat
 plan and the end of the current period, free trial and its end, cancelled-but-active until its
 end, complimentary access, or a quiet "no active subscription" / "not verified" state) — from the
 store's verification only, never from the fact that enforcement is disabled; read-only, with no
-action yet. Still to come, in their own phases: purchase and restore, the account-scoped paywall
-routing, persisted entitlement evidence, the backend entitlement mirror and server-side
+action yet. Since Phase 6.3 (October 2026) the purchase and the restore exist as infrastructure:
+the development preview's real-offering entry can run a deliberate RevenueCat TEST STORE purchase
+of the selected plan (« Achat de test — aucun paiement réel », confirmed first, the exact store
+price named) and a user-initiated restore; a verified entitlement then shows the « Plus » mark on
+Accueil and « Abonnement actif » in « Mon abonnement » through the same verification as always —
+« Abonnement activé » is never said before the store confirmed it, a cancellation is calm, a
+deferred payment owns nothing, an unconfirmed transaction offers « Vérifier à nouveau ». No
+product screen can start a purchase, purchases are enabled for the Test Store only (never the
+App Store yet), and enforcement stays disabled: nothing is restricted for anyone. Still to come,
+in their own phases: the Apple Sandbox validation (real trial, real restore), the account-scoped
+paywall routing, persisted entitlement evidence, the backend entitlement mirror and server-side
 enforcement, real terms and privacy URLs, account deletion and privacy-data export, Google Play.
 
 A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
