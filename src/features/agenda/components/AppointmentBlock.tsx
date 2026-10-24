@@ -4,16 +4,16 @@
 // the flat fill and the 3 pt accent are untouched; the composition follows
 // the height the timeline gives the card:
 //
-//   tall     [ portrait ]  09:00            grouped at the START line,
-//                          Client name      never centred in a long block
-//                          Prestations
+//   tall     [ portrait ]  Client name      grouped at the START line,
+//                          Prestations      never centred in a long block
+//                          Phases
 //   medium   [ portrait ]  Client name      two tight centred lines
 //                          Prestations
 //   compact  First name · Prestation        one line
 //   visual   colour only
 //
-// The duration is never written: the height of the card is the duration.
-// Everything shown is already on the segment: its start, its summary. The
+// Neither the time nor the duration is written: the grid places the card and
+// its height is the duration. Everything shown is already on the segment. The
 // identity disc shows the client's photo when the caller has a displayable
 // one, the initials otherwise (and when the photo fails to load); a card too
 // narrow for it (overlap columns) simply drops the disc.
@@ -24,7 +24,6 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { AppText } from "@/shared/ui/AppText";
 import {
-  formatAppointmentTime,
   getAppointmentStatusLabel,
   isTerminalAppointmentStatus,
 } from "@/features/appointments/presentation";
@@ -46,17 +45,16 @@ import {
   getAgendaSegmentDensity,
 } from "../segment-content";
 
-/** Initials disc: beside the time + name pair on a tall card, smaller on a medium one. */
+/** Initials disc: beside the name + prestations pair on a tall card, smaller on a medium one. */
 const TALL_AVATAR_SIZE = 32;
 const MEDIUM_AVATAR_SIZE = 24;
 /** Below this card width (overlap columns) the text keeps the whole line. */
 const AVATAR_MIN_CARD_WIDTH = 140;
 
-// Line boxes of a tall card. Time + name + prestations (47) always fit the
+// Line boxes of a tall card. Name + prestations + phases (48) fit the
 // shortest tall card (56) under the top inset; the phase line joins only
 // while the card has the height for it.
 const TALL_TOP_INSET = 4;
-const TIME_LINE = 14;
 const NAME_LINE = 18;
 const SERVICE_LINE = 15;
 const PHASE_LINE = 15;
@@ -97,7 +95,7 @@ export function AppointmentBlock({
   const phaseOnOwnLine =
     tall &&
     content.phaseLabel !== undefined &&
-    TIME_LINE + NAME_LINE + SERVICE_LINE + PHASE_LINE <= height - TALL_TOP_INSET - 1;
+    NAME_LINE + SERVICE_LINE + PHASE_LINE <= height - TALL_TOP_INSET - 1;
   const statusLabel = isTerminalAppointmentStatus(segment.status)
     ? getAppointmentStatusLabel(segment.status)
     : undefined;
@@ -165,16 +163,6 @@ export function AppointmentBlock({
             </View>
           )}
           <View style={styles.copy}>
-            {tall && (
-              <AppText
-                variant="chip"
-                numberOfLines={1}
-                style={[styles.time, { color: cardColors.secondaryText }]}
-                testID="appointment-block-time"
-              >
-                {formatAppointmentTime(segment.startAt)}
-              </AppText>
-            )}
             <AppText
               variant="rowTitle"
               numberOfLines={1}
@@ -268,7 +256,6 @@ const styles = StyleSheet.create({
   tallInitials: { fontSize: 12, lineHeight: 16 },
   mediumInitials: { fontSize: 10, lineHeight: 13 },
   copy: { flex: 1, minWidth: 0 },
-  time: { fontVariant: ["tabular-nums"], lineHeight: TIME_LINE },
   clientName: { lineHeight: 16 },
   tallClientName: { lineHeight: NAME_LINE },
   serviceName: { lineHeight: SERVICE_LINE },

@@ -857,11 +857,9 @@ presentation only. Occupancy, segments, statuses and navigation behave exactly a
 - **Composition by height** (`getAgendaSegmentDensity`, thresholds unchanged; `AppointmentBlock`).
   - *Tall* (≥ 56): one cluster anchored to the START line (4 pt inset, never vertically
     centred — the empty remainder of a long card is its duration). A 32 pt identity disc, then
-    beside it: the segment start time (`chip`, family `subtitle` tone, tabular), the client
-    name (`rowTitle`, family `title` tone — the strongest line), the prestation summary
-    (`metadata`) and the phases on their own line while the height allows. On the shortest
-    tall cards the phases stay inline after the prestations; time, name and prestations
-    always fit.
+    beside it: the client name (`rowTitle`, family `title` tone — the strongest line), the
+    prestation summary (`metadata`) and the phases on their own line while the height allows
+    (name, prestations and phases fit even the shortest tall card).
   - *Medium* (32–55): a 24 pt identity disc beside two tight centred lines, name then
     prestations. No time.
   - *Compact* (16–31): one line, first name · prestation. Below 16: colour only. No disc.
@@ -871,8 +869,8 @@ presentation only. Occupancy, segments, statuses and navigation behave exactly a
     with the initials in the card's name tone — flat, nothing translucent over the pastel.
     Decorative: the card speaks the client's name. Dropped when the card is narrower than
     140 pt (overlap columns).
-  - **No duration is written**: the height of the card is the duration. The start time is read
-    from the card's own segment (`startAt`). `spacing.sm` side padding. No written status: the
+  - **No time and no duration are written**: the grid and the hour axis place the card, its
+    height is the duration; Appointment Details shows the time. `spacing.sm` side padding. No written status: the
     colours carry it.
 - **Depth**: the barely-there `nativeShadows.card` under live cards, nothing else. The former
   card sheen (a top-down white gradient plus a one-pixel highlight, `gloss.card`) is removed: it

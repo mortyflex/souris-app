@@ -122,7 +122,7 @@ describe('AppointmentBlock hierarchy by height', () => {
     endAt: new Date(2026, 7, 24, 9, minutes),
   });
 
-  it('groups a tall card at its start line: initials, time, name, services, phases — no duration', async () => {
+  it('groups a tall card at its start line: initials, name, services, phases — no time, no duration', async () => {
     // 90 minutes on the 68 pt hour.
     const view = await renderBlock(102, multiService(90));
 
@@ -130,37 +130,37 @@ describe('AppointmentBlock hierarchy by height', () => {
     const avatar = view.getByTestId('appointment-block-avatar');
     expect(avatar).toHaveStyle({ height: 32, width: 32 });
     expect(avatar).toHaveTextContent('AX');
-    expect(view.getByTestId('appointment-block-time')).toHaveTextContent('09:00');
     expect(view.getByText('Ahlem X')).toHaveStyle({ lineHeight: 18 });
     // Several prestations stay ONE summary line.
     expect(view.getByText('Couleur · Coupe').props.numberOfLines).toBe(1);
     expect(view.getByTestId('appointment-block-phase')).toHaveTextContent('Application · Coupe');
-    // Reading order: time, name, services, phases.
+    // Reading order: name, services, phases.
     const order = view
-      .getAllByText(/^(09:00|Ahlem X|Couleur · Coupe|Application · Coupe)$/)
+      .getAllByText(/^(Ahlem X|Couleur · Coupe|Application · Coupe)$/)
       .map((node) => node.props.children);
-    expect(order[0]).toBe('09:00');
+    expect(order[0]).toBe('Ahlem X');
     expect(order[order.length - 1]).toBe('Application · Coupe');
+    // The grid places the card: its time is never written.
+    expect(view.queryByText(/\d{2}:\d{2}/)).toBeNull();
     // The height of the card is the duration: it is never written.
     expect(view.queryByText(/\d+ (h|min)/)).toBeNull();
     // The status is carried by the colours: never written.
     expect(view.queryByText(/Terminé|Planifié|Confirmé/)).toBeNull();
   });
 
-  it('fits time, name, services and the phases line in a one-hour card, without a duration', async () => {
+  it('fits name, services and the phases line in a one-hour card, without a time or a duration', async () => {
     const view = await renderBlock(68, multiService(60));
 
-    expect(view.getByTestId('appointment-block-time')).toHaveTextContent('09:00');
+    expect(view.queryByText(/\d{2}:\d{2}/)).toBeNull();
     expect(view.getByTestId('appointment-block-phase')).toHaveTextContent('Application · Coupe');
     expect(view.queryByText(/\d+ (h|min)/)).toBeNull();
   });
 
-  it('keeps the phases inline on the shortest tall card', async () => {
+  it('gives the phases their own line on the shortest tall card, now the time is gone', async () => {
     const view = await renderBlock(56, multiService(50));
 
-    expect(view.getByTestId('appointment-block-time')).toBeTruthy();
-    expect(view.queryByTestId('appointment-block-phase')).toBeNull();
-    expect(view.getByText(/Application · Coupe/)).toBeTruthy();
+    expect(view.queryByText(/\d{2}:\d{2}/)).toBeNull();
+    expect(view.getByTestId('appointment-block-phase')).toHaveTextContent('Application · Coupe');
   });
 
   it('keeps a medium card to two tight centred lines beside a smaller initials disc', async () => {
@@ -171,7 +171,7 @@ describe('AppointmentBlock hierarchy by height', () => {
     expect(view.getByTestId('appointment-block-avatar')).toHaveStyle({ height: 24, width: 24 });
     expect(view.getByText('Ahlem X')).toHaveStyle({ lineHeight: 16 });
     expect(view.getByText('Balayage 3')).toBeTruthy();
-    expect(view.queryByTestId('appointment-block-time')).toBeNull();
+    expect(view.queryByText(/\d{2}:\d{2}/)).toBeNull();
     expect(view.queryByTestId('appointment-block-phase')).toBeNull();
   });
 
@@ -181,7 +181,7 @@ describe('AppointmentBlock hierarchy by height', () => {
     expect(view.getByText(/Ahlem/).props.numberOfLines).toBe(1);
     expect(view.queryByText('Ahlem X')).toBeNull();
     expect(view.queryByTestId('appointment-block-avatar')).toBeNull();
-    expect(view.queryByTestId('appointment-block-time')).toBeNull();
+    expect(view.queryByText(/\d{2}:\d{2}/)).toBeNull();
   });
 
   it('reduces a quarter-hour sliver to its colour, still spoken in full', async () => {
@@ -198,7 +198,6 @@ describe('AppointmentBlock hierarchy by height', () => {
 
     expect(view.queryByTestId('appointment-block-avatar')).toBeNull();
     expect(view.getByText('Ahlem X').props.numberOfLines).toBe(1);
-    expect(view.getByTestId('appointment-block-time')).toBeTruthy();
   });
 
   it('shows no disc when the caller has no initials', async () => {

@@ -132,16 +132,14 @@ describe('DayTimeline hourly grid', () => {
   it('labels full hours only', async () => {
     const view = await renderTimeline([entry('morning', 9, 60)]);
 
-    // The grid labels only: a tall card also writes its own start time.
+    // The grid labels only: a card never writes its own start time.
     const gridLabels = view
       .getAllByText(/^\d{2}:\d{2}$/)
-      .filter((node) => node.props.testID !== 'appointment-block-time')
       .map((node) => node.props.children);
 
     expect(gridLabels).toEqual(
       Array.from({ length: 13 }, (_, index) => `${(index + 8).toString().padStart(2, '0')}:00`),
     );
-    expect(view.getByTestId('appointment-block-time')).toHaveTextContent('09:00');
   });
 
   it('keeps a 45-minute appointment 45 minutes tall', async () => {
