@@ -45,7 +45,11 @@ import {
   loadAppointmentDeposits,
   voidAppointmentDeposit,
 } from "@/persistence/stores/appointment-deposits";
-import { insertAppointment, loadAppointments } from "@/persistence/stores/appointments";
+import {
+  insertAppointment,
+  insertAppointmentWithDeposit,
+  loadAppointments,
+} from "@/persistence/stores/appointments";
 import { insertCalendarBlock } from "@/persistence/stores/calendar-blocks";
 import { findProduct, setProductStock } from "@/persistence/stores/products";
 import { completeSale, loadSales } from "@/persistence/stores/sales";
@@ -2873,6 +2877,71 @@ describe("AppointmentDetailsScreen — deposits (« Acomptes »)", () => {
       discount: { type: "PERCENT", percent: 20 },
       payment: { cardAmountCents: 1000, cashAmountCents: 0 },
     });
+  });
+
+  it("a deposit recorded WITH the Appointment at its creation reads exactly like one taken later", async () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, () => createDevelopmentSeed(new Date()));
+    // Coupe 30 € + Balayage 70 € = 100,00 € expected, same as the seeded cases.
+    const total = 10_000;
+    // What « Créer le rendez-vous » writes with « Ajouter un acompte reçu » filled in.
+    insertAppointmentWithDeposit(
+      db,
+      {
+        id: DEPOSIT_APPOINTMENT,
+        businessId: "business-test",
+        clientId: "client-agenda-sofia",
+        staffMemberId: "staff-amelie",
+        startAt: new Date(2026, 7, 29, 10, 0),
+        status: "SCHEDULED",
+        items: [
+          {
+            id: "dp-coupe",
+            serviceId: "service-cut",
+            order: 0,
+            serviceName: "Coupe",
+            serviceType: "SERVICE",
+            price: 30,
+            phases: [{ id: "dp-coupe-phase", name: "Coupe", durationMinutes: 30, requiresStaff: true }],
+          },
+          {
+            id: "dp-balayage",
+            serviceId: "service-highlights",
+            order: 1,
+            serviceName: "Balayage",
+            serviceType: "TECHNIQUE",
+            price: 70,
+            phases: [{ id: "dp-application", name: "Application", durationMinutes: 45, requiresStaff: true }],
+          },
+        ],
+      },
+      {
+        id: "dp-at-creation",
+        businessId: "business-test",
+        appointmentId: DEPOSIT_APPOINTMENT,
+        amountCents: 2500,
+        paymentMethod: "CASH",
+        paidAt: new Date(2026, 7, 22, 10, 0),
+        status: "ACTIVE",
+        createdAt: new Date(2026, 7, 22, 10, 0),
+      },
+    );
+    const expected = storedDeposits(db)[0]!;
+
+    const view = await renderDetails(DEPOSIT_APPOINTMENT, undefined, db);
+
+    expect(view.queryByTestId("take-deposit")).toBeTruthy();
+    expect(within(view.getByTestId("appointment-deposits")).getAllByText("Acomptes").length).toBeGreaterThan(0);
+    expect(view.getByTestId("appointment-deposit-expected").props.children).toBe(formatEuroCents(total));
+    expect(view.getByTestId("appointment-deposit-total").props.children).toBe(formatEuroCents(2500));
+    expect(view.getByTestId("appointment-deposit-remaining").props.children).toBe(formatEuroCents(total - 2500));
+    expect(view.getByTestId("appointment-deposit-label-dp-at-creation").props.children).toBe("22 août · Espèces");
+    expect(view.getByTestId("appointment-deposit-amount-dp-at-creation").props.children).toBe(formatEuroCents(2500));
+    expect(view.getByTestId("void-deposit-dp-at-creation")).toBeTruthy();
+    const footer = within(view.getByTestId("appointment-checkout-footer"));
+    expect(footer.getByText("Reste à encaisser")).toBeTruthy();
+    expect(footer.getByText(`Encaisser ${formatEuroCents(total - 2500)}`)).toBeTruthy();
+    expect(expected).toMatchObject({ amountCents: 2500, paymentMethod: "CASH", status: "ACTIVE" });
   });
 
   it("without a deposit shows ONE « Prendre un acompte » row and no accounting block", async () => {

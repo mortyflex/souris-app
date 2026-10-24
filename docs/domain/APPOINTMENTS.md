@@ -620,8 +620,9 @@ The creation draft boundary:
 - selecting a Service copies the CURRENT catalog timing and price into the draft;
 - the final AppointmentItem snapshot is built directly from the creation draft (name, type, price, and
   ordered phases with their final durations) — never re-read from the current catalog at save time;
-- creation persists the Appointment snapshot rows ONLY (appointment + items + phases, one transaction);
-  no Service row is written, on success or otherwise;
+- creation persists the Appointment snapshot rows ONLY (appointment + items + phases, one transaction) —
+  plus, when the professional recorded a deposit already received on the Résumé, that deposit record in
+  the SAME transaction (§25d « At creation »); no Service row is written, on success or otherwise;
 - existing AppointmentItem snapshots are never retroactively modified;
 - existing Appointment EDITING and Appointment Details keep the same snapshot-only semantics.
 
@@ -1282,6 +1283,33 @@ AppointmentDeposit                      src/domain/appointments/types.ts, deposi
 ```
 
 An Appointment has zero, one or several deposits.
+
+**At creation (« Ajouter un acompte reçu »).** The creation Résumé offers ONE optional, collapsed « Acompte »
+row (after « Réduction ») to record money the professional has ALREADY received for the Appointment being
+created. It is the SAME record, the SAME rules and the SAME write as « Prendre un acompte » on an existing
+Appointment — not a second deposit system, not a column of the Appointment:
+
+- inactive by default; nothing is preselected or prefilled. The no-show warning suggests a deposit in words
+  only (« Pensez à demander un acompte. ») and never fills the row in;
+- the entry (`src/features/appointments/creation/deposit-draft.ts`) asks `validateAppointmentDepositAmount`
+  against the position of the NEW Appointment — expected = services net of the discount, nothing paid ahead —
+  so `> 0`, exact cents, `<= expected`. The amount is kept AS TYPED and re-read on every render: a lower
+  price or a new discount re-validates it at once, the refusal is shown inline and « Créer le rendez-vous »
+  is held until it is corrected or removed. Nothing is clamped;
+- the method is Carte or Espèces; `paidAt` is the instant of the save (its Cash Register day), exactly as
+  the sheet records it;
+- the deposit id is created once per draft and reused by a retry, so a repeated save is refused, never
+  duplicated — on top of the one-creation guard of the sheet itself;
+- the save is ONE transaction (`insertAppointmentWithDeposit`: the Appointment rows, then THE deposit write
+  re-verifying the rows just inserted): never an Appointment without its requested deposit, never an orphan
+  deposit, both outbox entries marked together — the push worker sends the Appointment before its deposit
+  (`CLOUD_SYNC.md` §21). A refusal rolls everything back and is reported; nothing reads as saved;
+- it is offered only while the new Appointment will be financially open: an Appointment of a PREVIOUS local
+  day is finalized `COMPLETED` on insert (§24) and receives no deposit, so its Résumé shows no row.
+
+Once saved, the Appointment reads exactly like one whose deposit was taken later: Details lists it under
+« Acomptes », the Cash Register counts it once on the save day by its method, and the final checkout settles
+only the remaining amount.
 
 **Statuses.** `ACTIVE` counts wherever money is counted. `VOIDED` is a CORRECTION of a mistaken entry — not a
 refund: it stays in the Appointment's financial history (shown « Annulé », subdued), and counts in no total:

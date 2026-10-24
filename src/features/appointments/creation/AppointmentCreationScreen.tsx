@@ -26,7 +26,20 @@
 // otherwise. Derived ONCE per render from the Appointment session (the same
 // data as the profile's « Absences ») and the selected Client: a changed or
 // cleared selection updates or removes it at once, on every step. It suggests
-// a deposit in words only; deposit entry during creation is a later phase.
+// a deposit in words only — never a button, never a prefilled amount: the
+// « Acompte » row of the Résumé is where the professional decides.
+//
+// Deposit (« Ajouter un acompte reçu »): the Résumé offers ONE optional row to
+// record money ALREADY received for the new Appointment. The draft (id,
+// amount as typed, method) lives here with the rest of the draft and survives
+// every step transition; its validity is derived on every render from the
+// current services total, so a changed price or discount re-validates it at
+// once and an entry that no longer fits holds « Créer le rendez-vous ». It is
+// saved with the Appointment in ONE transaction (`addAppointment(entry,
+// deposit)`): never an Appointment without its deposit, never a deposit
+// twice. The row is offered only while the new Appointment will be
+// financially open — an Appointment of a previous day is finalized on save
+// and receives no deposit (docs/domain/APPOINTMENTS.md §25d).
 //
 // Client Profile entry: `initialClientId` opens the SAME flow on the Cliente
 // step with that Client already selected (the Agenda entries pass none).
@@ -47,7 +60,7 @@
 // swipe-to-dismiss (`src/app/(app)/_layout.tsx`): scrolling the Client list
 // never abandons the draft — leaving goes through the explicit « Annuler ».
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
@@ -102,6 +115,11 @@ import {
 } from '@/shared/ui/theme';
 
 import { buildAppointment, type BuildAppointmentItemInput } from './build-appointment';
+import {
+  canOfferCreationDeposit,
+  deriveCreationDepositState,
+  type CreationDepositDraft,
+} from './deposit-draft';
 import { AppointmentScheduleSection } from './components/AppointmentScheduleSection';
 import { ClientPickerStep } from '@/features/clients/selection/ClientPickerStep';
 import { CreationStepper } from './components/CreationStepper';
@@ -184,6 +202,13 @@ export function AppointmentCreationScreen({
   const [selectedDrafts, setSelectedDrafts] = useState<readonly SelectedServiceDraft[]>([]);
   const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
   const [draftDiscount, setDraftDiscount] = useState<AppointmentDiscount>();
+  // The deposit already received, if the professional records one: id, amount
+  // as typed, method. Inactive by default; validated on every render below.
+  const [depositDraft, setDepositDraft] = useState<CreationDepositDraft>();
+  // ONE creation per sheet: set when « Créer le rendez-vous » starts writing,
+  // cleared only when the write failed (nothing was saved, she may retry). A
+  // second tap in the same frame can never create twice.
+  const creating = useRef(false);
   // Per-appointment client reminder (Lot B). ON by default; only shown — and
   // only stored — while the GLOBAL preference is enabled (fail-safe reading).
   const remindersGloballyEnabled =
@@ -254,10 +279,24 @@ export function AppointmentCreationScreen({
         )
       : undefined;
 
+  // THE deposit truth of this draft: offered only while the new Appointment
+  // will be financially open (never for a previous-day Appointment, finalized
+  // on save), read against the CURRENT services total — a lower price or a
+  // new discount re-validates the entered amount at once.
+  const depositOffered = canOfferCreationDeposit(draftStartAt, today);
+  const depositState = summary
+    ? deriveCreationDepositState(
+        depositOffered ? depositDraft : undefined,
+        'SCHEDULED',
+        summary.servicesTotal,
+      )
+    : undefined;
+
   const canContinue =
     step === 0
       ? selectedClient !== undefined
-      : selectedDrafts.length > 0 && (step !== 2 || blockInTheWay === undefined);
+      : selectedDrafts.length > 0 &&
+        (step !== 2 || (blockInTheWay === undefined && depositState?.blocksCreation !== true));
 
   const visibleClients = useMemo(
     () => prepareClientDirectory(activeClients, clientQuery),
@@ -325,6 +364,9 @@ export function AppointmentCreationScreen({
 
   const create = () => {
     if (!selectedClient || selectedDrafts.length === 0 || !summary || blockInTheWay) return;
+    if (!depositState || depositState.blocksCreation) return;
+    if (creating.current) return;
+    creating.current = true;
 
     const appointmentId = createAppointmentId();
     // The final draft is the immediate source for the Appointment snapshot.
@@ -342,11 +384,14 @@ export function AppointmentCreationScreen({
       startAt: draftStartAt,
     });
 
-    // Snapshot only: the Appointment (items + phases) is the whole write.
-    // Official Service timing is edited from Prestations & tarifs alone.
+    // Snapshot only: the Appointment (items + phases) — plus the deposit
+    // already received, when one was entered — is the whole write, in ONE
+    // transaction. Official Service timing is edited from Prestations & tarifs
+    // alone. A failure saves nothing, says so, and lets her try again.
     try {
-      addAppointment({ appointment });
+      addAppointment({ appointment }, depositState.deposit);
     } catch (error) {
+      creating.current = false;
       alertPersistenceFailure(error);
       return;
     }
@@ -508,6 +553,11 @@ export function AppointmentCreationScreen({
           }
           discount={draftDiscount}
           onDiscountChange={setDraftDiscount}
+          deposit={
+            depositOffered && depositState
+              ? { draft: depositDraft, state: depositState, onChange: setDepositDraft }
+              : undefined
+          }
           entries={selectedDrafts.map((draft) => ({ draft }))}
           expandedDraftId={expandedDraftId}
           startAt={draftStartAt}

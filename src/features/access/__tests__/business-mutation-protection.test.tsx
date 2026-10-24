@@ -323,6 +323,14 @@ const MUTATIONS: readonly { readonly name: string; readonly run: (s: Sessions) =
       }),
   },
   { name: 'appointments.addAppointment', run: (s) => s.appointments.addAppointment({ appointment: { ...futureAppointment, id: 'appointment-new', items: [] } }) },
+  {
+    name: 'appointments.addAppointment (with a deposit already received)',
+    run: (s) =>
+      s.appointments.addAppointment(
+        { appointment: { ...futureAppointment, id: 'appointment-new-deposit' } },
+        { id: 'deposit-at-creation', amountCents: 3000, paymentMethod: 'CASH' },
+      ),
+  },
   { name: 'appointments.updateAppointment', run: (s) => s.appointments.updateAppointment({ appointment: { ...futureAppointment, notes: 'changed' } }) },
   {
     name: 'appointments.updateAppointmentItemTiming',

@@ -29,6 +29,7 @@ import {
   type AppointmentCancellation,
   type AppointmentCancellationActor,
   type AppointmentCheckoutRefusal,
+  type AppointmentDeposit,
   type AppointmentDiscount,
   type AppointmentItem,
   type AppointmentPayment,
@@ -48,6 +49,7 @@ import {
   AppointmentDepositShortfallError,
   assertAppointmentDepositsCovered,
   countAppointmentDeposits,
+  insertAppointmentDeposit,
   readAppointmentDepositPosition,
 } from './appointment-deposits';
 import { countAppointmentSales } from './sales';
@@ -256,6 +258,38 @@ export function insertAppointment(db: SourisDatabase, appointment: Appointment):
     );
     writeItems(db, appointment);
     markAggregateUpserted(db, 'APPOINTMENT', appointment.id);
+  });
+}
+
+/**
+ * A NEW Appointment together with a deposit ALREADY received for it
+ * (« Ajouter un acompte reçu » on the creation Résumé), in ONE transaction:
+ * the Appointment rows first, then the deposit through THE deposit write —
+ * which re-reads the stored Appointment just inserted (financially open,
+ * enough left to collect) and refuses a repeated id. Any refusal rolls the
+ * Appointment back with it: never an Appointment without its requested
+ * deposit, never a deposit without its Appointment, and both outbox entries
+ * are marked together or not at all (the push worker sends the Appointment
+ * before its deposit — CLOUD_SYNC.md §21).
+ */
+export function insertAppointmentWithDeposit(
+  db: SourisDatabase,
+  appointment: Appointment,
+  deposit: AppointmentDeposit,
+): void {
+  if (deposit.appointmentId !== appointment.id) {
+    throw new Error(
+      `insertAppointmentWithDeposit: deposit "${deposit.id}" names Appointment "${deposit.appointmentId}", not "${appointment.id}"`,
+    );
+  }
+  if (deposit.businessId !== appointment.businessId) {
+    throw new Error(
+      `insertAppointmentWithDeposit: deposit "${deposit.id}" belongs to another Business than its Appointment`,
+    );
+  }
+  runInTransaction(db, () => {
+    insertAppointment(db, appointment);
+    insertAppointmentDeposit(db, deposit);
   });
 }
 

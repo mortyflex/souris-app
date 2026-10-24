@@ -46,6 +46,7 @@ import {
   countAppointmentReferences,
   deleteAppointment as removeAppointment,
   insertAppointment,
+  insertAppointmentWithDeposit,
   removeAppointmentItem as persistItemRemoval,
   settleCompletedAppointmentWithDeposits as persistDepositSettlement,
   reorderAppointmentItems as persistItemOrder,
@@ -60,6 +61,7 @@ import { reconcileAppointmentEntriesForLocalDay } from './reconciliation';
 import { removeAppointmentEntryById } from './deletion';
 import type {
   AppointmentCheckoutDiscount,
+  AppointmentCreationDeposit,
   AppointmentDepositInput,
   AppointmentSessionEntry,
   AppointmentSessionValue,
@@ -118,6 +120,9 @@ function millisecondsUntilNextLocalDay(now: Date): number {
  * checkout, Cash Register, day summary) already reads this session. The
  * stored rows are the authority for every deposit rule: the store re-reads
  * the Appointment, its linked Sales and its deposits inside each transaction.
+ * A deposit already received for a NEW Appointment (« Ajouter un acompte
+ * reçu » on the creation Résumé) is written by `addAppointment` in the SAME
+ * transaction as the Appointment — both saved, or neither.
  *
  * Automatic previous-local-day finalization runs here (never in
  * rendering): at session start, when the app returns to the foreground, and
@@ -200,13 +205,40 @@ export function AppointmentSessionProvider({ children }: PropsWithChildren) {
     return appointments.find(({ appointment }) => appointment.id === appointmentId);
   };
 
-  const addAppointment = (entry: AppointmentSessionEntry) => {
+  const addAppointment = (entry: AppointmentSessionEntry, deposit?: AppointmentCreationDeposit) => {
     requireWriteAccess('appointments.addAppointment');
-    const reconciledEntry = reconcileAppointmentEntriesForLocalDay([entry], new Date())[0] ?? entry;
-    // ONE transaction: appointment + items + phases. Snapshot only — the
-    // Service catalog is never written from Appointment workflows.
-    insertAppointment(database, reconciledEntry.appointment);
+    const now = new Date();
+    const reconciledEntry = reconcileAppointmentEntriesForLocalDay([entry], now)[0] ?? entry;
+    if (!deposit) {
+      // ONE transaction: appointment + items + phases. Snapshot only — the
+      // Service catalog is never written from Appointment workflows.
+      insertAppointment(database, reconciledEntry.appointment);
+      commit([...committed.current, reconciledEntry]);
+      return;
+    }
+
+    // A deposit ALREADY received for the new Appointment: the same deposit
+    // record as « Prendre un acompte », received now, written in the SAME
+    // transaction as the Appointment. The store re-verifies it against the
+    // rows just inserted and refuses a repeated id; a refusal rolls the
+    // Appointment back too, so state changes only once both are committed.
+    if (committedDeposits.current.some((candidate) => candidate.id === deposit.id)) {
+      throw new AppointmentDepositConflictError(deposit.id, 'DUPLICATE_DEPOSIT');
+    }
+    const { appointment } = reconciledEntry;
+    const record = createAppointmentDeposit({
+      id: deposit.id,
+      businessId: appointment.businessId,
+      appointmentId: appointment.id,
+      amountCents: deposit.amountCents,
+      paymentMethod: deposit.paymentMethod,
+      paidAt: now,
+      status: 'ACTIVE',
+      createdAt: now,
+    });
+    insertAppointmentWithDeposit(database, appointment, record);
     commit([...committed.current, reconciledEntry]);
+    commitDeposits([...committedDeposits.current, record]);
   };
 
   const updateAppointment = (entry: AppointmentSessionEntry) => {

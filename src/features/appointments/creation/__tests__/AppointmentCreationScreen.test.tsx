@@ -15,7 +15,7 @@
 
 import { formatEuros } from '@/shared/lib/money';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 
 import type { Appointment, AppointmentItem, AppointmentStatus } from '@/domain/appointments';
 import type { Client } from '@/domain/clients';
@@ -28,7 +28,10 @@ import { haptics } from '@/shared/lib/haptics';
 import { caution, serviceCategoryColors } from '@/shared/ui/theme';
 
 import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
+import * as depositStore from '@/persistence/stores/appointment-deposits';
+import { loadAppointmentDeposits } from '@/persistence/stores/appointment-deposits';
 import { loadAppointments } from '@/persistence/stores/appointments';
+import { PERSISTENCE_FAILURE_TITLE } from '@/providers/persistence-failure';
 import { loadServices } from '@/persistence/stores/services';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { usePersistence } from '@/providers/PersistenceProvider';
@@ -40,6 +43,7 @@ const mockBack = jest.fn();
 let mockReducedMotion = false;
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
 const mockSelectionHaptic = jest.spyOn(haptics, 'selection').mockImplementation();
+const mockAlert = jest.spyOn(Alert, 'alert').mockImplementation();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack }),
@@ -157,7 +161,7 @@ type Rendered = Awaited<ReturnType<typeof renderCreation>>;
 
 function SessionProbe() {
   const { clients, archiveClient, updateClient } = useClientSession();
-  const { appointments, addAppointment } = useAppointmentSession();
+  const { appointments, addAppointment, deposits } = useAppointmentSession();
   const { getServiceById, setServiceActive } = useServiceCatalog();
   const newest = appointments[appointments.length - 1]?.appointment;
   const createdClient = clients.find((client) => client.firstName === 'Nouvelle');
@@ -169,6 +173,15 @@ function SessionProbe() {
       <Text testID="new-client-id">{createdClient?.id ?? ''}</Text>
       <Text testID="last-appointment-client-id">{newest?.clientId ?? ''}</Text>
       <Text testID="last-appointment-discount">{JSON.stringify(newest?.discount ?? null)}</Text>
+      <Text testID="last-appointment-id">{newest?.id ?? ''}</Text>
+      <Text testID="deposits-probe">
+        {deposits
+          .map(
+            (deposit) =>
+              `${deposit.appointmentId}|${deposit.amountCents}|${deposit.paymentMethod}|${deposit.status}|${deposit.businessId}`,
+          )
+          .join('~')}
+      </Text>
       <Text testID="appointments-probe">
         {appointments
           .map(
@@ -1838,8 +1851,12 @@ describe('AppointmentCreationScreen', () => {
         within(warning).getByText('1 absence enregistrée. Pensez à demander un acompte.'),
       ).toBeTruthy();
       expect(view.getAllByTestId(WARNING)).toHaveLength(1);
-      // Awareness only on the Résumé too: no deposit row, no deposit action.
-      expect(view.queryByText(/Ajouter un acompte|Prendre un acompte|Acomptes?$/)).toBeNull();
+      // Awareness only: the warning carries no deposit action, and the « Acompte »
+      // row of the Résumé stays collapsed and empty — nothing is enabled or filled in.
+      expect(within(warning).queryByRole('button')).toBeNull();
+      expect(within(footer).queryByText(/acompte/i)).toBe(within(warning).getByText(/Pensez à demander un acompte/));
+      expect(view.getByTestId('creation-deposit-summary').props.children).toBe('Aucun');
+      expect(view.queryByTestId('creation-deposit-amount')).toBeNull();
 
       // Back to the Client step through « Précédent » twice: still there, still correct.
       await act(async () => {
@@ -2076,6 +2093,416 @@ describe('AppointmentCreationScreen', () => {
       expect(view.getByTestId('appointment-discount-presets')).toBeTruthy();
       expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
       expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(20));
+    });
+  });
+
+  describe('deposit already received (« Acompte » on the Résumé)', () => {
+    const DEPOSIT = 'creation-deposit';
+    const SUMMARY = 'creation-deposit-summary';
+    const AMOUNT = 'creation-deposit-amount';
+    const ERROR = 'creation-deposit-error';
+    const CREATE = 'Créer le rendez-vous';
+
+    beforeAll(() => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+    });
+
+    afterAll(() => {
+      jest.useRealTimers();
+    });
+
+    beforeEach(() => {
+      // Today is 10 août; the Appointment (`startAt`, the 25th) is still to come,
+      // so it stays SCHEDULED on save and may receive a deposit.
+      jest.setSystemTime(new Date(2026, 7, 10, 9, 0));
+      mockAlert.mockClear();
+    });
+
+    async function press(view: Rendered, testID: string) {
+      await act(async () => {
+        fireEvent.press(view.getByTestId(testID));
+      });
+    }
+
+    async function typeAmount(view: Rendered, text: string) {
+      await act(async () => {
+        fireEvent.changeText(view.getByTestId(AMOUNT), text);
+      });
+    }
+
+    /** Constance + Brushing 1 (20 €), up to the Résumé, the « Acompte » row opened. */
+    async function reachSummaryWithDepositOpen(view: Rendered) {
+      await selectClientBeyond60(view);
+      await searchService(view, 'brushing 1');
+      await selectService(view, 'Brushing 1');
+      await continueToSummary(view);
+      await press(view, 'creation-deposit-toggle');
+    }
+
+    async function createAppointment(view: Rendered) {
+      await act(async () => {
+        fireEvent.press(view.getByText(CREATE));
+      });
+    }
+
+    const summaryText = (view: Rendered) => view.getByTestId(SUMMARY).props.children as string;
+    const storedDeposits = (database: TestDatabase) => loadAppointmentDeposits(database);
+    const createButton = (view: Rendered) => view.getByText(CREATE);
+
+    it('offers ONE collapsed « Acompte » row, inactive by default; creating as before writes no deposit', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      await selectClientBeyond60(view);
+      await searchService(view, 'brushing 1');
+      await selectService(view, 'Brushing 1');
+      await continueToSummary(view);
+
+      // After « Réduction », before the reminder: a quiet row, nothing prefilled.
+      expect(view.getByTestId(DEPOSIT)).toBeTruthy();
+      expect(summaryText(view)).toBe('Aucun');
+      expect(view.getByLabelText('Acompte, aucun')).toBeTruthy();
+      expect(view.getByTestId('creation-deposit-toggle').props.accessibilityHint).toBe('Ajouter un acompte reçu');
+      expect(view.queryByTestId('creation-deposit-quick-amounts')).toBeNull();
+      expect(view.queryByTestId(AMOUNT)).toBeNull();
+      expect(createButton(view)).toBeEnabled();
+
+      await createAppointment(view);
+
+      expect(view.getByTestId('last-appointment-discount').props.children).toBe('null');
+      expect(view.getByTestId('deposits-probe').props.children).toBe('');
+      expect(storedDeposits(database)).toEqual([]);
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('records a deposit already received: a quick amount, Espèces, the position shown, saved WITH the Appointment', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      await reachSummaryWithDepositOpen(view);
+
+      expect(view.getByText('Montant déjà reçu du client, enregistré avec le rendez-vous.')).toBeTruthy();
+      // 20 € expected: 10 € and exactly 20 € fit, 30 € and 50 € are not offered.
+      expect(view.getByTestId('creation-deposit-quick-1000')).toBeTruthy();
+      expect(view.getByTestId('creation-deposit-quick-2000')).toBeTruthy();
+      expect(view.queryByTestId('creation-deposit-quick-3000')).toBeNull();
+      expect(view.queryByTestId('creation-deposit-position')).toBeNull();
+
+      await press(view, 'creation-deposit-quick-1000');
+      await press(view, 'creation-deposit-method-cash');
+
+      expect(summaryText(view)).toBe(`${formatEuros(10)} · Espèces`);
+      expect(view.getByLabelText('Acompte, 10,00 € par espèces')).toBeTruthy();
+      expect(view.getByTestId('creation-deposit-expected-total').props.children).toBe(formatEuros(20));
+      expect(view.getByTestId('creation-deposit-collected').props.children).toBe(formatEuros(10));
+      expect(view.getByTestId('creation-deposit-remaining').props.children).toBe(formatEuros(10));
+      // The expected total of the Appointment never changes because of a deposit.
+      expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(20));
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+
+      await createAppointment(view);
+
+      const appointmentId = view.getByTestId('last-appointment-id').props.children as string;
+      expect(appointmentId).not.toBe('');
+      expect(view.getByTestId('deposits-probe').props.children).toBe(`${appointmentId}|1000|CASH|ACTIVE|fixture-business`);
+      expect(storedDeposits(database)).toEqual([
+        expect.objectContaining({
+          appointmentId,
+          businessId: 'fixture-business',
+          amountCents: 1000,
+          paymentMethod: 'CASH',
+          status: 'ACTIVE',
+          paidAt: new Date(2026, 7, 10, 9, 0),
+        }),
+      ]);
+      expect(loadAppointments(database).find((appointment) => appointment.id === appointmentId)).toMatchObject({
+        status: 'SCHEDULED',
+        clientId: CONSTANCE_ID,
+      });
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+      expect(mockAlert).not.toHaveBeenCalled();
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads a free amount typed with a comma or a dot as exact cents, Carte by default', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      await reachSummaryWithDepositOpen(view);
+
+      await typeAmount(view, '7,50');
+      expect(summaryText(view)).toBe(`${formatEuros(7.5)} · Carte`);
+      expect(view.getByTestId('creation-deposit-remaining').props.children).toBe(formatEuros(12.5));
+
+      await typeAmount(view, '7.5');
+      expect(summaryText(view)).toBe(`${formatEuros(7.5)} · Carte`);
+
+      await typeAmount(view, '12,');
+      expect(summaryText(view)).toBe(`${formatEuros(12)} · Carte`);
+
+      await createAppointment(view);
+
+      expect(storedDeposits(database)).toEqual([
+        expect.objectContaining({ amountCents: 1200, paymentMethod: 'CARD' }),
+      ]);
+    });
+
+    it('refuses zero, negative, unreadable and oversized amounts and holds « Créer le rendez-vous »', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      const before = loadAppointments(database).length;
+      await reachSummaryWithDepositOpen(view);
+
+      await typeAmount(view, '0');
+      expect(view.getByTestId(ERROR).props.children).toBe('Le montant doit être supérieur à 0 €.');
+      expect(summaryText(view)).toBe('Aucun');
+      expect(createButton(view)).toBeDisabled();
+
+      await typeAmount(view, '-5');
+      expect(view.getByTestId(ERROR).props.children).toBe('Montant invalide');
+      expect(createButton(view)).toBeDisabled();
+
+      await typeAmount(view, 'dix');
+      expect(view.getByTestId(ERROR).props.children).toBe('Montant invalide');
+      expect(createButton(view)).toBeDisabled();
+
+      await typeAmount(view, '20,01');
+      expect(view.getByTestId(ERROR).props.children).toBe(
+        `L’acompte ne peut pas dépasser le reste à encaisser (${formatEuros(20)}).`,
+      );
+      expect(createButton(view)).toBeDisabled();
+
+      // Nothing was written by any of those attempts.
+      await createAppointment(view);
+      expect(loadAppointments(database)).toHaveLength(before);
+      expect(storedDeposits(database)).toEqual([]);
+
+      // Exactly the total is fine: fully prepaid.
+      await typeAmount(view, '20');
+      expect(view.queryByTestId(ERROR)).toBeNull();
+      expect(view.getByTestId('creation-deposit-remaining').props.children).toBe(formatEuros(0));
+      expect(createButton(view)).toBeEnabled();
+    });
+
+    it('a discount added after the deposit re-validates it — percentage, then fixed — and never clamps it', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      await reachSummaryWithDepositOpen(view);
+      await typeAmount(view, '15');
+      expect(createButton(view)).toBeEnabled();
+
+      // 20 € − 50 % = 10 €: the 15 € deposit no longer fits.
+      await press(view, 'appointment-discount-toggle');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Réduction de 50 pour cent'));
+      });
+      expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(10));
+      expect(view.getByTestId(ERROR).props.children).toBe(
+        `L’acompte ne peut pas dépasser le reste à encaisser (${formatEuros(10)}).`,
+      );
+      expect(summaryText(view)).toBe('Aucun');
+      expect(view.getByTestId(AMOUNT).props.value).toBe('15');
+      expect(createButton(view)).toBeDisabled();
+
+      // The discount removed: the same typed amount is valid again.
+      await press(view, 'appointment-discount-clear');
+      expect(view.queryByTestId(ERROR)).toBeNull();
+      expect(summaryText(view)).toBe(`${formatEuros(15)} · Carte`);
+      expect(createButton(view)).toBeEnabled();
+
+      // A fixed 7,50 € discount: 12,50 € expected, the deposit is lowered by hand.
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Réduction en euros'));
+      });
+      await act(async () => {
+        fireEvent.changeText(view.getByTestId('appointment-discount-entry-input'), '7,50');
+      });
+      expect(view.getByTestId(ERROR)).toBeTruthy();
+      await typeAmount(view, '12,50');
+      expect(view.queryByTestId(ERROR)).toBeNull();
+      expect(view.getByTestId('creation-deposit-expected-total').props.children).toBe(formatEuros(12.5));
+      expect(view.getByTestId('creation-deposit-remaining').props.children).toBe(formatEuros(0));
+
+      await createAppointment(view);
+
+      expect(view.getByTestId('last-appointment-discount').props.children).toBe('{"type":"FIXED","amountCents":750}');
+      expect(storedDeposits(database)).toEqual([expect.objectContaining({ amountCents: 1250, paymentMethod: 'CARD' })]);
+    });
+
+    it('a price lowered after the deposit re-validates it; raised again, it is accepted with the same id', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      await reachSummaryWithDepositOpen(view);
+      await typeAmount(view, '15');
+
+      await expandService(view, 'Brushing 1');
+      await act(async () => {
+        fireEvent.changeText(view.getByLabelText('Prix de Brushing 1'), '12');
+      });
+      expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(12));
+      expect(view.getByTestId(ERROR).props.children).toBe(
+        `L’acompte ne peut pas dépasser le reste à encaisser (${formatEuros(12)}).`,
+      );
+      expect(createButton(view)).toBeDisabled();
+
+      await act(async () => {
+        fireEvent.changeText(view.getByLabelText('Prix de Brushing 1'), '30');
+      });
+      expect(view.queryByTestId(ERROR)).toBeNull();
+      expect(view.getByTestId('creation-deposit-remaining').props.children).toBe(formatEuros(15));
+      expect(createButton(view)).toBeEnabled();
+
+      await createAppointment(view);
+
+      expect(storedDeposits(database)).toEqual([expect.objectContaining({ amountCents: 1500 })]);
+      expect(view.getByTestId('appointments-probe').props.children).toContain('Brushing 1:30:30');
+    });
+
+    it('the draft survives the steps backward and forward, and a changed Client', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      await reachSummaryWithDepositOpen(view);
+      await typeAmount(view, '15');
+      await press(view, 'creation-deposit-method-cash');
+
+      await press(view, 'edit-client');
+      await tapClient(view, 'Léa Martin');
+      await act(async () => {
+        fireEvent.press(view.getByText('Continuer'));
+      });
+      await continueToSummary(view);
+
+      expect(summaryText(view)).toBe(`${formatEuros(15)} · Espèces`);
+      await press(view, 'edit-services');
+      await continueToSummary(view);
+      expect(summaryText(view)).toBe(`${formatEuros(15)} · Espèces`);
+
+      await createAppointment(view);
+
+      expect(view.getByTestId('last-appointment-client-id').props.children).toBe('client-agenda-lea');
+      expect(storedDeposits(database)).toEqual([expect.objectContaining({ amountCents: 1500, paymentMethod: 'CASH' })]);
+    });
+
+    it('« Aucun acompte » removes the draft: the Appointment is created without one', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      await reachSummaryWithDepositOpen(view);
+      await typeAmount(view, '15');
+      mockSelectionHaptic.mockClear();
+
+      await press(view, 'creation-deposit-clear');
+
+      expect(summaryText(view)).toBe('Aucun');
+      expect(view.getByTestId(AMOUNT).props.value).toBe('');
+      expect(view.queryByTestId('creation-deposit-position')).toBeNull();
+      expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+
+      await createAppointment(view);
+
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(storedDeposits(database)).toEqual([]);
+    });
+
+    it('cancelling the creation writes nothing — no Appointment, no deposit', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      const before = loadAppointments(database).length;
+      await reachSummaryWithDepositOpen(view);
+      await typeAmount(view, '15');
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Annuler la création'));
+      });
+
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(loadAppointments(database)).toHaveLength(before);
+      expect(storedDeposits(database)).toEqual([]);
+      expect(view.getByTestId('deposits-probe').props.children).toBe('');
+    });
+
+    it('tapping « Créer le rendez-vous » twice creates ONE Appointment and ONE deposit', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      const before = loadAppointments(database).length;
+      await reachSummaryWithDepositOpen(view);
+      await typeAmount(view, '15');
+
+      await act(async () => {
+        fireEvent.press(createButton(view));
+        fireEvent.press(createButton(view));
+      });
+      await createAppointment(view);
+
+      expect(loadAppointments(database)).toHaveLength(before + 1);
+      expect(storedDeposits(database)).toHaveLength(1);
+      expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
+    });
+
+    it('a failed write saves nothing, says so, and lets her try again with the same deposit', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      const before = loadAppointments(database).length;
+      await reachSummaryWithDepositOpen(view);
+      await typeAmount(view, '15');
+      const failingWrite = jest.spyOn(depositStore, 'insertAppointmentDeposit').mockImplementationOnce(() => {
+        throw new Error('disk full');
+      });
+
+      await createAppointment(view);
+      failingWrite.mockRestore();
+
+      expect(mockAlert).toHaveBeenCalledWith(PERSISTENCE_FAILURE_TITLE, expect.any(String));
+      expect(mockBack).not.toHaveBeenCalled();
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+      expect(loadAppointments(database)).toHaveLength(before);
+      expect(storedDeposits(database)).toEqual([]);
+      expect(view.getByTestId('deposits-probe').props.children).toBe('');
+      // The draft is intact and the action available again.
+      expect(summaryText(view)).toBe(`${formatEuros(15)} · Carte`);
+      expect(createButton(view)).toBeEnabled();
+
+      await createAppointment(view);
+
+      expect(loadAppointments(database)).toHaveLength(before + 1);
+      expect(storedDeposits(database)).toEqual([expect.objectContaining({ amountCents: 1500 })]);
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('the no-show warning never fills the deposit in: it stays « Aucun » and creating writes none', async () => {
+      const database = openTestDatabase();
+      const view = await renderCreation(database);
+      await press(view, 'sofia-no-show-1');
+      await selectClientByName(view, 'Sofia Petit');
+      await searchService(view, 'brushing 1');
+      await selectService(view, 'Brushing 1');
+      await continueToSummary(view);
+
+      const warning = within(view.getByTestId('appointment-creation-actions')).getByTestId('appointment-no-show-warning');
+      expect(within(warning).getByText('1 absence enregistrée. Pensez à demander un acompte.')).toBeTruthy();
+      expect(within(warning).queryByRole('button')).toBeNull();
+      expect(summaryText(view)).toBe('Aucun');
+      expect(view.queryByTestId(AMOUNT)).toBeNull();
+      expect(createButton(view)).toBeEnabled();
+
+      await createAppointment(view);
+
+      expect(view.getByTestId('deposits-probe').props.children).toBe('');
+      expect(storedDeposits(database)).toEqual([]);
+    });
+
+    it('offers no deposit for an Appointment of a previous day: it is finalized on save', async () => {
+      const database = openTestDatabase();
+      const view = await render(creationTree(0, database, new Date(2026, 7, 9, 10, 0)));
+      await selectClientBeyond60(view);
+      await searchService(view, 'brushing 1');
+      await selectService(view, 'Brushing 1');
+      await continueToSummary(view);
+
+      expect(view.getByTestId('appointment-discount')).toBeTruthy();
+      expect(view.queryByTestId(DEPOSIT)).toBeNull();
+
+      await createAppointment(view);
+
+      const appointmentId = view.getByTestId('last-appointment-id').props.children as string;
+      expect(loadAppointments(database).find((appointment) => appointment.id === appointmentId)?.status).toBe('COMPLETED');
+      expect(storedDeposits(database)).toEqual([]);
     });
   });
 });

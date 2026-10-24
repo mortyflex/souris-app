@@ -650,7 +650,23 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
   acompte. » / « N absences enregistrées. Pensez à demander un acompte. » ONLY when the most recent
   past, non-cancelled Appointment is a known NO_SHOW; otherwise « Historique d'absences » + the
   count alone. Neutral wording (§38). Informative only: no button, no dialog, no animation, no
-  haptic; creation is never blocked. One accessible element announced politely.
+  haptic; creation is never blocked. One accessible element announced politely. The deposit it
+  suggests is entered in the « Acompte » row of the Résumé (below), never from the warning.
+- **« Acompte » row on the creation Résumé** (`CreationDepositEditor`) — the optional entry of a
+  deposit ALREADY received, in the Options section right after « Réduction », in the same family:
+  ONE collapsed white grouped row (banknote glyph of the Caisse, `cashRegisterIcon`, 16 pt accent;
+  `control` « Acompte »; `metadata` « Aucun », or the chosen `30,00 € · Carte` in `lav700`;
+  `DisclosureChevron`) with the hint « Ajouter un acompte reçu ». Open: one soft `metadata` caption
+  (« Montant déjà reçu du client, enregistré avec le rendez-vous. »), the quick amounts of
+  « Prendre un acompte » (10 / 20 / 30 / 50 €, 40 pt chips, only those within the expected total),
+  the free entry « Montant de l'acompte » (decimal pad, French decimals, `KeyboardDismissAccessory`,
+  rose only while unreadable or refused, the refusal named under it), the Carte / Espèces
+  `SegmentedControl`, then — once the entry reads — a `surfaceLavender` position block
+  (`Total attendu`, `Acompte encaissé`, `Reste à encaisser` in `lav700`) and « Aucun acompte »
+  (accent, trailing). Inactive by default; nothing preselected; absent for a previous-day
+  Appointment. The footer and « Créer le rendez-vous » are unchanged: an unreadable or refused entry
+  simply disables the CTA. One `selection` tick per quick amount or removal; the save keeps the
+  single `success` haptic of the creation.
 - **Sale glyph on the Client Profile** — « Vendre un produit » carries the bag glyph of the
   « Revente » action of Appointment Details (`shared/icons/sale-icon.ts`: `bag.fill` /
   `shopping_bag`). `AppButton` takes an optional leading `icon`, 18 pt: accent violet on the

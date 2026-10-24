@@ -21,7 +21,7 @@ import {
   loadAppointmentDeposits,
   voidAppointmentDeposit,
 } from '../stores/appointment-deposits';
-import { updateAppointment } from '../stores/appointments';
+import { insertAppointmentWithDeposit, loadAppointments, updateAppointment } from '../stores/appointments';
 import { bindLocalDatabaseToBusiness } from '../stores/business-profile';
 import { readAggregatePayload, LocalAggregateScopeError } from '../sync/aggregate-payload';
 import { approveInitialRestore, approveInitialUpload } from '../sync/bootstrap';
@@ -613,5 +613,111 @@ describe('Appointment deposits — the financial invariant across devices', () =
     expect(await fresh.run()).toMatchObject({ pushed: 1, failed: 0 });
     expect(breachOf(fresh.db)).toBeUndefined();
     expect(breachOf(source.db)).toBeUndefined();
+  });
+});
+
+describe('Appointment created WITH a deposit (creation Résumé)', () => {
+  const CREATED_ID = 'appointment-created-with-deposit';
+  /** Léa's visit again, a week later: 95 € + 40 € = 135,00 € expected. */
+  const createdAppointment: Appointment = {
+    ...appointmentLea,
+    businessId: REMOTE_BUSINESS_ID,
+    id: CREATED_ID,
+    startAt: new Date(2026, 8, 18, 9, 30),
+    notes: undefined,
+    items: appointmentLea.items.map((item, index) => ({
+      ...item,
+      id: `${CREATED_ID}-item-${index}`,
+      phases: item.phases.map((phase) => ({ ...phase, id: `${CREATED_ID}-${phase.id}` })),
+    })),
+  };
+  const createdDeposit: AppointmentDeposit = {
+    ...cardDeposit,
+    id: 'deposit-at-creation',
+    appointmentId: CREATED_ID,
+    paymentMethod: 'CASH',
+  };
+  const depositRef = { aggregateType: 'APPOINTMENT_DEPOSIT', aggregateId: createdDeposit.id } as const;
+
+  it('offline creation: both entries wait in the outbox; ONE run pushes the Appointment, then its deposit', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { db, run } = await openSyncedSource(remote);
+
+    insertAppointmentWithDeposit(db, createdAppointment, createdDeposit);
+    expect(loadSyncOutbox(db, REMOTE_BUSINESS_ID).map((entry) => entry.aggregateType)).toEqual([
+      'APPOINTMENT',
+      'APPOINTMENT_DEPOSIT',
+    ]);
+
+    expect(await run()).toMatchObject({ status: 'PUSHED', pushed: 2, failed: 0, conflicts: [] });
+
+    expect(remote.requests.map((request) => `${request.aggregateType}/${request.aggregateId}`)).toEqual([
+      `APPOINTMENT/${CREATED_ID}`,
+      `APPOINTMENT_DEPOSIT/${createdDeposit.id}`,
+    ]);
+    expect(remote.find(REMOTE_BUSINESS_ID, 'APPOINTMENT_DEPOSIT', createdDeposit.id)).toMatchObject({
+      payload: { ...cardPayload, appointment_id: CREATED_ID, payment_method: 'CASH' },
+      syncVersion: 1,
+      deleted: false,
+    });
+    expect(readAcknowledgedRemoteVersion(db, REMOTE_BUSINESS_ID, depositRef)?.remoteVersion).toBe(1);
+    expect(countSyncOutboxRows(db)).toBe(0);
+  });
+
+  it('a lost acknowledgement is replayed without a duplicate: one Appointment, one deposit, version 1 each', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { db, run } = await openSyncedSource(remote);
+    insertAppointmentWithDeposit(db, createdAppointment, createdDeposit);
+
+    remote.loseNextResponse();
+    await run();
+    expect(await run()).toMatchObject({ failed: 0, conflicts: [] });
+
+    const rows = remote
+      .list(REMOTE_BUSINESS_ID)
+      .filter((row) => row.key.endsWith(`/${CREATED_ID}`) || row.key.endsWith(`/${createdDeposit.id}`));
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.syncVersion === 1)).toBe(true);
+    expect(countSyncOutboxRows(db)).toBe(0);
+    expect(loadAppointmentDeposits(db).filter((deposit) => deposit.appointmentId === CREATED_ID)).toEqual([createdDeposit]);
+  });
+
+  it('a device restored from the cloud holds the Appointment WITH its deposit: 105 € remain, 30 € in the Caisse of its day', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = await openSyncedSource(remote);
+    insertAppointmentWithDeposit(source.db, createdAppointment, createdDeposit);
+    await source.run();
+
+    const fresh = await openRestoredDevice(remote);
+
+    expect(fresh.restored).toMatchObject({ restored: { appointmentDeposits: 1 } });
+    const restored = loadSnapshot(fresh.db);
+    const appointment = restored.appointments.find((candidate) => candidate.id === CREATED_ID)!;
+    expect(appointment).toEqual(createdAppointment);
+    expect(restored.appointmentDeposits).toEqual([createdDeposit]);
+    expect(getAppointmentRemainingAmount(appointment, restored.sales, restored.appointmentDeposits)).toBe(10_500);
+    expect(findAppointmentDepositInvariantBreach(appointment, restored.sales, restored.appointmentDeposits)).toBeUndefined();
+    expect(
+      getCashRegisterDaySummary(
+        { appointments: restored.appointments, sales: restored.sales, deposits: restored.appointmentDeposits },
+        PAID_AT,
+      ),
+    ).toMatchObject({ totalCents: 3000, cashCents: 3000, cardCents: 0, checkoutCount: 1 });
+  });
+
+  it('another synchronizing device pulls the Appointment and its deposit together, in that order, without echo', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = await openSyncedSource(remote);
+    const other = await openRestoredDevice(remote);
+
+    insertAppointmentWithDeposit(source.db, createdAppointment, createdDeposit);
+    await source.run();
+    remote.clearRequests();
+
+    expect(await other.run()).toMatchObject({ pull: { status: 'PULLED', applied: 2, conflicts: [] } });
+    expect(loadAppointments(other.db).find((candidate) => candidate.id === CREATED_ID)).toEqual(createdAppointment);
+    expect(loadAppointmentDeposits(other.db)).toEqual([createdDeposit]);
+    expect(countSyncOutboxRows(other.db)).toBe(0);
+    expect(remote.requests).toEqual([]);
   });
 });

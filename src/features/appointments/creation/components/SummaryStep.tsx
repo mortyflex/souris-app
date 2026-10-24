@@ -11,7 +11,10 @@
 //                          to the catalog step
 //   4. Options          → the « Réduction » row (preceded by the birthday
 //                          suggestion when the Appointment date is the Client
-//                          birthday) and, when a discount is set, its breakdown
+//                          birthday) and, when a discount is set, its breakdown;
+//                          then the « Acompte » row — a deposit ALREADY
+//                          received, saved with the Appointment — offered only
+//                          while the new Appointment will be financially open
 //   5. Final summary    → Temps actif / Temps de pose only when the
 //                          Appointment has pose time (otherwise Temps actif
 //                          would repeat Durée totale), then Durée totale and
@@ -50,7 +53,9 @@ import { SortableDraftList, type SortableDraftEntry } from '../../editor/compone
 import type { StartTimeOfDay } from '../draft-start';
 import type { AppointmentCreationSummary } from '../presentation';
 import { formatCreationDuration, formatCreationPrice } from '../presentation';
+import type { CreationDepositDraft, CreationDepositState } from '../deposit-draft';
 import { AppointmentScheduleSection } from './AppointmentScheduleSection';
+import { CreationDepositEditor } from './CreationDepositEditor';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 const clientIcon: SymbolViewProps['name'] = { ios: 'person', android: 'person' };
@@ -75,6 +80,16 @@ interface SummaryStepProps {
     /** True when the selected Client has no usable email address. */
     readonly missingClientEmail: boolean;
     readonly onAddEmail: () => void;
+  };
+  /**
+   * The optional deposit already received (« Acompte »). Undefined when the
+   * new Appointment cannot receive one (a previous-day Appointment is
+   * finalized on save): the row then stays away.
+   */
+  readonly deposit?: {
+    readonly draft: CreationDepositDraft | undefined;
+    readonly state: CreationDepositState;
+    readonly onChange: (draft: CreationDepositDraft | undefined) => void;
   };
   readonly entries: readonly SortableDraftEntry[];
   readonly expandedDraftId: string | null;
@@ -102,6 +117,7 @@ export function SummaryStep({
   onDiscountChange,
   birthdayReminder,
   reminder,
+  deposit,
   entries,
   expandedDraftId,
   onToggleExpanded,
@@ -201,6 +217,13 @@ export function SummaryStep({
               value={formatDiscountAmount(summary.servicesTotal.discountCents)}
             />
           </View>
+        )}
+        {deposit && (
+          <CreationDepositEditor
+            draft={deposit.draft}
+            onChange={deposit.onChange}
+            state={deposit.state}
+          />
         )}
         {reminder && (
           <GroupedSurface testID="summary-reminder">

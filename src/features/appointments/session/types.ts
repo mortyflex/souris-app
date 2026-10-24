@@ -32,6 +32,13 @@ export interface AppointmentDepositInput {
   readonly paymentMethod: PaymentMethod;
 }
 
+/**
+ * A deposit ALREADY received for an Appointment being CREATED (« Ajouter un
+ * acompte reçu » on the Résumé): the Appointment id is the new entry's. The
+ * id is generated once per draft deposit, so a repeated save is refused.
+ */
+export type AppointmentCreationDeposit = Omit<AppointmentDepositInput, 'appointmentId'>;
+
 /** Result of the database-backed pre-check run when the professional taps permanent deletion. */
 export interface AppointmentDeletionEligibility {
   readonly deletable: boolean;
@@ -47,8 +54,18 @@ export interface AppointmentSessionValue {
    * Persists a NEW Appointment (row + item + phase snapshots) in one
    * transaction. Snapshot only: the Service catalog is never written. On
    * failure nothing is persisted and state does not change.
+   *
+   * With `deposit`, a deposit already received for it is recorded in the
+   * SAME transaction (THE deposit write re-verifies it against the stored
+   * Appointment just inserted): the Appointment and its deposit are saved
+   * together or not at all — never one without the other, never twice for
+   * the same deposit id. Throws `AppointmentDepositConflictError` when the
+   * deposit is refused; nothing is persisted then.
    */
-  readonly addAppointment: (entry: AppointmentSessionEntry) => void;
+  readonly addAppointment: (
+    entry: AppointmentSessionEntry,
+    deposit?: AppointmentCreationDeposit,
+  ) => void;
   readonly updateAppointment: (entry: AppointmentSessionEntry) => void;
   /**
    * Appointment-specific timing edit from Appointment Details: the phase
