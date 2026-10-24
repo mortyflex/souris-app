@@ -249,6 +249,20 @@ export const receiptPodium = {
   place: { face: "#EAE2FB", top: "#D8CAF5", number: "#9A85D6" },
 } as const;
 
+// Caution — the graded severity of a recurring client no-show pattern
+// (DESIGN_OVERRIDES.md §35, Activité). A thin outline on the « Absences »
+// stat card ONLY: never a card fill, never a status, never a client colour,
+// and NOT peach (peach is processing time). Two warm steps derived from
+// OKLCH, each ≥ 2.7:1 on white as a 1.5 pt graphic; the strongest step is the
+// existing rose600 so the scale ends on the system's one danger colour. The
+// colour never carries the severity alone: the count stays written and the
+// severity is spoken.
+export const caution = {
+  amber600: "#D19000", // oklch(0.70 0.150 78) — low: 1–2 no-shows
+  orange600: "#D65C00", // oklch(0.62 0.175 48) — moderate: 3–5 no-shows
+  red600: rose.rose600, // high: 6 no-shows or more
+} as const;
+
 // Secondary readable foreground — readable secondary metadata text.
 // More legible than muted; reserved for text that is actually read.
 // oklch(0.42 0.055 285)

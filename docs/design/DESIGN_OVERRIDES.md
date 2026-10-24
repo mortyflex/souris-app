@@ -1471,6 +1471,13 @@ lifecycle are unchanged.
   `surfaceLavender` disc, the value in navy `summaryValue`, then a SHORT label in `metadata`
   that never truncates: « Réalisés » (spoken « Rendez-vous réalisés »), « Total dépensé »,
   « Absences », « Annulations ». Numbers are never violet. Always four cards, zeros included.
+  The « Absences » card ALONE takes a 1.5 pt caution outline graded on the existing NO_SHOW
+  count (`getNoShowSeverity`, presentation only): 0 plain · 1–2 `caution.amber600` · 3–5
+  `caution.orange600` · 6 + `caution.red600` (= rose600). The glyph takes the same colour; the
+  outline is carved out of the padding so the footprint never moves; the figure stays navy;
+  no fill, no shadow, no icon change. Spoken as « Absences, 3, absences répétées » (« à
+  surveiller » / « absences fréquentes »), so the pattern never depends on colour alone.
+  Cancellations are never absences. Peach is never used here: it is processing time.
 - **History area.** Right under Activité, a full-width `SegmentedControl` « Rendez-vous [n] |
   Produits achetés [n] » (default Rendez-vous, plain local state). Options may carry a count
   pill: `surfaceLavenderStrong` + accent text, accent + white on the selected option, `999+`

@@ -15,6 +15,7 @@ export {
   lavender,
   rose,
   peach,
+  caution,
   mint,
   mauve,
   azure,

@@ -95,6 +95,11 @@ import { ClientHistorySection } from './components/ClientHistorySection';
 import { ProfileQuickAction } from './components/ProfileQuickAction';
 import { ProfileStatCard } from './components/ProfileStatCard';
 import { getClientActivitySummary, getClientAppointmentTimeline } from './presentation';
+import {
+  describeNoShowSeverity,
+  getNoShowSeverity,
+  getNoShowSeverityAccent,
+} from './no-show-severity';
 
 const metricIcons = {
   completed: { ios: 'calendar', android: 'calendar_today' },
@@ -196,6 +201,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
   }
 
   const activity = getClientActivitySummary(appointments, sales, client.id);
+  const noShowSeverity = getNoShowSeverity(activity.noShowAppointmentCount);
   const purchases = getClientSales(sales, client.id);
   // Phone and email live in the identity block; the rest stays below.
   const hasMoreInfo = Boolean(client.birthday || client.smsMarketingConsent);
@@ -431,6 +437,8 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
               <ProfileStatCard
                 icon={metricIcons.noShow}
                 label="Absences"
+                accent={getNoShowSeverityAccent(noShowSeverity)}
+                accessibilityDescription={describeNoShowSeverity(noShowSeverity)}
                 testID="metric-noshow"
                 value={String(activity.noShowAppointmentCount)}
               />

@@ -22,7 +22,7 @@ import { ClientProfileScreen } from '../ClientProfileScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
-import { rose, semanticColors } from '@/shared/ui/theme';
+import { caution, rose, semanticColors } from '@/shared/ui/theme';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -150,6 +150,18 @@ const futureAppointment: Appointment = {
   items: [cancelledItem],
 };
 
+/** Six NO_SHOW appointments of Sofia, 10th → 15th July 2026 at 10:00. */
+const noShowAppointments: readonly Appointment[] = [1, 2, 3, 4, 5, 6].map((index) => ({
+  id: `no-show-${index}`,
+  businessId: 'fixture-business',
+  clientId: 'client-agenda-sofia',
+  staffMemberId: 'staff-amelie',
+  startAt: new Date(2026, 6, 9 + index, 10),
+  status: 'NO_SHOW',
+  items: [{ ...cancelledItem, id: `no-show-item-${index}` }],
+  noShow: { recordedAt: new Date(2026, 6, 9 + index, 10, 30) },
+}));
+
 const shampoo: Product = {
   id: 'product-shampoo',
   businessId: 'fixture-business',
@@ -256,6 +268,22 @@ function SessionProbe() {
       <Pressable
         testID="add-future-appointment"
         onPress={() => addAppointment({ appointment: futureAppointment })}
+      />
+      <Pressable
+        testID="add-no-shows-1"
+        onPress={() => addAppointment({ appointment: noShowAppointments[0] })}
+      />
+      <Pressable
+        testID="add-no-shows-3"
+        onPress={() => {
+          for (const appointment of noShowAppointments.slice(1, 3)) addAppointment({ appointment });
+        }}
+      />
+      <Pressable
+        testID="add-no-shows-6"
+        onPress={() => {
+          for (const appointment of noShowAppointments.slice(3, 6)) addAppointment({ appointment });
+        }}
       />
       <Pressable
         testID="add-long-history"
@@ -718,6 +746,61 @@ describe('ClientProfileScreen', () => {
     expect(view.queryByText('Aucun rendez-vous enregistré.')).toBeNull();
     expect(view.queryByTestId('open-client-purchase-history')).toBeNull();
     expect(view.queryByText(/0 visite|panier moyen/)).toBeNull();
+  });
+
+  it('outlines the Absences card by severity from the existing NO_SHOW count, nothing else', async () => {
+    const view = await renderProfile('client-agenda-sofia');
+
+    // Cancellations — by the client or by the business — are never absences.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-cancelled-appointment'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-business-cancelled-appointment'));
+    });
+    const neutral = view.getByLabelText('Absences, 0');
+    expect(view.getByTestId('metric-noshow').props.children).toBe('0');
+    expect(neutral).not.toHaveStyle({ borderWidth: 1.5 });
+    expect(view.getByTestId('metric-cancelled').props.children).toBe('1');
+
+    // A single no-show already shows: amber.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-no-shows-1'));
+    });
+    expect(view.getByTestId('metric-noshow').props.children).toBe('1');
+    expect(view.getByLabelText('Absences, 1, à surveiller')).toHaveStyle({
+      borderColor: caution.amber600,
+      borderWidth: 1.5,
+    });
+
+    // Three: orange.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-no-shows-3'));
+    });
+    expect(view.getByTestId('metric-noshow').props.children).toBe('3');
+    expect(view.getByLabelText('Absences, 3, absences répétées')).toHaveStyle({
+      borderColor: caution.orange600,
+      borderWidth: 1.5,
+    });
+
+    // Six: red.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-no-shows-6'));
+    });
+    expect(view.getByTestId('metric-noshow').props.children).toBe('6');
+    expect(view.getByLabelText('Absences, 6, absences fréquentes')).toHaveStyle({
+      borderColor: caution.red600,
+      borderWidth: 1.5,
+    });
+    // The figure itself stays navy and readable.
+    expect(view.getByTestId('metric-noshow')).toHaveStyle({ color: semanticColors.foreground });
+
+    // The three other cards never take an outline, whatever the no-show count.
+    expect(view.getByTestId('metric-completed').props.children).toBe('0');
+    expect(view.getByTestId('metric-cancelled').props.children).toBe('1');
+    for (const label of ['Rendez-vous réalisés, 0', `Total dépensé, ${formatPrice(0)}`, 'Annulations, 1']) {
+      expect(view.getByLabelText(label)).not.toHaveStyle({ borderWidth: 1.5 });
+    }
   });
 
   it('shows only the Client’s own completed purchases, newest first, from Sale snapshots', async () => {
