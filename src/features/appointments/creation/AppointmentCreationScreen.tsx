@@ -17,6 +17,17 @@
 // step change never replays it, choosing her again after another Client does.
 // The actionable reminder next to « Réduction » stays on the Résumé.
 //
+// No-shows: choosing a Client who has missed Appointments shows a compact,
+// non-blocking warning in the FIXED FOOTER — above « Continuer » on the Client
+// step (visible whatever the list scrolled to, the chosen row may be far
+// down) and again above « Créer le rendez-vous » on the Résumé, the two
+// decision points; never on Prestations. « Dernier rendez-vous non honoré »
+// when the latest known outcome is a NO_SHOW, « Historique d'absences »
+// otherwise. Derived ONCE per render from the Appointment session (the same
+// data as the profile's « Absences ») and the selected Client: a changed or
+// cleared selection updates or removes it at once, on every step. It suggests
+// a deposit in words only; deposit entry during creation is a later phase.
+//
 // Client Profile entry: `initialClientId` opens the SAME flow on the Cliente
 // step with that Client already selected (the Agenda entries pass none).
 // Nothing is created until « Créer le rendez-vous » on the Résumé.
@@ -70,6 +81,9 @@ import {
 } from '@/features/clients/birthday/presentation';
 import { isSameLocalDay, useToday } from '@/features/clients/birthday/use-today';
 import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
+import { getClientAttendanceHistory } from '@/features/clients/no-shows/attendance';
+import { NoShowWarningNotice } from '@/features/clients/no-shows/NoShowWarningNotice';
+import { getClientNoShowWarning } from '@/features/clients/no-shows/presentation';
 import { prepareClientDirectory } from '@/features/clients/directory/sort-clients';
 import { alertPersistenceFailure } from '@/providers/persistence-failure';
 import { haptics } from '@/shared/lib/haptics';
@@ -154,7 +168,7 @@ export function AppointmentCreationScreen({
 }: AppointmentCreationScreenProps) {
   const router = useRouter();
   const business = useCurrentBusiness();
-  const { addAppointment } = useAppointmentSession();
+  const { addAppointment, appointments } = useAppointmentSession();
   const { addCalendarBlock, calendarBlocks } = useCalendarBlockSession();
   const [mode, setMode] = useState<CreationMode>('client');
   const { activeClients } = useClientSession();
@@ -198,6 +212,23 @@ export function AppointmentCreationScreen({
         isSameLocalDay(draftStartAt, today) ? 'TODAY' : 'THAT_DAY',
       )
     : '';
+
+  // THE no-show truth of this draft: the chosen Client against the whole
+  // Appointment session. Recomputed only when either changes; a Client with
+  // no no-show yields nothing, so the step looks exactly as before.
+  const noShowWarning = useMemo(
+    () =>
+      selectedClientId === undefined
+        ? undefined
+        : getClientNoShowWarning(
+            getClientAttendanceHistory(
+              appointments.map(({ appointment }) => appointment),
+              selectedClientId,
+              new Date(),
+            ),
+          ),
+    [appointments, selectedClientId],
+  );
 
   const summaryItems: readonly BuildAppointmentItemInput[] = selectedDrafts.map(
     (draft) => ({ service: toServiceSnapshotSource(draft) }),
@@ -503,6 +534,11 @@ export function AppointmentCreationScreen({
 
       {mode === 'client' && (
         <SheetActionBar testID="appointment-creation-actions">
+          {/* The two decision points. Inside the fixed footer, so the warning
+              never depends on where the Client list or the summary is scrolled. */}
+          {(step === 0 || step === 2) && selectedClient && noShowWarning && (
+            <NoShowWarningNotice testID="appointment-no-show-warning" warning={noShowWarning} />
+          )}
           {step === 2 && blockInTheWay && (
             <ScheduleConflictNotice
               conflict={describeCalendarBlockInTheWay(blockInTheWay)}

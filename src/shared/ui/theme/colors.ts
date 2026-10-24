@@ -263,6 +263,15 @@ export const caution = {
   red600: rose.rose600, // high: 6 no-shows or more
 } as const;
 
+// The quiet disc behind the glyph of a caution notice: each step at 14 %
+// alpha, so the glyph (the full step) still reads on it. Alpha variants of
+// the approved steps only, like `calendarIntensity`.
+export const cautionTint = {
+  amber: "rgba(209, 144, 0, 0.14)",
+  orange: "rgba(214, 92, 0, 0.14)",
+  red: "rgba(207, 56, 105, 0.14)",
+} as const;
+
 // Secondary readable foreground — readable secondary metadata text.
 // More legible than muted; reserved for text that is actually read.
 // oklch(0.42 0.055 285)

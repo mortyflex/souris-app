@@ -16,6 +16,7 @@ export {
   rose,
   peach,
   caution,
+  cautionTint,
   mint,
   mauve,
   azure,

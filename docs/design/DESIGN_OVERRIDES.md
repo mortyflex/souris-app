@@ -636,6 +636,21 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
     explicit birthday-Client selection in creation — never on a re-render.
   - *Appointment Details*: a static 14 pt glyph + « Anniversaire du client » (`metadata`,
     `rose700`) under the date line.
+- **No-show warning in the creation footer** (`NoShowWarningNotice`) — while a Client with
+  no-shows is chosen, the fixed `SheetActionBar` of Appointment creation carries it as its
+  first child: above « Continuer » on the Client step (visible whatever the list scrolled to —
+  the chosen row may be far down, and the scrolling header carries NO copy of it) and above
+  « Créer le rendez-vous » on the Résumé, the two decision points; never on Prestations. Gone the
+  moment the selection changes or empties, on every step. A white `surfaceElevated` card with a
+  1.5 pt caution outline graded like the profile's « Absences » (`getNoShowSeverity`: 1–2
+  `caution.amber600`, 3–5 `caution.orange600`, 6 + `caution.red600`), a 28 pt disc of the same
+  hue at 14 % (`cautionTint`) with the 14 pt crossed-out person glyph
+  (`shared/icons/no-show-icon.ts`), a navy `control` title and ONE soft `metadata` line, wrapping
+  freely. Copy: « Dernier rendez-vous non honoré » + « 1 absence enregistrée. Pensez à demander un
+  acompte. » / « N absences enregistrées. Pensez à demander un acompte. » ONLY when the most recent
+  past, non-cancelled Appointment is a known NO_SHOW; otherwise « Historique d'absences » + the
+  count alone. Neutral wording (§38). Informative only: no button, no dialog, no animation, no
+  haptic; creation is never blocked. One accessible element announced politely.
 - **Sale glyph on the Client Profile** — « Vendre un produit » carries the bag glyph of the
   « Revente » action of Appointment Details (`shared/icons/sale-icon.ts`: `bag.fill` /
   `shopping_bag`). `AppButton` takes an optional leading `icon`, 18 pt: accent violet on the

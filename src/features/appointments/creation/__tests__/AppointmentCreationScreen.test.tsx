@@ -16,8 +16,8 @@
 import { formatEuros } from '@/shared/lib/money';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { serviceCategoryColors } from '@/shared/ui/theme';
 
+import type { Appointment, AppointmentItem, AppointmentStatus } from '@/domain/appointments';
 import type { Client } from '@/domain/clients';
 import { createInitialClients } from '@/features/clients/data/initial-clients';
 import { ClientSessionProvider, useClientSession } from '@/features/clients/session/ClientSessionProvider';
@@ -25,6 +25,7 @@ import { AppointmentSessionProvider, useAppointmentSession } from '@/features/ap
 import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
 import { ServiceCatalogProvider, useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { haptics } from '@/shared/lib/haptics';
+import { caution, serviceCategoryColors } from '@/shared/ui/theme';
 
 import { AppointmentCreationScreen } from '../AppointmentCreationScreen';
 import { loadAppointments } from '@/persistence/stores/appointments';
@@ -114,11 +115,49 @@ jest.mock('react-native-safe-area-context', () => {
 
 const startAt = new Date(2026, 7, 25, 10, 15);
 
+const sofiaItem: AppointmentItem = {
+  id: 'sofia-item',
+  serviceId: 'service-cut',
+  order: 0,
+  serviceName: 'Coupe',
+  serviceType: 'SERVICE',
+  price: 42,
+  phases: [{ id: 'sofia-phase', name: 'Coupe', durationMinutes: 30, requiresStaff: true }],
+};
+
+const CONSTANCE_ID = createInitialClients().find(
+  (client) => client.firstName === 'Constance' && client.lastName === 'Chevalier',
+)?.id as string;
+
+/** One past Appointment (July 2026) of Sofia — or of the given Client. */
+function sofiaAppointment(
+  id: string,
+  day: number,
+  status: AppointmentStatus,
+  cancelledBy?: 'CLIENT' | 'BUSINESS',
+  clientId = 'client-agenda-sofia',
+): Appointment {
+  const at = new Date(2026, 6, day, 10);
+  return {
+    id,
+    businessId: 'fixture-business',
+    clientId,
+    staffMemberId: 'staff-amelie',
+    startAt: at,
+    status,
+    items: [{ ...sofiaItem, id: `${id}-item` }],
+    ...(status === 'NO_SHOW' ? { noShow: { recordedAt: at } } : {}),
+    ...(status === 'CANCELLED'
+      ? { cancellation: { cancelledAt: at, cancelledBy: cancelledBy ?? 'CLIENT' } }
+      : {}),
+  };
+}
+
 type Rendered = Awaited<ReturnType<typeof renderCreation>>;
 
 function SessionProbe() {
   const { clients, archiveClient, updateClient } = useClientSession();
-  const { appointments } = useAppointmentSession();
+  const { appointments, addAppointment } = useAppointmentSession();
   const { getServiceById, setServiceActive } = useServiceCatalog();
   const newest = appointments[appointments.length - 1]?.appointment;
   const createdClient = clients.find((client) => client.firstName === 'Nouvelle');
@@ -160,6 +199,71 @@ function SessionProbe() {
           : 'missing'}
       </Text>
       <Pressable testID="archive-lea" onPress={() => archiveClient('client-agenda-lea')} />
+      <Pressable testID="archive-sofia" onPress={() => archiveClient('client-agenda-sofia')} />
+      {/* Sofia's history, added in whatever order a test needs: dates decide, not insertion. */}
+      <Pressable
+        testID="sofia-no-show-1"
+        onPress={() => addAppointment({ appointment: sofiaAppointment('sofia-ns-1', 10, 'NO_SHOW') })}
+      />
+      <Pressable
+        testID="constance-no-show-1"
+        onPress={() =>
+          addAppointment({
+            appointment: sofiaAppointment('constance-ns-1', 10, 'NO_SHOW', undefined, CONSTANCE_ID),
+          })
+        }
+      />
+      <Pressable
+        testID="sofia-no-show-2"
+        onPress={() => addAppointment({ appointment: sofiaAppointment('sofia-ns-2', 11, 'NO_SHOW') })}
+      />
+      <Pressable
+        testID="sofia-no-show-3"
+        onPress={() => addAppointment({ appointment: sofiaAppointment('sofia-ns-3', 12, 'NO_SHOW') })}
+      />
+      <Pressable
+        testID="sofia-no-shows-4-5"
+        onPress={() => {
+          addAppointment({ appointment: sofiaAppointment('sofia-ns-4', 13, 'NO_SHOW') });
+          addAppointment({ appointment: sofiaAppointment('sofia-ns-5', 14, 'NO_SHOW') });
+        }}
+      />
+      <Pressable
+        testID="sofia-no-show-6"
+        onPress={() => addAppointment({ appointment: sofiaAppointment('sofia-ns-6', 15, 'NO_SHOW') })}
+      />
+      <Pressable
+        testID="sofia-attended-after"
+        onPress={() => addAppointment({ appointment: sofiaAppointment('sofia-came', 20, 'COMPLETED') })}
+      />
+      <Pressable
+        testID="sofia-attended-before"
+        onPress={() => addAppointment({ appointment: sofiaAppointment('sofia-came-early', 2, 'COMPLETED') })}
+      />
+      <Pressable
+        testID="sofia-unresolved-after"
+        onPress={() => addAppointment({ appointment: sofiaAppointment('sofia-open', 22, 'SCHEDULED') })}
+      />
+      <Pressable
+        testID="sofia-cancelled-after"
+        onPress={() => {
+          addAppointment({ appointment: sofiaAppointment('sofia-cancelled', 23, 'CANCELLED', 'CLIENT') });
+          addAppointment({
+            appointment: sofiaAppointment('sofia-business-cancelled', 24, 'CANCELLED', 'BUSINESS'),
+          });
+        }}
+      />
+      <Pressable
+        testID="sofia-future"
+        onPress={() =>
+          addAppointment({
+            appointment: {
+              ...sofiaAppointment('sofia-future', 1, 'SCHEDULED'),
+              startAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+            },
+          })
+        }
+      />
       <Pressable
         testID="give-lea-birthday"
         onPress={() =>
@@ -1478,6 +1582,327 @@ describe('AppointmentCreationScreen', () => {
       await continueToSummary(view);
 
       expect(view.queryByTestId('appointment-birthday-notice')).toBeNull();
+    });
+  });
+
+  describe('no-show warning in the footer (Client step and Résumé)', () => {
+    const WARNING = 'appointment-no-show-warning';
+    const FOOTER = 'appointment-creation-actions';
+    const LIST = 'client-picker-list';
+    const LAST_MISSED = 'Dernier rendez-vous non honoré';
+    const HISTORY = "Historique d'absences";
+
+    beforeAll(() => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+    });
+
+    afterAll(() => {
+      jest.useRealTimers();
+    });
+
+    beforeEach(() => {
+      // Today is 10 août at 08:00, before every seeded Agenda fixture of the
+      // day: the seeded appointments are still to come, so only the history
+      // added by each test is in the past. The July no-shows are past.
+      jest.setSystemTime(new Date(2026, 7, 10, 8, 0));
+    });
+
+    async function press(view: Rendered, testID: string) {
+      await act(async () => {
+        fireEvent.press(view.getByTestId(testID));
+      });
+    }
+
+    async function seedNoShows(view: Rendered, count: 1 | 2 | 3 | 5 | 6) {
+      await press(view, 'sofia-no-show-1');
+      if (count >= 2) await press(view, 'sofia-no-show-2');
+      if (count >= 3) await press(view, 'sofia-no-show-3');
+      if (count >= 5) await press(view, 'sofia-no-shows-4-5');
+      if (count >= 6) await press(view, 'sofia-no-show-6');
+    }
+
+    /** The warning, found INSIDE the fixed footer — never inside the scrolling list. */
+    function footerWarning(view: Rendered) {
+      const warning = within(view.getByTestId(FOOTER)).getByTestId(WARNING);
+      const list = view.queryByTestId(LIST);
+      if (list) expect(within(list).queryByTestId(WARNING)).toBeNull();
+      return warning;
+    }
+
+    it('shows nothing for a Client without no-shows: the step is unchanged', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-attended-after');
+      await press(view, 'sofia-cancelled-after');
+
+      await tapClient(view, 'Sofia Petit');
+
+      expect(view.queryByTestId(WARNING)).toBeNull();
+      expect(view.queryByText(/absence/)).toBeNull();
+      expect(view.getByText('Continuer')).toBeEnabled();
+    });
+
+    it('warns at once, above « Continuer », that the last appointment was missed — amber, singular', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      expect(view.queryByTestId(WARNING)).toBeNull();
+
+      await tapClient(view, 'Sofia Petit');
+
+      // Still on the Client step, the row selected: the warning blocks nothing.
+      expect(view.getByLabelText('Client — étape en cours')).toBeTruthy();
+      expect(view.getByRole('button', { name: /Sofia Petit/ })).toBeSelected();
+      expect(view.getByText('Continuer')).toBeEnabled();
+
+      const warning = footerWarning(view);
+      expect(within(warning).getByText(LAST_MISSED)).toBeTruthy();
+      expect(
+        within(warning).getByText('1 absence enregistrée. Pensez à demander un acompte.'),
+      ).toBeTruthy();
+      expect(warning).toHaveStyle({ borderColor: caution.amber600, borderWidth: 1.5 });
+      expect(
+        view.getByLabelText(`${LAST_MISSED}. 1 absence enregistrée. Pensez à demander un acompte.`),
+      ).toBeTruthy();
+      // In the footer, BEFORE the buttons: it sits above « Continuer », never over it.
+      const footer = view.getByTestId(FOOTER);
+      const continueButton = view.getByText('Continuer');
+      expect(footer.children.indexOf(warning)).toBe(0);
+      expect(within(footer).getByText('Continuer')).toBe(continueButton);
+      expect(within(warning).queryByText('Continuer')).toBeNull();
+      // A suggestion in words only: no deposit action, no dialog, no celebration.
+      expect(view.queryByText(/Ajouter un acompte|Prendre un acompte/)).toBeNull();
+      expect(view.queryByRole('alert')).toBeNull();
+      expect(mockSuccessHaptic).not.toHaveBeenCalled();
+    });
+
+    it('is visible for a Client far down the list, without scrolling back to the top', async () => {
+      const view = await renderCreation();
+      await press(view, 'constance-no-show-1');
+
+      // Constance sits beyond index 60 of the address book: her row is reached by
+      // the search, the way a scrolled list would — the header is far away.
+      await tapClient(view, 'Constance Chevalier');
+
+      expect(within(footerWarning(view)).getByText(LAST_MISSED)).toBeTruthy();
+      // The scrolling header carries no warning any more (no duplicate, nothing to scroll to).
+      expect(view.getAllByTestId(WARNING)).toHaveLength(1);
+    });
+
+    it('stays put while the list scrolls and while the search is used', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      await tapClient(view, 'Sofia Petit');
+
+      await act(async () => {
+        fireEvent.scroll(view.getByTestId(LIST), {
+          nativeEvent: {
+            contentOffset: { x: 0, y: 1800 },
+            contentSize: { width: 390, height: 6000 },
+            layoutMeasurement: { width: 390, height: 500 },
+          },
+        });
+      });
+      expect(footerWarning(view)).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.changeText(view.getByPlaceholderText('Rechercher un client'), 'Léa');
+      });
+      expect(footerWarning(view)).toBeTruthy();
+      // The list still answers: another row can be chosen right away.
+      await act(async () => {
+        fireEvent.press(view.getByRole('button', { name: /Léa Martin/ }));
+      });
+      expect(view.queryByTestId(WARNING)).toBeNull();
+    });
+
+    it('agrees in number and grades amber, orange, red as the no-shows add up', async () => {
+      const view = await renderCreation();
+      await seedNoShows(view, 2);
+      await tapClient(view, 'Sofia Petit');
+
+      expect(within(footerWarning(view)).getByText(/^2 absences enregistrées\./)).toBeTruthy();
+      expect(footerWarning(view)).toHaveStyle({ borderColor: caution.amber600 });
+
+      await press(view, 'sofia-no-show-3');
+      expect(within(footerWarning(view)).getByText(/^3 absences enregistrées\./)).toBeTruthy();
+      expect(footerWarning(view)).toHaveStyle({ borderColor: caution.orange600 });
+
+      await press(view, 'sofia-no-shows-4-5');
+      expect(within(footerWarning(view)).getByText(/^5 absences enregistrées\./)).toBeTruthy();
+      expect(footerWarning(view)).toHaveStyle({ borderColor: caution.orange600 });
+
+      await press(view, 'sofia-no-show-6');
+      expect(within(footerWarning(view)).getByText(/^6 absences enregistrées\./)).toBeTruthy();
+      expect(footerWarning(view)).toHaveStyle({ borderColor: caution.red600 });
+      expect(within(footerWarning(view)).getByText(LAST_MISSED)).toBeTruthy();
+    });
+
+    it('falls back to the history wording — the count alone — when the Client came back since', async () => {
+      const view = await renderCreation();
+      // Insertion order is deliberately NOT chronological: the dates decide.
+      await press(view, 'sofia-attended-after');
+      await press(view, 'sofia-no-show-1');
+      await tapClient(view, 'Sofia Petit');
+
+      const warning = footerWarning(view);
+      expect(within(warning).getByText(HISTORY)).toBeTruthy();
+      expect(within(warning).getByText('1 absence enregistrée.')).toBeTruthy();
+      expect(within(warning).queryByText(LAST_MISSED)).toBeNull();
+      expect(within(warning).queryByText(/acompte/)).toBeNull();
+      expect(warning).toHaveStyle({ borderColor: caution.amber600 });
+
+      await press(view, 'sofia-no-show-2');
+      await press(view, 'sofia-no-show-3');
+      expect(within(footerWarning(view)).getByText('3 absences enregistrées.')).toBeTruthy();
+      expect(footerWarning(view)).toHaveStyle({ borderColor: caution.orange600 });
+    });
+
+    it('still names the missed last appointment when only earlier visits were attended', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-attended-before');
+      await press(view, 'sofia-no-show-1');
+      await tapClient(view, 'Sofia Petit');
+
+      expect(within(footerWarning(view)).getByText(LAST_MISSED)).toBeTruthy();
+    });
+
+    it('ignores future bookings and later cancellations when deciding what the last one was', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      await press(view, 'sofia-future');
+      await press(view, 'sofia-cancelled-after');
+      await tapClient(view, 'Sofia Petit');
+
+      const warning = footerWarning(view);
+      expect(within(warning).getByText(LAST_MISSED)).toBeTruthy();
+      // Cancellations are never absences.
+      expect(within(warning).getByText(/^1 absence enregistrée\./)).toBeTruthy();
+    });
+
+    it('never claims the last one was missed while the most recent past appointment is unresolved', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      await press(view, 'sofia-unresolved-after');
+      await tapClient(view, 'Sofia Petit');
+
+      const warning = footerWarning(view);
+      expect(within(warning).getByText(HISTORY)).toBeTruthy();
+      expect(within(warning).queryByText(LAST_MISSED)).toBeNull();
+    });
+
+    it('follows the selection: another Client clears it, choosing her again brings it back', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      await tapClient(view, 'Sofia Petit');
+      expect(footerWarning(view)).toBeTruthy();
+
+      await tapClient(view, 'Léa Martin');
+      expect(view.queryByTestId(WARNING)).toBeNull();
+      expect(view.queryByText(/absence/)).toBeNull();
+
+      await tapClient(view, 'Sofia Petit');
+      expect(within(footerWarning(view)).getByText(LAST_MISSED)).toBeTruthy();
+    });
+
+    it('disappears when the selection empties (the chosen Client is archived)', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      await tapClient(view, 'Sofia Petit');
+      expect(footerWarning(view)).toBeTruthy();
+
+      await press(view, 'archive-sofia');
+
+      expect(view.queryByTestId(WARNING)).toBeNull();
+      expect(view.getByText('Continuer')).toBeDisabled();
+    });
+
+    it('leaves Prestations alone, comes back on the Résumé above « Créer le rendez-vous », and again on the Client step', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      await selectClientByName(view, 'Sofia Petit');
+
+      // Prestations: the service flow is unchanged.
+      expect(view.getByPlaceholderText('Rechercher une prestation')).toBeTruthy();
+      expect(view.queryByTestId(WARNING)).toBeNull();
+
+      await searchService(view, 'balayage 1');
+      await selectService(view, 'Balayage 1');
+      await continueToSummary(view);
+
+      // Résumé: the SAME warning, in the fixed footer, right before the CTA.
+      expect(view.getByText('Créer le rendez-vous')).toBeEnabled();
+      const footer = view.getByTestId(FOOTER);
+      const warning = within(footer).getByTestId(WARNING);
+      expect(footer.children.indexOf(warning)).toBe(0);
+      expect(within(warning).getByText(LAST_MISSED)).toBeTruthy();
+      expect(
+        within(warning).getByText('1 absence enregistrée. Pensez à demander un acompte.'),
+      ).toBeTruthy();
+      expect(view.getAllByTestId(WARNING)).toHaveLength(1);
+      // Awareness only on the Résumé too: no deposit row, no deposit action.
+      expect(view.queryByText(/Ajouter un acompte|Prendre un acompte|Acomptes?$/)).toBeNull();
+
+      // Back to the Client step through « Précédent » twice: still there, still correct.
+      await act(async () => {
+        fireEvent.press(view.getByText('Précédent'));
+      });
+      expect(view.queryByTestId(WARNING)).toBeNull();
+      await act(async () => {
+        fireEvent.press(view.getByText('Précédent'));
+      });
+      expect(within(footerWarning(view)).getByText(LAST_MISSED)).toBeTruthy();
+    });
+
+    it('shows no warning on the Résumé for a Client without no-shows', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      await selectClientByName(view, 'Léa Martin');
+      await searchService(view, 'balayage 1');
+      await selectService(view, 'Balayage 1');
+      await continueToSummary(view);
+
+      expect(view.getByText('Créer le rendez-vous')).toBeEnabled();
+      expect(view.queryByTestId(WARNING)).toBeNull();
+      expect(view.queryByText(/absence/)).toBeNull();
+    });
+
+    it('follows a Client change made from the Résumé', async () => {
+      const view = await renderCreation();
+      await press(view, 'sofia-no-show-1');
+      await selectClientByName(view, 'Léa Martin');
+      await searchService(view, 'balayage 1');
+      await selectService(view, 'Balayage 1');
+      await continueToSummary(view);
+      expect(view.queryByTestId(WARNING)).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(view.getByTestId('edit-client'));
+      });
+      await selectClientByName(view, 'Sofia Petit');
+      await continueToSummary(view);
+
+      expect(view.getByTestId('edit-client-value')).toHaveTextContent('Sofia Petit');
+      expect(within(view.getByTestId(FOOTER)).getByTestId(WARNING)).toBeTruthy();
+    });
+
+    it('never blocks: the appointment is created as usual, with no deposit of any kind', async () => {
+      const view = await renderCreation();
+      await seedNoShows(view, 6);
+      const before = view.getByTestId('appointments-probe').props.children as string;
+
+      await selectClientByName(view, 'Sofia Petit');
+      await searchService(view, 'balayage 1');
+      await selectService(view, 'Balayage 1');
+      await continueToSummary(view);
+      expect(footerWarning(view)).toHaveStyle({ borderColor: caution.red600 });
+      await act(async () => {
+        fireEvent.press(view.getByText('Créer le rendez-vous'));
+      });
+
+      expect(view.getByTestId('last-appointment-client-id')).toHaveTextContent('client-agenda-sofia');
+      const after = view.getByTestId('appointments-probe').props.children as string;
+      expect(after.split('~')).toHaveLength(before.split('~').length + 1);
+      expect(after).toContain('Balayage 1:');
+      expect(mockBack).toHaveBeenCalled();
     });
   });
 
