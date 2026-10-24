@@ -714,8 +714,24 @@ price change alters neither the gross, nor the discount, nor the net. The editor
 5 → 50 €) are a UI convenience; the Appointment stores the chosen value, so changing the presets later
 never alters an existing Appointment. The domain accepts any valid value: a whole percentage from 1 to 50
 (`MAX_DISCOUNT_PERCENT`) or any positive integer cents. The maximum of 50 % is ONE rule, enforced identically by
-the domain, the SQLite CHECK, the Supabase CHECK and the sync / restore validation; the UI offers no free
-percentage input.
+the domain, the SQLite CHECK, the Supabase CHECK and the sync / restore validation.
+
+**Free entry.** Next to the presets, the editor offers ONE free entry of the current mode — « Autre
+pourcentage » (whole percent, number pad) or « Autre montant » (euros, decimal pad, comma or dot, at most two
+decimals). It is read by the pure feature rules (`src/features/appointments/editor/discount-entry.ts`) into the
+SAME `AppointmentDiscount` the presets produce: `7,50` → `{ FIXED, 750 }`, `7` → `{ PERCENT, 7 }`. Nothing is
+stored differently for a typed value: a custom amount is integer cents, a custom percentage is a whole percent
+within the ONE bound, and the applied cents stay derived. The entry refuses, in words and without applying
+anything, an unreadable value, `0`, a fractional percentage (`7,5 %`) and a percentage above 50 % — 100 % included.
+A fixed amount above the services total is accepted, applied in full by the clamp above (the net is `0 €`) and
+said so (« Limitée au total des prestations. »). A preset and the entry are two ways of choosing one value: a
+preset selects its chip and empties the entry; a typed value deselects the chips; a stored custom value reopens
+in the entry.
+
+**Known limitation — percentages above 50 %.** The 50 % bound is a CHECK of the SQLite and Supabase columns.
+Raising it (to 100 %) would need a SQLite table rebuild (a CHECK cannot be altered) and a hand-applied Supabase
+migration replacing the column constraint, plus the sync validation; it is deliberately NOT done here. Until that
+dedicated phase, a larger reduction is entered as a fixed amount, up to the services total.
 
 **Where it shows.** Creation (Résumé step) and editing: a collapsed, secondary « Réduction » row.
 Appointment Details: `Prestations` (gross) → `Réduction -20 %  -20,00 €` → `Total à encaisser`; the

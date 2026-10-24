@@ -121,6 +121,10 @@ export function SummaryStep({
   return (
     <ScrollView
       contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
+      // The discount entry types: a chip or the CTA answers the first tap while
+      // the keyboard is up, and dragging the step lowers the keyboard.
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.section}>

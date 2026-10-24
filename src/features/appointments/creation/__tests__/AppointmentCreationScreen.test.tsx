@@ -868,6 +868,36 @@ describe('AppointmentCreationScreen', () => {
     expect(view.getByTestId('catalog-brushing-1').props.children).toBe('20:service-brushing-brushing-1-phase=30');
   });
 
+  it('creates an Appointment with a freely entered amount, typed with a comma, stored as exact cents', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+    await searchService(view, 'brushing 1');
+    await selectService(view, 'Brushing 1');
+    await continueToSummary(view);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('appointment-discount-toggle'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Réduction en euros'));
+    });
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId('appointment-discount-entry-input'), '7,50');
+    });
+
+    // 20 € − 7,50 € = 12,50 €, shown before confirmation.
+    expect(view.getByTestId('creation-discount-breakdown')).toBeTruthy();
+    expect(within(view.getByTestId('creation-discount-breakdown')).getByText(`-${formatEuros(7.5)}`)).toBeTruthy();
+    expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(12.5));
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe(`-${formatEuros(7.5)}`);
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+
+    expect(view.getByTestId('last-appointment-discount').props.children).toBe('{"type":"FIXED","amountCents":750}');
+  });
+
   it('creates an Appointment without a discount exactly as before', async () => {
     const view = await renderCreation();
     await selectClientBeyond60(view);

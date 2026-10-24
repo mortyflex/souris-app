@@ -2305,6 +2305,74 @@ describe("AppointmentDetailsScreen", () => {
       expect(mockSelectionHaptic).not.toHaveBeenCalled();
     });
 
+    it("takes a freely entered amount at checkout: the due, the « Reste » shortcut and the stored discount follow exact cents", async () => {
+      const db = openTestDatabase();
+      bootstrapPersistence(db, () => createDevelopmentSeed(new Date()));
+      const view = await renderDetails("agenda-sofia", probes, db);
+      const caisseBefore = Number(view.getByTestId("caisse-day-total").props.children);
+      await openCheckout(view);
+      await press(view, "appointment-discount-toggle");
+      await act(async () => {
+        fireEvent.press(view.getByLabelText("Réduction en euros"));
+      });
+
+      await act(async () => {
+        fireEvent.changeText(view.getByTestId("appointment-discount-entry-input"), "7,50");
+      });
+
+      // 95 € − 7,50 € = 87,50 €: the expectation, the editor and the shortcut agree.
+      expect(view.getByTestId("checkout-discount").props.children).toBe(formatEuroCents(-750));
+      expect(expected(view)).toBe(formatEuroCents(8750));
+      expect(view.getByTestId("appointment-discount-net-total").props.children).toBe(formatEuroCents(8750));
+      expect(view.getByLabelText(`Saisir le reste en carte, ${formatEuroCents(8750)}`)).toBeTruthy();
+      expect(summary(view)).toBe(`-${formatEuroCents(750)}`);
+      expect(toggleLabel(view)).toBe("Réduction, 7,50 euros");
+
+      // A custom percentage moves everything again: 95 € × 7 % = 6,65 €.
+      await act(async () => {
+        fireEvent.press(view.getByLabelText("Réduction en pourcentage"));
+      });
+      await act(async () => {
+        fireEvent.changeText(view.getByTestId("appointment-discount-entry-input"), "7");
+      });
+      expect(within(view.getByTestId("checkout-expectation")).getByText("Réduction -7 %")).toBeTruthy();
+      expect(view.getByTestId("checkout-discount").props.children).toBe(formatEuroCents(-665));
+      expect(expected(view)).toBe(formatEuroCents(8835));
+
+      // An unreadable entry applies nothing and the due is the full amount again.
+      await act(async () => {
+        fireEvent.changeText(view.getByTestId("appointment-discount-entry-input"), "100");
+      });
+      expect(view.getByTestId("appointment-discount-entry-error").props.children).toBe(
+        "Le pourcentage ne peut pas dépasser 50 %.",
+      );
+      expect(view.queryByTestId("checkout-discount")).toBeNull();
+      expect(expected(view)).toBe(formatEuroCents(9500));
+
+      // Back to the custom amount, settled exactly, persisted as integer cents.
+      await act(async () => {
+        fireEvent.press(view.getByLabelText("Réduction en euros"));
+      });
+      await act(async () => {
+        fireEvent.changeText(view.getByTestId("appointment-discount-entry-input"), "7.50");
+      });
+      await press(view, "checkout-fill-card");
+      expect(view.getByTestId("checkout-amount-card").props.value).toBe("87,50");
+
+      await press(view, "confirm-checkout");
+      await settleSheetTransition();
+
+      expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
+      expect(view.getByTestId("appointment-payment-probe").props.children).toBe("8750/0");
+      expect(view.getByTestId("discount-probe").props.children).toBe('{"type":"FIXED","amountCents":750}');
+      const stored = loadAppointments(db).find((appointment) => appointment.id === "agenda-sofia");
+      expect(stored?.discount).toStrictEqual({ type: "FIXED", amountCents: 750 });
+      expect(stored).toMatchObject({ status: "COMPLETED", payment: { cardAmountCents: 8750, cashAmountCents: 0 } });
+      expect(view.getByTestId("appointment-discount-value").props.children).toBe(`-${formatEuroCents(750)}`);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(8750));
+      expect(Number(view.getByTestId("caisse-day-total").props.children)).toBe(caisseBefore + 8750);
+    });
+
     it("keeps a manually entered amount when the discount lowers the due: never capped, never confirmable above it", async () => {
       const view = await renderDetails("agenda-sofia", probes);
       const caisseBefore = Number(view.getByTestId("caisse-day-total").props.children);

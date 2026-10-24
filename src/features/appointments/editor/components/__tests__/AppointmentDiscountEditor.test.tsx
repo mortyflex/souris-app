@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Platform, StyleSheet } from 'react-native';
 
 import {
@@ -10,7 +10,7 @@ import { discountIcon } from '@/shared/icons/discount-icon';
 import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { getAppTextStyle } from '@/shared/ui/AppText';
-import { lavender, semanticColors } from '@/shared/ui/theme';
+import { lavender, rose, semanticColors } from '@/shared/ui/theme';
 
 import { AppointmentDiscountEditor } from '../AppointmentDiscountEditor';
 
@@ -248,5 +248,243 @@ describe('AppointmentDiscountEditor', () => {
     expect(value).toMatchObject({ fontFamily: strong.fontFamily, fontSize: strong.fontSize, color: lavender.lav700 });
     expect(value.fontFamily).not.toBe(label.fontFamily);
     expect(value.fontSize).toBeGreaterThan(label.fontSize as number);
+  });
+});
+
+describe('AppointmentDiscountEditor — free entry (« Autre montant » / « Autre pourcentage »)', () => {
+  beforeEach(() => {
+    mockSelectionHaptic.mockClear();
+  });
+
+  const entry = (view: Awaited<ReturnType<typeof renderEditor>>['view']) =>
+    view.getByTestId('appointment-discount-entry-input');
+  const typeEntry = async (
+    view: Awaited<ReturnType<typeof renderEditor>>['view'],
+    text: string,
+  ) => {
+    await act(async () => {
+      fireEvent.changeText(entry(view), text);
+    });
+  };
+
+  it('offers a whole-percentage entry in % mode and a decimal euro entry in € mode, with the matching keyboard', async () => {
+    const { view, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+
+    expect(view.getByText('Autre pourcentage')).toBeTruthy();
+    expect(view.getByLabelText('Pourcentage de réduction')).toBeTruthy();
+    expect(entry(view).props.keyboardType).toBe('number-pad');
+    expect(entry(view).props.placeholder).toBe('0');
+    expect(entry(view).props.maxLength).toBe(3);
+    expect(entry(view).props.value).toBe('');
+    // The field sits outside the preset grid: the presets stay ten chips.
+    expect(within(view.getByTestId('appointment-discount-presets')).getAllByRole('button')).toHaveLength(10);
+
+    await press({ label: 'Réduction en euros' });
+
+    expect(view.getByText('Autre montant')).toBeTruthy();
+    expect(view.getByLabelText('Montant de la réduction')).toBeTruthy();
+    expect(entry(view).props.keyboardType).toBe('decimal-pad');
+    expect(entry(view).props.placeholder).toBe('0,00');
+    expect(entry(view).props.maxLength).toBe(9);
+    expect(entry(view).props.returnKeyType).toBe('done');
+    expect(entry(view).props.selectTextOnFocus).toBe(true);
+  });
+
+  it.each([
+    ['3', 300, 9700],
+    ['7,50', 750, 9250],
+    ['12.90', 1290, 8710],
+  ])('applies the custom amount « %s » in exact cents and shows the discount and the net total', async (text, cents, net) => {
+    const { view, onChange, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+    await press({ label: 'Réduction en euros' });
+    mockSelectionHaptic.mockClear(); // the mode switch ticked once
+
+    await typeEntry(view, text);
+
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'FIXED', amountCents: cents });
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe(`-${euros(cents)}`);
+
+    expect(view.getByTestId('appointment-discount-net-total').props.children).toBe(euros(net));
+    expect(view.queryByTestId('appointment-discount-entry-error')).toBeNull();
+    // Typing ticks nothing.
+    expect(mockSelectionHaptic).not.toHaveBeenCalled();
+  });
+
+  it('applies a custom whole percentage, computed by the domain with half-up cent rounding', async () => {
+    const { view, onChange, press } = await renderEditor({ grossEuros: 12.9 });
+    await press({ testID: 'appointment-discount-toggle' });
+
+    await typeEntry(view, '7');
+
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'PERCENT', percent: 7 });
+    // 12,90 € × 7 % = 90,3 c → 90 c
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe(`-7 % · -${euros(90)}`);
+
+    expect(view.getByTestId('appointment-discount-net-total').props.children).toBe(euros(1200));
+    expect(view.getByLabelText('Réduction, 7 pour cent')).toBeTruthy();
+  });
+
+  it('keeps a trailing separator while typing and updates the value digit by digit', async () => {
+    const { view, onChange, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+    await press({ label: 'Réduction en euros' });
+
+    await typeEntry(view, '7');
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'FIXED', amountCents: 700 });
+    await typeEntry(view, '7,');
+    expect(entry(view).props.value).toBe('7,');
+    expect(onChange).toHaveBeenCalledTimes(1); // still 700 c: no change
+    await typeEntry(view, '7,5');
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'FIXED', amountCents: 750 });
+    expect(view.queryByTestId('appointment-discount-entry-error')).toBeNull();
+  });
+
+  it('a typed value deselects the chips; a chip empties the entry; clearing the entry removes the discount', async () => {
+    const { view, onChange, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+    await press({ label: 'Réduction de 20 pour cent' });
+
+    await typeEntry(view, '7');
+    expect(view.getByTestId('appointment-discount-preset-PERCENT-20').props.accessibilityState.selected).toBe(false);
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'PERCENT', percent: 7 });
+
+    await press({ label: 'Réduction de 25 pour cent' });
+    expect(entry(view).props.value).toBe('');
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'PERCENT', percent: 25 });
+    expect(view.getByTestId('appointment-discount-preset-PERCENT-25').props.accessibilityState.selected).toBe(true);
+
+    await typeEntry(view, '12');
+    await typeEntry(view, '');
+    expect(onChange).toHaveBeenLastCalledWith(undefined);
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
+    expect(view.queryByTestId('appointment-discount-entry-error')).toBeNull();
+  });
+
+  it('typing a preset value selects its chip, and the entry stays as typed', async () => {
+    const { view, onChange, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+
+    await typeEntry(view, '20');
+
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'PERCENT', percent: 20 });
+    expect(view.getByTestId('appointment-discount-preset-PERCENT-20').props.accessibilityState.selected).toBe(true);
+    expect(entry(view).props.value).toBe('20');
+  });
+
+  it('reopens a custom discount with its text in the entry, in the French input form, and no chip selected', async () => {
+    const { view } = await renderEditor({ initial: { type: 'FIXED', amountCents: 750 } });
+
+    expect(view.getByLabelText('Réduction en euros').props.accessibilityState.selected).toBe(true);
+    expect(entry(view).props.value).toBe('7,50');
+    expect(view.getByTestId('appointment-discount-preset-FIXED-500').props.accessibilityState.selected).toBe(false);
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe(`-${euros(750)}`);
+    expect(view.getByLabelText('Réduction, 7,50 euros')).toBeTruthy();
+  });
+
+  it('switching the mode keeps the discount and shows its text only in its own mode', async () => {
+    const { view, onChange, press } = await renderEditor({ initial: { type: 'FIXED', amountCents: 750 } });
+
+    await press({ label: 'Réduction en pourcentage' });
+    expect(entry(view).props.value).toBe('');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe(`-${euros(750)}`);
+
+    await press({ label: 'Réduction en euros' });
+    expect(entry(view).props.value).toBe('7,50');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['FIXED', 'abc', 'Montant invalide'],
+    ['FIXED', '-5', 'Montant invalide'],
+    ['FIXED', '7,505', 'Montant invalide'],
+    ['FIXED', '0', 'La réduction doit être supérieure à 0 €.'],
+    ['PERCENT', '0', 'La réduction doit être supérieure à 0 %.'],
+    ['PERCENT', '7,5', 'Saisissez un pourcentage entier.'],
+    ['PERCENT', '100', 'Le pourcentage ne peut pas dépasser 50 %.'],
+    ['PERCENT', 'x', 'Pourcentage invalide'],
+  ] as const)('explains an unreadable %s entry « %s » in words, applies nothing and turns the field rose', async (mode, text, message) => {
+    const { view, onChange, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+    if (mode === 'FIXED') await press({ label: 'Réduction en euros' });
+
+    await typeEntry(view, text);
+
+    expect(onChange).not.toHaveBeenCalled();
+    const error = view.getByTestId('appointment-discount-entry-error');
+    expect(error.props.children).toBe(message);
+    expect(error.props.accessibilityLiveRegion).toBe('polite');
+    expect(StyleSheet.flatten(error.props.style).color).toBe(rose.rose600);
+    expect(StyleSheet.flatten(view.getByTestId('appointment-discount-entry').props.style)).toMatchObject({
+      backgroundColor: semanticColors.surfaceRose,
+      borderColor: rose.rose600,
+    });
+    expect(view.getByTestId('appointment-discount-summary').props.children).toBe('Aucune');
+    expect(view.queryByTestId('appointment-discount-net-total')).toBeNull();
+  });
+
+  it('an unreadable entry removes the discount it replaces, and a corrected entry restores one', async () => {
+    const { view, onChange, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+    await press({ label: 'Réduction de 20 pour cent' });
+
+    await typeEntry(view, '60');
+    expect(onChange).toHaveBeenLastCalledWith(undefined);
+    expect(view.getByTestId('appointment-discount-entry-error').props.children).toBe(
+      'Le pourcentage ne peut pas dépasser 50 %.',
+    );
+
+    await typeEntry(view, '50');
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'PERCENT', percent: 50 });
+    expect(view.queryByTestId('appointment-discount-entry-error')).toBeNull();
+    expect(view.getByTestId('appointment-discount-preset-PERCENT-50').props.accessibilityState.selected).toBe(true);
+  });
+
+  it('says in words when a custom amount above the services total is limited to it, and the net stays zero', async () => {
+    const { view, press } = await renderEditor({ grossEuros: 30 });
+    await press({ testID: 'appointment-discount-toggle' });
+    await press({ label: 'Réduction en euros' });
+
+    await typeEntry(view, '50');
+
+    expect(view.queryByTestId('appointment-discount-entry-error')).toBeNull();
+    expect(view.getByTestId('appointment-discount-clamped').props.children).toBe('Limitée au total des prestations.');
+
+    expect(view.getByTestId('appointment-discount-net-total').props.children).toBe(euros(0));
+
+    await typeEntry(view, '12');
+    expect(view.queryByTestId('appointment-discount-clamped')).toBeNull();
+    expect(view.getByTestId('appointment-discount-net-total').props.children).toBe(euros(1800));
+  });
+
+  it('« Aucune réduction » also empties the entry', async () => {
+    const { view, onChange, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+    await press({ label: 'Réduction en euros' });
+    await typeEntry(view, '7,50');
+    mockSelectionHaptic.mockClear(); // the mode switch ticked once
+
+    await press({ label: 'Supprimer la réduction' });
+
+    expect(onChange).toHaveBeenLastCalledWith(undefined);
+    expect(entry(view).props.value).toBe('');
+    expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it('binds the compact iOS « OK » keyboard accessory to the entry', async () => {
+    const { view, press } = await renderEditor();
+    await press({ testID: 'appointment-discount-toggle' });
+
+    const accessoryID = entry(view).props.inputAccessoryViewID as string;
+    expect(typeof accessoryID).toBe('string');
+    expect(accessoryID.length).toBeGreaterThan(0);
+    if (Platform.OS === 'ios') {
+      expect(view.getByTestId('appointment-discount-keyboard-dismiss')).toBeTruthy();
+      expect(view.getByLabelText('Fermer le clavier')).toBeTruthy();
+    } else {
+      expect(view.queryByTestId('appointment-discount-keyboard-dismiss')).toBeNull();
+    }
   });
 });

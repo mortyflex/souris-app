@@ -69,6 +69,26 @@ describe('Appointment discount — pricing', () => {
     });
   });
 
+  it('applies freely chosen values exactly like the presets: custom cents and custom whole percentages', () => {
+    // 3 €, 7,50 € and 12,90 € typed by the professional.
+    expect(getAppointmentServicesTotal(appointmentOf([60, 40], fixed(300)))).toMatchObject({ discountCents: 300, netCents: 9700 });
+    expect(getAppointmentServicesTotal(appointmentOf([60, 40], fixed(750)))).toMatchObject({ discountCents: 750, netCents: 9250 });
+    expect(getAppointmentServicesTotal(appointmentOf([60, 40], fixed(1290)))).toMatchObject({ discountCents: 1290, netCents: 8710 });
+    // 7 % of 12,90 € = 90,3 c → 90 c ; 33 % of 10 € = 330 c ; 1 % of 0,49 € = 0,49 c → 0 c.
+    expect(getAppointmentDiscountCents(1290, percent(7))).toBe(90);
+    expect(getAppointmentDiscountCents(1000, percent(33))).toBe(330);
+    expect(getAppointmentDiscountCents(49, percent(1))).toBe(0);
+    // 7,50 € off a 7,50 € Appointment: nothing left, nothing negative.
+    expect(getAppointmentServicesTotal(appointmentOf([7.5], fixed(750)))).toEqual({
+      grossCents: 750,
+      discountCents: 750,
+      netCents: 0,
+    });
+    // A fixed amount on a zero-value or empty Appointment applies nothing.
+    expect(getAppointmentServicesTotal(appointmentOf([0], fixed(750)))).toEqual({ grossCents: 0, discountCents: 0, netCents: 0 });
+    expect(getAppointmentServicesTotal(appointmentOf([], percent(7)))).toEqual({ grossCents: 0, discountCents: 0, netCents: 0 });
+  });
+
   it('rounds a percentage half up to the cent, deterministically, in integer arithmetic', () => {
     // 12,50 € × 15 % = 187,5 c → 188 c
     expect(getAppointmentDiscountCents(1250, percent(15))).toBe(188);

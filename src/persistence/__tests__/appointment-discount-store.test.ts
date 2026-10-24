@@ -165,6 +165,25 @@ describe('Appointment discount persistence', () => {
     expect(getAppointmentExpectedTotal(reload(db)!, [])).toEqual(before);
   });
 
+  it('persists freely entered values — custom cents and a custom whole percentage — exactly, across a restart', () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, createTestSeed);
+
+    updateAppointmentDiscount(db, appointmentLea.id, { type: 'FIXED', amountCents: 750 });
+    expect(rawDiscount(db)).toEqual({ discount_percent: null, discount_amount_cents: 750 });
+    expect(reload(db)?.discount).toEqual({ type: 'FIXED', amountCents: 750 });
+    expect(getAppointmentExpectedTotal(reload(db)!, [])).toMatchObject({ discountCents: 750, expectedTotalCents: 12750 });
+
+    updateAppointmentDiscount(db, appointmentLea.id, { type: 'FIXED', amountCents: 1290 });
+    expect(reload(db)?.discount).toEqual({ type: 'FIXED', amountCents: 1290 });
+
+    updateAppointmentDiscount(db, appointmentLea.id, { type: 'PERCENT', percent: 7 });
+    expect(rawDiscount(db)).toEqual({ discount_percent: 7, discount_amount_cents: null });
+    expect(reload(db)?.discount).toEqual({ type: 'PERCENT', percent: 7 });
+    // 135 € × 7 % = 945 c, derived on reload — never stored.
+    expect(getAppointmentExpectedTotal(reload(db)!, [])).toMatchObject({ discountCents: 945, expectedTotalCents: 12555 });
+  });
+
   it('refuses an unknown Appointment and an invalid discount', () => {
     const db = openTestDatabase();
     bootstrapPersistence(db, createTestSeed);

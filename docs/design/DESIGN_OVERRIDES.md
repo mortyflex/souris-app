@@ -1134,6 +1134,19 @@ price, no badge on Agenda cards (their geometry and content are unchanged).
   `accessibilityState.selected` — and the chosen value is always written in the row header, so
   selection never relies on colour alone. Each chip is spoken « Réduction de 20 pour cent » /
   « Réduction de 15 euros ».
+- **Free entry.** Under the chips, ONE field in the « Autre montant » style of the deposit sheet (§33):
+  white on the neutral surface with the chips' `borderSubtle` hairline and `radii.medium`, the platform
+  touch-target height, the quiet `control` label « Autre pourcentage » (`%` mode, number pad, placeholder
+  `0`) or « Autre montant » (`€` mode, decimal pad, placeholder `0,00`) on the left, the right-aligned
+  semibold tabular entry and the unit (`%` / `€`) on the right, `selectTextOnFocus`, the compact iOS « OK »
+  accessory (`KeyboardDismissAccessory`). Spoken « Pourcentage de réduction » / « Montant de la réduction ».
+  An unreadable entry alone turns the field `surfaceRose` + `rose600` with ONE rose `metadata` sentence under
+  it, announced politely (« Montant invalide », « La réduction doit être supérieure à 0 € », « Saisissez un
+  pourcentage entier. », « Le pourcentage ne peut pas dépasser 50 %. »); a readable value applies at once,
+  deselects every chip and never ticks. A chip empties the entry; a custom value reopens with its text.
+- **Clamp note.** Only when a fixed amount exceeds the services total, the footer adds the quiet
+  `foregroundSoft` `metadata` note « Limitée au total des prestations. » above `Total après réduction`; the
+  header row already states the applied amount.
 - **Removal.** Once a discount is set, the footer shows `Total après réduction` and, under it, the
   accent text action « Aucune réduction » (spoken « Supprimer la réduction »). Switching `%` ↔ `€` alone
   changes nothing until a value is tapped.

@@ -1,28 +1,47 @@
-// BeautIzzy — « Réduction » control (Appointment creation and editing)
+// BeautIzzy — « Réduction » control (Appointment creation, editing, checkout)
 //
 // Deliberately secondary: most Appointments carry no discount, so the block
 // is ONE collapsed row (« Réduction · Aucune ») until the professional opens
 // it. Open, it shows the % / € switch, the ten quick presets of that mode,
-// and « Aucune réduction » once a discount is chosen.
+// ONE free entry (« Autre pourcentage » / « Autre montant ») for any other
+// value, and « Aucune réduction » once a discount is chosen.
 //
 // DRAFT state only — the parent owns the discount and persists it with the
 // rest of the Appointment. Nothing is computed here: the gross → discount →
 // net amounts come from the ONE domain derivation, passed in as
-// `servicesTotal`. A discount is a normal professional action: lavender
-// identity, never a warning colour. The chosen value is always written in
-// the header row, so selection never relies on colour alone.
+// `servicesTotal`; the free entry is read by the pure entry rules
+// (`discount-entry.ts`). A discount is a normal professional action: lavender
+// identity, never a warning colour — only an unreadable entry turns rose. The
+// chosen value is always written in the header row, so selection never
+// relies on colour alone.
+//
+// Presets and the free entry are two ways of choosing the SAME value: a
+// preset selects its chip and empties the entry; a typed value deselects
+// every chip; a discount that is not a preset reopens with its text in the
+// entry. The text is local (`7,` must survive while typing) and the entry
+// hands the parent a value on every readable change, or `undefined` once it
+// is empty or unreadable.
 //
 // Haptics: ONE subtle selection tick per real change — a new preset, the
 // removal, and the % / € switch (given by SegmentedControl itself, only when
 // the mode changes). Re-tapping the chosen preset is a no-op: no tick, no
-// `onChange`. The price-tag icon is decorative and hidden from accessibility.
+// `onChange`. Typing ticks nothing. The price-tag icon is decorative and
+// hidden from accessibility.
 //
 // Disclosure: the block opens and closes itself. A parent that needs to open
 // it from outside (the birthday suggestion, AppointmentDiscountSection) passes
 // `expanded` + `onExpandedChange` and owns that one boolean instead.
 
-import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useId, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import {
@@ -39,17 +58,25 @@ import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
 import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
+import { KeyboardDismissAccessory } from '@/shared/ui/KeyboardDismissAccessory';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import {
+  fontFamilies,
   foregroundSoft,
   interaction,
   lavender,
   radii,
+  rose,
   semanticColors,
   spacing,
   touchTarget,
 } from '@/shared/ui/theme';
 
+import {
+  DISCOUNT_ENTRY_MAX_LENGTH,
+  deriveDiscountEntryState,
+  formatDiscountEntryText,
+} from '../discount-entry';
 import {
   formatDiscountPresetLabel,
   getDiscountPresetKey,
@@ -73,6 +100,23 @@ const modeOptions: readonly SegmentedControlOption<AppointmentDiscountMode>[] = 
   { value: 'PERCENT', label: '%', accessibilityLabel: 'Réduction en pourcentage' },
   { value: 'FIXED', label: '€', accessibilityLabel: 'Réduction en euros' },
 ];
+
+const entryCopy = {
+  PERCENT: {
+    label: 'Autre pourcentage',
+    accessibilityLabel: 'Pourcentage de réduction',
+    placeholder: '0',
+    unit: '%',
+    keyboardType: 'number-pad',
+  },
+  FIXED: {
+    label: 'Autre montant',
+    accessibilityLabel: 'Montant de la réduction',
+    placeholder: '0,00',
+    unit: '€',
+    keyboardType: 'decimal-pad',
+  },
+} as const;
 
 const minimumTouchTarget = touchTarget[Platform.OS === 'android' ? 'android' : 'ios'];
 const chipHeight = 40;
@@ -99,15 +143,39 @@ export function AppointmentDiscountEditor({
   const [ownExpanded, setOwnExpanded] = useState(discount !== undefined);
   const expanded = controlledExpanded ?? ownExpanded;
   const [mode, setMode] = useState<AppointmentDiscountMode>(discount?.type ?? 'PERCENT');
+  // The free entry's own text: a custom discount reopens with it, a preset
+  // leaves it empty. Kept as typed so `7,` survives until the next digit.
+  const [entryText, setEntryText] = useState(() => formatDiscountEntryText(discount, mode));
+  const keyboardAccessoryID = useId();
   const summary = formatDiscountSummary(discount, servicesTotal.discountCents);
+  const entry = deriveDiscountEntryState(mode, entryText);
+  const copy = entryCopy[mode];
+  // A fixed amount above the services total is applied in full by the domain
+  // clamp (the net is zero): said in words, never silently.
+  const clamped = discount?.type === 'FIXED' && discount.amountCents > servicesTotal.grossCents;
 
   const choose = (preset: AppointmentDiscount) => {
+    setEntryText('');
     if (areAppointmentDiscountsEqual(preset, discount)) return;
     haptics.selection();
     onChange(preset);
   };
 
+  const typeEntry = (text: string) => {
+    setEntryText(text);
+    const next = deriveDiscountEntryState(mode, text).discount;
+    if (areAppointmentDiscountsEqual(next, discount)) return;
+    onChange(next);
+  };
+
+  const switchMode = (next: AppointmentDiscountMode) => {
+    if (next === mode) return;
+    setMode(next);
+    setEntryText(formatDiscountEntryText(discount, next));
+  };
+
   const clear = () => {
+    setEntryText('');
     haptics.selection();
     onChange(undefined);
   };
@@ -154,7 +222,7 @@ export function AppointmentDiscountEditor({
       {expanded && (
         <View style={styles.body}>
           <SegmentedControl
-            onChange={setMode}
+            onChange={switchMode}
             options={modeOptions}
             testID="appointment-discount-mode"
             value={mode}
@@ -189,8 +257,59 @@ export function AppointmentDiscountEditor({
             })}
           </View>
 
+          <View style={styles.entry}>
+            <View
+              style={[styles.entryField, entry.error !== undefined && styles.entryFieldInvalid]}
+              testID="appointment-discount-entry"
+            >
+              <AppText variant="control" style={styles.entryLabel}>
+                {copy.label}
+              </AppText>
+              <TextInput
+                accessibilityLabel={copy.accessibilityLabel}
+                // The numeric pads have no return key: the compact BeautIzzy
+                // « OK » replaces React Native's full-width system toolbar.
+                inputAccessoryViewID={keyboardAccessoryID}
+                keyboardType={copy.keyboardType}
+                maxLength={DISCOUNT_ENTRY_MAX_LENGTH[mode]}
+                onChangeText={typeEntry}
+                placeholder={copy.placeholder}
+                placeholderTextColor={semanticColors.foregroundMuted}
+                returnKeyType="done"
+                selectTextOnFocus
+                style={styles.entryInput}
+                testID="appointment-discount-entry-input"
+                textAlign="right"
+                value={entryText}
+              />
+              <AppText variant="control" style={styles.entryUnit}>
+                {copy.unit}
+              </AppText>
+            </View>
+            {entry.error !== undefined && (
+              <AppText
+                accessibilityLiveRegion="polite"
+                variant="metadata"
+                style={styles.entryError}
+                testID="appointment-discount-entry-error"
+              >
+                {entry.error}
+              </AppText>
+            )}
+            {/* Absolutely positioned by React Native: never part of the layout. */}
+            <KeyboardDismissAccessory
+              nativeID={keyboardAccessoryID}
+              testID="appointment-discount-keyboard-dismiss"
+            />
+          </View>
+
           {discount && (
             <View style={styles.footer}>
+              {clamped && (
+                <AppText variant="metadata" style={styles.clampedNote} testID="appointment-discount-clamped">
+                  Limitée au total des prestations.
+                </AppText>
+              )}
               {/* The label stays quiet; the amount she will charge carries the weight. */}
               <View
                 accessible
@@ -266,6 +385,33 @@ const styles = StyleSheet.create({
   },
   chipText: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   chipTextSelected: { color: lavender.lav700, fontVariant: ['tabular-nums'] },
+  entry: { gap: spacing.xs },
+  // The « Autre montant » field of the deposit sheet: white on the neutral
+  // surface, a chip's hairline, rose only while the entry cannot be read.
+  entryField: {
+    alignItems: 'center',
+    backgroundColor: semanticColors.surfaceElevated,
+    borderColor: semanticColors.borderSubtle,
+    borderCurve: 'continuous',
+    borderRadius: radii.medium,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: minimumTouchTarget,
+    paddingHorizontal: spacing.md,
+  },
+  entryFieldInvalid: { backgroundColor: semanticColors.surfaceRose, borderColor: rose.rose600 },
+  entryLabel: { color: foregroundSoft, flex: 1 },
+  entryInput: {
+    color: semanticColors.foreground,
+    fontFamily: fontFamilies['600'],
+    fontSize: 17,
+    fontVariant: ['tabular-nums'],
+    minWidth: 88,
+    paddingVertical: 0,
+  },
+  entryUnit: { color: foregroundSoft },
+  entryError: { color: rose.rose600 },
   footer: { gap: spacing.xs },
   netTotalRow: {
     alignItems: 'center',
@@ -273,6 +419,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   netTotalLabel: { color: foregroundSoft },
+  clampedNote: { color: foregroundSoft },
   netTotalValue: { color: lavender.lav700, fontVariant: ['tabular-nums'] },
   clear: { alignSelf: 'flex-end', justifyContent: 'center', minHeight: 32 },
   clearText: { color: semanticColors.accent },
