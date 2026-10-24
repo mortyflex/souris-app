@@ -71,7 +71,11 @@ may differ from Apple's; this is expected. Since Phase 6.3 the purchase and rest
 but purchases are enabled for the RevenueCat Test Store ONLY (`PURCHASABLE_STORES`): a TestFlight
 or App Store build, bound to the Apple key, refuses every purchase (`not-enabled`) and exposes no
 purchase entry point — no real-money transaction can start from a release until the Apple
-Sandbox validation phase enables the App Store deliberately.
+Sandbox validation phase enables the App Store deliberately. Phase 6.4A adds a DEBUG-only Apple
+Sandbox mode (`APP_VARIANT=apple-sandbox`, `docs/architecture/ARCHITECTURE.md` §10) that reads the
+real App Store products with the same Apple key and the same bundle identifier as this release — on
+the SIMULATOR only: installed on a device, a debug build of `com.mortyflex.sourisapp` collides with
+(and may replace) the TestFlight installation. It changes nothing in a release build.
 
 ## 3. Supabase Dashboard (manual)
 

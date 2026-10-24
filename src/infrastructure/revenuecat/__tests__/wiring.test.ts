@@ -5,7 +5,7 @@
 
 import { unconfiguredSubscriptionSource } from '@/features/access/subscription-source';
 
-import { createAccountSubscriptionSource } from '../index';
+import { createAccountSubscriptionSource, readRevenueCatBuild } from '../index';
 import { customerInfo, NOW } from '../testing/customer-info-fixtures';
 import { createFakeRevenueCatSdk } from '../testing/fake-revenuecat-sdk';
 
@@ -85,5 +85,91 @@ describe('createAccountSubscriptionSource', () => {
   it('uses the production defaults without throwing', () => {
     const warn = jest.fn();
     expect(() => createAccountSubscriptionSource({ warn })).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Apple Sandbox mode (Phase 6.4A): the wiring binds the SDK to the Apple key
+// in an explicitly opted-in iOS debug build carrying the App Store bundle
+// identifier, names the App Store as its store (so the provider refuses every
+// purchase), says so once without a key, and refuses the mode for the `.dev`
+// identifier. The default development build is untouched.
+// ---------------------------------------------------------------------------
+
+describe('createAccountSubscriptionSource — Apple Sandbox mode', () => {
+  const SANDBOX_BUILD = { platform: 'ios', debug: true, appleSandbox: true, bundleIdentifier: 'com.mortyflex.sourisapp' };
+
+  it('configures the SDK with the Apple key and the Supabase user id, bound to the App Store, and announces the mode without a key', async () => {
+    const sdk = createFakeRevenueCatSdk();
+    const warn = jest.fn();
+    const info = jest.fn();
+    const source = createAccountSubscriptionSource({ environment: BOTH, build: SANDBOX_BUILD, sdk, clock: () => NOW, warn, info });
+    expect(source).not.toBe(unconfiguredSubscriptionSource);
+    expect(source.store).toBe('app-store');
+    await expect(source.verify('user-lea')).resolves.toEqual({ kind: 'unavailable' });
+    expect(sdk.calls.configure).toEqual([{ apiKey: APPLE_KEY, appUserID: 'user-lea' }]);
+    expect(warn).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledTimes(1);
+    const notice = String(info.mock.calls[0]?.[0]);
+    expect(notice).toContain('APP_VARIANT=apple-sandbox');
+    expect(notice).not.toContain(APPLE_KEY);
+    expect(notice).not.toContain(TEST_STORE_KEY);
+  });
+
+  it('exposes the offering loader (read) and the transactions the provider will refuse for the App Store', () => {
+    const source = createAccountSubscriptionSource({ environment: BOTH, build: SANDBOX_BUILD, sdk: createFakeRevenueCatSdk(), warn: jest.fn(), info: jest.fn() });
+    expect(typeof source.loadOffering).toBe('function');
+    // The source is the same adapter as the release one: the refusal of its purchases lives in
+    // PURCHASABLE_STORES (features/access), never in a second code path here.
+    expect(source.store).toBe('app-store');
+  });
+
+  it('refuses the mode for the .dev bundle identifier: unconfigured, explained by the variant and the bundle, no SDK configured', async () => {
+    const sdk = createFakeRevenueCatSdk();
+    const warn = jest.fn();
+    const info = jest.fn();
+    const source = createAccountSubscriptionSource({
+      environment: BOTH,
+      build: { ...SANDBOX_BUILD, bundleIdentifier: 'com.mortyflex.sourisapp.dev' },
+      sdk,
+      warn,
+      info,
+    });
+    expect(source).toBe(unconfiguredSubscriptionSource);
+    await expect(source.verify('user-lea')).resolves.toEqual({ kind: 'unavailable' });
+    expect(sdk.calls.configure).toEqual([]);
+    expect(info).not.toHaveBeenCalled();
+    const warnings = warn.mock.calls.flat().join('\n');
+    expect(warnings).toContain('APP_VARIANT=apple-sandbox');
+    expect(warnings).toContain('com.mortyflex.sourisapp');
+    expect(warnings).not.toContain(APPLE_KEY);
+    expect(warnings).not.toContain(TEST_STORE_KEY);
+  });
+
+  it('keeps the Test Store as the default development behaviour and says nothing about a sandbox', async () => {
+    const sdk = createFakeRevenueCatSdk();
+    sdk.setCustomerInfo('user-lea', customerInfo());
+    const info = jest.fn();
+    const source = createAccountSubscriptionSource({
+      environment: BOTH,
+      build: { platform: 'ios', debug: true, appleSandbox: false, bundleIdentifier: 'com.mortyflex.sourisapp' },
+      sdk,
+      clock: () => NOW,
+      warn: jest.fn(),
+      info,
+    });
+    expect(source.store).toBe('test-store');
+    await expect(source.verify('user-lea')).resolves.toMatchObject({ kind: 'verified' });
+    expect(sdk.calls.configure).toEqual([{ apiKey: TEST_STORE_KEY, appUserID: 'user-lea' }]);
+    expect(info).not.toHaveBeenCalled();
+  });
+
+  it('reads the build of this bundle from the Expo config without throwing, and never a key from it', () => {
+    const build = readRevenueCatBuild();
+    expect(typeof build.platform).toBe('string');
+    expect(typeof build.debug).toBe('boolean');
+    expect(typeof build.appleSandbox).toBe('boolean');
+    expect(build.bundleIdentifier === undefined || typeof build.bundleIdentifier === 'string').toBe(true);
+    expect(Object.keys(build).sort()).toEqual(['appleSandbox', 'bundleIdentifier', 'debug', 'platform']);
   });
 });

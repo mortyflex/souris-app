@@ -1415,7 +1415,10 @@ Accueil and « Abonnement actif » in « Mon abonnement » through the same veri
 « Abonnement activé » is never said before the store confirmed it, a cancellation is calm, a
 deferred payment owns nothing, an unconfirmed transaction offers « Vérifier à nouveau ». No
 product screen can start a purchase, purchases are enabled for the Test Store only (never the
-App Store yet), and enforcement stays disabled: nothing is restricted for anyone. Still to come,
+App Store yet), and enforcement stays disabled: nothing is restricted for anyone. Phase 6.4A
+(October 2026) prepares the Apple Sandbox validation: an explicitly selected, development-only
+build reads the real App Store products, prices, periods and trial information in the same preview,
+read-only — no Apple purchase, no restore, nothing visible to any professional. Still to come,
 in their own phases: the Apple Sandbox validation (real trial, real restore), the account-scoped
 paywall routing, persisted entitlement evidence, the backend entitlement mirror and server-side
 enforcement, real terms and privacy URLs, account deletion and privacy-data export, Google Play.

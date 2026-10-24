@@ -38,6 +38,16 @@
 // keeps no real store history, so the alert says what that test can and
 // cannot prove.
 //
+// Apple Sandbox mode (Phase 6.4A, `APP_VARIANT=apple-sandbox`): a debug
+// bundle bound to the App Store (`checkout.store === 'app-store'`). The live
+// entry then draws the REAL App Store offering — products, prices, periods,
+// trial eligibility, as the Apple Sandbox answers them for the signed-in
+// account — and transacts NOTHING: the primary action only explains the
+// refusal (`test-store-purchase.ts`, `not-test-store`), no restore link is
+// drawn, and the environment notice says « Apple Sandbox — lecture seule ».
+// The provider refuses an App Store purchase anyway (`PURCHASABLE_STORES`);
+// this screen simply never asks.
+//
 // The SDK's purchase dialog is a native presentation of its own. On iOS the
 // Test Store purchase is a UIAlertController the SDK presents on the key
 // window's top-most presented view controller at the instant the purchase
@@ -100,7 +110,12 @@ import { CHECKOUT_VERIFY_AGAIN_TITLE, describeCheckoutResult } from '../checkout
 import type { PaywallOffering } from '../paywall-offering';
 import { buildPaywallPlans } from '../paywall-presentation';
 import { paywallContextFixtures, paywallPreviewScenarios, type PaywallPreviewScenario } from '../testing/paywall-fixtures';
-import { TEST_PURCHASE_REFUSALS, resolveTestPurchaseRefusal } from './test-store-purchase';
+import {
+  TEST_PURCHASE_REFUSALS,
+  TEST_RESTORE_REFUSALS,
+  resolveTestPurchaseRefusal,
+  resolveTestRestoreRefusal,
+} from './test-store-purchase';
 
 interface PaywallPreviewSheetProps {
   readonly visible: boolean;
@@ -128,6 +143,20 @@ export const TEST_RESTORE_MESSAGE =
   'Le Test Store ne restaure pas un historique d’achats réel : ce test vérifie uniquement l’appel SDK et la mise à jour du statut. La restauration réelle sera validée en Sandbox Apple / TestFlight.';
 export const TEST_RESTORE_CONFIRM_TITLE = 'Restaurer (test)';
 export const TEST_PURCHASE_REFUSED_TITLE = 'Achat de test refusé';
+export const TEST_RESTORE_REFUSED_TITLE = 'Restauration de test refusée';
+/** Apple Sandbox mode (Phase 6.4A): the App Store offering is read, nothing is bought or restored. */
+export const APPLE_SANDBOX_PREVIEW_DETAIL =
+  'Offre réelle du compte connecté, App Store (Apple Sandbox). Lecture seule : aucun achat, aucune restauration.';
+export const APPLE_SANDBOX_NOTICE_TITLE = 'Apple Sandbox — lecture seule';
+export const APPLE_SANDBOX_NOTICE_LINES = [
+  'Produits, prix et essai réels de l’App Store (Sandbox), compte connecté.',
+  'Aucun achat ni restauration dans cette version.',
+] as const;
+
+/** What the live entry says about itself, from the store the source is bound to. */
+export function describeLiveOfferingPreview(store: PlusCheckoutSession['store']): string {
+  return store === 'app-store' ? APPLE_SANDBOX_PREVIEW_DETAIL : LIVE_OFFERING_PREVIEW_DETAIL;
+}
 
 /** A confirmed Test Store purchase: the store offering (its reference) and the plan, captured at confirmation. */
 interface CheckoutRequest {
@@ -224,6 +253,7 @@ export function PaywallPreviewSheet({ visible, onClose }: PaywallPreviewSheetPro
   };
   const explainNoPurchase = () => explainPreview('Aucun achat n’est effectué dans cet aperçu.');
   const explainNoStore = () => explainPreview('Aucun magasin n’est interrogé dans cet aperçu.');
+  const liveOfferingDetail = describeLiveOfferingPreview(checkout.store);
 
   return (
     <>
@@ -248,7 +278,7 @@ export function PaywallPreviewSheet({ visible, onClose }: PaywallPreviewSheetPro
         <View style={styles.list}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${LIVE_OFFERING_PREVIEW_TITLE}, ${LIVE_OFFERING_PREVIEW_DETAIL}`}
+            accessibilityLabel={`${LIVE_OFFERING_PREVIEW_TITLE}, ${liveOfferingDetail}`}
             onPress={() => setStage({ kind: 'opening', selection: { source: 'revenuecat' } })}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             testID={`paywall-preview-${LIVE_OFFERING_PREVIEW_KEY}`}
@@ -258,7 +288,7 @@ export function PaywallPreviewSheet({ visible, onClose }: PaywallPreviewSheetPro
                 {LIVE_OFFERING_PREVIEW_TITLE}
               </AppText>
               <AppText style={styles.rowDetail} variant="metadata">
-                {LIVE_OFFERING_PREVIEW_DETAIL}
+                {liveOfferingDetail}
               </AppText>
             </View>
             <NavigationChevron />
@@ -373,8 +403,14 @@ function LiveOfferingPaywall({ checkout, onClose, onPurchase }: LiveOfferingPayw
   };
 
   const requestTestRestore = () => {
-    if (checkout.activity !== undefined) {
-      Alert.alert(TEST_PURCHASE_REFUSED_TITLE, TEST_PURCHASE_REFUSALS['operation-in-progress']);
+    const refusal = resolveTestRestoreRefusal({
+      development: __DEV__,
+      store: checkout.store,
+      authenticated: checkout.authenticated,
+      activity: checkout.activity,
+    });
+    if (refusal !== undefined) {
+      Alert.alert(TEST_RESTORE_REFUSED_TITLE, TEST_RESTORE_REFUSALS[refusal]);
       return;
     }
     Alert.alert(TEST_RESTORE_TITLE, TEST_RESTORE_MESSAGE, [
@@ -383,15 +419,24 @@ function LiveOfferingPaywall({ checkout, onClose, onPurchase }: LiveOfferingPayw
     ]);
   };
 
+  // Apple Sandbox mode (a debug bundle bound to the App Store) reads the App
+  // Store offering and transacts nothing: no restore link at all. Every other
+  // source keeps the Test Store bench, whose guards explain the rest.
+  const appleSandbox = checkout.store === 'app-store';
+
   return (
     <PaywallScreen
       activity={checkout.activity}
       context={checkout.entitled ? paywallContextFixtures.entitled : paywallContextFixtures.initialOffer}
-      environmentNotice={{ title: TEST_PURCHASE_TITLE, lines: TEST_PURCHASE_NOTICE_LINES }}
+      environmentNotice={
+        appleSandbox
+          ? { title: APPLE_SANDBOX_NOTICE_TITLE, lines: APPLE_SANDBOX_NOTICE_LINES }
+          : { title: TEST_PURCHASE_TITLE, lines: TEST_PURCHASE_NOTICE_LINES }
+      }
       offering={offering}
       onClose={onClose}
       onContinueReadOnly={onClose}
-      onRestorePurchases={requestTestRestore}
+      onRestorePurchases={appleSandbox ? undefined : requestTestRestore}
       onRetryOffering={retry}
       onSubscribe={requestTestPurchase}
       testID="paywall-preview-screen"

@@ -439,10 +439,11 @@ development fixtures and no product route mounts it.
 config.ts                  THE key rule, pure: a development bundle (`__DEV__`) uses the Test Store key
                            (EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY); an iOS release — TestFlight included —
                            the Apple key (EXPO_PUBLIC_REVENUECAT_IOS_API_KEY); an Android release nothing
-                           until Google Play exists. APP_VARIANT never decides: it selects identifiers, not
-                           the compilation. A missing key, a key of the wrong family (`test_` / `appl_`
-                           prefixes) or a secret key leaves the build UNCONFIGURED — the unconfigured source,
-                           never a crash, never a key in a message.
+                           until Google Play exists. APP_VARIANT never decides the compilation: it selects
+                           identifiers — and, since Phase 6.4A, the ONE explicit Apple Sandbox opt-in of a
+                           debug bundle (`apple-sandbox`, below). A missing key, a key of the wrong family
+                           (`test_` / `appl_` prefixes) or a secret key leaves the build UNCONFIGURED — the
+                           unconfigured source, never a crash, never a key in a message.
 sdk.ts                     the ONE module importing `react-native-purchases`: configure, logIn,
                            getAppUserID, getCustomerInfo, invalidateCustomerInfoCache, the update listener.
                            No logOut (it would create an anonymous identity), no purchase, no restore.
@@ -661,6 +662,88 @@ another-account case. Remaining before production subscriptions: that validation
 scoped paywall routing, persisted verified evidence, the backend entitlement mirror with server-
 side enforcement, real terms and privacy URLs, account deletion and privacy-data export, Google
 Play.
+
+Apple Sandbox offering verification (Phase 6.4A). A READ-ONLY development mode that fetches the
+real Apple subscription products from the Apple Sandbox — offerings, prices, billing periods, trial
+information — in an iOS DEBUG build. No purchase, no restore, no routing, no enforcement change:
+`SUBSCRIPTION_ENFORCEMENT` stays `disabled`, `PURCHASABLE_STORES` stays `['test-store']`, the
+Test Store remains the default development behaviour, and release / TestFlight builds are untouched.
+
+```text
+app.config.js              APP_VARIANT=apple-sandbox → name « BeautIzzy Sandbox », the APP STORE bundle
+                           identifier (com.mortyflex.sourisapp, from app.json) and
+                           `extra.revenueCat.appleSandbox = true`. ONE variant value sets both, so the `.dev`
+                           identifier can never carry the flag. `development` and no variant keep the flag
+                           false. No eas.json profile sets the variant: it is for `npx expo run:ios` only.
+config.ts                  `RevenueCatBuild` gains `appleSandbox` and `bundleIdentifier`. In a DEBUG bundle
+                           with `appleSandbox`: iOS only (`apple-sandbox-ios-only`), the App Store bundle
+                           identifier only (`apple-sandbox-wrong-bundle`), then the Apple key
+                           (EXPO_PUBLIC_REVENUECAT_IOS_API_KEY) bound to `app-store`, `appleSandbox: true`. The
+                           Test Store key is never selected once the mode is requested; a release build ignores
+                           the flag (same Apple key, `appleSandbox: false`). Refusals name the variant and the
+                           bundle, never a key.
+index.ts                   `readRevenueCatBuild()`: Platform.OS, `__DEV__`, and — from `expo-constants`'
+                           `expoConfig` — the flag and the iOS bundle identifier. The SAME adapter is created;
+                           its `store` is `app-store`, so the provider answers `not-enabled` to any purchase.
+                           A dev-only console.info announces the mode (variant and bundle, never a key).
+purchasable-stores.ts      UNCHANGED: `['test-store']`. An `appl_` key never enables a purchase.
+development/               the live entry draws the App Store offering under « Apple Sandbox — lecture seule »,
+                           its primary action only explains (`not-test-store`, now worded for the sandbox), NO
+                           restore link is drawn (`resolveTestRestoreRefusal` guards the Test Store link the
+                           same way the purchase is guarded), and the list row says « Lecture seule : aucun
+                           achat, aucune restauration ». Loading, unavailable, retry, the entitled context, the
+                           account-scoped loader and the Test Store bench are unchanged.
+```
+
+Launching Apple Sandbox mode on the iPhone 17 simulator. Simulator FIRST: a debug build of
+`com.mortyflex.sourisapp` installed on a PHYSICAL device collides with the TestFlight installation of
+the same bundle identifier: iOS either refuses the install (another signing team) or REPLACES the
+TestFlight build with the debug one (iOS normally keeps the data container when the team matches —
+do not rely on it). Never do this on the pilot phone; the next TestFlight install would replace the
+debug build again. The simulator has no TestFlight installation, so nothing is overwritten and no
+local data is touched. Requirements:
+`.env` holds `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` (`appl_…`), the Paid Apps Agreement is active, the
+products are « Ready to Submit », the offering `default` carries `$rc_monthly` / `$rc_annual` bound to
+`com.mortyflex.sourisapp.plus.monthly` / `.annual`, entitlement `plus`.
+
+```bash
+# 1. regenerate the native project for THIS variant: `expo run:ios` reuses an existing ios/ as is,
+#    and the everyday one is BeautIzzyDev with the .dev identifier
+APP_VARIANT=apple-sandbox npx expo prebuild --platform ios --clean
+
+# 2. debug build (__DEV__ true), App Store bundle identifier, iPhone 17 simulator
+APP_VARIANT=apple-sandbox npx expo run:ios --device "iPhone 17"
+
+# 3. verify at launch (Metro console): the dev-only notice
+#    [BeautIzzy] RevenueCat Apple Sandbox mode (APP_VARIANT=apple-sandbox, com.mortyflex.sourisapp): …
+#    then sign in, Plus › Développement › « Aperçu BeautIzzy Plus (test) » › « Offre RevenueCat actuelle »
+
+# back to the everyday development build afterwards (the .dev identifier, the Test Store)
+APP_VARIANT=development npx expo prebuild --platform ios --clean
+APP_VARIANT=development npx expo run:ios --device "iPhone 17"
+```
+
+If Metro is started on its own (`npx expo start`), start it with the SAME `APP_VARIANT` as the
+installed binary: the flag and the bundle identifier the wiring reads come from the config Metro
+evaluates. A mismatch is refused, not guessed: the `.dev` configuration with the flag is
+`apple-sandbox-wrong-bundle`, unconfigured, with the explanation in the console.
+
+What the mode can and cannot show. The current RevenueCat offering with the App Store products,
+their storefront prices and `priceString`, their billing periods, their introductory offer and this
+account's eligibility — exactly what the mapping (`offering.ts`) reads, so a wrong package, product
+or period is visible as a missing plan. Known Apple Sandbox limitations: products appear only once
+App Store Connect has propagated them (hours after creation or after the agreement became active);
+on a simulator the storefront and currency may follow the simulator's region rather than the
+sandbox tester's until a sandbox account is signed in; eligibility may answer `unknown` for an
+account that never purchased, and StoreKit may prompt for an App Store sign-in — use the Apple
+Sandbox tester only, never a real Apple ID; a product fetched here is NOT a proof that a purchase
+succeeds (that is the next subphase). The verification of an account that never bought anything is `never`; nothing changes
+on Accueil or in « Mon abonnement ».
+
+Still required, in the next subphases, before `app-store` joins `PURCHASABLE_STORES`: the real
+StoreKit purchase sheet with the sandbox tester, the 14-day trial, a real restore on a second
+install, interrupted and deferred transactions, a renewal and an expiration through the listener,
+the receipt-of-another-account case.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
