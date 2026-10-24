@@ -6,7 +6,7 @@
 // the platform Switch deliberately — an on/off setting is exactly where the
 // native control belongs (CLAUDE.md §6).
 
-import { StyleSheet, Switch, View } from 'react-native';
+import { Platform, StyleSheet, Switch, View } from 'react-native';
 
 import { AppText } from './AppText';
 import { semanticColors, spacing } from './theme';
@@ -31,6 +31,16 @@ export function SwitchRow({
   accessibilityLabel,
   testID,
 }: SwitchRowProps) {
+  // Android paints an untinted switch thumb with the AppCompat theme accent —
+  // the stock teal, since the native theme declares no colorAccent — so the
+  // thumb is told its colour explicitly: BeautIzzy white on the violet track,
+  // the same reading as iOS. A disabled Android switch loses the native
+  // dimming once its track is tinted, so its "on" track fades to the lavender
+  // border tone instead. iOS keeps its own thumb and dimming untouched.
+  const isAndroid = Platform.OS === 'android';
+  const onTrackColor =
+    isAndroid && disabled ? semanticColors.borderLavender : semanticColors.accent;
+
   return (
     <View style={styles.row} testID={testID}>
       <View style={styles.copy}>
@@ -48,7 +58,8 @@ export function SwitchRow({
         disabled={disabled}
         onValueChange={onValueChange}
         testID={testID ? `${testID}-switch` : undefined}
-        trackColor={{ true: semanticColors.accent, false: undefined }}
+        thumbColor={isAndroid ? semanticColors.onAccent : undefined}
+        trackColor={{ true: onTrackColor, false: undefined }}
         value={value}
       />
     </View>
