@@ -135,6 +135,17 @@ migrations/20261003120000_add_client_lifecycle_sms.sql          (Client lifecycl
                                                                  functions a pushed consent would be silently
                                                                  dropped. docs/architecture/COMMUNICATIONS.md
                                                                  §34–§44)
+migrations/20261004120000_create_subscription_entitlements.sql (BeautIzzy Plus 6.5A — BY HAND, after the lifecycle
+                                                                 SMS one; creates TWO new server-owned tables,
+                                                                 subscription_entitlements (owner SELECT only) and
+                                                                 subscription_events (zero policies), their triggers,
+                                                                 the SECURITY DEFINER subscription_* functions
+                                                                 (service_role-only EXECUTE) and ONE after-insert
+                                                                 trigger on businesses. Touches NO sync RPC, NO
+                                                                 communication object and NO row. Applying it alone
+                                                                 mirrors nothing: the revenuecat-webhook function
+                                                                 must be deployed and configured in RevenueCat.
+                                                                 docs/architecture/SUBSCRIPTIONS.md)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -533,3 +544,75 @@ at step 9 — and only for a Business whose owner explicitly enabled reminders (
 11. Only then enable reminders for the real production Business (its Settings)
 12. Ship / keep the app build that shows Rappels clientes
 ```
+
+## Entitlement mirror (BeautIzzy Plus Phase 6.5A) — NOT deployed yet
+
+`20261004120000_create_subscription_entitlements.sql` creates the server-side mirror of each
+account's RevenueCat Plus entitlement — one row per granting PRODUCT (a paid subscription and a
+promotional grant are two rows), effective access derived by `subscription_has_plus_access`
+(`docs/architecture/SUBSCRIPTIONS.md`). Additive, creates
+no row, safe to re-run. `SUBSCRIPTION_ENFORCEMENT` stays `disabled` in the app and nothing reads
+the mirror yet. Suggested manual check in the SQL Editor after applying:
+
+```sql
+-- both tables: RLS on; ONE policy (owner SELECT on the snapshot); none on the history
+select tablename, rowsecurity from pg_tables where schemaname = 'public' and tablename like 'subscription\_%';
+select tablename, policyname, cmd, roles from pg_policies where tablename like 'subscription\_%';
+
+-- API roles: authenticated SELECT on subscription_entitlements ONLY; service_role NOTHING direct
+select grantee, table_name, string_agg(privilege_type, ',' order by privilege_type)
+from information_schema.role_table_grants
+where table_schema = 'public' and table_name like 'subscription\_%'
+  and grantee in ('anon', 'authenticated', 'service_role')
+group by grantee, table_name order by grantee, table_name;
+
+-- the functions: SECURITY DEFINER for the five RPCs (read_mirror, write_snapshot, apply_revenuecat_event,
+-- apply_reconciliation, has_plus_access), search_path pinned, service_role-only EXECUTE
+select p.proname, p.prosecdef, p.proconfig,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role_exec
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace and p.proname like 'subscription\_%';
+
+-- the binding trigger exists on businesses
+select tgname from pg_trigger where tgrelid = 'public.businesses'::regclass and tgname = 'businesses_subscription_bind_after_insert';
+```
+
+Behavior checks as a signed-in owner: `select * from public.subscription_entitlements` returns
+her rows only (empty until RevenueCat sends something); any `insert` / `update` / `delete` and
+any `select` on `subscription_events` fail with `42501`; calling
+`subscription_apply_revenuecat_event` or `subscription_has_plus_access` fails with `42501`. The
+same checks (81, including the idempotent duplicate, the per-row `40001` guard with no history row
+left behind, two concurrent sources as two rows — the Apple expiration leaving the complimentary
+grant in force and the grant's revocation ending access only when no other source grants —,
+Sandbox / Production separation and the production-only access rule (an active SANDBOX row and a
+Test Store product labelled PRODUCTION grant nothing), the after-the-fact Business binding, the
+per-product reconciliation's "confirmed later wins", the append-only history that still lets a
+deleted user's FK set NULL, and the lockout of every direct access by `anon`, `authenticated` and
+`service_role`) were executed against the full migration chain in an isolated in-process Postgres
+when this migration was written.
+
+### Webhook deployment (deliberate manual steps — none performed by the phase)
+
+```text
+1. Apply the migration above.
+2. RevenueCat › Integrations › Webhooks › New: URL https://<ref>.supabase.co/functions/v1/revenuecat-webhook,
+   Authorization header value = a long random value (≥ 32 chars, `Bearer <random>` recommended);
+   optionally enable signing and keep the signing secret (shown once).
+3. npx supabase secrets set REVENUECAT_WEBHOOK_AUTHORIZATION='<the exact header value>'
+   npx supabase secrets set REVENUECAT_WEBHOOK_SIGNING_SECRET='<signing secret>'          (optional)
+   npx supabase secrets set REVENUECAT_SECRET_API_KEY='<sk_… RevenueCat secret API key>'    (optional: enables the
+                                                                                              REST reconciliation after each event)
+   npx supabase secrets set REVENUECAT_ALLOWED_APP_IDS='<production app id>,<test store app id>' (recommended)
+4. npx supabase functions deploy revenuecat-webhook --no-verify-jwt
+   RevenueCat is a third-party caller that cannot send a Supabase API key: THIS function verifies
+   the shared Authorization value (constant time) and the HMAC signature itself, so JWT
+   verification is OFF for it — the one deliberate exception; communications-worker keeps it ON.
+5. RevenueCat › the webhook › Send test event → 200, outcome IGNORED, one subscription_events row.
+```
+
+Secrets live in Edge Function secrets only — never in Expo env, the app bundle, SQLite, a public
+row or source control. Answers and logs carry event ids, types, environments, outcomes and
+configuration booleans only. Backfill of pre-existing accounts: `docs/architecture/SUBSCRIPTIONS.md`
+§9 — validate it on a non-production project first; never run it against production as part of
+this phase.

@@ -425,8 +425,8 @@ without writing any entitlement. No product route mounts the paywall today.
 Production activation still requires: enabling the App Store in `PURCHASABLE_STORES` after the
 Apple Sandbox validation (purchase and restore exist since Phase 6.3 below, against the Test Store
 only; Google Play is not configured); the account-scoped paywall routing; persisted verified
-evidence and correct offline startup; the backend entitlement mirror with server-side enforcement
-of business mutations and server-controlled reminder / SMS suppression; real privacy and terms
+evidence and correct offline startup; server-side enforcement of business mutations on the backend
+entitlement mirror (the mirror itself exists since Phase 6.5A below) and server-controlled reminder / SMS suppression; real privacy and terms
 URLs; account deletion and privacy-data export. `SUBSCRIPTION_ENFORCEMENT` stays `disabled` until
 then.
 
@@ -825,6 +825,35 @@ Still required, in the next subphases, before `app-store` joins `PURCHASABLE_STO
 device run of this bench (the 14-day trial sheet, a restore on a second install, interrupted and
 deferred transactions, a renewal and an expiration observed through the listener, the receipt-of-
 another-account case), then the product decision itself.
+
+Server-side entitlement mirror (Phase 6.5A, `supabase/functions/revenuecat-webhook`,
+`20261004120000_create_subscription_entitlements.sql`, `docs/architecture/SUBSCRIPTIONS.md`). The
+BACKEND half of the subscription: RevenueCat posts every subscription event to a Supabase Edge
+Function that authenticates it (the shared Authorization value in constant time, the optional HMAC
+signature), validates it, and records it in an append-only history unique on the RevenueCat event
+id, then rewrites the row of the PRODUCT the event concerns — one row per (user, environment,
+entitlement, product), so a paid subscription and a promotional grant never overwrite each other
+and PRODUCTION / SANDBOX never meet — through SECURITY DEFINER functions only the server role may
+execute. Effective access is derived from all rows by `subscription_has_plus_access` (PRODUCTION
+rows of production stores only, not EXPIRED, end not reached; not wired to anything yet). The row
+is computed from the authoritative fields (expiration, period type, store, grace end), never from
+the event name: a paid cancellation keeps the access until its end, a billing issue keeps it
+through the store's grace, a product change waits for the renewal, only an expiration ends a
+product; a PROMOTIONAL grant without expiration is complimentary access with no end (the pilot's),
+revoked deliberately from RevenueCat — a CANCELLATION that ends every grant at once and nothing
+else; a delayed or out-of-order delivery is STALE for its product and never applied; a duplicate
+changes nothing; a database failure answers 500 with nothing recorded so RevenueCat retries. When
+the RevenueCat secret API key is configured, the subscriber's current state is fetched from the
+REST API after each event and reconciled product by product, never expiring a row the answer does
+not describe. The RevenueCat App
+User ID is the Supabase user id and `businesses.owner_user_id` is UNIQUE, so the Business is
+derived from the user, never sent. The app reads nothing from the mirror yet, `authenticated` may
+only SELECT its own snapshot rows, and nothing is deployed or applied by the phase. The mirror
+holds the end of access exactly as RevenueCat knows it: the 72-hour offline grace stays a device
+rule for a last-trusted-active state whose renewal cannot be verified, never a server extension of a
+confirmed expiration. `SUBSCRIPTION_ENFORCEMENT` stays `disabled`; server-side enforcement, the
+reminder / SMS suppression, the scheduled re-verification and the operator backfill tool are Phase
+6.5B.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain

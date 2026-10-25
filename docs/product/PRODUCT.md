@@ -1421,10 +1421,15 @@ build reads the real App Store products, prices, periods and trial information i
 Phase 6.4B (October 2026) lets that build run Apple Sandbox purchases and restores through Apple's
 own purchase sheet — from the developer preview only, for dedicated test accounts only, never for a
 professional's or a pilot's account, nothing visible to any professional, no product purchase
-enabled for the App Store, enforcement still disabled. Still to come, in their own phases: the
-device run of that validation (real trial, real restore, renewal and expiration), the account-scoped
-paywall routing, persisted entitlement evidence, the backend entitlement mirror and server-side
-enforcement, real terms and privacy URLs, account deletion and privacy-data export, Google Play.
+enabled for the App Store, enforcement still disabled. Phase 6.5A (October 2026) adds the server-side
+entitlement mirror: a secure RevenueCat webhook records every subscription event and keeps, per
+account and per environment, the current Plus entitlement — including the complimentary access
+granted individually to early professional testers, with no predetermined end — so the server can
+later decide without trusting the device. Nothing visible changes and enforcement stays disabled.
+Still to come, in their own phases: the device run of that validation (real trial, real restore,
+renewal and expiration), the account-scoped paywall routing, persisted entitlement evidence,
+server-side enforcement on the backend entitlement mirror, real terms and privacy URLs, account
+deletion and privacy-data export, Google Play.
 
 A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
 existing install keeps its local data; completing Business setup binds that data to the new
