@@ -26,6 +26,12 @@ import { paywallPreviewScenarios } from '../../testing/paywall-fixtures';
 import {
   APPLE_SANDBOX_NOTICE_TITLE,
   APPLE_SANDBOX_PREVIEW_DETAIL,
+  APPLE_SANDBOX_PURCHASE_CONFIRM_TITLE,
+  APPLE_SANDBOX_PURCHASE_TITLE,
+  APPLE_SANDBOX_READ_ONLY_NOTICE_TITLE,
+  APPLE_SANDBOX_READ_ONLY_PREVIEW_DETAIL,
+  APPLE_SANDBOX_RESTORE_CONFIRM_TITLE,
+  APPLE_SANDBOX_RESTORE_TITLE,
   LIVE_OFFERING_PREVIEW_KEY,
   LIVE_OFFERING_PREVIEW_TITLE,
   PaywallPreviewSheet,
@@ -33,6 +39,7 @@ import {
   TEST_PURCHASE_REFUSED_TITLE,
   TEST_PURCHASE_TITLE,
   TEST_RESTORE_CONFIRM_TITLE,
+  TEST_RESTORE_REFUSED_TITLE,
   TEST_RESTORE_TITLE,
 } from '../PaywallPreviewSheet';
 
@@ -858,14 +865,14 @@ describe('PaywallPreviewSheet — the Test Store purchase (Phase 6.3)', () => {
     }
   });
 
-  it('refuses safely when the source is not bound to the Test Store, without asking anything or moving the paywall', async () => {
+  it('refuses safely when the source is bound to neither testable store, without asking anything or moving the paywall', async () => {
     const source = createFakeSubscriptionSource({ offerings: true, transactions: true, store: 'app-store' });
     source.respondWith(NEVER);
     source.respondWithOffering(LIVE_OFFERING);
     const { view, alert } = await openLivePaywall(source);
     await press(view.getByTestId('paywall-subscribe'));
     expect(lastAlert(alert)).toMatchObject({ title: TEST_PURCHASE_REFUSED_TITLE });
-    expect(lastAlert(alert).message).toMatch(/Test Store/);
+    expect(lastAlert(alert).message).toMatch(/Test Store ou au mode Apple Sandbox/);
     expect(lastAlert(alert).buttons).toEqual([]);
     expect(source.calls.purchase).toEqual([]);
     expect(presentedModals(view)).toHaveLength(1);
@@ -975,32 +982,47 @@ describe('PaywallPreviewSheet — the Test Store restore (Phase 6.3)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Apple Sandbox mode (Phase 6.4A): a debug bundle bound to the App Store
+// Apple Sandbox mode (Phase 6.4A/B): a debug bundle bound to the App Store
 // (`APP_VARIANT=apple-sandbox`). The live entry draws the REAL App Store
-// offering — prices, periods, trial eligibility — and transacts nothing: the
-// primary action only explains, no restore link exists, the notice says
-// read-only. Loading, unavailable, retry and the entitled context are kept.
+// offering — prices, periods, trial eligibility. For a DEDICATED TEST ACCOUNT
+// it transacts through the same coordinator as the Test Store, with the
+// explicit `apple-sandbox-test` origin, after a confirmation naming the plan,
+// the store price, Apple's sheet and the account; every outcome is worded,
+// nothing reads as active without a verified entitlement; one modal at a time,
+// one purchase at a time. For ANY OTHER account it stays read-only: the action
+// only explains, no restore link, the read-only notice. Loading, unavailable,
+// retry and the entitled context are kept.
 // ---------------------------------------------------------------------------
 
-describe('PaywallPreviewSheet — Apple Sandbox mode (App Store, read-only)', () => {
-  /** A source bound to the App Store, as the wiring builds it in Apple Sandbox mode. */
-  function sandboxSource(offering: StorePaywallOffering = LIVE_OFFERING, verification: SubscriptionVerification = NEVER) {
-    const source = createFakeSubscriptionSource({ offerings: true, transactions: true, store: 'app-store' });
-    source.respondWith(verification);
-    source.respondWithOffering(offering);
-    return source;
-  }
+const TESTER_MODE = { testAccounts: ['lea@example.com'] };
+const OTHER_MODE = { testAccounts: ['someone-else@example.com'] };
 
-  it('labels the live entry as the read-only App Store offering, not as a Test Store purchase', async () => {
+/** A source bound to the App Store in Apple Sandbox mode, as the wiring builds it; the signed-in account is declared unless told otherwise. */
+function sandboxSource(
+  offering: StorePaywallOffering = LIVE_OFFERING,
+  verification: SubscriptionVerification = NEVER,
+  mode: { readonly testAccounts: readonly string[] } = TESTER_MODE,
+) {
+  const source = createFakeSubscriptionSource({ offerings: true, transactions: true, store: 'app-store', appleSandbox: mode });
+  source.respondWith(verification);
+  source.respondWithOffering(offering);
+  return source;
+}
+
+const SANDBOX_REQUEST = { reference: 'offering-1', plan: 'annual' as const };
+
+describe('PaywallPreviewSheet — Apple Sandbox mode, a dedicated test account (Phase 6.4B)', () => {
+  it('labels the live entry as the Apple Sandbox test bench for a dedicated test account', async () => {
     const source = sandboxSource();
     const view = await renderPreview(source);
     await openList(view);
     expect(view.getByText(APPLE_SANDBOX_PREVIEW_DETAIL)).toBeTruthy();
     expect(view.queryByText(/Achat de test sur le RevenueCat Test Store/)).toBeNull();
+    expect(view.queryByText(APPLE_SANDBOX_READ_ONLY_PREVIEW_DETAIL)).toBeNull();
     expect(source.calls.loadOffering).toEqual([]);
   });
 
-  it('draws the real offering — prices, trial, annual preselected — under the Apple Sandbox read-only notice, without any restore link', async () => {
+  it('draws the real offering — prices, trial, annual preselected — under the Apple Sandbox test notice, with the restore link', async () => {
     const source = sandboxSource();
     const { view } = await openLivePaywall(source);
     expect(source.calls.loadOffering).toEqual(['user-lea']);
@@ -1010,24 +1032,243 @@ describe('PaywallPreviewSheet — Apple Sandbox mode (App Store, read-only)', ()
     expect(view.queryByText('7 jours gratuits')).toBeTruthy();
     const notice = view.getByTestId('paywall-environment-notice');
     expect(within(notice).getByText(APPLE_SANDBOX_NOTICE_TITLE)).toBeTruthy();
-    expect(within(notice).getByText(/Aucun achat ni restauration/)).toBeTruthy();
+    expect(within(notice).getByText(/Feuille d’achat Apple native/)).toBeTruthy();
+    expect(within(notice).getByText(/pas d’APP_VARIANT/)).toBeTruthy();
     expect(within(notice).queryByText(TEST_PURCHASE_TITLE)).toBeNull();
-    expect(view.queryByTestId('paywall-link-restore')).toBeNull();
+    expect(view.getByTestId('paywall-link-restore')).toBeTruthy();
+    // Nothing transacted on opening or loading.
+    expect(source.calls.purchase).toEqual([]);
+    expect(source.calls.restore).toEqual([]);
     await closePaywall(view);
   });
 
-  it('the primary action never starts an Apple purchase: it explains the read-only mode, asks nothing, and the paywall stays', async () => {
+  it('asks for an explicit confirmation naming the plan, the store price, Apple’s sheet and the signed-in account; declining buys nothing', async () => {
     const source = sandboxSource();
     const { view, alert } = await openLivePaywall(source);
-    for (const plan of ['annual', 'monthly'] as const) {
-      await press(view.getByTestId(`paywall-plan-${plan}`));
-      await press(view.getByTestId('paywall-subscribe'));
-      expect(lastAlert(alert)).toMatchObject({ title: TEST_PURCHASE_REFUSED_TITLE, buttons: [] });
-      expect(lastAlert(alert).message).toMatch(/Apple Sandbox, lecture seule — aucun achat/);
-      expect(view.getByTestId('paywall-preview-screen')).toBeTruthy();
+    await press(view.getByTestId('paywall-subscribe'));
+    const confirmation = lastAlert(alert);
+    expect(confirmation.title).toBe(APPLE_SANDBOX_PURCHASE_TITLE);
+    expect(plain(confirmation.message ?? '')).toContain('Annuel · $49.99 par an');
+    expect(confirmation.message).toMatch(/Feuille d’achat Apple/);
+    expect(confirmation.message).toMatch(/Sandbox tester/);
+    expect(confirmation.message).toContain('Compte : lea@example.com');
+    expect(confirmation.message).not.toMatch(/Test Store/);
+    expect(confirmation.buttons.map((button) => button.text)).toEqual(['Annuler', APPLE_SANDBOX_PURCHASE_CONFIRM_TITLE]);
+    expect(source.calls.purchase).toEqual([]);
+    expect(presentedModals(view)).toHaveLength(1);
+
+    await pressAlertButton(alert, 'Annuler');
+    await settleSheetTransition();
+    expect(source.calls.purchase).toEqual([]);
+    expect(view.getByTestId('paywall-preview-screen')).toBeTruthy();
+    await closePaywall(view);
+  });
+
+  /** Confirms the Apple Sandbox purchase: the paywall slides down, the sheet buys once it is gone. */
+  async function confirmSandboxPurchase(view: View, alert: jest.SpyInstance) {
+    await press(view.getByTestId('paywall-subscribe'));
+    await pressAlertButton(alert, APPLE_SANDBOX_PURCHASE_CONFIRM_TITLE);
+    await settleSheetTransition();
+  }
+
+  it('on confirmation the paywall Modal is dismissed FIRST, then the ONE purchase starts with the explicit Apple Sandbox origin, over an empty screen', async () => {
+    const presentedAtPurchase: number[] = [];
+    let view: View | undefined;
+    const source = createFakeSubscriptionSource({
+      offerings: true,
+      store: 'app-store',
+      appleSandbox: TESTER_MODE,
+      purchase: () => {
+        presentedAtPurchase.push(presentedModals(view!).length);
+        return Promise.resolve({ kind: 'cancelled' });
+      },
+    });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const opened = await openLivePaywall(source);
+    view = opened.view;
+    const { alert } = opened;
+
+    mockModalDismissals.hold = true;
+    await press(view.getByTestId('paywall-subscribe'));
+    await pressAlertButton(alert, APPLE_SANDBOX_PURCHASE_CONFIRM_TITLE);
+    await settleSheetTransition();
+    expectNothingPresented(view);
+    expect(source.calls.purchase).toEqual([]);
+    await act(async () => {
+      mockModalDismissals.pending.splice(0).forEach((dismissed) => dismissed());
+    });
+    await settleSheetTransition();
+    // The provider authorized the explicit Apple Sandbox test (iOS, __DEV__, the mode, the declared account) and asked the source once.
+    expect(source.calls.purchase).toEqual([{ userId: 'user-lea', request: SANDBOX_REQUEST }]);
+    expect(presentedAtPurchase).toEqual([0]);
+    expect(lastAlert(alert).title).toBe('Achat annulé');
+    await returnFromResult(view, alert);
+  });
+
+  it('a verified entitlement after the Apple Sandbox purchase: « Abonnement activé », the CustomerInfo of the store applied, the entitled context returns', async () => {
+    const source = sandboxSource();
+    source.respondWithPurchase({ kind: 'completed', verification: ACTIVE });
+    const { view, alert } = await openLivePaywall(source);
+    await confirmSandboxPurchase(view, alert);
+    expect(source.calls.purchase).toEqual([{ userId: 'user-lea', request: SANDBOX_REQUEST }]);
+    expectNothingPresented(view);
+    expect(lastAlert(alert)).toMatchObject({ title: 'Abonnement activé', message: 'Votre accès BeautIzzy Plus est actif.' });
+    await returnFromResult(view, alert);
+    expect(view.getByText('Votre abonnement BeautIzzy Plus est actif.')).toBeTruthy();
+    expect(view.queryByTestId('paywall-subscribe')).toBeNull();
+    expect(source.calls.loadOffering).toEqual(['user-lea', 'user-lea']);
+  });
+
+  it('confirms the SELECTED plan: the monthly package, with the monthly store price', async () => {
+    const source = sandboxSource();
+    source.respondWithPurchase({ kind: 'cancelled' });
+    const { view, alert } = await openLivePaywall(source);
+    await press(view.getByTestId('paywall-plan-monthly'));
+    await press(view.getByTestId('paywall-subscribe'));
+    expect(plain(lastAlert(alert).message ?? '')).toContain('Mensuel · $4.99 par mois');
+    await pressAlertButton(alert, APPLE_SANDBOX_PURCHASE_CONFIRM_TITLE);
+    await settleSheetTransition();
+    expect(source.calls.purchase).toEqual([{ userId: 'user-lea', request: { reference: 'offering-1', plan: 'monthly' } }]);
+    await returnFromResult(view, alert);
+  });
+
+  it.each([
+    [{ kind: 'cancelled' }, 'Achat annulé'],
+    [{ kind: 'pending' }, 'Achat en attente'],
+    [{ kind: 'completed', verification: UNAVAILABLE }, 'Achat reçu'],
+    [{ kind: 'failed', reason: 'store-problem' }, 'Achat impossible'],
+    [{ kind: 'failed', reason: 'network' }, 'Achat impossible'],
+    [{ kind: 'failed', reason: 'not-allowed' }, 'Achat impossible'],
+    [{ kind: 'failed', reason: 'already-owned' }, 'Achat impossible'],
+  ] as const satisfies readonly (readonly [StorePurchaseOutcome, string])[])(
+    'the outcome %o is worded « %s », nothing reads as active, no record is made up, and the paywall is reachable again',
+    async (outcome, title) => {
+      const source = sandboxSource();
+      source.respondWithPurchase(outcome);
+      const { view, alert } = await openLivePaywall(source);
+      await confirmSandboxPurchase(view, alert);
+      expect(lastAlert(alert).title).toBe(title);
+      expect(lastAlert(alert).message).not.toMatch(/activé|actif/);
+      await returnFromResult(view, alert);
+      expect(view.queryByText('Votre abonnement BeautIzzy Plus est actif.')).toBeNull();
+      expect(view.getByTestId('paywall-subscribe').props.accessibilityState?.disabled).toBeFalsy();
+      await closePaywall(view);
+    },
+  );
+
+  it('« Achat reçu » offers « Vérifier à nouveau »: a re-verification, never a second purchase', async () => {
+    const source = sandboxSource();
+    source.respondWithPurchase({ kind: 'completed', verification: UNAVAILABLE });
+    const { view, alert } = await openLivePaywall(source);
+    await confirmSandboxPurchase(view, alert);
+    expect(lastAlert(alert).buttons.map((button) => button.text)).toEqual([CHECKOUT_VERIFY_AGAIN_TITLE, 'OK']);
+    source.respondWith(ACTIVE);
+    await pressAlertButton(alert, CHECKOUT_VERIFY_AGAIN_TITLE);
+    expect(source.calls.purchase).toHaveLength(1);
+    expect(source.calls.verify).toEqual(['user-lea', 'user-lea']);
+    expect(lastAlert(alert).title).toBe('Abonnement activé');
+    await returnFromResult(view, alert);
+  });
+
+  it('while Apple’s sheet is up, nothing of ours is presented and a second purchase cannot start; the result waits for the store', async () => {
+    let release: ((outcome: StorePurchaseOutcome) => void) | undefined;
+    const source = createFakeSubscriptionSource({
+      offerings: true,
+      store: 'app-store',
+      appleSandbox: TESTER_MODE,
+      purchase: () => new Promise((resolve) => (release = resolve)),
+    });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const { view, alert } = await openLivePaywall(source);
+    await confirmSandboxPurchase(view, alert);
+    expectNothingPresented(view);
+    expect(source.calls.purchase).toHaveLength(1);
+    const alerts = alert.mock.calls.length;
+    await press(view.getByLabelText('Ouvrir l’aperçu'));
+    await settleSheetTransition();
+    expectNothingPresented(view);
+    expect(alert.mock.calls.length).toBe(alerts);
+    expect(source.calls.purchase).toHaveLength(1);
+    await act(async () => release!({ kind: 'cancelled' }));
+    expect(lastAlert(alert).title).toBe('Achat annulé');
+    await returnFromResult(view, alert);
+    expect(source.calls.purchase).toHaveLength(1);
+  });
+
+  it('explains the Apple Sandbox restore and asks for confirmation naming the account; declining restores nothing', async () => {
+    const source = sandboxSource();
+    const { view, alert } = await openLivePaywall(source);
+    await press(view.getByTestId('paywall-link-restore'));
+    const confirmation = lastAlert(alert);
+    expect(confirmation.title).toBe(APPLE_SANDBOX_RESTORE_TITLE);
+    expect(confirmation.message).toMatch(/Sandbox tester/);
+    expect(confirmation.message).toContain('Compte : lea@example.com');
+    expect(confirmation.buttons.map((button) => button.text)).toEqual(['Annuler', APPLE_SANDBOX_RESTORE_CONFIRM_TITLE]);
+    await pressAlertButton(alert, 'Annuler');
+    expect(source.calls.restore).toEqual([]);
+    await closePaywall(view);
+  });
+
+  it.each([
+    [{ kind: 'completed', verification: ACTIVE }, 'Achats restaurés'],
+    [{ kind: 'completed', verification: NEVER }, 'Aucun achat à restaurer'],
+    [{ kind: 'completed', verification: UNAVAILABLE }, 'Restauration reçue'],
+    [{ kind: 'cancelled' }, 'Achat annulé'],
+    [{ kind: 'failed', reason: 'network' }, 'Restauration impossible'],
+  ] as const satisfies readonly (readonly [StoreRestoreOutcome, string])[])(
+    'confirming runs the user-initiated Apple Sandbox restore in place and words %o as « %s »',
+    async (outcome, title) => {
+      const source = sandboxSource();
+      source.respondWithRestore(outcome);
+      const { view, alert } = await openLivePaywall(source);
+      await press(view.getByTestId('paywall-link-restore'));
+      await pressAlertButton(alert, APPLE_SANDBOX_RESTORE_CONFIRM_TITLE);
+      expect(source.calls.restore).toEqual(['user-lea']);
+      expect(lastAlert(alert).title).toBe(title);
       expect(presentedModals(view)).toHaveLength(1);
-    }
-    expect(alert).not.toHaveBeenCalledWith(TEST_PURCHASE_TITLE, expect.anything(), expect.anything());
+      if (outcome.kind === 'completed' && outcome.verification === ACTIVE) {
+        expect(view.getByText('Votre abonnement BeautIzzy Plus est actif.')).toBeTruthy();
+      } else {
+        expect(view.queryByText('Votre abonnement BeautIzzy Plus est actif.')).toBeNull();
+        await closePaywall(view);
+      }
+    },
+  );
+
+  it('while the restore runs, the primary action is disabled and a second tap does nothing, then frees', async () => {
+    let release: ((outcome: StoreRestoreOutcome) => void) | undefined;
+    const source = createFakeSubscriptionSource({
+      offerings: true,
+      store: 'app-store',
+      appleSandbox: TESTER_MODE,
+      restore: () => new Promise((resolve) => (release = resolve)),
+    });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const { view, alert } = await openLivePaywall(source);
+    await press(view.getByTestId('paywall-link-restore'));
+    await pressAlertButton(alert, APPLE_SANDBOX_RESTORE_CONFIRM_TITLE);
+    const action = view.getByTestId('paywall-subscribe');
+    expect(action.props.accessibilityState?.disabled).toBe(true);
+    expect(within(action).getByText('Restauration en cours…')).toBeTruthy();
+    const alerts = alert.mock.calls.length;
+    await press(action);
+    await press(view.getByTestId('paywall-link-restore'));
+    expect(alert.mock.calls.length).toBe(alerts);
+    expect(source.calls.restore).toHaveLength(1);
+    await act(async () => release!({ kind: 'cancelled' }));
+    expect(view.getByTestId('paywall-subscribe').props.accessibilityState?.disabled).toBeFalsy();
+    await closePaywall(view);
+  });
+
+  it('an entitled test account meets the entitled context: nothing to sell, nothing to buy', async () => {
+    const source = sandboxSource(LIVE_OFFERING, ACTIVE);
+    const { view } = await openLivePaywall(source);
+    expect(view.queryByTestId('paywall-plans')).toBeNull();
+    expect(view.queryByTestId('paywall-subscribe')).toBeNull();
+    expect(view.getByTestId('paywall-continue')).toBeTruthy();
     expect(source.calls.purchase).toEqual([]);
     expect(source.calls.restore).toEqual([]);
     await closePaywall(view);
@@ -1038,6 +1279,7 @@ describe('PaywallPreviewSheet — Apple Sandbox mode (App Store, read-only)', ()
     let loads = 0;
     const source = createFakeSubscriptionSource({
       store: 'app-store',
+      appleSandbox: TESTER_MODE,
       transactions: true,
       loadOffering: () => {
         loads += 1;
@@ -1050,13 +1292,10 @@ describe('PaywallPreviewSheet — Apple Sandbox mode (App Store, read-only)', ()
     const { view } = await openLivePaywall(source);
     expect(view.getByTestId('paywall-plans-loading')).toBeTruthy();
     expect(view.getByTestId('paywall-subscribe').props.accessibilityState?.disabled).toBe(true);
-
     await act(async () => {
       release!({ status: 'unavailable', reason: 'store-unavailable' });
     });
     expect(view.getByTestId('paywall-plans-unavailable')).toBeTruthy();
-    expect(view.queryByTestId('paywall-link-restore')).toBeNull();
-
     await press(view.getByTestId('paywall-retry-offering'));
     expect(loads).toBe(2);
     await act(async () => {
@@ -1068,8 +1307,98 @@ describe('PaywallPreviewSheet — Apple Sandbox mode (App Store, read-only)', ()
     await closePaywall(view);
   });
 
-  it('an entitled account meets the entitled context: nothing to sell, nothing to buy, nothing to restore', async () => {
-    const source = sandboxSource(LIVE_OFFERING, ACTIVE);
+  it('never transacts on opening, loading, closing or withdrawing the live entry', async () => {
+    const source = sandboxSource();
+    const { view } = await openLivePaywall(source);
+    await closePaywall(view);
+    await openScenario(view, LIVE_OFFERING_PREVIEW_KEY);
+    await closePaywall(view);
+    await press(view.getByLabelText('Retirer l’aperçu'));
+    await settleSheetTransition();
+    expectNothingPresented(view);
+    expect(source.calls.purchase).toEqual([]);
+    expect(source.calls.restore).toEqual([]);
+  });
+
+  it('refuses safely outside a development bundle, even for a dedicated test account', async () => {
+    const source = sandboxSource();
+    const { view, alert } = await openLivePaywall(source);
+    const flags = globalThis as unknown as { __DEV__: boolean };
+    flags.__DEV__ = false;
+    try {
+      await press(view.getByTestId('paywall-subscribe'));
+      await press(view.getByTestId('paywall-link-restore'));
+    } finally {
+      flags.__DEV__ = true;
+    }
+    expect(alert.mock.calls.map((call) => call[0])).toEqual([TEST_PURCHASE_REFUSED_TITLE, TEST_RESTORE_REFUSED_TITLE]);
+    expect(source.calls.purchase).toEqual([]);
+    expect(source.calls.restore).toEqual([]);
+    await closePaywall(view);
+  });
+});
+
+describe('PaywallPreviewSheet — Apple Sandbox mode, any other account (read-only)', () => {
+  it('labels the live entry as read-only for an undeclared account', async () => {
+    const source = sandboxSource(LIVE_OFFERING, NEVER, OTHER_MODE);
+    const view = await renderPreview(source);
+    await openList(view);
+    expect(view.getByText(APPLE_SANDBOX_READ_ONLY_PREVIEW_DETAIL)).toBeTruthy();
+    expect(view.queryByText(APPLE_SANDBOX_PREVIEW_DETAIL)).toBeNull();
+    expect(source.calls.loadOffering).toEqual([]);
+  });
+
+  it.each([
+    ['an undeclared account', OTHER_MODE],
+    ['a mode declaring nobody', { testAccounts: [] }],
+  ])('draws the real offering under the read-only notice, without any restore link, for %s', async (_label, mode) => {
+    const source = sandboxSource(LIVE_OFFERING, NEVER, mode);
+    const { view } = await openLivePaywall(source);
+    expect(plain(String(view.getByTestId('paywall-plan-annual-price').props.children))).toBe('$49.99');
+    expect(view.getByTestId('paywall-plan-annual').props.accessibilityState.selected).toBe(true);
+    const notice = view.getByTestId('paywall-environment-notice');
+    expect(within(notice).getByText(APPLE_SANDBOX_READ_ONLY_NOTICE_TITLE)).toBeTruthy();
+    expect(within(notice).getByText(/aucun achat, aucune restauration/)).toBeTruthy();
+    expect(within(notice).queryByText(APPLE_SANDBOX_NOTICE_TITLE)).toBeNull();
+    expect(view.queryByTestId('paywall-link-restore')).toBeNull();
+    await closePaywall(view);
+  });
+
+  it('the primary action never starts an Apple purchase: it explains the undeclared account, asks nothing, and the paywall stays', async () => {
+    const source = sandboxSource(LIVE_OFFERING, NEVER, OTHER_MODE);
+    const { view, alert } = await openLivePaywall(source);
+    for (const plan of ['annual', 'monthly'] as const) {
+      await press(view.getByTestId(`paywall-plan-${plan}`));
+      await press(view.getByTestId('paywall-subscribe'));
+      expect(lastAlert(alert)).toMatchObject({ title: TEST_PURCHASE_REFUSED_TITLE, buttons: [] });
+      expect(lastAlert(alert).message).toMatch(/compte de test dédié/);
+      expect(lastAlert(alert).message).toMatch(/Aucun achat/);
+      expect(view.getByTestId('paywall-preview-screen')).toBeTruthy();
+      expect(presentedModals(view)).toHaveLength(1);
+    }
+    expect(alert).not.toHaveBeenCalledWith(APPLE_SANDBOX_PURCHASE_TITLE, expect.anything(), expect.anything());
+    expect(alert).not.toHaveBeenCalledWith(TEST_PURCHASE_TITLE, expect.anything(), expect.anything());
+    expect(source.calls.purchase).toEqual([]);
+    expect(source.calls.restore).toEqual([]);
+    await closePaywall(view);
+  });
+
+  it('an App Store source WITHOUT Apple Sandbox mode (a release shape) is refused as not testable: nothing is asked', async () => {
+    const source = createFakeSubscriptionSource({ offerings: true, transactions: true, store: 'app-store' });
+    source.respondWith(NEVER);
+    source.respondWithOffering(LIVE_OFFERING);
+    const { view, alert } = await openLivePaywall(source);
+    expect(view.queryByTestId('paywall-link-restore')).toBeNull();
+    await press(view.getByTestId('paywall-subscribe'));
+    expect(lastAlert(alert)).toMatchObject({ title: TEST_PURCHASE_REFUSED_TITLE, buttons: [] });
+    expect(lastAlert(alert).message).toMatch(/Apple Sandbox/);
+    expect(source.calls.purchase).toEqual([]);
+    expect(source.calls.restore).toEqual([]);
+    await closePaywall(view);
+  });
+
+  it('an entitled undeclared account meets the entitled context: nothing to sell, nothing to restore', async () => {
+    const source = sandboxSource(LIVE_OFFERING, ACTIVE, OTHER_MODE);
     const { view } = await openLivePaywall(source);
     expect(view.queryByTestId('paywall-plans')).toBeNull();
     expect(view.queryByTestId('paywall-subscribe')).toBeNull();
@@ -1078,16 +1407,5 @@ describe('PaywallPreviewSheet — Apple Sandbox mode (App Store, read-only)', ()
     expect(source.calls.purchase).toEqual([]);
     expect(source.calls.restore).toEqual([]);
     await closePaywall(view);
-  });
-
-  it('closing the live entry, or withdrawing the preview, transacts nothing either', async () => {
-    const source = sandboxSource();
-    const { view } = await openLivePaywall(source);
-    await closePaywall(view);
-    await press(view.getByLabelText('Retirer l’aperçu'));
-    await settleSheetTransition();
-    expectNothingPresented(view);
-    expect(source.calls.purchase).toEqual([]);
-    expect(source.calls.restore).toEqual([]);
   });
 });

@@ -73,9 +73,16 @@ or App Store build, bound to the Apple key, refuses every purchase (`not-enabled
 purchase entry point — no real-money transaction can start from a release until the Apple
 Sandbox validation phase enables the App Store deliberately. Phase 6.4A adds a DEBUG-only Apple
 Sandbox mode (`APP_VARIANT=apple-sandbox`, `docs/architecture/ARCHITECTURE.md` §10) that reads the
-real App Store products with the same Apple key and the same bundle identifier as this release — on
-the SIMULATOR only: installed on a device, a debug build of `com.mortyflex.sourisapp` collides with
-(and may replace) the TestFlight installation. It changes nothing in a release build.
+real App Store products with the same Apple key and the same bundle identifier as this release.
+Phase 6.4B lets that mode purchase and restore — from the developer preview only, for the
+dedicated test accounts declared in `EXPO_PUBLIC_REVENUECAT_APPLE_SANDBOX_TEST_ACCOUNTS` only, on a
+development-signed build. The simulator does not fetch the App Store products, so the test runs on
+a PHYSICAL iPhone: a debug build of `com.mortyflex.sourisapp` installed on a device replaces the
+TestFlight installation of the same bundle identifier — use a development iPhone, never the pilot
+phone, and sign the device's Sandbox Account in with an Apple Sandbox tester, never a real Apple ID.
+Neither variable nor mode changes anything in a release build: `PURCHASABLE_STORES` still names the
+Test Store only, and the authorization rule requires `__DEV__`. Do not push the test-account
+variable to EAS; a release ignores it anyway.
 
 ## 3. Supabase Dashboard (manual)
 

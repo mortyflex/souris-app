@@ -6,8 +6,10 @@
 import {
   APP_STORE_BUNDLE_IDENTIFIER,
   APPLE_SANDBOX_APP_VARIANT,
-  APPLE_SANDBOX_MODE_NOTICE,
+  APPLE_SANDBOX_TEST_ACCOUNTS_VARIABLE,
+  describeAppleSandboxMode,
   describeUnconfiguredRevenueCat,
+  parseAppleSandboxTestAccounts,
   resolveRevenueCatConfiguration,
   type RawRevenueCatEnvironment,
   type RevenueCatUnconfiguredReason,
@@ -26,6 +28,7 @@ describe('resolveRevenueCatConfiguration', () => {
         store: 'test-store',
         apiKey: TEST_STORE_KEY,
         appleSandbox: false,
+        appleSandboxTestAccounts: [],
       });
     }
   });
@@ -36,6 +39,7 @@ describe('resolveRevenueCatConfiguration', () => {
       store: 'app-store',
       apiKey: APPLE_KEY,
       appleSandbox: false,
+      appleSandboxTestAccounts: [],
     });
   });
 
@@ -100,6 +104,7 @@ describe('resolveRevenueCatConfiguration', () => {
       store: 'test-store',
       apiKey: TEST_STORE_KEY,
       appleSandbox: false,
+      appleSandboxTestAccounts: [],
     });
     expect(resolveRevenueCatConfiguration({ testStoreApiKey: 'test_abc def', iosApiKey: undefined }, { platform: 'ios', debug: true })).toEqual({
       kind: 'unconfigured',
@@ -150,6 +155,7 @@ describe('resolveRevenueCatConfiguration — Apple Sandbox mode', () => {
       store: 'app-store',
       apiKey: APPLE_KEY,
       appleSandbox: true,
+      appleSandboxTestAccounts: [],
     });
   });
 
@@ -184,6 +190,7 @@ describe('resolveRevenueCatConfiguration — Apple Sandbox mode', () => {
           store: 'test-store',
           apiKey: TEST_STORE_KEY,
           appleSandbox: false,
+          appleSandboxTestAccounts: [],
         });
       }
     }
@@ -195,12 +202,14 @@ describe('resolveRevenueCatConfiguration — Apple Sandbox mode', () => {
       store: 'app-store',
       apiKey: APPLE_KEY,
       appleSandbox: false,
+      appleSandboxTestAccounts: [],
     });
     expect(resolveRevenueCatConfiguration(BOTH, { ...SANDBOX_BUILD, debug: false, bundleIdentifier: 'com.mortyflex.sourisapp.dev' })).toEqual({
       kind: 'configured',
       store: 'app-store',
       apiKey: APPLE_KEY,
       appleSandbox: false,
+      appleSandboxTestAccounts: [],
     });
     expect(resolveRevenueCatConfiguration(BOTH, { ...SANDBOX_BUILD, debug: false, platform: 'android' })).toEqual({
       kind: 'unconfigured',
@@ -216,8 +225,62 @@ describe('resolveRevenueCatConfiguration — Apple Sandbox mode', () => {
       expect(description).not.toContain(TEST_STORE_KEY);
     }
     expect(describeUnconfiguredRevenueCat('apple-sandbox-wrong-bundle')).toContain(APP_STORE_BUNDLE_IDENTIFIER);
-    expect(APPLE_SANDBOX_MODE_NOTICE).toContain('APP_VARIANT=apple-sandbox');
-    expect(APPLE_SANDBOX_MODE_NOTICE).toMatch(/purchases and restores stay disabled/);
-    expect(APPLE_SANDBOX_MODE_NOTICE).not.toMatch(/appl_|test_/);
+    for (const notice of [describeAppleSandboxMode(0), describeAppleSandboxMode(2)]) {
+      expect(notice).toContain('APP_VARIANT=apple-sandbox');
+      expect(notice).toContain(APPLE_SANDBOX_TEST_ACCOUNTS_VARIABLE);
+      expect(notice).toMatch(/decided by the app's signature/);
+      expect(notice).not.toMatch(/appl_|test_/);
+    }
+    expect(describeAppleSandboxMode(0)).toMatch(/no dedicated test account is declared.*stay refused/);
+    expect(describeAppleSandboxMode(2)).toMatch(/2 dedicated test account\(s\) declared.*development preview only/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Apple Sandbox test accounts (Phase 6.4B): declared in ONE variable, read in
+// this boundary only, normalized, never logged; carried by the configuration
+// in Apple Sandbox mode ONLY — a Test Store or release configuration carries
+// an empty list whatever the variable says.
+// ---------------------------------------------------------------------------
+
+describe('Apple Sandbox test accounts', () => {
+  it('names the variable', () => {
+    expect(APPLE_SANDBOX_TEST_ACCOUNTS_VARIABLE).toBe('EXPO_PUBLIC_REVENUECAT_APPLE_SANDBOX_TEST_ACCOUNTS');
+  });
+
+  it('parses a comma- or whitespace-separated list: trimmed, lowercase, blanks and duplicates dropped', () => {
+    expect(parseAppleSandboxTestAccounts(undefined)).toEqual([]);
+    expect(parseAppleSandboxTestAccounts('')).toEqual([]);
+    expect(parseAppleSandboxTestAccounts(' , ,, ')).toEqual([]);
+    expect(parseAppleSandboxTestAccounts('Tester@Example.com')).toEqual(['tester@example.com']);
+    expect(parseAppleSandboxTestAccounts(' a@x.io , B@X.IO,,user-1\n a@x.io ')).toEqual(['a@x.io', 'b@x.io', 'user-1']);
+  });
+
+  it('carries the declared accounts in Apple Sandbox mode', () => {
+    const configuration = resolveRevenueCatConfiguration({ ...BOTH, appleSandboxTestAccounts: 'Tester@Example.com, user-2' }, SANDBOX_BUILD);
+    expect(configuration).toEqual({
+      kind: 'configured',
+      store: 'app-store',
+      apiKey: APPLE_KEY,
+      appleSandbox: true,
+      appleSandboxTestAccounts: ['tester@example.com', 'user-2'],
+    });
+  });
+
+  it('carries an empty list in Apple Sandbox mode without the variable: nobody may transact', () => {
+    expect(resolveRevenueCatConfiguration(BOTH, SANDBOX_BUILD)).toMatchObject({ appleSandbox: true, appleSandboxTestAccounts: [] });
+    expect(resolveRevenueCatConfiguration({ ...BOTH, appleSandboxTestAccounts: '  ' }, SANDBOX_BUILD)).toMatchObject({ appleSandboxTestAccounts: [] });
+  });
+
+  it('ignores the variable outside Apple Sandbox mode: the Test Store and every release carry an empty list', () => {
+    const declared = { ...BOTH, appleSandboxTestAccounts: 'tester@example.com' };
+    expect(resolveRevenueCatConfiguration(declared, { platform: 'ios', debug: true })).toMatchObject({ store: 'test-store', appleSandboxTestAccounts: [] });
+    expect(resolveRevenueCatConfiguration(declared, { platform: 'android', debug: true })).toMatchObject({ store: 'test-store', appleSandboxTestAccounts: [] });
+    expect(resolveRevenueCatConfiguration(declared, { platform: 'ios', debug: false })).toMatchObject({ store: 'app-store', appleSandbox: false, appleSandboxTestAccounts: [] });
+    expect(resolveRevenueCatConfiguration(declared, { ...SANDBOX_BUILD, debug: false })).toMatchObject({ appleSandbox: false, appleSandboxTestAccounts: [] });
+    expect(resolveRevenueCatConfiguration(declared, { ...SANDBOX_BUILD, bundleIdentifier: 'com.mortyflex.sourisapp.dev' })).toEqual({
+      kind: 'unconfigured',
+      reason: 'apple-sandbox-wrong-bundle',
+    });
   });
 });

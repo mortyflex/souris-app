@@ -6,7 +6,7 @@
 
 import { act, render } from '@testing-library/react-native';
 import { useEffect } from 'react';
-import { Text } from 'react-native';
+import { Platform, Text } from 'react-native';
 
 import type { SubscriptionStatus, SubscriptionVerification } from '@/domain/access';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
@@ -373,5 +373,169 @@ describe('BusinessAccessProvider — a restore is user-initiated only', () => {
     });
     expect(stateOf(view)).toBe('never-subscribed:verified:idle');
     expect(source.calls.restore).toEqual(['user-lea', 'user-lea']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Apple Sandbox test (Phase 6.4B): a source carrying `appleSandbox` is a debug
+// bundle bound to the App Store. THE authorization rule is applied HERE, with
+// the live platform and compilation: a purchase passes only as an explicit
+// Apple Sandbox test, on iOS, in a debug bundle, for a declared test account;
+// a restore passes for a declared account only. A product purchase, a release
+// shape, Android or an undeclared account is refused without touching the
+// source. The outcome then follows the same pipeline as every transaction.
+// ---------------------------------------------------------------------------
+
+describe('BusinessAccessProvider — Apple Sandbox test', () => {
+  const TESTER_MODE = { testAccounts: [fakeUser.email!.toLowerCase()] };
+  const sandboxSource = (mode = TESTER_MODE) => {
+    const source = createFakeSubscriptionSource({ transactions: true, store: 'app-store', appleSandbox: mode });
+    source.respondWith(NEVER);
+    return source;
+  };
+
+  it('exposes the mode of the source, and none for a Test Store or release-shaped source', async () => {
+    await renderAccess({ source: sandboxSource() });
+    expect(latest?.store).toBe('app-store');
+    expect(latest?.appleSandbox).toEqual(TESTER_MODE);
+    await renderAccess({ source: createFakeSubscriptionSource({ transactions: true, store: 'app-store' }) });
+    expect(latest?.appleSandbox).toBeUndefined();
+  });
+
+  it('authorizes the explicit Apple Sandbox test purchase of a declared account and applies its verification through the pipeline', async () => {
+    const source = sandboxSource();
+    source.respondWithPurchase({ kind: 'completed', verification: ACTIVE });
+    const view = await renderAccess({ source, enforcement: 'enabled' });
+    expect(stateOf(view)).toBe('never-subscribed:verified:idle');
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await latest!.purchase(REQUEST, 'apple-sandbox-test');
+    });
+    expect(outcome).toEqual({ kind: 'completed', verification: ACTIVE });
+    expect(source.calls.purchase).toEqual([{ userId: 'user-lea', request: REQUEST }]);
+    expect(stateOf(view)).toBe('entitled:verified:idle');
+    expect(latest?.verification).toEqual(ACTIVE);
+  });
+
+  it('matches the declared account by id as well', async () => {
+    const source = sandboxSource({ testAccounts: [fakeUser.id] });
+    source.respondWithPurchase({ kind: 'cancelled' });
+    await renderAccess({ source });
+    await expect(latest!.purchase(REQUEST, 'apple-sandbox-test')).resolves.toEqual({ kind: 'cancelled' });
+    expect(source.calls.purchase).toHaveLength(1);
+  });
+
+  it('refuses a PRODUCT purchase in Apple Sandbox mode (not-enabled): the opt-in is never implied', async () => {
+    const source = sandboxSource();
+    await renderAccess({ source });
+    await expect(latest!.purchase(REQUEST)).resolves.toEqual({ kind: 'failed', reason: 'not-enabled' });
+    await expect(latest!.purchase(REQUEST, 'product')).resolves.toEqual({ kind: 'failed', reason: 'not-enabled' });
+    expect(source.calls.purchase).toEqual([]);
+  });
+
+  it('refuses the Apple Sandbox test for an undeclared account, and for a mode declaring nobody (not-test-account)', async () => {
+    const undeclared = sandboxSource({ testAccounts: ['someone-else@example.com'] });
+    await renderAccess({ source: undeclared });
+    await expect(latest!.purchase(REQUEST, 'apple-sandbox-test')).resolves.toEqual({ kind: 'failed', reason: 'not-test-account' });
+    expect(undeclared.calls.purchase).toEqual([]);
+    const nobody = sandboxSource({ testAccounts: [] });
+    await renderAccess({ source: nobody });
+    await expect(latest!.purchase(REQUEST, 'apple-sandbox-test')).resolves.toEqual({ kind: 'failed', reason: 'not-test-account' });
+    expect(nobody.calls.purchase).toEqual([]);
+  });
+
+  it('refuses the Apple Sandbox test against a source WITHOUT the mode (a release bound to the App Store), whatever the origin', async () => {
+    const release = createFakeSubscriptionSource({ transactions: true, store: 'app-store' });
+    await renderAccess({ source: release });
+    await expect(latest!.purchase(REQUEST, 'apple-sandbox-test')).resolves.toEqual({ kind: 'failed', reason: 'not-enabled' });
+    expect(release.calls.purchase).toEqual([]);
+  });
+
+  it('refuses the Apple Sandbox test outside a debug bundle, even for a declared account', async () => {
+    const source = sandboxSource();
+    await renderAccess({ source });
+    const flags = globalThis as unknown as { __DEV__: boolean };
+    flags.__DEV__ = false;
+    try {
+      await expect(latest!.purchase(REQUEST, 'apple-sandbox-test')).resolves.toEqual({ kind: 'failed', reason: 'not-enabled' });
+    } finally {
+      flags.__DEV__ = true;
+    }
+    expect(source.calls.purchase).toEqual([]);
+  });
+
+  it('refuses the Apple Sandbox test off iOS, even for a declared account', async () => {
+    const source = sandboxSource();
+    await renderAccess({ source });
+    const os = Platform.OS;
+    (Platform as { OS: string }).OS = 'android';
+    try {
+      await expect(latest!.purchase(REQUEST, 'apple-sandbox-test')).resolves.toEqual({ kind: 'failed', reason: 'not-enabled' });
+    } finally {
+      (Platform as { OS: string }).OS = os;
+    }
+    expect(source.calls.purchase).toEqual([]);
+  });
+
+  it('leaves the Test Store untouched: a product purchase passes, the origin changes nothing', async () => {
+    const source = createFakeSubscriptionSource({ transactions: true });
+    source.respondWith(NEVER);
+    source.respondWithPurchase({ kind: 'cancelled' });
+    await renderAccess({ source });
+    await expect(latest!.purchase(REQUEST)).resolves.toEqual({ kind: 'cancelled' });
+    await expect(latest!.purchase(REQUEST, 'apple-sandbox-test')).resolves.toEqual({ kind: 'cancelled' });
+    expect(source.calls.purchase).toHaveLength(2);
+  });
+
+  it('restores in Apple Sandbox mode for a declared account only; a release-shaped source keeps restoring for anyone', async () => {
+    const declared = sandboxSource();
+    declared.respondWithRestore({ kind: 'completed', verification: ACTIVE });
+    const view = await renderAccess({ source: declared, enforcement: 'enabled' });
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await latest!.restore();
+    });
+    expect(outcome).toEqual({ kind: 'completed', verification: ACTIVE });
+    expect(declared.calls.restore).toEqual(['user-lea']);
+    expect(stateOf(view)).toBe('entitled:verified:idle');
+
+    const undeclared = sandboxSource({ testAccounts: ['someone-else@example.com'] });
+    await renderAccess({ source: undeclared });
+    await expect(latest!.restore()).resolves.toEqual({ kind: 'failed', reason: 'not-test-account' });
+    expect(undeclared.calls.restore).toEqual([]);
+
+    const release = createFakeSubscriptionSource({ transactions: true, store: 'app-store' });
+    release.respondWithRestore({ kind: 'completed', verification: NEVER });
+    await renderAccess({ source: release });
+    await act(async () => {
+      outcome = await latest!.restore();
+    });
+    expect(outcome).toEqual({ kind: 'completed', verification: NEVER });
+  });
+
+  it('keeps one transaction at a time and never starts a transaction on its own in Apple Sandbox mode', async () => {
+    let release: ((outcome: StorePurchaseOutcome) => void) | undefined;
+    const source = createFakeSubscriptionSource({
+      store: 'app-store',
+      appleSandbox: TESTER_MODE,
+      purchase: () => new Promise((resolve) => (release = resolve)),
+      restore: () => Promise.resolve({ kind: 'cancelled' }),
+    });
+    source.respondWith(NEVER);
+    const view = await renderAccess({ source });
+    expect(source.calls.purchase).toEqual([]);
+    expect(source.calls.restore).toEqual([]);
+    let first: Promise<unknown> | undefined;
+    await act(async () => {
+      first = latest!.purchase(REQUEST, 'apple-sandbox-test');
+    });
+    expect(stateOf(view)).toBe('enforcement-disabled:verified:purchase');
+    await expect(latest!.purchase(REQUEST, 'apple-sandbox-test')).resolves.toEqual({ kind: 'failed', reason: 'operation-in-progress' });
+    await expect(latest!.restore()).resolves.toEqual({ kind: 'failed', reason: 'operation-in-progress' });
+    await act(async () => release!({ kind: 'cancelled' }));
+    await expect(first).resolves.toEqual({ kind: 'cancelled' });
+    expect(source.calls.purchase).toHaveLength(1);
+    expect(source.calls.restore).toEqual([]);
+    expect(stateOf(view)).toBe('enforcement-disabled:verified:idle');
   });
 });

@@ -18,6 +18,13 @@
 //   purchase      buys `plan` of the offering the screen holds: the offering
 //                 must be the store's (it carries the adapter's `reference`;
 //                 a fixture carries none and cannot be bought from — ever);
+//                 an `origin` names the developer-only Apple Sandbox test
+//                 when that is what the screen runs (Phase 6.4B); a product
+//                 purchase passes none;
+//   appleSandbox  whether the source is a debug bundle bound to the App Store
+//                 (Apple Sandbox mode), and `dedicatedTestAccount` whether the
+//                 signed-in account is one declared for its tests — read from
+//                 THE authorization rule, so a screen refuses before it asks;
 //   restore       user-initiated only;
 //   retryVerification
 //                 asks the provider to verify again, without any transaction:
@@ -44,8 +51,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { isVerificationCurrent, type SubscriptionPlan, type SubscriptionVerification } from '@/domain/access';
 import { useAuth } from '@/features/auth/session/AuthProvider';
+import type { AuthUser } from '@/features/auth/gateway';
 
 import type { PaywallOffering } from '../paywall/paywall-offering';
+import { isDedicatedTestAccount, type PurchaseOrigin } from '../purchase-authorization';
 import { hasVerifiedPlusEntitlement } from '../status/subscription-status-presentation';
 import type { StoreTransactionFailure, SubscriptionStoreKind } from '../subscription-source';
 import { useBusinessAccess, type StoreOperation } from './BusinessAccessProvider';
@@ -73,8 +82,14 @@ export interface PlusCheckoutSession {
   readonly activity: PlusCheckoutActivity | undefined;
   readonly entitled: boolean;
   readonly authenticated: boolean;
+  /** The signed-in account; undefined while nobody is. */
+  readonly account: AuthUser | undefined;
   readonly store: SubscriptionStoreKind | undefined;
-  readonly purchase: (offering: PaywallOffering, plan: SubscriptionPlan) => Promise<PlusCheckoutResult | undefined>;
+  /** The source is a debug bundle bound to the App Store (Apple Sandbox mode). */
+  readonly appleSandbox: boolean;
+  /** Apple Sandbox mode AND the signed-in account is one of its dedicated test accounts. */
+  readonly dedicatedTestAccount: boolean;
+  readonly purchase: (offering: PaywallOffering, plan: SubscriptionPlan, origin?: PurchaseOrigin) => Promise<PlusCheckoutResult | undefined>;
   readonly restore: () => Promise<PlusCheckoutResult | undefined>;
   readonly retryVerification: () => Promise<PlusCheckoutResult | undefined>;
 }
@@ -100,8 +115,9 @@ function conclude(verification: SubscriptionVerification, now: Date): 'entitled'
 export function usePlusCheckout({ clock = defaultClock }: UsePlusCheckoutOptions = {}): PlusCheckoutSession {
   const { state: auth } = useAuth();
   const authenticated = auth.status === 'authenticated';
+  const account = authenticated ? auth.user : undefined;
   const access = useBusinessAccess();
-  const { verification, storeOperation, store } = access;
+  const { verification, storeOperation, store, appleSandbox } = access;
   const [verifying, setVerifying] = useState(false);
 
   const mounted = useRef(true);
@@ -123,12 +139,12 @@ export function usePlusCheckout({ clock = defaultClock }: UsePlusCheckoutOptions
   }, [clock]);
 
   const purchase = useCallback(
-    async (offering: PaywallOffering, plan: SubscriptionPlan): Promise<PlusCheckoutResult | undefined> => {
+    async (offering: PaywallOffering, plan: SubscriptionPlan, origin?: PurchaseOrigin): Promise<PlusCheckoutResult | undefined> => {
       let result: PlusCheckoutResult;
       if (offering.status !== 'available' || offering.reference === undefined) {
         result = { kind: 'failed', operation: 'purchase', reason: 'stale-offering' };
       } else {
-        const outcome = await accessRef.current.purchase({ reference: offering.reference, plan });
+        const outcome = await accessRef.current.purchase({ reference: offering.reference, plan }, origin);
         switch (outcome.kind) {
           case 'completed':
             result = conclude(outcome.verification, clockRef.current()) === 'entitled' ? { kind: 'activated' } : { kind: 'received' };
@@ -196,7 +212,10 @@ export function usePlusCheckout({ clock = defaultClock }: UsePlusCheckoutOptions
     activity: storeOperation !== undefined ? OPERATION_ACTIVITY[storeOperation] : verifying ? 'verifying' : undefined,
     entitled: hasVerifiedPlusEntitlement(verification, clock()),
     authenticated,
+    account,
     store,
+    appleSandbox: appleSandbox !== undefined,
+    dedicatedTestAccount: isDedicatedTestAccount(account, appleSandbox),
     purchase,
     restore,
     retryVerification,

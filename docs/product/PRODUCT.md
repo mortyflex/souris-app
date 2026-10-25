@@ -1417,9 +1417,12 @@ deferred payment owns nothing, an unconfirmed transaction offers « Vérifier à
 product screen can start a purchase, purchases are enabled for the Test Store only (never the
 App Store yet), and enforcement stays disabled: nothing is restricted for anyone. Phase 6.4A
 (October 2026) prepares the Apple Sandbox validation: an explicitly selected, development-only
-build reads the real App Store products, prices, periods and trial information in the same preview,
-read-only — no Apple purchase, no restore, nothing visible to any professional. Still to come,
-in their own phases: the Apple Sandbox validation (real trial, real restore), the account-scoped
+build reads the real App Store products, prices, periods and trial information in the same preview.
+Phase 6.4B (October 2026) lets that build run Apple Sandbox purchases and restores through Apple's
+own purchase sheet — from the developer preview only, for dedicated test accounts only, never for a
+professional's or a pilot's account, nothing visible to any professional, no product purchase
+enabled for the App Store, enforcement still disabled. Still to come, in their own phases: the
+device run of that validation (real trial, real restore, renewal and expiration), the account-scoped
 paywall routing, persisted entitlement evidence, the backend entitlement mirror and server-side
 enforcement, real terms and privacy URLs, account deletion and privacy-data export, Google Play.
 

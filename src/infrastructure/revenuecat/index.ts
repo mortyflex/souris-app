@@ -11,7 +11,9 @@
 // The build is described from `Platform.OS`, `__DEV__` and the Expo config of
 // this bundle (`expo-constants`): its iOS bundle identifier and the Apple
 // Sandbox flag app.config.js sets for `APP_VARIANT=apple-sandbox`. THE rule
-// (`config.ts`) decides what they mean; nothing here reads the flag twice.
+// (`config.ts`) decides what they mean; nothing here reads the flag twice. In
+// Apple Sandbox mode the source carries `appleSandbox` with the dedicated
+// test accounts (Phase 6.4B), and the notice counts them — never names them.
 //
 // The dependencies are parameters with production defaults so the wiring is
 // verified without `process.env`, `Platform`, `__DEV__` or Expo config tricks:
@@ -23,7 +25,7 @@ import { Platform } from 'react-native';
 import { unconfiguredSubscriptionSource, type SubscriptionSource } from '@/features/access/subscription-source';
 
 import {
-  APPLE_SANDBOX_MODE_NOTICE,
+  describeAppleSandboxMode,
   describeUnconfiguredRevenueCat,
   readRevenueCatEnvironment,
   resolveRevenueCatConfiguration,
@@ -82,6 +84,13 @@ export function createAccountSubscriptionSource({
     warn(describeUnconfiguredRevenueCat(configuration.reason));
     return unconfiguredSubscriptionSource;
   }
-  if (configuration.appleSandbox) info(APPLE_SANDBOX_MODE_NOTICE);
-  return createRevenueCatSubscriptionSource({ sdk, apiKey: configuration.apiKey, store: configuration.store, clock });
+  if (configuration.appleSandbox) info(describeAppleSandboxMode(configuration.appleSandboxTestAccounts.length));
+  return createRevenueCatSubscriptionSource({
+    sdk,
+    apiKey: configuration.apiKey,
+    store: configuration.store,
+    // Apple Sandbox mode travels with the source: the provider's authorization rule reads it there.
+    appleSandbox: configuration.appleSandbox ? { testAccounts: configuration.appleSandboxTestAccounts } : undefined,
+    clock,
+  });
 }

@@ -236,3 +236,97 @@ describe('usePlusCheckout — restore and re-verification', () => {
     expect(stateOf(view)).toBe('idle:plus:test-store');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Apple Sandbox test (Phase 6.4B): the hook names the mode and whether the
+// signed-in account is a declared test account (THE authorization rule), hands
+// the explicit origin to the provider, and words the provider's refusals.
+// ---------------------------------------------------------------------------
+
+describe('usePlusCheckout — Apple Sandbox mode', () => {
+  const MODE = { testAccounts: ['lea@example.com'] };
+
+  it('reads the mode and the declared account, and exposes the signed-in account', async () => {
+    const source = createFakeSubscriptionSource({ transactions: true, store: 'app-store', appleSandbox: MODE });
+    source.respondWith(NEVER);
+    const view = await renderCheckout(source);
+    expect(stateOf(view)).toBe('idle:none:app-store');
+    expect(latest?.appleSandbox).toBe(true);
+    expect(latest?.dedicatedTestAccount).toBe(true);
+    expect(latest?.account).toEqual(fakeUser);
+  });
+
+  it('an undeclared account is not a dedicated test account; a Test Store source has no mode at all', async () => {
+    const undeclared = createFakeSubscriptionSource({ transactions: true, store: 'app-store', appleSandbox: { testAccounts: ['other@example.com'] } });
+    await renderCheckout(undeclared);
+    expect(latest?.appleSandbox).toBe(true);
+    expect(latest?.dedicatedTestAccount).toBe(false);
+    const testStore = createFakeSubscriptionSource({ transactions: true });
+    await renderCheckout(testStore);
+    expect(latest?.appleSandbox).toBe(false);
+    expect(latest?.dedicatedTestAccount).toBe(false);
+    expect(latest?.account).toEqual(fakeUser);
+  });
+
+  it('signed out: no account, no dedicated test account', async () => {
+    const source = createFakeSubscriptionSource({ transactions: true, store: 'app-store', appleSandbox: MODE });
+    await renderCheckout(source, createFakeAuthGateway({ restore: async () => ({ kind: 'unauthenticated' }) }));
+    expect(latest?.authenticated).toBe(false);
+    expect(latest?.account).toBeUndefined();
+    expect(latest?.appleSandbox).toBe(true);
+    expect(latest?.dedicatedTestAccount).toBe(false);
+  });
+
+  it('passes the explicit Apple Sandbox origin to the provider, which then buys; without it the provider refuses (not-enabled)', async () => {
+    const source = createFakeSubscriptionSource({ transactions: true, store: 'app-store', appleSandbox: MODE });
+    source.respondWith(NEVER);
+    source.respondWithPurchase({ kind: 'completed', verification: ACTIVE });
+    const view = await renderCheckout(source);
+    expect(await run(() => latest!.purchase(STORE_OFFERING, 'annual'))).toEqual({ kind: 'failed', operation: 'purchase', reason: 'not-enabled' });
+    expect(source.calls.purchase).toEqual([]);
+    expect(await run(() => latest!.purchase(STORE_OFFERING, 'annual', 'apple-sandbox-test'))).toEqual({ kind: 'activated' });
+    expect(source.calls.purchase).toEqual([{ userId: 'user-lea', request: { reference: 'offering-7', plan: 'annual' } }]);
+    expect(stateOf(view)).toBe('idle:plus:app-store');
+  });
+
+  it('words the undeclared-account refusal of a purchase and of a restore', async () => {
+    const source = createFakeSubscriptionSource({ transactions: true, store: 'app-store', appleSandbox: { testAccounts: ['other@example.com'] } });
+    source.respondWith(NEVER);
+    await renderCheckout(source);
+    expect(await run(() => latest!.purchase(STORE_OFFERING, 'annual', 'apple-sandbox-test'))).toEqual({
+      kind: 'failed',
+      operation: 'purchase',
+      reason: 'not-test-account',
+    });
+    expect(await run(() => latest!.restore())).toEqual({ kind: 'failed', operation: 'restore', reason: 'not-test-account' });
+    expect(source.calls.purchase).toEqual([]);
+    expect(source.calls.restore).toEqual([]);
+  });
+
+  it('a fixture offering is never bought from, Apple Sandbox or not', async () => {
+    const source = createFakeSubscriptionSource({ transactions: true, store: 'app-store', appleSandbox: MODE });
+    await renderCheckout(source);
+    expect(await run(() => latest!.purchase(paywallOfferingFixtures.frenchWithTrial, 'annual', 'apple-sandbox-test'))).toEqual({
+      kind: 'failed',
+      operation: 'purchase',
+      reason: 'stale-offering',
+    });
+    expect(source.calls.purchase).toEqual([]);
+  });
+
+  it('restores for a declared account and words the outcomes as in the Test Store', async () => {
+    const source = createFakeSubscriptionSource({ transactions: true, store: 'app-store', appleSandbox: MODE });
+    source.respondWith(NEVER);
+    source.respondWithRestore({ kind: 'completed', verification: ACTIVE });
+    const view = await renderCheckout(source);
+    expect(await run(() => latest!.restore())).toEqual({ kind: 'restored' });
+    expect(stateOf(view)).toBe('idle:plus:app-store');
+    source.respondWithRestore({ kind: 'completed', verification: NEVER });
+    expect(await run(() => latest!.restore())).toEqual({ kind: 'nothing-to-restore' });
+    source.respondWithRestore({ kind: 'completed', verification: UNAVAILABLE });
+    expect(await run(() => latest!.restore())).toEqual({ kind: 'restore-received' });
+    source.respondWithRestore({ kind: 'failed', reason: 'network' });
+    expect(await run(() => latest!.restore())).toEqual({ kind: 'failed', operation: 'restore', reason: 'network' });
+    expect(source.calls.restore).toEqual(['user-lea', 'user-lea', 'user-lea', 'user-lea']);
+  });
+});

@@ -34,6 +34,23 @@ import type { StorePaywallOffering } from './paywall/paywall-offering';
 /** Which store a source is bound to: RevenueCat's Test Store (development) or Apple's App Store. */
 export type SubscriptionStoreKind = 'test-store' | 'app-store';
 
+/**
+ * Apple Sandbox mode (Phase 6.4): a DEBUG bundle bound to the App Store by the
+ * explicit `APP_VARIANT=apple-sandbox` opt-in, for Apple Sandbox testing on a
+ * development-signed device build. Absent from every other source — a release
+ * bound to the App Store never carries it. Carrying it is not a proof that a
+ * transaction runs in Apple's Sandbox: StoreKit decides the environment from
+ * the app's signature and the Apple account signed in on the device.
+ */
+export interface AppleSandboxMode {
+  /**
+   * The dedicated test accounts that may transact in this mode — Supabase user
+   * ids or emails, lowercase — and nobody else (`purchase-authorization.ts`).
+   * Empty: no account may transact.
+   */
+  readonly testAccounts: readonly string[];
+}
+
 /** A purchase names the offering it was shown (`reference`) and the plan chosen in it. */
 export interface PurchaseRequest {
   /** The opaque reference the source attached to the offering it loaded (`StorePaywallOffering.reference`). */
@@ -47,8 +64,10 @@ export type StoreTransactionFailure =
   | 'no-account'
   /** No store adapter, or one without transactions, in this build. */
   | 'not-configured'
-  /** The build's store is not one purchases are enabled for (see `purchasable-stores.ts`). */
+  /** The build's store is not one purchases are enabled for (see `purchasable-stores.ts`, `purchase-authorization.ts`). */
   | 'not-enabled'
+  /** Apple Sandbox mode: the signed-in account is not one of the dedicated test accounts. */
+  | 'not-test-account'
   /** A purchase or a restore is already in flight for this session. */
   | 'operation-in-progress'
   /** The named offering is not the one the source currently holds for this account: load it again. */
@@ -89,6 +108,8 @@ export type StoreRestoreOutcome =
 export interface SubscriptionSource {
   /** The store this source is bound to; absent for a source without one. */
   readonly store?: SubscriptionStoreKind;
+  /** Apple Sandbox mode (a debug bundle bound to the App Store, Phase 6.4); absent from every other source. */
+  readonly appleSandbox?: AppleSandboxMode;
   /** Verifies the subscription of the signed-in user. */
   readonly verify: (userId: string) => Promise<SubscriptionVerification>;
   /**

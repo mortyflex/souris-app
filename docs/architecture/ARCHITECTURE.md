@@ -740,10 +740,91 @@ Sandbox tester only, never a real Apple ID; a product fetched here is NOT a proo
 succeeds (that is the next subphase). The verification of an account that never bought anything is `never`; nothing changes
 on Accueil or in « Mon abonnement ».
 
+Apple Sandbox purchase and restore test (Phase 6.4B). The SAME Apple Sandbox mode, now able to
+TRANSACT — from the developer preview only, for DEDICATED TEST ACCOUNTS only, on a development-
+signed build installed on a physical iPhone. `SUBSCRIPTION_ENFORCEMENT` stays `disabled`,
+`PURCHASABLE_STORES` stays `['test-store']` (no product purchase is enabled for the App Store),
+release and TestFlight builds, Android and the everyday development build are untouched. Nothing
+is purchased or restored automatically, at launch, on a render or while reading the offering.
+
+```text
+subscription-source.ts     (features/access) `AppleSandboxMode { testAccounts }` on the source, absent from
+                           every other build; a new refusal, `not-test-account`.
+config.ts                  reads ONE more variable, EXPO_PUBLIC_REVENUECAT_APPLE_SANDBOX_TEST_ACCOUNTS — the
+                           dedicated test accounts, Supabase user ids or emails, comma-separated —
+                           normalized (trimmed, lowercase, deduplicated), carried in Apple Sandbox mode only
+                           (empty for the Test Store and every release, whatever the variable says), never
+                           logged. The dev-only notice COUNTS the declared accounts and names none.
+index.ts                   hands `appleSandbox: { testAccounts }` to the adapter, which exposes it as is.
+purchase-authorization.ts  THE authorization rule, pure, applied by the PROVIDER with the live `Platform.OS`
+                           and `__DEV__`, whatever a screen already checked. A purchase is authorized when the
+                           store is purchasable (the Test Store), OR when EVERY independent condition holds:
+                           the caller explicitly asked for the Apple Sandbox TEST (`origin:
+                           'apple-sandbox-test'` — a product purchase, the default, is never promoted), iOS, a
+                           debug bundle, a source carrying Apple Sandbox mode, the App Store, and a signed-in
+                           account that `isDedicatedTestAccount` (by id, or by email case-insensitively). A
+                           restore is restricted in Apple Sandbox mode only, to the same accounts (a Sandbox
+                           receipt is never attached to a real account's RevenueCat customer). Refusals:
+                           `not-enabled`, `not-test-account`. The build is checked before the account.
+BusinessAccessProvider     `purchase(request, origin = 'product')`; exposes `appleSandbox`; `transact` takes
+                           the authorization and refuses before touching the source. One transaction at a
+                           time, the session pipeline, `account-changed`: unchanged.
+use-plus-checkout.ts       `purchase(offering, plan, origin?)`; exposes `account`, `appleSandbox`,
+                           `dedicatedTestAccount` (THE rule read back) so a screen refuses before it asks.
+test-store-purchase.ts     the bench guard now knows TWO testable stores: the Test Store, and the App Store in
+                           Apple Sandbox mode for a dedicated test account. `store-not-testable` (the App Store
+                           without the mode, or no store), `not-test-account`; the others unchanged.
+development/               a dedicated test account meets the Apple Sandbox TEST bench: the live row says so,
+                           the notice is « Apple Sandbox — achat de test » and states that the Sandbox
+                           environment depends on the app's signature and the device's Apple account, not on
+                           APP_VARIANT; the primary action confirms « Achat Apple Sandbox (test) » naming the
+                           plan, the exact store price, Apple's sheet and « Compte : <email> », then the SAME
+                           coordinator dismisses the paywall Modal and starts the ONE purchase with the explicit
+                           origin; outcomes are worded by `checkout-presentation.ts` as before (« Abonnement
+                           activé » for a verified entitlement only); the restore link runs the user-initiated
+                           restore after « Restauration (Apple Sandbox) ». ANY OTHER account — or an App Store
+                           source without the mode — keeps the read-only bench: « Apple Sandbox — lecture
+                           seule », no restore link, the action only explains.
+```
+
+Independent safeguards, from the outside in: `APP_VARIANT=apple-sandbox` at build time (the App
+Store bundle identifier AND the flag, from one value); the configuration boundary (iOS, debug, the
+App Store bundle, the `appl_` key — the Test Store key is never used for an Apple transaction); the
+source's `appleSandbox` (absent from every release); the provider's rule (iOS, `__DEV__`, the mode,
+the explicit origin, the declared account); the preview's guard (same conditions, explained first);
+the confirmation alert; Apple's own purchase sheet, which is never bypassed and the only place money
+is confirmed. No transaction record is made up: the verification is the CustomerInfo the store
+answered, through the existing pipeline, and the post-purchase SDK event follows the listener.
+
+The mode is NOT a proof of the Sandbox environment. StoreKit decides it from the app's signature
+(a development-signed build on a device → Sandbox) and the Apple account signed in on the device
+(a Sandbox tester). The developer verifies both before confirming; the UI says so. A development-
+signed build of `com.mortyflex.sourisapp` on a physical iPhone replaces a TestFlight installation
+of the same bundle identifier (`docs/release/TESTFLIGHT.md` §2): never on the pilot phone.
+
+Running the test (physical iPhone; the simulator does not fetch the App Store products — not fixed
+in this phase):
+
+```bash
+# 1. .env: EXPO_PUBLIC_REVENUECAT_IOS_API_KEY (appl_…) and the dedicated test accounts
+#    EXPO_PUBLIC_REVENUECAT_APPLE_SANDBOX_TEST_ACCOUNTS=tester@example.com   (or the Supabase user id)
+# 2. the native project of THIS variant exists already (ios/BeautIzzySandbox, Phase 6.4A); regenerate it
+#    only if it was replaced by another variant: APP_VARIANT=apple-sandbox npx expo prebuild --platform ios --clean
+# 3. Xcode › Product › Scheme › Edit Scheme › Run › Options › StoreKit Configuration = None
+#    (no .storekit file in ios/, none referenced by the scheme: a local StoreKit configuration would
+#    intercept the Sandbox transactions and present fake products)
+# 4. device: Settings › App Store › Sandbox Account = the Apple Sandbox tester (never a real Apple ID)
+# 5. restart Metro with the variant (the env is inlined at bundle time), run on the device:
+APP_VARIANT=apple-sandbox npx expo run:ios --device
+# 6. Metro console at launch: « RevenueCat Apple Sandbox mode (…): … 1 dedicated test account(s) declared … »
+# 7. sign in with the dedicated test account → Plus › Développement › « Aperçu BeautIzzy Plus (test) »
+#    › « Offre RevenueCat actuelle » → the row reads « Achat et restauration de test via la feuille Apple »
+```
+
 Still required, in the next subphases, before `app-store` joins `PURCHASABLE_STORES`: the real
-StoreKit purchase sheet with the sandbox tester, the 14-day trial, a real restore on a second
-install, interrupted and deferred transactions, a renewal and an expiration through the listener,
-the receipt-of-another-account case.
+device run of this bench (the 14-day trial sheet, a restore on a second install, interrupted and
+deferred transactions, a renewal and an expiration observed through the listener, the receipt-of-
+another-account case), then the product decision itself.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain

@@ -91,13 +91,16 @@ describe('createAccountSubscriptionSource', () => {
 // ---------------------------------------------------------------------------
 // Apple Sandbox mode (Phase 6.4A): the wiring binds the SDK to the Apple key
 // in an explicitly opted-in iOS debug build carrying the App Store bundle
-// identifier, names the App Store as its store (so the provider refuses every
-// purchase), says so once without a key, and refuses the mode for the `.dev`
-// identifier. The default development build is untouched.
+// identifier, names the App Store as its store, carries Apple Sandbox mode
+// with the declared test accounts (Phase 6.4B — the provider's authorization
+// rule reads them there), says so once without a key or an account, and
+// refuses the mode for the `.dev` identifier. The default development build
+// and the release build carry no mode.
 // ---------------------------------------------------------------------------
 
 describe('createAccountSubscriptionSource — Apple Sandbox mode', () => {
   const SANDBOX_BUILD = { platform: 'ios', debug: true, appleSandbox: true, bundleIdentifier: 'com.mortyflex.sourisapp' };
+  const DECLARED = { ...BOTH, appleSandboxTestAccounts: 'Tester@Example.com, user-tester' };
 
   it('configures the SDK with the Apple key and the Supabase user id, bound to the App Store, and announces the mode without a key', async () => {
     const sdk = createFakeRevenueCatSdk();
@@ -112,16 +115,42 @@ describe('createAccountSubscriptionSource — Apple Sandbox mode', () => {
     expect(info).toHaveBeenCalledTimes(1);
     const notice = String(info.mock.calls[0]?.[0]);
     expect(notice).toContain('APP_VARIANT=apple-sandbox');
+    expect(notice).toMatch(/no dedicated test account is declared/);
     expect(notice).not.toContain(APPLE_KEY);
     expect(notice).not.toContain(TEST_STORE_KEY);
   });
 
-  it('exposes the offering loader (read) and the transactions the provider will refuse for the App Store', () => {
+  it('carries Apple Sandbox mode on the source with the declared test accounts, and counts them in the notice without naming them', () => {
+    const info = jest.fn();
+    const source = createAccountSubscriptionSource({ environment: DECLARED, build: SANDBOX_BUILD, sdk: createFakeRevenueCatSdk(), warn: jest.fn(), info });
+    expect(source.store).toBe('app-store');
+    expect(source.appleSandbox).toEqual({ testAccounts: ['tester@example.com', 'user-tester'] });
+    const notice = String(info.mock.calls[0]?.[0]);
+    expect(notice).toMatch(/2 dedicated test account\(s\)/);
+    expect(notice).not.toMatch(/tester@example\.com|user-tester/);
+  });
+
+  it('carries the mode with an empty list when no account is declared: the authorization rule then refuses everyone', () => {
+    const source = createAccountSubscriptionSource({ environment: BOTH, build: SANDBOX_BUILD, sdk: createFakeRevenueCatSdk(), warn: jest.fn(), info: jest.fn() });
+    expect(source.appleSandbox).toEqual({ testAccounts: [] });
+  });
+
+  it('exposes the offering loader (read) and the transactions the provider authorizes under its rule only', () => {
     const source = createAccountSubscriptionSource({ environment: BOTH, build: SANDBOX_BUILD, sdk: createFakeRevenueCatSdk(), warn: jest.fn(), info: jest.fn() });
     expect(typeof source.loadOffering).toBe('function');
-    // The source is the same adapter as the release one: the refusal of its purchases lives in
-    // PURCHASABLE_STORES (features/access), never in a second code path here.
+    expect(typeof source.purchase).toBe('function');
+    expect(typeof source.restore).toBe('function');
+    // The source is the same adapter as the release one: the authorization of its purchases lives in
+    // features/access (PURCHASABLE_STORES, purchase-authorization.ts), never in a second code path here.
     expect(source.store).toBe('app-store');
+  });
+
+  it('a release bound to the App Store carries NO Apple Sandbox mode, even with declared accounts and the flag', () => {
+    const info = jest.fn();
+    const source = createAccountSubscriptionSource({ environment: DECLARED, build: { ...SANDBOX_BUILD, debug: false }, sdk: createFakeRevenueCatSdk(), warn: jest.fn(), info });
+    expect(source.store).toBe('app-store');
+    expect(source.appleSandbox).toBeUndefined();
+    expect(info).not.toHaveBeenCalled();
   });
 
   it('refuses the mode for the .dev bundle identifier: unconfigured, explained by the variant and the bundle, no SDK configured', async () => {
@@ -159,8 +188,23 @@ describe('createAccountSubscriptionSource — Apple Sandbox mode', () => {
       info,
     });
     expect(source.store).toBe('test-store');
+    expect(source.appleSandbox).toBeUndefined();
     await expect(source.verify('user-lea')).resolves.toMatchObject({ kind: 'verified' });
     expect(sdk.calls.configure).toEqual([{ apiKey: TEST_STORE_KEY, appUserID: 'user-lea' }]);
+    expect(info).not.toHaveBeenCalled();
+  });
+
+  it('the Test Store build ignores declared test accounts: no mode, nothing announced', () => {
+    const info = jest.fn();
+    const source = createAccountSubscriptionSource({
+      environment: DECLARED,
+      build: { platform: 'ios', debug: true, appleSandbox: false, bundleIdentifier: 'com.mortyflex.sourisapp.dev' },
+      sdk: createFakeRevenueCatSdk(),
+      warn: jest.fn(),
+      info,
+    });
+    expect(source.store).toBe('test-store');
+    expect(source.appleSandbox).toBeUndefined();
     expect(info).not.toHaveBeenCalled();
   });
 

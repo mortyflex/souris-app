@@ -380,3 +380,223 @@ describe('Test Store purchase — the whole chain (Phase 6.3)', () => {
     expect(latest?.verification).toEqual({ kind: 'verified', status: { kind: 'active', plan: 'annual', expiresAt: NEXT_MONTH } });
   });
 });
+
+// ---------------------------------------------------------------------------
+// End to end (Phase 6.4B): the real source in Apple Sandbox mode over the fake
+// SDK, the real provider, the real checkout hook, Accueil and « Mon
+// abonnement ». The explicit Apple Sandbox test of a declared account buys the
+// ORIGINAL App Store package; the CustomerInfo the store answers is applied
+// through the existing pipeline — the `plus` entitlement is recognized, the
+// plan is read from the exact App Store product — and the post-purchase SDK
+// event follows the listener path. A product purchase, an undeclared account
+// or a release-shaped source transacts nothing.
+// ---------------------------------------------------------------------------
+
+describe('Apple Sandbox test — the whole chain (Phase 6.4B)', () => {
+  const APPLE_KEY = 'appl_FakeAppleKeyForUnitTestsOnly';
+  const TESTER_MODE = { testAccounts: [fakeUser.email!.toLowerCase()] };
+
+  beforeEach(() => {
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      appStateListeners.add(listener);
+      return { remove: () => appStateListeners.delete(listener) } as ReturnType<typeof AppState.addEventListener>;
+    });
+  });
+
+  afterEach(() => {
+    latest = undefined;
+    checkout = undefined;
+    offeringSession = undefined;
+    appStateListeners.clear();
+    jest.restoreAllMocks();
+  });
+
+  function appStoreSdk() {
+    const sdk = createFakeRevenueCatSdk();
+    sdk.setCustomerInfo(LEA, customerInfo({ plus: null, originalAppUserId: LEA }));
+    sdk.setOfferings(LEA, appStoreOfferings);
+    return sdk;
+  }
+
+  async function renderSandbox(
+    sdk: FakeRevenueCatSdk,
+    auth: FakeAuthGateway,
+    { mode }: { readonly mode: { readonly testAccounts: readonly string[] } | undefined } = { mode: TESTER_MODE },
+  ) {
+    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: APPLE_KEY, store: 'app-store', appleSandbox: mode, clock: () => NOW });
+    const view = await render(
+      <AuthProvider gateway={auth}>
+        <BusinessAccessProvider enforcement={SUBSCRIPTION_ENFORCEMENT} source={source} clock={() => NOW}>
+          <HomeHeader clock={() => NOW} />
+          <SubscriptionStatusSection clock={() => NOW} />
+          <Probe />
+          <CheckoutProbe />
+        </BusinessAccessProvider>
+      </AuthProvider>,
+    );
+    await settle();
+    await settle();
+    return view;
+  }
+
+  it('a verified Apple Sandbox purchase of the annual plan: the ORIGINAL App Store package, the `plus` entitlement recognized with its plan, the badge and the active status', async () => {
+    const sdk = appStoreSdk();
+    sdk.scriptPurchase(LEA, (pkg) => {
+      const info = customerInfo({ plus: plusEntitlement({ productIdentifier: pkg.product.identifier }), originalAppUserId: LEA });
+      sdk.setCustomerInfo(LEA, info);
+      sdk.emit(info); // the SDK fires its update event after a purchase
+      return Promise.resolve(purchased(info, pkg.product.identifier));
+    });
+    const view = await renderSandbox(sdk, signedIn());
+    expect(sdk.calls.configure).toEqual([{ apiKey: APPLE_KEY, appUserID: LEA }]);
+    expect(checkout?.appleSandbox).toBe(true);
+    expect(checkout?.dedicatedTestAccount).toBe(true);
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+    await act(async () => {});
+    const offering = offeringSession!.offering;
+    expect(offering.status === 'available' && offering.reference).toBe('offering-1');
+
+    const result = await runCheckout(() => checkout!.purchase(offering, 'annual', 'apple-sandbox-test'));
+    expect(result).toEqual({ kind: 'activated' });
+    expect(sdk.calls.purchasePackage).toHaveLength(1);
+    expect(sdk.calls.purchasePackage[0]!.pkg).toBe(appStoreOfferings.current!.annual);
+    expect(sdk.calls.purchasePackage[0]!.appUserId).toBe(LEA);
+    expect(sdk.calls.restorePurchases).toEqual([]);
+    expect(sdk.listenerCount()).toBe(1);
+
+    expect(view.getByTestId('home-plus-mark')).toBeTruthy();
+    expect(view.getByText('Abonnement actif')).toBeTruthy();
+    expect(view.getByText('Annuel')).toBeTruthy();
+    expect(latest?.verification).toEqual({ kind: 'verified', status: { kind: 'active', plan: 'annual', expiresAt: NEXT_MONTH } });
+    expect(stateOf(view)).toBe('full:enforcement-disabled:write:verified');
+    expect(SUBSCRIPTION_ENFORCEMENT).toBe('disabled');
+  });
+
+  it('a trial started in the Sandbox is recognized as a trial through the same pipeline', async () => {
+    const sdk = appStoreSdk();
+    sdk.scriptPurchase(LEA, (pkg) => {
+      const info = customerInfo({ plus: plusEntitlement({ productIdentifier: pkg.product.identifier, periodType: 'TRIAL' }), originalAppUserId: LEA });
+      sdk.setCustomerInfo(LEA, info);
+      return Promise.resolve(purchased(info, pkg.product.identifier));
+    });
+    const view = await renderSandbox(sdk, signedIn());
+    await act(async () => {});
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'monthly', 'apple-sandbox-test'))).toEqual({ kind: 'activated' });
+    expect(sdk.calls.purchasePackage[0]!.pkg).toBe(appStoreOfferings.current!.monthly);
+    expect(view.getByTestId('home-plus-mark')).toBeTruthy();
+    expect(latest?.verification).toMatchObject({ kind: 'verified', status: { kind: 'trial', plan: 'monthly' } });
+  });
+
+  it('a cancelled Sandbox purchase sheet: no badge, the status unchanged, no record made up', async () => {
+    const sdk = appStoreSdk();
+    sdk.scriptPurchase(LEA, () => Promise.reject(purchasesError(PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR)));
+    const view = await renderSandbox(sdk, signedIn());
+    await act(async () => {});
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual', 'apple-sandbox-test'))).toEqual({ kind: 'cancelled' });
+    expect(sdk.calls.purchasePackage).toHaveLength(1);
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+    expect(view.getByText('Aucun abonnement actif')).toBeTruthy();
+    expect(latest?.verification).toEqual({ kind: 'verified', status: { kind: 'never' } });
+  });
+
+  it.each([
+    [PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR, { kind: 'deferred' }],
+    [PURCHASES_ERROR_CODE.STORE_PROBLEM_ERROR, { kind: 'failed', operation: 'purchase', reason: 'store-problem' }],
+    [PURCHASES_ERROR_CODE.NETWORK_ERROR, { kind: 'failed', operation: 'purchase', reason: 'network' }],
+    [PURCHASES_ERROR_CODE.OFFLINE_CONNECTION_ERROR, { kind: 'failed', operation: 'purchase', reason: 'network' }],
+    [PURCHASES_ERROR_CODE.PURCHASE_NOT_ALLOWED_ERROR, { kind: 'failed', operation: 'purchase', reason: 'not-allowed' }],
+    [PURCHASES_ERROR_CODE.PRODUCT_ALREADY_PURCHASED_ERROR, { kind: 'failed', operation: 'purchase', reason: 'already-owned' }],
+  ] as const)('the SDK rejection %s is worded as %o and grants nothing', async (code, expected) => {
+    const sdk = appStoreSdk();
+    sdk.scriptPurchase(LEA, () => Promise.reject(purchasesError(code)));
+    const view = await renderSandbox(sdk, signedIn());
+    await act(async () => {});
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual', 'apple-sandbox-test'))).toEqual(expected);
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+    expect(checkout?.entitled).toBe(false);
+  });
+
+  it('a product purchase, an undeclared account or a release-shaped source never reaches the SDK', async () => {
+    const sdk = appStoreSdk();
+    sdk.scriptPurchase(LEA, (pkg) => Promise.resolve(purchased(customerInfo({ originalAppUserId: LEA }), pkg.product.identifier)));
+    await renderSandbox(sdk, signedIn());
+    await act(async () => {});
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual'))).toEqual({
+      kind: 'failed',
+      operation: 'purchase',
+      reason: 'not-enabled',
+    });
+
+    await renderSandbox(sdk, signedIn(), { mode: { testAccounts: ['someone-else@example.com'] } });
+    await act(async () => {});
+    expect(checkout?.dedicatedTestAccount).toBe(false);
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual', 'apple-sandbox-test'))).toEqual({
+      kind: 'failed',
+      operation: 'purchase',
+      reason: 'not-test-account',
+    });
+    expect(await runCheckout(() => checkout!.restore())).toEqual({ kind: 'failed', operation: 'restore', reason: 'not-test-account' });
+
+    await renderSandbox(sdk, signedIn(), { mode: undefined });
+    await act(async () => {});
+    expect(checkout?.appleSandbox).toBe(false);
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual', 'apple-sandbox-test'))).toEqual({
+      kind: 'failed',
+      operation: 'purchase',
+      reason: 'not-enabled',
+    });
+    expect(sdk.calls.purchasePackage).toEqual([]);
+    expect(sdk.calls.restorePurchases).toEqual([]);
+  });
+
+  it('a user-initiated Sandbox restore with an App Store entitlement reaches the badge with its plan; a restore without one confirms the absence; nothing restores by itself', async () => {
+    const sdk = appStoreSdk();
+    const view = await renderSandbox(sdk, signedIn());
+    await foreground();
+    await settle();
+    expect(sdk.calls.restorePurchases).toEqual([]);
+    expect(await runCheckout(() => checkout!.restore())).toEqual({ kind: 'nothing-to-restore' });
+    expect(sdk.calls.restorePurchases).toEqual([LEA]);
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+
+    sdk.setCustomerInfo(LEA, customerInfo({ plus: plusEntitlement({ productIdentifier: appStoreOfferings.current!.annual!.product.identifier }), originalAppUserId: LEA }));
+    expect(await runCheckout(() => checkout!.restore())).toEqual({ kind: 'restored' });
+    expect(sdk.calls.restorePurchases).toEqual([LEA, LEA]);
+    expect(view.getByTestId('home-plus-mark')).toBeTruthy();
+    expect(view.getByText('Abonnement actif')).toBeTruthy();
+    expect(view.getByText('Annuel')).toBeTruthy();
+  });
+
+  it('a Sandbox restore the store cannot answer is worded as network, grants nothing', async () => {
+    const sdk = createFakeRevenueCatSdk({ restorePurchases: () => Promise.reject(purchasesError(PURCHASES_ERROR_CODE.OFFLINE_CONNECTION_ERROR)) });
+    sdk.setCustomerInfo(LEA, customerInfo({ plus: null, originalAppUserId: LEA }));
+    sdk.setOfferings(LEA, appStoreOfferings);
+    const view = await renderSandbox(sdk, signedIn());
+    expect(await runCheckout(() => checkout!.restore())).toEqual({ kind: 'failed', operation: 'restore', reason: 'network' });
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+  });
+
+  it('an expiration pushed by the store after a Sandbox purchase is applied through the listener: the badge leaves', async () => {
+    const sdk = appStoreSdk();
+    sdk.scriptPurchase(LEA, (pkg) => {
+      const info = customerInfo({ plus: plusEntitlement({ productIdentifier: pkg.product.identifier }), originalAppUserId: LEA });
+      sdk.setCustomerInfo(LEA, info);
+      return Promise.resolve(purchased(info, pkg.product.identifier));
+    });
+    const view = await renderSandbox(sdk, signedIn());
+    await act(async () => {});
+    expect(await runCheckout(() => checkout!.purchase(offeringSession!.offering, 'annual', 'apple-sandbox-test'))).toEqual({ kind: 'activated' });
+    expect(view.getByTestId('home-plus-mark')).toBeTruthy();
+
+    const expired = customerInfo({
+      plus: plusEntitlement({ productIdentifier: appStoreOfferings.current!.annual!.product.identifier, isActive: false, willRenew: false }),
+      originalAppUserId: LEA,
+    });
+    sdk.setCustomerInfo(LEA, expired);
+    await act(async () => sdk.emit(expired));
+    await settle();
+    expect(view.queryByTestId('home-plus-mark')).toBeNull();
+    expect(latest?.verification).toMatchObject({ kind: 'verified', status: { kind: 'expired' } });
+    expect(stateOf(view)).toBe('full:enforcement-disabled:write:verified');
+  });
+});

@@ -104,11 +104,26 @@ describe('RevenueCat integration — Phase 6.1 / 6.2 boundary', () => {
     ]);
   });
 
-  it('purchases are enabled for the RevenueCat Test Store only: a release bound to the App Store starts no transaction', () => {
+  it('purchases are enabled for the RevenueCat Test Store only — plus the explicitly requested Apple Sandbox test of a debug bundle: a release bound to the App Store starts no transaction', () => {
     const policy = files.find((file) => file.path === 'features/access/purchasable-stores.ts')!.source;
     expect(policy).toMatch(/export const PURCHASABLE_STORES: readonly SubscriptionStoreKind\[\] = \['test-store'\];/);
     const provider = files.find((file) => file.path === 'features/access/session/BusinessAccessProvider.tsx')!.source;
-    expect(provider).toMatch(/operation === 'purchase' && !isPurchasableStore\(store\)\) return failed\('not-enabled'\)/);
+    // THE authorization rule, evaluated by the provider with the LIVE platform and compilation — never a screen's word.
+    expect(provider).toMatch(/resolvePurchaseRefusal\(\{ store, appleSandbox, origin, platform: Platform\.OS, debug: __DEV__, account \}\)/);
+    expect(provider).toMatch(/resolveRestoreRefusal\(\{ appleSandbox, account \}\)/);
+    expect(provider).toMatch(/origin: PurchaseOrigin = 'product'/);
+    const rule = files.find((file) => file.path === 'features/access/purchase-authorization.ts')!.source;
+    expect(rule).toMatch(/if \(isPurchasableStore\(input\.store\)\) return undefined;/);
+    expect(rule).toMatch(/if \(input\.origin !== 'apple-sandbox-test'\) return 'not-enabled';/);
+    expect(rule).toMatch(/if \(input\.platform !== 'ios' \|\| !input\.debug\) return 'not-enabled';/);
+    expect(rule).toMatch(/if \(input\.appleSandbox === undefined \|\| input\.store !== 'app-store'\) return 'not-enabled';/);
+    expect(rule).toMatch(/if \(!isDedicatedTestAccount\(input\.account, input\.appleSandbox\)\) return 'not-test-account';/);
+    // The opt-in is written by the development preview only: no product module names the Apple Sandbox test.
+    const optIns = files.filter((file) => /'apple-sandbox-test'/.test(file.source)).map((file) => file.path).sort();
+    expect(optIns).toEqual(['features/access/paywall/development/PaywallPreviewSheet.tsx', 'features/access/purchase-authorization.ts']);
+    // Apple Sandbox mode is granted by the configuration boundary only, and travels on the source.
+    const granters = files.filter((file) => /appleSandbox: configuration\.appleSandbox \?/.test(file.source)).map((file) => file.path);
+    expect(granters).toEqual(['infrastructure/revenuecat/index.ts']);
     // Nothing restores automatically: the only `restore` calls are user-initiated through the hook.
     expect(provider).not.toMatch(/restore\(\)/);
     const hook = files.find((file) => file.path === 'features/access/session/use-plus-checkout.ts')!.source;
@@ -155,9 +170,12 @@ describe('RevenueCat integration — Phase 6.1 / 6.2 boundary', () => {
       expect({ path: file.path, email: /[\w.+-]+@[\w-]+\.[a-z]{2,}/i.test(file.source) }).toEqual({ path: file.path, email: false });
       expect({ path: file.path, secret: /service_role|SERVICE_ROLE|sk_[a-z]/i.test(file.source) }).toEqual({ path: file.path, secret: false });
     }
-    // The environment is read literally, in the configuration boundary only.
-    const readers = files.filter((file) => /EXPO_PUBLIC_REVENUECAT_/.test(file.source)).map((file) => file.path);
+    // The environment is read literally, in the configuration boundary only; the test-account variable
+    // is NAMED by the development bench's refusal sentence, never read there.
+    const readers = files.filter((file) => /process\.env\.EXPO_PUBLIC_REVENUECAT_/.test(file.source)).map((file) => file.path);
     expect(readers).toEqual(['infrastructure/revenuecat/config.ts']);
+    const mentions = files.filter((file) => /EXPO_PUBLIC_REVENUECAT_/.test(file.source)).map((file) => file.path).sort();
+    expect(mentions).toEqual(['features/access/paywall/development/test-store-purchase.ts', 'infrastructure/revenuecat/config.ts']);
   });
 
   it('keeps the environment files and Apple keys out of git', () => {
@@ -168,6 +186,7 @@ describe('RevenueCat integration — Phase 6.1 / 6.2 boundary', () => {
     const example = readFileSync(join(ROOT, '.env.example'), 'utf8');
     expect(example).toMatch(/^EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY=$/m);
     expect(example).toMatch(/^EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=$/m);
+    expect(example).toMatch(/^EXPO_PUBLIC_REVENUECAT_APPLE_SANDBOX_TEST_ACCOUNTS=$/m);
   });
 
   it('installs the core SDK only: no RevenueCat UI package', () => {

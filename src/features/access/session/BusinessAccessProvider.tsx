@@ -58,6 +58,17 @@
 // account A never touches account B's state, and is never reported as B's.
 // A restore is user-initiated only: nothing here restores at launch, at
 // sign-in or on a foreground return.
+//
+// Apple Sandbox test (Phase 6.4B). A source carrying `appleSandbox` is a debug
+// bundle bound to the App Store. Its purchases stay refused like any App Store
+// purchase, unless the caller asks for the Apple Sandbox TEST explicitly
+// (`origin` naming the Apple Sandbox test) AND THE authorization rule
+// (`purchase-authorization.ts`) holds: iOS, a development bundle, that
+// source, the App Store, and a signed-in account declared as a dedicated
+// test account. A restore in that mode is reserved to the same accounts. The
+// rule is evaluated here, with the live platform and compilation, whatever
+// the screen already checked. The outcome then follows the same pipeline as
+// every transaction.
 
 import {
   createContext,
@@ -69,7 +80,7 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import {
   canMutateBusinessData,
@@ -92,8 +103,9 @@ import {
   unconfiguredPaywallOffering,
   type PaywallOffering,
 } from '../paywall/paywall-offering';
-import { isPurchasableStore } from '../purchasable-stores';
+import { resolvePurchaseRefusal, resolveRestoreRefusal, type PurchaseOrigin } from '../purchase-authorization';
 import type {
+  AppleSandboxMode,
   PurchaseRequest,
   StorePurchaseOutcome,
   StoreRestoreOutcome,
@@ -136,14 +148,17 @@ export interface BusinessAccessValue {
   readonly loadOffering: () => Promise<PaywallOffering>;
   /** The store the source is bound to; undefined without one. */
   readonly store: SubscriptionStoreKind | undefined;
+  /** Apple Sandbox mode of the source (a debug bundle bound to the App Store); undefined in every other build. */
+  readonly appleSandbox: AppleSandboxMode | undefined;
   /** The transaction in flight for the session, if any: screens disable their actions on it. */
   readonly storeOperation: StoreOperation | undefined;
   /**
    * Buys, for the signed-in user, a plan of an offering the source loaded.
    * One transaction at a time; never rejects; applies a completed outcome's
-   * verification through the session pipeline.
+   * verification through the session pipeline. `origin` defaults to a product
+   * purchase; only the developer-only Apple Sandbox test names itself.
    */
-  readonly purchase: (request: PurchaseRequest) => Promise<SessionPurchaseOutcome>;
+  readonly purchase: (request: PurchaseRequest, origin?: PurchaseOrigin) => Promise<SessionPurchaseOutcome>;
   /** Asks the store for the signed-in user's previous purchases. User-initiated only; never rejects. */
   readonly restore: () => Promise<SessionRestoreOutcome>;
 }
@@ -180,7 +195,8 @@ export function BusinessAccessProvider({
   children,
 }: PropsWithChildren<BusinessAccessProviderProps>) {
   const { state: auth } = useAuth();
-  const userId = auth.status === 'authenticated' ? auth.user.id : undefined;
+  const account = auth.status === 'authenticated' ? auth.user : undefined;
+  const userId = account?.id;
 
   const clockRef = useRef(clock);
   useEffect(() => {
@@ -287,6 +303,7 @@ export function BusinessAccessProvider({
   }, [userId, source]);
 
   const store = source?.store;
+  const appleSandbox = source?.appleSandbox;
 
   /** Runs ONE transaction for the signed-in user; the outcome is applied only to the session it started in. */
   const transact = useCallback(
@@ -294,10 +311,12 @@ export function BusinessAccessProvider({
       operation: StoreOperation,
       start: ((forUserId: string) => Promise<Outcome>) | undefined,
       failed: (reason: StoreTransactionFailure) => Outcome,
+      authorize: () => StoreTransactionFailure | undefined,
     ): Promise<Outcome | { readonly kind: 'account-changed' }> => {
       if (!userId) return failed('no-account');
       if (start === undefined) return failed('not-configured');
-      if (operation === 'purchase' && !isPurchasableStore(store)) return failed('not-enabled');
+      const refusal = authorize();
+      if (refusal !== undefined) return failed(refusal);
       if (operationRef.current !== undefined) return failed('operation-in-progress');
       operationRef.current = operation;
       setStoreOperation(operation);
@@ -320,25 +339,33 @@ export function BusinessAccessProvider({
       }
       return outcome;
     },
-    [userId, store, apply],
+    [userId, apply],
   );
 
   const purchase = useCallback(
-    (request: PurchaseRequest): Promise<SessionPurchaseOutcome> => {
+    (request: PurchaseRequest, origin: PurchaseOrigin = 'product'): Promise<SessionPurchaseOutcome> => {
       const start = source?.purchase;
       return transact<StorePurchaseOutcome>(
         'purchase',
         start === undefined ? undefined : (forUserId) => start(forUserId, request),
         (reason) => ({ kind: 'failed', reason }),
+        // THE authorization rule, with the live platform and compilation: the Test Store, or the
+        // explicitly requested Apple Sandbox test of a dedicated test account — nothing else.
+        () => resolvePurchaseRefusal({ store, appleSandbox, origin, platform: Platform.OS, debug: __DEV__, account }),
       );
     },
-    [source, transact],
+    [source, transact, store, appleSandbox, account],
   );
 
   const restore = useCallback(
     (): Promise<SessionRestoreOutcome> =>
-      transact<StoreRestoreOutcome>('restore', source?.restore, (reason) => ({ kind: 'failed', reason })),
-    [source, transact],
+      transact<StoreRestoreOutcome>(
+        'restore',
+        source?.restore,
+        (reason) => ({ kind: 'failed', reason }),
+        () => resolveRestoreRefusal({ appleSandbox, account }),
+      ),
+    [source, transact, appleSandbox, account],
   );
 
   const input = useMemo<BusinessAccessInput>(
@@ -392,11 +419,12 @@ export function BusinessAccessProvider({
       refresh,
       loadOffering,
       store,
+      appleSandbox,
       storeOperation,
       purchase,
       restore,
     }),
-    [access, current.verification, enforcement, refresh, loadOffering, store, storeOperation, purchase, restore],
+    [access, current.verification, enforcement, refresh, loadOffering, store, appleSandbox, storeOperation, purchase, restore],
   );
 
   return <BusinessAccessContext.Provider value={value}>{children}</BusinessAccessContext.Provider>;

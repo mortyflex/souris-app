@@ -38,15 +38,25 @@
 // keeps no real store history, so the alert says what that test can and
 // cannot prove.
 //
-// Apple Sandbox mode (Phase 6.4A, `APP_VARIANT=apple-sandbox`): a debug
-// bundle bound to the App Store (`checkout.store === 'app-store'`). The live
-// entry then draws the REAL App Store offering — products, prices, periods,
-// trial eligibility, as the Apple Sandbox answers them for the signed-in
-// account — and transacts NOTHING: the primary action only explains the
-// refusal (`test-store-purchase.ts`, `not-test-store`), no restore link is
-// drawn, and the environment notice says « Apple Sandbox — lecture seule ».
-// The provider refuses an App Store purchase anyway (`PURCHASABLE_STORES`);
-// this screen simply never asks.
+// Apple Sandbox mode (Phase 6.4A/B, `APP_VARIANT=apple-sandbox`): a debug
+// bundle bound to the App Store (`checkout.appleSandbox`). The live entry
+// then draws the REAL App Store offering — products, prices, periods, trial
+// eligibility, as the Apple Sandbox answers them for the signed-in account.
+// Since Phase 6.4B it may also TRANSACT there, for a DEDICATED TEST ACCOUNT
+// only (`checkout.dedicatedTestAccount`, from THE authorization rule): the
+// primary action confirms an « Achat Apple Sandbox (test) » naming the plan,
+// the exact store price and the signed-in account, then hands the coordinator
+// a request whose `origin` is `apple-sandbox-test` — the explicit opt-in the
+// provider requires on top of iOS, `__DEV__`, the sandbox source and the
+// declared account; the restore link runs the user-initiated restore after an
+// alert saying what it attaches to which account. Apple's own purchase sheet
+// is the only confirmation of the money: nothing here bypasses it, and no
+// transaction record is ever made up. Any other account — a professional's, a
+// pilot's, one nobody declared — meets the READ-ONLY variant: the action only
+// explains (`not-test-account`), no restore link, « Apple Sandbox — lecture
+// seule ». Whether the transaction runs in Apple's Sandbox is decided by the
+// app's signature and the device's Apple account, never by APP_VARIANT: the
+// notice says so.
 //
 // The SDK's purchase dialog is a native presentation of its own. On iOS the
 // Test Store purchase is a UIAlertController the SDK presents on the key
@@ -97,12 +107,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import type { SubscriptionPlan } from '@/domain/access';
+import type { AuthUser } from '@/features/auth/gateway';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
 import { NavigationChevron } from '@/shared/ui/NavigationChevron';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { interaction, semanticColors, spacing } from '@/shared/ui/theme';
 
+import type { PurchaseOrigin } from '../../purchase-authorization';
 import { usePaywallOffering } from '../../session/use-paywall-offering';
 import { usePlusCheckout, type PlusCheckoutResult, type PlusCheckoutSession } from '../../session/use-plus-checkout';
 import { PaywallScreen } from '../PaywallScreen';
@@ -144,24 +156,52 @@ export const TEST_RESTORE_MESSAGE =
 export const TEST_RESTORE_CONFIRM_TITLE = 'Restaurer (test)';
 export const TEST_PURCHASE_REFUSED_TITLE = 'Achat de test refusé';
 export const TEST_RESTORE_REFUSED_TITLE = 'Restauration de test refusée';
-/** Apple Sandbox mode (Phase 6.4A): the App Store offering is read, nothing is bought or restored. */
+/** Apple Sandbox mode (Phase 6.4B), a dedicated test account: the App Store offering, bought and restored through Apple's sheet. */
 export const APPLE_SANDBOX_PREVIEW_DETAIL =
-  'Offre réelle du compte connecté, App Store (Apple Sandbox). Lecture seule : aucun achat, aucune restauration.';
-export const APPLE_SANDBOX_NOTICE_TITLE = 'Apple Sandbox — lecture seule';
+  'Offre réelle du compte connecté, App Store (Apple Sandbox). Achat et restauration de test via la feuille Apple — compte de test dédié.';
+/** Apple Sandbox mode, any other account: the App Store offering is read, nothing is bought or restored. */
+export const APPLE_SANDBOX_READ_ONLY_PREVIEW_DETAIL =
+  'Offre réelle du compte connecté, App Store (Apple Sandbox). Lecture seule : compte non déclaré comme compte de test.';
+export const APPLE_SANDBOX_NOTICE_TITLE = 'Apple Sandbox — achat de test';
 export const APPLE_SANDBOX_NOTICE_LINES = [
-  'Produits, prix et essai réels de l’App Store (Sandbox), compte connecté.',
-  'Aucun achat ni restauration dans cette version.',
+  'Produits, prix et essai réels de l’App Store, compte de test connecté.',
+  'Feuille d’achat Apple native. L’environnement Sandbox dépend de la signature de l’app et du compte Apple de l’appareil, pas d’APP_VARIANT.',
 ] as const;
+export const APPLE_SANDBOX_READ_ONLY_NOTICE_TITLE = 'Apple Sandbox — lecture seule';
+export const APPLE_SANDBOX_READ_ONLY_NOTICE_LINES = [
+  'Produits, prix et essai réels de l’App Store (Sandbox), compte connecté.',
+  'Compte non déclaré comme compte de test dédié : aucun achat, aucune restauration.',
+] as const;
+export const APPLE_SANDBOX_PURCHASE_TITLE = 'Achat Apple Sandbox (test)';
+export const APPLE_SANDBOX_PURCHASE_NOTICE_LINES = [
+  'Feuille d’achat Apple. Sans paiement réel uniquement si l’app est signée en développement et si le compte Apple de l’appareil est un Sandbox tester.',
+] as const;
+export const APPLE_SANDBOX_PURCHASE_CONFIRM_TITLE = 'Acheter (Sandbox)';
+export const APPLE_SANDBOX_RESTORE_TITLE = 'Restauration (Apple Sandbox)';
+export const APPLE_SANDBOX_RESTORE_MESSAGE =
+  'Demande à Apple les achats du compte Apple connecté sur cet appareil (Sandbox tester) et les rattache au compte connecté. Compte de test dédié uniquement.';
+export const APPLE_SANDBOX_RESTORE_CONFIRM_TITLE = 'Restaurer (Sandbox)';
 
-/** What the live entry says about itself, from the store the source is bound to. */
-export function describeLiveOfferingPreview(store: PlusCheckoutSession['store']): string {
-  return store === 'app-store' ? APPLE_SANDBOX_PREVIEW_DETAIL : LIVE_OFFERING_PREVIEW_DETAIL;
+/** « Compte : lea@… » — the signed-in account the transaction is posted for, shown to the developer, never logged. */
+export function describeTransactingAccount(account: AuthUser | undefined): string {
+  return `Compte : ${account?.email ?? account?.id ?? 'aucun'}`;
 }
 
-/** A confirmed Test Store purchase: the store offering (its reference) and the plan, captured at confirmation. */
+/** What the live entry says about itself, from the store the source is bound to and the signed-in account. */
+export function describeLiveOfferingPreview(checkout: Pick<PlusCheckoutSession, 'appleSandbox' | 'dedicatedTestAccount'>): string {
+  if (!checkout.appleSandbox) return LIVE_OFFERING_PREVIEW_DETAIL;
+  return checkout.dedicatedTestAccount ? APPLE_SANDBOX_PREVIEW_DETAIL : APPLE_SANDBOX_READ_ONLY_PREVIEW_DETAIL;
+}
+
+/**
+ * A confirmed purchase: the store offering (its reference), the plan, and
+ * the origin — `apple-sandbox-test` for the Apple Sandbox bench, none for
+ * the Test Store — captured at confirmation.
+ */
 interface CheckoutRequest {
   readonly offering: PaywallOffering;
   readonly plan: SubscriptionPlan;
+  readonly origin: PurchaseOrigin | undefined;
 }
 
 /**
@@ -229,7 +269,7 @@ export function PaywallPreviewSheet({ visible, onClose }: PaywallPreviewSheetPro
         { text: 'OK', style: 'cancel' as const, onPress: returnToPaywall },
       ]);
     };
-    void checkoutRef.current.purchase(request.offering, request.plan).then(showResult);
+    void checkoutRef.current.purchase(request.offering, request.plan, request.origin).then(showResult);
   }, [stage]);
 
   if (!__DEV__) return null;
@@ -253,7 +293,7 @@ export function PaywallPreviewSheet({ visible, onClose }: PaywallPreviewSheetPro
   };
   const explainNoPurchase = () => explainPreview('Aucun achat n’est effectué dans cet aperçu.');
   const explainNoStore = () => explainPreview('Aucun magasin n’est interrogé dans cet aperçu.');
-  const liveOfferingDetail = describeLiveOfferingPreview(checkout.store);
+  const liveOfferingDetail = describeLiveOfferingPreview(checkout);
 
   return (
     <>
@@ -355,13 +395,18 @@ interface LiveOfferingPaywallProps {
 /**
  * The paywall over the real offering of the signed-in account. Mounted only
  * while the paywall stage shows it: the loader starts with it and is dropped
- * with it. Its primary action guards and confirms a Test Store purchase,
- * then hands it to the coordinator; its restore link runs a confirmed
- * restore in place; an entitled account meets the entitled context and no
- * purchase action at all.
+ * with it. Its primary action guards and confirms a Test Store purchase — or,
+ * in Apple Sandbox mode for a dedicated test account, an Apple Sandbox one —
+ * then hands it to the coordinator; its restore link runs a confirmed restore
+ * in place; an entitled account meets the entitled context and no purchase
+ * action at all.
  */
 function LiveOfferingPaywall({ checkout, onClose, onPurchase }: LiveOfferingPaywallProps) {
   const { offering, retry } = usePaywallOffering();
+  // Apple Sandbox mode: a debug bundle bound to the App Store. Transactions
+  // are offered to a dedicated test account only; everyone else reads.
+  const appleSandbox = checkout.appleSandbox;
+  const sandboxTester = appleSandbox && checkout.dedicatedTestAccount;
 
   const showResult = (result: PlusCheckoutResult | undefined) => {
     if (result === undefined) return;
@@ -382,7 +427,9 @@ function LiveOfferingPaywall({ checkout, onClose, onPurchase }: LiveOfferingPayw
     const refusal = resolveTestPurchaseRefusal({
       development: __DEV__,
       store: checkout.store,
+      appleSandbox,
       authenticated: checkout.authenticated,
+      dedicatedTestAccount: checkout.dedicatedTestAccount,
       offering,
       plan,
       activity: checkout.activity,
@@ -396,9 +443,18 @@ function LiveOfferingPaywall({ checkout, onClose, onPurchase }: LiveOfferingPayw
       Alert.alert(TEST_PURCHASE_REFUSED_TITLE, TEST_PURCHASE_REFUSALS['plan-not-offered']);
       return;
     }
-    Alert.alert(TEST_PURCHASE_TITLE, `${described}\n${TEST_PURCHASE_NOTICE_LINES.join('\n')}`, [
+    // The explicit opt-in the provider requires for an Apple Sandbox purchase; a Test Store purchase passes none.
+    const origin: PurchaseOrigin | undefined = sandboxTester ? 'apple-sandbox-test' : undefined;
+    const confirmation = sandboxTester
+      ? {
+          title: APPLE_SANDBOX_PURCHASE_TITLE,
+          message: [described, ...APPLE_SANDBOX_PURCHASE_NOTICE_LINES, describeTransactingAccount(checkout.account)].join('\n'),
+          confirm: APPLE_SANDBOX_PURCHASE_CONFIRM_TITLE,
+        }
+      : { title: TEST_PURCHASE_TITLE, message: [described, ...TEST_PURCHASE_NOTICE_LINES].join('\n'), confirm: TEST_PURCHASE_CONFIRM_TITLE };
+    Alert.alert(confirmation.title, confirmation.message, [
       { text: TEST_PURCHASE_CANCEL_TITLE, style: 'cancel' },
-      { text: TEST_PURCHASE_CONFIRM_TITLE, onPress: () => onPurchase({ offering, plan }) },
+      { text: confirmation.confirm, onPress: () => onPurchase({ offering, plan, origin }) },
     ]);
   };
 
@@ -406,37 +462,48 @@ function LiveOfferingPaywall({ checkout, onClose, onPurchase }: LiveOfferingPayw
     const refusal = resolveTestRestoreRefusal({
       development: __DEV__,
       store: checkout.store,
+      appleSandbox,
       authenticated: checkout.authenticated,
+      dedicatedTestAccount: checkout.dedicatedTestAccount,
       activity: checkout.activity,
     });
     if (refusal !== undefined) {
       Alert.alert(TEST_RESTORE_REFUSED_TITLE, TEST_RESTORE_REFUSALS[refusal]);
       return;
     }
-    Alert.alert(TEST_RESTORE_TITLE, TEST_RESTORE_MESSAGE, [
+    const confirmation = sandboxTester
+      ? {
+          title: APPLE_SANDBOX_RESTORE_TITLE,
+          message: `${APPLE_SANDBOX_RESTORE_MESSAGE}\n${describeTransactingAccount(checkout.account)}`,
+          confirm: APPLE_SANDBOX_RESTORE_CONFIRM_TITLE,
+        }
+      : { title: TEST_RESTORE_TITLE, message: TEST_RESTORE_MESSAGE, confirm: TEST_RESTORE_CONFIRM_TITLE };
+    Alert.alert(confirmation.title, confirmation.message, [
       { text: TEST_PURCHASE_CANCEL_TITLE, style: 'cancel' },
-      { text: TEST_RESTORE_CONFIRM_TITLE, onPress: () => void checkout.restore().then(showResult) },
+      { text: confirmation.confirm, onPress: () => void checkout.restore().then(showResult) },
     ]);
   };
 
-  // Apple Sandbox mode (a debug bundle bound to the App Store) reads the App
-  // Store offering and transacts nothing: no restore link at all. Every other
-  // source keeps the Test Store bench, whose guards explain the rest.
-  const appleSandbox = checkout.store === 'app-store';
+  // The notice says which bench this is. The App Store without a dedicated
+  // test account — Apple Sandbox mode for any other account, or a source
+  // without the mode — reads the offering and transacts nothing: no restore
+  // link at all, the action only explains.
+  const restoreHidden = checkout.store === 'app-store' && !sandboxTester;
+  const environmentNotice = !appleSandbox
+    ? { title: TEST_PURCHASE_TITLE, lines: TEST_PURCHASE_NOTICE_LINES }
+    : sandboxTester
+      ? { title: APPLE_SANDBOX_NOTICE_TITLE, lines: APPLE_SANDBOX_NOTICE_LINES }
+      : { title: APPLE_SANDBOX_READ_ONLY_NOTICE_TITLE, lines: APPLE_SANDBOX_READ_ONLY_NOTICE_LINES };
 
   return (
     <PaywallScreen
       activity={checkout.activity}
       context={checkout.entitled ? paywallContextFixtures.entitled : paywallContextFixtures.initialOffer}
-      environmentNotice={
-        appleSandbox
-          ? { title: APPLE_SANDBOX_NOTICE_TITLE, lines: APPLE_SANDBOX_NOTICE_LINES }
-          : { title: TEST_PURCHASE_TITLE, lines: TEST_PURCHASE_NOTICE_LINES }
-      }
+      environmentNotice={environmentNotice}
       offering={offering}
       onClose={onClose}
       onContinueReadOnly={onClose}
-      onRestorePurchases={appleSandbox ? undefined : requestTestRestore}
+      onRestorePurchases={restoreHidden ? undefined : requestTestRestore}
       onRetryOffering={retry}
       onSubscribe={requestTestPurchase}
       testID="paywall-preview-screen"

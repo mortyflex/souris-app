@@ -4,6 +4,7 @@ import type { SubscriptionVerification } from '@/domain/access';
 
 import type { StorePaywallOffering } from '../paywall/paywall-offering';
 import type {
+  AppleSandboxMode,
   PurchaseRequest,
   StorePurchaseOutcome,
   StoreRestoreOutcome,
@@ -54,6 +55,8 @@ interface FakeSubscriptionSourceOptions {
   readonly restore?: (userId: string) => Promise<StoreRestoreOutcome>;
   /** The store the fake claims to be bound to. Omitted: the Test Store when it transacts, none otherwise. */
   readonly store?: SubscriptionStoreKind;
+  /** Apple Sandbox mode the fake claims (a debug bundle bound to the App Store). Omitted: none. */
+  readonly appleSandbox?: AppleSandboxMode;
 }
 
 export const UNAVAILABLE_VERIFICATION: SubscriptionVerification = { kind: 'unavailable' };
@@ -125,6 +128,7 @@ export function createFakeSubscriptionSource(
       };
     },
     ...(store === undefined ? {} : { store }),
+    ...(options.appleSandbox === undefined ? {} : { appleSandbox: options.appleSandbox }),
     ...(loadOffering === undefined ? {} : { loadOffering }),
     ...(purchase === undefined ? {} : { purchase }),
     ...(restore === undefined ? {} : { restore }),

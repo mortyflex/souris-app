@@ -106,12 +106,17 @@ describe('paywall presentation — production boundary', () => {
     expect(preview).toContain("from '../../session/use-paywall-offering'");
     expect(preview).toContain("from '../../session/use-plus-checkout'");
     expect(preview).not.toMatch(/purchasePackage|restorePurchases|infrastructure\/revenuecat|subscription-source|react-native-purchases/);
-    // The Test Store purchase is guarded (every condition) and confirmed before the coordinator is asked…
-    expect(preview).toMatch(/resolveTestPurchaseRefusal\(\{\s*development: __DEV__,\s*store: checkout\.store,/);
-    expect(preview).toMatch(/Alert\.alert\(TEST_PURCHASE_TITLE,[\s\S]*?onPress: \(\) => onPurchase\(\{ offering, plan \}\)/);
+    // The purchase is guarded (every condition, the Apple Sandbox account included) and confirmed before the coordinator is asked…
+    expect(preview).toMatch(/resolveTestPurchaseRefusal\(\{\s*development: __DEV__,\s*store: checkout\.store,\s*appleSandbox,\s*authenticated: checkout\.authenticated,\s*dedicatedTestAccount: checkout\.dedicatedTestAccount,/);
+    expect(preview).toMatch(/Alert\.alert\(confirmation\.title, confirmation\.message,[\s\S]*?onPress: \(\) => onPurchase\(\{ offering, plan, origin \}\)/);
+    // …the Apple Sandbox opt-in is named for a dedicated test account only, never for the Test Store…
+    expect(preview).toMatch(/const origin: PurchaseOrigin \| undefined = sandboxTester \? 'apple-sandbox-test' : undefined;/);
+    expect(preview).toMatch(/const sandboxTester = appleSandbox && checkout\.dedicatedTestAccount;/);
     // …which buys ONCE, from the always-mounted sheet, in the `checkout` stage only — never from the paywall it presents.
     expect(preview.match(/\.purchase\(/g)).toHaveLength(1);
-    expect(preview).toMatch(/stage\.kind !== 'checkout' \|\| startedRequest\.current === stage\.request\) return;[\s\S]*?checkoutRef\.current\.purchase\(request\.offering, request\.plan\)/);
+    expect(preview).toMatch(/stage\.kind !== 'checkout' \|\| startedRequest\.current === stage\.request\) return;[\s\S]*?checkoutRef\.current\.purchase\(request\.offering, request\.plan, request\.origin\)/);
+    // No transaction record, no fake receipt, no bypass of Apple's sheet: the preview never names a transaction or a receipt.
+    expect(preview).not.toMatch(/transactionIdentifier|receipt|originalJson/i);
     // The paywall Modal and the SDK dialog never overlap: the Modal is presented in the paywall stages only.
     expect(preview).toMatch(/visible=\{visible && stage\.kind === 'paywall'\}/);
     expect(preview).toMatch(/if \(stage\.kind === 'checkout-closing'\) setStage\(\{ kind: 'checkout', request: stage\.request \}\);/);

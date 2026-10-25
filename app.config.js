@@ -4,10 +4,12 @@
 //                                                                    TestFlight) and a plain `expo run:ios`
 //   development     BeautIzzy Dev      com.mortyflex.sourisapp.dev    the everyday development build
 //                                                                    (EAS `development` profile)
-//   apple-sandbox   BeautIzzy Sandbox  com.mortyflex.sourisapp        Phase 6.4A: a DEBUG build carrying the
+//   apple-sandbox   BeautIzzy Sandbox  com.mortyflex.sourisapp        Phase 6.4A/B: a DEBUG build carrying the
 //                                                                    App Store bundle identifier so RevenueCat
 //                                                                    can read the real Apple products in the
-//                                                                    Apple Sandbox — read-only, never a purchase
+//                                                                    Apple Sandbox, and — from the developer
+//                                                                    preview only, for declared test accounts
+//                                                                    only — run Sandbox purchases and restores
 //
 // The variant selects the name, the identifiers and ONE flag read by the
 // RevenueCat wiring (`extra.revenueCat.appleSandbox`). It never decides the

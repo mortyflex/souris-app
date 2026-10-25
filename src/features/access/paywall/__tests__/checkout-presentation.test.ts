@@ -15,6 +15,7 @@ const FAILURES: readonly StoreTransactionFailure[] = [
   'no-account',
   'not-configured',
   'not-enabled',
+  'not-test-account',
   'operation-in-progress',
   'stale-offering',
   'sdk-unavailable',

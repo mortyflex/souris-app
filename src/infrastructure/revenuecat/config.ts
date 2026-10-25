@@ -20,10 +20,20 @@
 // Store bundle identifier. The rule honours the flag only on iOS and only when
 // the configuration's bundle identifier is the App Store one: the `.dev`
 // identifier never reads the products of the App Store bundle. The flag changes
-// the KEY, nothing else: the source is then bound to `app-store`, a store
-// purchases are not enabled for (`features/access/purchasable-stores.ts`), so
-// the mode reads offerings, prices, periods and trial eligibility, and can
-// neither purchase nor restore. A release build ignores the flag entirely.
+// the KEY and marks the source with Apple Sandbox mode: it is bound to
+// `app-store`, a store product purchases are not enabled for
+// (`features/access/purchasable-stores.ts`), so the mode reads offerings,
+// prices, periods and trial eligibility — and, since Phase 6.4B, lets the
+// developer-only test bench purchase and restore for the DEDICATED TEST
+// ACCOUNTS declared in EXPO_PUBLIC_REVENUECAT_APPLE_SANDBOX_TEST_ACCOUNTS (a
+// comma-separated list of Supabase user ids or emails), under THE
+// authorization rule of `features/access/purchase-authorization.ts`. The list
+// is read here only, normalized (trimmed, lowercase), never logged; it is
+// empty outside the mode. A release build ignores the flag entirely.
+//
+// The mode is not a proof that a transaction runs in Apple's Sandbox: StoreKit
+// decides the environment from the app's signature (a development-signed
+// build on a device) and the Apple account signed in on it.
 //
 // Every key here is a PUBLIC SDK key (`test_…`, `appl_…`): it ships inside the
 // app. A key of the wrong family in a variable — an Apple key where the Test
@@ -58,6 +68,8 @@ export interface RevenueCatBuild {
 export interface RawRevenueCatEnvironment {
   readonly testStoreApiKey: string | undefined;
   readonly iosApiKey: string | undefined;
+  /** The dedicated test accounts of Apple Sandbox mode, as written in the environment (comma-separated). */
+  readonly appleSandboxTestAccounts?: string | undefined;
 }
 
 export type RevenueCatUnconfiguredReason =
@@ -80,6 +92,8 @@ export type RevenueCatConfiguration =
       readonly apiKey: string;
       /** True in Apple Sandbox mode only: a debug bundle bound to the App Store. */
       readonly appleSandbox: boolean;
+      /** The dedicated test accounts of Apple Sandbox mode (ids or emails, lowercase); empty outside the mode. */
+      readonly appleSandboxTestAccounts: readonly string[];
     }
   | { readonly kind: 'unconfigured'; readonly reason: RevenueCatUnconfiguredReason };
 
@@ -94,19 +108,33 @@ const VARIABLE: Readonly<Record<RevenueCatStore, string>> = {
   'app-store': 'EXPO_PUBLIC_REVENUECAT_IOS_API_KEY',
 };
 
+/** The variable declaring the dedicated test accounts of Apple Sandbox mode. */
+export const APPLE_SANDBOX_TEST_ACCOUNTS_VARIABLE = 'EXPO_PUBLIC_REVENUECAT_APPLE_SANDBOX_TEST_ACCOUNTS';
+
+/** The declared test accounts: comma- or whitespace-separated, trimmed, lowercase, blanks dropped, duplicates dropped. */
+export function parseAppleSandboxTestAccounts(raw: string | undefined): readonly string[] {
+  if (raw === undefined) return [];
+  const entries = raw
+    .split(/[,\s]+/)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+  return [...new Set(entries)];
+}
+
 function resolveKey(
   store: RevenueCatStore,
   raw: string | undefined,
   missing: RevenueCatUnconfiguredReason,
   invalid: RevenueCatUnconfiguredReason,
   appleSandbox: boolean,
+  appleSandboxTestAccounts: readonly string[] = [],
 ): RevenueCatConfiguration {
   const apiKey = raw?.trim() ?? '';
   if (apiKey.length === 0) return { kind: 'unconfigured', reason: missing };
   if (!apiKey.startsWith(KEY_PREFIX[store]) || /\s/.test(apiKey)) {
     return { kind: 'unconfigured', reason: invalid };
   }
-  return { kind: 'configured', store, apiKey, appleSandbox };
+  return { kind: 'configured', store, apiKey, appleSandbox, appleSandboxTestAccounts };
 }
 
 /** Pure selection, exported so it can be verified without touching `process.env`, `__DEV__` or the Expo config. */
@@ -123,7 +151,14 @@ export function resolveRevenueCatConfiguration(
       if (build.bundleIdentifier !== APP_STORE_BUNDLE_IDENTIFIER) {
         return { kind: 'unconfigured', reason: 'apple-sandbox-wrong-bundle' };
       }
-      return resolveKey('app-store', raw.iosApiKey, 'missing-ios-key', 'invalid-ios-key', true);
+      return resolveKey(
+        'app-store',
+        raw.iosApiKey,
+        'missing-ios-key',
+        'invalid-ios-key',
+        true,
+        parseAppleSandboxTestAccounts(raw.appleSandboxTestAccounts),
+      );
     }
     return resolveKey('test-store', raw.testStoreApiKey, 'missing-test-store-key', 'invalid-test-store-key', false);
   }
@@ -155,13 +190,24 @@ export function describeUnconfiguredRevenueCat(reason: RevenueCatUnconfiguredRea
   }
 }
 
-/** The developer-facing notice of Apple Sandbox mode; names the variant and the bundle, never a key. */
-export const APPLE_SANDBOX_MODE_NOTICE = `RevenueCat Apple Sandbox mode (APP_VARIANT=${APPLE_SANDBOX_APP_VARIANT}, ${APP_STORE_BUNDLE_IDENTIFIER}): the real App Store products are read with the Apple public key; purchases and restores stay disabled.`;
+/**
+ * The developer-facing notice of Apple Sandbox mode; names the variant, the
+ * bundle and HOW MANY test accounts are declared — never a key, never an
+ * account.
+ */
+export function describeAppleSandboxMode(testAccountCount: number): string {
+  const accounts =
+    testAccountCount === 0
+      ? `no dedicated test account is declared in ${APPLE_SANDBOX_TEST_ACCOUNTS_VARIABLE}, so purchases and restores stay refused`
+      : `${testAccountCount} dedicated test account(s) declared in ${APPLE_SANDBOX_TEST_ACCOUNTS_VARIABLE} may purchase and restore from the development preview only`;
+  return `RevenueCat Apple Sandbox mode (APP_VARIANT=${APPLE_SANDBOX_APP_VARIANT}, ${APP_STORE_BUNDLE_IDENTIFIER}): the real App Store products are read with the Apple public key; ${accounts}. The StoreKit environment is decided by the app's signature and the device's Apple account, not by the variant.`;
+}
 
 /** Reads the build-time environment. Values are never logged, compared to examples, or printed. */
 export function readRevenueCatEnvironment(): RawRevenueCatEnvironment {
   return {
     testStoreApiKey: process.env.EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY,
     iosApiKey: process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY,
+    appleSandboxTestAccounts: process.env.EXPO_PUBLIC_REVENUECAT_APPLE_SANDBOX_TEST_ACCOUNTS,
   };
 }

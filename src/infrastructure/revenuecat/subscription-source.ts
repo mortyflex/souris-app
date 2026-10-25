@@ -74,6 +74,7 @@ import {
   type StorePaywallOffering,
 } from '@/features/access/paywall/paywall-offering';
 import type {
+  AppleSandboxMode,
   PurchaseRequest,
   StorePurchaseOutcome,
   StoreRestoreOutcome,
@@ -99,6 +100,8 @@ export interface RevenueCatSubscriptionSourceOptions {
   readonly apiKey: string;
   /** The store the key belongs to; the provider refuses purchases against a store not enabled yet. */
   readonly store: SubscriptionStoreKind;
+  /** Apple Sandbox mode (Phase 6.4), exposed as is: the provider's authorization rule reads it. Absent otherwise. */
+  readonly appleSandbox?: AppleSandboxMode;
   /** Injected for deterministic tests; the application uses the system clock. */
   readonly clock?: () => Date;
 }
@@ -121,6 +124,7 @@ export function createRevenueCatSubscriptionSource({
   sdk,
   apiKey,
   store,
+  appleSandbox,
   clock = defaultClock,
 }: RevenueCatSubscriptionSourceOptions): SubscriptionSource {
   /** The user the SDK is identified as after the last COMPLETED transition; undefined before, during, or after a failed one. */
@@ -328,6 +332,7 @@ export function createRevenueCatSubscriptionSource({
 
   return {
     store,
+    ...(appleSandbox === undefined ? {} : { appleSandbox }),
     verify: (userId) => run(() => verifyOnChain(userId)),
     loadOffering: (userId) => run(() => loadOfferingOnChain(userId)),
     purchase: (userId, request) => run(() => purchaseOnChain(userId, request)),
