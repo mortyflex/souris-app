@@ -130,6 +130,39 @@ describe('RevenueCat integration — Phase 6.1 / 6.2 boundary', () => {
     expect(hook).not.toMatch(/useEffect\([^)]*restore/);
   });
 
+  it('a Sandbox entitlement is read by the two testing configurations only, never by a release and never by __DEV__ alone (Phase 6.5C, step 1)', () => {
+    // THE environment rule: the policy is resolved from the source's binding, in the adapter, once.
+    const adapter = files.find((file) => file.path === 'infrastructure/revenuecat/subscription-source.ts')!.source;
+    expect(adapter).toMatch(/if \(store === 'test-store'\) return 'sandbox-trusted';/);
+    expect(adapter).toMatch(/if \(appleSandbox !== undefined && appleSandbox\.testAccounts\.length > 0\) return 'sandbox-trusted';/);
+    expect(adapter).toMatch(/return 'production-only';/);
+    expect(adapter).toMatch(/const environmentPolicy = resolveEntitlementEnvironmentPolicy\(\{ store, appleSandbox \}\);/);
+    // Every mapping of the adapter carries that one policy; no call site chooses another.
+    const mappings = adapter.match(/mapCustomerInfoToVerification\((?:[^()]|\([^()]*\))*\)/g) ?? [];
+    expect(mappings.length).toBeGreaterThanOrEqual(3);
+    for (const call of mappings) expect(call).toMatch(/, environmentPolicy\)$/);
+    // The trusting literal exists in the pure mapping (its vocabulary) and in the adapter's rule — nowhere else.
+    const trusting = files.filter((file) => /'sandbox-trusted'/.test(file.source)).map((file) => file.path).sort();
+    expect(trusting).toEqual(['infrastructure/revenuecat/customer-info.ts', 'infrastructure/revenuecat/subscription-source.ts']);
+    // The mapping reads the SDK's documented field, in the pure module only, and never decides from __DEV__.
+    const readers = files.filter((file) => /\bisSandbox\b/.test(file.source)).map((file) => file.path);
+    expect(readers).toEqual(['infrastructure/revenuecat/customer-info.ts']);
+    const mapping = files.find((file) => file.path === 'infrastructure/revenuecat/customer-info.ts')!.source;
+    const code = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code(mapping)).not.toMatch(/__DEV__/);
+    expect(code(adapter)).not.toMatch(/__DEV__/);
+    expect(mapping).toMatch(/if \(!isEntitlementEnvironmentTrusted\(readEntitlementEnvironment\(entitlement\), policy\)\) return UNAVAILABLE;/);
+  });
+
+  it('the application neither reads nor writes the server-side entitlement mirror: a device verification can never become server evidence', () => {
+    for (const file of files) {
+      expect({
+        path: file.path,
+        mirror: /subscription_(entitlements|events|has_plus_access|apply_revenuecat_event|apply_reconciliation|read_mirror|write_snapshot)/.test(file.source),
+      }).toEqual({ path: file.path, mirror: false });
+    }
+  });
+
   it('reads the offerings and the trial eligibility through the SDK facade only, from the source only', () => {
     const sdkReaders = files
       .filter((file) => /\bPurchases\.(getOfferings|checkTrialOrIntroductoryPriceEligibility)\s*\(/.test(file.source))

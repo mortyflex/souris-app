@@ -1,8 +1,10 @@
 // BeautIzzy — CustomerInfo mapping: only the `plus` entitlement grants, each
 // store state reaches its domain status, history separates expired from
-// never, nothing is invented, and a stale or malformed answer is unavailable.
+// never, nothing is invented, a stale or malformed answer is unavailable, and
+// a Sandbox record is read by the testing configurations only (Phase 6.5C
+// step 1): under the ordinary policy it is unavailable, never a status.
 
-import type { CustomerInfo } from 'react-native-purchases';
+import type { CustomerInfo, PurchasesEntitlementInfo } from 'react-native-purchases';
 
 import type { SubscriptionStatus, SubscriptionVerification } from '@/domain/access';
 
@@ -10,16 +12,21 @@ import {
   APP_STORE_PLUS_PRODUCT_IDENTIFIERS,
   CUSTOMER_INFO_FRESHNESS_MS,
   isCustomerInfoFresh,
+  isEntitlementEnvironmentTrusted,
   mapCustomerInfoToVerification,
   parseStoreInstant,
   planFromProductIdentifier,
+  readEntitlementEnvironment,
+  type EntitlementEnvironmentPolicy,
 } from '../customer-info';
 import { customerInfo, LAST_MONTH, NEXT_MONTH, NOW, plusEntitlement } from '../testing/customer-info-fixtures';
 
 const UNAVAILABLE: SubscriptionVerification = { kind: 'unavailable' };
 const verified = (status: SubscriptionStatus): SubscriptionVerification => ({ kind: 'verified', status });
 
-const map = (info: CustomerInfo, now = NOW) => mapCustomerInfoToVerification(info, now);
+/** The ordinary policy: what a release reads. The environment suite below passes the other one explicitly. */
+const map = (info: CustomerInfo, now = NOW, policy: EntitlementEnvironmentPolicy = 'production-only') =>
+  mapCustomerInfoToVerification(info, now, policy);
 
 describe('mapCustomerInfoToVerification', () => {
   it('maps an active renewing App Store subscription, with its plan from the exact product identifier', () => {
@@ -147,6 +154,121 @@ describe('mapCustomerInfoToVerification', () => {
 
   it('rejects an invalid current instant', () => {
     expect(() => map(customerInfo(), new Date(Number.NaN))).toThrow(RangeError);
+    expect(() => map(customerInfo(), new Date(Number.NaN), 'sandbox-trusted')).toThrow(RangeError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Environment (Phase 6.5C, step 1): a Sandbox record is never production
+// evidence. The ordinary policy reads production records only; the testing
+// policy reads both alike; an unreadable environment is read by neither.
+// ---------------------------------------------------------------------------
+
+const sandbox = (overrides: Partial<PurchasesEntitlementInfo> = {}) => plusEntitlement({ isSandbox: true, ...overrides });
+const production = (overrides: Partial<PurchasesEntitlementInfo> = {}) => plusEntitlement({ isSandbox: false, ...overrides });
+
+/** Every store state the mapping knows, as a Sandbox record and as a production one, with the status a trusted read yields. */
+const STORE_STATES: readonly [label: string, overrides: Partial<PurchasesEntitlementInfo>, status: SubscriptionStatus][] = [
+  ['active', {}, { kind: 'active', plan: 'monthly', expiresAt: NEXT_MONTH }],
+  ['trial', { periodType: 'TRIAL' }, { kind: 'trial', plan: 'monthly', expiresAt: NEXT_MONTH }],
+  [
+    'cancelled but valid until its end',
+    { willRenew: false, unsubscribeDetectedAt: LAST_MONTH.toISOString() },
+    { kind: 'cancelled-active', plan: 'monthly', expiresAt: NEXT_MONTH },
+  ],
+  [
+    'billing retry',
+    { willRenew: false, billingIssueDetectedAt: LAST_MONTH.toISOString() },
+    { kind: 'active', plan: 'monthly', expiresAt: NEXT_MONTH },
+  ],
+  [
+    'promotional',
+    { store: 'PROMOTIONAL', productIdentifier: 'rc_promo_plus_lifetime', willRenew: false, expirationDate: null, expirationDateMillis: null },
+    { kind: 'complimentary' },
+  ],
+  [
+    'Test Store product',
+    { productIdentifier: 'plus_monthly_test', store: 'TEST_STORE' },
+    { kind: 'active', plan: 'unknown', expiresAt: NEXT_MONTH },
+  ],
+  ['expired', { isActive: false, willRenew: false, expirationDate: LAST_MONTH.toISOString() }, { kind: 'expired' }],
+];
+
+describe('mapCustomerInfoToVerification — environment policy', () => {
+  it.each(STORE_STATES)('production-only: a production %s record reads its status', (_label, overrides, status) => {
+    expect(map(customerInfo({ plus: production(overrides) }), NOW, 'production-only')).toEqual(verified(status));
+  });
+
+  it.each(STORE_STATES)('production-only: a Sandbox %s record is unavailable — never that status, never expired', (_label, overrides) => {
+    expect(map(customerInfo({ plus: sandbox(overrides) }), NOW, 'production-only')).toEqual(UNAVAILABLE);
+  });
+
+  it.each(STORE_STATES)('sandbox-trusted: a Sandbox %s record reads its status, exactly like a production one', (_label, overrides, status) => {
+    expect(map(customerInfo({ plus: sandbox(overrides) }), NOW, 'sandbox-trusted')).toEqual(verified(status));
+    expect(map(customerInfo({ plus: production(overrides) }), NOW, 'sandbox-trusted')).toEqual(verified(status));
+  });
+
+  it('an expired Sandbox record is not a confirmed end under production-only: no production proof is erased by it', () => {
+    const expiredSandbox = sandbox({ isActive: false, willRenew: false, expirationDate: LAST_MONTH.toISOString() });
+    expect(map(customerInfo({ plus: expiredSandbox }), NOW, 'production-only')).toEqual(UNAVAILABLE);
+    expect(map(customerInfo({ plus: expiredSandbox }), NOW, 'sandbox-trusted')).toEqual(verified({ kind: 'expired' }));
+  });
+
+  it('the absence of a record is read the same under both policies: the history decides, not the environment', () => {
+    for (const policy of ['production-only', 'sandbox-trusted'] as const) {
+      expect(map(customerInfo({ plus: null }), NOW, policy)).toEqual(verified({ kind: 'never' }));
+      expect(map(customerInfo({ plus: null, allPurchasedProductIdentifiers: [APP_STORE_PLUS_PRODUCT_IDENTIFIERS.annual] }), NOW, policy)).toEqual(
+        verified({ kind: 'expired' }),
+      );
+      expect(
+        map(
+          customerInfo({
+            plus: null,
+            allPurchasedProductIdentifiers: [APP_STORE_PLUS_PRODUCT_IDENTIFIERS.monthly],
+            activeSubscriptions: [APP_STORE_PLUS_PRODUCT_IDENTIFIERS.monthly],
+          }),
+          NOW,
+          policy,
+        ),
+      ).toEqual(UNAVAILABLE);
+    }
+  });
+
+  it('a record whose environment is missing or not a boolean is unavailable under either policy', () => {
+    const unreadable: readonly unknown[] = [undefined, null, 'true', 'false', 1, 0, {}];
+    for (const isSandbox of unreadable) {
+      const record = { ...plusEntitlement(), isSandbox } as unknown as PurchasesEntitlementInfo;
+      expect(map(customerInfo({ plus: record }), NOW, 'production-only')).toEqual(UNAVAILABLE);
+      expect(map(customerInfo({ plus: record }), NOW, 'sandbox-trusted')).toEqual(UNAVAILABLE);
+    }
+    const missing = { ...plusEntitlement() } as Record<string, unknown>;
+    delete missing.isSandbox;
+    expect(map(customerInfo({ plus: missing as unknown as PurchasesEntitlementInfo }), NOW, 'production-only')).toEqual(UNAVAILABLE);
+    expect(map(customerInfo({ plus: missing as unknown as PurchasesEntitlementInfo }), NOW, 'sandbox-trusted')).toEqual(UNAVAILABLE);
+  });
+
+  it('the environment is read before the record is judged: freshness, failed verification and lapsed ends still apply to a trusted record', () => {
+    const stale = new Date(NOW.getTime() - CUSTOMER_INFO_FRESHNESS_MS - 1);
+    expect(map(customerInfo({ plus: sandbox(), requestDate: stale }), NOW, 'sandbox-trusted')).toEqual(UNAVAILABLE);
+    const failed = sandbox({ verification: 'FAILED' as PurchasesEntitlementInfo['verification'] });
+    expect(map(customerInfo({ plus: failed }), NOW, 'sandbox-trusted')).toEqual(UNAVAILABLE);
+    const lapsed = sandbox({ expirationDate: NOW.toISOString(), expirationDateMillis: NOW.getTime() });
+    expect(map(customerInfo({ plus: lapsed }), NOW, 'sandbox-trusted')).toEqual(UNAVAILABLE);
+  });
+
+  it('readEntitlementEnvironment and isEntitlementEnvironmentTrusted are the two halves of the rule', () => {
+    expect(readEntitlementEnvironment(production())).toBe('production');
+    expect(readEntitlementEnvironment(sandbox())).toBe('sandbox');
+    expect(readEntitlementEnvironment({ ...production(), isSandbox: 'no' })).toBeUndefined();
+    expect(readEntitlementEnvironment(null)).toBeUndefined();
+    expect(readEntitlementEnvironment('production')).toBeUndefined();
+
+    expect(isEntitlementEnvironmentTrusted('production', 'production-only')).toBe(true);
+    expect(isEntitlementEnvironmentTrusted('sandbox', 'production-only')).toBe(false);
+    expect(isEntitlementEnvironmentTrusted(undefined, 'production-only')).toBe(false);
+    expect(isEntitlementEnvironmentTrusted('production', 'sandbox-trusted')).toBe(true);
+    expect(isEntitlementEnvironmentTrusted('sandbox', 'sandbox-trusted')).toBe(true);
+    expect(isEntitlementEnvironmentTrusted(undefined, 'sandbox-trusted')).toBe(false);
   });
 });
 

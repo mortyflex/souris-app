@@ -1433,6 +1433,10 @@ whose Plus access is verified (an active subscription, a trial, a cancelled subs
 end, a billing grace until its deadline, a complimentary access), suspended at a confirmed
 expiration without touching history or settings, and resumed — never replayed — when the
 subscription is back. Nothing visible changes and the app's enforcement stays disabled.
+Phase 6.5C, step 1 (October 2026): the app itself reads production entitlements only — an Apple
+Sandbox or Test Store purchase is never shown as a verified subscription on a professional's build
+(no « Plus » mark, « Abonnement non vérifié », never « expiré »); only the two developer testing
+configurations keep reading their own test purchases. Enforcement stays disabled.
 Still to come, in their own phases: the device run of that validation (real trial, real restore,
 renewal and expiration), the account-scoped paywall routing, persisted entitlement evidence,
 server-side enforcement of business changes on the backend entitlement mirror, real terms and

@@ -7,7 +7,7 @@ import type { SubscriptionVerification } from '@/domain/access';
 
 import { CUSTOMER_INFO_FRESHNESS_MS } from '../customer-info';
 import { PURCHASES_ERROR_CODE, type CustomerInfo, type LogInResult, type MakePurchaseResult, type PurchasesPackage } from '../sdk';
-import { createRevenueCatSubscriptionSource } from '../subscription-source';
+import { createRevenueCatSubscriptionSource, resolveEntitlementEnvironmentPolicy } from '../subscription-source';
 import { customerInfo, NEXT_MONTH, NOW, plusEntitlement } from '../testing/customer-info-fixtures';
 import {
   createFakeRevenueCatSdk,
@@ -176,6 +176,96 @@ describe('createRevenueCatSubscriptionSource — verification', () => {
     await source.verify(LEA);
     expect(sdk.calls.invalidateCustomerInfoCache).toBe(0);
     expect(sdk.calls.getCustomerInfo).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Environment (Phase 6.5C, step 1): the policy is a property of the source's
+// binding, resolved once, applied to every mapping of that source.
+// ---------------------------------------------------------------------------
+
+describe('resolveEntitlementEnvironmentPolicy', () => {
+  it('trusts Sandbox entitlements for the Test Store, and for Apple Sandbox mode with dedicated test accounts only', () => {
+    expect(resolveEntitlementEnvironmentPolicy({ store: 'test-store', appleSandbox: undefined })).toBe('sandbox-trusted');
+    expect(resolveEntitlementEnvironmentPolicy({ store: 'app-store', appleSandbox: { testAccounts: ['user-tester'] } })).toBe('sandbox-trusted');
+  });
+
+  it('reads production only for an App Store source without the mode — a release, TestFlight — or with nobody allowed to transact', () => {
+    expect(resolveEntitlementEnvironmentPolicy({ store: 'app-store', appleSandbox: undefined })).toBe('production-only');
+    expect(resolveEntitlementEnvironmentPolicy({ store: 'app-store', appleSandbox: { testAccounts: [] } })).toBe('production-only');
+  });
+});
+
+describe('createRevenueCatSubscriptionSource — environment', () => {
+  const APPLE_KEY = 'appl_FakeAppleKeyForUnitTestsOnly';
+  const sandboxActive = () => customerInfo({ plus: plusEntitlement({ isSandbox: true }), originalAppUserId: LEA });
+  const productionActive = () => customerInfo({ plus: plusEntitlement({ isSandbox: false }), originalAppUserId: LEA });
+
+  function appStoreHarness(appleSandbox?: { readonly testAccounts: readonly string[] }) {
+    const sdk = createFakeRevenueCatSdk();
+    const source = createRevenueCatSubscriptionSource({ sdk, apiKey: APPLE_KEY, store: 'app-store', appleSandbox, clock: () => NOW });
+    return { sdk, source };
+  }
+
+  it('an App Store source without Apple Sandbox mode reads a production entitlement, and answers unavailable for a Sandbox one', async () => {
+    const { sdk, source } = appStoreHarness();
+    sdk.setCustomerInfo(LEA, productionActive());
+    await expect(source.verify(LEA)).resolves.toEqual(ACTIVE_MONTHLY);
+    sdk.setCustomerInfo(LEA, sandboxActive());
+    await expect(source.verify(LEA)).resolves.toEqual(UNAVAILABLE);
+  });
+
+  it('an App Store source in Apple Sandbox mode with a dedicated test account reads a Sandbox entitlement; with none declared it does not', async () => {
+    const trusted = appStoreHarness({ testAccounts: ['user-tester'] });
+    trusted.sdk.setCustomerInfo(LEA, sandboxActive());
+    await expect(trusted.source.verify(LEA)).resolves.toEqual(ACTIVE_MONTHLY);
+
+    const nobody = appStoreHarness({ testAccounts: [] });
+    nobody.sdk.setCustomerInfo(LEA, sandboxActive());
+    await expect(nobody.source.verify(LEA)).resolves.toEqual(UNAVAILABLE);
+    nobody.sdk.setCustomerInfo(LEA, productionActive());
+    await expect(nobody.source.verify(LEA)).resolves.toEqual(ACTIVE_MONTHLY);
+  });
+
+  it('a Test Store source reads a Sandbox entitlement: the development bench sees its own purchases', async () => {
+    const { sdk, source } = harness();
+    sdk.setCustomerInfo(LEA, sandboxActive());
+    await expect(source.verify(LEA)).resolves.toEqual(ACTIVE_MONTHLY);
+  });
+
+  it('the policy applies to a push re-read and to the answer of a purchase or a restore alike', async () => {
+    const { sdk, source } = appStoreHarness();
+    sdk.setCustomerInfo(LEA, productionActive());
+    await source.verify(LEA);
+    const received: SubscriptionVerification[] = [];
+    const unsubscribe = source.onVerificationChange!(LEA, (verification) => received.push(verification));
+    sdk.setCustomerInfo(LEA, sandboxActive());
+    sdk.emit(sandboxActive());
+    await flush();
+    expect(received).toEqual([UNAVAILABLE]);
+    unsubscribe();
+
+    sdk.setOfferings(LEA, appStoreOfferings);
+    const offering = await source.loadOffering!(LEA);
+    sdk.scriptPurchase(LEA, (pkg) => Promise.resolve(makePurchaseResult(sandboxActive(), pkg.product.identifier, NOW)));
+    await expect(source.purchase!(LEA, { reference: (offering as { reference: string }).reference, plan: 'monthly' })).resolves.toEqual({
+      kind: 'completed',
+      verification: UNAVAILABLE,
+    });
+    // The fake's restore answers the scripted CustomerInfo of the identified user.
+    sdk.setCustomerInfo(LEA, sandboxActive());
+    await expect(source.restore!(LEA)).resolves.toEqual({ kind: 'completed', verification: UNAVAILABLE });
+    sdk.setCustomerInfo(LEA, productionActive());
+    await expect(source.restore!(LEA)).resolves.toEqual({ kind: 'completed', verification: ACTIVE_MONTHLY });
+  });
+
+  it('answers for the identity asked: a Sandbox entitlement of one account never becomes another account’s production answer', async () => {
+    const { sdk, source } = appStoreHarness();
+    sdk.setCustomerInfo(LEA, sandboxActive());
+    sdk.setCustomerInfo(NOA, customerInfo({ plus: plusEntitlement({ isSandbox: false }), originalAppUserId: NOA }));
+    await expect(source.verify(LEA)).resolves.toEqual(UNAVAILABLE);
+    await expect(source.verify(NOA)).resolves.toEqual(ACTIVE_MONTHLY);
+    await expect(source.verify(LEA)).resolves.toEqual(UNAVAILABLE);
   });
 });
 

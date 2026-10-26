@@ -19,7 +19,13 @@ Phase 6.5B  Communication entitlement enforcement    done — the server-side sw
                                                              communications_is_entitled, the four
                                                              boundaries, the worker's final check
                                                              (docs/architecture/COMMUNICATIONS.md §46)
-Phase 6.5C  Server-side enforcement, continued      future — business-mutation enforcement in the
+Phase 6.5C  Server-side enforcement, continued      step 1 done — the device reads production
+                                                             entitlements only (`isSandbox`): a
+                                                             Sandbox purchase is never a verified
+                                                             production entitlement outside the two
+                                                             testing configurations (ARCHITECTURE.md
+                                                             §10, Phase 6.5C step 1)
+                                                     future — business-mutation enforcement in the
                                                              sync RPCs, the app reading the mirror,
                                                              offline evidence persistence, the
                                                              scheduled re-verification and the

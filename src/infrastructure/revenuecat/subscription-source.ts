@@ -67,6 +67,19 @@
 // construction, or `unavailable` when it cannot be trusted. `restore` does
 // the same with the store's restore answer. Neither grants anything: the
 // provider applies the verification through its own pipeline.
+//
+// Environment (Phase 6.5C, step 1). Every CustomerInfo this source maps —
+// a verification, a push re-read, the answer of a purchase or a restore —
+// goes through ONE environment policy (`customer-info.ts`), resolved ONCE
+// from the source's own binding by `resolveEntitlementEnvironmentPolicy`:
+// a source bound to the Test Store, or an App Store source in Apple Sandbox
+// mode with dedicated test accounts declared, reads Sandbox entitlements
+// (`sandbox-trusted`); EVERY other source — an App Store release, TestFlight
+// included, or Apple Sandbox mode with nobody allowed to transact — reads
+// production entitlements only (`production-only`), so a Sandbox purchase is
+// never a verified production entitlement on a professional's device. The
+// policy is a property of the configuration, never of `__DEV__` alone, and
+// no caller can hand the mapping another one.
 
 import type { SubscriptionPlan, SubscriptionVerification } from '@/domain/access';
 import {
@@ -83,7 +96,11 @@ import type {
   SubscriptionStoreKind,
 } from '@/features/access/subscription-source';
 
-import { isCustomerInfoFresh, mapCustomerInfoToVerification } from './customer-info';
+import {
+  isCustomerInfoFresh,
+  mapCustomerInfoToVerification,
+  type EntitlementEnvironmentPolicy,
+} from './customer-info';
 import { mapOfferingsToPaywallOffering, productIdentifiersWithFreeTrial, selectPlanPackages } from './offering';
 import { classifyPurchasesError } from './purchase-error';
 import type {
@@ -120,6 +137,31 @@ const defaultClock = () => new Date();
 
 const ignore = () => undefined;
 
+/** What a source's binding says about Sandbox entitlements: the two testing configurations trust them, nothing else does. */
+export interface EntitlementEnvironmentBinding {
+  readonly store: SubscriptionStoreKind;
+  readonly appleSandbox: AppleSandboxMode | undefined;
+}
+
+/**
+ * THE rule choosing the environment policy of a source, pure. Sandbox
+ * entitlements are trusted by a source bound to the RevenueCat Test Store
+ * (a debug bundle's store, whose purchases exist in no production
+ * environment), and by an App Store source carrying Apple Sandbox mode with
+ * at least one dedicated test account declared — the configuration that may
+ * transact in Apple's Sandbox at all. An App Store source without the mode
+ * (a release, TestFlight), or in the mode with nobody allowed to transact,
+ * reads production entitlements only.
+ */
+export function resolveEntitlementEnvironmentPolicy({
+  store,
+  appleSandbox,
+}: EntitlementEnvironmentBinding): EntitlementEnvironmentPolicy {
+  if (store === 'test-store') return 'sandbox-trusted';
+  if (appleSandbox !== undefined && appleSandbox.testAccounts.length > 0) return 'sandbox-trusted';
+  return 'production-only';
+}
+
 export function createRevenueCatSubscriptionSource({
   sdk,
   apiKey,
@@ -127,6 +169,8 @@ export function createRevenueCatSubscriptionSource({
   appleSandbox,
   clock = defaultClock,
 }: RevenueCatSubscriptionSourceOptions): SubscriptionSource {
+  /** Resolved once from the binding; every mapping of this source uses it. */
+  const environmentPolicy = resolveEntitlementEnvironmentPolicy({ store, appleSandbox });
   /** The user the SDK is identified as after the last COMPLETED transition; undefined before, during, or after a failed one. */
   let identifiedUserId: string | undefined;
   /** Bumped when a transition starts: a push captured before it never delivers after it. */
@@ -186,7 +230,7 @@ export function createRevenueCatSubscriptionSource({
         await sdk.invalidateCustomerInfoCache();
         info = await readCustomerInfo(userId);
       }
-      return mapCustomerInfoToVerification(info, clock());
+      return mapCustomerInfoToVerification(info, clock(), environmentPolicy);
     } catch {
       return UNAVAILABLE;
     }
@@ -255,7 +299,7 @@ export function createRevenueCatSubscriptionSource({
   /** The verification of a CustomerInfo the store answered with a transaction; `unavailable` when it cannot be trusted. */
   function verificationOf(info: CustomerInfo): SubscriptionVerification {
     try {
-      return mapCustomerInfoToVerification(info, clock());
+      return mapCustomerInfoToVerification(info, clock(), environmentPolicy);
     } catch {
       return UNAVAILABLE;
     }
@@ -325,7 +369,7 @@ export function createRevenueCatSubscriptionSource({
       if (!stillCurrent()) return;
       const now = clock();
       if (!isCustomerInfoFresh(info, now)) return;
-      const verification = mapCustomerInfoToVerification(info, now);
+      const verification = mapCustomerInfoToVerification(info, now, environmentPolicy);
       for (const listener of subscribers.get(userId) ?? []) listener(verification);
     });
   }

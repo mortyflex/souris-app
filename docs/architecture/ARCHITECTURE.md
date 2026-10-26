@@ -876,6 +876,30 @@ no entitlement rule and merely obeys the database's verdict. While the switch is
 state after this phase — every Business behaves exactly as before. Nothing is applied, deployed or
 enabled by the phase.
 
+Sandbox entitlement isolation (Phase 6.5C, step 1, `src/infrastructure/revenuecat/`). The first
+client-side step of 6.5C closes the one gap between the device and the mirror: RevenueCat reports,
+on every entitlement record, the environment it was unlocked in (`isSandbox` — Apple's Sandbox and
+the Test Store are sandbox; TestFlight purchases are Sandbox purchases), and the mapping did not read
+it, so a Sandbox subscription read as `active` on the device while `subscription_has_plus_access`
+denies it. `mapCustomerInfoToVerification` now takes an `EntitlementEnvironmentPolicy` and reads the
+environment BEFORE anything else about the record: under `production-only` a Sandbox record — or one
+whose `isSandbox` is not a boolean — is `unavailable` as a whole (never active, never a trial, and
+never `expired`: an ended Sandbox subscription is no confirmed end of production access and erases
+no production proof); under `sandbox-trusted` production and Sandbox records are read alike. THE
+rule choosing the policy is `resolveEntitlementEnvironmentPolicy`, pure, in the adapter, resolved
+ONCE per source from its binding and applied to every mapping (verification, push re-read, the
+answer of a purchase or a restore): a source bound to the Test Store, or an App Store source in
+Apple Sandbox mode with at least one dedicated test account declared, trusts Sandbox records; an
+App Store source without the mode — every release, TestFlight included — or in the mode with nobody
+allowed to transact reads production only. The policy follows the configuration boundary and the
+allowlist of Phase 6.4B, never `__DEV__` alone; `revenuecat-boundary.test.ts` pins the rule, the
+single reader of `isSandbox`, the two files that may name the trusting policy, and that no
+application module names a mirror table or function (a device verification can never become server
+evidence). Observable effect with enforcement disabled: a Sandbox entitlement on a release build
+shows no « Plus » mark and « Abonnement non vérifié » instead of « Abonnement actif »; the
+authorized Apple Sandbox bench and the Test Store bench are unchanged. Nothing else changes:
+`SUBSCRIPTION_ENFORCEMENT` stays `disabled`, no routing, no persistence, no server change.
+
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
 announces (`nextBusinessAccessDeadline`: the end of the entitlement in force, then the end of the

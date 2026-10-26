@@ -34,12 +34,47 @@
 //
 // The plan is established by an EXACT App Store product identifier; any other
 // identifier (a Test Store product, a future product) is `unknown`.
+//
+// Environment (Phase 6.5C, step 1). Every entitlement record says where it was
+// unlocked: `isSandbox` false for a production purchase, true for Apple's
+// Sandbox and the RevenueCat Test Store. A Sandbox entitlement is never
+// evidence of production Plus access, so the caller states, with
+// `EntitlementEnvironmentPolicy`, which environments ITS source may trust:
+//
+//   production-only   an ordinary source — an App Store release, TestFlight
+//                     included: a record whose environment is not production
+//                     (sandbox, or not readable) is `unavailable` as a whole,
+//                     whatever it says — never active, never expired, never
+//                     a fresh revocation. Nothing is fabricated: the status
+//                     of production access is simply unknown here.
+//   sandbox-trusted   the two testing configurations only — a source bound to
+//                     the Test Store (a debug bundle), or an App Store source
+//                     in Apple Sandbox mode with dedicated test accounts
+//                     declared (`subscription-source.ts` resolves it; nothing
+//                     else may): production and sandbox records are read
+//                     alike, so the bench sees its own test purchases.
+//
+// The environment is read before anything else about the record: under
+// `production-only` an expired Sandbox subscription is not `expired` (which
+// would erase a production proof) — it is simply not production evidence.
+// A record whose `isSandbox` is not a boolean is malformed under either
+// policy: `unavailable`, like any other malformed record.
 
 import type { EntitlementPlan, SubscriptionPlan, SubscriptionVerification } from '@/domain/access';
 
 import type { CustomerInfo } from './sdk';
 
 export const PLUS_ENTITLEMENT_IDENTIFIER = 'plus';
+
+/**
+ * Which store environments a source may read a `plus` record from.
+ * `production-only` is the policy of every ordinary source; `sandbox-trusted`
+ * is resolved from a testing configuration only, never from `__DEV__` alone.
+ */
+export type EntitlementEnvironmentPolicy = 'production-only' | 'sandbox-trusted';
+
+/** The environment an entitlement record was unlocked in, as RevenueCat reports it. */
+export type EntitlementEnvironment = 'production' | 'sandbox';
 
 /** Five minutes: the SDK's foreground cache lifetime. An older answer is not a verification of now. */
 export const CUSTOMER_INFO_FRESHNESS_MS = 5 * 60 * 1000;
@@ -96,6 +131,23 @@ function isKnownPlusProduct(productIdentifier: string): boolean {
   return planFromProductIdentifier(productIdentifier) !== 'unknown';
 }
 
+/** The environment of an entitlement record from its documented `isSandbox` field; undefined when it is not a boolean. */
+export function readEntitlementEnvironment(entitlement: unknown): EntitlementEnvironment | undefined {
+  if (!isRecord(entitlement)) return undefined;
+  if (entitlement.isSandbox === false) return 'production';
+  if (entitlement.isSandbox === true) return 'sandbox';
+  return undefined;
+}
+
+/** Whether a record of `environment` may be read under `policy`. An unreadable environment is trusted by no policy. */
+export function isEntitlementEnvironmentTrusted(
+  environment: EntitlementEnvironment | undefined,
+  policy: EntitlementEnvironmentPolicy,
+): boolean {
+  if (environment === undefined) return false;
+  return policy === 'sandbox-trusted' || environment === 'production';
+}
+
 /** What the absence of any `plus` record means, read from the purchase history. */
 function mapWithoutEntitlementRecord(info: Record<string, unknown>): SubscriptionVerification {
   if (stringList(info.activeSubscriptions).some(isKnownPlusProduct)) return UNAVAILABLE;
@@ -103,7 +155,11 @@ function mapWithoutEntitlementRecord(info: Record<string, unknown>): Subscriptio
   return NEVER;
 }
 
-export function mapCustomerInfoToVerification(info: CustomerInfo, now: Date): SubscriptionVerification {
+export function mapCustomerInfoToVerification(
+  info: CustomerInfo,
+  now: Date,
+  policy: EntitlementEnvironmentPolicy,
+): SubscriptionVerification {
   if (!isValidInstant(now)) throw new RangeError('mapCustomerInfoToVerification: invalid current instant');
   if (!isRecord(info) || !isCustomerInfoFresh(info, now)) return UNAVAILABLE;
 
@@ -112,6 +168,9 @@ export function mapCustomerInfoToVerification(info: CustomerInfo, now: Date): Su
   const entitlement = entitlements.all[PLUS_ENTITLEMENT_IDENTIFIER];
   if (entitlement === undefined) return mapWithoutEntitlementRecord(info);
   if (!isRecord(entitlement)) return UNAVAILABLE;
+  // The environment first: a record this source may not read says nothing —
+  // not even that the production access expired.
+  if (!isEntitlementEnvironmentTrusted(readEntitlementEnvironment(entitlement), policy)) return UNAVAILABLE;
   if (entitlement.verification === 'FAILED') return UNAVAILABLE;
 
   if (entitlement.isActive === false) return EXPIRED;

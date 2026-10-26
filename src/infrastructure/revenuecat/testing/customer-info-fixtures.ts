@@ -2,6 +2,8 @@
 //
 // Complete objects with the SDK's documented field names, so the mapping is
 // exercised against real shapes. No store, no network, no real customer.
+// The default record is a PRODUCTION purchase (`isSandbox: false`); a test
+// about a Sandbox purchase sets `isSandbox: true` explicitly.
 
 import type { CustomerInfo, PurchasesEntitlementInfo } from 'react-native-purchases';
 
@@ -28,7 +30,7 @@ export function plusEntitlement(overrides: Partial<PurchasesEntitlementInfo> = {
     store: 'APP_STORE',
     productIdentifier: APP_STORE_PLUS_PRODUCT_IDENTIFIERS.monthly,
     productPlanIdentifier: null,
-    isSandbox: true,
+    isSandbox: false,
     unsubscribeDetectedAt: null,
     unsubscribeDetectedAtMillis: null,
     billingIssueDetectedAt: null,
