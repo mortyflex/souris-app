@@ -4,6 +4,10 @@ import { AppState, Text, type AppStateStatus } from 'react-native';
 
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser } from '@/features/auth/testing/fake-auth-gateway';
+import type { SubscriptionVerification } from '@/domain/access';
+import { BusinessAccessProvider } from '@/features/access/session/BusinessAccessProvider';
+import { createFakeSubscriptionSource, type FakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
+import { readSyncEntitlementHold } from '@/persistence/sync/entitlement-hold';
 import type { RestoredSession } from '@/features/auth/gateway';
 import { BusinessSessionProvider } from '@/features/business/session/BusinessSessionProvider';
 import {
@@ -549,5 +553,110 @@ describe('CloudSyncRunner', () => {
       photo_path: PHOTO_D,
     });
     expect(productMounts).toBe(mountedBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BeautIzzy Plus (Phase 6.5C, step 3): the server refuses the Business's
+// writes, the runner keeps pulling, and the moment the access session turns
+// from read-only to full the held writes are sent again — once, in order,
+// through the same single-flight orchestration. Nothing assumes the server
+// agrees: a refusal then records a fresh hold.
+// ---------------------------------------------------------------------------
+
+describe('CloudSyncRunner — held writes resume when Plus is back', () => {
+  const EXPIRED: SubscriptionVerification = { kind: 'verified', status: { kind: 'expired' } };
+  const ACTIVE: SubscriptionVerification = {
+    kind: 'verified',
+    status: { kind: 'active', plan: 'monthly', expiresAt: new Date('2027-01-01T00:00:00.000Z') },
+  };
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  /** The runner under a REAL access session with enforcement enabled: read-only until the store says otherwise. */
+  async function renderRestricted(database: SourisDatabase, remote: SyncRemoteGateway, source: FakeSubscriptionSource) {
+    const auth = createFakeAuthGateway({ restore: async () => live });
+    const view = await render(
+      <TestPersistenceProvider createSeed={createTestSeed} database={database}>
+        <AuthProvider gateway={auth}>
+          <BusinessAccessProvider enforcement="enabled" source={source}>
+            <BusinessSessionProvider gateway={createFakeBusinessGateway([createRemoteBusiness()])}>
+              <CloudSyncRunner gateway={remote} />
+            </BusinessSessionProvider>
+          </BusinessAccessProvider>
+        </AuthProvider>
+      </TestPersistenceProvider>,
+    );
+    await act(async () => {});
+    return view;
+  }
+
+  async function holdRecordedUnderReadOnly() {
+    const triggers = captureTriggers();
+    const database = openDatabase({ bound: true });
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const source = createFakeSubscriptionSource();
+    source.respondWith(EXPIRED);
+    const view = await renderRestricted(database, remote, source);
+    // Synchronization never needs Plus to START: the existing data is uploaded (reading and uploading are not restricted).
+    await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    await waitFor(() => expect(remote.list(REMOTE_BUSINESS_ID)).toHaveLength(6));
+
+    // From now on the server refuses the Business's writes. A local change is made (the write guard is a product
+    // boundary: the store is written directly here, as a change made while access was still full would have been).
+    remote.refuseEntitlement(true);
+    updateClient(database, { ...clientLea, firstName: 'Léa-en-attente' });
+    const requestsBefore = remote.requests.length;
+    await act(async () => triggers.tick?.());
+    await waitFor(() => expect(readSyncEntitlementHold(database, REMOTE_BUSINESS_ID)).toMatchObject({ refusals: 1 }));
+    expect(remote.requests).toHaveLength(requestsBefore + 1);
+    expect(countSyncOutboxRows(database)).toBe(1);
+
+    // Under the hold a tick still pulls, and sends nothing.
+    const pullsBefore = remote.pulls.length;
+    await act(async () => triggers.tick?.());
+    await waitFor(() => expect(remote.pulls.length).toBeGreaterThan(pullsBefore));
+    expect(remote.requests).toHaveLength(requestsBefore + 1);
+    return { triggers, database, remote, source, view, requestsBefore };
+  }
+
+  it('Plus back and the server agrees: the hold is lifted, ONE run sends the held write, nothing twice', async () => {
+    const { database, remote, source, requestsBefore } = await holdRecordedUnderReadOnly();
+
+    remote.refuseEntitlement(false);
+    await act(async () => source.emit(fakeUser.id, ACTIVE));
+
+    await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    expect(remote.requests).toHaveLength(requestsBefore + 2);
+    expect(remote.find(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id)?.payload).toMatchObject({ first_name: 'Léa-en-attente' });
+    expect(readSyncEntitlementHold(database, REMOTE_BUSINESS_ID)).toBeUndefined();
+
+    // A later push of the store (the same answer again) is not a transition: no further run, no further request.
+    await act(async () => source.emit(fakeUser.id, ACTIVE));
+    await act(async () => {});
+    expect(remote.requests).toHaveLength(requestsBefore + 2);
+  });
+
+  it('Plus looks back locally but the server still refuses: one attempt, a fresh hold, the change kept, no loop', async () => {
+    const { triggers, database, remote, source, requestsBefore } = await holdRecordedUnderReadOnly();
+
+    await act(async () => source.emit(fakeUser.id, ACTIVE));
+    await waitFor(() => expect(remote.requests).toHaveLength(requestsBefore + 2));
+    await waitFor(() => expect(readSyncEntitlementHold(database, REMOTE_BUSINESS_ID)).toMatchObject({ refusals: 1 }));
+    expect(countSyncOutboxRows(database)).toBe(1);
+
+    await act(async () => triggers.tick?.());
+    await act(async () => {});
+    expect(remote.requests).toHaveLength(requestsBefore + 2);
+    expect(loadSnapshot(database).clients.find((client) => client.id === clientLea.id)?.firstName).toBe('Léa-en-attente');
+  });
+
+  it('a read-only session that stays read-only never triggers a run by itself', async () => {
+    const { remote, source, requestsBefore } = await holdRecordedUnderReadOnly();
+    await act(async () => source.emit(fakeUser.id, EXPIRED));
+    await act(async () => {});
+    expect(remote.requests).toHaveLength(requestsBefore + 1);
   });
 });

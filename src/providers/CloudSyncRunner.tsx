@@ -87,10 +87,23 @@
 // trigger under the same conditions (undefined while a run is not allowed),
 // not a second worker and not a new behavior. No product screen reads any
 // sync state.
+//
+// PLUS BACK (BeautIzzy Plus Phase 6.5C, step 3). When the server refuses the
+// Business's writes for lack of a Plus entitlement, the worker puts the push
+// pass on HOLD (persistence/sync/entitlement-hold.ts) and keeps pulling. The
+// moment the access session turns from read-only to full — a verified
+// entitlement, a purchase, a restore — this runner clears the hold of the
+// bound Business and runs ONCE more, under the same conditions as every
+// trigger: the held writes are sent again, in order, through the same
+// single-flight worker. It assumes nothing about the server: a refusal then
+// records a fresh hold. With enforcement disabled the access session never
+// turns, so nothing here ever fires; without an access provider above
+// (tests of the runner alone) the same.
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 
+import { useOptionalBusinessAccess } from '@/features/access/session/BusinessAccessProvider';
 import { useAuth } from '@/features/auth/session/AuthProvider';
 import { useBusinessSession } from '@/features/business/session/BusinessSessionProvider';
 import type { SourisDatabase } from '@/persistence/database';
@@ -99,6 +112,7 @@ import {
   approveInitialUpload,
   isLocalDatabasePopulated,
 } from '@/persistence/sync/bootstrap';
+import { liftSyncEntitlementHold } from '@/persistence/sync/entitlement-hold';
 import {
   createSyncPushWorker,
   didSyncRunChangeLocalData,
@@ -290,6 +304,26 @@ export function CloudSyncRunner({ gateway, children }: PropsWithChildren<CloudSy
       clearInterval(tick);
     };
   }, [runOnce, database, businessId]);
+
+  // Plus back: the access session turned from read-only to full. The hold of
+  // the bound Business is lifted and ONE run follows, under the same
+  // conditions as every trigger. Only the transition fires it — never a
+  // render, never a session that was full all along (enforcement disabled).
+  const access = useOptionalBusinessAccess();
+  const canMutate = access?.canMutate;
+  const previousCanMutate = useRef(canMutate);
+  useEffect(() => {
+    const regained = previousCanMutate.current === false && canMutate === true;
+    previousCanMutate.current = canMutate;
+    if (!regained || !runOnce || businessId === undefined) return;
+    try {
+      liftSyncEntitlementHold(database, businessId);
+    } catch {
+      // The database was closed by a reset; the next mount starts over.
+      return;
+    }
+    void runOnce();
+  }, [canMutate, runOnce, database, businessId]);
 
   // No run is possible (offline session): nothing is "in flight", the gate cannot open by itself.
   const gateStatus: FirstSyncGate['status'] = gateOpen

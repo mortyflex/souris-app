@@ -281,6 +281,20 @@ export function enqueueInitialUpload(db: SourisDatabase, businessId: string, now
   return created;
 }
 
+/**
+ * Makes the entries of the Business whose last attempt failed with `error`
+ * eligible at once (`next_attempt_at = NULL`), keeping their attempt count
+ * and the recorded error: the reason the backoff was waiting on is known to
+ * be over (an entitlement hold lifted, CLOUD_SYNC.md §26). Returns how many
+ * entries were released. Payload, operation, revision and place are untouched.
+ */
+export function releaseSyncOutboxEntries(db: SourisDatabase, businessId: string, error: string): number {
+  return db.runSync(
+    'UPDATE sync_outbox SET next_attempt_at = NULL WHERE business_id = ? AND last_error = ? AND next_attempt_at IS NOT NULL',
+    [businessId, error],
+  ).changes;
+}
+
 /** Whether the Business has ANY pending entry, eligible or not (one indexed SELECT). */
 export function hasPendingSyncOutbox(db: SourisDatabase, businessId: string): boolean {
   return (

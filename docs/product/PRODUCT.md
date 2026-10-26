@@ -1442,6 +1442,11 @@ enforcement exists a professional who opens the app without network keeps workin
 verified subscription — until its end, then for at most 72 hours while the renewal cannot be
 verified, never after a confirmed end — and a fresh installation or another account starts with
 nothing. Nothing visible changes today and enforcement stays disabled.
+Phase 6.5C, step 3 (October 2026): should the server one day refuse to record a change for lack of
+a subscription, nothing of that change is lost — it waits on the device, the professional keeps
+receiving what was recorded elsewhere, the app does not pester the server, and the waiting changes
+are sent, in order, as soon as the subscription is back. The server does not refuse anything yet;
+nothing visible changes and enforcement stays disabled.
 Still to come, in their own phases: the device run of that validation (real trial, real restore,
 renewal and expiration), the account-scoped paywall routing, server-side enforcement of business
 changes on the backend entitlement mirror, real terms and privacy URLs, account deletion and

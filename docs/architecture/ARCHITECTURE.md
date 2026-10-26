@@ -934,6 +934,22 @@ grace of local-only access, and nothing in it ever reaches the server. Deferred 
 server-side refusal of business writes, a clock high-water mark beside the proof (a clock set back
 extends what the proof grants; the store is the natural place for the mark).
 
+Entitlement-aware synchronization (Phase 6.5C, step 3, `docs/architecture/CLOUD_SYNC.md` §26). The
+client is prepared for the server refusing business writes for lack of a Plus entitlement — the
+structured `ENTITLEMENT_REQUIRED` answer of `sync_push_aggregate` that step 4 will add; the deployed
+functions never give it yet. The gateway parses it; the worker treats it as a per-Business,
+recoverable restriction: the refused entry stays exactly as it is (payload, operation, revision,
+place) with the refusal and the ordinary bounded backoff recorded, nothing is acknowledged or
+settled, the Business goes on a persisted HOLD (`persistence/sync/entitlement-hold.ts`, one metadata
+row trusted for that Business only) during which not one write is sent — one request per elapsed
+backoff, 1, 2, 4 … 60 minutes, never one per tick — and the run goes ON to the pull, so a device
+without Plus keeps receiving what others changed. `CloudSyncRunner` reacts to ONE thing: the access
+session turning from read-only to full, on which it lifts the hold (the record goes, the deferred
+entries become eligible, counts kept) and runs once, in order, through the same single-flight
+worker — assuming nothing about the server, whose refusal then records a fresh hold. Authentication
+and permission failures, rejections, conflicts and the deployed behaviour are unchanged; with
+enforcement disabled the access session never turns, so nothing fires.
+
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
 announces (`nextBusinessAccessDeadline`: the end of the entitlement in force, then the end of the

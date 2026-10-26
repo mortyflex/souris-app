@@ -223,7 +223,16 @@ export type RemotePushResult =
       readonly appointmentId: string | undefined;
       readonly expectedTotalCents: number;
       readonly activeDepositTotalCents: number;
-    };
+    }
+  /**
+   * The owner holds no verified Plus entitlement, so the server refused the
+   * write (BeautIzzy Plus Phase 6.5C — a server behaviour to come; the client
+   * is prepared, CLOUD_SYNC.md §26). NOTHING was written. A per-Business
+   * restriction, not a failure of this aggregate: the entry stays pending
+   * untouched, the Business's push pass goes on hold (entitlement-hold.ts)
+   * and the pull half of the run proceeds as usual.
+   */
+  | { readonly status: 'ENTITLEMENT_REQUIRED' };
 
 export type SyncRemoteFailureCode =
   /** No connectivity / transport failure. The run stops; nothing is lost. */

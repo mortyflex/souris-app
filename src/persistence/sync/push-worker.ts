@@ -39,12 +39,23 @@
 //                     no tombstone, no acknowledged version
 //          CONFLICT → nothing was written remotely; the entry stays pending
 //                     with a backoff and the conflict is reported
+//          ENTITLEMENT_REQUIRED → the server refused the write for lack of a
+//                     Plus entitlement (Phase 6.5C): nothing was written; the
+//                     entry stays pending with the refusal recorded and the
+//                     SAME bounded backoff; the Business's push pass goes on
+//                     HOLD (entitlement-hold.ts) — the remaining entries are not
+//                     sent in this run, nor in any run before the hold elapses —
+//                     and the run goes ON to the pull. Never a run-level failure,
+//                     never a settlement, never an acknowledgement. A hold still
+//                     in force skips the push pass without a single request; an
+//                     answer of any other kind for a write of the Business ends it
 //          failure  → the entry stays pending (attempt_count / last_error /
 //                     next_attempt_at); a rejection of this one aggregate moves
 //                     on to the next entry, anything else stops the run
 //     4. incremental pull (pull-worker.ts) — only for a Business that really
 //        synchronizes (ALREADY_SYNCED / INITIAL_UPLOAD) and only when the push
-//        pass was not stopped by a run-level failure. Push goes FIRST so that
+//        pass was not stopped by a run-level failure (an entitlement hold is
+//        not one). Push goes FIRST so that
 //        a push whose answer was lost is acknowledged before the pull looks at
 //        it (it would otherwise read as "remote newer + local dirty")
 //
@@ -56,11 +67,19 @@ import { runInTransaction, type SourisDatabase } from '../database';
 
 import {
   readBoundBusinessId,
+  type SyncAggregateRef,
   type SyncConflict,
   type SyncFinancialConflict,
   type SyncOperation,
 } from './aggregate';
 import { readAggregatePayload } from './aggregate-payload';
+import {
+  clearSyncEntitlementHold,
+  ENTITLEMENT_REQUIRED_ERROR,
+  isSyncEntitlementHoldActive,
+  readSyncEntitlementHold,
+  writeSyncEntitlementHold,
+} from './entitlement-hold';
 import {
   classifySyncBootstrap,
   clearInitialUploadApproval,
@@ -131,6 +150,14 @@ export type SyncRunResult =
        */
       readonly financialConflicts?: readonly SyncFinancialConflict[];
       /**
+       * The server refuses the Business's writes for lack of a Plus entitlement
+       * (CLOUD_SYNC.md §26): no write is sent before `until`. `refused` names
+       * the entry whose push received the refusal in THIS run; absent when the
+       * pass was skipped under a hold recorded earlier. Nothing was written on
+       * either side, every entry stays pending, and the pull ran as usual.
+       */
+      readonly entitlementHold?: { readonly until: Date; readonly refused?: SyncAggregateRef };
+      /**
        * Set when the run ended early: anything but a rejection of ONE aggregate
        * (transport, authorization, unexpected server answer) is a run-level
        * problem, and the remaining entries are not thrown at it.
@@ -194,6 +221,8 @@ function toFailure(error: unknown): { readonly code: SyncRemoteFailureCode; read
 export function hasEligiblePushWork(db: SourisDatabase, businessId: string, now: Date): boolean {
   const stored = readSyncBootstrapRecord(db, businessId);
   if (!stored || !isStoredPushDecisionCurrent(db, businessId, stored.decision)) return false;
+  // Under an entitlement hold no write would be sent: nothing to run for (the pull has its own trigger).
+  if (isSyncEntitlementHoldActive(db, businessId, now)) return false;
   return loadEligibleSyncOutbox(db, businessId, now).length > 0;
 }
 
@@ -307,13 +336,31 @@ export function createSyncPushWorker({
   async function pushEntries(
     businessId: string,
     decision: SyncBootstrapDecision,
-  ): Promise<Pick<Extract<SyncRunResult, { status: 'PUSHED' }>, 'pushed' | 'failed' | 'conflicts' | 'stoppedBy'>> {
+  ): Promise<
+    Pick<Extract<SyncRunResult, { status: 'PUSHED' }>, 'pushed' | 'failed' | 'conflicts' | 'stoppedBy' | 'entitlementHold'>
+  > {
     let pushed = 0;
     let failed = 0;
     const conflicts: SyncConflict[] = [];
     const financialConflicts: SyncFinancialConflict[] = [];
     // Reported only when there is one, like `stoppedBy` and `pull`.
     const summarize = () => (financialConflicts.length > 0 ? { financialConflicts } : {});
+
+    // A hold still in force: not one write is sent (CLOUD_SYNC.md §26). The
+    // entries stay as they are; the run goes on to the pull.
+    const hold = readSyncEntitlementHold(db, businessId);
+    if (hold !== undefined && now().getTime() < hold.nextAttemptAt.getTime()) {
+      return { pushed, failed, conflicts, entitlementHold: { until: hold.nextAttemptAt } };
+    }
+    // Any answer the server gives a write of this Business — applied, absent,
+    // conflict, financial conflict — proves its writes are not refused for
+    // entitlement: the elapsed hold is then over. Cleared once, on that answer.
+    let holdCleared = hold === undefined;
+    const settleHold = () => {
+      if (holdCleared) return;
+      clearSyncEntitlementHold(db, businessId);
+      holdCleared = true;
+    };
 
     for (const listed of loadEligibleSyncOutbox(db, businessId, now())) {
       // The list is a snapshot; the entry may have been coalesced or settled since.
@@ -364,6 +411,31 @@ export function createSyncPushWorker({
         );
         return { pushed, failed, conflicts, ...summarize(), stoppedBy: failure.code };
       }
+
+      if (result.status === 'ENTITLEMENT_REQUIRED') {
+        // The owner holds no verified Plus entitlement on the server: a
+        // per-Business restriction, not this aggregate's fault. The entry stays
+        // pending — payload, operation, revision and place untouched — with the
+        // refusal recorded and the SAME bounded backoff as any retry; the
+        // Business goes on hold until that instant, so the remaining entries are
+        // not thrown at a refusal that would be identical. Never a settlement,
+        // never an acknowledgement, never a run-level failure: the pull follows.
+        const refusedAt = now();
+        const refusals = (hold?.refusals ?? 0) + 1;
+        const until = nextSyncAttemptAt(refusedAt, refusals - 1);
+        runInTransaction(db, () => {
+          writeSyncEntitlementHold(db, { businessId, refusals, refusedAt, nextAttemptAt: until });
+          fail(entry, ENTITLEMENT_REQUIRED_ERROR, until);
+        });
+        return {
+          pushed,
+          failed,
+          conflicts,
+          ...summarize(),
+          entitlementHold: { until, refused: { aggregateType: entry.aggregateType, aggregateId: entry.aggregateId } },
+        };
+      }
+      settleHold();
 
       if (result.status === 'FINANCIAL_CONFLICT') {
         // The remote is the authority on the Appointment's financial state and
@@ -427,7 +499,8 @@ export function createSyncPushWorker({
 
     const summary = await pushEntries(businessId, bootstrap.decision);
     // Pull only for a Business that really synchronizes, and not through a
-    // remote that just failed the push pass.
+    // remote that just failed the push pass (an entitlement hold is not a
+    // failure of the remote: reading never needs Plus).
     const pull =
       bootstrap.decision !== 'EMPTY' && summary.stoppedBy === undefined
         ? await pullRemoteChanges({ database: db, gateway, businessId, now })

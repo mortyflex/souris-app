@@ -528,3 +528,13 @@ export function useBusinessAccess(): BusinessAccessValue {
   }
   return value;
 }
+
+/**
+ * The access session when a provider is mounted above, undefined otherwise.
+ * For infrastructure that merely REACTS to access (the cloud sync runner
+ * resuming held writes once Plus is back) and must work in a tree without
+ * the provider (its own tests); a screen or a guard uses `useBusinessAccess`.
+ */
+export function useOptionalBusinessAccess(): BusinessAccessValue | undefined {
+  return useContext(BusinessAccessContext) ?? undefined;
+}

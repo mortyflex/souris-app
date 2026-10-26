@@ -82,6 +82,14 @@ export interface FakeSyncRemote extends SyncRemoteGateway {
   failNext(error: SyncRemoteError, times?: number): void;
   loseNextResponse(): void;
   beforePush(hook: ((request: RemotePushRequest) => void) | undefined): void;
+  /**
+   * The FUTURE server behaviour of BeautIzzy Plus Phase 6.5C (CLOUD_SYNC.md §26):
+   * while `refused` is true, every push of an OWNED Business answers
+   * `ENTITLEMENT_REQUIRED` and writes nothing (ownership is still checked
+   * first; pulls are unaffected). Off by default: the deployed server never
+   * answers it yet.
+   */
+  refuseEntitlement(refused: boolean): void;
 }
 
 function clone<Value>(value: Value): Value {
@@ -190,6 +198,7 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
   const requests: RemotePushRequest[] = [];
   const failures: SyncRemoteError[] = [];
   let loseResponse = false;
+  let entitlementRefused = false;
   let countCalls = 0;
   let hook: ((request: RemotePushRequest) => void) | undefined;
   let pullHook: (() => void) | undefined;
@@ -369,6 +378,9 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
     beforePush(next) {
       hook = next;
     },
+    refuseEntitlement(refused) {
+      entitlementRefused = refused;
+    },
 
     async countBusinessAggregates(businessId) {
       countCalls += 1;
@@ -410,6 +422,10 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
       hook?.(request);
       const failure = failures.shift();
       if (failure) throw failure;
+      if (entitlementRefused) {
+        rowsOf(request.businessId); // the owner check comes first, as on the server
+        return { status: 'ENTITLEMENT_REQUIRED' };
+      }
       const result = apply(request);
       if (loseResponse) {
         loseResponse = false;

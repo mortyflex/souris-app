@@ -87,6 +87,9 @@ export function toRemotePushResult(data: unknown): RemotePushResult {
         activeDepositTotalCents: active,
       };
     }
+    case 'ENTITLEMENT_REQUIRED':
+      // The server refused the write for lack of a Plus entitlement (CLOUD_SYNC.md §26): nothing else is read from it.
+      return { status: 'ENTITLEMENT_REQUIRED' };
     default:
       throw new SyncRemoteError('UNKNOWN', 'BADRESULT');
   }

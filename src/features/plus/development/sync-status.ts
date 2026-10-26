@@ -117,6 +117,7 @@ export function formatSyncRunResult(result: SyncRunResult): string {
         `pushed ${result.pushed}`,
         `failed ${result.failed}`,
         `conflicts ${result.conflicts.length}`,
+        ...(result.entitlementHold ? [`entitlement hold${result.entitlementHold.refused ? ' (refused now)' : ''}`] : []),
         ...(result.stoppedBy ? [`stopped by ${result.stoppedBy}`] : []),
         ...formatPull(result.pull),
       ].join(' · ');

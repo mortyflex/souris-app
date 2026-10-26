@@ -68,6 +68,12 @@ describe('toRemotePushResult', () => {
     expect(
       toRemotePushResult({ status: 'FINANCIAL_CONFLICT', expected_total_cents: 0, active_deposit_cents: 1 }),
     ).toMatchObject({ appointmentId: undefined });
+    // The future entitlement refusal (CLOUD_SYNC.md §26): a structured, per-Business answer — never an error,
+    // never a generic unknown; whatever detail the server adds later is not read.
+    expect(toRemotePushResult({ status: 'ENTITLEMENT_REQUIRED' })).toEqual({ status: 'ENTITLEMENT_REQUIRED' });
+    expect(toRemotePushResult({ status: 'ENTITLEMENT_REQUIRED', reason: 'EXPIRED', sync_version: 3 })).toEqual({
+      status: 'ENTITLEMENT_REQUIRED',
+    });
     for (const bad of [
       { status: 'FINANCIAL_CONFLICT' },
       { status: 'FINANCIAL_CONFLICT', expected_total_cents: 10, active_deposit_cents: -1 },

@@ -2115,3 +2115,69 @@ Through the engine it behaves exactly like the client-notes column (§18):
 The queue side of Lot B (`business_communication_preferences`, the reconciliation triggers, the
 projection RPC) stays OUTSIDE the sync engine, like the whole Communication Core: no aggregate
 type, no outbox entry, no snapshot key.
+
+---
+
+## 26. Entitlement refusals — the push pass on hold, the pull unaffected (BeautIzzy Plus 6.5C, step 3)
+
+BeautIzzy Plus makes business WRITES a paid capability: a later server step (Phase 6.5C, step 4)
+will make `sync_push_aggregate` answer a structured `{ "status": "ENTITLEMENT_REQUIRED" }` — nothing
+written — when the owner holds no verified production Plus entitlement in the server-side mirror
+(`docs/architecture/SUBSCRIPTIONS.md`). The deployed functions never answer it yet; this section is
+what the CLIENT does with it, implemented and verified ahead of the server so that a refusal can
+never cost a local change, nor stop a device from receiving what others changed. Reading never
+needs Plus: the pull RPC is untouched by any of this.
+
+**The rule.** A refusal is about the owner's subscription, never about one aggregate — every write
+of the Business would be refused the same way. It is therefore a per-Business, recoverable
+restriction, and never: an authentication failure (`FORBIDDEN` keeps stopping the run), a
+rejection of the aggregate (`REJECTED` keeps its per-entry backoff), an unknown answer, a run-level
+failure, a settlement or an acknowledgement.
+
+```text
+sync-gateway.ts        parses the status; whatever detail the server adds later is not read
+remote-gateway.ts      RemotePushResult gains { status: 'ENTITLEMENT_REQUIRED' }
+entitlement-hold.ts    ONE hold per Business in souris_metadata['sync_entitlement_hold']:
+                       { businessId, refusals, refusedAt, nextAttemptAt } — trusted for that
+                       Business only, like the first-sync decision; cleared by the development reset
+push-worker.ts         on the refusal: the entry stays EXACTLY as it is (payload, operation, revision,
+                       created instant, place in the order) with attempt_count + 1,
+                       last_error = 'ENTITLEMENT_REQUIRED' and next_attempt_at = the hold's instant;
+                       the hold is written with refusals + 1 and the bounded backoff of any retry
+                       (1, 2, 4 … 60 minutes); the remaining eligible entries are NOT sent in this
+                       run; the run goes ON to the pull. A hold still in force skips the push pass
+                       without a single request; the first answer of any other kind (APPLIED,
+                       ABSENT, CONFLICT, FINANCIAL_CONFLICT) for a write of the Business ends an
+                       elapsed hold. `hasEligiblePushWork` / `isSyncRunDue` read false under a hold
+                       (the tick never starts a run just to be refused); `isForegroundSyncTickDue`
+                       stays true for a synchronizing device, so the idle tick keeps PULLING
+CloudSyncRunner.tsx    Plus back — the access session turns from read-only to full (a verified
+                       entitlement, a purchase, a restore): `liftSyncEntitlementHold` removes the
+                       hold and makes the deferred entries eligible at once (ONE transaction; counts
+                       and errors kept), then ONE run follows under the usual conditions. Only the
+                       transition fires it: with enforcement disabled nothing ever does, and a tree
+                       without an access provider behaves as before (`useOptionalBusinessAccess`)
+```
+
+**What the device never assumes.** A local transition to full access is not server authorization:
+after the lift, the run sends the first held entry and obeys the answer — a refusal records a fresh
+hold (refusals start again at 1), the change stays pending, and nothing loops. A local mutation
+made under a hold (a change made during the offline grace, say) coalesces into its entry as always
+and waits for the hold like the others. A hold recorded for another Business id holds nothing, and
+the worker still refuses to run for a Business the device is not bound to; the outbox stays
+Business-scoped, so a logout or an account switch never pushes another account's changes.
+
+**Result shape.** A PUSHED result carries `entitlementHold: { until, refused? }` — `refused` names
+the entry whose push received the refusal in THIS run, absent when the pass was skipped under a hold
+recorded earlier; `failed` does not count it, `stoppedBy` is not set, `pull` is present as usual.
+
+**Verification.** `src/persistence/__tests__/sync-entitlement-hold.test.ts` (the hold record and
+its isolation; a normal push untouched; the refused entry preserved field by field with nothing
+acknowledged; the pull in the same run and under the hold; several entries — one request, the
+others untouched, dependency order on recovery; repeated refusals at 1, 2, 4 … 60 minutes with the
+tick sending nothing in between; a mutation during the hold; a restart; recovery once each; the
+server still refusing after a local lift; another Business's hold; a conflict ending the hold;
+FORBIDDEN unchanged; the deployed server never refusing), `sync-gateway.test.ts` (the status
+parsed, details ignored) and `CloudSyncRunner.test.tsx` (the lift and the single run on the
+read-only → full transition, with and without the server agreeing, and no run without a
+transition).

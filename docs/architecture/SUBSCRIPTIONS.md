@@ -33,10 +33,16 @@ Phase 6.5C  Server-side enforcement, continued      step 1 done — the device r
                                                              trusted-test-source proof never restores
                                                              ordinary production access
                                                              (ARCHITECTURE.md §10, Phase 6.5C step 2)
-                                                     future — business-mutation enforcement in the
-                                                             sync RPCs, the app reading the mirror,
-                                                             the scheduled re-verification and the
-                                                             backfill tool
+                                                     step 3 done — the client handles the future
+                                                             ENTITLEMENT_REQUIRED push answer: the
+                                                             entry stays, the Business's push pass
+                                                             goes on a bounded hold, the pull goes on,
+                                                             and the runner resumes the held writes
+                                                             once Plus is back (CLOUD_SYNC.md §26)
+                                                     future — step 4: business-mutation enforcement in
+                                                             the sync RPCs and the RLS policies, the
+                                                             app reading the mirror, the scheduled
+                                                             re-verification and the backfill tool
 ```
 
 **What 6.5A does NOT change:** `SUBSCRIPTION_ENFORCEMENT` stays `disabled`; `PURCHASABLE_STORES`

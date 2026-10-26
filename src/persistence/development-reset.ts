@@ -19,6 +19,7 @@ import {
   SYNC_INITIAL_RESTORE_APPROVAL_KEY,
   SYNC_INITIAL_UPLOAD_APPROVAL_KEY,
 } from './sync/bootstrap';
+import { SYNC_ENTITLEMENT_HOLD_KEY } from './sync/entitlement-hold';
 import { SYNC_PULL_CURSOR_KEY } from './sync/pull-cursor';
 
 export function clearPersistedDataForDevelopment(db: SourisDatabase): void {
@@ -34,5 +35,6 @@ export function clearPersistedDataForDevelopment(db: SourisDatabase): void {
     deleteMetadata(db, SYNC_INITIAL_UPLOAD_APPROVAL_KEY);
     deleteMetadata(db, SYNC_INITIAL_RESTORE_APPROVAL_KEY);
     deleteMetadata(db, SYNC_PULL_CURSOR_KEY);
+    deleteMetadata(db, SYNC_ENTITLEMENT_HOLD_KEY);
   });
 }
