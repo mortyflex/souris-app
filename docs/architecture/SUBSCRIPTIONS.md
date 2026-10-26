@@ -39,9 +39,18 @@ Phase 6.5C  Server-side enforcement, continued      step 1 done — the device r
                                                              goes on a bounded hold, the pull goes on,
                                                              and the runner resumes the held writes
                                                              once Plus is back (CLOUD_SYNC.md §26)
-                                                     future — step 4: business-mutation enforcement in
-                                                             the sync RPCs and the RLS policies, the
-                                                             app reading the mirror, the scheduled
+                                                     step 4 done — the server-side switch
+                                                             BUSINESS_MUTATION_ENTITLEMENT_ENFORCEMENT
+                                                             (disabled), THE business-mutation rule
+                                                             business_mutation_is_entitled, and
+                                                             sync_push_aggregate answering
+                                                             ENTITLEMENT_REQUIRED under it
+                                                             (CLOUD_SYNC.md §26) — the RPC boundary
+                                                             only; direct table writes, Storage and
+                                                             the preference RPCs are step 5
+                                                     future — step 5: the row-level policies, Storage
+                                                             and the preference RPCs reusing the rule;
+                                                             the app reading the mirror; the scheduled
                                                              re-verification and the backfill tool
 ```
 
@@ -187,7 +196,12 @@ revocation receives no extension anywhere. The function is SECURITY DEFINER, STA
 granted to `service_role` only. It was wired to nothing in 6.5A; since Phase 6.5B it is THE rule
 behind `communications_is_entitled(business, at)` — the communication boundaries and the worker's
 final pre-dispatch check (`COMMUNICATIONS.md` §46), behind a server-side switch that is disabled
-by default. No sync RPC calls it yet (6.5C). The per-row TS rule `isEntitledAt`
+by default. Since Phase 6.5C step 4 it is also THE rule behind
+`business_mutation_is_entitled(business, at)` — the signed-in owner's own Business, AND enforcement
+disabled or Plus access — which `sync_push_aggregate` asks under a second, independent server-side
+switch, `BUSINESS_MUTATION_ENTITLEMENT_ENFORCEMENT` (disabled by default; `CLOUD_SYNC.md` §26). The
+rule is SECURITY DEFINER out of necessity (this function and the flag reader are executable by the
+schema owner only) and is granted to `authenticated` alone. The per-row TS rule `isEntitledAt`
 (`core/entitlement-snapshot.ts`) is the same predicate for one row and never decides access by
 itself.
 

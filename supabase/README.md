@@ -161,6 +161,20 @@ migrations/20261005120000_add_communication_entitlement_enforcement.sql
                                                                  RPC and NO existing row; while the switch is
                                                                  disabled every Business behaves exactly as before.
                                                                  docs/architecture/COMMUNICATIONS.md §46)
+migrations/20261006120000_add_business_mutation_entitlement_enforcement.sql
+                                                                (BeautIzzy Plus 6.5C step 4 — BY HAND, after the
+                                                                 6.5B one; inserts ONE more DISABLED row of
+                                                                 server_feature_flags, creates the business-mutation
+                                                                 rule business_mutation_is_entitled (granted to
+                                                                 authenticated only), its flag reader and operator
+                                                                 switch (no EXECUTE grant), and replaces
+                                                                 sync_push_aggregate IN PLACE: under the switch an
+                                                                 owner without verified production Plus access gets
+                                                                 { "status": "ENTITLEMENT_REQUIRED" } and nothing is
+                                                                 written. Touches NO policy, NO Storage object, NO
+                                                                 communication object, NOT the pull RPC and NO row;
+                                                                 while the switch is disabled every push behaves
+                                                                 exactly as before. docs/architecture/CLOUD_SYNC.md §26)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -733,3 +747,83 @@ select public.communications_set_entitlement_enforcement(false);
 ```
 
 After enabling, the worker's smoke response carries a `suspended` count beside `sent` / `skipped`.
+
+## Business mutation entitlement enforcement (BeautIzzy Plus Phase 6.5C, step 4) — NOT applied, switch DISABLED
+
+`20261006120000_add_business_mutation_entitlement_enforcement.sql` lets the server refuse, behind
+its OWN server-side switch that ships DISABLED, the business writes of an owner without a verified
+production Plus entitlement — through `sync_push_aggregate` only (`docs/architecture/CLOUD_SYNC.md`
+§26.1). Additive, rewrites no row, safe to re-run (a re-run can never flip the switch). No
+deployment order to respect: the deployed app builds since Phase 6.5C step 3 parse the answer, and
+the switch stays off until an operator flips it. BOUNDARY: the owner-only table policies, the
+Storage policy and the communication preference RPCs are NOT gated by this migration (step 5).
+Suggested manual check in the SQL Editor after applying:
+
+```sql
+-- the switch: one more row, disabled, never enabled; the communications row untouched
+select flag, enabled, enabled_at from public.server_feature_flags order by flag;
+select public.business_mutation_entitlement_enforcement_enabled();                               -- false
+
+-- the functions: SECURITY DEFINER, search_path pinned; authenticated may execute EXACTLY the rule,
+-- service_role none of the three; no "=X/" (PUBLIC) entry on any ACL
+select p.proname, p.prosecdef, p.proconfig,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role_exec
+  from pg_proc p
+ where p.pronamespace = 'public'::regnamespace and p.proname like 'business\_mutation\_%';
+select p.proname, p.proacl from pg_proc p
+ where p.pronamespace = 'public'::regnamespace and p.proname like 'business\_mutation\_%'
+   and (p.proacl is null or p.proacl::text ~ '(^\{|,)=X/');                                      -- 0 rows
+
+-- the push RPC kept its shape and privileges, and asks the rule once
+select p.prosecdef, has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('anon', p.oid, 'execute') as anon_exec,
+       (length(p.prosrc) - length(replace(p.prosrc, 'business_mutation_is_entitled', ''))) / length('business_mutation_is_entitled') as rule_calls
+  from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'sync_push_aggregate';
+-- expected: prosecdef false, authenticated_exec true, anon_exec false, rule_calls 1
+
+-- while disabled: every owner may write her Business, whatever the mirror says
+select b.id, b.name, public.business_mutation_is_entitled(b.id) from public.businesses b;         -- postgres: all FALSE (no JWT subject)
+```
+
+The last query answers FALSE for every row when run as `postgres` in the SQL Editor: the rule is
+TRUE for the SIGNED-IN owner only, and the editor has no JWT subject. Behavior checks as a signed-in
+owner: `select public.business_mutation_is_entitled('<her business id>')` is TRUE while the switch
+is disabled, FALSE for any other Business id; `select * from public.server_feature_flags`, any call
+of `business_mutation_set_entitlement_enforcement` or `business_mutation_entitlement_enforcement_enabled`
+fail with `42501`; a push to another owner's Business is still `42501`. The same checks — plus the
+status grid (ACTIVE, TRIAL, CANCELLED_ACTIVE until its end, BILLING_RETRY until its grace deadline,
+EXPIRED, dated and lifetime COMPLIMENTARY, no row, Sandbox-only, a Test Store product labelled
+PRODUCTION, one second after an end, no 72-hour grace), the disabled default for a Business without
+any row, the idempotent re-run that flips nothing in either direction and rewrites no business,
+mirror or queue row, the refusal performing zero writes for an UPSERT, a DELETE, an absent id and an
+already tombstoned row, the untouched version / updated_at / tombstone bookkeeping, the exactly-once
+retry after a webhook RENEWAL with the deployed replay and CONFLICT semantics, validation errors
+(22023) preceding the rule, the pull and count RPCs unaffected for an unentitled owner, the
+independence of the two switches, and the effective privileges (a grant-less role, anon,
+authenticated and service_role lockout, explicit ACLs) — 87 checks in all — were executed against the
+full 21-migration chain in an isolated in-process Postgres when this migration was written; the
+6.5A (81) and 6.5B (144) harnesses still pass with it appended.
+
+### Enabling enforcement (deliberate manual step — NOT performed by the phase)
+
+Preconditions: the 6.5A mirror is applied, the `revenuecat-webhook` is deployed and receiving
+production events, every paying or pilot account has been backfilled (`docs/architecture/SUBSCRIPTIONS.md`
+§10 — a Business whose owner has NO mirrored row is REFUSED under enforcement), every device runs a
+build of Phase 6.5C step 3 or later (an older build reads the answer as unknown and backs off, losing
+nothing but staying silent about it), and step 5 has closed the bypass paths if the goal is protection
+rather than a rehearsal. Validate on Staging (`iteufklnrsmazzvmzqxa`) first, never on production as
+part of this phase.
+
+```sql
+-- preview who would be refused (read-only)
+select b.id, b.name, public.subscription_has_plus_access(b.owner_user_id) as entitled
+  from public.businesses b order by b.name;
+
+-- flip (table owner only); the answer counts the Businesses without Plus right now
+select public.business_mutation_set_entitlement_enforcement(true);
+--   → { "enabled": true, "businesses_without_plus": n }
+
+-- roll back: writes flow again for everyone; the devices resend what they kept
+select public.business_mutation_set_entitlement_enforcement(false);
+```

@@ -1447,6 +1447,10 @@ a subscription, nothing of that change is lost — it waits on the device, the p
 receiving what was recorded elsewhere, the app does not pester the server, and the waiting changes
 are sent, in order, as soon as the subscription is back. The server does not refuse anything yet;
 nothing visible changes and enforcement stays disabled.
+Phase 6.5C, step 4 (October 2026): the server gains the ability to refuse — behind its own switch,
+shipped off — the recording of business changes for a professional without a verified subscription,
+through the application's synchronization only; reading and downloading never need a subscription.
+Nothing is applied or enabled; nothing visible changes.
 Still to come, in their own phases: the device run of that validation (real trial, real restore,
 renewal and expiration), the account-scoped paywall routing, server-side enforcement of business
 changes on the backend entitlement mirror, real terms and privacy URLs, account deletion and

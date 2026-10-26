@@ -34,8 +34,9 @@ function topLevelStatements(sql: string): string {
 describe('communications entitlement enforcement — Phase 6.5B boundary', () => {
   it('is a NEW forward-only migration sorting strictly after the 6.5A mirror, which is untouched', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    expect(names.at(-1)).toBe(MIGRATION_NAME);
-    expect(names.at(-2)).toBe(MIRROR_MIGRATION_NAME);
+    // Immediately after the mirror; later phases (6.5C step 4 onwards) sort after it and never touch it.
+    expect(names.indexOf(MIGRATION_NAME)).toBe(names.indexOf(MIRROR_MIGRATION_NAME) + 1);
+    expect(names.slice(names.indexOf(MIGRATION_NAME) + 1).every((name) => name > MIGRATION_NAME)).toBe(true);
     const mirror = readFileSync(join(MIGRATIONS_DIR, MIRROR_MIGRATION_NAME), 'utf8');
     expect(mirror).not.toMatch(/communications_/);
   });

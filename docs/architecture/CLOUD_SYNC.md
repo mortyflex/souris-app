@@ -2181,3 +2181,62 @@ FORBIDDEN unchanged; the deployed server never refusing), `sync-gateway.test.ts`
 parsed, details ignored) and `CloudSyncRunner.test.tsx` (the lift and the single run on the
 read-only → full transition, with and without the server agreeing, and no run without a
 transition).
+
+### 26.1 The server side (Phase 6.5C, step 4) — the RPC boundary only
+
+`supabase/migrations/20261006120000_add_business_mutation_entitlement_enforcement.sql` adds what
+the client above was prepared for, behind a SECOND server-side switch:
+
+```text
+server_feature_flags                    ONE new row, BUSINESS_MUTATION_ENTITLEMENT_ENFORCEMENT, inserted
+                                        false with `on conflict do nothing` — a re-run never flips it;
+                                        independent of COMMUNICATIONS_ENTITLEMENT_ENFORCEMENT and of the
+                                        app's build constant
+business_mutation_entitlement_enforcement_enabled()
+                                        the flag reader; SECURITY DEFINER; executable by nobody (owner only)
+business_mutation_is_entitled(business, at)
+                                        THE rule: the signed-in caller owns the Business — the same FALSE for
+                                        a foreign, a nonexistent or a NULL Business — AND (enforcement
+                                        disabled, OR subscription_has_plus_access(owner, at)). SECURITY
+                                        DEFINER out of necessity (the access rule and the reader are
+                                        owner-only); STABLE; granted to `authenticated` ONLY — the push RPC
+                                        is SECURITY INVOKER and asks it as the owner; step 5's policies will
+                                        reuse it
+sync_push_aggregate                     replaced IN PLACE: same signature, same grants, the deployed body
+                                        plus ONE check after the owner check and the argument validation and
+                                        BEFORE the `for update` read:
+                                          if not business_mutation_is_entitled(p_business_id)
+                                          then return '{"status":"ENTITLEMENT_REQUIRED"}'
+                                        An ownership failure is still 42501, a malformed call still 22023; a
+                                        refusal locks, reads and writes nothing — no version, tombstone or
+                                        history moves, UPSERT and DELETE alike (a DELETE of an absent or an
+                                        already tombstoned row is refused too, never ABSENT or a replayed
+                                        APPLIED while unentitled; once Plus is back the replay semantics are
+                                        exactly the deployed ones)
+business_mutation_set_entitlement_enforcement(boolean)
+                                        the operator switch: flips the row and reports how many Businesses
+                                        lack Plus right now; no EXECUTE grant (table owner only); converges
+                                        nothing — the device keeps and resends its refused writes (§26)
+```
+
+Untouched: the pull RPC, the count RPC, every policy, Storage, every communication and mirror
+object, every row. With the switch disabled every push behaves exactly as before, for every
+Business, including the accounts without any mirrored row.
+
+**Boundary.** This is enforcement at the sync RPC. The owner-only INSERT / UPDATE / DELETE
+policies of the operational tables still let a direct PostgREST table call write, the Storage
+policy still lets the owner upload business media, and `communications_update_preferences` /
+`communications_update_lifecycle_sms_preferences` still accept an enable: these bypass paths are
+the explicit work of step 5 (the rule above reused in `with check` predicates, the Storage policy
+and the preference RPCs). Server-side business-mutation protection is NOT complete before step 5.
+
+**Deployment order.** Apply the migration BY HAND, never automatically; the deployed app builds
+(step 3 and later) already parse the answer, and builds that predate step 3 would read it as an
+unknown answer with backoff — another reason the switch ships disabled. Enabling is a separate,
+deliberate operator step (`supabase/README.md` › Business mutation entitlement enforcement) that
+presupposes the 6.5A webhook in production and the backfill of every paying account: a Business
+whose owner has NO mirrored row is refused under enforcement.
+
+**Verification.** 87 checks against the full 21-migration chain in an isolated in-process Postgres
+under the strict role stub (`supabase/README.md` lists them), plus the source-level guard
+`src/infrastructure/supabase/__tests__/sync-entitlement-migration.test.ts`.

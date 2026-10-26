@@ -950,6 +950,32 @@ worker — assuming nothing about the server, whose refusal then records a fresh
 and permission failures, rejections, conflicts and the deployed behaviour are unchanged; with
 enforcement disabled the access session never turns, so nothing fires.
 
+Server-side business-mutation entitlement foundation (Phase 6.5C, step 4,
+`supabase/migrations/20261006120000_add_business_mutation_entitlement_enforcement.sql`,
+`docs/architecture/CLOUD_SYNC.md` §26). The server now holds what the step 3 client was prepared
+for: behind a SECOND server-side switch — its own disabled row of `server_feature_flags`,
+`BUSINESS_MUTATION_ENTITLEMENT_ENFORCEMENT`, flipped by hand through an operator-only function,
+independent of the communications switch and of the app's build constant — `sync_push_aggregate`
+answers exactly `{ "status": "ENTITLEMENT_REQUIRED" }` for a write of a Business whose owner holds no
+verified production Plus entitlement, and touches nothing: the check sits after the ownership
+check and the argument validation (an ownership failure is still 42501, a malformed call still
+22023) and before any row is read or locked, so no version, tombstone or history moves and a
+DELETE is refused like an UPSERT. ONE rule decides, `business_mutation_is_entitled(business, at)`:
+the signed-in caller owns the Business — the same FALSE for a foreign, a nonexistent or a NULL
+Business, revealing nothing — AND either enforcement is disabled or `subscription_has_plus_access`
+holds (reused, never re-implemented: ACTIVE, TRIAL, a cancelled subscription until its end, a
+billing grace until its deadline, a complimentary grant; never EXPIRED, Sandbox-only, Test
+Store-only or an account without a mirrored row; no server-side grace). It is SECURITY DEFINER out
+of necessity — the access rule and the flag reader are executable by the schema owner only, so an
+INVOKER wrapper running as the owner could not ask them — and is the one function granted to
+`authenticated`, so the SECURITY INVOKER push RPC can ask it and the row-level policies of step 5
+can reuse it without a second rule. While the switch is disabled — its state after this step —
+every push behaves exactly as before, for every Business, including the accounts without any
+mirrored row; the pull and count RPCs are untouched. BOUNDARY: this is the sync RPC only. The direct
+PostgREST table writes the owner-only policies still permit, the Storage uploads of business media
+and the communication preference RPCs are NOT gated yet: step 5. Server-side business-mutation
+protection is not complete before it. Nothing is applied, deployed or enabled by the step.
+
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
 announces (`nextBusinessAccessDeadline`: the end of the entitlement in force, then the end of the
