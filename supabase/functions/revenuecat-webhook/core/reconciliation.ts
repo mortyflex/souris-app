@@ -206,6 +206,19 @@ export function mapSubscriberResponse(response: unknown, matchedAppUserId: strin
   return { requestDateMs, originalAppUserId, sources };
 }
 
+/**
+ * The row to write for ONE described product: the API state, carrying the
+ * webhook facts the API lacks (original transaction, pending product) from
+ * the row it replaces. Shared with the periodic reconciliation and the
+ * operator backfill (`supabase/functions/subscription-reconciliation`), so
+ * every REST reconciliation writes the same row for the same answer.
+ */
+export function mergeReconciledSnapshot(existing: EntitlementSnapshot | null, snapshot: EntitlementSnapshot): EntitlementSnapshot {
+  return existing === null
+    ? snapshot
+    : { ...snapshot, originalTransactionId: existing.originalTransactionId, pendingProductId: existing.pendingProductId };
+}
+
 export type ReconciliationOutcome =
   | { readonly status: 'applied'; readonly applied: readonly string[]; readonly stale: readonly string[] }
   | { readonly status: 'nothing' }
@@ -240,10 +253,7 @@ export function createSubscriberReconciler({ api, mirror }: SubscriberReconciler
         for (const { environment, snapshot } of mapped.sources) {
           const existing = findSnapshot(reads[environment]?.snapshots ?? [], snapshot.productId);
           // The webhook facts the API lacks travel with the row.
-          const merged: EntitlementSnapshot =
-            existing === null
-              ? snapshot
-              : { ...snapshot, originalTransactionId: existing.originalTransactionId, pendingProductId: existing.pendingProductId };
+          const merged = mergeReconciledSnapshot(existing, snapshot);
           const result = await mirror.applyReconciliation(matched.userId, environment, snapshot.productId, merged);
           (result === 'APPLIED' ? applied : stale).push(`${environment}:${snapshot.productId}`);
         }

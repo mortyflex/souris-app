@@ -29,10 +29,11 @@ const RULE = String.raw`\(select public\.business_mutation_is_entitled\(business
 const BOTH = `${OWNER} and ${RULE}`;
 
 describe('Phase 6.5C step 5 — business-mutation policies migration', () => {
-  it('is ONE forward-only migration sorting last, right after step 4, which is untouched', () => {
+  it('is ONE forward-only migration sorting right after step 4, which is untouched', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    expect(names.at(-1)).toBe(MIGRATION_NAME);
-    expect(names.at(-2)).toBe(STEP4_MIGRATION_NAME);
+    // Immediately after step 4; step 6 (and later phases) sort after it and never touch it.
+    expect(names.indexOf(MIGRATION_NAME)).toBe(names.indexOf(STEP4_MIGRATION_NAME) + 1);
+    expect(names.slice(names.indexOf(MIGRATION_NAME) + 1).every((name) => name > MIGRATION_NAME)).toBe(true);
     const step4 = readFileSync(join(MIGRATIONS_DIR, STEP4_MIGRATION_NAME), 'utf8');
     expect(step4).not.toMatch(/create policy|storage\.|communications_update/);
   });

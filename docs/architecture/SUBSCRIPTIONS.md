@@ -56,9 +56,16 @@ Phase 6.5C  Server-side enforcement, continued      step 1 done — the device r
                                                              §47): server-side business-mutation
                                                              protection is complete at the database;
                                                              still disabled, still unapplied
-                                                     future — the app reading the mirror, the
-                                                             scheduled re-verification and the backfill
-                                                             tool; production activation (see §12)
+                                                     step 6 done — the periodic re-verification sweep
+                                                             and the operator backfill: the
+                                                             subscription-reconciliation Edge Function
+                                                             re-reads bounded batches of accounts from
+                                                             RevenueCat's REST API through THE 6.5A
+                                                             reconciliation, with dry-run, leases,
+                                                             backoff and continuation (§13); nothing
+                                                             scheduled, nothing deployed, nothing applied
+                                                     future — the app reading the mirror; production
+                                                             activation (see §12)
 ```
 
 ## 12. Production activation — forbidden until every prerequisite holds
@@ -68,8 +75,9 @@ Enabling `BUSINESS_MUTATION_ENTITLEMENT_ENFORCEMENT` on the production project i
 
 1. the 6.5A webhook is deployed on production and receives production events, with the REST
    reconciliation configured;
-2. EVERY paying and pilot account has been backfilled (§10) and verified by eye: a Business whose
-   owner has no mirrored row is REFUSED under enforcement;
+2. EVERY paying and pilot account has been backfilled (§13, the `subscription-reconciliation`
+   function in APPLY mode, after a DRY_RUN read by eye) and every `INVESTIGATE` outcome has been
+   settled by hand: a Business whose owner has no mirrored row is REFUSED under enforcement;
 3. the step 4 and step 5 migrations have been applied on Staging and the Staging checklist of
    `supabase/README.md` › Business mutation entitlement enforcement — step 5 has been run end to
    end with real devices (write refused, pull continues, hold, resume, Storage, preferences);
@@ -358,12 +366,13 @@ event, both sides of a TRANSFER): `GET https://api.revenuecat.com/v1/subscribers
 Without the key, the mirror is webhook-only: correct for every supported event, blind to
 unsupported ones and to the receiver of a transfer until the next event about them.
 
-**Deliberate limitations.** The reconciliation runs AFTER a webhook only; there is no scheduled
-sweep and no operator endpoint yet. Because an absence is never applied, a source that RevenueCat
-silently dropped (no event, no listing) stays mirrored until its own end passes — which is why
-every row has an end except a complimentary lifetime grant, whose only ends are the revocation
-CANCELLATION and the reconciliation's `EXPIRED` once RevenueCat lists it as expired. A sweep and
-the operator backfill tool belong to 6.5B, together with the first server-side reader.
+**Deliberate limitations.** The webhook's reconciliation runs AFTER a delivery only. Because an
+absence is never applied, a source that RevenueCat silently dropped (no event, no listing) stays
+mirrored until its own end passes — which is why every row has an end except a complimentary
+lifetime grant, whose only ends are the revocation CANCELLATION and the reconciliation's
+`EXPIRED` once RevenueCat lists it as expired. Since Phase 6.5C step 6 the SAME reconciliation
+also runs without a webhook — the periodic sweep and the operator backfill of §13 — and reports
+such an absence as `INVESTIGATE` instead of deciding it.
 
 ## 9. Deployment, secrets and configuration (manual, in this order)
 
@@ -404,7 +413,13 @@ Installing the webhook is NOT retroactive: RevenueCat delivers events generated 
 integration exists. Development and test accounts already hold purchase histories (Test Store,
 Apple Sandbox), and pilot grants may predate the webhook. Until each is reconciled, its mirror is
 simply ABSENT — which, with enforcement disabled, changes nothing for anyone, and which the
-future server-side reader must treat as "not verified", never as "entitled".
+server-side readers treat as "not verified", never as "entitled".
+
+Since Phase 6.5C step 6 the backfill is the `subscription-reconciliation` function (§13): a
+DRY_RUN over the accounts to backfill, read by eye, then the same request in APPLY mode, batch by
+batch, until the cursor is exhausted — then every `INVESTIGATE` settled by hand. The procedure
+below is the 6.5A one, kept for an account the function reports `NO_SUBSCRIBER` for whose grant
+must be (re)created, and as the manual fallback.
 
 Safe procedure, to run against a NON-production project first (a Supabase branch or a second
 project pointed at the same RevenueCat project), never against production as part of this phase:
@@ -427,10 +442,8 @@ project pointed at the same RevenueCat project), never against production as par
 4. Only once the procedure is validated there, repeat it on production, account by account.
 ```
 
-Known gaps the procedure cannot close by itself: a customer with NO event to resend and NO grant
-(only the REST reconciliation reaches them, which 6.5A triggers after a webhook only); a customer
-whose latest state changed while the webhook was not yet installed is reconciled correctly as soon
-as ANY later event about them is delivered.
+The gaps of this manual procedure — a customer with NO event to resend and NO grant, a state that
+changed while the webhook was not installed, a missed delivery — are exactly what §13 closes.
 
 ## 11. Tests
 
@@ -459,3 +472,175 @@ as ANY later event about them is delivered.
 - Phase 6.5B (communication enforcement): `supabase/functions/communications-worker/core/__tests__/`
   (the worker gate, the adapter, `entitlement-boundary.test.ts`) and the 131-check PGlite harness of
   `20261005120000_add_communication_entitlement_enforcement.sql` — `COMMUNICATIONS.md` §46.
+- Phase 6.5C step 6 (sweep and backfill): `supabase/functions/subscription-reconciliation/core/__tests__/`
+  — the dedicated secret (missing, blank, the wrong kind of key), the hardened client (the exact
+  request without `X-Platform`, 200 versus 201, `Retry-After`, doubling bounded backoff, the
+  attempt bound, timeouts, 401/403 and other 4xx never retried, malformed bodies, message privacy,
+  no global fetch), one account in every state (active, trial, cancelled inside its period,
+  expired, renewed after an expiration, billing grace, dated and indefinite complimentary grants,
+  Sandbox-only, Test Store, wrong product or entitlement, two concurrent sources), the
+  non-evidence answers (missing subscriber with and without a source in force, no sources, the
+  absence rule, a Sandbox absence, malformed, every failure class, mirror failures), ordering and
+  races (confirmed later → STALE, an older EXPIRATION losing to the listed renewal, duplicate
+  reconciliation → CONFIRMED), isolation (another account's rows, an alias to another account, an
+  anonymous original id, ids matching nobody), DRY_RUN parity, the pass (the request contract and
+  its refusals, single-user and batched backfill, partial failures, dry run, continuation, bounded
+  requests and spacing, the rate-limit and unauthorized stops, a settle failure, a claim failure,
+  the sweep's selection, the log line), the RPC bindings, and the boundary guard (Deno imports,
+  the shared 6.5A core, the named secret key, the dedicated credential, the migration's shape:
+  additive, sorting last, no schedule, no switch, THE rule reused, service_role-only grants, the
+  app untouched, the webhook's file set unchanged, no network in the suites). The migration is
+  validated by an 89-check PGlite harness (`supabase/README.md` › Subscription reconciliation);
+  the 6.5A (84), 6.5B (144), step 4 (87) and step 5 (378) harnesses still pass with it appended.
+
+## 13. Periodic reconciliation and operator backfill (Phase 6.5C, step 6)
+
+`supabase/functions/subscription-reconciliation` and
+`supabase/migrations/20261008120000_add_subscription_reconciliation.sql`. The webhook reconciles
+an account AFTER a delivery about it; two gaps remain: an account whose history predates the
+webhook (§10) and a delivery RevenueCat never made. Step 6 closes both with the SAME
+reconciliation — the webhook's `mapSubscriberResponse`, the same merge of the webhook facts, the
+same `subscription_apply_reconciliation` — run on a bounded batch of accounts WITHOUT a webhook,
+either by an operator (the backfill) or by a scheduler an operator creates by hand (the sweep).
+No second interpretation of a subscription exists: the step adds bookkeeping, not rules.
+
+```text
+operator (curl) or pg_cron job      POST /functions/v1/subscription-reconciliation
+   apikey: the DEDICATED secret key `subscription_reconciliation` (verify_jwt ON; never 'none')
+      ↓ body: what to reconcile, and whether to write (DRY_RUN by default)
+subscription-reconciliation        ONE pass: claim a batch → for each account, in turn, one request
+(Edge Function)                    apart: read the mirror, GET /v1/subscribers/{user id}, map, apply
+                                   per product → settle → finish; answer the per-account report
+      ↓ RPC (SECURITY DEFINER, service_role-only EXECUTE)
+Postgres                           subscription_reconciliation_claim / _settle / _finish
+                                   subscription_read_mirror, subscription_apply_reconciliation (6.5A)
+                                   subscription_has_plus_access (THE rule, for the report)
+                                   subscription_reconciliation_state   lease, last attempt, outcome, backoff
+                                   subscription_reconciliation_runs    one row per pass: counts, report, cursor
+```
+
+### 13.1 The RevenueCat REST client (`core/revenuecat-api.ts`)
+
+The v1 endpoint the webhook already reads, verified against the reference (`api-v1/customers`,
+`api-v1/customer-info-model`): `GET https://api.revenuecat.com/v1/subscribers/{app_user_id}`,
+`Authorization: Bearer <secret key>`. Facts the client is built on:
+
+- it **gets or creates**: 200 = the customer was found, **201 = it did not exist and was created,
+  empty, by this read**. The client reports `created`, and the pass never reads a created customer
+  as a verified absence of entitlement (`NO_SUBSCRIBER`, below). The v2 `GET
+  /projects/{id}/customers/{id}` answers 404 instead, but needs a v2 key, a project id and a
+  different data model (`gives_access`, `status`), i.e. a second mapping: not chosen;
+- `X-Platform` is never sent: it would rewrite the customer's `last_seen` on an informational read;
+- rate limits: v1 answers 429 (RevenueCat's guidance for v1: about one request per second, pause
+  on 429; v2 documents `Retry-After` in seconds and `backoff_ms`). The client honours
+  `Retry-After` when present (bounded to 10 s), doubles its own backoff otherwise (1 s, 2 s, …,
+  10 s), and gives up after **3 attempts**; the pass spaces requests **1 s** apart;
+- a request is aborted after **10 s** (`AbortController`) and counts as a timeout;
+- failure classes: `unauthorized` (401/403, never retried, stops the pass), `rate_limited` (429
+  after the bound, stops the pass), `unavailable` (5xx after the bound), `network`, `timeout`,
+  `malformed` (a 2xx that is not JSON, never retried), `rejected` (another 4xx, never retried).
+  Messages carry the class and the status only — never the body, never the key.
+
+### 13.2 One account (`core/account-reconciliation.ts`)
+
+The account's Supabase user id IS its App User ID (`subscription-source.ts`). The mirror is read
+in both environments through `subscription_read_mirror` with the user id and every App User ID
+the mirror already holds for it; the subscriber is fetched; the answer is mapped per product by
+the webhook's rule (`is_sandbox` decides the environment of EACH product) and each described
+product is applied through `subscription_apply_reconciliation` — which keeps a row confirmed
+LATER (`STALE`). Outcomes, one per account, in the vocabulary of the state and run tables:
+
+| outcome | meaning | written |
+|---|---|---|
+| `APPLIED` | at least one row changed (state, end, store, renewal…) | the described rows |
+| `CONFIRMED` | the answer agreed with the mirror: rows re-verified only | the described rows (`verified_at`) |
+| `STALE` | every described row had been confirmed later (a webhook landed in between) | nothing |
+| `NO_SUBSCRIBER` | RevenueCat had never seen the account (201) and the mirror holds no source in force | nothing |
+| `NO_SOURCES` | the customer exists, grants nothing, and the mirror holds no source in force | nothing |
+| `INVESTIGATE` | the answer disagrees with a mirrored source IN FORCE: it does not list it; it lists no customer or no source beside it; or the subscriber's `original_app_user_id` is ANOTHER Supabase account (an alias or a transfer that merged two accounts) | the described rows only; the rest untouched |
+| `FAILED` | RevenueCat unreachable, rate limited, unauthorized, a malformed answer, a database error | nothing |
+
+Rules that hold in every case: an absence is never an expiration (the 6.5A policy — a source
+RevenueCat no longer lists is reported, never ended); a failed read is never a lost entitlement;
+nothing is invented for an account without a RevenueCat history; an indefinite complimentary
+grant keeps no end; Sandbox and Test Store products land in `SANDBOX` rows (or keep their
+non-production store) and never grant; `subscription_has_plus_access` is asked, not re-implemented,
+for the `accessBefore` / `accessAfter` of the report. **DRY_RUN** performs the same reads, the same
+request and the same mapping, decides `would-apply` / `would-confirm` / `would-be-stale` per
+product with the same "confirmed later" comparison, and writes nothing — a preview that is exactly
+the apply.
+
+### 13.3 The pass, the request, the bookkeeping (`core/run.ts`, the migration)
+
+```jsonc
+{}                                                      // dry-run SWEEP of every mirrored account
+{ "kind": "SWEEP", "mode": "APPLY", "limit": 20, "minAgeSeconds": 72000 }   // the scheduled sweep
+{ "users": ["<uuid>"] }                                 // dry-run backfill of ONE account
+{ "users": ["<uuid>", "…"], "mode": "APPLY" }           // backfill of an explicit list (≤ 50)
+{ "source": "businesses", "kind": "BACKFILL", "mode": "APPLY", "limit": 25, "after": "<uuid>" }
+```
+
+- everything defaults to the safe side: no body is a DRY_RUN; writing takes `"mode": "APPLY"`;
+  an unknown key is refused (400) rather than ignored, so a misspelt `mode` never silently
+  dry-runs — or writes; `limit` is 1..50 (20 by default), bounded again in the database;
+- scopes: an explicit `users` list (unknown or malformed ids are reported in `unknownUsers`, never
+  invented; the failure backoff is ignored — the operator asked for THESE accounts now), every user
+  with a mirrored row (`source: "mirrored"`, the sweep's), every Business owner
+  (`source: "businesses"`, the full backfill — it reaches accounts RevenueCat may never have seen,
+  which the v1 read then creates empty: expect `NO_SUBSCRIBER` for them);
+- `subscription_reconciliation_claim` opens the run row, skips the accounts another pass holds
+  (`lease_until`), the accounts RevenueCat answered for less than `minAgeSeconds` ago and the
+  accounts in failure backoff, orders a SWEEP by least recently attempted (rotation) and a
+  BACKFILL by user id (with `after`, the continuation cursor the answer carries while accounts
+  remain), and — in APPLY mode only — leases the batch for 5 minutes. A DRY_RUN leases nothing and
+  writes no account state;
+- accounts are processed one after the other, one request apart; each is settled at once
+  (`subscription_reconciliation_settle`: counts, requests and a bounded report on the run; the
+  lease released, the failure count and backoff — 15 min × 2^(failures − 1), at most 24 h — on the
+  state row in APPLY mode), so a crash loses nothing already recorded;
+- two failures stop the pass on purpose: an `unauthorized` key (every further request would fail
+  the same way) and a `rate_limited` that survived the retries (the pass yields; the next
+  invocation resumes). `subscription_reconciliation_finish` closes the run (`COMPLETED`,
+  `STOPPED`, `FAILED`) and releases every lease it still holds; a run left `RUNNING` by a crash is
+  closed as `ABANDONED` by the next claim after one hour, its leases having expired by time;
+- the answer is the pass summary: status, `stoppedBy`, counts per outcome, requests, the
+  per-account reports (user id, outcome, detail, access before / after, per-product before →
+  after with its result, the unlisted sources in force), `unknownUsers`, `skipped`, `eligible`,
+  `nextCursor`. The log line carries counts and vocabularies only.
+
+Bounds, by construction: at most 50 accounts × 3 attempts per invocation, one request at a time,
+1 s apart; a SWEEP with `minAgeSeconds` reconciles each account at most once per that interval.
+
+**Ordering safety with the webhook.** Both paths write through `subscription_apply_reconciliation`
+and the webhook's own guarded apply; the row's `verified_at` decides: an answer older than the
+row's last confirmation is `STALE`, a webhook event older than the reconciliation's `request_date`
+is `STALE` for the webhook. A sweep can therefore never roll back a newer event, and a webhook can
+never be overwritten by an older API answer. Nothing in the append-only `subscription_events`
+history is touched by this step.
+
+### 13.4 Authentication and secrets
+
+- The function is reachable through ONE dedicated server-side secret key, named
+  `subscription_reconciliation` (`withSupabase({ auth: 'secret:subscription_reconciliation' })`,
+  `verify_jwt` ON — never `--no-verify-jwt`): publishable keys, user JWTs, the worker's key and
+  unauthenticated calls are refused before the handler runs. There is no public endpoint.
+- The RevenueCat credential is `REVENUECAT_RECONCILIATION_API_KEY`: a RevenueCat **secret** API key
+  (`sk_…`, v1, read) DEDICATED to this function — never the public SDK key, never the webhook's
+  shared Authorization value, and a separate key from the webhook's own `REVENUECAT_SECRET_API_KEY`
+  so each can be rotated or revoked alone. Read by name through an injected reader in one file
+  (`core/configuration.ts`); a missing or malformed value answers 500 and claims nothing; it exists
+  in Edge Function secrets only and appears in no message, answer or log.
+- The database surface is SECURITY DEFINER functions with `search_path = ''`, EXECUTE granted to
+  `service_role` only; the two bookkeeping tables have RLS on, zero policies and zero grants — not
+  even the server role reads them directly. An operator reads them in the SQL Editor as the owner.
+
+### 13.5 What this step does NOT do
+
+Nothing is scheduled: no migration names `cron.schedule`, and the sweep stays unscheduled until
+an operator creates the pg_cron job by hand (`supabase/README.md` › Subscription reconciliation).
+Nothing is deployed or applied; no secret is set; no real RevenueCat call is made by the test
+suites. Neither switch moves; `SUBSCRIPTION_ENFORCEMENT` stays `disabled`; `PURCHASABLE_STORES`
+stays `['test-store']`; the 72-hour offline policy is untouched; the mobile app changes nothing.
+The `businesses` scope may create empty RevenueCat customers for accounts that never ran a 6.1+
+build (the v1 read's documented side effect): run the backfill on Staging first, with explicit
+user lists in production where that matters.

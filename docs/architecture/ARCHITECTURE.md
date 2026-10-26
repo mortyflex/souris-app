@@ -1000,6 +1000,33 @@ deployed builds are unchanged. PGlite limits, stated: real Storage API semantics
 error mapping and Supabase's platform grants are rehearsed on Staging, not proven by the harness.
 Production activation stays forbidden until the prerequisites of `SUBSCRIPTIONS.md` §12 hold.
 
+Periodic reconciliation and operator backfill (Phase 6.5C, step 6,
+`supabase/functions/subscription-reconciliation`,
+`supabase/migrations/20261008120000_add_subscription_reconciliation.sql`,
+`docs/architecture/SUBSCRIPTIONS.md` §13). The mirror learns about an account only when RevenueCat
+delivers an event about it; two gaps remained — an account whose history predates the webhook, and
+a delivery that never came. A second Edge Function closes both with the SAME reconciliation as the
+webhook's (its mapping, its merge of the webhook facts, `subscription_apply_reconciliation`), run on a
+bounded batch of accounts without a webhook: by an operator (the backfill: one explicit account, an
+explicit list, or every Business owner, batch by batch with a continuation cursor) or by a pg_cron
+job an operator creates by hand (the sweep: every mirrored account, least recently attempted first,
+at most once per minimum age). Every pass is DRY_RUN unless the body says APPLY, and a dry run is
+exactly the apply with the writes left out. The RevenueCat client is hardened on the documented v1
+facts — the endpoint CREATES an absent customer (201), honoured as "no subscriber", never as a
+verified absence; no `X-Platform`; `Retry-After` and a doubling backoff, three attempts, a
+ten-second timeout, one request per second — and the pass reports one outcome per account
+(APPLIED, CONFIRMED, STALE, NO_SUBSCRIBER, NO_SOURCES, INVESTIGATE, FAILED) in which an absence is
+never an expiration, a failed read is never a lost entitlement, nothing is invented, and the three
+answers that are not evidence (no customer, no source, a disagreement with a mirrored source in
+force or a subscriber shared with another account) are handed to an operator instead of decided.
+The migration adds bookkeeping, not rules: a per-account lease (no two passes on one account), the
+last attempt and outcome, a bounded failure backoff, and one row per pass with its counts, requests
+and report — two server-owned tables nobody reads directly, three SECURITY DEFINER functions the
+server role alone may execute, `subscription_has_plus_access` asked for the report and never
+re-implemented. The function is reachable through its own named secret key only, reads its own
+dedicated RevenueCat secret, and nothing schedules it: no migration names a cron job, both switches
+stay disabled, nothing is applied or deployed, the app is untouched.
+
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
 announces (`nextBusinessAccessDeadline`: the end of the entitlement in force, then the end of the

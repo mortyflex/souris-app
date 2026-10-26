@@ -187,6 +187,18 @@ migrations/20261007120000_complete_business_mutation_entitlement_enforcement.sql
                                                                  nothing, touches NO SELECT policy, NO grant, NO row;
                                                                  while the switch is disabled every write behaves exactly
                                                                  as before. docs/architecture/CLOUD_SYNC.md §26.2)
+migrations/20261008120000_add_subscription_reconciliation.sql   (BeautIzzy Plus 6.5C step 6 — BY HAND, after step 5;
+                                                                 creates TWO new server-owned bookkeeping tables
+                                                                 (RLS on, zero policies, zero grants — not even
+                                                                 service_role) and the three SECURITY DEFINER
+                                                                 subscription_reconciliation_* functions
+                                                                 (service_role-only EXECUTE) the
+                                                                 subscription-reconciliation Edge Function runs
+                                                                 against. Creates NO schedule, inserts NO flag,
+                                                                 replaces NO function or policy, touches NO row.
+                                                                 Applying it alone reconciles nothing: the function
+                                                                 must be deployed and invoked with its key.
+                                                                 docs/architecture/SUBSCRIPTIONS.md §13)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -926,3 +938,156 @@ dedicated test account whose mirror row is controlled through the webhook or the
 Production activation remains FORBIDDEN until `docs/architecture/SUBSCRIPTIONS.md` §12 holds in
 full: webhook live, every paying and pilot account backfilled, this checklist run on Staging, every
 device on step 3 or later, the rollback rehearsed.
+
+## Subscription reconciliation — sweep and backfill (BeautIzzy Plus Phase 6.5C, step 6) — NOT applied, NOT deployed, NOT scheduled
+
+`20261008120000_add_subscription_reconciliation.sql` adds the bookkeeping of the
+`subscription-reconciliation` Edge Function (`docs/architecture/SUBSCRIPTIONS.md` §13): the
+per-account lease / outcome / backoff state and one row per pass. Additive, creates no row, flips no
+switch, replaces nothing, creates no cron job, safe to re-run. The function re-reads bounded batches
+of accounts from RevenueCat's REST API and applies them through the SAME
+`subscription_apply_reconciliation` the webhook uses; its answers are what the operator reads.
+Suggested manual check in the SQL Editor after applying:
+
+```sql
+-- both tables: RLS on, zero policies, zero grants to any role, zero rows
+select tablename, rowsecurity from pg_tables where schemaname = 'public' and tablename like 'subscription\_reconciliation\_%';
+select count(*) from pg_policies where tablename like 'subscription\_reconciliation\_%';                 -- 0
+select grantee, table_name, privilege_type from information_schema.role_table_grants
+ where table_schema = 'public' and table_name like 'subscription\_reconciliation\_%';                    -- 0 rows
+select (select count(*) from public.subscription_reconciliation_state),
+       (select count(*) from public.subscription_reconciliation_runs);                                  -- 0, 0
+
+-- the three functions: SECURITY DEFINER, search_path pinned, service_role-only EXECUTE, no PUBLIC entry
+select p.proname, p.prosecdef, p.proconfig, p.proacl,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role_exec
+  from pg_proc p
+ where p.pronamespace = 'public'::regnamespace and p.proname like 'subscription\_reconciliation\_%';
+
+-- nothing scheduled by anyone (the cron schema may not even exist yet)
+select jobname from cron.job where jobname like 'subscription-%';                                       -- 0 rows, or "schema cron does not exist"
+
+-- both switches still disabled
+select flag, enabled from public.server_feature_flags order by flag;
+```
+
+The same checks — plus the three scopes (explicit users with unknown ids reported, every mirrored
+user, every Business owner), the clamped batch and the continuation cursor, the APPLY lease and its
+release by a concurrent pass, DRY_RUN writing no state, settle (success resets, FAILED backs off
+15 min → 30 min → … → 24 h, every outcome counted and reported on the run), finish (COMPLETED /
+STOPPED releasing every lease, a closed run refusing further settles), the explicit list ignoring
+the backoff, the sweep's rotation (never attempted first, then least recently attempted), the
+mirror and the businesses byte-identical after every claim / settle / finish, abandoned runs, the
+6.5B trigger and the step 4/5 rule still deciding on a reconciliation write with both switches off
+and on (an expiration caught by the sweep suspends and refuses; a renewal caught by the sweep
+restores writes and re-derives the reminder; an account without a row stays refused — nothing
+invented), the lockout of every role on both tables and all three functions, the idempotent re-run
+and the cascade of a deleted user — 89 checks — were executed against the full 23-migration chain in
+an isolated in-process Postgres when this migration was written; the 6.5A (84), 6.5B (144), step 4
+(87) and step 5 (378) harnesses still pass with it appended.
+
+### Function deployment (deliberate manual steps — none performed by the phase)
+
+```text
+1. Apply the migration above (after steps 4 and 5).
+2. Dashboard › Settings › API Keys: create a DEDICATED secret key named exactly
+   `subscription_reconciliation` (lowercase letters, digits and underscore only). The function
+   (`withSupabase({ auth: 'secret:subscription_reconciliation' })`) accepts only that named key and
+   refuses publishable keys, user JWTs, the worker's key and unauthenticated calls.
+3. RevenueCat › Project › API keys: create a SECRET API key (v1, read) DEDICATED to the reconciliation —
+   not the webhook's key, never the public SDK key — then
+   npx supabase secrets set REVENUECAT_RECONCILIATION_API_KEY='<sk_… that key>'
+4. npx supabase functions deploy subscription-reconciliation
+   (verify_jwt stays ON — the deploy default; never --no-verify-jwt: the gateway accepts the sb_secret_…
+    key on the `apikey` header in place of a JWT, and the named-secret-key check narrows it to that key).
+5. Smoke, writing nothing — an empty body is a DRY_RUN sweep:
+   curl -s -X POST https://<ref>.supabase.co/functions/v1/subscription-reconciliation \
+        -H 'apikey: <the sb_secret_… subscription_reconciliation key>' -H 'Content-Type: application/json' -d '{}'
+   → { "ok": true, "mode": "DRY_RUN", "status": "COMPLETED", "counts": {…}, "accounts": [...], … }
+   A 500 naming REVENUECAT_RECONCILIATION_API_KEY means the secret is missing or not an sk_… key.
+```
+
+### Operator backfill (explicitly authorized operational action — Staging first, never production as part of this phase)
+
+```text
+1. Preview ONE account (nothing written; one RevenueCat request):
+   -d '{"users": ["<supabase user id>"]}'
+   Read `accounts[0]`: outcome, accessBefore, changes[] (environment, product, before → after, would-apply /
+   would-confirm / would-be-stale), unlisted[], detail.
+2. Apply it:  -d '{"users": ["<supabase user id>"], "mode": "APPLY"}'
+   then verify by eye:
+   select product_id, environment, status, entitled_until, source, verified_at
+     from public.subscription_entitlements where user_id = '<id>' order by environment, product_id;
+   select public.subscription_has_plus_access('<id>');
+3. A controlled batch, dry-run first, then apply, batch by batch — `nextCursor` of one answer is the `after`
+   of the next; stop when it is null:
+   -d '{"source": "businesses", "kind": "BACKFILL", "limit": 25}'
+   -d '{"source": "businesses", "kind": "BACKFILL", "mode": "APPLY", "limit": 25}'
+   -d '{"source": "businesses", "kind": "BACKFILL", "mode": "APPLY", "limit": 25, "after": "<nextCursor>"}'
+   Repeating a batch is safe: already reconciled accounts read CONFIRMED and nothing changes.
+   NOTE: the v1 read CREATES an empty RevenueCat customer for an account RevenueCat never saw
+   (reported NO_SUBSCRIBER). Prefer explicit user lists on production where that matters.
+4. Settle every INVESTIGATE by hand (the report's `detail` and `unlisted[]` say why; nothing was changed
+   for the disputed source): a grant RevenueCat no longer lists, a subscriber shared between two accounts.
+   `docs/architecture/SUBSCRIPTIONS.md` §10 keeps the manual procedure for a grant to (re)create.
+5. Operational reporting, in the SQL Editor (as the owner):
+   select id, kind, mode, status, selected, counts, requests, cursor_user_id, last_error, started_at, finished_at
+     from public.subscription_reconciliation_runs order by started_at desc limit 20;
+   select user_id, last_outcome, last_detail, last_succeeded_at, consecutive_failures, next_attempt_at
+     from public.subscription_reconciliation_state where last_outcome in ('INVESTIGATE', 'FAILED') order by updated_at desc;
+```
+
+Every answer is bounded to the batch (≤ 50 accounts, ≤ 3 requests each, one request per second); a
+`STOPPED` answer with `stoppedBy` "rate-limited" simply means: invoke again later. "unauthorized"
+means the RevenueCat key is refused: fix the secret before invoking again.
+
+### Enabling the periodic sweep (deliberate manual step — NOT performed by the phase)
+
+Preconditions: the migration applied and the function deployed as above; the backfill of §Operator
+backfill run and read on this project; `pg_cron` + `pg_net` enabled (they are, on a project running the
+communications worker). The sweep re-verifies every MIRRORED account at most once per `minAgeSeconds`,
+in batches of `limit`, least recently attempted first — it recovers missed webhooks and confirms
+ends by time; it never reaches an account without a mirrored row (that is the backfill's job). The
+body MUST say `"mode": "APPLY"`: a cron job with an empty body would dry-run forever. With 20 accounts
+every 15 minutes and a 20-hour minimum age, a project of a few hundred mirrored accounts is fully
+re-verified daily at under 100 RevenueCat requests per hour.
+
+```sql
+select vault.create_secret('<the sb_secret_… subscription_reconciliation key>', 'subscription_reconciliation_secret_key');
+select cron.schedule('subscription-reconciliation-sweep', '*/15 * * * *', $$
+  select net.http_post(
+    url := 'https://<ref>.supabase.co/functions/v1/subscription-reconciliation',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'apikey', (select decrypted_secret from vault.decrypted_secrets
+                  where name = 'subscription_reconciliation_secret_key')),
+    body := '{"kind": "SWEEP", "mode": "APPLY", "limit": 20, "minAgeSeconds": 72000}'::jsonb);
+$$);
+-- pause / resume / remove:
+-- select cron.alter_job((select jobid from cron.job where jobname = 'subscription-reconciliation-sweep'), active := false);
+-- select cron.unschedule('subscription-reconciliation-sweep');
+```
+
+Overlapping ticks are harmless: a pass skips the accounts another pass holds (lease), and the
+database refuses nothing else. The secret key must never exist in Expo env, the app bundle, SQLite,
+public database rows or source control. Verify the cron → Edge Function invocation pattern against
+the current Supabase docs when actually enabling it.
+
+### Staging order for Phase 6.5C steps 4, 5 and 6
+
+```text
+ 1. Apply migrations/20261006120000_add_business_mutation_entitlement_enforcement.sql   (step 4 — switch stays OFF)
+ 2. Apply migrations/20261007120000_complete_business_mutation_entitlement_enforcement.sql (step 5 — needs the step 4 rule)
+ 3. Apply migrations/20261008120000_add_subscription_reconciliation.sql                 (step 6 — needs the 6.5A mirror only;
+                                                                                         ordered after 5 because filenames are
+                                                                                         dependency order)
+ 4. Verify the three migrations with the SQL checks of their sections (both switches OFF).
+ 5. Create the `subscription_reconciliation` secret key, set REVENUECAT_RECONCILIATION_API_KEY,
+    deploy subscription-reconciliation, run the empty-body DRY_RUN smoke.
+ 6. Backfill Staging's accounts (§Operator backfill: dry-run, apply, settle INVESTIGATE).
+ 7. Run the step 5 Staging checklist (above) with real devices — it needs backfilled mirrors to show
+    "entitled" behaviors, which is why step 6 precedes it.
+ 8. Only then decide, separately, whether to enable the sweep on Staging (§above) — and never
+    enforcement on production before docs/architecture/SUBSCRIPTIONS.md §12 holds in full.
+```
