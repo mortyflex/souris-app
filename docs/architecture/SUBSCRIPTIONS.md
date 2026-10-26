@@ -14,11 +14,16 @@ Phase 6.5A  Server-side entitlement mirror           done — two tables, the su
             + secure RevenueCat webhook                      the revenuecat-webhook Edge Function,
                                                              optional REST reconciliation, the
                                                              effective-access helper (this doc)
-Phase 6.5B  Server-side enforcement                  future — business-mutation enforcement in the
-                                                             sync RPCs, reminder / SMS suppression,
-                                                             the app reading the mirror, offline
-                                                             evidence persistence, the scheduled
-                                                             re-verification and the backfill tool
+Phase 6.5B  Communication entitlement enforcement    done — the server-side switch (disabled by
+                                                             default), THE communication rule
+                                                             communications_is_entitled, the four
+                                                             boundaries, the worker's final check
+                                                             (docs/architecture/COMMUNICATIONS.md §46)
+Phase 6.5C  Server-side enforcement, continued      future — business-mutation enforcement in the
+                                                             sync RPCs, the app reading the mirror,
+                                                             offline evidence persistence, the
+                                                             scheduled re-verification and the
+                                                             backfill tool
 ```
 
 **What 6.5A does NOT change:** `SUBSCRIPTION_ENFORCEMENT` stays `disabled`; `PURCHASABLE_STORES`
@@ -160,9 +165,12 @@ It checks ends, not starts (a dated grant whose end is ahead grants). It models 
 the app's 72-hour grace (`src/domain/access`) belongs to a DEVICE whose last trusted state was in
 force and whose renewal verification is temporarily unavailable; a confirmed expiration or
 revocation receives no extension anywhere. The function is SECURITY DEFINER, STABLE, EXECUTE
-granted to `service_role` only, and is **not wired to anything** in 6.5A: no sync RPC and no
-reminder function calls it. The per-row TS rule `isEntitledAt` (`core/entitlement-snapshot.ts`)
-is the same predicate for one row and never decides access by itself.
+granted to `service_role` only. It was wired to nothing in 6.5A; since Phase 6.5B it is THE rule
+behind `communications_is_entitled(business, at)` — the communication boundaries and the worker's
+final pre-dispatch check (`COMMUNICATIONS.md` §46), behind a server-side switch that is disabled
+by default. No sync RPC calls it yet (6.5C). The per-row TS rule `isEntitledAt`
+(`core/entitlement-snapshot.ts`) is the same predicate for one row and never decides access by
+itself.
 
 ## 6. The webhook (`supabase/functions/revenuecat-webhook`)
 
@@ -389,3 +397,6 @@ as ANY later event about them is delivered.
   Supabase role stub over the full migration chain — `supabase/README.md` › Entitlement mirror
   lists the checks. Per project policy (`CLOUD_SYNC.md` §13) that harness lives outside the
   repository.
+- Phase 6.5B (communication enforcement): `supabase/functions/communications-worker/core/__tests__/`
+  (the worker gate, the adapter, `entitlement-boundary.test.ts`) and the 131-check PGlite harness of
+  `20261005120000_add_communication_entitlement_enforcement.sql` — `COMMUNICATIONS.md` §46.

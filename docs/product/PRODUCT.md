@@ -1426,10 +1426,17 @@ entitlement mirror: a secure RevenueCat webhook records every subscription event
 account and per environment, the current Plus entitlement — including the complimentary access
 granted individually to early professional testers, with no predetermined end — so the server can
 later decide without trusting the device. Nothing visible changes and enforcement stays disabled.
+Phase 6.5B (October 2026) makes client communications — appointment email reminders, birthday and
+win-back SMS — a BeautIzzy Plus capability on the server: once a dedicated server-side switch is
+enabled by the operator (it ships disabled), they are scheduled and sent only for a professional
+whose Plus access is verified (an active subscription, a trial, a cancelled subscription until its
+end, a billing grace until its deadline, a complimentary access), suspended at a confirmed
+expiration without touching history or settings, and resumed — never replayed — when the
+subscription is back. Nothing visible changes and the app's enforcement stays disabled.
 Still to come, in their own phases: the device run of that validation (real trial, real restore,
 renewal and expiration), the account-scoped paywall routing, persisted entitlement evidence,
-server-side enforcement on the backend entitlement mirror, real terms and privacy URLs, account
-deletion and privacy-data export, Google Play.
+server-side enforcement of business changes on the backend entitlement mirror, real terms and
+privacy URLs, account deletion and privacy-data export, Google Play.
 
 A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
 existing install keeps its local data; completing Business setup binds that data to the new

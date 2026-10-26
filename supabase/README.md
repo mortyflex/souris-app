@@ -146,6 +146,21 @@ migrations/20261004120000_create_subscription_entitlements.sql (BeautIzzy Plus 6
                                                                  mirrors nothing: the revenuecat-webhook function
                                                                  must be deployed and configured in RevenueCat.
                                                                  docs/architecture/SUBSCRIPTIONS.md)
+migrations/20261005120000_add_communication_entitlement_enforcement.sql
+                                                                (BeautIzzy Plus 6.5B — BY HAND, after the mirror
+                                                                 one, and BEFORE the next communications-worker
+                                                                 deployment (the worker now calls
+                                                                 communications_authorize_dispatch); creates the
+                                                                 server-owned server_feature_flags table with ONE
+                                                                 DISABLED row, the communication entitlement rule,
+                                                                 the suspension helper, the worker's pre-dispatch
+                                                                 gate, the operator switch function (no EXECUTE
+                                                                 grant), ONE after trigger on
+                                                                 subscription_entitlements, and replaces the four
+                                                                 reconciliation functions in place. Touches NO sync
+                                                                 RPC and NO existing row; while the switch is
+                                                                 disabled every Business behaves exactly as before.
+                                                                 docs/architecture/COMMUNICATIONS.md §46)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -616,3 +631,105 @@ row or source control. Answers and logs carry event ids, types, environments, ou
 configuration booleans only. Backfill of pre-existing accounts: `docs/architecture/SUBSCRIPTIONS.md`
 §9 — validate it on a non-production project first; never run it against production as part of
 this phase.
+
+## Communication entitlement enforcement (BeautIzzy Plus Phase 6.5B) — NOT applied, switch DISABLED
+
+`20261005120000_add_communication_entitlement_enforcement.sql` makes email and SMS communications a
+Plus capability on the server, behind a SERVER-SIDE switch that ships DISABLED
+(`docs/architecture/COMMUNICATIONS.md` §46). Additive, rewrites no row, safe to re-run (a re-run can
+never flip the switch). Order: apply it BEFORE the next `communications-worker` deployment — the
+worker's pre-dispatch check now calls `communications_authorize_dispatch`. The order is also
+protected: the updated worker probes that function (nil UUID, side-effect free) BEFORE claiming
+anything and refuses the whole pass (500, `compatibility: 'authorization-gate-unavailable'`) while it
+is missing — nothing claimed, no attempt count moved, nothing sent, nothing able to expire into
+FAILED. Suggested manual check in the SQL Editor after applying:
+
+```sql
+-- the switch: one row, disabled, never enabled; RLS on, zero policies, zero grants
+select flag, enabled, enabled_at from public.server_feature_flags;
+select tablename, rowsecurity from pg_tables where schemaname = 'public' and tablename = 'server_feature_flags';
+select count(*) from pg_policies where tablename = 'server_feature_flags';                          -- 0
+select grantee, privilege_type from information_schema.role_table_grants
+ where table_schema = 'public' and table_name = 'server_feature_flags'
+   and grantee in ('anon', 'authenticated', 'service_role');                                       -- 0 rows
+select public.communications_entitlement_enforcement_enabled();                                   -- false
+
+-- the functions: search_path pinned, no API-role EXECUTE; service_role may call EXACTLY the gate and the
+-- rule it asks — never the operator switch, suspend_pending, the flag reader or the trigger function
+-- (every new function is revoked from PUBLIC, anon, authenticated and service_role; two grants exist)
+select p.proname, p.prosecdef, p.proconfig,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role_exec
+  from pg_proc p
+ where p.pronamespace = 'public'::regnamespace
+   and p.proname in ('communications_entitlement_enforcement_enabled', 'communications_is_entitled',
+                     'communications_suspend_pending', 'communications_authorize_dispatch',
+                     'communications_on_entitlement_change', 'communications_set_entitlement_enforcement');
+-- expected: service_role_exec TRUE for communications_authorize_dispatch and communications_is_entitled ONLY,
+-- authenticated_exec FALSE everywhere; proacl NOT NULL and without a "=X/" (PUBLIC) entry on all six:
+select p.proname, p.proacl from pg_proc p
+ where p.pronamespace = 'public'::regnamespace and p.proname like 'communications\_%'
+   and (p.proacl is null or p.proacl::text ~ '(^\{|,)=X/');                                       -- 0 rows
+
+-- the trigger on the mirror exists
+select tgname from pg_trigger where tgrelid = 'public.subscription_entitlements'::regclass
+   and tgname = 'subscription_entitlements_communications_reconcile';
+
+-- while disabled: every Business is entitled, whatever its mirror says
+select b.id, b.name, public.communications_is_entitled(b.id) from public.businesses b;             -- all true
+```
+
+Behavior checks as a signed-in owner: `select * from public.server_feature_flags`, any call of
+`communications_set_entitlement_enforcement`, `communications_is_entitled`,
+`communications_entitlement_enforcement_enabled` or `communications_authorize_dispatch` fail with
+`42501`. As `service_role`, `communications_entitlement_enforcement_enabled()` and
+`communications_suspend_pending(...)` fail with `42501` too. The same checks — plus the status grid (ACTIVE, TRIAL, CANCELLED_ACTIVE until its end,
+BILLING_RETRY until its grace deadline, EXPIRED, dated and lifetime COMPLIMENTARY, no row, Sandbox-only,
+a Test Store product labelled PRODUCTION, one second after an end), the disabled default for a
+Business without any row, the idempotent re-run rewriting nothing, the enabling sweep (unentitled
+Businesses suspended with the marker, entitled ones untouched, SENT history / preferences / consent
+preserved), the scheduling boundaries (an unentitled Business schedules no reminder, no lifecycle SMS
+and mints no rescheduled notice; the retry executor from CURRENT state), the worker gate (DISPATCH /
+SUSPENDED cancelling in the same call / SKIPPED / ABSENT, a lapse by TIME without any event caught
+before dispatch, the suspended record never claimable again, a late mark_sent recording reality), the
+mirror trigger (a revocation suspending everything at once, a purchase re-deriving future reminders
+with new keys but never the one whose H-24 passed, consumed lifecycle keys not replayed while new
+facts schedule normally, Sandbox events changing nothing in either direction, an injected failure
+leaving a durable BUSINESS retry job and the webhook write intact), the disable path restoring the
+pre-enforcement state, the effective privileges (a grant-less role may execute none of the new
+functions, every ACL is explicit without a PUBLIC entry, the replaced functions kept their original
+privileges, the switch and the flag table share one owner — all under a WORST-CASE stub that grants
+service_role EXECUTE on every new function by default), the nil-UUID probe touching zero rows, and
+the lockout of every direct access — 144 checks — were executed against the full 20-migration chain
+in an isolated in-process Postgres when this migration was written; the 6.5A mirror harness (81)
+still passes with it appended.
+
+### Enabling enforcement (deliberate manual step — NOT performed by the phase)
+
+Preconditions: the 6.5A mirror is applied, the `revenuecat-webhook` is deployed and receiving
+production events, every account that should keep communications has been backfilled
+(`docs/architecture/SUBSCRIPTIONS.md` §10 — a Business whose owner has NO mirrored row reads as NOT
+entitled under enforcement), and this migration plus the matching worker are deployed. Validate on
+Staging (`iteufklnrsmazzvmzqxa`) first, never on production as part of this phase.
+
+```sql
+-- preview who would be suspended (read-only)
+select b.id, b.name, public.subscription_has_plus_access(b.owner_user_id) as entitled,
+       count(sc.*) filter (where sc.status in ('SCHEDULED', 'PROCESSING')) as pending
+  from public.businesses b
+  left join public.scheduled_communications sc on sc.business_id = b.id
+ group by b.id, b.name, b.owner_user_id order by b.name;
+
+-- flip + converge in ONE transaction (table owner only)
+select public.communications_set_entitlement_enforcement(true);
+--   → { "enabled": true, "businesses_suspended": n, "communications_suspended": m }
+
+-- inspect suspensions (history is kept; nothing is deleted)
+select business_id, kind, channel, count(*) from public.scheduled_communications
+ where last_error = 'ENTITLEMENT_SUSPENDED' group by 1, 2, 3;
+
+-- roll back: restores the pre-enforcement state (future reminders re-derived; suspended rows stay history)
+select public.communications_set_entitlement_enforcement(false);
+```
+
+After enabling, the worker's smoke response carries a `suspended` count beside `sent` / `skipped`.

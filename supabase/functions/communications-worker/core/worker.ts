@@ -3,13 +3,25 @@
 // One invocation = FIRST re-run any failed trigger reconciliations
 // (reconciliation.ts — a recovered reconciliation may enqueue an immediate
 // event this same pass then sends), THEN claim a bounded batch of due
-// records, dispatch each one through its channel's transport, and settle
-// each one exactly once (sent, retry under the central policy, or failed).
-// Everything time- and concurrency-sensitive is the database's job
-// (communications_claim_due / mark_* and the reconciliation claim/settle
-// RPCs): two overlapping invocations can never process the same record, and
-// a record cancelled after being claimed is re-checked immediately before
-// dispatch and skipped.
+// records, ask the database for the final go-ahead on each one, dispatch
+// through its channel's transport, and settle each one exactly once (sent,
+// retry under the central policy, or failed). Everything time-, state- and
+// concurrency-sensitive is the database's job (communications_claim_due /
+// authorize_dispatch / mark_* and the reconciliation claim/settle RPCs): two
+// overlapping invocations can never process the same record; a record
+// cancelled after being claimed is skipped; a record of a Business that is
+// no longer entitled to communications (BeautIzzy Plus, server-side
+// enforcement — Phase 6.5B) is suspended by the database and never
+// dispatched. The worker holds no entitlement rule of its own.
+//
+// Compatibility rule: the pass begins with a side-effect-free check that the
+// database exposes the pre-dispatch gate (`verifyDispatchAuthorization`). A
+// worker deployed BEFORE its migration therefore refuses the whole pass with
+// `WorkerCompatibilityError` — nothing claimed (no reconciliation job, no
+// communication), no attempt count moved, no status changed, no provider
+// called — instead of claiming records it could never authorize and letting
+// their leases expire into FAILED. It never falls back to dispatching
+// without authorization.
 //
 // Observability rule: summaries carry counts and ids only. Payloads and
 // recipients are business-private and are never logged.
@@ -34,6 +46,8 @@ export interface WorkerSummary {
   readonly failed: number;
   /** Claimed records skipped without dispatch (cancelled between claim and dispatch). */
   readonly skipped: number;
+  /** Claimed records the database suspended before dispatch: the Business is not entitled now. */
+  readonly suspended: number;
   /** The reconciliation retry pass that ran before sending (counts only). */
   readonly reconciliation: ReconciliationSummary;
 }
@@ -44,6 +58,22 @@ export interface WorkerDependencies {
   /** Absent in tests that exercise sending alone: the retry pass then reports zeros. */
   readonly reconciliation?: ReconciliationRetryQueue;
   readonly retryPolicy?: RetryPolicy;
+}
+
+/**
+ * The database does not expose what this worker build needs (the pre-dispatch
+ * authorization gate of migration 20261005120000). Raised BEFORE anything is
+ * claimed; the Deno entry answers 500 with this message.
+ */
+export class WorkerCompatibilityError extends Error {
+  constructor(detail: string) {
+    super(
+      `communications worker: pre-dispatch authorization gate unavailable — apply migration ` +
+        `20261005120000_add_communication_entitlement_enforcement.sql before deploying this worker ` +
+        `(${detail})`,
+    );
+    this.name = 'WorkerCompatibilityError';
+  }
 }
 
 function sanitizeError(error: unknown): string {
@@ -58,6 +88,14 @@ export async function runCommunicationsWorker(
 ): Promise<WorkerSummary> {
   const policy = deps.retryPolicy ?? COMMUNICATION_RETRY_POLICY;
 
+  // Compatibility FIRST, before any claim: a worker whose database lacks the
+  // pre-dispatch gate refuses the pass and touches nothing.
+  try {
+    await deps.queue.verifyDispatchAuthorization();
+  } catch (error) {
+    throw new WorkerCompatibilityError(sanitizeError(error));
+  }
+
   // Recover FIRST: a reconciliation that failed at trigger time is re-run
   // from current authoritative state, so anything it (re)schedules or
   // enqueues immediately is eligible for the send pass below.
@@ -70,6 +108,7 @@ export async function runCommunicationsWorker(
   let retried = 0;
   let failed = 0;
   let skipped = 0;
+  let suspended = 0;
 
   for (const communication of claimed) {
     // Bound crash loops: a record repeatedly claimed by workers that died
@@ -83,10 +122,16 @@ export async function runCommunicationsWorker(
       continue;
     }
 
-    // Cancellation re-check, immediately before dispatch: a record cancelled
-    // after the claim must not be sent.
-    const status = await deps.queue.readStatus(communication.id);
-    if (status !== 'PROCESSING') {
+    // Final eligibility check, immediately before dispatch, decided by the
+    // database: a record cancelled after the claim must not be sent, and a
+    // record of a Business that is not entitled NOW is suspended there and
+    // must not be sent either.
+    const authorization = await deps.queue.authorizeDispatch(communication.id);
+    if (authorization === 'SUSPENDED') {
+      suspended += 1;
+      continue;
+    }
+    if (authorization !== 'DISPATCH') {
       skipped += 1;
       continue;
     }
@@ -133,5 +178,13 @@ export async function runCommunicationsWorker(
     }
   }
 
-  return { claimed: claimed.length, sent, retried, failed, skipped, reconciliation };
+  return {
+    claimed: claimed.length,
+    sent,
+    retried,
+    failed,
+    skipped,
+    suspended,
+    reconciliation,
+  };
 }

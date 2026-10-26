@@ -835,7 +835,8 @@ id, then rewrites the row of the PRODUCT the event concerns — one row per (use
 entitlement, product), so a paid subscription and a promotional grant never overwrite each other
 and PRODUCTION / SANDBOX never meet — through SECURITY DEFINER functions only the server role may
 execute. Effective access is derived from all rows by `subscription_has_plus_access` (PRODUCTION
-rows of production stores only, not EXPIRED, end not reached; not wired to anything yet). The row
+rows of production stores only, not EXPIRED, end not reached; wired to communications since Phase
+6.5B below). The row
 is computed from the authoritative fields (expiration, period type, store, grace end), never from
 the event name: a paid cancellation keeps the access until its end, a billing issue keeps it
 through the store's grace, a product change waits for the renewal, only an expiration ends a
@@ -851,9 +852,29 @@ derived from the user, never sent. The app reads nothing from the mirror yet, `a
 only SELECT its own snapshot rows, and nothing is deployed or applied by the phase. The mirror
 holds the end of access exactly as RevenueCat knows it: the 72-hour offline grace stays a device
 rule for a last-trusted-active state whose renewal cannot be verified, never a server extension of a
-confirmed expiration. `SUBSCRIPTION_ENFORCEMENT` stays `disabled`; server-side enforcement, the
-reminder / SMS suppression, the scheduled re-verification and the operator backfill tool are Phase
-6.5B.
+confirmed expiration. `SUBSCRIPTION_ENFORCEMENT` stays `disabled`; the reminder / SMS suppression is
+Phase 6.5B below; business-mutation enforcement in the sync RPCs, the scheduled re-verification and
+the operator backfill tool are Phase 6.5C.
+
+Server-side communication entitlement enforcement (Phase 6.5B,
+`20261005120000_add_communication_entitlement_enforcement.sql`, `docs/architecture/COMMUNICATIONS.md`
+§46). Email and SMS communications become a Plus capability on the server: behind a SERVER-SIDE
+switch — one disabled row of the new `server_feature_flags` table, flipped by hand through an
+operator-only function, never the app's build constant — a communication is scheduled and sent only
+for a Business whose owner holds verified production Plus access per `subscription_has_plus_access`
+(reused, never re-implemented: ACTIVE, TRIAL, a cancelled subscription until its end, a billing grace
+until its confirmed deadline, a complimentary grant; never EXPIRED, never a Sandbox or Test Store
+purchase, never an account without a mirrored row, no 72-hour server grace). Four boundaries decide
+in the database: the appointment reminder reconciliation, the lifecycle SMS reconciliation, the
+worker's final check immediately before dispatch (`communications_authorize_dispatch`, which cancels a
+claimed record of an unentitled Business in the same call — the guard against a lapse by time and
+against a queue filled before the switch), and a trigger on the mirror that suspends pending
+communications at a confirmed loss and re-derives future reminders at a regain. Suspension is the
+existing terminal CANCELLED state with the `ENTITLEMENT_SUSPENDED` marker: history, preferences and
+consent are never touched, nothing is deleted, nothing is replayed on reactivation. The worker holds
+no entitlement rule and merely obeys the database's verdict. While the switch is disabled — its
+state after this phase — every Business behaves exactly as before. Nothing is applied, deployed or
+enabled by the phase.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain

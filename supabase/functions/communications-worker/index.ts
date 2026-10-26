@@ -20,7 +20,13 @@
 //
 // Pass order: failed trigger reconciliations are re-run FIRST (durable
 // retry jobs — docs/architecture/COMMUNICATIONS.md §14b), then due records
-// are claimed and sent. EMAIL is real (Resend); SMS binds the real client
+// are claimed, authorized one by one by the database immediately before
+// dispatch (status re-check + BeautIzzy Plus entitlement when the
+// server-side switch is on — §46) and sent. The pass opens with a
+// side-effect-free check that `communications_authorize_dispatch` exists: a
+// worker deployed before the 6.5B migration refuses the pass (500,
+// `compatibility: 'authorization-gate-unavailable'`) without claiming a
+// single record, so nothing can expire into FAILED while the order is wrong. EMAIL is real (Resend); SMS binds the real client
 // lifecycle transport ONLY when all three Twilio secrets are valid (Phase
 // 2) and stays unsupported otherwise. The registry is built BEFORE
 // anything is claimed, so a deployment missing RESEND_API_KEY /
@@ -41,7 +47,7 @@ import {
   createSupabaseCommunicationQueue,
   createSupabaseReconciliationRetryQueue,
 } from './core/supabase-queue.ts';
-import { runCommunicationsWorker } from './core/worker.ts';
+import { runCommunicationsWorker, WorkerCompatibilityError } from './core/worker.ts';
 
 export default {
   fetch: withSupabase({ auth: 'secret:communications_worker' }, async (_request, ctx) => {
@@ -67,6 +73,15 @@ export default {
     } catch (error) {
       if (error instanceof WorkerConfigurationError) {
         return Response.json({ ok: false, error: error.message }, { status: 500 });
+      }
+      if (error instanceof WorkerCompatibilityError) {
+        // The database lacks the pre-dispatch gate: the pass was refused
+        // BEFORE anything was claimed. Operational signal, nothing to repair
+        // in the queue — apply the migration, then invoke again.
+        return Response.json(
+          { ok: false, error: error.message, compatibility: 'authorization-gate-unavailable' },
+          { status: 500 },
+        );
       }
       const message = error instanceof Error ? error.message : 'worker pass failed';
       return Response.json({ ok: false, error: message }, { status: 500 });

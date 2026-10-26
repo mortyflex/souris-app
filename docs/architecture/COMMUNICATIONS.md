@@ -25,7 +25,13 @@ Pivot   SMS = client lifecycle channel     Phase 1 done (§31) — appointment S
                                            deployed / enabled: migration + cron + secrets are
                                            controlled manual steps
         Opt-out (STOP / unsubscribe)       future — REQUIRED before any real-client rollout
-        Quota / entitlements               future (C3) — separate from the core
+Plus    Entitlement enforcement            Phase 6.5B done (§46) — email and SMS communications
+                                           are scheduled and sent only for a Business with a
+                                           verified production Plus entitlement, behind a
+                                           SERVER-SIDE switch that is DISABLED by default. NOT
+                                           applied / NOT enabled: migration + switch are controlled
+                                           manual steps
+        Quota                              future (C3) — separate from the core
 ```
 
 **Global safety rule, unchanged by Lot B:** everything defaults OFF. No existing Business is
@@ -1088,3 +1094,126 @@ tolerant loading), sync payload compatibility (old-build/old-remote never erases
 the consent form round-trip and phone notice, the profile row, the lifecycle settings screen
 (defaults OFF, independent switches, fail-safe), and the gateway mapping including
 INVALID_VALUE.
+
+## 46. BeautIzzy Plus entitlement enforcement (Phase 6.5B)
+
+Migration `supabase/migrations/20261005120000_add_communication_entitlement_enforcement.sql`;
+the mirror it reads is Phase 6.5A (`docs/architecture/SUBSCRIPTIONS.md`). Communications are a
+BeautIzzy Plus capability: when the server-side switch is enabled, a communication is scheduled
+and sent only for a Business whose owner holds a VERIFIED PRODUCTION Plus entitlement.
+
+**The switch is server-side, separate, and disabled by default.** It is ONE row of the new
+server-owned table `server_feature_flags` (`COMMUNICATIONS_ENTITLEMENT_ENFORCEMENT`, inserted
+`false`; a re-run of the migration can never flip it; a missing row reads as disabled). It is
+flipped BY HAND through `communications_set_entitlement_enforcement(boolean)`, which no role may
+execute (table owner only — the SQL Editor's `postgres`); it is read through
+`communications_entitlement_enforcement_enabled()`. It is NOT the mobile app's
+`SUBSCRIPTION_ENFORCEMENT` build constant, not an Edge Function secret, not a client setting: a
+client-side switch is never a security control, and a stale deployment cannot disagree with the
+database. While the switch is disabled, every function behaves exactly as before 6.5B — for every
+Business, including the accounts without any `subscription_entitlements` row.
+
+**ONE rule decides** — `communications_is_entitled(business, at)`: enforcement disabled, or
+`subscription_has_plus_access(owner, at)` (SUBSCRIPTIONS.md §5). The access rule is reused, never
+re-implemented; it already yields the product rules of this phase:
+
+```text
+ACTIVE / TRIAL in force                         allowed
+CANCELLED_ACTIVE before its expiration          allowed, until the expiration (exclusive)
+BILLING_RETRY (store billing grace)             allowed until the confirmed grace deadline, not after
+COMPLIMENTARY with a valid grant                allowed (a lifetime grant: no end)
+EXPIRED                                         suspended
+no row / unverified / Sandbox or Test Store     NOT entitled — unknown or unverified is never paid access;
+                                                an Apple Sandbox purchase never authorizes production
+72-hour offline grace                           NONE on the server (a device rule only)
+```
+
+**Four boundaries, all in the database:**
+
+```text
+1. appointment reminders       communications_reconcile_appointment / _events / _business: an
+                               unentitled Business schedules nothing and its pending appointment
+                               communications are suspended; no rescheduled / cancelled notice is minted
+2. client lifecycle SMS        communications_reconcile_client_lifecycle (the daily sweep keeps calling
+                               it): an unentitled Business has its pending birthday / win-back SMS
+                               suspended and runs neither pass
+3. the worker's final check    communications_authorize_dispatch(id) replaces the status re-read,
+                               immediately before dispatch, on a CLAIMED record:
+                                 DISPATCH   still PROCESSING, Business entitled NOW
+                                 SUSPENDED  still PROCESSING, Business NOT entitled: cancelled in the
+                                            same call (ENTITLEMENT_SUSPENDED), never dispatched
+                                 SKIPPED    no longer PROCESSING (cancelled meanwhile) / ABSENT
+                               This catches an entitlement that lapsed by TIME without any webhook
+                               event, and a queue filled before the switch was enabled.
+4. the mirror itself           trigger on subscription_entitlements (enforcement ON, PRODUCTION rows
+                               only): a confirmed loss — EXPIRATION, revocation, transfer, refund —
+                               suspends every pending communication of the Business at once; a
+                               confirmed regain re-derives the FUTURE appointment reminders. Errors
+                               are swallowed into a durable BUSINESS retry job (§14b); a mirror write
+                               never fails because of a reminder.
+```
+
+**Suspension** is the existing terminal `CANCELLED` state with `last_error = 'ENTITLEMENT_SUSPENDED'`
+(`communications_suspend_pending(business, source_type?, source_id?)`), exactly what the preference
+switch does when turned off. Legal transitions only (SCHEDULED | PROCESSING → CANCELLED). Never a
+deletion; SENT / FAILED history, preferences, lifecycle preferences and consent are never touched.
+A suspended record is never claimable again, and the mark_* settlements act on PROCESSING rows
+only, so no duplicate send and no resurrection is possible; the residual race (a suspension landing
+between the authorization and the provider call) is recorded by `communications_mark_sent` as
+`DISPATCHED_BEFORE_CANCELLATION`, as for any cancellation.
+
+**Reactivation resumes, never replays.** A regain (webhook RENEWAL / INITIAL_PURCHASE / grant, or a
+reconciliation) runs the whole-Business pass: a reminder whose H-24 is still ahead is re-created
+with a suffixed dedupe key (the OFF→ON pattern of §15); a reminder whose H-24 passed during the
+lapse is not eligible and is never sent; a SENT reminder is never sent twice. Lifecycle SMS
+converge with the next daily sweep from CURRENT state: a birthday or win-back SMS that was suspended
+keeps its annual / episode key consumed (Phase 2 semantics — one logical offer per year / per
+completed visit, ever), so it is not re-created; new facts (a new birthday, a new completed visit)
+schedule normally.
+
+**The worker** (`core/worker.ts`) holds no entitlement rule: it asks `authorizeDispatch` once per
+claimed record and obeys the verdict; `suspended` joins the summary counts. The Supabase adapter
+maps the answer fail-closed (only an explicit `DISPATCH` sends). **Deployment order is protected**:
+every pass opens with a side-effect-free compatibility check (`verifyDispatchAuthorization`) that
+probes `communications_authorize_dispatch` with the nil UUID — queue ids come from
+`gen_random_uuid()` (version 4), so that id can never name a row; the gate answers `ABSENT` and
+writes nothing. A worker deployed BEFORE the 6.5B migration therefore refuses the whole pass with
+`WorkerCompatibilityError` (500, `compatibility: 'authorization-gate-unavailable'`) before claiming a
+single communication or reconciliation job: no attempt count moves, no status changes, no provider
+is called, and nothing can expire its lease into FAILED while the order is wrong. Only the exact
+`ABSENT` contract passes; the worker never falls back to dispatching without authorization. The
+intended order stays: apply the migration, then redeploy the worker.
+
+**Privileges** are explicit and minimal: every new function is revoked from PUBLIC (Postgres's
+implicit EXECUTE), anon, authenticated AND service_role; exactly two grants exist, both to
+service_role — `communications_authorize_dispatch` (SECURITY INVOKER, the worker's gate) and
+`communications_is_entitled` (the rule that gate asks). The flag reader, the suspension helper and
+the trigger function run only inside SECURITY DEFINER bodies as the owner; the operator switch is
+granted to nobody.
+
+**Operator switch** — `communications_set_entitlement_enforcement(true)` flips the flag and, in the
+same transaction, suspends the pending communications of every unentitled Business (answer:
+`{ enabled, businesses_suspended, communications_suspended }`); `(false)` flips it back and restores
+the pre-enforcement state (future reminders re-derived for every Business with EMAIL on, one
+lifecycle sweep; answer `{ enabled, businesses_reconciled }`). Suspended rows stay history either way.
+
+**Known limits (deliberate):** the app's reminder status projection does not know "suspended" — an
+appointment whose reminder was suspended reads `NONE` / `TOO_LATE` like one that never had a
+reminder (the app reading the mirror is a later phase); no advance notice is sent to the
+professional; the sync RPCs (business-mutation enforcement) and the scheduled re-verification sweep
+are NOT part of 6.5B.
+
+**Verification:** Jest — the worker's gate (disabled → sent without entitlement; enabled → entitled
+sent, unentitled suspended with the marker and never retried; terminal suspension across passes;
+reactivation sends new records only; mixed batches; the in-flight race; the verdict obeyed
+verbatim), the adapter mapping (fail-closed, the one RPC, errors surfaced), and the boundary guard
+(`entitlement-boundary.test.ts`: forward-only migration, disabled flag row, no app constant under
+`supabase/`, the access rule reused not re-implemented, no top-level row rewrite, the exact two
+grants, the worker naming no mirror object), and the deployment-order suite (missing gate → pass
+refused with nothing claimed, due records untouched, attempt counts frozen across many passes,
+exactly-once delivery once the migration lands, enforcement disabled and enabled unchanged, a
+surprising probe answer refused). Database — 144 checks against the full 20-migration chain on a
+populated PGlite under a worst-case default grant to service_role (`supabase/README.md` ›
+Communication entitlement enforcement lists them), including effective privileges through a
+grant-less role and the explicit ACLs; the 6.5A harness (81) still passes with this migration
+appended.
