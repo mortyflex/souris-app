@@ -8,6 +8,7 @@ import type {
   PurchaseRequest,
   StorePurchaseOutcome,
   StoreRestoreOutcome,
+  SubscriptionEvidenceProvenance,
   SubscriptionSource,
   SubscriptionStoreKind,
 } from '../subscription-source';
@@ -57,6 +58,8 @@ interface FakeSubscriptionSourceOptions {
   readonly store?: SubscriptionStoreKind;
   /** Apple Sandbox mode the fake claims (a debug bundle bound to the App Store). Omitted: none. */
   readonly appleSandbox?: AppleSandboxMode;
+  /** The provenance of the proofs the fake produces. Omitted: `production`; `'none'` declares no provenance (the unconfigured shape). */
+  readonly evidenceProvenance?: SubscriptionEvidenceProvenance | 'none';
 }
 
 export const UNAVAILABLE_VERIFICATION: SubscriptionVerification = { kind: 'unavailable' };
@@ -129,6 +132,7 @@ export function createFakeSubscriptionSource(
     },
     ...(store === undefined ? {} : { store }),
     ...(options.appleSandbox === undefined ? {} : { appleSandbox: options.appleSandbox }),
+    ...(options.evidenceProvenance === 'none' ? {} : { evidenceProvenance: options.evidenceProvenance ?? 'production' }),
     ...(loadOffering === undefined ? {} : { loadOffering }),
     ...(purchase === undefined ? {} : { purchase }),
     ...(restore === undefined ? {} : { restore }),

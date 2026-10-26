@@ -900,6 +900,40 @@ shows no « Plus » mark and « Abonnement non vérifié » instead of « Abonne
 authorized Apple Sandbox bench and the Test Store bench are unchanged. Nothing else changes:
 `SUBSCRIPTION_ENFORCEMENT` stays `disabled`, no routing, no persistence, no server change.
 
+Persisted entitlement evidence (Phase 6.5C, step 2, `src/features/access/evidence/`). The proof of
+the session — the domain's `EntitlementEvidence`, exactly as `updateEntitlementEvidence` produces
+it — now survives a restart: `BusinessAccessProvider` receives an `EntitlementEvidenceStore` from
+the root layout (ONE row of `souris_metadata`, key `business_access_evidence`, over the device
+database; no new table, no new dependency) and mirrors every VERIFIED answer into it, in `apply`,
+synchronously: a confirmed entitlement replaces the proof, a confirmed expiration or absence clears
+it, an `unavailable` answer — offline, store unreachable — touches nothing. The wire form is
+versioned and typed (`entitlement-evidence-store.ts`: version, the user id, the provenance, the
+verification instant, the entitlement with its plan and end) and decoded strictly: anything else —
+not JSON, another version, a malformed field, an unknown kind — reads as NO proof, never a partial
+one, never a crash; `clear` removes an unreadable row too. Every proof carries the PROVENANCE of
+the source that produced it (`SubscriptionEvidenceProvenance` on `SubscriptionSource`, declared by
+the RevenueCat adapter from its environment policy: `production` for an App Store source without
+Apple Sandbox mode — every release, TestFlight included —, `trusted-test-source` for the Test Store
+and for Apple Sandbox mode with dedicated test accounts). THE restore rule
+(`entitlement-evidence-policy.ts`, pure) decides what a starting session may rest on: the
+signed-in user's own proof, trusted by the current source's provenance (a production proof
+everywhere; a trusted-test-source proof in a trusted test source only — the Apple Sandbox bench
+shares the App Store bundle identifier, and so the device database, with a release, which must
+never honour the bench's proof), reliable by the domain's timestamps. Anything else starts the
+session without a proof, as a fresh installation does. What the restored proof then GRANTS is the
+unchanged domain policy: full until its end, the 72-hour grace from THAT end (never from the
+restart) unless the entitlement was cancelled, read-only after; a complimentary grant without end
+grants indefinitely. Restoring is synchronous and happens once per signed-in user, when the session
+becomes theirs, so no asynchronous hydration exists that a later account could race; a late answer
+of a previous session is dropped by the session generation before it could write. Sign-out
+persists and clears nothing: like the business data, the proof stays on the device for its owner,
+and another account never reads, inherits or erases it. The development data reset leaves the row
+alone, like the account binding. The proof is written whatever the enforcement, so the first build
+to enforce starts with it. Not a security boundary: a forged row buys at most the domain's 72-hour
+grace of local-only access, and nothing in it ever reaches the server. Deferred to later steps: the
+server-side refusal of business writes, a clock high-water mark beside the proof (a clock set back
+extends what the proof grants; the store is the natural place for the mark).
+
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
 announces (`nextBusinessAccessDeadline`: the end of the entitlement in force, then the end of the

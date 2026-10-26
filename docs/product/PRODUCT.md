@@ -1437,10 +1437,15 @@ Phase 6.5C, step 1 (October 2026): the app itself reads production entitlements 
 Sandbox or Test Store purchase is never shown as a verified subscription on a professional's build
 (no « Plus » mark, « Abonnement non vérifié », never « expiré »); only the two developer testing
 configurations keep reading their own test purchases. Enforcement stays disabled.
+Phase 6.5C, step 2 (October 2026): the verified subscription is remembered on the device, so once
+enforcement exists a professional who opens the app without network keeps working from her last
+verified subscription — until its end, then for at most 72 hours while the renewal cannot be
+verified, never after a confirmed end — and a fresh installation or another account starts with
+nothing. Nothing visible changes today and enforcement stays disabled.
 Still to come, in their own phases: the device run of that validation (real trial, real restore,
-renewal and expiration), the account-scoped paywall routing, persisted entitlement evidence,
-server-side enforcement of business changes on the backend entitlement mirror, real terms and
-privacy URLs, account deletion and privacy-data export, Google Play.
+renewal and expiration), the account-scoped paywall routing, server-side enforcement of business
+changes on the backend entitlement mirror, real terms and privacy URLs, account deletion and
+privacy-data export, Google Play.
 
 A fresh install starts empty: no pilot Clients, Appointments, Products, Services, or Sales. An
 existing install keeps its local data; completing Business setup binds that data to the new

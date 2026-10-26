@@ -377,6 +377,8 @@ export function createRevenueCatSubscriptionSource({
   return {
     store,
     ...(appleSandbox === undefined ? {} : { appleSandbox }),
+    // The proofs of this source come from where its policy lets it read (Phase 6.5C, step 2).
+    evidenceProvenance: environmentPolicy === 'sandbox-trusted' ? 'trusted-test-source' : 'production',
     verify: (userId) => run(() => verifyOnChain(userId)),
     loadOffering: (userId) => run(() => loadOfferingOnChain(userId)),
     purchase: (userId, request) => run(() => purchaseOnChain(userId, request)),

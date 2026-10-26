@@ -25,10 +25,17 @@ Phase 6.5C  Server-side enforcement, continued      step 1 done — the device r
                                                              production entitlement outside the two
                                                              testing configurations (ARCHITECTURE.md
                                                              §10, Phase 6.5C step 1)
+                                                     step 2 done — the verified proof persists on the
+                                                             device (one souris_metadata row, with
+                                                             its provenance) and a restart without
+                                                             network starts from it under the
+                                                             unchanged 72-hour offline policy; a
+                                                             trusted-test-source proof never restores
+                                                             ordinary production access
+                                                             (ARCHITECTURE.md §10, Phase 6.5C step 2)
                                                      future — business-mutation enforcement in the
                                                              sync RPCs, the app reading the mirror,
-                                                             offline evidence persistence, the
-                                                             scheduled re-verification and the
+                                                             the scheduled re-verification and the
                                                              backfill tool
 ```
 

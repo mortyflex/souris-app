@@ -17,9 +17,35 @@
 // user — or nobody — reads a fresh pending session, never the previous one's
 // verification or evidence; a verification that lands after the user changed
 // is dropped (session generation); a push from the store reaches only the
-// session it was subscribed for. Evidence lives in memory only and dies with
-// the session: nothing is persisted in this phase, so after a restart the
-// offline policy starts without a proof until the store answers again.
+// session it was subscribed for.
+//
+// Persisted evidence (Phase 6.5C, step 2). The proof of the session — the
+// domain's `EntitlementEvidence`, kept exactly as `updateEntitlementEvidence`
+// produces it — is also written to the device database through the
+// `evidenceStore` (`evidence/entitlement-evidence-store.ts`), so a restart
+// without network starts WITH the last proof and the offline policy applies
+// to it: full until its end, the 72-hour grace after it unless the
+// entitlement was cancelled, read-only after. The store is written from a
+// VERIFIED answer only, synchronously, in `apply`: a confirmed entitlement
+// replaces the proof, a confirmed expiration or absence clears it, an
+// `unavailable` answer touches nothing — the domain rule decides, the store
+// only mirrors it. Every proof carries the provenance of the source that
+// produced it (`SubscriptionEvidenceProvenance`).
+//
+// A session STARTS with the persisted proof only when THE restore rule
+// (`evidence/entitlement-evidence-policy.ts`) accepts it: the signed-in
+// user's own proof, trusted by this source's provenance (a production proof
+// everywhere; a trusted-test-source proof in a trusted test source only),
+// reliable by the domain's timestamps. Anything else — another account's
+// proof, a Sandbox bench's proof read by a release, a corrupt or outdated
+// row, no row — starts the session without a proof, as a fresh installation
+// does. Restoring is synchronous (the metadata read is), done ONCE per
+// signed-in user when the session becomes theirs: no asynchronous hydration
+// exists that a later account could race, and a verification of a previous
+// account is already dropped by the session generation before it could
+// write anything. Sign-out persists and clears nothing: like the business
+// data, the proof stays on the device for its owner. Without a store (tests,
+// the test persistence provider) the proof lives in memory only, as before.
 //
 // Time awareness. The answer is re-resolved for the current instant, with a
 // fresh verification requested, at every deadline the domain announces
@@ -97,6 +123,8 @@ import {
 } from '@/domain/access';
 import { useAuth } from '@/features/auth/session/AuthProvider';
 
+import { selectRestorableEntitlementEvidence } from '../evidence/entitlement-evidence-policy';
+import type { EntitlementEvidenceStore } from '../evidence/entitlement-evidence-store';
 import {
   noAccountPaywallOffering,
   storeUnavailablePaywallOffering,
@@ -186,12 +214,15 @@ interface BusinessAccessProviderProps {
   readonly source: SubscriptionSource | undefined;
   /** Injected for deterministic tests; the application uses the system clock. */
   readonly clock?: () => Date;
+  /** Where the proof persists across restarts; undefined keeps it in memory only (tests, the test persistence provider). */
+  readonly evidenceStore?: EntitlementEvidenceStore;
 }
 
 export function BusinessAccessProvider({
   enforcement,
   source,
   clock = defaultClock,
+  evidenceStore,
   children,
 }: PropsWithChildren<BusinessAccessProviderProps>) {
   const { state: auth } = useAuth();
@@ -213,37 +244,97 @@ export function BusinessAccessProvider({
     evidence: undefined,
     resolvedAt: clock(),
   }));
+  // The committed session, readable synchronously by `apply` and `reevaluate`
+  // (so the proof is persisted outside React's updater, exactly once per answer).
+  const sessionRef = useRef(session);
   // Bumped whenever the signed-in user changes: an answer, a push or a timer
   // from an older session is dropped. Within a session, only the latest
   // `verify` applies.
   const sessionGeneration = useRef(0);
   const verifySequence = useRef(0);
 
-  // Derived while the stored session belongs to another user (sign-in,
-  // account change, sign-out): pending, with no evidence — never theirs.
-  const current: AccessSession =
-    session.userId === userId
-      ? session
-      : { userId, verification: undefined, evidence: undefined, resolvedAt: session.resolvedAt };
+  const sourceProvenance = source?.evidenceProvenance;
 
-  const apply = useCallback((forUserId: string, verification: SubscriptionVerification) => {
-    const now = clockRef.current();
-    setSession((previous) => {
-      const evidence = previous.userId === forUserId ? previous.evidence : undefined;
-      return {
-        userId: forUserId,
-        verification,
-        evidence: updateEntitlementEvidence(evidence, verification, now),
-        resolvedAt: now,
-      };
-    });
+  /** The persisted proof `forUserId` may start from at `now`, by THE restore rule; a store failure reads as no proof. */
+  const restoreEvidence = useCallback(
+    (forUserId: string, now: Date): EntitlementEvidence | undefined => {
+      if (evidenceStore === undefined) return undefined;
+      let record: ReturnType<EntitlementEvidenceStore['read']>;
+      try {
+        record = evidenceStore.read(forUserId);
+      } catch {
+        return undefined;
+      }
+      return selectRestorableEntitlementEvidence({ record, userId: forUserId, sourceProvenance, now });
+    },
+    [evidenceStore, sourceProvenance],
+  );
+
+  /** Mirrors a VERIFIED answer's effect on the proof into the store; a store failure never fails the session. */
+  const persistEvidence = useCallback(
+    (forUserId: string, evidence: EntitlementEvidence | undefined) => {
+      if (evidenceStore === undefined) return;
+      try {
+        if (evidence === undefined) {
+          evidenceStore.clear(forUserId);
+        } else if (sourceProvenance !== undefined) {
+          evidenceStore.write({ userId: forUserId, provenance: sourceProvenance, evidence });
+        }
+      } catch {
+        // The in-memory proof of the session stands; the next verified answer tries again.
+      }
+    },
+    [evidenceStore, sourceProvenance],
+  );
+
+  /** The session of a user the committed session does not belong to yet: pending, starting from the persisted proof. */
+  const pendingSession = useCallback(
+    (forUserId: string | undefined, now: Date): AccessSession => ({
+      userId: forUserId,
+      verification: undefined,
+      evidence: forUserId === undefined ? undefined : restoreEvidence(forUserId, now),
+      resolvedAt: now,
+    }),
+    [restoreEvidence],
+  );
+
+  const commit = useCallback((next: AccessSession) => {
+    sessionRef.current = next;
+    setSession(next);
   }, []);
+
+  // Derived while the committed session belongs to another user (sign-in,
+  // account change, sign-out): pending, with that user's restored proof or
+  // none — never the previous user's. Memoized: restored once per user. It is
+  // resolved for the instant of the last commit (no clock is read during a
+  // render); the first answer — or the first deadline — commits a fresh one.
+  const current = useMemo<AccessSession>(
+    () => (session.userId === userId ? session : pendingSession(userId, session.resolvedAt)),
+    [session, userId, pendingSession],
+  );
+
+  const apply = useCallback(
+    (forUserId: string, verification: SubscriptionVerification) => {
+      const now = clockRef.current();
+      const previous = sessionRef.current;
+      const baseline = previous.userId === forUserId ? previous.evidence : restoreEvidence(forUserId, now);
+      const evidence = updateEntitlementEvidence(baseline, verification, now);
+      // The domain decided what the proof becomes; a verified answer is mirrored, an unavailable one changes nothing.
+      if (verification.kind === 'verified') persistEvidence(forUserId, evidence);
+      commit({ userId: forUserId, verification, evidence, resolvedAt: now });
+    },
+    [restoreEvidence, persistEvidence, commit],
+  );
 
   /** Re-resolves the session for the current instant; the answer and the proof stay exactly as they are. */
-  const reevaluate = useCallback((forUserId: string) => {
-    const now = clockRef.current();
-    setSession((previous) => (previous.userId === forUserId ? { ...previous, resolvedAt: now } : previous));
-  }, []);
+  const reevaluate = useCallback(
+    (forUserId: string) => {
+      const now = clockRef.current();
+      const previous = sessionRef.current;
+      commit(previous.userId === forUserId ? { ...previous, resolvedAt: now } : pendingSession(forUserId, now));
+    },
+    [pendingSession, commit],
+  );
 
   const verify = useCallback(
     async (forUserId: string, generation: number): Promise<SubscriptionVerification | undefined> => {

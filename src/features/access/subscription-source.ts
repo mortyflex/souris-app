@@ -105,11 +105,33 @@ export type StoreRestoreOutcome =
   | { readonly kind: 'cancelled' }
   | { readonly kind: 'failed'; readonly reason: StoreTransactionFailure };
 
+/**
+ * Where the proofs a source produces come from (Phase 6.5C, step 2):
+ *
+ *   production           every entitlement this source confirms was unlocked in
+ *                        a production store environment (an App Store release,
+ *                        TestFlight included: the source reads production
+ *                        records only);
+ *   trusted-test-source  a testing configuration that also reads Sandbox
+ *                        records — the RevenueCat Test Store of a debug bundle,
+ *                        or Apple Sandbox mode with dedicated test accounts.
+ *
+ * A persisted proof carries the provenance of the source that produced it: a
+ * `production` proof is honoured by every configuration, a
+ * `trusted-test-source` proof by a trusted test source only
+ * (`evidence/entitlement-evidence-policy.ts`). A source without a declared
+ * provenance (the unconfigured one) can produce no proof and honours
+ * production proofs only.
+ */
+export type SubscriptionEvidenceProvenance = 'production' | 'trusted-test-source';
+
 export interface SubscriptionSource {
   /** The store this source is bound to; absent for a source without one. */
   readonly store?: SubscriptionStoreKind;
   /** Apple Sandbox mode (a debug bundle bound to the App Store, Phase 6.4); absent from every other source. */
   readonly appleSandbox?: AppleSandboxMode;
+  /** The provenance of the proofs this source produces; absent for a source that confirms nothing. */
+  readonly evidenceProvenance?: SubscriptionEvidenceProvenance;
   /** Verifies the subscription of the signed-in user. */
   readonly verify: (userId: string) => Promise<SubscriptionVerification>;
   /**

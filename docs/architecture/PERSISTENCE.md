@@ -97,7 +97,10 @@ distinguishes the two shapes. Nested child ids (phases, items, sale lines) keep 
 their parent id and are unique inside that parent only (CLOUD_SYNC.md §5).
 
 ```text
-souris_metadata     key PK, value                                   seed marker and future flags
+souris_metadata     key PK, value                                   seed marker, sync bookkeeping, caches, and the
+                                                                    persisted subscription proof (`business_access_evidence`,
+                                                                    Plus 6.5C step 2: one versioned JSON row, owner-only
+                                                                    read, written by BusinessAccessProvider only)
 
 clients             id PK, first_name, last_name?, phone?, email?, birth_date? (legacy, ≤ v3),
                     archived_at? (v2), birthday? (v4, MM-DD), notes? (v9),

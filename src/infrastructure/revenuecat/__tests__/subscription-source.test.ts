@@ -194,6 +194,16 @@ describe('resolveEntitlementEnvironmentPolicy', () => {
     expect(resolveEntitlementEnvironmentPolicy({ store: 'app-store', appleSandbox: undefined })).toBe('production-only');
     expect(resolveEntitlementEnvironmentPolicy({ store: 'app-store', appleSandbox: { testAccounts: [] } })).toBe('production-only');
   });
+
+  it('the source declares the provenance of its proofs from the same policy (Phase 6.5C, step 2)', () => {
+    const sdk = createFakeRevenueCatSdk();
+    const build = (store: 'test-store' | 'app-store', appleSandbox?: { readonly testAccounts: readonly string[] }) =>
+      createRevenueCatSubscriptionSource({ sdk, apiKey: store === 'test-store' ? API_KEY : 'appl_FakeAppleKeyForUnitTestsOnly', store, appleSandbox, clock: () => NOW });
+    expect(build('test-store').evidenceProvenance).toBe('trusted-test-source');
+    expect(build('app-store', { testAccounts: ['user-tester'] }).evidenceProvenance).toBe('trusted-test-source');
+    expect(build('app-store').evidenceProvenance).toBe('production');
+    expect(build('app-store', { testAccounts: [] }).evidenceProvenance).toBe('production');
+  });
 });
 
 describe('createRevenueCatSubscriptionSource — environment', () => {

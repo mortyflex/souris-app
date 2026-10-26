@@ -7,11 +7,12 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { SUBSCRIPTION_ENFORCEMENT } from '@/features/access/enforcement';
+import { createEntitlementEvidenceStore } from '@/features/access/evidence/entitlement-evidence-store';
 import { BusinessAccessProvider } from '@/features/access/session/BusinessAccessProvider';
 import type { SubscriptionSource } from '@/features/access/subscription-source';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
@@ -122,11 +123,13 @@ function AccountSession({
     const profile = readBusinessProfile(database);
     return profile ? { id: profile.ownerUserId } : undefined;
   }, [database]);
+  // The persisted proof of the subscription (BeautIzzy Plus): one metadata row of the device database.
+  const evidenceStore = useMemo(() => createEntitlementEvidenceStore(database), [database]);
 
   return (
     <AuthProvider gateway={gateways.auth} resolveLocalOwner={resolveLocalOwner}>
       <BusinessSessionProvider gateway={gateways.business}>
-        <BusinessAccessProvider enforcement={SUBSCRIPTION_ENFORCEMENT} source={subscriptionSource}>
+        <BusinessAccessProvider enforcement={SUBSCRIPTION_ENFORCEMENT} source={subscriptionSource} evidenceStore={evidenceStore}>
           {/* Renders nothing of its own; pushes local data only once the live session is bound to its Business. */}
           <CloudSyncRunner gateway={gateways.sync}>
             <BusinessMediaProvider remote={gateways.media}>

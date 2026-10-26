@@ -152,6 +152,10 @@ describe('RevenueCat integration — Phase 6.1 / 6.2 boundary', () => {
     expect(code(mapping)).not.toMatch(/__DEV__/);
     expect(code(adapter)).not.toMatch(/__DEV__/);
     expect(mapping).toMatch(/if \(!isEntitlementEnvironmentTrusted\(readEntitlementEnvironment\(entitlement\), policy\)\) return UNAVAILABLE;/);
+    // The provenance of the source's proofs follows the SAME policy (Phase 6.5C, step 2), declared in the adapter only.
+    expect(adapter).toMatch(/evidenceProvenance: environmentPolicy === 'sandbox-trusted' \? 'trusted-test-source' : 'production',/);
+    const declarers = files.filter((file) => /\bevidenceProvenance:/.test(file.source)).map((file) => file.path).sort();
+    expect(declarers).toEqual(['infrastructure/revenuecat/subscription-source.ts']);
   });
 
   it('the application neither reads nor writes the server-side entitlement mirror: a device verification can never become server evidence', () => {
