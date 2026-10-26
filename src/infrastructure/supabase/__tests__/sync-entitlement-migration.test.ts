@@ -25,9 +25,10 @@ const code = migration.replace(/^\s*--.*$/gm, '');
 describe('Phase 6.5C step 4 — business-mutation entitlement migration', () => {
   it('is ONE forward-only migration sorting last, after the 6.5B one', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    expect(names.at(-1)).toBe(MIGRATION_NAME);
-    expect(names.at(-2)).toBe(PREVIOUS_MIGRATION_NAME);
-    expect(names.filter((name) => name.includes('business_mutation'))).toEqual([MIGRATION_NAME]);
+    // Immediately after the 6.5B one; step 5 (and later phases) sort after it and never touch it.
+    expect(names.indexOf(MIGRATION_NAME)).toBe(names.indexOf(PREVIOUS_MIGRATION_NAME) + 1);
+    expect(names.slice(names.indexOf(MIGRATION_NAME) + 1).every((name) => name > MIGRATION_NAME)).toBe(true);
+    expect(names.filter((name) => name.includes('add_business_mutation'))).toEqual([MIGRATION_NAME]);
   });
 
   it('inserts ONE disabled flag row that a re-run can never flip, independent of the communications flag', () => {

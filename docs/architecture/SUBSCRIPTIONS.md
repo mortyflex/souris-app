@@ -48,11 +48,37 @@ Phase 6.5C  Server-side enforcement, continued      step 1 done — the device r
                                                              (CLOUD_SYNC.md §26) — the RPC boundary
                                                              only; direct table writes, Storage and
                                                              the preference RPCs are step 5
-                                                     future — step 5: the row-level policies, Storage
-                                                             and the preference RPCs reusing the rule;
-                                                             the app reading the mirror; the scheduled
-                                                             re-verification and the backfill tool
+                                                     step 5 done — the row-level write policies of the
+                                                             eleven operational tables, the business-
+                                                             media upload policy and the three
+                                                             preference RPCs reuse the SAME rule
+                                                             (CLOUD_SYNC.md §26.2, COMMUNICATIONS.md
+                                                             §47): server-side business-mutation
+                                                             protection is complete at the database;
+                                                             still disabled, still unapplied
+                                                     future — the app reading the mirror, the
+                                                             scheduled re-verification and the backfill
+                                                             tool; production activation (see §12)
 ```
+
+## 12. Production activation — forbidden until every prerequisite holds
+
+Enabling `BUSINESS_MUTATION_ENTITLEMENT_ENFORCEMENT` on the production project is NOT part of any
+6.5C step and stays forbidden until ALL of the following have been performed and recorded:
+
+1. the 6.5A webhook is deployed on production and receives production events, with the REST
+   reconciliation configured;
+2. EVERY paying and pilot account has been backfilled (§10) and verified by eye: a Business whose
+   owner has no mirrored row is REFUSED under enforcement;
+3. the step 4 and step 5 migrations have been applied on Staging and the Staging checklist of
+   `supabase/README.md` › Business mutation entitlement enforcement — step 5 has been run end to
+   end with real devices (write refused, pull continues, hold, resume, Storage, preferences);
+4. every device runs a build of Phase 6.5C step 3 or later (an older build reads the refusal as
+   an unknown answer and backs off, losing nothing but saying nothing);
+5. the client-side wording of the preference refusal exists, or the product accepts the generic
+   failure the deployed builds show;
+6. the switch is flipped on production by hand, account by account verified, with the rollback
+   (`business_mutation_set_entitlement_enforcement(false)`) rehearsed on Staging first.
 
 **What 6.5A does NOT change:** `SUBSCRIPTION_ENFORCEMENT` stays `disabled`; `PURCHASABLE_STORES`
 stays `['test-store']`; no sync RPC, reminder function, communication table or existing row is

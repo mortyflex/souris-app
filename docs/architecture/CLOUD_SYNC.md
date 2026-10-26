@@ -2240,3 +2240,72 @@ whose owner has NO mirrored row is refused under enforcement.
 **Verification.** 87 checks against the full 21-migration chain in an isolated in-process Postgres
 under the strict role stub (`supabase/README.md` lists them), plus the source-level guard
 `src/infrastructure/supabase/__tests__/sync-entitlement-migration.test.ts`.
+
+### 26.2 The remaining write paths (Phase 6.5C, step 5) — protection complete at the database
+
+`supabase/migrations/20261007120000_complete_business_mutation_entitlement_enforcement.sql` closes,
+with the SAME rule `business_mutation_is_entitled(business, at)` of step 4 and nothing new about
+subscriptions, the three authenticated write paths that went around the push RPC:
+
+```text
+row-level policies    the eleven operational tables — clients, services, service_phases, appointments,
+                      appointment_items, appointment_phases, products, sales, sale_items,
+                      calendar_blocks, appointment_deposits — have their INSERT and UPDATE policies
+                      replaced UNDER THEIR NAMES (drop + create: no permissive policy of the previous
+                      shape survives to OR around the rule):
+                        INSERT   with check (owner AND rule)
+                        UPDATE   using (owner) · with check (owner AND rule)  — the row stays targetable,
+                                 so a refused update is an explicit 42501 on the new row, never "0 rows"
+                        DELETE   using (owner AND rule)                       — children only; a refused
+                                 delete affects 0 rows
+                      SELECT policies, table grants, triggers, constraints, the tombstone model and the
+                      `businesses` policies are untouched. A child's new business_id must be a Business
+                      the caller owns AND may write; a parent's business_id is pinned by its trigger:
+                      no row can be moved to another Business to escape the rule
+Storage               `is_business_media_writable(name)` = the owner predicate AND the rule on the first
+                      folder (the Business id; a non-UUID folder is refused without being cast). The
+                      business-media INSERT policy uses it; SELECT and DELETE stay owner-only (reading,
+                      listing and REMOVING a photo need no Plus: cleanup and privacy); there is still no
+                      UPDATE policy — an object is never overwritten, a replacement is a new object
+preference RPCs       communications_update_preferences, communications_update_sms_preferences (dormant),
+                      communications_update_lifecycle_sms_preferences: after the owner check and the
+                      required-argument check, BEFORE any validation or write, a request that would turn
+                      a switch ON that is not already on answers { "status": "ENTITLEMENT_REQUIRED" }
+                      unless the rule holds. Turning OFF, keeping ON (a Reply-To edit, a knob change) and
+                      every deployed answer (UPDATED, INVALID_REPLY_TO, INVALID_VALUE, 42501, 22023) are
+                      byte-identical. The 6.5B scheduling, worker gate and switch are not rewritten
+```
+
+**What a read-only account keeps, by design:** every read (SELECT policies, the pull and count
+RPCs, Storage SELECT); authentication and the Business profile; disabling any communication;
+removing a photo; every service-role path (the worker, the webhook and the mirror functions never
+run as `authenticated`). The only write an unentitled owner may still make to a business table is
+none: a consent change the professional records on a client is a business mutation, guarded by the
+application since Phase 4 (`write-guard.ts`); the client's own STOP path (`CLIENT_STOP`, reserved) is
+a server-side write and unaffected.
+
+**Disabled = unchanged.** While the switch is off the rule answers TRUE for every owner, so every
+policy, the Storage policy and the three RPCs behave exactly as the deployed ones: the effective
+write permissions of the shipped app builds are the same, including for accounts without any
+mirrored row. Applying the migration reads, writes, reschedules or deletes no row.
+
+**Client impact once enabled.** Deployed builds never write tables directly (the engine pushes
+through the RPC), so the policy change is invisible to them; a photo upload refused by Storage is
+reported by the media gateway as an upload failure and the previous photo is kept (the row change
+waits in the outbox like any other); a preference refusal is read by the deployed gateway as an
+unknown answer (`BADRESULT`) and shown as a generic failure, with nothing changed — the dedicated
+wording is a later client step.
+
+**What PGlite does not prove.** The harness runs the policies on a Storage STUB (`storage.objects`
+with RLS and the platform's grants, `storage.foldername`); the real Storage API (upload with
+`upsert: false`, the object owner columns, listing), PostgREST's own translation of a WITH CHECK
+violation into an HTTP answer, and the platform's default grants are rehearsed on Staging
+(`supabase/README.md` › Business mutation entitlement enforcement — step 5 › Staging checklist),
+never claimed from the stub.
+
+**Verification.** 378 checks against the full 22-migration chain under the strict role stub (every
+table, insert / update / delete, the status grid, cross-Business and tenant-escape attempts, the
+OR-bypass test, Storage, the preference gates, consent and history, the two switches, the idempotent
+re-run, effective privileges), plus the source guard
+`src/infrastructure/supabase/__tests__/business-mutation-policies-migration.test.ts`; the step 4
+(87), 6.5A (81) and 6.5B (144) harnesses still pass with the migration appended.

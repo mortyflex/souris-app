@@ -1451,6 +1451,11 @@ Phase 6.5C, step 4 (October 2026): the server gains the ability to refuse — be
 shipped off — the recording of business changes for a professional without a verified subscription,
 through the application's synchronization only; reading and downloading never need a subscription.
 Nothing is applied or enabled; nothing visible changes.
+Phase 6.5C, step 5 (October 2026): the same server-side switch now also covers every other way a
+change could reach the cloud — direct database writes, photo uploads, and turning a paid
+communication ON. Without a verified subscription a professional keeps reading everything, keeps
+her account and her profile, may turn any communication OFF and may remove a photo; nothing is
+deleted or hidden. Still disabled, still unapplied; nothing visible changes.
 Still to come, in their own phases: the device run of that validation (real trial, real restore,
 renewal and expiration), the account-scoped paywall routing, server-side enforcement of business
 changes on the backend entitlement mirror, real terms and privacy URLs, account deletion and

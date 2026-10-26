@@ -175,6 +175,18 @@ migrations/20261006120000_add_business_mutation_entitlement_enforcement.sql
                                                                  communication object, NOT the pull RPC and NO row;
                                                                  while the switch is disabled every push behaves
                                                                  exactly as before. docs/architecture/CLOUD_SYNC.md §26)
+migrations/20261007120000_complete_business_mutation_entitlement_enforcement.sql
+                                                                (BeautIzzy Plus 6.5C step 5 — BY HAND, after step 4;
+                                                                 replaces UNDER THEIR NAMES the INSERT / UPDATE policies
+                                                                 of the eleven operational tables and the DELETE policies
+                                                                 of the four child tables (ownership AND the step 4 rule),
+                                                                 adds is_business_media_writable and replaces the
+                                                                 business-media INSERT policy with it, and replaces the
+                                                                 three communication preference RPCs in place (turning a
+                                                                 switch ON needs Plus; OFF never). Inserts no flag, flips
+                                                                 nothing, touches NO SELECT policy, NO grant, NO row;
+                                                                 while the switch is disabled every write behaves exactly
+                                                                 as before. docs/architecture/CLOUD_SYNC.md §26.2)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -827,3 +839,90 @@ select public.business_mutation_set_entitlement_enforcement(true);
 -- roll back: writes flow again for everyone; the devices resend what they kept
 select public.business_mutation_set_entitlement_enforcement(false);
 ```
+
+## Business mutation entitlement enforcement — step 5 (BeautIzzy Plus Phase 6.5C) — NOT applied, switch DISABLED
+
+`20261007120000_complete_business_mutation_entitlement_enforcement.sql` completes, at the database,
+what step 4 started at the push RPC: the row-level write policies of the eleven operational tables,
+the business-media upload policy and the three communication preference RPCs reuse the SAME rule
+(`docs/architecture/CLOUD_SYNC.md` §26.2, `docs/architecture/COMMUNICATIONS.md` §47). Additive,
+rewrites no row, inserts no flag, flips nothing, safe to re-run (`drop policy if exists` on the named
+policies, `create or replace`). Apply AFTER step 4 (the rule must exist). While the switch is
+disabled every write behaves exactly as before, for every Business, including the accounts without
+any mirrored row. Suggested manual check in the SQL Editor after applying:
+
+```sql
+-- every write policy of the eleven tables names BOTH predicates; SELECT policies name the owner only
+select tablename, cmd, policyname,
+       coalesce(qual, '') ~ 'is_business_owner' as using_owner,
+       coalesce(qual, '') ~ 'business_mutation_is_entitled' as using_rule,
+       coalesce(with_check, '') ~ 'business_mutation_is_entitled' as check_rule
+  from pg_policies
+ where schemaname = 'public' and tablename in ('clients','services','service_phases','appointments','appointment_items',
+       'appointment_phases','products','sales','sale_items','calendar_blocks','appointment_deposits')
+ order by tablename, cmd;
+-- expected: SELECT using_owner t / using_rule f; INSERT check_rule t; UPDATE using_rule f / check_rule t;
+--           DELETE (children only) using_rule t; 3 policies per parent, 4 per child, none other
+
+-- Storage: insert through the writable predicate; select / delete unchanged; no update policy
+select cmd, policyname, qual, with_check from pg_policies where schemaname = 'storage' and tablename = 'objects' order by cmd;
+
+-- the helper and the three RPCs: privileges unchanged (authenticated only), search_path pinned
+select p.proname, p.prosecdef, p.proconfig,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('anon', p.oid, 'execute') as anon_exec
+  from pg_proc p
+ where p.pronamespace = 'public'::regnamespace
+   and p.proname in ('is_business_media_writable', 'communications_update_preferences',
+                     'communications_update_sms_preferences', 'communications_update_lifecycle_sms_preferences');
+
+-- both switches still disabled
+select flag, enabled from public.server_feature_flags order by flag;
+```
+
+Behavior checks as a signed-in owner while the switch is disabled: a direct `insert` / `update` on
+her own rows succeeds exactly as before, a write to another Business is still `42501` (insert /
+update) or `0 rows` (delete), an upload into her own folder succeeds, `select
+public.communications_update_preferences(<her id>, true, '<valid email>')` answers `UPDATED`. The
+same checks — plus the status grid through direct writes, the push RPC and the three preference
+RPCs (ACTIVE, TRIAL, CANCELLED_ACTIVE before / after its end, BILLING_RETRY within / past its grace,
+EXPIRED, COMPLIMENTARY, no row, Sandbox-only, Test Store), every table and child table under refusal
+with the whole world byte-identical afterwards, cross-Business and tenant-escape attempts, the
+OR-bypass test, Storage insert / replacement / read / remove / cross-folder / non-UUID / other
+bucket, the preference gates (enable refused, disable and keep-on allowed, validation answers
+unchanged, consent and history untouched), the pull and the step 4 push refusal, the independence of
+the two switches, the idempotent re-run, and the effective privileges — 378 checks in all — were
+executed against the full 22-migration chain in an isolated in-process Postgres when this migration
+was written; the step 4 (87), 6.5A (81) and 6.5B (144) harnesses still pass with it appended.
+
+### What the harness cannot prove — Staging checklist (required before any production activation)
+
+PGlite runs the policies on a STUB of `storage.objects` and has no PostgREST: the following are
+rehearsed on Staging (`iteufklnrsmazzvmzqxa`), with the step 4 and step 5 migrations applied and a
+dedicated test account whose mirror row is controlled through the webhook or the reconciliation:
+
+```text
+ 1. switch OFF: a device build of step 3 or later syncs normally (push, pull, photo upload, preference
+    enable / disable) — nothing differs from before the two migrations;
+ 2. switch ON, account entitled (ACTIVE / TRIAL / COMPLIMENTARY): same as 1;
+ 3. switch ON, account NOT entitled (no row, EXPIRED): a local change is refused by the push RPC
+    (ENTITLEMENT_REQUIRED), stays pending with the hold, and the device keeps PULLING what another
+    device changed; the Plus badge / status reflect the verification; the read-only UX of Phase 5 is
+    inert (client enforcement still disabled);
+ 4. switch ON, NOT entitled: a client / product photo upload is refused by Storage, the media gateway
+    reports the failure and the previous photo is kept; reading and listing existing photos still
+    works; removing a photo still works;
+ 5. switch ON, NOT entitled: turning email reminders or a lifecycle automation ON from the settings
+    screens is refused (the deployed build shows a generic failure, nothing changes); turning OFF
+    works; editing the Reply-To of an already-ON preference works;
+ 6. switch ON, NOT entitled: a direct PostgREST write with the account's own token (curl / the
+    Supabase JS client) is refused — insert / update → 42501 (HTTP 403), child delete → 0 rows;
+ 7. the account regains Plus (a Sandbox purchase on Staging counts as PRODUCTION only if the mirror
+    says so — use a promotional grant or a reconciliation write): the device resumes the held writes
+    once, in order, and photo uploads / preference enables work again;
+ 8. switch OFF again: everything returns to 1 with no manual cleanup.
+```
+
+Production activation remains FORBIDDEN until `docs/architecture/SUBSCRIPTIONS.md` §12 holds in
+full: webhook live, every paying and pilot account backfilled, this checklist run on Staging, every
+device on step 3 or later, the rollback rehearsed.

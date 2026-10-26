@@ -1217,3 +1217,36 @@ populated PGlite under a worst-case default grant to service_role (`supabase/REA
 Communication entitlement enforcement lists them), including effective privileges through a
 grant-less role and the explicit ACLs; the 6.5A harness (81) still passes with this migration
 appended.
+
+## 47. Turning a paid communication ON needs Plus (BeautIzzy Plus 6.5C, step 5)
+
+Migration `supabase/migrations/20261007120000_complete_business_mutation_entitlement_enforcement.sql`;
+the rule it reads is Phase 6.5C step 4 (`business_mutation_is_entitled`, `CLOUD_SYNC.md` §26), behind
+the BUSINESS_MUTATION switch — independent of the COMMUNICATIONS switch of §46, which still decides
+whether a scheduled communication is SENT. Two switches, two questions: §46 "may this Business's
+communications go out?", §47 "may this owner turn an automation ON right now?".
+
+The three owner RPCs are replaced in place, same signatures, same grants, the deployed bodies plus
+ONE gate placed after the owner check and the required-argument check and before any validation or
+write:
+
+```text
+communications_update_preferences(business, enabled, reply_to)
+communications_update_sms_preferences(business, enabled)            (dormant, kept for compatibility)
+communications_update_lifecycle_sms_preferences(business, birthday, winback, …knobs)
+
+  a request that would turn a switch ON that is not already on
+  and the owner holds no verified production Plus (under the switch)   → { "status": "ENTITLEMENT_REQUIRED" }
+  turning a switch OFF                                                 → as before, always
+  keeping an ON switch on (Reply-To edit, discount / validity knob)    → as before, always
+  INVALID_REPLY_TO, INVALID_VALUE, UPDATED, 42501, 22023               → byte-identical
+```
+
+Disabling is never gated: a professional without Plus may stop every communication at once, which
+is the consent-withdrawal-equivalent of the preference surface. Preferences, lifecycle preferences,
+client consent and SENT / FAILED history are never touched by a refusal. The deployed app gateway
+reads the new answer as `BADRESULT` and shows a generic failure with nothing changed; the dedicated
+wording (« Action réservée à BeautIzzy Plus ») is a later client step. While the BUSINESS_MUTATION
+switch is disabled the rule answers TRUE for every owner and the three RPCs are exactly the deployed
+ones. Verified in the step 5 harness (`supabase/README.md`) and pinned by
+`src/infrastructure/supabase/__tests__/business-mutation-policies-migration.test.ts`.

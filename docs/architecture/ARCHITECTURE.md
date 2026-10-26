@@ -976,6 +976,30 @@ PostgREST table writes the owner-only policies still permit, the Storage uploads
 and the communication preference RPCs are NOT gated yet: step 5. Server-side business-mutation
 protection is not complete before it. Nothing is applied, deployed or enabled by the step.
 
+Complete server-side business-mutation protection (Phase 6.5C, step 5,
+`supabase/migrations/20261007120000_complete_business_mutation_entitlement_enforcement.sql`,
+`docs/architecture/CLOUD_SYNC.md` §26.2, `docs/architecture/COMMUNICATIONS.md` §47). The three
+write paths that went around the step 4 RPC are closed with THE SAME rule and no new subscription
+interpretation: every INSERT and UPDATE policy of the eleven operational tables (the seven aggregate
+families and the four nested child tables) requires ownership AND `business_mutation_is_entitled` in
+its WITH CHECK, every child DELETE policy in its USING — replaced UNDER THEIR NAMES so no permissive
+policy of the previous shape survives to OR around the rule; UPDATE keeps ownership alone in USING
+so a refused update is an explicit 42501 on the new row; the business-media INSERT policy requires
+ownership of the Business folder AND the rule through ONE helper mirroring the owner predicate
+(`is_business_media_writable`), while SELECT and DELETE stay as they were and there is still no
+UPDATE policy; the three communication preference RPCs refuse, with the push RPC's structured
+answer `ENTITLEMENT_REQUIRED`, only a request that would turn a switch ON that is not already on —
+disabling, keeping an ON switch on and every validation answer are byte-identical. What a read-only
+account keeps: every read, the pull and count RPCs, Storage reading and listing, the Business
+profile (`businesses` keeps its policies: onboarding and account management are not business
+data), disabling any communication, removing a photo, and every service-role path. No broad
+exception exists; a consent change the professional records on a client is a business mutation
+guarded by the app since Phase 4, and the client's own STOP path is a server-side write. While the
+switch is disabled the rule answers TRUE for every owner, so the effective write permissions of the
+deployed builds are unchanged. PGlite limits, stated: real Storage API semantics, PostgREST's own
+error mapping and Supabase's platform grants are rehearsed on Staging, not proven by the harness.
+Production activation stays forbidden until the prerequisites of `SUBSCRIPTIONS.md` §12 hold.
+
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
 announces (`nextBusinessAccessDeadline`: the end of the entitlement in force, then the end of the
