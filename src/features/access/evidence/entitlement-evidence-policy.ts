@@ -16,21 +16,25 @@
 //                 database, with a release — grants nothing to that release;
 //   timestamps    the proof is reliable by the domain's own rule
 //                 (`isReliableEntitlementEvidence`): a proof dated in the
-//                 future, or an entitlement that ended before it was proven,
-//                 is not restored at all rather than reported as unreliable —
-//                 a persisted record that contradicts itself is corrupt.
+//                 future — a clock behind the proof's own instant — or an
+//                 entitlement that ended before it was proven, is not
+//                 restored at all rather than reported as unreliable: a
+//                 persisted record that contradicts the present or itself
+//                 is not a proof, whatever mark it carries.
 //
-// What the restored proof then GRANTS — full until its end, the 72-hour
-// grace after it unless the entitlement was cancelled, read-only after —
-// is decided by `resolveBusinessAccess` and nothing here: this module
-// restores evidence, it never resolves access, and it reads no clock of its
-// own.
+// The restored proof comes with the observed mark the record carries
+// (Phase 6.5C step 7) — its own, or the verification instant for a version-1
+// row — advanced to `now`. What the proof then GRANTS — full until its end,
+// the 72-hour grace after it unless the entitlement was cancelled or the
+// clock was found set back against that mark, read-only after — is decided
+// by `resolveBusinessAccess` and nothing here: this module restores
+// evidence, it never resolves access, and it reads no clock of its own.
 
-import { isReliableEntitlementEvidence, type EntitlementEvidence } from '@/domain/access';
+import { advanceObservedTime, isReliableEntitlementEvidence, type EntitlementEvidence } from '@/domain/access';
 
 import type { SubscriptionEvidenceProvenance } from '../subscription-source';
 
-import type { PersistedEntitlementEvidence } from './entitlement-evidence-store';
+import { persistedObservedUntil, type PersistedEntitlementEvidence } from './entitlement-evidence-store';
 
 /** Whether a proof of `recorded` provenance may be honoured by a source of `current` provenance. */
 export function isEvidenceProvenanceTrusted(
@@ -52,15 +56,22 @@ export interface RestoreEntitlementEvidenceInput {
   readonly now: Date;
 }
 
-/** The proof a starting session may rest on, or undefined: the session then starts without one. */
+/** What a starting session restores: the proof it may rest on, and the observed mark that goes with it. */
+export interface RestoredEntitlementEvidence {
+  readonly evidence: EntitlementEvidence;
+  /** The high-water mark of observed time, advanced to `now`: never behind the proof, never behind the clock. */
+  readonly observedUntil: Date;
+}
+
+/** The proof a starting session may rest on, with its observed mark, or undefined: the session then starts without one. */
 export function selectRestorableEntitlementEvidence({
   record,
   userId,
   sourceProvenance,
   now,
-}: RestoreEntitlementEvidenceInput): EntitlementEvidence | undefined {
+}: RestoreEntitlementEvidenceInput): RestoredEntitlementEvidence | undefined {
   if (record === undefined || record.userId !== userId) return undefined;
   if (!isEvidenceProvenanceTrusted(record.provenance, sourceProvenance)) return undefined;
   if (!isReliableEntitlementEvidence(record.evidence, now)) return undefined;
-  return record.evidence;
+  return { evidence: record.evidence, observedUntil: advanceObservedTime(persistedObservedUntil(record), now) };
 }

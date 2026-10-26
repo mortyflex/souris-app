@@ -118,4 +118,14 @@ export interface BusinessAccessInput {
   readonly verification: SubscriptionVerification;
   /** The persisted proof; `undefined` on a fresh installation. */
   readonly lastVerifiedEntitlement?: EntitlementEvidence;
+  /**
+   * The latest instant this device has observed so far — the high-water mark
+   * of LOCAL time kept beside the proof (Phase 6.5C step 7); `undefined` when
+   * none was kept. The offline policy is judged at the later of `now` and this
+   * mark, so a clock set back can never win back an ended entitlement or an
+   * elapsed grace; a `now` significantly behind the mark is a clock rollback,
+   * and the conditional grace is refused until the store speaks again. It is
+   * never a verification instant: only a store answer is authoritative.
+   */
+  readonly observedUntil?: Date;
 }

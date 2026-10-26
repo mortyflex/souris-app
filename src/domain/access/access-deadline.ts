@@ -18,18 +18,24 @@
 //                              which the resolver may answer differently for
 //                              the same input: the end of the entitlement in
 //                              force, then the end of the offline grace that
-//                              follows it. Undefined when nothing is pending:
-//                              enforcement disabled, a confirmed end, an
-//                              indefinite complimentary access, an unreliable
-//                              proof, a cancelled subscription past its end, a
-//                              grace already elapsed.
+//                              follows it — or, while the clock is found set
+//                              back, the instant it catches up with the
+//                              observed mark. Undefined when nothing is
+//                              pending: enforcement disabled, a confirmed end,
+//                              an indefinite complimentary access, an
+//                              unreliable proof, a cancelled subscription past
+//                              its end, a grace already elapsed.
 //
 // Every deadline is a property of the proof, never of the clock or of an
 // attempt: asking again, failing to verify, or restarting the timer cannot
-// move it.
+// move it. The proof is judged at the resolver's effective instant (the later
+// of the clock and the observed high-water mark), so a clock set back does
+// not move a deadline either.
 
 import {
+  CLOCK_ROLLBACK_TOLERANCE_MS,
   OFFLINE_ACCESS_GRACE_PERIOD_MS,
+  assessClock,
   isReliableEntitlementEvidence,
 } from './resolve-business-access';
 import type { BusinessAccessInput, SubscriptionVerification } from './types';
@@ -77,11 +83,21 @@ export function nextBusinessAccessDeadline(input: BusinessAccessInput): Date | u
 
   const evidence = input.lastVerifiedEntitlement;
   if (evidence === undefined || !isReliableEntitlementEvidence(evidence, input.now)) return undefined;
+  // What the proof grants is judged at the effective instant (the resolver's
+  // rule): a deadline is a property of the proof, and a clock set back does
+  // not move it.
+  const { effectiveNow, rolledBack } = assessClock(input.now, input.observedUntil);
   const { entitlement } = evidence;
   if (entitlement.expiresAt === undefined) return undefined;
   const expiresAt = entitlement.expiresAt.getTime();
-  if (now < expiresAt) return new Date(expiresAt);
+  const effective = effectiveNow.getTime();
+  if (effective < expiresAt) return new Date(expiresAt);
   if (entitlement.kind === 'cancelled-active') return undefined;
+  if (rolledBack) {
+    // Refused grace: the answer changes once the clock has caught up with the
+    // mark (progressing normally from here), strictly after `now`.
+    return new Date(effective - CLOCK_ROLLBACK_TOLERANCE_MS);
+  }
   const graceEndsAt = expiresAt + OFFLINE_ACCESS_GRACE_PERIOD_MS;
-  return now < graceEndsAt ? new Date(graceEndsAt) : undefined;
+  return effective < graceEndsAt ? new Date(graceEndsAt) : undefined;
 }

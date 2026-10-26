@@ -931,8 +931,8 @@ and another account never reads, inherits or erases it. The development data res
 alone, like the account binding. The proof is written whatever the enforcement, so the first build
 to enforce starts with it. Not a security boundary: a forged row buys at most the domain's 72-hour
 grace of local-only access, and nothing in it ever reaches the server. Deferred to later steps: the
-server-side refusal of business writes, a clock high-water mark beside the proof (a clock set back
-extends what the proof grants; the store is the natural place for the mark).
+server-side refusal of business writes (steps 4 and 5), a clock high-water mark beside the proof (a
+clock set back extends what the proof grants; the store is the natural place for the mark — step 7).
 
 Entitlement-aware synchronization (Phase 6.5C, step 3, `docs/architecture/CLOUD_SYNC.md` §26). The
 client is prepared for the server refusing business writes for lack of a Plus entitlement — the
@@ -1026,6 +1026,39 @@ server role alone may execute, `subscription_has_plus_access` asked for the repo
 re-implemented. The function is reachable through its own named secret key only, reads its own
 dedicated RevenueCat secret, and nothing schedules it: no migration names a cron job, both switches
 stay disabled, nothing is applied or deployed, the app is untouched.
+
+Offline entitlement clock protection (Phase 6.5C, step 7, `src/domain/access`,
+`src/features/access/evidence/`, `BusinessAccessProvider`). The offline policy compares the device
+clock with the proof's end and the 72-hour grace after it, and a device clock can be set back. The
+session now keeps the high-water mark of the instants it has OBSERVED on that clock — at every
+resolution: a verification, a deadline, a foreground return, a restart — persisted beside the proof
+(`observedAt`, the evidence row's version 2; a version-1 row is still read, its mark starting at its
+verification instant, and rewritten as version 2 at its first observation; a build before this step
+reads a version-2 row as no proof, by its own rule). THE domain rule judges what an unverified proof
+GRANTS at the later of the clock and that mark (`assessClock`): an entitlement that had ended stays
+ended, an elapsed grace stays elapsed, so setting the clock back wins back nothing. A clock behind
+the mark by more than a documented tolerance (`CLOCK_ROLLBACK_TOLERANCE_MS`, five minutes — automatic
+corrections move a clock by seconds, a manual change by more) is a ROLLBACK: a proven entitlement
+still in force at the mark keeps full access until its trusted end, the store's instant, but the
+conditional grace — which rests on time having progressed normally — is refused with the existing
+`unreliable-evidence` read-only answer until the clock catches up with the mark or a verification
+succeeds; a cancelled subscription past its end stays `subscription-expired`; an indefinite
+complimentary grant has nothing to win back and nothing refused; a clock behind the proof's OWN
+verification instant reads as before (no proof restored, read-only). A VERIFIED answer is never
+judged against the mark and resets it to its own instant: the adapter accepts a store answer only
+within minutes of the store's request instant, so the store has just agreed on the time — local
+observed time and the authoritative verification instant stay two different things. A detection
+deletes nothing: the proof, the business data, the outbox and the subscription history stay as
+they are. The mark only advances, is restored with the proof it belongs to for the signed-in user
+only (another account's mark never judges a session; a trusted-test-source proof and its mark
+still authorize nothing in a release), is persisted only through the store's own de-duplicating
+`observe`, and costs no timer, no background work and no request. With enforcement disabled
+nothing is restricted and the mark is still kept. Limits, stated plainly: a device-only mark is
+not trusted time and nothing here is cryptographic — a clock set back BEFORE the application
+observed the later instant (while closed, or on a device that never ran through the grace) is not
+detected, a tampered database can hold any mark or any proof, and the protection raises the cost
+of the one cheap manipulation on an unmodified device to exactly what the server-side mirror
+ignores anyway: every write that reaches the server is decided there.
 
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain

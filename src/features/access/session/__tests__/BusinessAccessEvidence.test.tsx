@@ -151,6 +151,7 @@ describe('BusinessAccessProvider — persisted entitlement evidence', () => {
       userId: LEA,
       provenance: 'production',
       evidence: { verifiedAt: T0, entitlement: { kind: 'active', plan: 'monthly', expiresAt: EXPIRY } },
+      observedAt: T0,
     });
     await shutdown(view);
   });
@@ -233,10 +234,10 @@ describe('BusinessAccessProvider — persisted entitlement evidence', () => {
     }
   });
 
-  it('7. an unavailable verification — offline, store unreachable, a rejecting source — keeps the persisted proof exactly as it is', async () => {
+  it('7. an unavailable verification — offline, store unreachable, a rejecting source — keeps the persisted proof exactly as it is (only the observed mark advances)', async () => {
     const device = openDevice();
     await shutdown(await launch({ device, source: sourceAnswering(ACTIVE), now: () => T0 }));
-    const written = readMetadata(device.db, ENTITLEMENT_EVIDENCE_KEY);
+    const { observedAt: _initialMark, ...written } = device.store.read(LEA)!;
 
     const rejecting = createFakeSubscriptionSource({ verify: () => Promise.reject(new Error('store unreachable')) });
     const view = await launch({ device, source: rejecting, now: () => new Date(T0.getTime() + DAY_MS) });
@@ -247,7 +248,9 @@ describe('BusinessAccessProvider — persisted entitlement evidence', () => {
     });
     await settle();
     expect(stateOf(view)).toBe('full:entitled:write:unavailable');
-    expect(readMetadata(device.db, ENTITLEMENT_EVIDENCE_KEY)).toBe(written);
+    const { observedAt, ...kept } = device.store.read(LEA)!;
+    expect(kept).toEqual(written);
+    expect(observedAt).toEqual(new Date(T0.getTime() + DAY_MS));
     await shutdown(view);
   });
 
@@ -287,7 +290,7 @@ describe('BusinessAccessProvider — persisted entitlement evidence', () => {
 
   it('9b. within one launch, a sign-out and another sign-in read their own proof — never the previous session’s', async () => {
     const device = openDevice();
-    device.store.write({ userId: NOA, provenance: 'production', evidence: { verifiedAt: T0, entitlement: { kind: 'trial', plan: 'annual', expiresAt: EXPIRY } } });
+    device.store.write({ userId: NOA, provenance: 'production', evidence: { verifiedAt: T0, entitlement: { kind: 'trial', plan: 'annual', expiresAt: EXPIRY } }, observedAt: T0 });
     const auth = signedInAs(LEA);
     const source = offline();
     const view = await launch({ device, source, now: () => new Date(T0.getTime() + HOUR_MS), auth });
@@ -351,7 +354,7 @@ describe('BusinessAccessProvider — persisted entitlement evidence', () => {
 
   it.each([
     ['not JSON', '{corrupt'],
-    ['a later format version', JSON.stringify({ version: 2, userId: LEA, provenance: 'production', verifiedAt: T0.toISOString(), entitlement: { kind: 'active', plan: 'monthly', expiresAt: EXPIRY.toISOString() } })],
+    ['a later format version', JSON.stringify({ version: 3, userId: LEA, provenance: 'production', verifiedAt: T0.toISOString(), observedAt: T0.toISOString(), entitlement: { kind: 'active', plan: 'monthly', expiresAt: EXPIRY.toISOString() } })],
     ['an unknown entitlement kind', JSON.stringify({ version: 1, userId: LEA, provenance: 'production', verifiedAt: T0.toISOString(), entitlement: { kind: 'lifetime' } })],
     ['a proof dated in the future', JSON.stringify({ version: 1, userId: LEA, provenance: 'production', verifiedAt: new Date(T0.getTime() + DAY_MS).toISOString(), entitlement: { kind: 'active', plan: 'monthly', expiresAt: EXPIRY.toISOString() } })],
     ['an entitlement that ended before it was proven', JSON.stringify({ version: 1, userId: LEA, provenance: 'production', verifiedAt: T0.toISOString(), entitlement: { kind: 'active', plan: 'monthly', expiresAt: new Date(T0.getTime() - 1).toISOString() } })],
@@ -377,6 +380,9 @@ describe('BusinessAccessProvider — persisted entitlement evidence', () => {
       write: () => {
         throw new Error('disk');
       },
+      observe: () => {
+        throw new Error('disk');
+      },
       clear: () => {
         throw new Error('disk');
       },
@@ -400,7 +406,7 @@ describe('BusinessAccessProvider — persisted entitlement evidence', () => {
     await shutdown(await launch({ device, source: sourceAnswering(COMPLIMENTARY), now: () => T0 }));
     const yearsLater = await restartOffline(device, new Date(T0.getTime() + 3 * 365 * DAY_MS));
     expect(stateOf(yearsLater)).toBe('full:entitled:write:unavailable');
-    expect(device.store.read(LEA)).toEqual({ userId: LEA, provenance: 'production', evidence: { verifiedAt: T0, entitlement: { kind: 'complimentary' } } });
+    expect(device.store.read(LEA)).toEqual({ userId: LEA, provenance: 'production', evidence: { verifiedAt: T0, entitlement: { kind: 'complimentary' } }, observedAt: new Date(T0.getTime() + 3 * 365 * DAY_MS) });
     await shutdown(yearsLater);
 
     await shutdown(await launch({ device, source: sourceAnswering(COMPLIMENTARY_DATED), now: () => T0 }));

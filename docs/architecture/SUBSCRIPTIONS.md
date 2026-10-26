@@ -64,6 +64,15 @@ Phase 6.5C  Server-side enforcement, continued      step 1 done — the device r
                                                              reconciliation, with dry-run, leases,
                                                              backoff and continuation (§13); nothing
                                                              scheduled, nothing deployed, nothing applied
+                                                     step 7 done — offline entitlement clock rollback
+                                                             protection: a persisted high-water mark of
+                                                             observed local time beside the proof (evidence
+                                                             format v2), the offline policy judged at the
+                                                             later of the clock and that mark, a rollback
+                                                             beyond five minutes refusing the conditional
+                                                             grace (read-only, never a deletion); the
+                                                             72-hour policy itself unchanged (ARCHITECTURE.md
+                                                             §10, Phase 6.5C step 7)
                                                      future — the app reading the mirror; production
                                                              activation (see §12)
 ```

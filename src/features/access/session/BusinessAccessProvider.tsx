@@ -47,6 +47,23 @@
 // data, the proof stays on the device for its owner. Without a store (tests,
 // the test persistence provider) the proof lives in memory only, as before.
 //
+// Observed time (Phase 6.5C, step 7). Every resolution observes the clock,
+// and the session keeps the high-water mark of what it observed
+// (`observedUntil`), persisted beside the proof (`evidenceStore.observe`) so
+// it survives a restart. The domain judges the offline policy at the later of
+// the clock and that mark, and refuses the conditional grace while the clock
+// is found set back (`assessClock`, `resolve-business-access.ts`): setting
+// the clock back wins back nothing, and the read-only answer it yields is the
+// existing `unreliable-evidence`. The mark only advances; a VERIFIED answer
+// resets it to its own instant, because the store just agreed on the time (the
+// adapter accepts an answer only within minutes of the store's request
+// instant). A mark is restored with the proof it belongs to, for the signed-in
+// user only, and persisted only when it advanced: no timer, no background
+// work and no request exist for it. Nothing here can tell real time: a clock
+// set back before this application observed the later instant goes unseen,
+// and nothing is deleted on a detection — the proof, the business data and
+// the outbox stay exactly as they are.
+//
 // Time awareness. The answer is re-resolved for the current instant, with a
 // fresh verification requested, at every deadline the domain announces
 // (`nextBusinessAccessDeadline`: the end of the entitlement in force, then
@@ -109,6 +126,7 @@ import {
 import { AppState, Platform } from 'react-native';
 
 import {
+  advanceObservedTime,
   canMutateBusinessData,
   isVerificationCurrent,
   nextBusinessAccessDeadline,
@@ -123,7 +141,7 @@ import {
 } from '@/domain/access';
 import { useAuth } from '@/features/auth/session/AuthProvider';
 
-import { selectRestorableEntitlementEvidence } from '../evidence/entitlement-evidence-policy';
+import { selectRestorableEntitlementEvidence, type RestoredEntitlementEvidence } from '../evidence/entitlement-evidence-policy';
 import type { EntitlementEvidenceStore } from '../evidence/entitlement-evidence-store';
 import {
   noAccountPaywallOffering,
@@ -206,6 +224,8 @@ interface AccessSession {
   readonly evidence: EntitlementEvidence | undefined;
   /** The instant of the last resolution: a verification landing, a deadline, a foreground return. */
   readonly resolvedAt: Date;
+  /** The high-water mark of the instants this session (and the device, through the store) observed. */
+  readonly observedUntil: Date | undefined;
 }
 
 interface BusinessAccessProviderProps {
@@ -243,6 +263,7 @@ export function BusinessAccessProvider({
     verification: undefined,
     evidence: undefined,
     resolvedAt: clock(),
+    observedUntil: undefined,
   }));
   // The committed session, readable synchronously by `apply` and `reevaluate`
   // (so the proof is persisted outside React's updater, exactly once per answer).
@@ -255,9 +276,9 @@ export function BusinessAccessProvider({
 
   const sourceProvenance = source?.evidenceProvenance;
 
-  /** The persisted proof `forUserId` may start from at `now`, by THE restore rule; a store failure reads as no proof. */
+  /** The persisted proof `forUserId` may start from at `now`, with its observed mark, by THE restore rule; a store failure reads as no proof. */
   const restoreEvidence = useCallback(
-    (forUserId: string, now: Date): EntitlementEvidence | undefined => {
+    (forUserId: string, now: Date): RestoredEntitlementEvidence | undefined => {
       if (evidenceStore === undefined) return undefined;
       let record: ReturnType<EntitlementEvidenceStore['read']>;
       try {
@@ -270,15 +291,15 @@ export function BusinessAccessProvider({
     [evidenceStore, sourceProvenance],
   );
 
-  /** Mirrors a VERIFIED answer's effect on the proof into the store; a store failure never fails the session. */
+  /** Mirrors a VERIFIED answer's effect on the proof into the store, with the mark reset to its instant; a store failure never fails the session. */
   const persistEvidence = useCallback(
-    (forUserId: string, evidence: EntitlementEvidence | undefined) => {
+    (forUserId: string, evidence: EntitlementEvidence | undefined, observedAt: Date) => {
       if (evidenceStore === undefined) return;
       try {
         if (evidence === undefined) {
           evidenceStore.clear(forUserId);
         } else if (sourceProvenance !== undefined) {
-          evidenceStore.write({ userId: forUserId, provenance: sourceProvenance, evidence });
+          evidenceStore.write({ userId: forUserId, provenance: sourceProvenance, evidence, observedAt });
         }
       } catch {
         // The in-memory proof of the session stands; the next verified answer tries again.
@@ -287,14 +308,31 @@ export function BusinessAccessProvider({
     [evidenceStore, sourceProvenance],
   );
 
-  /** The session of a user the committed session does not belong to yet: pending, starting from the persisted proof. */
+  /** Advances the persisted mark of `forUserId`'s proof (a no-op in the store unless it advanced); a store failure never fails the session (the in-memory mark stands). */
+  const persistObservation = useCallback(
+    (forUserId: string, observedUntil: Date) => {
+      if (evidenceStore === undefined) return;
+      try {
+        evidenceStore.observe(forUserId, observedUntil);
+      } catch {
+        // The next resolution tries again.
+      }
+    },
+    [evidenceStore],
+  );
+
+  /** The session of a user the committed session does not belong to yet: pending, starting from the persisted proof and its mark. */
   const pendingSession = useCallback(
-    (forUserId: string | undefined, now: Date): AccessSession => ({
-      userId: forUserId,
-      verification: undefined,
-      evidence: forUserId === undefined ? undefined : restoreEvidence(forUserId, now),
-      resolvedAt: now,
-    }),
+    (forUserId: string | undefined, now: Date): AccessSession => {
+      const restored = forUserId === undefined ? undefined : restoreEvidence(forUserId, now);
+      return {
+        userId: forUserId,
+        verification: undefined,
+        evidence: restored?.evidence,
+        resolvedAt: now,
+        observedUntil: forUserId === undefined ? undefined : advanceObservedTime(restored?.observedUntil, now),
+      };
+    },
     [restoreEvidence],
   );
 
@@ -317,23 +355,39 @@ export function BusinessAccessProvider({
     (forUserId: string, verification: SubscriptionVerification) => {
       const now = clockRef.current();
       const previous = sessionRef.current;
-      const baseline = previous.userId === forUserId ? previous.evidence : restoreEvidence(forUserId, now);
-      const evidence = updateEntitlementEvidence(baseline, verification, now);
-      // The domain decided what the proof becomes; a verified answer is mirrored, an unavailable one changes nothing.
-      if (verification.kind === 'verified') persistEvidence(forUserId, evidence);
-      commit({ userId: forUserId, verification, evidence, resolvedAt: now });
+      const baseline = previous.userId === forUserId ? previous : pendingSession(forUserId, now);
+      const evidence = updateEntitlementEvidence(baseline.evidence, verification, now);
+      let observedUntil: Date;
+      if (verification.kind === 'verified') {
+        // The domain decided what the proof becomes, and the store agreed on
+        // this instant: the proof is mirrored with the mark reset to it.
+        observedUntil = new Date(now.getTime());
+        persistEvidence(forUserId, evidence, observedUntil);
+      } else {
+        // An unavailable answer changes nothing about the proof; the clock was
+        // observed (the store itself rewrites nothing unless the mark advanced).
+        observedUntil = advanceObservedTime(baseline.observedUntil, now);
+        persistObservation(forUserId, observedUntil);
+      }
+      commit({ userId: forUserId, verification, evidence, resolvedAt: now, observedUntil });
     },
-    [restoreEvidence, persistEvidence, commit],
+    [pendingSession, persistEvidence, persistObservation, commit],
   );
 
-  /** Re-resolves the session for the current instant; the answer and the proof stay exactly as they are. */
+  /** Re-resolves the session for the current instant and observes it; the answer and the proof stay exactly as they are. */
   const reevaluate = useCallback(
     (forUserId: string) => {
       const now = clockRef.current();
       const previous = sessionRef.current;
-      commit(previous.userId === forUserId ? { ...previous, resolvedAt: now } : pendingSession(forUserId, now));
+      if (previous.userId !== forUserId) {
+        commit(pendingSession(forUserId, now));
+        return;
+      }
+      const observedUntil = advanceObservedTime(previous.observedUntil, now);
+      persistObservation(forUserId, observedUntil);
+      commit({ ...previous, resolvedAt: now, observedUntil });
     },
-    [pendingSession, commit],
+    [pendingSession, persistObservation, commit],
   );
 
   const verify = useCallback(
@@ -468,8 +522,9 @@ export function BusinessAccessProvider({
           ? current.verification
           : UNAVAILABLE,
       lastVerifiedEntitlement: current.evidence,
+      observedUntil: current.observedUntil,
     }),
-    [current.resolvedAt, current.verification, current.evidence, enforcement],
+    [current.resolvedAt, current.verification, current.evidence, current.observedUntil, enforcement],
   );
 
   const access = useMemo(() => resolveBusinessAccess(input), [input]);
