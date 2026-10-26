@@ -232,3 +232,46 @@ describe('ReminderSettingsScreen — read-only business access', () => {
     expect(view.getByText('Impossible d’enregistrer le réglage pour le moment. Réessayez.')).toBeTruthy();
   });
 });
+
+// Server-side enforcement (Phase 6.5C, step 5 → step 8): the device may think
+// it has access (enforcement disabled on the device, or an offline grace the
+// server does not grant) while the server refuses to turn reminders ON. The
+// refusal is explained in its own words, the stored setting stands, and
+// turning OFF still works.
+describe('ReminderSettingsScreen — the server answers ENTITLEMENT_REQUIRED', () => {
+  it('enabling: the explanation names BeautIzzy Plus, the switch keeps its stored value, no generic failure', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    gateway.setEntitlementEnforced(true);
+    const view = await renderSettings(gateway);
+
+    await toggleTo(view, true);
+
+    expect(gateway.calls.update).toBe(1);
+    expect(gateway.updates).toEqual([]);
+    expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(false);
+    expect(view.getByText('L’activation nécessite BeautIzzy Plus. Votre réglage actuel est conservé.')).toBeTruthy();
+    expect(view.queryByText(/Impossible d’enregistrer/)).toBeNull();
+    expect(view.queryByText('Adresse e-mail invalide.')).toBeNull();
+    expect(haptics.warning).toHaveBeenCalled();
+  });
+
+  it('disabling, and keeping an enabled preference while editing its Reply-To, still succeed', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    gateway.seedPreferences(testBusiness.id, { emailRemindersEnabled: true, replyToEmail: 'salon@example.test' });
+    gateway.setEntitlementEnforced(true);
+    const view = await renderSettings(gateway);
+
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId('reminder-reply-to-input'), 'nouveau@example.test');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('reminder-save-reply-to'));
+    });
+    expect(gateway.updates.at(-1)?.preferences).toEqual({ emailRemindersEnabled: true, smsRemindersEnabled: false, replyToEmail: 'nouveau@example.test' });
+
+    await toggleTo(view, false);
+    expect(gateway.updates.at(-1)?.preferences.emailRemindersEnabled).toBe(false);
+    expect(view.getByTestId('reminder-toggle-switch').props.value).toBe(false);
+    expect(view.queryByText(/BeautIzzy Plus/)).toBeNull();
+  });
+});

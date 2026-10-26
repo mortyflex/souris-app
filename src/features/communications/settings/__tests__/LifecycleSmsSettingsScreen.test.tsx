@@ -305,6 +305,27 @@ describe('LifecycleSmsSettingsScreen', () => {
     expect(gateway.lifecycleUpdates).toEqual([]);
   });
 
+  it('ENTITLEMENT_REQUIRED (the server refuses to turn an automation on): its own message, the switch keeps its stored value, disabling still works', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    gateway.seedLifecycleSmsPreferences(testBusiness.id, { ...DEFAULT_LIFECYCLE_SMS_PREFERENCES, winbackSmsEnabled: true });
+    gateway.setEntitlementEnforced(true);
+    const view = await renderSettings(gateway);
+
+    await toggle(view, 'lifecycle-birthday-toggle', true);
+
+    expect(gateway.calls.updateLifecycle).toBe(1);
+    expect(gateway.lifecycleUpdates).toEqual([]);
+    expect(view.getByTestId('lifecycle-birthday-toggle-switch').props.value).toBe(false);
+    expect(view.getByText('L’activation nécessite BeautIzzy Plus. Votre réglage actuel est conservé.')).toBeTruthy();
+    expect(view.queryByText(/Impossible d’enregistrer/)).toBeNull();
+    expect(view.queryByText('Cette valeur n’est pas autorisée.')).toBeNull();
+
+    await toggle(view, 'lifecycle-winback-toggle', false);
+    expect(gateway.lifecycleUpdates.at(-1)?.preferences).toMatchObject({ winbackSmsEnabled: false, birthdaySmsEnabled: false });
+    expect(view.getByTestId('lifecycle-winback-toggle-switch').props.value).toBe(false);
+    expect(view.queryByText(/BeautIzzy Plus/)).toBeNull();
+  });
+
   it('INVALID_VALUE rolls back with its own message', async () => {
     const gateway = createFakeCommunicationsGateway();
     const view = await renderSettings(gateway);

@@ -113,10 +113,11 @@ describe('subscription-reconciliation — Phase 6.5C step 6 boundary', () => {
     expect(api).toMatch(/signal: controller\.signal/);
   });
 
-  it('scenario 25: the migration is ONE forward-only, additive file sorting last — no schedule, no switch, no replaced function, no rewritten row', () => {
+  it('scenario 25: the migration is ONE forward-only, additive file right after step 5 — no schedule, no switch, no replaced function, no rewritten row', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    expect(names.at(-1)).toBe(MIGRATION_NAME);
-    expect(names.at(-2)).toBe(STEP5_MIGRATION_NAME);
+    // Immediately after step 5; later steps sort after it and never touch it.
+    expect(names.indexOf(MIGRATION_NAME)).toBe(names.indexOf(STEP5_MIGRATION_NAME) + 1);
+    expect(names.slice(names.indexOf(MIGRATION_NAME) + 1).every((name) => name > MIGRATION_NAME)).toBe(true);
     expect(names.filter((name) => name.includes('subscription_reconciliation'))).toEqual([MIGRATION_NAME]);
     // No scheduler is created or touched by any migration: enabling the sweep is a documented manual step.
     for (const name of names) {

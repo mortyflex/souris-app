@@ -22,7 +22,13 @@ export interface CommunicationPreferences {
 export type UpdateCommunicationPreferencesResult =
   | { readonly status: 'UPDATED'; readonly preferences: CommunicationPreferences }
   /** The server refused the Reply-To (enabling requires a valid address). */
-  | { readonly status: 'INVALID_REPLY_TO' };
+  | { readonly status: 'INVALID_REPLY_TO' }
+  /**
+   * The server refused to turn reminders ON: the Business holds no verified
+   * Plus entitlement (BeautIzzy Plus, server-side enforcement). Nothing was
+   * written; the stored preference stands. Disabling is never refused.
+   */
+  | { readonly status: 'ENTITLEMENT_REQUIRED' };
 
 export type AppointmentReminderStatusKind =
   | 'SCHEDULED'
@@ -76,7 +82,9 @@ export interface LifecycleSmsPreferencesUpdate {
 export type UpdateLifecycleSmsPreferencesResult =
   | { readonly status: 'UPDATED'; readonly preferences: LifecycleSmsPreferences }
   /** The server refused an out-of-range value. */
-  | { readonly status: 'INVALID_VALUE' };
+  | { readonly status: 'INVALID_VALUE' }
+  /** The server refused to turn an automation ON for lack of a verified Plus entitlement; nothing was written. */
+  | { readonly status: 'ENTITLEMENT_REQUIRED' };
 
 export type CommunicationsGatewayFailureCode = 'NETWORK' | 'FORBIDDEN' | 'UNKNOWN';
 

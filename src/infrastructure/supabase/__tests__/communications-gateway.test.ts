@@ -94,6 +94,17 @@ describe('updatePreferences', () => {
     });
     expect(result).toEqual({ status: 'INVALID_REPLY_TO' });
   });
+
+  it('surfaces the step 5 refusal as ENTITLEMENT_REQUIRED — the exact literal the RPC returns', async () => {
+    const { client } = createRpcMock({
+      communications_update_preferences: { data: { status: 'ENTITLEMENT_REQUIRED' } },
+    });
+    const result = await createSupabaseCommunicationsGateway(client).updatePreferences('biz-1', {
+      emailRemindersEnabled: true,
+      replyToEmail: 'salon@example.test',
+    });
+    expect(result).toEqual({ status: 'ENTITLEMENT_REQUIRED' });
+  });
 });
 
 describe('readAppointmentReminderStatus', () => {
@@ -311,5 +322,16 @@ describe('lifecycle SMS preferences (SMS pivot Phase 2)', () => {
       birthdayDiscountPercent: 101,
     });
     expect(result).toEqual({ status: 'INVALID_VALUE' });
+  });
+
+  it('maps the ENTITLEMENT_REQUIRED refusal', async () => {
+    const { client } = createRpcMock({
+      communications_update_lifecycle_sms_preferences: { data: { status: 'ENTITLEMENT_REQUIRED' } },
+    });
+    const result = await createSupabaseCommunicationsGateway(client).updateLifecycleSmsPreferences('biz-1', {
+      birthdaySmsEnabled: true,
+      winbackSmsEnabled: false,
+    });
+    expect(result).toEqual({ status: 'ENTITLEMENT_REQUIRED' });
   });
 });

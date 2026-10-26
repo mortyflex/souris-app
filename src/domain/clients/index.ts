@@ -21,6 +21,7 @@ export {
   parseBirthdayKey,
   type ClientBirthday,
 } from './birthday';
+export { isClientSmsConsentWithdrawalOnly } from './consent-withdrawal';
 export { CLIENT_NOTES_MAX_LENGTH, normalizeClientNotes } from './notes';
 export { clientEmailComparisonKey, isValidClientEmail } from './email';
 export {

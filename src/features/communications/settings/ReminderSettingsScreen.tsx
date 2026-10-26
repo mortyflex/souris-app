@@ -12,7 +12,10 @@
 //
 // Enabling requires a valid Reply-To (prefilled from the signed-in account
 // email the first time); the server validates it again. Nothing here talks
-// to the queue: turning the switch reconciles server-side.
+// to the queue: turning the switch reconciles server-side. A server refusal
+// for lack of BeautIzzy Plus (ENTITLEMENT_REQUIRED, Phase 6.5C) is explained
+// in its own words and leaves the stored setting exactly as it is; turning
+// the switch OFF is never refused.
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -33,6 +36,7 @@ import { foregroundSoft, gutter, rose, semanticColors, spacing } from '@/shared/
 
 import { useCommunicationPreferences } from '../preferences/CommunicationPreferencesProvider';
 import {
+  COMMUNICATION_REQUIRES_PLUS,
   REMINDER_INVALID_REPLY_TO,
   REMINDER_OFFLINE_NOTICE,
   REMINDER_REPLY_TO_LABEL,
@@ -75,6 +79,12 @@ export function ReminderSettingsScreen() {
       const result = await update(next);
       if (result.status === 'INVALID_REPLY_TO') {
         setFailure(REMINDER_INVALID_REPLY_TO);
+        haptics.warning();
+        return;
+      }
+      if (result.status === 'ENTITLEMENT_REQUIRED') {
+        // The server kept the stored setting; the switch never flipped.
+        setFailure(COMMUNICATION_REQUIRES_PLUS);
         haptics.warning();
         return;
       }

@@ -4,6 +4,7 @@ import {
   archiveClient as archiveClientRecord,
   canDeleteClientPermanently,
   isClientArchived,
+  isClientSmsConsentWithdrawalOnly,
   restoreClient as restoreClientRecord,
   type Client,
 } from '@/domain/clients';
@@ -29,7 +30,9 @@ const ClientSessionContext = createContext<ClientSessionValue | null>(null);
  * Appointment Creation picker, Agenda, Appointment Details/Editing, and the
  * Client Profile. Hydrated once from the persisted snapshot; every mutation
  * passes the business write guard first (features/access/write-guard.ts), is
- * written to SQLite next, and is reflected in state only after success.
+ * written to SQLite next, and is reflected in state only after success — with
+ * ONE exemption, an edit that only withdraws a client's SMS consent
+ * (`isClientSmsConsentWithdrawalOnly`), which read-only access never refuses.
  *
  * Archived Clients stay in `clients` (history keeps resolving them) and are
  * simply excluded from `activeClients`, the only selectable collection.
@@ -86,7 +89,14 @@ export function ClientSessionProvider({ children }: PropsWithChildren) {
   };
 
   const updateClient = (client: Client) => {
-    requireWriteAccess('clients.updateClient');
+    // Withdrawing the client's promotional SMS consent — and changing nothing
+    // else — is privacy-protective, never a paid mutation: it passes under
+    // read-only access, and the server applies exactly this write without
+    // Plus (`sync_withdraw_client_sms_consent`). Anything else is guarded.
+    const current = clients.find((candidate) => candidate.id === client.id);
+    if (current === undefined || !isClientSmsConsentWithdrawalOnly(current, client)) {
+      requireWriteAccess('clients.updateClient');
+    }
     persistClient(database, client);
     // Identity edits never touch the lifecycle nor the photo: the stored
     // archived_at and photo_path are left as-is, so the in-memory record

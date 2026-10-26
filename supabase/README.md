@@ -199,6 +199,17 @@ migrations/20261008120000_add_subscription_reconciliation.sql   (BeautIzzy Plus 
                                                                  Applying it alone reconciles nothing: the function
                                                                  must be deployed and invoked with its key.
                                                                  docs/architecture/SUBSCRIPTIONS.md §13)
+migrations/20261009120000_add_client_consent_withdrawal_exception.sql
+                                                                (BeautIzzy Plus 6.5C step 8 — BY HAND, after step 6;
+                                                                 adds ONE SECURITY DEFINER helper
+                                                                 (sync_withdraw_client_sms_consent, authenticated
+                                                                 only) and replaces sync_push_aggregate IN PLACE
+                                                                 with the step 4 body plus the consent-withdrawal
+                                                                 exception inside its ENTITLEMENT_REQUIRED branch.
+                                                                 No policy, table, trigger, switch or row touched;
+                                                                 while the switch is disabled every push behaves
+                                                                 exactly as before. docs/architecture/CLOUD_SYNC.md
+                                                                 §26.3)
 ```
 
 The two `add_*` migrations are additive and safe to re-run (`add column if not exists`, `create or replace`);
@@ -1091,3 +1102,83 @@ the current Supabase docs when actually enabling it.
  8. Only then decide, separately, whether to enable the sweep on Staging (§above) — and never
     enforcement on production before docs/architecture/SUBSCRIPTIONS.md §12 holds in full.
 ```
+
+## Client consent withdrawal — the enforcement exception (BeautIzzy Plus Phase 6.5C, step 8) — NOT applied, switch DISABLED
+
+`20261009120000_add_client_consent_withdrawal_exception.sql` lets an owner WITHOUT Plus still
+withdraw a client's promotional SMS consent through the ordinary push (`docs/architecture/CLOUD_SYNC.md`
+§26.3): under the BUSINESS_MUTATION switch, a CLIENT UPSERT whose payload only sets
+`sms_marketing_consent = 'OPTED_OUT'` (every other key equal to the stored row) is applied — the three
+consent columns, nothing else — through `sync_withdraw_client_sms_consent`; anything else is refused as
+before. Additive, rewrites no row, flips nothing, safe to re-run. Apply AFTER step 4 (the rule) — the
+ordering after step 6 follows from the filename rule. Suggested manual check in the SQL Editor after
+applying:
+
+```sql
+-- the helper: SECURITY DEFINER, search_path pinned, authenticated only, no PUBLIC entry
+select p.proname, p.prosecdef, p.proconfig, p.proacl,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role_exec,
+       has_function_privilege('anon', p.oid, 'execute') as anon_exec
+  from pg_proc p
+ where p.pronamespace = 'public'::regnamespace and p.proname = 'sync_withdraw_client_sms_consent';
+
+-- the push RPC: still SECURITY INVOKER, authenticated only, the rule asked once, the exception after it
+select p.prosecdef, has_function_privilege('authenticated', p.oid, 'execute') as authenticated_exec,
+       (length(p.prosrc) - length(replace(p.prosrc, 'business_mutation_is_entitled', ''))) / length('business_mutation_is_entitled') as rule_calls,
+       position('sync_withdraw_client_sms_consent' in p.prosrc) > position('business_mutation_is_entitled' in p.prosrc) as exception_after_rule
+  from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'sync_push_aggregate';
+-- expected: prosecdef false, authenticated_exec true, rule_calls 1, exception_after_rule true
+
+-- the clients policies of step 5 are untouched; both switches still disabled
+select cmd, policyname, with_check from pg_policies where schemaname = 'public' and tablename = 'clients' order by cmd;
+select flag, enabled from public.server_feature_flags order by flag;
+```
+
+Behavior checks as a signed-in owner with the switch ON (Staging, a dedicated test account without a
+mirror row): a push of one of her clients that only sets the consent to OPTED_OUT (same name, phone,
+email, birthday, notes, photo, archive marker as stored) answers `APPLIED` with a bumped version and
+the client's pending lifecycle offers read CANCELLED; the same push with any other field changed, a
+push setting OPTED_IN or clearing the consent, a new client, or a DELETE answers
+`ENTITLEMENT_REQUIRED`; a direct `update public.clients set sms_marketing_consent = 'OPTED_OUT' …` is
+still `42501`; another owner's client is `42501`. The same checks — plus the switch-off byte-identical
+behavior, the idempotent replay, the newer-instant re-withdrawal, the unseen-revision case, every
+non-withdrawal shape (extra keys, a malformed or missing audit pair, an unknown source, a tombstoned
+client), the helper's own privileges and the direct-call behavior, the lifecycle trigger, role lockout
+and the idempotent re-run — 56 checks — were executed against the full 24-migration chain in an isolated
+in-process Postgres when this migration was written; the 6.5A (84), 6.5B (144), step 4 (87), step 5 (378)
+and step 6 (89) harnesses still pass with it appended.
+
+### Staging validation of Phase 6.5C — exact prerequisites and order
+
+Steps 4–8 are complete in the repository and NOTHING is applied, deployed or enabled anywhere. The
+Staging validation (project `iteufklnrsmazzvmzqxa`) needs, in this order:
+
+```text
+ 1. Apply, by hand, in filename order:
+      20261006120000_add_business_mutation_entitlement_enforcement.sql       (step 4)
+      20261007120000_complete_business_mutation_entitlement_enforcement.sql  (step 5)
+      20261008120000_add_subscription_reconciliation.sql                     (step 6)
+      20261009120000_add_client_consent_withdrawal_exception.sql             (step 8)
+    and run the SQL checks of each section; both switches read false.
+ 2. Create the `subscription_reconciliation` secret key, set REVENUECAT_RECONCILIATION_API_KEY,
+    deploy subscription-reconciliation, run the empty-body DRY_RUN smoke (§Subscription reconciliation).
+ 3. Backfill the Staging accounts (dry-run, apply, settle every INVESTIGATE) so the test accounts
+    have the mirror rows the checklist needs — one entitled, one without any row.
+ 4. Install a build of Phase 6.5C step 8 or later on the test devices (the build parses
+    ENTITLEMENT_REQUIRED from the push AND the preference RPCs, persists the observed-time mark, and
+    lets a consent withdrawal through).
+ 5. Flip `business_mutation_set_entitlement_enforcement(true)` on Staging only, then run the step 5
+    checklist (§What the harness cannot prove) plus the step 8 checks above: a consent withdrawal from
+    the read-only device reaches the server and cancels pending offers; enabling reminders or an
+    automation on the read-only device shows « L’activation nécessite BeautIzzy Plus. Votre réglage
+    actuel est conservé. » and the switch stays off; disabling works.
+ 6. Optionally flip `communications_set_entitlement_enforcement(true)` and verify the reminder row of
+    a suspended appointment reminder never reads « Programmé » (it reads nothing, or the derived
+    « Non programmé » states).
+ 7. Flip both switches back to false; verify everything returns to the pre-enforcement behavior
+    with no manual cleanup.
+```
+
+Production activation remains FORBIDDEN until `docs/architecture/SUBSCRIPTIONS.md` §12 holds in
+full.

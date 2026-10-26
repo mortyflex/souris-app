@@ -708,6 +708,70 @@ describe('business mutation protection (enforcement enabled)', () => {
     });
   });
 
+  describe('a client consent withdrawal is privacy-protective, not a paid mutation (step 8)', () => {
+    const withdrawn = (client: Client, at = NOW): Client => ({
+      ...client,
+      smsMarketingConsent: { status: 'OPTED_OUT', updatedAt: at, source: 'PROFESSIONAL' },
+    });
+
+    it('withdrawing a client’s SMS consent — and nothing else — passes under read-only access, is persisted and queued for the server', async () => {
+      const source = sourceAnswering(EXPIRED);
+      const { view, database } = await renderApp({ access: { enforcement: 'enabled', source, clock: () => NOW } });
+      expect(stateOf(view)).toContain('read-only:subscription-expired');
+      const outboxBefore = countSyncOutboxRows(database);
+
+      expect(await attempt(() => sessions().clients.updateClient(withdrawn(clientLea)))).toBeUndefined();
+
+      expect(loadClients(database).find((client) => client.id === clientLea.id)?.smsMarketingConsent).toEqual({ status: 'OPTED_OUT', updatedAt: NOW, source: 'PROFESSIONAL' });
+      expect(sessions().clients.getClientById(clientLea.id)?.smsMarketingConsent?.status).toBe('OPTED_OUT');
+      expect(countSyncOutboxRows(database)).toBe(outboxBefore + 1);
+      // Withdrawing again (an idempotent re-save) still passes; the rest of the identity is untouched.
+      expect(await attempt(() => sessions().clients.updateClient(withdrawn(clientLea, new Date(NOW.getTime() + 1000))))).toBeUndefined();
+      expect(sessions().clients.getClientById(clientLea.id)?.firstName).toBe(clientLea.firstName);
+    });
+
+    it('granting or clearing a consent, or a withdrawal bundled with another change, stays refused and changes nothing', async () => {
+      const source = sourceAnswering(EXPIRED);
+      const { view, database } = await renderApp({ access: { enforcement: 'enabled', source, clock: () => NOW } });
+      const before = fingerprint(database, view);
+
+      const granted: Client = { ...clientLea, smsMarketingConsent: { status: 'OPTED_IN', updatedAt: NOW, source: 'PROFESSIONAL' } };
+      for (const edit of [granted, { ...withdrawn(clientLea), firstName: 'Léana' }, { ...withdrawn(clientLea), phone: '+33699999999' }, { ...withdrawn(clientLea), notes: 'autre' }]) {
+        const error = await attempt(() => sessions().clients.updateClient(edit));
+        expect(isBusinessAccessDeniedError(error)).toBe(true);
+        expect((error as BusinessAccessDeniedError).operation).toBe('clients.updateClient');
+      }
+      // A withdrawal first, then an attempt to clear it back to « Non renseigné »: refused.
+      expect(await attempt(() => sessions().clients.updateClient(withdrawn(clientLea)))).toBeUndefined();
+      const { smsMarketingConsent: _consent, ...cleared } = clientLea;
+      expect(isBusinessAccessDeniedError(await attempt(() => sessions().clients.updateClient(cleared)))).toBe(true);
+      expect(sessions().clients.getClientById(clientLea.id)?.smsMarketingConsent?.status).toBe('OPTED_OUT');
+      expect(fingerprint(database, view).snapshot.clients.filter((client) => client.id !== clientLea.id)).toEqual(before.snapshot.clients.filter((client) => client.id !== clientLea.id));
+    });
+
+    it('the queued withdrawal reaches a server that refuses every other write for lack of Plus', async () => {
+      const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+      const source = sourceAnswering(ACTIVE);
+      const { view, database } = await renderApp({ access: { enforcement: 'enabled', source, clock: () => NOW } });
+      // The client exists on the server before access lapses.
+      expect(approveInitialUpload(database, REMOTE_BUSINESS_ID).status).toBe('APPROVED');
+      const worker = createSyncPushWorker({ database, gateway: remote });
+      expect((await worker.run(REMOTE_BUSINESS_ID)).status).toBe('PUSHED');
+      expect(countSyncOutboxRows(database)).toBe(0);
+
+      await act(async () => source.emit(fakeUser.id, EXPIRED));
+      expect(stateOf(view)).toContain('read-only:subscription-expired');
+      remote.refuseEntitlement(true);
+      expect(await attempt(() => sessions().clients.updateClient(withdrawn(clientLea)))).toBeUndefined();
+
+      const run = await worker.run(REMOTE_BUSINESS_ID);
+      expect(run).toMatchObject({ status: 'PUSHED', pushed: 1 });
+      expect(run.status === 'PUSHED' && run.entitlementHold).toBeUndefined();
+      expect(countSyncOutboxRows(database)).toBe(0);
+      expect(remote.find(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id)?.payload).toMatchObject({ sms_marketing_consent: 'OPTED_OUT', first_name: clientLea.firstName });
+    });
+  });
+
   describe('account isolation', () => {
     it('a user switch never reuses the previous user’s access: the new account is verified on its own', async () => {
       const auth = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });

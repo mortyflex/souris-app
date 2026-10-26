@@ -17,6 +17,13 @@ export const REMINDER_UPDATE_FAILURE =
   'Impossible d’enregistrer le réglage pour le moment. Réessayez.';
 export const REMINDER_OFFLINE_NOTICE =
   'Connexion indisponible : le réglage affiché est le dernier connu.';
+/**
+ * The server refused to turn a communication ON for lack of BeautIzzy Plus
+ * (ENTITLEMENT_REQUIRED): the stored setting stands, nothing was changed.
+ * Never a technical failure wording; disabling is always possible.
+ */
+export const COMMUNICATION_REQUIRES_PLUS =
+  'L’activation nécessite BeautIzzy Plus. Votre réglage actuel est conservé.';
 
 export const LIFECYCLE_SMS_SETTINGS_TITLE = 'SMS fidélisation';
 export const LIFECYCLE_BIRTHDAY_TOGGLE_LABEL = 'Anniversaires';

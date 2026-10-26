@@ -409,3 +409,73 @@ describe('the push worker under an entitlement refusal', () => {
     expect(remote.find(REMOTE_BUSINESS_ID, 'SERVICE', 'service-new')?.payload).toEqual(refusedPayload);
   });
 });
+
+// The consent-withdrawal exception (Phase 6.5C, step 8): the server applies a
+// CLIENT write that only sets the promotional SMS consent to OPTED_OUT
+// whatever the entitlement (sync_withdraw_client_sms_consent, played by the
+// fake remote), and refuses everything else exactly as before.
+describe('the push worker and the consent-withdrawal exception', () => {
+  const optedIn = { ...clientLea, smsMarketingConsent: { status: 'OPTED_IN' as const, updatedAt: NOW, source: 'PROFESSIONAL' as const } };
+  const withdrawn = { ...clientLea, smsMarketingConsent: { status: 'OPTED_OUT' as const, updatedAt: new Date(NOW.getTime() + MINUTE_MS), source: 'PROFESSIONAL' as const } };
+
+  async function openDeviceWithClient() {
+    const device = await openSyncedDevice();
+    insertClient(device.db, optedIn);
+    expect(await device.run()).toMatchObject({ status: 'PUSHED', pushed: 1 });
+    device.remote.clearRequests();
+    device.remote.refuseEntitlement(true);
+    return device;
+  }
+
+  it('a withdrawal queued offline is applied by the refusing server, acknowledged and settled: no hold, nothing lost', async () => {
+    const { db, remote, run } = await openDeviceWithClient();
+    updateClient(db, withdrawn);
+    expect(pending(db)).toEqual([expect.objectContaining({ type: 'CLIENT', id: clientLea.id, operation: 'UPSERT' })]);
+
+    const result = await run();
+    expect(result).toMatchObject({ status: 'PUSHED', pushed: 1, failed: 0 });
+    expect(result.status === 'PUSHED' && result.entitlementHold).toBeUndefined();
+    expect(pending(db)).toEqual([]);
+    expect(ack(db, 'CLIENT', clientLea.id)).toBe(2);
+    expect(remote.find(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id)?.payload).toMatchObject({ sms_marketing_consent: 'OPTED_OUT', sms_marketing_consent_source: 'PROFESSIONAL', first_name: clientLea.firstName });
+    expect(readSyncEntitlementHold(db, REMOTE_BUSINESS_ID)).toBeUndefined();
+  });
+
+  it('granting a consent, or a withdrawal bundled with another change, is refused and held — the entry stays, nothing is discarded', async () => {
+    const { db, remote, run } = await openDeviceWithClient();
+    updateClient(db, { ...withdrawn, firstName: 'Léana' });
+
+    const mixed = await run();
+    expect(mixed).toMatchObject({ pushed: 0, entitlementHold: { refused: { aggregateType: 'CLIENT', aggregateId: clientLea.id } } });
+    expect(pending(db)).toEqual([expect.objectContaining({ type: 'CLIENT', lastError: 'ENTITLEMENT_REQUIRED' })]);
+    expect(remote.find(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id)?.payload).toMatchObject({ sms_marketing_consent: 'OPTED_IN', first_name: clientLea.firstName });
+
+    // Plus is back: the held entry (withdrawal and rename) lands in full.
+    remote.refuseEntitlement(false);
+    liftSyncEntitlementHold(db, REMOTE_BUSINESS_ID);
+    expect(await run()).toMatchObject({ status: 'PUSHED', pushed: 1 });
+    expect(remote.find(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id)?.payload).toMatchObject({ sms_marketing_consent: 'OPTED_OUT', first_name: 'Léana' });
+
+    // Refused again: a grant is never the exception.
+    remote.refuseEntitlement(true);
+    updateClient(db, { ...optedIn, firstName: 'Léana', smsMarketingConsent: { ...optedIn.smsMarketingConsent, updatedAt: new Date(NOW.getTime() + 2 * MINUTE_MS) } });
+    expect(await run()).toMatchObject({ pushed: 0, entitlementHold: { refused: { aggregateId: clientLea.id } } });
+    expect(remote.find(REMOTE_BUSINESS_ID, 'CLIENT', clientLea.id)?.payload).toMatchObject({ sms_marketing_consent: 'OPTED_OUT' });
+  });
+
+  it('the exception never crosses Businesses: a withdrawal pushed to a Business the account does not own is an ownership refusal, applied nowhere', async () => {
+    const db = openTestDatabase();
+    bootstrapPersistence(db, () => createTestSeed({ clients: [optedIn], services: [], products: [], appointments: [] }));
+    bindLocalDatabaseToBusiness(db, remoteBusinessProfile);
+    expect(approveInitialUpload(db, REMOTE_BUSINESS_ID, NOW)).toMatchObject({ status: 'APPROVED' });
+    const remote = createFakeSyncRemote([OTHER_BUSINESS_ID]);
+    remote.refuseEntitlement(true);
+    updateClient(db, withdrawn);
+    const { run } = context(db, remote, NOW);
+    const result = await run();
+    expect(JSON.stringify(result)).toContain('FORBIDDEN');
+    expect(JSON.stringify(result)).not.toContain('ENTITLEMENT_REQUIRED');
+    expect(remote.find(OTHER_BUSINESS_ID, 'CLIENT', clientLea.id)).toBeUndefined();
+    expect(pending(db).some((entry) => entry.id === clientLea.id)).toBe(true);
+  });
+});

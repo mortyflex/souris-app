@@ -1244,9 +1244,17 @@ communications_update_lifecycle_sms_preferences(business, birthday, winback, …
 
 Disabling is never gated: a professional without Plus may stop every communication at once, which
 is the consent-withdrawal-equivalent of the preference surface. Preferences, lifecycle preferences,
-client consent and SENT / FAILED history are never touched by a refusal. The deployed app gateway
-reads the new answer as `BADRESULT` and shows a generic failure with nothing changed; the dedicated
-wording (« Action réservée à BeautIzzy Plus ») is a later client step. While the BUSINESS_MUTATION
+client consent and SENT / FAILED history are never touched by a refusal. Since Phase 6.5C step 8
+the app gateway parses the answer (`UpdateCommunicationPreferencesResult` /
+`UpdateLifecycleSmsPreferencesResult` carry `ENTITLEMENT_REQUIRED`), the preference provider changes
+nothing locally, and both settings screens explain it in their own words
+(`COMMUNICATION_REQUIRES_PLUS`: « L’activation nécessite BeautIzzy Plus. Votre réglage actuel est
+conservé. ») with the switch left at its stored value — never the generic « Impossible
+d’enregistrer » wording; a build before step 8 reads it as `BADRESULT` and shows that generic
+failure with nothing changed. The onboarding reminder activation (`BusinessSetupScreen`) keeps its
+calm generic notice for this answer (a brand-new Business is never refused while the switch is
+off). A client's own consent withdrawal is the symmetric exception on the business-data side
+(`CLOUD_SYNC.md` §26.3). While the BUSINESS_MUTATION
 switch is disabled the rule answers TRUE for every owner and the three RPCs are exactly the deployed
 ones. Verified in the step 5 harness (`supabase/README.md`) and pinned by
 `src/infrastructure/supabase/__tests__/business-mutation-policies-migration.test.ts`.

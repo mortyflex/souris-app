@@ -83,11 +83,12 @@ export interface FakeSyncRemote extends SyncRemoteGateway {
   loseNextResponse(): void;
   beforePush(hook: ((request: RemotePushRequest) => void) | undefined): void;
   /**
-   * The FUTURE server behaviour of BeautIzzy Plus Phase 6.5C (CLOUD_SYNC.md §26):
+   * The server behaviour of BeautIzzy Plus Phase 6.5C (CLOUD_SYNC.md §26):
    * while `refused` is true, every push of an OWNED Business answers
    * `ENTITLEMENT_REQUIRED` and writes nothing (ownership is still checked
-   * first; pulls are unaffected). Off by default: the deployed server never
-   * answers it yet.
+   * first; pulls are unaffected) — except a CLIENT upsert that only withdraws
+   * an existing client's promotional SMS consent, which is applied (step 8,
+   * §26.3). Off by default: the deployed server's switch is disabled.
    */
   refuseEntitlement(refused: boolean): void;
 }
@@ -249,6 +250,33 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
       businesses.set(businessId, rows);
     }
     return rows;
+  }
+
+  const CONSENT_KEYS = ['sms_marketing_consent', 'sms_marketing_consent_updated_at', 'sms_marketing_consent_source'];
+
+  /** The server's narrow consent-withdrawal write, or undefined when the request is not exactly one. */
+  function applyConsentWithdrawal(
+    rows: Map<string, FakeRemoteAggregate>,
+    request: RemotePushRequest,
+  ): RemotePushResult | undefined {
+    if (request.aggregateType !== 'CLIENT' || request.operation !== 'UPSERT' || request.payload === undefined) return undefined;
+    const payload = request.payload as unknown as Record<string, unknown>;
+    if (payload.sms_marketing_consent !== 'OPTED_OUT') return undefined;
+    if (typeof payload.sms_marketing_consent_updated_at !== 'string' || typeof payload.sms_marketing_consent_source !== 'string') return undefined;
+    const remote = rows.get(`CLIENT/${request.aggregateId}`);
+    if (!remote || remote.deleted) return undefined;
+    const stored = remote.payload as unknown as Record<string, unknown>;
+    for (const key of Object.keys(payload)) {
+      if (CONSENT_KEYS.includes(key)) continue;
+      if (JSON.stringify(payload[key] ?? null) !== JSON.stringify(stored[key] ?? null)) return undefined;
+    }
+    const identical = CONSENT_KEYS.every((key) => stored[key] === payload[key]);
+    if (identical) return { status: 'APPLIED', syncVersion: remote.syncVersion };
+    const next = { ...stored };
+    for (const key of CONSENT_KEYS) next[key] = payload[key];
+    const written: FakeRemoteAggregate = { ...remote, payload: next as unknown as FakeRemoteAggregate['payload'], syncVersion: remote.syncVersion + 1, updatedAt: tick() };
+    rows.set(`CLIENT/${request.aggregateId}`, written);
+    return { status: 'APPLIED', syncVersion: written.syncVersion };
   }
 
   function apply(request: RemotePushRequest): RemotePushResult {
@@ -423,7 +451,12 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
       const failure = failures.shift();
       if (failure) throw failure;
       if (entitlementRefused) {
-        rowsOf(request.businessId); // the owner check comes first, as on the server
+        const rows = rowsOf(request.businessId); // the owner check comes first, as on the server
+        // The step 8 exception: a CLIENT upsert that only withdraws the SMS
+        // consent of an existing client is applied — the three consent
+        // columns only — whatever the entitlement (sync_withdraw_client_sms_consent).
+        const withdrawal = applyConsentWithdrawal(rows, request);
+        if (withdrawal) return withdrawal;
         return { status: 'ENTITLEMENT_REQUIRED' };
       }
       const result = apply(request);

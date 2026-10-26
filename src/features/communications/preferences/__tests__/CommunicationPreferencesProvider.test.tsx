@@ -146,4 +146,19 @@ describe('updating', () => {
     expect(value().emailRemindersEnabled).toBe(false);
     expect(readCachedCommunicationPreferences(database, testBusiness.id)?.emailRemindersEnabled ?? false).toBe(false);
   });
+
+  it('a server ENTITLEMENT_REQUIRED (enabling without Plus) changes nothing locally and is returned as such', async () => {
+    const gateway = createFakeCommunicationsGateway();
+    gateway.setEntitlementEnforced(true);
+    const { database, value } = await renderProvider(gateway);
+
+    await act(async () => {
+      const result = await value().update({ emailRemindersEnabled: true, replyToEmail: 'salon@example.test' });
+      expect(result.status).toBe('ENTITLEMENT_REQUIRED');
+    });
+
+    expect(value().emailRemindersEnabled).toBe(false);
+    expect(value().state.status).toBe('ready');
+    expect(readCachedCommunicationPreferences(database, testBusiness.id)?.emailRemindersEnabled ?? false).toBe(false);
+  });
 });

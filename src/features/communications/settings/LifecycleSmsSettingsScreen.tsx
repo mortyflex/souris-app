@@ -47,6 +47,7 @@ import { foregroundSoft, gutter, rose, semanticColors, spacing } from '@/shared/
 import type { LifecycleSmsPreferences, LifecycleSmsPreferencesUpdate } from '../gateway';
 import { useCommunicationsGateway } from '../session/CommunicationsGatewayProvider';
 import {
+  COMMUNICATION_REQUIRES_PLUS,
   formatLifecycleDays,
   formatLifecyclePercent,
   LIFECYCLE_AFTER_LABEL,
@@ -82,7 +83,14 @@ type SwitchKey = 'birthdaySmsEnabled' | 'winbackSmsEnabled';
 /** The one control whose write is in flight. */
 type PendingControl = NumericKnob | SwitchKey;
 
-type WriteFailure = 'UPDATE_FAILED' | 'INVALID_VALUE';
+type WriteFailure = 'UPDATE_FAILED' | 'INVALID_VALUE' | 'ENTITLEMENT_REQUIRED';
+
+const FAILURE_COPY: Readonly<Record<WriteFailure, string>> = {
+  UPDATE_FAILED: REMINDER_UPDATE_FAILURE,
+  INVALID_VALUE: LIFECYCLE_INVALID_VALUE,
+  // The server kept the stored automations: enabling needs BeautIzzy Plus.
+  ENTITLEMENT_REQUIRED: COMMUNICATION_REQUIRES_PLUS,
+};
 
 export function LifecycleSmsSettingsScreen() {
   const router = useRouter();
@@ -158,7 +166,7 @@ export function LifecycleSmsSettingsScreen() {
         }
         const result = await gateway.updateLifecycleSmsPreferences(business.id, next);
         if (result.status !== 'UPDATED') {
-          setFailure('INVALID_VALUE');
+          setFailure(result.status);
           haptics.warning();
           return;
         }
@@ -299,7 +307,7 @@ export function LifecycleSmsSettingsScreen() {
         )}
         {!offline && failure !== undefined && (
           <AppText variant="metadata" accessibilityLiveRegion="polite" style={styles.failure}>
-            {failure === 'INVALID_VALUE' ? LIFECYCLE_INVALID_VALUE : REMINDER_UPDATE_FAILURE}
+            {FAILURE_COPY[failure]}
           </AppText>
         )}
       </ScrollView>

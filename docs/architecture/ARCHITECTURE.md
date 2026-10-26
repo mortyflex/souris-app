@@ -1060,6 +1060,29 @@ detected, a tampered database can hold any mark or any proof, and the protection
 of the one cheap manipulation on an unmodified device to exactly what the server-side mirror
 ignores anyway: every write that reaches the server is decided there.
 
+Final enforcement exceptions and user-facing consistency (Phase 6.5C, step 8,
+`supabase/migrations/20261009120000_add_client_consent_withdrawal_exception.sql`,
+`src/domain/clients/consent-withdrawal.ts`, `docs/architecture/CLOUD_SYNC.md` §26.3,
+`docs/architecture/COMMUNICATIONS.md` §47). Two gaps around an expired Plus are closed, nothing
+else. First, a client's promotional SMS consent can be WITHDRAWN without Plus — the one business
+write that protects the client rather than serving the business, and one the server must receive
+to stop sending: ONE rule, mirrored on both sides, defines it (the next consent is OPTED_OUT and
+every other identity field is unchanged); the client provider lets exactly that edit skip the write
+guard, and the push RPC, in its refusal branch, hands exactly that payload to a SECURITY DEFINER
+helper that writes the three consent columns of the owner's own client and nothing else — a grant,
+a cleared consent, a bundled change, a new or tombstoned client, another owner's client and every
+direct PostgREST write stay refused as before, and a held entry is never discarded. Second, the
+server's `ENTITLEMENT_REQUIRED` answer to turning reminders or an automation ON is now parsed by the
+communications gateway and explained in the settings screens in its own words
+(« L’activation nécessite BeautIzzy Plus. Votre réglage actuel est conservé. »), the switch left at
+its stored value; turning OFF never asks. Verified by eye and by the existing tests: the « Mon
+abonnement » section already tells an active subscription, a trial, a cancelled subscription inside
+its paid period, a confirmed expiration, a pending or unverified state apart, Accueil shows the
+read-only card with the policy's own reason, and a reminder the server suspended never reads
+« Programmé » (the projection derives the pre-queue state; a dedicated SUSPENDED status is a
+documented follow-up). Both switches stay disabled, `SUBSCRIPTION_ENFORCEMENT` stays `disabled`,
+nothing is applied, deployed or enabled; the Staging order for steps 4–8 is in `supabase/README.md`.
+
 Business access is time-aware. The answer of `resolveBusinessAccess` holds for one instant, so the
 provider re-resolves it — and asks the subscription source again — at every deadline the domain
 announces (`nextBusinessAccessDeadline`: the end of the entitlement in force, then the end of the

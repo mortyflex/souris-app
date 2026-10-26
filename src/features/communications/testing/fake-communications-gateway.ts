@@ -44,6 +44,12 @@ export interface FakeCommunicationsGateway extends CommunicationsGateway {
   failNext(code: CommunicationsGatewayFailureCode): void;
   /** Makes the NEXT lifecycle update answer the server's INVALID_VALUE refusal. */
   refuseNextLifecycleUpdate(): void;
+  /**
+   * Plays the server-side Plus enforcement (Phase 6.5C step 5): while set,
+   * an update that would turn reminders or an automation ON answers
+   * ENTITLEMENT_REQUIRED and stores nothing; disabling still succeeds.
+   */
+  setEntitlementEnforced(enforced: boolean): void;
   /** Scripts the projection answer of one appointment. */
   setReminderStatus(appointmentId: string, status: AppointmentReminderStatus): void;
   /** Seeds the stored preference of a Business. */
@@ -61,6 +67,7 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
   const lifecycleUpdates: { businessId: string; preferences: LifecycleSmsPreferences }[] = [];
   let nextFailure: CommunicationsGatewayFailureCode | undefined;
   let refusingLifecycleUpdate = false;
+  let entitlementEnforced = false;
 
   const takeFailure = () => {
     if (nextFailure === undefined) return;
@@ -78,6 +85,9 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
     },
     refuseNextLifecycleUpdate() {
       refusingLifecycleUpdate = true;
+    },
+    setEntitlementEnforced(enforced) {
+      entitlementEnforced = enforced;
     },
     setReminderStatus(appointmentId, status) {
       statusByAppointment.set(appointmentId, status);
@@ -102,6 +112,14 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
       }
       if (next.emailRemindersEnabled && replyTo === undefined) {
         return { status: 'INVALID_REPLY_TO' };
+      }
+      // Like the step 5 RPC: turning reminders ON needs Plus; keeping them on, or OFF, never does.
+      if (
+        entitlementEnforced &&
+        next.emailRemindersEnabled &&
+        preferencesByBusiness.get(businessId)?.emailRemindersEnabled !== true
+      ) {
+        return { status: 'ENTITLEMENT_REQUIRED' };
       }
       // Like the server: the email update never touches the SMS switch.
       const preferences: CommunicationPreferences = {
@@ -134,6 +152,13 @@ export function createFakeCommunicationsGateway(): FakeCommunicationsGateway {
       // Like the server: the switches change, an omitted numeric knob stays
       // stored (NULL keeps the stored value).
       const stored = lifecycleByBusiness.get(businessId) ?? DEFAULT_LIFECYCLE_SMS_PREFERENCES;
+      // Like the step 5 RPC: turning an automation ON needs Plus; OFF never does.
+      if (
+        entitlementEnforced &&
+        ((next.birthdaySmsEnabled && !stored.birthdaySmsEnabled) || (next.winbackSmsEnabled && !stored.winbackSmsEnabled))
+      ) {
+        return { status: 'ENTITLEMENT_REQUIRED' };
+      }
       const preferences: LifecycleSmsPreferences = {
         birthdaySmsEnabled: next.birthdaySmsEnabled,
         birthdayDiscountPercent: next.birthdayDiscountPercent ?? stored.birthdayDiscountPercent,

@@ -2280,9 +2280,11 @@ preference RPCs       communications_update_preferences, communications_update_s
 RPCs, Storage SELECT); authentication and the Business profile; disabling any communication;
 removing a photo; every service-role path (the worker, the webhook and the mirror functions never
 run as `authenticated`). The only write an unentitled owner may still make to a business table is
-none: a consent change the professional records on a client is a business mutation, guarded by the
-application since Phase 4 (`write-guard.ts`); the client's own STOP path (`CLIENT_STOP`, reserved) is
-a server-side write and unaffected.
+the WITHDRAWAL of a client's promotional SMS consent — nothing else of the client, never a grant —
+through the push RPC's narrow exception of step 8 (§26.3); every other consent change the
+professional records on a client is a business mutation, guarded by the application since Phase 4
+(`write-guard.ts`); the client's own STOP path (`CLIENT_STOP`, reserved) is a server-side write and
+unaffected.
 
 **Disabled = unchanged.** While the switch is off the rule answers TRUE for every owner, so every
 policy, the Storage policy and the three RPCs behave exactly as the deployed ones: the effective
@@ -2309,3 +2311,49 @@ OR-bypass test, Storage, the preference gates, consent and history, the two swit
 re-run, effective privileges), plus the source guard
 `src/infrastructure/supabase/__tests__/business-mutation-policies-migration.test.ts`; the step 4
 (87), 6.5A (81) and 6.5B (144) harnesses still pass with the migration appended.
+
+### 26.3 The consent-withdrawal exception (Phase 6.5C, step 8)
+
+`supabase/migrations/20261009120000_add_client_consent_withdrawal_exception.sql`,
+`src/domain/clients/consent-withdrawal.ts`. ONE business write is privacy-protective rather than
+paid: WITHDRAWING a client's promotional SMS consent. The server schedules lifecycle SMS from its
+own copy of the consent (`COMMUNICATIONS.md` §34–§44), so a withdrawal that stays on a read-only
+device protects nobody. Step 8 lets it through, on both sides, under one rule:
+
+```text
+a CLIENT UPSERT whose payload says sms_marketing_consent = 'OPTED_OUT'
+and whose every OTHER key equals the stored row
+(first_name, last_name, phone, email, birthday, notes, photo_path, archived_at)
+```
+
+- **Device** (`ClientSessionProvider.updateClient`): an edit that satisfies
+  `isClientSmsConsentWithdrawalOnly(current, next)` — next consent OPTED_OUT, every identity field
+  unchanged — skips the write guard; it is written to SQLite and queued like any Client edit.
+  Granting or clearing a consent, or a withdrawal bundled with any other change, is guarded as
+  before (`BusinessAccessDeniedError`, nothing written).
+- **Server** (`sync_push_aggregate`, replaced in place with the step 4 body plus the exception
+  INSIDE its refusal branch): when the rule refuses, a CLIENT UPSERT is first handed to
+  `sync_withdraw_client_sms_consent` — SECURITY DEFINER, owner-checked, EXECUTE for
+  `authenticated` only — which answers NULL for anything that is not exactly a withdrawal of an
+  existing, non-deleted client of the caller's Business (the refusal then stands:
+  `ENTITLEMENT_REQUIRED`, nothing written, the entry held on the device until Plus is back —
+  nothing is discarded), and otherwise writes the THREE consent columns of that one row and
+  nothing else, answering `{ "status": "APPLIED", "sync_version": n }`. The before-write trigger
+  bumps the version and the instant; the lifecycle trigger cancels the client's pending offers.
+  An already withdrawn consent is acknowledged with the current version; a withdrawal on top of
+  an unseen revision whose other fields are identical is applied (it overwrites nothing else) and
+  the device pulls the new version as usual.
+- **Direct PostgREST writes** are untouched: the step 5 policies still refuse an unentitled
+  owner's UPDATE of `clients`, consent included. The exception is reachable through the two
+  functions only; a direct call of the helper by the owner withdraws her own client's consent the
+  same way and can do nothing else; another owner's client is 42501.
+- **Disabled = unchanged.** The refusal branch is never entered while the switch is off, so every
+  push behaves exactly as before.
+
+Known limit: an entry queued BEFORE access lapsed that already carries another change of the same
+client, then a withdrawal recorded while read-only, is one payload with both — not a pure
+withdrawal — and stays held until Plus returns (the only way to split it would be a second queue).
+Verification: a 56-check PGlite harness (`supabase/README.md` › Client consent withdrawal), the
+source guard `client-consent-withdrawal-migration.test.ts`, the fake remote's replica of the rule
+(`sync-entitlement-hold.test.ts`) and the provider tests
+(`business-mutation-protection.test.tsx`).

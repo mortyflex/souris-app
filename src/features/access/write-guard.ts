@@ -22,8 +22,12 @@
 // Automatic and safety-critical operations never go through it: remote
 // changes adopted from the sync runner, the push of entries already queued,
 // previous-day appointment finalization, local cache writes, session and
-// account housekeeping, and the WITHDRAWAL of a communication consent. Each
-// exemption is a narrowly scoped call site, never a public bypass flag.
+// account housekeeping, and the WITHDRAWAL of a communication consent — the
+// professional's own (switching reminders or an automation OFF) and a
+// client's (an edit that only sets the promotional SMS consent to OPTED_OUT,
+// `isClientSmsConsentWithdrawalOnly`, which the server applies without Plus
+// too). Each exemption is a narrowly scoped call site, never a public bypass
+// flag.
 //
 // The refusal is thrown, not returned: every provider mutation already
 // throws — having changed nothing — when a write is refused, and every

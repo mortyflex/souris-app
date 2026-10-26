@@ -140,6 +140,8 @@ export function createSupabaseCommunicationsGateway(
       if (error) throw mapCommunicationsPostgrestError(error);
       const row = asObject(data);
       if (row.status === 'INVALID_REPLY_TO') return { status: 'INVALID_REPLY_TO' };
+      // The step 5 server answer: enabling without Plus. The exact literal the RPC returns.
+      if (row.status === 'ENTITLEMENT_REQUIRED') return { status: 'ENTITLEMENT_REQUIRED' };
       if (row.status !== 'UPDATED') throw new CommunicationsGatewayError('UNKNOWN', 'BADRESULT');
       return { status: 'UPDATED', preferences: toPreferences(data) };
     },
@@ -193,6 +195,7 @@ export function createSupabaseCommunicationsGateway(
       if (error) throw mapCommunicationsPostgrestError(error);
       const row = asObject(data);
       if (row.status === 'INVALID_VALUE') return { status: 'INVALID_VALUE' };
+      if (row.status === 'ENTITLEMENT_REQUIRED') return { status: 'ENTITLEMENT_REQUIRED' };
       if (row.status !== 'UPDATED') throw new CommunicationsGatewayError('UNKNOWN', 'BADRESULT');
       return { status: 'UPDATED', preferences: toLifecycleSmsPreferences(data) };
     },

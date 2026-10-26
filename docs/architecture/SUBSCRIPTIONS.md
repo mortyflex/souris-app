@@ -73,8 +73,16 @@ Phase 6.5C  Server-side enforcement, continued      step 1 done — the device r
                                                              grace (read-only, never a deletion); the
                                                              72-hour policy itself unchanged (ARCHITECTURE.md
                                                              §10, Phase 6.5C step 7)
+                                                     step 8 done — the final enforcement exceptions and
+                                                             user-facing consistency: a client's SMS consent
+                                                             may be withdrawn without Plus, on the device and
+                                                             on the server (CLOUD_SYNC.md §26.3); the
+                                                             preference RPCs' ENTITLEMENT_REQUIRED is parsed
+                                                             and explained (COMMUNICATIONS.md §47); still
+                                                             nothing applied, deployed or enabled
                                                      future — the app reading the mirror; production
-                                                             activation (see §12)
+                                                             activation (see §12); the Staging validation
+                                                             of steps 4–8 (supabase/README.md)
 ```
 
 ## 12. Production activation — forbidden until every prerequisite holds
