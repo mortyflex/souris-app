@@ -95,6 +95,35 @@ describe('ReceiptPrinter', () => {
     expect(view.queryByLabelText(/^×$|^X$/)).toBeNull();
   });
 
+  it('reports its dismissal once, after the closing transition, once the Modal is gone', async () => {
+    const onDismissed = jest.fn();
+    const props = {
+      backdropLabel: 'Fermer le ticket',
+      onClose: jest.fn(),
+      onDismissed,
+      renderReceipt: () => <Text testID="receipt-content">paper</Text>,
+      testID: 'printer',
+    };
+    const view = await render(<ReceiptPrinter {...props} visible />);
+    expect(onDismissed).not.toHaveBeenCalled();
+
+    await act(async () => view.rerender(<ReceiptPrinter {...props} visible={false} />));
+    // Still on screen while the paper leaves; a re-render meanwhile never restarts the closing.
+    expect(view.getByTestId('receipt-content')).toBeTruthy();
+    expect(onDismissed).not.toHaveBeenCalled();
+    await act(async () => view.rerender(<ReceiptPrinter {...props} onDismissed={onDismissed} visible={false} />));
+    await act(async () => {
+      jest.advanceTimersByTime(receiptPrint.dismiss);
+    });
+
+    expect(view.queryByTestId('receipt-content')).toBeNull();
+    expect(onDismissed).toHaveBeenCalledTimes(1);
+    // Opening again reports nothing until the next close.
+    await act(async () => view.rerender(<ReceiptPrinter {...props} visible />));
+    expect(view.getByTestId('receipt-content')).toBeTruthy();
+    expect(onDismissed).toHaveBeenCalledTimes(1);
+  });
+
   it('scrolls the whole natural-height paper, clear of the actions, and never bounds its height', async () => {
     const onClose = jest.fn();
     const frames: object[] = [];

@@ -3,6 +3,7 @@ import { getInsightsPeriod, type BusinessInsights } from '@/domain/insights';
 import { formatEuroCents } from '@/shared/lib/money';
 
 import {
+  buildInsightsRankingSections,
   buildInsightsReceipt,
   formatCompletedAppointments,
   formatInsightsClientName,
@@ -126,6 +127,42 @@ describe('buildInsightsReceipt', () => {
     ]);
     // Written short, so it never truncates to « rendez-v… »; still spoken in full.
     expect(loyal!.rows.map((row) => row.value)).toEqual(['7 rdv', '1 rdv']);
+  });
+
+  it('carries the stable client id of a place only for a client who still exists, only on the ticket', () => {
+    const clients = new Map([['amel', client('amel', 'Amel', 'Benali')]]);
+    const source = insights({
+      isEmpty: false,
+      topServices: [{ serviceId: 's1', serviceName: 'Balayage', count: 18 }],
+      topProducts: [{ productId: 'p1', productName: 'Shampooing', unitCount: 12 }],
+      topSpendingClients: [
+        { clientId: 'amel', spendingCents: 62000, completedAppointmentCount: 7 },
+        { clientId: 'gone', spendingCents: 1000, completedAppointmentCount: 1 },
+      ],
+      topLoyalClients: [
+        { clientId: 'gone', spendingCents: 1000, completedAppointmentCount: 9 },
+        { clientId: 'amel', spendingCents: 62000, completedAppointmentCount: 7 },
+      ],
+    });
+    const [services, products, spending, loyal] = buildInsightsReceipt(source, (id) => clients.get(id)).sections;
+
+    // The id is the client's own, never derived from the displayed name.
+    expect(spending!.rows.map((row) => [row.label, row.clientId])).toEqual([
+      ['Amel B.', 'amel'],
+      ['Client inconnu', undefined],
+    ]);
+    // A client who is gone keeps their rank and metric; only the id is missing.
+    expect(loyal!.rows.map((row) => [row.rank, row.label, row.value, row.clientId])).toEqual([
+      [1, 'Client inconnu', '9 rdv', undefined],
+      [2, 'Amel B.', '7 rdv', 'amel'],
+    ]);
+    expect(loyal!.rows[0]).not.toHaveProperty('clientId');
+    // Services and products never open anything.
+    for (const row of [...services!.rows, ...products!.rows]) expect(row).not.toHaveProperty('clientId');
+    // Nor does any public row, whoever the client is.
+    for (const section of buildInsightsRankingSections(source, (id) => clients.get(id), 'public')) {
+      for (const row of section.rows) expect(row).not.toHaveProperty('clientId');
+    }
   });
 
   it('always keeps the four categories, never padded, each with its own empty message', () => {

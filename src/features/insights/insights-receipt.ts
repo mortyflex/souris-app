@@ -9,7 +9,10 @@
 // the ticket and the share card (`insights-share-card.ts`) show the same
 // places, people, metrics and order. Only the presentation differs:
 //
-//   ticket  the in-app ticket: `Amel B.`, `195,00 €`
+//   ticket  the in-app ticket: `Amel B.`, `195,00 €`; a client place carries
+//           the stable id of its client (`clientId`) when that client still
+//           exists, so the podium can open their profile — a client who is
+//           gone keeps their place, as « Client inconnu », and opens nothing
 //   public  the shared image: `Amel B.`, `195 €` — first name and last-name
 //           initial only (never a full last name), compact amounts, rows keyed
 //           by place so not even a client id reaches the public model
@@ -31,6 +34,12 @@ export interface InsightsRankingRow {
   readonly value: string;
   /** `Première place, Balayage, 18 prestations` */
   readonly accessibilityLabel: string;
+  /**
+   * The stable id of the client this place opens. Only on the in-app ticket,
+   * and only for a client who still exists: never on a public row, never for
+   * a service, a product or an unknown client.
+   */
+  readonly clientId?: string;
 }
 
 export type InsightsRankingKey = 'services' | 'products' | 'spendingClients' | 'loyalClients';
@@ -131,13 +140,21 @@ export function formatCompletedAppointments(count: number): string {
 const PLACES = ['Première place', 'Deuxième place', 'Troisième place'] as const;
 
 /** `spokenValue` when the visible metric is abbreviated (`3 rdv` → « 3 rendez-vous »). */
-function row(key: string, index: number, label: string, value: string, spokenValue = value): InsightsRankingRow {
+function row(
+  key: string,
+  index: number,
+  label: string,
+  value: string,
+  spokenValue = value,
+  clientId?: string,
+): InsightsRankingRow {
   return {
     key,
     rank: (index + 1) as 1 | 2 | 3,
     label,
     value,
     accessibilityLabel: `${PLACES[index] ?? `${index + 1}e place`}, ${label}, ${spokenValue}`,
+    ...(clientId !== undefined ? { clientId } : {}),
   };
 }
 
@@ -152,6 +169,9 @@ export function buildInsightsRankingSections(
   const spending = isPublic ? formatCompactEuroCents : formatEuroCents;
   // A public row is keyed by its place: not even the client id reaches a public card.
   const clientKey = (clientId: string, index: number) => (isPublic ? `place-${index + 1}` : clientId);
+  // The ticket opens a place only for a client who still exists; a public row never opens anything.
+  const openableClientId = (clientId: string) =>
+    !isPublic && getClient(clientId) !== undefined ? clientId : undefined;
 
   return [
     {
@@ -174,7 +194,14 @@ export function buildInsightsRankingSections(
       key: 'spendingClients',
       title: 'Clients qui dépensent le plus',
       rows: insights.topSpendingClients.map((client, index) =>
-        row(clientKey(client.clientId, index), index, clientName(client.clientId), spending(client.spendingCents)),
+        row(
+          clientKey(client.clientId, index),
+          index,
+          clientName(client.clientId),
+          spending(client.spendingCents),
+          undefined,
+          openableClientId(client.clientId),
+        ),
       ),
       emptyMessage: 'Aucune dépense sur cette période',
     },
@@ -188,6 +215,7 @@ export function buildInsightsRankingSections(
           clientName(client.clientId),
           `${client.completedAppointmentCount} rdv`,
           plural(client.completedAppointmentCount, 'rendez-vous', 'rendez-vous'),
+          openableClientId(client.clientId),
         ),
       ),
       emptyMessage: 'Aucun rendez-vous réalisé sur cette période',

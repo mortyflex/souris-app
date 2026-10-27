@@ -30,7 +30,9 @@
 //
 // Dismissal: the « Fermer » close button under the paper (spoken « Fermer »),
 // a tap on the dimmed page, the hardware back button, the accessibility escape
-// gesture.
+// gesture. `onDismissed` fires once the closing transition is over and the
+// Modal is gone — like the shared BottomSheet, so a navigation chained from it
+// never races the leaving receipt.
 //
 // The actions under the paper are ONE centred row of the same compact icon
 // buttons for every receipt (`GlassIconButton`, floating glass, accent
@@ -100,6 +102,8 @@ interface ReceiptPrinterProps {
   readonly visible: boolean;
   /** Every dismissal request: « Fermer », dimmed page, hardware back, escape. */
   readonly onClose: () => void;
+  /** The receipt has left and the Modal is unmounted; safe to present or navigate from. */
+  readonly onDismissed?: () => void;
   readonly backdropLabel: string;
   readonly renderReceipt: (frame: ReceiptPaperFrame) => ReactNode;
   /** Capsules after « Fermer », in order. */
@@ -136,6 +140,7 @@ const NOTICE_ROOM = 44;
 export function ReceiptPrinter({
   visible,
   onClose,
+  onDismissed,
   backdropLabel,
   renderReceipt,
   actions = [],
@@ -156,6 +161,11 @@ export function ReceiptPrinter({
   // Until the paper is measured it is assumed as tall as the window: hidden.
   const paperHeight = useSharedValue(windowHeight);
   const printing = useRef(false);
+  // Read when the close timer fires: a new callback identity never restarts the closing.
+  const dismissed = useRef(onDismissed);
+  useEffect(() => {
+    dismissed.current = onDismissed;
+  }, [onDismissed]);
 
   useEffect(() => {
     if (!presented) return;
@@ -169,6 +179,7 @@ export function ReceiptPrinter({
       feed.set(0);
       settle.set(0);
       setPresented(false);
+      dismissed.current?.();
     }, receiptPrint.dismiss);
     return () => clearTimeout(unmount);
   }, [visible, presented, presence, feed, settle]);

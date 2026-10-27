@@ -30,14 +30,23 @@
 // truncated or shrunk: at worst it wraps onto a second line. Only names keep a
 // side padding, so two neighbouring names never touch.
 //
+// Client places open the client's profile: a place whose row carries a
+// `clientId` becomes ONE button (same look, pressed on paper as a soft fade,
+// spoken with the hint « Ouvre la fiche client ») when the podium is given
+// `onClientPress`. Nothing changes visually otherwise — no chevron, no card:
+// a podium is not a list. A place without an id (a service, a product, a
+// client who no longer exists) stays exactly as it is, and the share card
+// never passes a handler, so an exported podium is never interactive.
+//
 // Share-card options: `allowFontScaling={false}` keeps an exported bitmap independent from the
 // device text size; `layout="story"` widens #1 on the narrower card (below).
 
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
 import {
   fontFamilies,
+  interaction,
   lavender,
   radii,
   receiptMedal,
@@ -60,8 +69,12 @@ interface InsightsPodiumProps {
   readonly layout?: InsightsPodiumLayout;
   /** `false` for an exported image: the layout never follows the device text size. */
   readonly allowFontScaling?: boolean;
+  /** Opens a client's profile from their place. Absent, no place is interactive. */
+  readonly onClientPress?: (clientId: string) => void;
   readonly testID?: string;
 }
+
+export const INSIGHTS_CLIENT_PLACE_HINT = 'Ouvre la fiche client';
 
 const MEDALS = { 1: receiptMedal.gold, 2: receiptMedal.silver, 3: receiptMedal.bronze } as const;
 
@@ -76,11 +89,12 @@ export function InsightsPodium({
   section,
   layout = 'receipt',
   allowFontScaling = true,
+  onClientPress,
   testID,
 }: InsightsPodiumProps) {
   const [first, second, third] = section.rows;
   const story = layout === 'story';
-  const slot = { allowFontScaling, testID };
+  const slot = { allowFontScaling, onClientPress, testID };
 
   return (
     <View style={styles.root} testID={testID}>
@@ -122,23 +136,22 @@ function PodiumSlot({
   row,
   style,
   allowFontScaling,
+  onClientPress,
   testID,
 }: {
   readonly row: InsightsRankingRow;
   readonly style: StyleProp<ViewStyle>;
   readonly allowFontScaling: boolean;
+  readonly onClientPress?: (clientId: string) => void;
   readonly testID?: string;
 }) {
   const winner = row.rank === 1;
   const plinth = winner ? receiptPodium.first : receiptPodium.place;
+  const clientId = row.clientId;
+  const placeTestID = testID ? `${testID}-place-${row.rank}` : undefined;
 
-  return (
-    <View
-      accessible
-      accessibilityLabel={row.accessibilityLabel}
-      style={style}
-      testID={testID ? `${testID}-place-${row.rank}` : undefined}
-    >
+  const content = (
+    <>
       <Medal allowFontScaling={allowFontScaling} rank={row.rank} />
       <AppText
         allowFontScaling={allowFontScaling}
@@ -171,6 +184,27 @@ function PodiumSlot({
           {row.rank}
         </AppText>
       </View>
+    </>
+  );
+
+  if (clientId !== undefined && onClientPress !== undefined) {
+    return (
+      <Pressable
+        accessibilityHint={INSIGHTS_CLIENT_PLACE_HINT}
+        accessibilityLabel={row.accessibilityLabel}
+        accessibilityRole="button"
+        onPress={() => onClientPress(clientId)}
+        style={({ pressed }) => [style, pressed && styles.pressed]}
+        testID={placeTestID}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View accessible accessibilityLabel={row.accessibilityLabel} style={style} testID={placeTestID}>
+      {content}
     </View>
   );
 }
@@ -256,6 +290,8 @@ const styles = StyleSheet.create({
   storySide: { width: '30%' },
   left: { left: 0 },
   right: { right: 0 },
+  // Pressed on paper: the whole unit fades softly, nothing moves or lifts.
+  pressed: { opacity: interaction.pressedOpacity },
   label: {
     color: semanticColors.foreground,
     marginTop: spacing.xs,

@@ -7,7 +7,7 @@ import { brandAssets } from '@/shared/ui/BrandMark';
 import { RECEIPT_SIGNATURE_SIZE } from '@/shared/ui/ReceiptPaper';
 
 import { BusinessInsightsReceipt } from '../BusinessInsightsReceipt';
-import { InsightsPodium } from '../components/InsightsPodium';
+import { INSIGHTS_CLIENT_PLACE_HINT, InsightsPodium } from '../components/InsightsPodium';
 import { buildInsightsReceipt, type InsightsRankingSection } from '../insights-receipt';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
@@ -94,6 +94,59 @@ describe('InsightsPodium', () => {
     expect(view.getByText('Aucun rendez-vous réalisé sur cette période')).toBeTruthy();
     expect(view.queryByTestId('podium-place-1')).toBeNull();
     expect(view.queryByText('1')).toBeNull();
+  });
+
+  it('opens a client from their place, by their stable id, as ONE button that looks the same', async () => {
+    const onClientPress = jest.fn();
+    const loyal: InsightsRankingSection = {
+      ...section('loyalClients'),
+      rows: [
+        { key: 'c1', rank: 1, label: 'Aaliyah B.', value: '3 rdv', accessibilityLabel: 'Première place, Aaliyah B., 3 rendez-vous', clientId: 'c1' },
+        { key: 'gone', rank: 2, label: 'Client inconnu', value: '2 rdv', accessibilityLabel: 'Deuxième place, Client inconnu, 2 rendez-vous' },
+      ],
+    };
+    const view = await render(<InsightsPodium onClientPress={onClientPress} section={loyal} testID="podium" />);
+
+    const place = view.getByTestId('podium-place-1');
+    expect(place.props.accessibilityRole).toBe('button');
+    expect(place.props.accessibilityLabel).toBe('Première place, Aaliyah B., 3 rendez-vous');
+    expect(place.props.accessibilityHint).toBe(INSIGHTS_CLIENT_PLACE_HINT);
+    // Same unit as before: medal digit, name, metric and plinth — no chevron, no extra text.
+    expect(within(place).getAllByText('1')).toHaveLength(2);
+    expect(within(place).getByText('Aaliyah B.')).toBeTruthy();
+    expect(within(place).getByText('3 rdv')).toBeTruthy();
+    expect(StyleSheet.flatten(place.props.style).width).toBe('36%');
+
+    await act(async () => fireEvent.press(place));
+    expect(onClientPress).toHaveBeenCalledTimes(1);
+    expect(onClientPress).toHaveBeenCalledWith('c1');
+
+    // A client who no longer exists keeps the place, but it opens nothing.
+    const gone = view.getByTestId('podium-place-2');
+    expect(gone.props.accessibilityRole).toBeUndefined();
+    expect(gone.props.accessibilityLabel).toBe('Deuxième place, Client inconnu, 2 rendez-vous');
+    await act(async () => fireEvent.press(gone));
+    expect(onClientPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a client place static without a handler, as on the share card', async () => {
+    const loyal: InsightsRankingSection = {
+      ...section('loyalClients'),
+      rows: [{ key: 'c1', rank: 1, label: 'Aaliyah B.', value: '3 rdv', accessibilityLabel: 'Première place, Aaliyah B., 3 rendez-vous', clientId: 'c1' }],
+    };
+    const card = await render(<InsightsPodium layout="story" section={loyal} testID="podium" />);
+    expect(card.getByTestId('podium-place-1').props.accessibilityRole).toBeUndefined();
+    expect(card.queryByRole('button')).toBeNull();
+  });
+
+  it('keeps service places static even with a handler: they carry no client id', async () => {
+    const onClientPress = jest.fn();
+    const services = await render(
+      <InsightsPodium onClientPress={onClientPress} section={section('services')} testID="podium" />,
+    );
+    expect(services.queryByRole('button')).toBeNull();
+    await act(async () => fireEvent.press(services.getByTestId('podium-place-1')));
+    expect(onClientPress).not.toHaveBeenCalled();
   });
 
   it('keeps the metric of a very long name, wrapping the name on two lines at most', async () => {
@@ -224,6 +277,41 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
     await swipeTo(view, 1);
     await act(async () => fireEvent.press(view.getByTestId('business-insights-page-indicator-loyalClients')));
     expect(onCategoryChange.mock.calls).toEqual([['products'], ['loyalClients']]);
+  });
+
+  it('hands client presses to the podiums, and can open on a given category', async () => {
+    const onClientPress = jest.fn();
+    const view = await render(
+      <BusinessInsightsReceipt
+        initialCategory="spendingClients"
+        model={model}
+        nextLabel="Mois suivant"
+        onClientPress={onClientPress}
+        onNext={jest.fn()}
+        onPeriodKindChange={jest.fn()}
+        onPrevious={jest.fn()}
+        periodKind="MONTH"
+        periodLabel="Septembre 2026"
+        previousLabel="Mois précédent"
+        width={WIDTH}
+      />,
+    );
+
+    // The carousel starts on the asked category, offset included.
+    expect(pagination(view).props.accessibilityLabel).toBe('Clients qui dépensent le plus, 3 sur 4');
+    expect(view.getByTestId('business-insights-rankings').props.contentOffset).toEqual({ x: 2 * WIDTH, y: 0 });
+    expect(isShown(view, 'spendingClients')).toBe(true);
+    expect(isShown(view, 'services')).toBe(false);
+
+    const place = view.getByTestId('business-insights-podium-spendingClients-place-1');
+    expect(place.props.accessibilityRole).toBe('button');
+    await act(async () => fireEvent.press(place));
+    expect(onClientPress).toHaveBeenCalledWith('c1');
+    // Service places stay static.
+    expect(
+      view.getByTestId('business-insights-podium-services-place-1', { includeHiddenElements: true }).props
+        .accessibilityRole,
+    ).toBeUndefined();
   });
 
   it('moves between categories from the page indicator and the adjustable actions', async () => {

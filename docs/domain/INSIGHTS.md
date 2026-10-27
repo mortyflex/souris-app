@@ -107,7 +107,10 @@ exists and counts nowhere.
 
 Each ranking shows at most three places, as a podium. All four categories are always present (one
 carousel page each). A category with no result shows its own quiet message and is never padded with
-placeholders. Places are read-only.
+placeholders. Service and product places are read-only. A client place opens the client's existing
+profile by the client's stable id (`clientId`) when that client still exists; a client who no longer
+exists keeps their place as « Client inconnu » and opens nothing. Opening a profile never changes a
+figure, a rank or the browsed period: the ticket comes back as it was when the screen regains focus.
 
 | Ranking | Counts | Order |
 | --- | --- | --- |
@@ -227,7 +230,8 @@ change.
 ## 8. Not implemented
 
 - sharing a capture of the receipt itself (only the dedicated card is shared);
-- actions from the rankings (open a profile, reward, discount, offer);
+- actions from the rankings beyond opening a client profile (reward, discount, offer);
+- opening a service or a product from its place;
 - « Clients à relancer »;
 - revenue per service;
 - any persisted analytics.

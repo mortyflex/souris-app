@@ -743,7 +743,8 @@ describe('AgendaScreen — day navigation', () => {
       'Top prestations, 1 sur 4',
     );
     expect(view.getByLabelText(/^Première place, .+, \d+ prestations?$/)).toBeTruthy();
-    // No ranking is interactive, « Partager » sits next to « Fermer », and there is no « moins ».
+    // Service places are not interactive (client places are: BusinessInsightsTicket test),
+    // « Partager » sits next to « Fermer », and there is no « moins ».
     expect(view.getByRole('button', { name: 'Partager' })).toBeTruthy();
     expect(view.getByTestId('business-insights-close')).toBeTruthy();
     expect(view.queryByText(/dépensent le moins/)).toBeNull();

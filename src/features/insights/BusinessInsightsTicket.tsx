@@ -24,8 +24,19 @@
 // One action at a time: every press is ignored while one is working. A failure
 // shows one retryable line; nothing closes the ticket, and the browsed period
 // and category never move.
+//
+// Client places open the client's profile (`/clients/[clientId]`, by the
+// stable id the ranking row carries — never by name). A receipt lives in a
+// Modal, which would cover a pushed screen, so the ticket STEPS ASIDE: the
+// printer closes, the profile is pushed once the paper has left
+// (`onDismissed`), and when this screen regains focus the ticket comes back
+// as it was — same period kind, anchor and category — instead of starting
+// over. Only a close requested by the screen (« Fermer », the dimmed page…)
+// forgets the browsing; the next opening then starts again from the Agenda
+// date. A place whose client no longer exists carries no id and opens nothing.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { View } from 'react-native';
 
 import {
@@ -67,6 +78,13 @@ interface BusinessInsightsTicketProps {
 
 type ExportAction = 'share' | 'save';
 
+/** What the paper is showing: remembered while a client profile is open, so the ticket comes back as it was. */
+interface InsightsBrowsing {
+  readonly kind: InsightsPeriodKind;
+  readonly anchor: Date;
+  readonly category: InsightsRankingKey;
+}
+
 export const INSIGHTS_SHARE_ERROR = 'Impossible de préparer le partage.';
 export const INSIGHTS_SAVED = 'Image enregistrée dans Photos';
 export const INSIGHTS_SAVE_ERROR = 'Impossible d’enregistrer l’image.';
@@ -76,14 +94,55 @@ export const INSIGHTS_SAVE_PERMISSION_ERROR =
 export const INSIGHTS_SAVED_NOTICE_DURATION = 2600;
 
 export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessInsightsTicketProps) {
+  const router = useRouter();
   const [shareCard, setShareCard] = useState<InsightsShareCardModel | null>(null);
   const [working, setWorking] = useState<ExportAction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const exportFrame = useRef<View>(null);
   const busy = useRef(false);
 
+  // Stepping aside for a client profile: the printer closes while `aside`, and
+  // the paper reopens from `resumeFrom` when the screen regains focus.
+  const [aside, setAside] = useState(false);
+  const [resumeFrom, setResumeFrom] = useState<InsightsBrowsing | null>(null);
+  const browsing = useRef<InsightsBrowsing | null>(null);
+  const pendingClientId = useRef<string | null>(null);
+  const returning = useRef(false);
+
   // A notice belongs to one opening: closing the ticket forgets it.
   if (!visible && notice !== null) setNotice(null);
+  // So does the browsing: a close requested by the screen starts over next time.
+  if (!visible && aside) setAside(false);
+  if (!visible && resumeFrom !== null) setResumeFrom(null);
+
+  const openClient = (clientId: string) => {
+    if (busy.current || pendingClientId.current !== null) return;
+    pendingClientId.current = clientId;
+    setNotice(null);
+    setAside(true);
+  };
+
+  // The paper has left: push the profile, and come back on the next focus.
+  const onDismissed = useCallback(() => {
+    const clientId = pendingClientId.current;
+    if (clientId === null) return;
+    pendingClientId.current = null;
+    returning.current = true;
+    router.push({ pathname: '/clients/[clientId]', params: { clientId } });
+  }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!returning.current) return;
+      returning.current = false;
+      setResumeFrom(browsing.current);
+      setAside(false);
+    }, []),
+  );
+
+  const rememberBrowsing = useCallback((current: InsightsBrowsing) => {
+    browsing.current = current;
+  }, []);
 
   // The save confirmation is light: it goes away on its own.
   useEffect(() => {
@@ -142,6 +201,7 @@ export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessIns
         },
       ]}
       backdropLabel="Fermer les tops et tendances"
+      onDismissed={onDismissed}
       offstage={
         shareCard === null ? undefined : (
           <ImageExportFrame
@@ -156,32 +216,52 @@ export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessIns
       }
       onClose={onClose}
       renderReceipt={(frame) => (
-        <BusinessInsightsPaper anchor={anchor} frame={frame} onShareCardChange={setShareCard} />
+        <BusinessInsightsPaper
+          anchor={anchor}
+          frame={frame}
+          initialBrowsing={resumeFrom ?? undefined}
+          onBrowsingChange={rememberBrowsing}
+          onOpenClient={openClient}
+          onShareCardChange={setShareCard}
+        />
       )}
       testID="business-insights"
-      visible={visible}
+      visible={visible && !aside}
     />
   );
 }
 
-/** Mounted only while the printer presents it: its state starts over at each opening. */
+/**
+ * Mounted only while the printer presents it: its state starts over at each
+ * opening — from the Agenda date, or from `initialBrowsing` when the ticket
+ * comes back from a client profile.
+ */
 function BusinessInsightsPaper({
   anchor,
   frame,
+  initialBrowsing,
+  onBrowsingChange,
+  onOpenClient,
   onShareCardChange,
 }: {
   readonly anchor: Date;
   readonly frame: ReceiptPaperFrame;
+  readonly initialBrowsing?: InsightsBrowsing;
+  readonly onBrowsingChange: (browsing: InsightsBrowsing) => void;
+  readonly onOpenClient: (clientId: string) => void;
   readonly onShareCardChange: (card: InsightsShareCardModel | null) => void;
 }) {
   const { appointments, deposits } = useAppointmentSession();
   const { sales } = useSaleSession();
   const { getClientById } = useClientSession();
-  const [kind, setKind] = useState<InsightsPeriodKind>('MONTH');
+  const [kind, setKind] = useState<InsightsPeriodKind>(initialBrowsing?.kind ?? 'MONTH');
   const [periodAnchor, setPeriodAnchor] = useState(
-    () => new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate()),
+    () => initialBrowsing?.anchor ?? new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate()),
   );
-  const [category, setCategory] = useState<InsightsRankingKey>('services');
+  const [category, setCategory] = useState<InsightsRankingKey>(initialBrowsing?.category ?? 'services');
+  useEffect(() => {
+    onBrowsingChange({ kind, anchor: periodAnchor, category });
+  }, [kind, periodAnchor, category, onBrowsingChange]);
 
   const period = getInsightsPeriod(kind, periodAnchor);
   const insights = useMemo(
@@ -208,9 +288,11 @@ function BusinessInsightsPaper({
 
   return (
     <BusinessInsightsReceipt
+      initialCategory={initialBrowsing?.category}
       model={model}
       nextLabel={navigation.next}
       onCategoryChange={setCategory}
+      onClientPress={onOpenClient}
       onNext={() => setPeriodAnchor((current) => shiftInsightsAnchor(kind, current, 1))}
       onPeriodKindChange={setKind}
       onPrevious={() => setPeriodAnchor((current) => shiftInsightsAnchor(kind, current, -1))}

@@ -1774,9 +1774,20 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
   Never a floppy disk. A busy button shows a small accent spinner in place of its glyph (the circle
   never changes) and is `busy` / `disabled`; while one works, the others ignore presses. The labels
   are spoken, never written. « Résumé du jour » uses the SAME close button, alone, centred (§25).
-- **Not here.** No place is tappable, there is no reward, discount or offer action, and there is no
-  « dépensent le moins » ranking. The podium receives already-worded data, so the share card reuses
-  it without the carousel or a capture of this private receipt.
+- **Client places open the profile.** On the two client podiums, a place whose client still exists is
+  ONE button (`accessibilityRole="button"`, the same spoken label, hint « Ouvre la fiche client ») that
+  opens the existing client profile (`/clients/[clientId]`) by the client's stable id, never by name.
+  Nothing changes visually: same medal, name, metric and plinth, no chevron, no card, no extra height;
+  pressed, the whole unit fades to `interaction.pressedOpacity` and nothing moves. Because the receipt is
+  a Modal, the ticket steps aside: the paper leaves exactly as on « Fermer », the profile is pushed once
+  it is gone (`ReceiptPrinter` `onDismissed`), and when the screen regains focus the ticket prints again
+  AS IT WAS — same period kind, same anchor, same carousel category. Only a close requested by the
+  screen forgets the browsing. A place whose client no longer exists (« Client inconnu ») keeps its
+  rank and metric and is not interactive. Service and product places are never interactive, and the
+  share card's podium never is.
+- **Not here.** There is no reward, discount or offer action, and there is no « dépensent le moins »
+  ranking. The podium receives already-worded data, so the share card reuses it without the carousel
+  or a capture of this private receipt.
 
 ## 35. Tops & tendances — Share Card
 

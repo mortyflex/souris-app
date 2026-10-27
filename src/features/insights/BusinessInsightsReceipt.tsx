@@ -25,7 +25,12 @@
 // is local presentation state: it survives period changes and is forgotten
 // when the ticket closes. A settled page change gives ONE selection haptic and
 // is reported (`onCategoryChange`), so « Partager » shares the category on
-// screen.
+// screen. The ticket may ask the paper to open on a given category
+// (`initialCategory`) when it comes back from a client profile.
+//
+// Client places are the only interactive places: the receipt passes
+// `onClientPress` to every podium, and the podium turns the places that carry
+// a client id into buttons (`InsightsPodium`).
 
 import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
@@ -87,6 +92,10 @@ interface BusinessInsightsReceiptProps {
   readonly onNext: () => void;
   /** The settled carousel category, after each real change. */
   readonly onCategoryChange?: (category: InsightsRankingKey) => void;
+  /** The category the carousel opens on; the first one when omitted. */
+  readonly initialCategory?: InsightsRankingKey;
+  /** Opens a client's profile from their podium place. Absent, no place is interactive. */
+  readonly onClientPress?: (clientId: string) => void;
 }
 
 export function BusinessInsightsReceipt({
@@ -100,10 +109,19 @@ export function BusinessInsightsReceipt({
   onPrevious,
   onNext,
   onCategoryChange,
+  initialCategory,
+  onClientPress,
 }: BusinessInsightsReceiptProps) {
   const reduceMotion = useReduceMotion();
   const carousel = useRef<ScrollView>(null);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(() =>
+    Math.max(
+      model.sections.findIndex((section) => section.key === initialCategory),
+      0,
+    ),
+  );
+  // The starting offset of the carousel: the page it opens on, once, at mount.
+  const [initialOffset] = useState(() => ({ x: page * width, y: 0 }));
   const pageCount = model.sections.length;
   const current = model.sections[page] ?? model.sections[0]!;
 
@@ -216,6 +234,7 @@ export function BusinessInsightsReceipt({
       <ReceiptTearLine style={styles.tearLine} />
 
       <ScrollView
+        contentOffset={initialOffset}
         decelerationRate="fast"
         horizontal
         onMomentumScrollEnd={onMomentumScrollEnd}
@@ -237,7 +256,11 @@ export function BusinessInsightsReceipt({
               style={[styles.page, { width }]}
               testID={`business-insights-page-${section.key}`}
             >
-              <InsightsPodium section={section} testID={`business-insights-podium-${section.key}`} />
+              <InsightsPodium
+                onClientPress={onClientPress}
+                section={section}
+                testID={`business-insights-podium-${section.key}`}
+              />
             </View>
           );
         })}
