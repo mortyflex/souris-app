@@ -34,3 +34,16 @@ export function openSourisDatabase(): SourisDatabase {
   native.execSync('PRAGMA foreign_keys = ON;');
   return wrapSqliteDatabase(native);
 }
+
+/**
+ * A private, in-memory SQLite database with the same connection settings —
+ * foreign keys ON — and NO file: every call opens a distinct `:memory:`
+ * database that disappears when its connection closes. The device database
+ * (`souris.db`) is never opened, read or written through it. Used by the
+ * developer Playground demo runtime only.
+ */
+export function openInMemorySourisDatabase(): SourisDatabase {
+  const native = openDatabaseSync(':memory:');
+  native.execSync('PRAGMA foreign_keys = ON;');
+  return wrapSqliteDatabase(native);
+}

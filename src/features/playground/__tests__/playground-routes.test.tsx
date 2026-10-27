@@ -31,6 +31,9 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 jest.mock('../availability', () => ({ isPlaygroundAvailable: jest.fn(() => false) }));
+jest.mock('../demo/session', () => ({
+  usePlaygroundDemoSession: () => ({ scenario: null, start: jest.fn(), reset: jest.fn(), exit: jest.fn() }),
+}));
 
 async function renderRoute(element: React.ReactElement) {
   const view = await render(element);

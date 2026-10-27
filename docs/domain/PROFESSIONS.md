@@ -76,6 +76,11 @@ through the explicit `ActivityAcceptance = 'every-profession'` of the setup form
 `comingSoonSelectable` opt-in of the cards. Its actions never create a Business: the availability of
 the real onboarding is unchanged by it, and a stored activity can never come from a preview.
 
+The Playground also explores the application for every profession of `PROFESSIONS` on a fictional
+in-memory dataset (`docs/product/PLAYGROUND.md`, Step B1). The demo Business carries the profession
+as its stored activity inside memory only; no Business is created or bound, and `isProfessionAvailable`
+is never consulted or changed by it.
+
 ---
 
 ## 5. Step 2 — the catalogue (October 2026)

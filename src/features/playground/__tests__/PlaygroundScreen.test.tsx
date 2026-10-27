@@ -28,6 +28,10 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 jest.mock('../availability', () => ({ isPlaygroundAvailable: jest.fn(() => true) }));
+const mockStart = jest.fn();
+jest.mock('../demo/session', () => ({
+  usePlaygroundDemoSession: () => ({ scenario: null, start: mockStart, reset: jest.fn(), exit: jest.fn() }),
+}));
 
 const press = (element: unknown) =>
   act(async () => {
@@ -44,6 +48,7 @@ beforeEach(() => {
   mockPush.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
+  mockStart.mockClear();
   mockCanGoBack = true;
   jest.mocked(isPlaygroundAvailable).mockReturnValue(true);
 });
@@ -89,6 +94,28 @@ describe('PlaygroundScreen', () => {
     expect(view.getByTestId('activity-NAILS').props.accessibilityState.selected).toBe(false);
     await press(view.getByTestId('playground-preview-onboarding'));
     expect(mockPush).toHaveBeenLastCalledWith('/playground/ESTHETICS');
+  });
+
+  it('explores the application of the chosen profession: a NEW demo session, then the demo group', async () => {
+    const view = await renderPlayground();
+    const explore = view.getByTestId('playground-explore-app');
+
+    expect(explore.props.accessibilityState.disabled).toBe(true);
+    expect(view.getByText('Explorer l’application')).toBeTruthy();
+    await press(explore);
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    await press(view.getByTestId('activity-ESTHETICS'));
+    expect(view.getByText('Explorer l’application Esthétique')).toBeTruthy();
+    await press(view.getByTestId('playground-explore-app'));
+    expect(mockStart).toHaveBeenCalledWith('ESTHETICS');
+    expect(mockPush).toHaveBeenCalledWith('/(auth)/(demo)/(tabs)/agenda');
+    expect(mockStart.mock.invocationCallOrder[0]!).toBeLessThan(mockPush.mock.invocationCallOrder[0]!);
+    // The announced professions are explorable here, and only here: nothing about their availability changed.
+    await press(view.getByTestId('activity-NAILS'));
+    await press(view.getByTestId('playground-explore-app'));
+    expect(mockStart).toHaveBeenLastCalledWith('NAILS');
   });
 
   it('leaves with the back button — to the signed-out entry when nothing is behind it', async () => {

@@ -83,6 +83,9 @@ Route groups (Account & Onboarding V1):
 src/app/(auth)/          index = Product Discovery (3 slides), sign-up, sign-in, verify-email — no session
                          playground/index, playground/[activityType] — the developer Playground
                          (development build on Supabase Staging ONLY; absent everywhere else)
+                         (demo)/ — the Playground demo group: the (app) operational routes it
+                         needs (tabs agenda · clientes · demo, appointments, clients, services,
+                         calendar blocks, estimations, sales/new placeholder) inside the demo runtime
 src/app/(onboarding)/    five-step business setup (one route)         — session, no Business
                          (starts at the primary activity: Discovery is owned by (auth))
 src/app/(app)/           tabs + every operational sheet route         — session + bound Business
@@ -123,8 +126,24 @@ profession — the announced ones included — without an account, a network req
 - The preview accepts every profession of `PROFESSIONS` through `ActivityAcceptance =
   'every-profession'` (`business-form.ts`); the product keeps the default,
   `'available-professions'`, so nothing changes in what a new Business may be created with.
-- Step A (October 2026) previews onboarding only. Not implemented: a simulated authenticated
-  session, seeded local data, fake appointments, clients, sales or statistics.
+- Step A (October 2026) previews onboarding only.
+- Step B1 (October 2026) adds « Explorer l’application »: the `(demo)` route group of `(auth)`
+  mounts the REAL operational screens inside `PlaygroundDemoRuntime`
+  (`features/playground/demo/`), which composes the same providers as `(app)/_layout.tsx` around a
+  private in-memory SQLite database (`openInMemorySourisDatabase`, a `:memory:` connection per
+  demo generation), an in-memory `LocalFiles`, no media remote, no communications gateway, business
+  access with enforcement disabled and no source, and the fictional demo Business. The root
+  `AuthProvider` stays as it is (signed out): nothing fakes a session, no Business is bound, the
+  cloud sync runner is not mounted, and the Supabase, RevenueCat and device-database modules are
+  never loaded by the runtime (its test mocks them to throw). The scenario — profession +
+  generation — lives in `PlaygroundDemoSessionProvider`, mounted by the `(auth)` layout; the runtime
+  is keyed by it, so start, reset and profession switch each open a fresh database seeded from the
+  deterministic fixtures (`features/playground/demo/scenarios/`), and leaving the group clears the
+  session. The group's paths are the `(app)` paths; Expo Router resolves a shared path to the
+  current group, so the real screens' pushes stay inside the demo. Product reference and the list
+  of what is interactive or deliberately unavailable: `docs/product/PLAYGROUND.md`.
+- Not implemented: a simulated authenticated session, the cash register, sales, products and
+  insights on demo data (Step B2), persisted demos.
 
 Route files should remain thin.
 
