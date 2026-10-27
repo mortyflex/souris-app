@@ -6,6 +6,11 @@
 // jargon, no separate consent flow, and « Non renseigné » is never treated
 // as consent. When the client accepts SMS but has no texting-capable
 // number, a concise informational line appears — it never blocks the form.
+//
+// Three labels on one line: the control takes the shared compact density
+// (6 pt sides, a 90 % auto-fit as a last resort) so « Non renseigné » stays
+// whole on a 375 pt phone — the regular 10 pt sides left it about 88 pt where
+// it needs about 97.
 
 import { StyleSheet, View } from 'react-native';
 
@@ -45,6 +50,7 @@ export function SmsConsentField({ value, phone, onChange }: SmsConsentFieldProps
           { value: 'OPTED_IN', label: SMS_CONSENT_OPTED_IN_LABEL, testID: 'sms-consent-opted-in' },
           { value: 'OPTED_OUT', label: SMS_CONSENT_OPTED_OUT_LABEL, testID: 'sms-consent-opted-out' },
         ]}
+        density="compact"
         stretch
         testID="sms-consent-field"
         value={value ?? 'UNKNOWN'}

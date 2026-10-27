@@ -96,7 +96,6 @@ function Host({ hasImage = false }: { readonly hasImage?: boolean }) {
         cameraTestID="client-camera"
         cameraTitle="Photo du client"
         hasImage={hasImage}
-        libraryLabel="Choisir dans Photos"
         onClose={() => setVisible(false)}
         onPickError={onPickError}
         onRemove={onRemove}
@@ -137,7 +136,7 @@ describe('PhotoSourceFlow', () => {
 
     await openSheet(view);
     expect(view.getByLabelText('Prendre une photo')).toBeTruthy();
-    expect(view.getByLabelText('Choisir dans Photos')).toBeTruthy();
+    expect(view.getByLabelText('Choisir dans la photothèque')).toBeTruthy();
     expect(view.queryByLabelText('Supprimer la photo')).toBeNull();
     expect(mockEnsureCameraAccess).not.toHaveBeenCalled();
     expect(mockPickPhotoFromLibrary).not.toHaveBeenCalled();
@@ -241,7 +240,7 @@ describe('PhotoSourceFlow', () => {
     const view = await render(<Host />);
     await openSheet(view);
 
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans Photos')));
+    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans la photothèque')));
     expect(onSelected).toHaveBeenCalledWith('file:///app/Caches/ImagePicker/pick.jpg');
     expect(mockEnsureCameraAccess).not.toHaveBeenCalled();
     await settleSheetTransition();
@@ -253,14 +252,14 @@ describe('PhotoSourceFlow', () => {
     const view = await render(<Host />);
     await openSheet(view);
 
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans Photos')));
+    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans la photothèque')));
     expect(onSelected).not.toHaveBeenCalled();
     expect(onPickError).not.toHaveBeenCalled();
     await settleSheetTransition();
 
     mockPickPhotoFromLibrary.mockResolvedValue({ status: 'error' });
     await openSheet(view);
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans Photos')));
+    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans la photothèque')));
     expect(onSelected).not.toHaveBeenCalled();
     expect(onPickError).toHaveBeenCalledTimes(1);
   });

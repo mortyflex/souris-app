@@ -49,7 +49,9 @@ interface ProductImageProps {
  */
 export const productImageHeights = {
   thumbnail: listThumbnail.size,
-  form: 200,
+  // The creation / editing media tile, trimmed from 200 so the form keeps its
+  // fields in view; still a wide image area, never the Client's square portrait.
+  form: 164,
   detail: 96,
 } as const satisfies Record<ProductImageVariant, number>;
 

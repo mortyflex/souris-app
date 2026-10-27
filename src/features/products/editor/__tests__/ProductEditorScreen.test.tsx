@@ -455,6 +455,8 @@ describe("ProductEditorScreen", () => {
     }
     // One media affordance, no explanatory paragraph.
     expect(view.getByTestId("product-photo-empty")).toBeTruthy();
+    // A wide media tile, trimmed from 200 pt so the fields stay in view.
+    expect(view.getByTestId("product-photo-empty")).toHaveStyle({ height: 164 });
     expect(view.getAllByLabelText("Ajouter une photo")).toHaveLength(1);
     expect(
       view.queryByText("Prenez une photo ou choisissez une image."),

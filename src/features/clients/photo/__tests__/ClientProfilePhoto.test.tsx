@@ -217,7 +217,7 @@ async function takePhoto(view: View) {
 
 async function chooseFromPhotos(view: View) {
   await openPhotoMenu(view);
-  await act(async () => fireEvent.press(view.getByLabelText('Choisir dans Photos')));
+  await act(async () => fireEvent.press(view.getByLabelText('Choisir dans la photothèque')));
   await settleSheetTransition();
 }
 
@@ -266,7 +266,7 @@ describe('Client photo from the Client Profile', () => {
 
     const sheet = within(view.getByTestId('client-photo-sheet'));
     expect(sheet.getByLabelText('Prendre une photo')).toBeTruthy();
-    expect(sheet.getByLabelText('Choisir dans Photos')).toBeTruthy();
+    expect(sheet.getByLabelText('Choisir dans la photothèque')).toBeTruthy();
     expect(sheet.getByText('Annuler')).toBeTruthy();
     expect(sheet.queryByLabelText('Supprimer la photo')).toBeNull();
     expect(mockEnsureCameraAccess).not.toHaveBeenCalled();
@@ -337,7 +337,7 @@ describe('Client photo from the Client Profile', () => {
     remote.failUploads = true;
     await openPhotoMenu(view);
     expect(view.getByLabelText('Prendre une nouvelle photo')).toBeTruthy();
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans Photos')));
+    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans la photothèque')));
     await settleSheetTransition();
 
     await waitFor(() => expect(view.getByText('Impossible d’enregistrer la photo.')).toBeTruthy());

@@ -785,12 +785,12 @@ describe('HomeScreen', () => {
 
   it('opens the shared client creation form from « Client »', async () => {
     const view = await renderHome(seededDatabase());
-    expect(view.queryByRole('header', { name: 'Nouveau client' })).toBeNull();
+    expect(view.queryByRole('header', { name: 'Ajouter un client' })).toBeNull();
 
     await act(async () => fireEvent.press(view.getByTestId('home-new-client')));
     await settleSheetTransition();
 
-    expect(view.getByRole('header', { name: 'Nouveau client' })).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Ajouter un client' })).toBeTruthy();
     expect(mockPush).not.toHaveBeenCalled();
   });
 

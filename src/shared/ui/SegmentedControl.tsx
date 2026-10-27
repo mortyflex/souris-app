@@ -17,8 +17,8 @@
 // after its label (Rendez-vous 20 | Produits achetés 8) and spoken with it;
 // counts above 999 read `999+` so the capsule never breaks.
 //
-// `density="compact"` (opt-in, the client import review's three counted
-// filters) trims the option's horizontal padding, the label → count gap and
+// `density="compact"` (opt-in: the client import review's three counted
+// filters, the Client form's three-label SMS consent) trims the option's horizontal padding, the label → count gap and
 // the count pill's padding, so three counted labels fit a phone width on one
 // line; as a last resort only (3-digit counts on the narrowest phones) the
 // label may scale down to 90 %. Every other caller keeps the regular density.

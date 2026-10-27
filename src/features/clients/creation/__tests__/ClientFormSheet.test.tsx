@@ -5,7 +5,7 @@
 // resolve safely, and the value survives save → reopen.
 
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { ClientSessionProvider, useClientSession } from '../../session/ClientSessionProvider';
 import { ClientFormSheet } from '../ClientFormSheet';
@@ -103,7 +103,7 @@ describe('ClientFormSheet', () => {
 
     // §30 editing header: « Annuler » leading, one centered title, no eyebrow.
     expect(view.queryByText('NOUVEAU CLIENT')).toBeNull();
-    expect(view.getByRole('header', { name: 'Nouveau client' })).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Ajouter un client' })).toBeTruthy();
     expect(view.getByLabelText('Annuler la création')).toBeTruthy();
     expect(view.getAllByText('Annuler')).toHaveLength(1);
     expect(view.queryByText('Fermer')).toBeNull();
@@ -360,6 +360,23 @@ describe('ClientFormSheet', () => {
     expect(submitted).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'client-agenda-lea', firstName: 'Léana', birthday: { month: 10, day: 12 } }),
     );
+  });
+
+  it('keeps the three SMS labels whole on a phone width: the compact density, never a smaller control', async () => {
+    const view = await renderSheet('create');
+
+    for (const label of ['Non renseigné', 'Autorisés', 'Refusés']) {
+      const text = view.getByText(label);
+      expect(text.props.numberOfLines).toBe(1);
+      expect(text.props.adjustsFontSizeToFit).toBe(true);
+      expect(text.props.minimumFontScale).toBe(0.9);
+    }
+    // 6 pt sides instead of 10, each option an equal third of the full width.
+    expect(StyleSheet.flatten(view.getByTestId('sms-consent-unknown').props.style)).toMatchObject({
+      flex: 1,
+      paddingHorizontal: 6,
+    });
+    expect(view.getByTestId('sms-consent-field')).toHaveStyle({ alignSelf: 'stretch' });
   });
 
   it('offers SMS promotionnels with « Non renseigné » selected by default — a created Client stays UNKNOWN', async () => {

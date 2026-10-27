@@ -1,12 +1,13 @@
 // BeautIzzy — Client photo control (Client Profile)
 //
-// The validated portrait ClientAvatar, made editable in place: the whole
-// frame is the button, with a small camera badge on its bottom-right corner.
-// It opens the SHARED photo source flow (shared/ui/PhotoSourceFlow.tsx — the
-// same sheet, camera permission handling and camera as Product photos):
+// The validated portrait ClientAvatar, made editable in place: the shared
+// ClientPhotoFrame (the whole frame is the button, with a small camera badge
+// on its bottom-right corner). It opens the SHARED photo source flow
+// (shared/ui/PhotoSourceFlow.tsx — the same sheet, camera permission handling
+// and camera as Product photos):
 //
-//   no photo   Prendre une photo · Choisir dans Photos · Annuler
-//   photo      Prendre une nouvelle photo · Choisir dans Photos ·
+//   no photo   Prendre une photo · Choisir dans la photothèque · Annuler
+//   photo      Prendre une nouvelle photo · Choisir dans la photothèque ·
 //              Supprimer la photo · Annuler
 //
 // A chosen photo is normalized (client-photo-processing.ts), shown at once as
@@ -18,13 +19,10 @@
 // for no confirmation.
 
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
 
 import { getClientDisplayName, type Client } from '@/domain/clients';
 import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
-import { ClientAvatar } from '@/features/clients/avatar/ClientAvatar';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { useBusinessMediaRemote } from '@/providers/BusinessMediaProvider';
 import { usePersistence } from '@/providers/PersistenceProvider';
@@ -32,15 +30,11 @@ import { haptics } from '@/shared/lib/haptics';
 import { createUuidV4 } from '@/shared/lib/uuid';
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
 import { PhotoSourceFlow } from '@/shared/ui/PhotoSourceFlow';
-import { interaction, nativeShadows, radii, semanticColors } from '@/shared/ui/theme';
 
 import { prepareClientPhoto } from './client-photo-processing';
+import { ClientPhotoFrame } from './ClientPhotoFrame';
 import { discardTemporaryPhoto, removeClientPhoto, saveClientPhoto } from './client-photo-storage';
 import { useClientPhotoUri } from './use-client-photo-uri';
-
-const BADGE_SIZE = 32;
-/** How far the badge sits outside the frame's corner, so it covers little of the portrait. */
-const BADGE_OFFSET = -6;
 
 interface ClientPhotoControlProps {
   readonly client: Client;
@@ -106,49 +100,22 @@ export function ClientPhotoControl({ client, size }: ClientPhotoControlProps) {
 
   return (
     <>
-      <Pressable
+      <ClientPhotoFrame
         accessibilityHint={hasPhoto ? 'Ouvre les options de la photo' : undefined}
         accessibilityLabel={hasPhoto ? `Photo de ${displayName}` : `Ajouter une photo pour ${displayName}`}
-        accessibilityRole="button"
-        accessibilityState={{ busy, disabled: busy }}
-        disabled={busy}
+        busy={busy}
+        client={client}
         onPress={() => setSourceVisible(true)}
-        style={({ pressed }) => [
-          { height: size, width: size },
-          pressed && styles.pressed,
-        ]}
-        testID="client-photo-button"
-      >
-        <ClientAvatar
-          accessible={false}
-          client={client}
-          photoUri={previewUri ?? storedUri}
-          shape="portrait"
-          size={size}
-        />
-        <View pointerEvents="none" style={styles.badge} testID="client-photo-badge">
-          {busy ? (
-            <ActivityIndicator
-              color={semanticColors.accent}
-              size="small"
-              testID="client-photo-busy"
-            />
-          ) : (
-            <SymbolView
-              name={{ ios: 'camera.fill', android: 'photo_camera' }}
-              size={15}
-              tintColor={semanticColors.accent}
-            />
-          )}
-        </View>
-      </Pressable>
+        photoUri={previewUri ?? storedUri}
+        size={size}
+        testID="client-photo"
+      />
 
       <PhotoSourceFlow
         cameraHint="Cadrez le visage au centre"
         cameraTestID="client-camera"
         cameraTitle="Photo du client"
         hasImage={client.photoPath !== undefined}
-        libraryLabel="Choisir dans Photos"
         onClose={() => setSourceVisible(false)}
         onPickError={() => setFailed(true)}
         onRemove={removePhoto}
@@ -169,21 +136,3 @@ export function ClientPhotoControl({ client, size }: ClientPhotoControlProps) {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  pressed: { opacity: interaction.pressedOpacity },
-  badge: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceElevated,
-    borderColor: semanticColors.borderLavender,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    bottom: BADGE_OFFSET,
-    height: BADGE_SIZE,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: BADGE_OFFSET,
-    width: BADGE_SIZE,
-    ...nativeShadows.raised,
-  },
-});

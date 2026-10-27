@@ -336,9 +336,11 @@ Extends §11.
   keeps its 52 px thumbnail and row height. Form and details rest on the `surfaceMedia` lavender
   (lav200), dense enough for the white contour to read; the thumbnail keeps the quiet lav050.
 - In the Product form the image area is the interaction. Without a photo it is one soft lavender
-  media tile with the camera symbol and `Ajouter une photo`; with a photo it shows the sticker with a
-  small `Modifier` pill. Tapping opens a compact bottom sheet (`Photo du produit`: camera, library,
-  and remove when a photo exists, plus `Annuler`). No explanatory paragraph, no second CTA.
+  media tile (full width, 164 pt — trimmed from 200 so the fields stay in view) with the camera
+  symbol and `Ajouter une photo`; with a photo it shows the sticker with a small `Modifier` pill.
+  Tapping opens a compact bottom sheet (`Photo du produit` as its one heading, no eyebrow: camera,
+  `Choisir dans la photothèque`, and remove when a photo exists, plus `Annuler`). No explanatory
+  paragraph, no second CTA. A wide image area for a product; the Client keeps a square portrait.
 - `Prendre une photo` dismisses the source sheet first, then presents a dedicated Product camera in
   its own native large sheet (iOS `pageSheet`, full screen on Android): navy surface, close button,
   a preview that fills the available height with nothing drawn over it, `Placez le produit au
@@ -677,6 +679,22 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
   line break, autocorrect on). The Client form ends with a quiet optional `Notes` field; the
   Client Profile shows a `Notes` section (elevated surface, `body` text, selectable, line breaks
   preserved, never truncated) only when a note exists. Notes never appear in directory rows.
+- **Client photo at creation** (`ClientPhotoField` on the shared `ClientPhotoFrame`) — « Ajouter un
+  client » opens on the Profile portrait frame at 112 pt (the Profile keeps 80 pt; the badge grows
+  at half the frame's rate: 38 pt, 18 pt glyph, 7 pt outside the corner), centred above the
+  fields, initials following the typed name, the same photo sheet. The draft is
+  previewed, replaceable and removable before « Ajouter le client »; while the photo is stored the
+  action reads « Ajout du client… » and the sheet is locked. A photo that cannot be stored never
+  refuses the Client: « Impossible d’enregistrer la photo. — Le client a bien été ajouté. » once,
+  then the Profile. « Modifier le client » shows no photo field: the Profile owns the photo.
+- **Photo source sheet** (`PhotoSourceSheet`, Client and Product photos) — one heading only
+  (« Photo du client » / « Photo du produit », the former « PHOTO » eyebrow removed, `spacing.base`
+  above the title), the same rows everywhere: « Prendre une photo » / « Prendre une nouvelle
+  photo », « Choisir dans la photothèque » (`PHOTO_LIBRARY_LABEL`), « Supprimer la photo » when a
+  photo exists, « Annuler ».
+- **SMS promotionnels** (`SmsConsentField`) — the three-label `SegmentedControl` (« Non renseigné »
+  / « Autorisés » / « Refusés ») takes the compact density so the first label stays whole on a
+  375 pt phone; semantics, default and colours unchanged.
 - **Stock stepper** (`StockStepper`) — Product stock is chosen with a `[−] n [+]` control
   (0–30, hold to repeat) instead of a text field. A legacy quantity above 30 is shown exactly and
   can only be lowered one unit at a time; saving unrelated fields never clamps it.
@@ -1982,8 +2000,8 @@ that wording. Supersedes every feminine Client quote of the earlier sections.
 - **The directory** — the tab and its screen title read **Clientèle**. The route stays
   `(tabs)/clientes` and the trigger `name="clientes"`: technical identifiers are not copy.
 - **One person** — the natural masculine form of « client », never `client·e` nor
-  `cliente/client`: « Ajouter un client », « Nouveau client » (form title), « Ajouter le client »
-  (form confirmation), « Modifier le client », « Fiche client » (profile title, form backdrop),
+  `cliente/client`: « Ajouter un client » (directory action and form title, like « Ajouter un produit »),
+  « Ajouter le client » (form confirmation), « Modifier le client », « Fiche client » (profile title, form backdrop),
   « Rechercher un client », « Choisir un client », « Changer de client », « Aucun client »,
   « Aucun client trouvé », « Aucun client actif », « Client introuvable », « Ce client n'existe
   plus. », « Archiver le client », « Réactiver le client », « Photo du client », « Client inconnu ».
@@ -2104,7 +2122,7 @@ for every sheet, and the « no blur view » line of §21 still governs the light
 - **Opt-in only** — `material="glass"` on `BottomSheet` (`SheetPresentation`) or `SheetScreen
   fit="content"`. The default is `satin`.
 - **The two pilot sheets**:
-  1. the Client form (« Nouveau client » / « Modifier le client », `ClientFormSheet`) — a frequent
+  1. the Client form (« Ajouter un client » / « Modifier le client », `ClientFormSheet`) — a frequent
      editing drawer, opened from Clientèle, the Client profile and, stacked, from inside the
      Appointment creation / editing sheets, where the simulator confirmed the glass;
   2. the Prestation sheet (`ServiceEditorScreen`: type chooser, form, details) — a content-fit

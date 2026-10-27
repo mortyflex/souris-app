@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 
-import { PhotoSourceSheet } from '../PhotoSourceSheet';
+import { PHOTO_LIBRARY_LABEL, PhotoSourceSheet } from '../PhotoSourceSheet';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
 
@@ -16,7 +16,6 @@ jest.mock('react-native-safe-area-context', () => {
 async function renderSheet(hasImage: boolean) {
   const props = {
     hasImage,
-    libraryLabel: 'Choisir dans Photos',
     onChooseCamera: jest.fn(),
     onChooseLibrary: jest.fn(),
     onClose: jest.fn(),
@@ -32,14 +31,18 @@ describe('PhotoSourceSheet', () => {
   it('lists camera and library without removal when there is no image', async () => {
     const { view, props } = await renderSheet(false);
 
-    expect(view.getByText('Audrey Tarmis')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Audrey Tarmis' })).toBeTruthy();
+    // One heading only: no « PHOTO » eyebrow above it.
+    expect(view.queryByText('PHOTO')).toBeNull();
     expect(view.getByTestId('client-photo-sheet')).toBeTruthy();
+    // The library row reads the shared wording when the caller passes none.
+    expect(view.getByLabelText(PHOTO_LIBRARY_LABEL)).toBeTruthy();
     expect(view.getAllByTestId('bottom-sheet-scrim')).toHaveLength(1);
     expect(view.queryByLabelText('Supprimer la photo')).toBeNull();
 
     await act(async () => fireEvent.press(view.getByLabelText('Prendre une photo')));
     expect(props.onChooseCamera).toHaveBeenCalledTimes(1);
-    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans Photos')));
+    await act(async () => fireEvent.press(view.getByLabelText('Choisir dans la photothèque')));
     expect(props.onChooseLibrary).toHaveBeenCalledTimes(1);
     await act(async () => fireEvent.press(view.getByText('Annuler')));
     expect(props.onClose).toHaveBeenCalledTimes(1);
@@ -50,7 +53,7 @@ describe('PhotoSourceSheet', () => {
 
     expect(view.getByLabelText('Prendre une nouvelle photo')).toBeTruthy();
     expect(view.queryByLabelText('Prendre une photo')).toBeNull();
-    expect(view.getByLabelText('Choisir dans Photos')).toBeTruthy();
+    expect(view.getByLabelText('Choisir dans la photothèque')).toBeTruthy();
     await act(async () => fireEvent.press(view.getByLabelText('Supprimer la photo')));
     expect(props.onRemove).toHaveBeenCalledTimes(1);
   });

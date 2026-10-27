@@ -1,10 +1,13 @@
 // BeautIzzy — photo source sheet
 //
-// Compact action list on the shared BottomSheet: camera, library, and remove
-// when a photo exists. It never touches business state, never asks for a
-// permission and never presents the camera itself — PhotoSourceFlow opens
-// the camera only after this sheet has been fully dismissed, so one modal is
-// active at a time. Wording of the title and library row is caller-owned.
+// Compact action list on the shared BottomSheet: ONE heading (« Photo du
+// client », « Photo du produit » — no eyebrow above it), then camera, library,
+// and remove when a photo exists, then « Annuler ». It never touches business
+// state, never asks for a permission and never presents the camera itself —
+// PhotoSourceFlow opens the camera only after this sheet has been fully
+// dismissed, so one modal is active at a time. The title is caller-owned; the
+// rows read the same everywhere (PHOTO_LIBRARY_LABEL), though a caller may
+// still pass its own `libraryLabel`.
 
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
@@ -15,11 +18,15 @@ import { BottomSheet } from '@/shared/ui/BottomSheet';
 import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
+/** The ONE wording of the library row, shared by Client and Product photos. */
+export const PHOTO_LIBRARY_LABEL = 'Choisir dans la photothèque';
+
 interface PhotoSourceSheetProps {
   readonly visible: boolean;
   readonly title: string;
   readonly hasImage: boolean;
-  readonly libraryLabel: string;
+  /** Defaults to PHOTO_LIBRARY_LABEL. */
+  readonly libraryLabel?: string;
   readonly onChooseCamera: () => void;
   readonly onChooseLibrary: () => void;
   readonly onRemove: () => void;
@@ -33,7 +40,7 @@ export function PhotoSourceSheet({
   visible,
   title,
   hasImage,
-  libraryLabel,
+  libraryLabel = PHOTO_LIBRARY_LABEL,
   onChooseCamera,
   onChooseLibrary,
   onRemove,
@@ -44,7 +51,7 @@ export function PhotoSourceSheet({
   return (
     <BottomSheet
       backdropLabel="Fermer"
-      header={<SheetHeader eyebrow="PHOTO" title={title} />}
+      header={<SheetHeader style={styles.header} title={title} />}
       onClose={onClose}
       onDismissed={onDismissed}
       testID={`${testID}-sheet`}
@@ -113,6 +120,9 @@ function SourceOption({ icon, label, destructive = false, onPress, testID }: Sou
 }
 
 const styles = StyleSheet.create({
+  // Without an eyebrow the title alone opens the sheet: a touch more room
+  // above it keeps the heading clear of the grabber, and the sheet stays compact.
+  header: { paddingTop: spacing.base },
   options: { gap: spacing.xs, paddingBottom: spacing.base },
   option: {
     alignItems: 'center',

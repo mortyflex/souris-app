@@ -227,7 +227,7 @@ One optional portrait per Client, taken or chosen in BeautIzzy
   the photo; a replaced object is removed once the new path is committed;
 - the Client Profile avatar (the 80 pt portrait `ClientAvatar`) is the
   control: a small camera badge, one tap opens the shared photo sheet —
-  `Prendre une photo` / `Prendre une nouvelle photo`, `Choisir dans Photos`,
+  `Prendre une photo` / `Prendre une nouvelle photo`, `Choisir dans la photothèque`,
   `Supprimer la photo` when a photo exists, `Annuler`. Camera permission is
   asked on `Prendre une photo` only (shared with Product photos,
   `src/shared/lib/photo-acquisition.ts`);
@@ -244,9 +244,19 @@ One optional portrait per Client, taken or chosen in BeautIzzy
 - each device keeps a cached copy under `<documents>/client-photos/`,
   derived from the path: shown offline once seen, downloaded once on
   another device, initials whenever it cannot be had;
+- « Ajouter un client » offers the photo too (`ClientPhotoField`, the same
+  frame, sheet and normalization): the prepared draft is a temporary local
+  file, previewed, replaced or removed freely, and stored only AFTER the
+  Client row is written — Client first, then the shared upload → commit
+  lifecycle on that Client. A draft that cannot be stored (offline, cloud
+  storage unavailable, a failed upload) never loses the Client: it is added
+  without a photo, the sheet says so once (`Le client a bien été ajouté.`),
+  and the Profile control lets the photo be added later. Cancelling the
+  sheet, replacing or removing the draft deletes the temporary file; the
+  edit form never touches the photo;
 - identity edits, archive and restore never touch the photo; photos are
   never imported from legacy data (§3) and appear only on the Client Profile
-  (the directory keeps its initials).
+  and in « Ajouter un client » (the directory keeps its initials).
 
 ---
 

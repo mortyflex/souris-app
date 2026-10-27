@@ -14,7 +14,7 @@
 //     → blocked  → the sheet slides down → « Accès à l’appareil photo »
 //                  (Ouvrir les réglages / Annuler)
 //
-//   « Choisir dans Photos » → the system picker over the sheet → the sheet
+//   « Choisir dans la photothèque » → the system picker over the sheet → the sheet
 //     closes → `onSelected(uri)`, or nothing when cancelled
 //
 //   « Supprimer la photo » → the sheet closes → `onRemove()`
@@ -44,7 +44,8 @@ interface PhotoSourceFlowProps {
   readonly hasImage: boolean;
   /** Source sheet title, e.g. « Photo du produit ». */
   readonly title: string;
-  readonly libraryLabel: string;
+  /** Defaults to the shared PHOTO_LIBRARY_LABEL. */
+  readonly libraryLabel?: string;
   readonly cameraTitle: string;
   readonly cameraHint: string;
   /** A captured or picked photo, as a local file URI. */

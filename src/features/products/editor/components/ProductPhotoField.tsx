@@ -138,7 +138,6 @@ export function ProductPhotoField({
         cameraTestID="product-camera"
         cameraTitle="Photo du produit"
         hasImage={Boolean(imageUri)}
-        libraryLabel="Choisir dans la photothèque"
         onClose={() => setSourceVisible(false)}
         onPickError={showPickError}
         onRemove={removePhoto}
