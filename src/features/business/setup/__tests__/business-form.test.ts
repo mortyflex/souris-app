@@ -2,6 +2,7 @@ import {
   ACTIVITY_UNAVAILABLE_ERROR,
   buildBusinessSetupInput,
   EMPTY_BUSINESS_FORM,
+  isActivityAccepted,
   isValidBusinessForm,
   validateBusinessForm,
 } from '../business-form';
@@ -39,5 +40,35 @@ describe('business form', () => {
       }),
     ).toEqual({ ownerFirstName: 'Léa', name: 'Maison Léa', activityType: 'HAIRDRESSING', phone: '06 12 34 56 78' });
     expect(() => buildBusinessSetupInput(EMPTY_BUSINESS_FORM)).toThrow();
+  });
+});
+
+describe('business form — activity acceptance', () => {
+  const draft = { ...EMPTY_BUSINESS_FORM, ownerFirstName: 'Sofia', name: 'Nails by Sofia' };
+
+  it('defaults to the product rule: the available professions only', () => {
+    expect(isActivityAccepted('HAIRDRESSING')).toBe(true);
+    expect(isActivityAccepted('NAILS')).toBe(false);
+    expect(isActivityAccepted('HAIRDRESSING', 'available-professions')).toBe(true);
+    expect(isValidBusinessForm({ ...draft, activityType: 'NAILS' })).toBe(false);
+    expect(() => buildBusinessSetupInput({ ...draft, activityType: 'NAILS' })).toThrow(/not available/);
+  });
+
+  it('accepts every profession of PROFESSIONS for a preview, and still nothing onboarding never offers', () => {
+    for (const activityType of ['HAIRDRESSING', 'NAILS', 'ESTHETICS'] as const) {
+      const values = { ...draft, activityType };
+      expect(isActivityAccepted(activityType, 'every-profession')).toBe(true);
+      expect(validateBusinessForm(values, 'every-profession')).toEqual({});
+      expect(isValidBusinessForm(values, 'every-profession')).toBe(true);
+      expect(buildBusinessSetupInput(values, 'every-profession').activityType).toBe(activityType);
+      // The product rule is untouched by the preview acceptance.
+      if (activityType !== 'HAIRDRESSING') expect(isValidBusinessForm(values)).toBe(false);
+    }
+    for (const activityType of ['BARBER', 'LASHES_BROWS', 'MAKEUP', 'WELLNESS', 'OTHER'] as const) {
+      const values = { ...draft, activityType };
+      expect(isActivityAccepted(activityType, 'every-profession')).toBe(false);
+      expect(validateBusinessForm(values, 'every-profession')).toEqual({ activityType: ACTIVITY_UNAVAILABLE_ERROR });
+      expect(() => buildBusinessSetupInput(values, 'every-profession')).toThrow(/not available/);
+    }
   });
 });

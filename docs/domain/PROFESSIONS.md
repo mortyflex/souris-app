@@ -70,6 +70,12 @@ French label, one short supporting line, the pictogram, and either the selection
 to assistive technology; pressing it selects nothing. `Continuer` stays disabled until an available
 profession is chosen. Design: `docs/design/DESIGN_OVERRIDES.md` §44.
 
+The developer Playground (`docs/architecture/ARCHITECTURE.md` §4, development builds on Staging only)
+previews the same five steps for EVERY profession of `PROFESSIONS`, the announced ones included,
+through the explicit `ActivityAcceptance = 'every-profession'` of the setup form and the
+`comingSoonSelectable` opt-in of the cards. Its actions never create a Business: the availability of
+the real onboarding is unchanged by it, and a stored activity can never come from a preview.
+
 ---
 
 ## 5. Step 2 — the catalogue (October 2026)

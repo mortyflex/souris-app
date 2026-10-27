@@ -1,8 +1,10 @@
 // BeautIzzy — Supabase configuration boundary
 //
-// The ONLY place that reads the Supabase environment. Expo inlines
+// The place that reads the Supabase environment for the CLIENT. Expo inlines
 // `process.env.EXPO_PUBLIC_*` at build time, so the two variables must be
-// referenced literally. Both values are public client configuration (they
+// referenced literally. (The developer Playground guard,
+// src/features/playground/availability.ts, also references the URL literally
+// for the same reason, and compares its project ref only.) Both values are public client configuration (they
 // ship inside the app); security comes from Auth + Row Level Security. The
 // service_role / secret key and the database password never enter the app.
 //

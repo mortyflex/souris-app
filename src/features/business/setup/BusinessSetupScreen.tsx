@@ -29,16 +29,31 @@
 // store, with fresh identities, once: only the kept ones, never for an
 // existing Business (which never mounts this screen).
 //
+// Two layers, one file:
+//
+//   BusinessSetupScreen   the route's screen: wires the FOUR effects of the
+//                         flow to the real session (`useBusinessSetupActions`:
+//                         the Business session, the communications gateway,
+//                         the Service store, the account email);
+//   BusinessSetupFlow     the five steps themselves — every piece of
+//                         presentation and step logic, with NO provider
+//                         dependency. It is what the development Playground
+//                         mounts with in-memory actions to preview the
+//                         onboarding of every profession, so the preview IS
+//                         the real onboarding and never a copy of it
+//                         (`src/features/playground`).
+//
 // When this task's follow-up adds the subscription gate, it slots in at root
 // routing after `enterCreatedBusiness`: nothing here anticipates it.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
-import type { BusinessProfile } from '@/domain/business';
+import type { BusinessActivityType, BusinessProfile, BusinessSetupInput } from '@/domain/business';
 import { isUsableCommunicationEmail } from '@/domain/communications';
 import { useAuth } from '@/features/auth/session/AuthProvider';
+import type { UpdateCommunicationPreferencesResult } from '@/features/communications/gateway';
 import { useCommunicationsGateway } from '@/features/communications/session/CommunicationsGatewayProvider';
 import { createServiceId, createServicePhaseId } from '@/features/services/editor/runtime-ids';
 import { runInTransaction } from '@/persistence/database';
@@ -53,13 +68,14 @@ import { radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { formatBusinessSessionFailure } from '../messages';
 import { formatBusinessActivityType } from '../presentation';
-import { useBusinessSession } from '../session/BusinessSessionProvider';
+import { useBusinessSession, type CreateBusinessOutcome } from '../session/BusinessSessionProvider';
 import { getActivityIcon } from './activity-options';
 import {
   buildBusinessSetupInput,
   EMPTY_BUSINESS_FORM,
   isValidBusinessForm,
   validateBusinessForm,
+  type ActivityAcceptance,
   type BusinessFormValues,
 } from './business-form';
 import { ActivityOptionList } from './components/ActivityOptionList';
@@ -74,21 +90,113 @@ import {
   previousOnboardingStep,
   type OnboardingStep,
 } from './onboarding-steps';
-import { buildStarterCatalog, getStarterServices } from './starter-services';
+import { buildStarterCatalog, getStarterServices, type StarterService } from './starter-services';
 
 const ACTIVATION_FAILURE_TITLE = 'Impossible d’activer les rappels pour le moment.';
 const ACTIVATION_FAILURE_BODY =
   'Votre activité a bien été créée, mais les rappels restent désactivés.';
 const STARTER_WRITE_FAILURE = 'Impossible d’enregistrer ces prestations pour le moment. Réessayez.';
 
-export function BusinessSetupScreen() {
+/**
+ * The FOUR effects of the five steps — everything that leaves the screen.
+ * The product binds them to the real session (`useBusinessSetupActions`);
+ * the development Playground binds them to memory. The flow never knows
+ * which: it calls them at the same moments, in the same order.
+ */
+export interface BusinessSetupActions {
+  /** The signed-in account's email: the prefilled, editable reminders Reply-To. */
+  readonly accountEmail?: string;
+  /** Step 3: creates the Business ONCE (deferred entry). The outcome is the session's. */
+  readonly createBusiness: (input: BusinessSetupInput) => Promise<CreateBusinessOutcome>;
+  /**
+   * Step 3, opt-in selected: saves the EMAIL reminder preference. Absent when
+   * no communications gateway exists (unconfigured Supabase): the step then
+   * shows the calm activation notice.
+   */
+  readonly activateReminders?: (
+    businessId: string,
+    replyToEmail: string,
+  ) => Promise<UpdateCommunicationPreferencesResult>;
+  /** Step 4: writes the kept starters for the Business and returns their count. Throws when the write fails. */
+  readonly writeStarterServices: (business: BusinessProfile, kept: readonly StarterService[]) => number;
+  /** Step 5: enters the created Business (the product), or leaves the preview (the Playground). */
+  readonly enterBusiness: (business: BusinessProfile) => void;
+}
+
+/** The real effects: the Business session, the communications gateway, the Service store, the account. */
+function useBusinessSetupActions(): BusinessSetupActions {
   const { createBusiness, enterCreatedBusiness } = useBusinessSession();
   const { state: auth } = useAuth();
   const { database, reloadSnapshot } = usePersistence();
   const communications = useCommunicationsGateway();
+  const accountEmail = auth.status === 'authenticated' ? auth.user.email : undefined;
+
+  return useMemo<BusinessSetupActions>(
+    () => ({
+      accountEmail,
+      createBusiness: (input) => createBusiness(input, { deferEntry: true }),
+      activateReminders: communications
+        ? (businessId, replyToEmail) =>
+            communications.updatePreferences(businessId, { emailRemindersEnabled: true, replyToEmail })
+        : undefined,
+      writeStarterServices: (business, kept) => {
+        const catalog = buildStarterCatalog(business.id, kept, {
+          createServiceId,
+          createPhaseId: createServicePhaseId,
+        });
+        // One transaction: either every kept prestation exists, or none does.
+        runInTransaction(database, () => {
+          for (const service of catalog) insertService(database, service);
+        });
+        // The (app) providers hydrate from the snapshot: it must know the new rows.
+        reloadSnapshot();
+        return catalog.length;
+      },
+      enterBusiness: enterCreatedBusiness,
+    }),
+    [accountEmail, communications, createBusiness, database, enterCreatedBusiness, reloadSnapshot],
+  );
+}
+
+/** The onboarding route: the five steps bound to the real session. */
+export function BusinessSetupScreen() {
+  const actions = useBusinessSetupActions();
+  return <BusinessSetupFlow actions={actions} />;
+}
+
+export interface BusinessSetupFlowProps {
+  readonly actions: BusinessSetupActions;
+  /**
+   * Which activities may be chosen and completed with: the available
+   * professions (the product, the default) — or every profession, for the
+   * development Playground preview, whose actions never create a Business.
+   */
+  readonly activityAcceptance?: ActivityAcceptance;
+  /** A preselected activity (the Playground preview); the product starts with none. */
+  readonly initialActivityType?: BusinessActivityType;
+  /** An uppercase eyebrow above every step title (the Playground: « Mode démonstration »). */
+  readonly eyebrow?: string;
+  /** A compact action at the end of every top bar (the Playground: « Quitter »). */
+  readonly topBarEnd?: ReactNode;
+  /** The title of the last step's action; the product enters the app with « Continuer ». */
+  readonly finishTitle?: string;
+}
+
+export function BusinessSetupFlow({
+  actions,
+  activityAcceptance = 'available-professions',
+  initialActivityType,
+  eyebrow,
+  topBarEnd,
+  finishTitle = 'Continuer',
+}: BusinessSetupFlowProps) {
+  const previewing = activityAcceptance === 'every-profession';
 
   const [step, setStep] = useState<OnboardingStep>('activity');
-  const [values, setValues] = useState<BusinessFormValues>(EMPTY_BUSINESS_FORM);
+  const [values, setValues] = useState<BusinessFormValues>(() => ({
+    ...EMPTY_BUSINESS_FORM,
+    activityType: initialActivityType ?? null,
+  }));
   // A required field shows its error only once the professional typed in it.
   const [edited, setEdited] = useState<{ readonly ownerFirstName: boolean; readonly name: boolean }>({
     ownerFirstName: false,
@@ -115,15 +223,13 @@ export function BusinessSetupScreen() {
   // Written exactly once: a second press, however it arrives, writes nothing.
   const startersWritten = useRef(false);
 
-  const accountEmail = auth.status === 'authenticated' ? auth.user.email : undefined;
-  const replyToValue = replyToDraft ?? accountEmail ?? '';
-  const errors = validateBusinessForm(values);
+  const replyToValue = replyToDraft ?? actions.accountEmail ?? '';
+  const errors = validateBusinessForm(values, activityAcceptance);
   const progress = getOnboardingProgress(step);
   const starters = useMemo(
     () => (createdBusiness ? getStarterServices(createdBusiness.activityType) : []),
     [createdBusiness],
   );
-
   const updateField = <Key extends keyof BusinessFormValues>(key: Key, value: BusinessFormValues[Key]) => {
     setValues((current) => ({ ...current, [key]: value }));
     if (key === 'ownerFirstName' || key === 'name') setEdited((current) => ({ ...current, [key]: true }));
@@ -150,7 +256,7 @@ export function BusinessSetupScreen() {
    */
   const ensureBusinessCreated = async (): Promise<BusinessProfile | undefined> => {
     if (createdBusiness) return createdBusiness;
-    const outcome = await createBusiness(buildBusinessSetupInput(values), { deferEntry: true });
+    const outcome = await actions.createBusiness(buildBusinessSetupInput(values, activityAcceptance));
     if (outcome.kind === 'created') {
       setCreatedBusiness(outcome.business);
       setSelectedStarterKeys(new Set(getStarterServices(outcome.business.activityType).map((starter) => starter.key)));
@@ -198,12 +304,7 @@ export function BusinessSetupScreen() {
       return;
     }
     try {
-      const result = communications
-        ? await communications.updatePreferences(business.id, {
-            emailRemindersEnabled: true,
-            replyToEmail: replyTo,
-          })
-        : undefined;
+      const result = actions.activateReminders ? await actions.activateReminders(business.id, replyTo) : undefined;
       setSubmitting(false);
       if (result?.status === 'UPDATED') {
         setActivationFailed(false);
@@ -251,18 +352,9 @@ export function BusinessSetupScreen() {
     setFailure(null);
     setSubmitting(true);
     try {
-      const catalog = buildStarterCatalog(createdBusiness.id, kept, {
-        createServiceId,
-        createPhaseId: createServicePhaseId,
-      });
-      // One transaction: either every kept prestation exists, or none does.
-      runInTransaction(database, () => {
-        for (const service of catalog) insertService(database, service);
-      });
+      const count = actions.writeStarterServices(createdBusiness, kept);
       startersWritten.current = true;
-      // The (app) providers hydrate from the snapshot: it must know the new rows.
-      reloadSnapshot();
-      setStarterServiceCount(catalog.length);
+      setStarterServiceCount(count);
       setSubmitting(false);
       setStep('complete');
     } catch {
@@ -283,7 +375,7 @@ export function BusinessSetupScreen() {
   const enterApp = () => {
     if (!createdBusiness) return;
     haptics.action();
-    enterCreatedBusiness(createdBusiness);
+    actions.enterBusiness(createdBusiness);
   };
 
   switch (step) {
@@ -298,14 +390,17 @@ export function BusinessSetupScreen() {
               title="Continuer"
             />
           }
+          eyebrow={eyebrow}
           illustration={onboardingIllustrations.activity}
           onBack={onBack}
           progress={progress}
           subtitle="Choisissez celle qui correspond le mieux à votre quotidien."
           testID="onboarding-activity"
           title="Quelle est votre activité principale ?"
+          topBarEnd={topBarEnd}
         >
           <ActivityOptionList
+            comingSoonSelectable={previewing}
             onSelect={(activityType) => {
               haptics.selection();
               updateField('activityType', activityType);
@@ -320,11 +415,13 @@ export function BusinessSetupScreen() {
         <DetailsStep
           edited={edited}
           errors={errors}
+          eyebrow={eyebrow}
           onBack={onBack}
           onContinue={advance}
           onChange={updateField}
           progress={progress}
-          valid={isValidBusinessForm(values)}
+          topBarEnd={topBarEnd}
+          valid={isValidBusinessForm(values, activityAcceptance)}
           values={values}
         />
       );
@@ -367,12 +464,14 @@ export function BusinessSetupScreen() {
               </>
             )
           }
+          eyebrow={eyebrow}
           illustration={onboardingIllustrations.reminders}
           onBack={onBack}
           progress={progress}
           subtitle="BeautIzzy peut rappeler automatiquement vos rendez-vous à vos clients pour vous éviter d’y penser."
           testID="onboarding-reminders"
           title="Moins d’oublis, plus de tranquillité"
+          topBarEnd={topBarEnd}
         >
           <ReminderOptionCard
             disabled={submitting || activationFailed}
@@ -466,11 +565,13 @@ export function BusinessSetupScreen() {
               )}
             </>
           }
+          eyebrow={eyebrow}
           illustration={onboardingIllustrations.services}
           progress={progress}
           subtitle="Nous vous proposons une base adaptée à votre activité. Vous pourrez tout modifier ensuite."
           testID="onboarding-services"
           title="Préparons vos premières prestations"
+          topBarEnd={topBarEnd}
         >
           {starters.length > 0 ? (
             <>
@@ -508,10 +609,13 @@ export function BusinessSetupScreen() {
       return (
         <CompleteStep
           activityType={createdBusiness?.activityType ?? values.activityType ?? 'OTHER'}
+          eyebrow={eyebrow}
+          finishTitle={finishTitle}
           onContinue={enterApp}
           progress={progress}
           remindersEnabled={remindersEnabled}
           starterServiceCount={starterServiceCount}
+          topBarEnd={topBarEnd}
         />
       );
   }
@@ -523,13 +627,26 @@ interface DetailsStepProps {
   readonly errors: ReturnType<typeof validateBusinessForm>;
   readonly valid: boolean;
   readonly progress: ReturnType<typeof getOnboardingProgress>;
+  readonly eyebrow?: string;
+  readonly topBarEnd?: ReactNode;
   readonly onBack?: () => void;
   readonly onChange: <Key extends keyof BusinessFormValues>(key: Key, value: BusinessFormValues[Key]) => void;
   readonly onContinue: () => void;
 }
 
 /** Step 2: the business details, with the chosen activity recalled as a read-only chip. */
-function DetailsStep({ values, edited, errors, valid, progress, onBack, onChange, onContinue }: DetailsStepProps) {
+function DetailsStep({
+  values,
+  edited,
+  errors,
+  valid,
+  progress,
+  eyebrow,
+  topBarEnd,
+  onBack,
+  onChange,
+  onContinue,
+}: DetailsStepProps) {
   const lastNameRef = useRef<TextInput>(null);
   const nameRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
@@ -537,6 +654,7 @@ function DetailsStep({ values, edited, errors, valid, progress, onBack, onChange
 
   return (
     <OnboardingStepLayout
+      eyebrow={eyebrow}
       footer={<AppButton disabled={!valid} onPress={onContinue} testID="continue-details" title="Continuer" />}
       illustration={onboardingIllustrations.details}
       onBack={onBack}
@@ -544,6 +662,7 @@ function DetailsStep({ values, edited, errors, valid, progress, onBack, onChange
       subtitle="Ces informations nous aideront à personnaliser votre espace BeautIzzy."
       testID="onboarding-details"
       title="Parlez-nous un peu de vous"
+      topBarEnd={topBarEnd}
     >
       {activityType !== null && (
         <View
@@ -629,11 +748,23 @@ interface CompleteStepProps {
   readonly remindersEnabled: boolean;
   readonly starterServiceCount: number;
   readonly progress: ReturnType<typeof getOnboardingProgress>;
+  readonly eyebrow?: string;
+  readonly topBarEnd?: ReactNode;
+  readonly finishTitle: string;
   readonly onContinue: () => void;
 }
 
 /** Step 5: the recap. ONE success haptic on its first appearance, never on a re-render. */
-function CompleteStep({ activityType, remindersEnabled, starterServiceCount, progress, onContinue }: CompleteStepProps) {
+function CompleteStep({
+  activityType,
+  remindersEnabled,
+  starterServiceCount,
+  progress,
+  eyebrow,
+  topBarEnd,
+  finishTitle,
+  onContinue,
+}: CompleteStepProps) {
   const celebrated = useRef(false);
   useEffect(() => {
     if (celebrated.current) return;
@@ -644,12 +775,14 @@ function CompleteStep({ activityType, remindersEnabled, starterServiceCount, pro
   return (
     <OnboardingStepLayout
       align="center"
-      footer={<AppButton onPress={onContinue} testID="enter-app" title="Continuer" />}
+      eyebrow={eyebrow}
+      footer={<AppButton onPress={onContinue} testID="enter-app" title={finishTitle} />}
       illustration={onboardingIllustrations.complete}
       progress={progress}
       subtitle="Tout est en place pour vous aider à gérer votre activité plus simplement."
       testID="onboarding-complete"
       title="Votre espace BeautIzzy est prêt ✨"
+      topBarEnd={topBarEnd}
     >
       <SetupRecap
         activityType={activityType}

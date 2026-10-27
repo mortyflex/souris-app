@@ -43,6 +43,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 
+import { isPlaygroundAvailable } from '@/features/playground/availability';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -85,6 +86,8 @@ export function DiscoveryScreen({ initialPage = 0 }: DiscoveryScreenProps) {
   // Set while a programmatic scroll travels: the offsets it passes are not the finger's.
   const travelling = useRef(false);
 
+  // The developer Playground (features/playground): a Staging development build only, nothing elsewhere.
+  const playgroundAvailable = isPlaygroundAvailable();
   const side = resolveDiscoveryIllustrationSide(height);
   const small = height <= DISCOVERY_SMALL_WINDOW_HEIGHT;
   const last = isLastDiscoveryPage(page);
@@ -132,6 +135,11 @@ export function DiscoveryScreen({ initialPage = 0 }: DiscoveryScreenProps) {
     router.push('/sign-in');
   };
 
+  const openPlayground = () => {
+    haptics.action();
+    router.push('/playground');
+  };
+
   const selectPage = (index: number) => {
     if (clampDiscoveryPage(index) === page) return;
     haptics.selection();
@@ -169,6 +177,15 @@ export function DiscoveryScreen({ initialPage = 0 }: DiscoveryScreenProps) {
           </View>
           <AppButton onPress={forward} testID="discovery-primary" title={getDiscoveryPrimaryTitle(page)} />
           <AppButton onPress={signIn} testID="discovery-sign-in" title={DISCOVERY_SIGN_IN_TITLE} variant="tertiary" />
+          {playgroundAvailable && (
+            <AppButton
+              accessibilityLabel="Playground développeur, mode démonstration"
+              onPress={openPlayground}
+              testID="discovery-playground"
+              title="Playground développeur"
+              variant="tertiary"
+            />
+          )}
         </>
       }
       onBack={page === 0 ? undefined : back}

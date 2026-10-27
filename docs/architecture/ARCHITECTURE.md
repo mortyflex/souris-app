@@ -81,6 +81,8 @@ Route groups (Account & Onboarding V1):
 
 ```text
 src/app/(auth)/          index = Product Discovery (3 slides), sign-up, sign-in, verify-email — no session
+                         playground/index, playground/[activityType] — the developer Playground
+                         (development build on Supabase Staging ONLY; absent everywhere else)
 src/app/(onboarding)/    five-step business setup (one route)         — session, no Business
                          (starts at the primary activity: Discovery is owned by (auth))
 src/app/(app)/           tabs + every operational sheet route         — session + bound Business
@@ -98,6 +100,31 @@ Material bottom navigation on Android) with four static triggers — Agenda, Cli
 Plus — wrapped in the BeautIzzy navigation theme (`src/providers/navigation-theme.ts`). Operational
 workflows are pushed from the `(app)` Stack above the tabs, so the bar shows only on the four
 main screens. See `docs/design/DESIGN_OVERRIDES.md` §18.
+
+## Developer Playground (development only)
+
+`src/features/playground` is an internal development utility that previews the onboarding of EVERY
+profession — the announced ones included — without an account, a network request or a write.
+
+- ONE fail-closed rule decides whether it exists in a bundle: `resolvePlaygroundAvailability` /
+  `isPlaygroundAvailable` (`features/playground/availability.ts`): a development bundle (`__DEV__`)
+  whose inlined `EXPO_PUBLIC_SUPABASE_URL` is the Staging project. A release build, the Production
+  project, an unconfigured or malformed URL are all unavailable. Both inputs are build-time facts.
+- The rule is enforced at every layer: the Discovery entry (« Playground développeur », a tertiary
+  action under the sign-in link), the `(auth)` layout (`Stack.Protected`), and each route, which
+  redirects to the signed-out entry otherwise; the screens render nothing when unavailable. The
+  route files `require` the screen modules inside a `__DEV__` branch, so release bundles drop them.
+- The preview IS the real onboarding: `BusinessSetupScreen` is split into `BusinessSetupFlow` (the
+  five steps, no provider dependency) and `BusinessSetupActions` (its four effects: create the
+  Business, activate reminders, write the starters, enter). The product binds the actions to the
+  session, the communications gateway and the Service store; the Playground binds them to memory
+  (`preview-actions.ts`). Nothing is persisted, synced, scheduled, purchased or requested, and the
+  preview state dies with its screen: every new scenario is a new mount.
+- The preview accepts every profession of `PROFESSIONS` through `ActivityAcceptance =
+  'every-profession'` (`business-form.ts`); the product keeps the default,
+  `'available-professions'`, so nothing changes in what a new Business may be created with.
+- Step A (October 2026) previews onboarding only. Not implemented: a simulated authenticated
+  session, seeded local data, fake appointments, clients, sales or statistics.
 
 Route files should remain thin.
 

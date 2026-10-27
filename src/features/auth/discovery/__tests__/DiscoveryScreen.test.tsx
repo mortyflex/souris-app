@@ -4,6 +4,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { Dimensions } from 'react-native';
 
 import DiscoveryRoute from '@/app/(auth)/index';
+import { isPlaygroundAvailable } from '@/features/playground/availability';
 import { haptics } from '@/shared/lib/haptics';
 import { semanticColors } from '@/shared/ui/theme';
 
@@ -19,6 +20,9 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+
+// The developer Playground entry: unavailable unless a test says otherwise (the real rule is tested in features/playground).
+jest.mock('@/features/playground/availability', () => ({ isPlaygroundAvailable: jest.fn(() => false) }));
 
 // The first-run frame fades its groups in with Reanimated; tests render it settled.
 jest.mock('react-native-reanimated', () =>
@@ -66,6 +70,7 @@ beforeEach(() => {
   mockPush.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
+  jest.mocked(isPlaygroundAvailable).mockReturnValue(false);
 });
 
 describe('DiscoveryScreen — the signed-out first-launch experience', () => {
@@ -231,5 +236,29 @@ describe('DiscoveryScreen — the signed-out first-launch experience', () => {
     await press(view.getByTestId('discovery-page-indicator-insights'));
     expect(selection).toHaveBeenCalledTimes(3);
     selection.mockRestore();
+  });
+});
+
+describe('DiscoveryScreen — the developer Playground entry', () => {
+  it('is absent unless the Playground is available', async () => {
+    const view = await renderDiscovery();
+    expect(view.queryByTestId('discovery-playground')).toBeNull();
+    expect(view.queryByText('Playground développeur')).toBeNull();
+  });
+
+  it('is a discreet tertiary action under the sign-in link in a Staging development build, and pushes the Playground', async () => {
+    jest.mocked(isPlaygroundAvailable).mockReturnValue(true);
+    const view = await renderDiscovery();
+
+    const entry = view.getByTestId('discovery-playground');
+    expect(view.getByText('Playground développeur')).toBeTruthy();
+    expect(entry.props.accessibilityLabel).toBe('Playground développeur, mode démonstration');
+    // The product actions are untouched.
+    expect(view.getByText('Continuer')).toBeTruthy();
+    expect(view.getByText(SIGN_IN)).toBeTruthy();
+
+    await press(entry);
+    expect(mockPush).toHaveBeenCalledWith('/playground');
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

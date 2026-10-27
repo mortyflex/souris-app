@@ -8,6 +8,11 @@
 // profession keeps its place but is NOT a choice: its card is disabled,
 // quieter, carries the badge instead of the mark, and announces both states
 // to assistive technology. Each card is a radio.
+//
+// `comingSoonSelectable` is the development Playground's opt-in ONLY: the
+// announced professions keep their badge but may be selected, so their
+// onboarding can be previewed. The product never passes it, and the
+// availability rule of the form (`business-form.ts`) is untouched by it.
 
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -23,15 +28,23 @@ interface ActivityOptionListProps {
   readonly value: BusinessActivityType | null;
   readonly onSelect: (activityType: BusinessActivityType) => void;
   readonly disabled?: boolean;
+  /** Development Playground only: a « Bientôt disponible » profession may be selected for a preview. */
+  readonly comingSoonSelectable?: boolean;
 }
 
-export function ActivityOptionList({ value, onSelect, disabled = false }: ActivityOptionListProps) {
+export function ActivityOptionList({
+  value,
+  onSelect,
+  disabled = false,
+  comingSoonSelectable = false,
+}: ActivityOptionListProps) {
   return (
     <View accessibilityRole="radiogroup" style={styles.list} testID="activity-options">
       {ACTIVITY_OPTIONS.map((option) => {
         const available = option.availability === 'AVAILABLE';
-        const selected = available && option.type === value;
-        const inactive = disabled || !available;
+        const selectable = available || comingSoonSelectable;
+        const selected = selectable && option.type === value;
+        const inactive = disabled || !selectable;
         return (
           <Pressable
             accessibilityHint={available ? undefined : 'Cette activité n’est pas encore disponible.'}
@@ -44,24 +57,24 @@ export function ActivityOptionList({ value, onSelect, disabled = false }: Activi
             style={({ pressed }) => [
               styles.card,
               selected && styles.cardSelected,
-              !available && styles.cardComingSoon,
+              !available && !selected && styles.cardComingSoon,
               pressed && styles.cardPressed,
             ]}
             testID={`activity-${option.type}`}
           >
-            <View style={[styles.glyph, selected && styles.glyphSelected, !available && styles.glyphComingSoon]}>
+            <View style={[styles.glyph, selected && styles.glyphSelected, !selectable && styles.glyphComingSoon]}>
               <SymbolView
                 name={option.icon}
                 size={20}
                 tintColor={
-                  selected ? semanticColors.onAccent : available ? semanticColors.accent : semanticColors.foregroundMuted
+                  selected ? semanticColors.onAccent : selectable ? semanticColors.accent : semanticColors.foregroundMuted
                 }
               />
             </View>
             <View style={styles.copy}>
               <AppText
                 numberOfLines={1}
-                style={selected ? styles.labelSelected : available ? styles.label : styles.labelComingSoon}
+                style={selected ? styles.labelSelected : selectable ? styles.label : styles.labelComingSoon}
                 variant="rowTitle"
               >
                 {option.label}
@@ -70,15 +83,14 @@ export function ActivityOptionList({ value, onSelect, disabled = false }: Activi
                 {option.description}
               </AppText>
             </View>
-            {available ? (
-              <SelectionCheck selected={selected} />
-            ) : (
+            {!available && (
               <View style={styles.badge} testID={`activity-${option.type}-coming-soon`}>
                 <AppText style={styles.badgeText} variant="chip">
                   {COMING_SOON_LABEL}
                 </AppText>
               </View>
             )}
+            {selectable && <SelectionCheck selected={selected} />}
           </Pressable>
         );
       })}
