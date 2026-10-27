@@ -8,9 +8,16 @@
 // « Brushing 2 » and « Brushing 3 » share one icon. Nothing is stored, and
 // no business rule ever depends on it.
 //
-// The FIRST matching family wins: « Coupe Brushing 1 » is a Coupe. An unknown
-// name falls back on its type — scissors for a Service, sparkles for a
-// Technique — so the icon area is never empty.
+// The table covers the professions BeautIzzy is built for — hairdressing
+// first (the validated Production catalogue, unchanged), then nail services,
+// hair removal, lashes & brows and body care — so a nail technician's « Pose
+// complète gel » or an esthetician's « Épilation jambes » is recognised the
+// same way a « Coupe » is. The Business activity is deliberately NOT read:
+// one name always gives one family, whatever the profession.
+//
+// The FIRST matching family wins: « Coupe Brushing 1 » is a Coupe, « Soin du
+// visage » is a Soin. An unknown name falls back on its type — scissors for a
+// Service, sparkles for a Technique — so the icon area is never empty.
 //
 // Colours are the validated category colours (`serviceCategoryColors`), keyed
 // by the domain type: violet for a Service, azure for a Technique.
@@ -28,6 +35,10 @@ export type PrestationFamily =
   | 'STYLING'
   | 'CUT'
   | 'BLOW_DRY'
+  | 'NAILS'
+  | 'HAIR_REMOVAL'
+  | 'LASHES_BROWS'
+  | 'BODY'
   | 'SERVICE_FALLBACK'
   | 'TECHNIQUE_FALLBACK';
 
@@ -42,11 +53,23 @@ const familyIcons = {
   CUT: { ios: 'scissors', android: 'content_cut' },
   // SF Symbols has no hair dryer: the blown air stands for the brushing.
   BLOW_DRY: { ios: 'wind', android: 'air' },
+  // The hand of the profession card (activity-options.ts), so a nail
+  // prestation is recognised with the same glyph from onboarding onwards.
+  NAILS: { ios: 'hand.raised', android: 'back_hand' },
+  // No wax strip in either symbol set: the leaf reads as smooth skin.
+  HAIR_REMOVAL: { ios: 'leaf', android: 'spa' },
+  LASHES_BROWS: { ios: 'eye', android: 'visibility' },
+  BODY: { ios: 'figure.mind.and.body', android: 'self_improvement' },
   SERVICE_FALLBACK: { ios: 'scissors', android: 'content_cut' },
   TECHNIQUE_FALLBACK: { ios: 'sparkles', android: 'auto_awesome' },
 } as const satisfies Record<PrestationFamily, PlatformSymbolName>;
 
-/** Ordered: the first family whose keyword starts a word of the name wins. */
+/**
+ * Ordered: the first family whose keyword starts a word of the name wins.
+ * The hairdressing families keep their original order and keywords; the
+ * other professions follow, so no existing hair prestation changes family.
+ * Keywords are compared after accent stripping (« épilation » → `epilation`).
+ */
 const familyKeywords: readonly (readonly [PrestationFamily, readonly string[]])[] = [
   ['EXTRA_DOSE', ['dose']],
   ['BALAYAGE', ['balayage', 'meche']],
@@ -56,6 +79,12 @@ const familyKeywords: readonly (readonly [PrestationFamily, readonly string[]])[
   ['STYLING', ['chignon', 'coiffage']],
   ['CUT', ['coupe']],
   ['BLOW_DRY', ['brushing']],
+  // « pose » alone is deliberately absent: it also starts hair wording
+  // (« Pose d'extensions »); the material or the nail itself is what tells.
+  ['NAILS', ['ongle', 'nail', 'gel', 'semi', 'remplissage', 'depose', 'manucure', 'pedicure', 'vernis', 'capsule', 'main', 'pied']],
+  ['HAIR_REMOVAL', ['epilation', 'cire']],
+  ['LASHES_BROWS', ['cil', 'sourcil', 'regard', 'rehaussement']],
+  ['BODY', ['massage', 'modelage', 'gommage', 'corps']],
 ];
 
 const fallbackFamilies: Record<ServiceType, PrestationFamily> = {

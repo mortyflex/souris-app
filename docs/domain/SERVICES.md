@@ -150,7 +150,12 @@ the neutral price `0` the professional sets afterwards; they sync like hand-made
 onboarding step is the eligibility boundary: there is NO « catalogue empty → seed » rule, so an
 existing Business (including one being restored on a new, temporarily empty device) never receives
 them. Types follow §3: a SERVICE is one staff-required phase; only work where the client genuinely
-waits with something in place is a TECHNIQUE (Application → Temps de pose → Finition).
+waits with something in place is a TECHNIQUE (Application → Temps de pose → Finition), whatever the
+profession: Coloration, Balayage, Patine and Soin for Coiffure, « Soin du visage » (the mask) for
+Esthétique. Several steps alone never make a Technique — every Onglerie starter (« Pose complète
+gel », « Remplissage gel », « Semi-permanent mains / pieds », « Dépose », « Nail art », « Réparation
+d’un ongle ») is one SERVICE duration. Presets stay short (at most eight), with 5-minute durations
+between 15 min and 2 h, and are only proposed for the profession the new Business chose.
 
 ---
 
@@ -211,4 +216,76 @@ Service form rules:
 
 ## 9. Non-Goals
 
-Not in this phase: persistence, categories, options/variants, discounts, packages, taxes, online-booking configuration, staff-specific pricing, service drag ordering.
+Not in this phase: categories, descriptions, options/variants, discounts, packages, taxes,
+online-booking configuration, staff-specific pricing, service drag ordering. §10 records the
+smallest safe follow-up for the three the multi-profession work may need.
+
+---
+
+## 10. One Catalogue for Every Profession
+
+The catalogue is generic in the data model and specific in the user experience
+(`docs/domain/PROFESSIONS.md`). ONE `Service` model, ONE `Prestations & tarifs` editor, ONE
+Services / Techniques taxonomy and ONE Appointment snapshot serve every profession; nothing reads
+the Business activity except the two presentation touches below.
+
+### 10.1 What the model already represents
+
+A free name, a price (≥ 0, decimals allowed), a single duration (SERVICE) or ordered phases
+(TECHNIQUE) and the active flag represent the three reference catalogues as they are:
+
+```text
+HAIRDRESSING   Coupe femme · Brushing · Coloration · Balayage · Patine
+NAILS          Pose complète gel · Remplissage gel · Semi-permanent mains · Semi-permanent pieds
+               Dépose · Nail art · Réparation d’un ongle
+ESTHETICS      Soin du visage · Épilation sourcils · Épilation jambes · Soin du corps · Beauté du regard
+```
+
+The professional names her prestations freely; no vocabulary is enforced and nothing is renamed.
+Appointment snapshots (`AppointmentItem`) keep working unchanged: they copy the name, type, price
+and phases at booking time, whatever the profession.
+
+### 10.2 Services vs Techniques across professions
+
+The distinction is about the CLIENT WAITING, never about hair colour: a TECHNIQUE is a prestation
+with a « Temps de pose » (colour, mask, tint…), a SERVICE is one duration during which the
+professional stays with the client. A multi-step prestation without unattended time — a gel set,
+a wax, a cut — is therefore a SERVICE, for every profession; the Technique chooser says so
+(« Plusieurs phases, dont un temps de pose. »). The pose requirement of §3 and §8 is unchanged:
+relaxing it (a Technique with no pose) would be a product decision, not a profession need. Category
+colours stay the validated violet (Service) / azure (Technique).
+
+### 10.3 The two profession-aware presentation touches
+
+- **Family pictogram** (`src/features/services/prestation-visual.ts`): the ordered keyword table
+  keeps every hairdressing family first and unchanged (Coupe, Brushing, Balayage, Couleur, Soin,
+  Chignon, Dose, Gloss), then recognises `NAILS` (ongle, nail, gel, semi, remplissage, dépose,
+  manucure, pédicure, vernis, capsule, main, pied — never « pose » alone, which also starts hair
+  wording), `HAIR_REMOVAL` (épilation, cire), `LASHES_BROWS` (cil, sourcil, regard, rehaussement) and
+  `BODY` (massage, modelage, gommage, corps). « Soin » stays the care family for every profession.
+  The name alone decides — the Business activity is never read — and the type fallbacks (scissors /
+  sparkles) are unchanged.
+- **Name placeholder** (`src/features/services/editor/name-placeholder.ts`): the empty « Nom »
+  field suggests an example of the Business activity (« Ex. Coupe », « Ex. Pose complète gel »,
+  « Ex. Soin du visage », one per stored activity). A hint only: never a default, a rule or a
+  stored value.
+
+### 10.4 Not represented yet — smallest safe follow-ups
+
+None of these is needed to represent the three reference catalogues; each needs a persisted field,
+so none is added speculatively. If a pilot requires one, the follow-up is the same shape every time:
+an additive, nullable local column (forward migration, `docs/architecture/PERSISTENCE.md`), the
+same nullable column remotely (hand-applied Supabase migration), the field in the `SERVICE` sync
+payload, then the editor.
+
+- **Free categories** — the catalogue has no user-defined category: the only grouping is the type
+  taxonomy (`buildCatalogSections`), plus search. Follow-up: `services.category TEXT NULL` (free
+  text, no table), grouped under the type sections when present.
+- **Description** — no optional description exists on `Service`. Follow-up:
+  `services.description TEXT NULL`, trimmed, blank = none (the `clients.notes` pattern), shown on
+  Prestation Details and in the editor only.
+- **Online-bookable** — no property says whether a prestation may be booked online (the future
+  nail pilot needs some bookable, some not). Follow-up for the online-booking MVP:
+  `services.online_bookable INTEGER NULL CHECK (0, 1)`, absent = NOT bookable (safe for every
+  existing record), one switch in the editor, read ONLY by the future availability layer
+  (`CLAUDE.md` §17) — never by manual scheduling.

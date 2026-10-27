@@ -72,6 +72,7 @@ import {
 
 import { TextField } from "@/shared/ui/TextField";
 import { SortablePhaseEditor } from "./components/SortablePhaseEditor";
+import { getServiceNamePlaceholder } from "./name-placeholder";
 import { createServiceId, createServicePhaseId } from "./runtime-ids";
 import {
   addServicePhase,
@@ -365,6 +366,7 @@ export function ServiceEditorScreen({
         <ServiceForm
           attempted={attempted}
           expandedPhaseId={expandedPhaseId}
+          namePlaceholder={getServiceNamePlaceholder(business.activityType)}
           validation={validation}
           values={values}
           onAddPhase={addPhase}
@@ -502,7 +504,7 @@ function ServiceKindPicker({
         type="SERVICE"
       />
       <KindChoice
-        description="Plusieurs phases, avec ou sans temps de pose."
+        description="Plusieurs phases, dont un temps de pose."
         icon={{ ios: "list.number", android: "format_list_numbered" }}
         onPress={() => onSelect("TECHNIQUE")}
         type="TECHNIQUE"
@@ -567,6 +569,8 @@ function KindChoice({
 
 interface ServiceFormProps {
   readonly values: ServiceFormValues;
+  /** The example of the empty « Nom » field — the Business activity's, never a default value. */
+  readonly namePlaceholder: string;
   readonly attempted: boolean;
   readonly validation: ReturnType<typeof validateServiceForm>;
   readonly expandedPhaseId: string | null;
@@ -589,6 +593,7 @@ interface ServiceFormProps {
 
 function ServiceForm({
   values,
+  namePlaceholder,
   attempted,
   validation,
   expandedPhaseId,
@@ -634,7 +639,7 @@ function ServiceForm({
           }
           label="Nom"
           onChangeText={onChangeName}
-          placeholder="Ex. Coupe"
+          placeholder={namePlaceholder}
           value={values.name}
         />
         <TextField

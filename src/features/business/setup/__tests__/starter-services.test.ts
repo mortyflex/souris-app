@@ -1,6 +1,11 @@
 import { BUSINESS_ACTIVITY_TYPES } from '@/domain/business';
 import { createServiceId, createServicePhaseId } from '@/features/services/editor/runtime-ids';
-import { PROCESSING_PHASE_NAME } from '@/features/services/editor/service-form';
+import {
+  buildServiceFromForm,
+  PROCESSING_PHASE_NAME,
+  toServiceFormValues,
+  validateServiceForm,
+} from '@/features/services/editor/service-form';
 import { isUuidV4 } from '@/shared/lib/uuid';
 
 import {
@@ -24,8 +29,22 @@ describe('starter services', () => {
       'Coupe homme',
       'Soin',
     ]);
-    expect(names('NAILS')).toEqual(['Semi-permanent', 'Pose complète', 'Remplissage', 'Dépose', 'Nail art']);
-    expect(names('ESTHETICS')).toEqual(['Soin visage', 'Épilation sourcils', 'Épilation jambes', 'Soin corps']);
+    expect(names('NAILS')).toEqual([
+      'Pose complète gel',
+      'Remplissage gel',
+      'Semi-permanent mains',
+      'Semi-permanent pieds',
+      'Dépose',
+      'Nail art',
+      'Réparation d’un ongle',
+    ]);
+    expect(names('ESTHETICS')).toEqual([
+      'Soin du visage',
+      'Épilation sourcils',
+      'Épilation jambes',
+      'Soin du corps',
+      'Beauté du regard',
+    ]);
     expect(names('LASHES_BROWS')).toEqual(['Rehaussement de cils', 'Teinture', 'Brow lift', 'Restructuration sourcils']);
     expect(names('MAKEUP')).toEqual(['Maquillage jour', 'Maquillage soirée', 'Maquillage mariée']);
     expect(names('BARBER')).toEqual(['Coupe', 'Taille de barbe', 'Coupe + barbe']);
@@ -61,7 +80,51 @@ describe('starter services', () => {
     // Only chemical / resting work is a Technique — a haircut never is.
     expect(getStarterServices('HAIRDRESSING').find((s) => s.name === 'Coloration')?.type).toBe('TECHNIQUE');
     expect(getStarterServices('HAIRDRESSING').find((s) => s.name === 'Coupe femme')?.type).toBe('SERVICE');
+    // Nail work never leaves the client waiting; a facial does (the mask).
     expect(getStarterServices('NAILS').every((s) => s.type === 'SERVICE')).toBe(true);
+    expect(getStarterServices('ESTHETICS').find((s) => s.name === 'Soin du visage')?.type).toBe('TECHNIQUE');
+    expect(getStarterServices('ESTHETICS').filter((s) => s.type === 'TECHNIQUE')).toHaveLength(1);
+  });
+
+  it('keeps every preset short and coherent: no more than eight starters, 15 min to 2 h each', () => {
+    for (const activity of BUSINESS_ACTIVITY_TYPES) {
+      const starters = getStarterServices(activity);
+      expect(starters.length).toBeLessThanOrEqual(8);
+      expect(new Set(starters.map((starter) => starter.name)).size).toBe(starters.length);
+      for (const starter of starters) {
+        const total = getStarterDurationMinutes(starter);
+        expect(total).toBeGreaterThanOrEqual(15);
+        expect(total).toBeLessThanOrEqual(120);
+        expect(total % 5).toBe(0);
+      }
+    }
+  });
+
+  it('builds nail and esthetics starters the Prestation editor can reopen and save unchanged', () => {
+    let sequence = 0;
+    const identity = {
+      createServiceId: () => `service-${++sequence}`,
+      createPhaseId: (serviceId: string) => `${serviceId}-phase-${++sequence}`,
+    };
+    const catalog = buildStarterCatalog('business-nails', [
+      ...getStarterServices('NAILS'),
+      ...getStarterServices('ESTHETICS'),
+    ], identity);
+
+    expect(catalog).toHaveLength(12);
+    for (const service of catalog) {
+      const values = toServiceFormValues(service);
+      expect(validateServiceForm(values).valid).toBe(true);
+      expect(
+        buildServiceFromForm({ id: service.id, businessId: service.businessId, active: service.active, values }),
+      ).toEqual(service);
+    }
+    const facial = catalog.find((service) => service.name === 'Soin du visage');
+    expect(facial?.phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff])).toEqual([
+      ['Application', 30, true],
+      [PROCESSING_PHASE_NAME, 15, false],
+      ['Finition', 15, true],
+    ]);
   });
 
   it('builds active catalog Services at the neutral price with fresh identities', () => {

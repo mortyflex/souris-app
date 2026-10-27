@@ -6,7 +6,10 @@ import {
   useServiceCatalog,
 } from "../../session/ServiceCatalogProvider";
 import { ServiceEditorScreen } from "../ServiceEditorScreen";
-import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
+import {
+  TestPersistenceProvider,
+  testBusiness,
+} from "@/providers/testing/TestPersistenceProvider";
 import { serviceCategoryColors } from "@/shared/ui/theme";
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
 
@@ -201,6 +204,34 @@ describe("ServiceEditorScreen", () => {
     expect(
       view.getByLabelText("Prix de la prestation").props.autoFocus,
     ).toBeFalsy();
+    // The empty name suggests an example of the Business's profession.
+    expect(view.getByLabelText("Nom de la prestation").props.placeholder).toBe(
+      "Ex. Coupe",
+    );
+  });
+
+  it("suggests a nail example to a nail technician, with the same form, rules and categories", async () => {
+    const view = await render(
+      <TestPersistenceProvider
+        business={{ ...testBusiness, activityType: "NAILS" }}
+      >
+        <ServiceCatalogProvider>
+          <ServiceEditorScreen mode="create" />
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
+    );
+
+    // The same two categories, in the same colours, for every profession.
+    expect(view.getByTestId("choose-service-type-SERVICE")).toBeTruthy();
+    expect(view.getByTestId("choose-service-type-TECHNIQUE")).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(view.getByTestId("choose-service-type-SERVICE"));
+    });
+    const name = view.getByLabelText("Nom de la prestation");
+    expect(name.props.placeholder).toBe("Ex. Pose complète gel");
+    // A hint only: the field starts empty and the name stays required.
+    expect(name.props.value).toBe("");
+    expect(view.getByTestId("save-service").props.accessibilityState.disabled).toBe(true);
   });
 
   it("chooses the structure with two whole-card options: Service and Technique", async () => {
@@ -228,14 +259,14 @@ describe("ServiceEditorScreen", () => {
     expect(within(techniqueCard).getByText("Technique")).toBeTruthy();
     expect(
       within(techniqueCard).getByText(
-        "Plusieurs phases, avec ou sans temps de pose.",
+        "Plusieurs phases, dont un temps de pose.",
       ),
     ).toBeTruthy();
     expect(serviceCard.props.accessibilityLabel).toBe(
       "Service, une seule durée, la professionnelle reste occupée",
     );
     expect(techniqueCard.props.accessibilityLabel).toBe(
-      "Technique, plusieurs phases, avec ou sans temps de pose",
+      "Technique, plusieurs phases, dont un temps de pose",
     );
     // Category colours: violet Service, azure Technique.
     expect(

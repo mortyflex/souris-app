@@ -72,11 +72,19 @@ profession is chosen. Design: `docs/design/DESIGN_OVERRIDES.md` §44.
 
 ---
 
-## 5. Not implemented yet (Step 2 and later)
+## 5. Step 2 — the catalogue (October 2026)
 
-- profession-specific terminology;
-- service categories, titles and descriptions per profession;
-- online-bookable eligibility of a service;
+`docs/domain/SERVICES.md` §10 records how ONE catalogue serves every profession: the `Service`
+model, the editor, the Services / Techniques taxonomy and the Appointment snapshots are shared and
+unchanged; the Business activity only personalises the starter prestations, the family pictogram
+keywords and the example of the empty « Nom » field. No column, no sync field and no migration were
+added.
+
+## 6. Not implemented yet
+
+- free service categories, descriptions and the online-bookable property (the smallest safe
+  follow-up of each: SERVICES.md §10.4);
+- profession-specific terminology beyond the touches above;
 - any catalogue migration or renaming;
 - making `NAILS` or `ESTHETICS` available.
 

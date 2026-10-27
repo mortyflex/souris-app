@@ -18,8 +18,10 @@
 //
 // Types follow the catalog rules (docs/domain/SERVICES.md §3): a SERVICE is
 // one staff-required phase; a TECHNIQUE is used only where the client
-// genuinely waits with something in place (« Temps de pose »), and then
-// carries Application → Temps de pose → Finition.
+// genuinely waits with something in place (« Temps de pose » — a colour, a
+// mask, a tint), whatever the profession, and then carries
+// Application → Temps de pose → Finition. Several steps alone never make a
+// Technique: a gel set or a wax is one SERVICE duration.
 
 import type { BusinessActivityType } from '@/domain/business';
 import type { Service, ServiceType } from '@/domain/appointments';
@@ -74,18 +76,25 @@ const presets: Record<BusinessActivityType, readonly StarterService[]> = {
     service('cut-men', 'Coupe homme', 30),
     technique('care', 'Soin', { application: 10, processing: 15, finishing: 15 }),
   ],
+  // Nail work keeps the technician with the client from start to finish (a
+  // lamp cure lasts seconds): every starter is a SERVICE with one duration.
   NAILS: [
-    service('semi-permanent', 'Semi-permanent', 60),
-    service('full-set', 'Pose complète', 90),
-    service('infill', 'Remplissage', 75),
+    service('gel-full-set', 'Pose complète gel', 90),
+    service('gel-infill', 'Remplissage gel', 75),
+    service('semi-permanent-hands', 'Semi-permanent mains', 45),
+    service('semi-permanent-feet', 'Semi-permanent pieds', 45),
     service('removal', 'Dépose', 30),
-    service('nail-art', 'Nail art', 30),
+    service('nail-art', 'Nail art', 15),
+    service('nail-repair', 'Réparation d’un ongle', 15),
   ],
+  // A facial is the one esthetics starter where the client genuinely waits
+  // with something in place (the mask): Application → Temps de pose → Finition.
   ESTHETICS: [
-    service('facial', 'Soin visage', 60),
+    technique('facial', 'Soin du visage', { application: 30, processing: 15, finishing: 15 }),
     service('brow-wax', 'Épilation sourcils', 15),
     service('leg-wax', 'Épilation jambes', 30),
-    service('body-treatment', 'Soin corps', 60),
+    service('body-treatment', 'Soin du corps', 60),
+    service('eye-beauty', 'Beauté du regard', 30),
   ],
   LASHES_BROWS: [
     technique('lash-lift', 'Rehaussement de cils', { application: 20, processing: 20, finishing: 15 }),

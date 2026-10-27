@@ -64,7 +64,7 @@ function CatalogProbe() {
           addService({
             id: "service-unknown",
             businessId: "business-test",
-            name: "Beauté des mains avec un nom vraiment très long pour la ligne",
+            name: "Forfait découverte avec un nom vraiment très long pour la ligne",
             type: "SERVICE",
             price: 1250,
             phases: [
