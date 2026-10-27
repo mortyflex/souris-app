@@ -1,6 +1,6 @@
 // BeautIzzy — Business setup form rules (pure)
 
-import type { BusinessActivityType, BusinessSetupInput } from '@/domain/business';
+import { isProfessionAvailable, type BusinessActivityType, type BusinessSetupInput } from '@/domain/business';
 
 export interface BusinessFormValues {
   readonly ownerFirstName: string;
@@ -24,11 +24,15 @@ export interface BusinessFormErrors {
   readonly activityType?: string;
 }
 
+/** A « Bientôt disponible » profession is announced, never accepted — whatever path proposed it. */
+export const ACTIVITY_UNAVAILABLE_ERROR = 'Cette activité n’est pas encore disponible.';
+
 export function validateBusinessForm(values: BusinessFormValues): BusinessFormErrors {
   const errors: { ownerFirstName?: string; name?: string; activityType?: string } = {};
   if (values.ownerFirstName.trim().length === 0) errors.ownerFirstName = 'Votre prénom est requis.';
   if (values.name.trim().length === 0) errors.name = 'Le nom de votre activité est requis.';
   if (values.activityType === null) errors.activityType = 'Choisissez votre activité.';
+  else if (!isProfessionAvailable(values.activityType)) errors.activityType = ACTIVITY_UNAVAILABLE_ERROR;
   return errors;
 }
 
@@ -45,6 +49,9 @@ function optionalText(value: string): string | undefined {
 export function buildBusinessSetupInput(values: BusinessFormValues): BusinessSetupInput {
   if (values.activityType === null) {
     throw new Error('buildBusinessSetupInput: activityType is required');
+  }
+  if (!isProfessionAvailable(values.activityType)) {
+    throw new Error(`buildBusinessSetupInput: ${values.activityType} is not available to a new Business`);
   }
   const ownerLastName = optionalText(values.ownerLastName);
   const phone = optionalText(values.phone);

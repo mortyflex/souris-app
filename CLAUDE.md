@@ -28,6 +28,11 @@ Product principle:
 
 > Generic in the data model, specific in the user experience.
 
+Profession model: `docs/domain/PROFESSIONS.md`. A profession IS the stored `BusinessActivityType`;
+`PROFESSIONS` / `isProfessionAvailable` decide what a NEW Business may choose (today
+`HAIRDRESSING`; `NAILS` and `ESTHETICS` announced « Bientôt disponible »). An existing Business is
+never re-checked. Never infer that a profession is supported because its identifier or label exists.
+
 ---
 
 ## 2. Product Mission

@@ -1335,7 +1335,9 @@ Account   « Créons votre compte » (email + password) → email confirmation w
           to Discovery; opened without history (the confirmation link), back goes to the
           Discovery entry.
 
-Setup     1. Primary activity   ONE activity, 2-column grid, required — `Continuer`
+Setup     1. Primary activity   ONE profession, one option card each (Coiffure; Onglerie and
+                                Esthétique « Bientôt disponible », not selectable), required —
+                                `Continuer`
           2. Business details   prénom *, nom, nom de votre activité *, téléphone (the chosen
                                 activity recalled as a read-only chip)
           3. Client reminders   the recommended EMAIL opt-in (« Activer les rappels par e-mail »,
@@ -1365,9 +1367,14 @@ anywhere in the first run.
 
 The primary activity is a SINGLE value — the stable vocabulary is `HAIRDRESSING | BARBER | NAILS |
 ESTHETICS | LASHES_BROWS | MAKEUP | WELLNESS | OTHER` (Coiffure, Barbier, Onglerie, Esthétique,
-Cils & sourcils, Maquillage, Bien-être, Autre). Multi-profession support is not
-implemented. It personalises the starter services, their pictograms and a few examples only — never
-Home, Agenda, Clientèle, Produits, Caisse, navigation or a business rule.
+Cils & sourcils, Maquillage, Bien-être, Autre). Since the multi-profession foundations (October
+2026, Step 1 — `docs/domain/PROFESSIONS.md`) onboarding offers the professions BeautIzzy is
+prepared for: Coiffure is AVAILABLE (the validated Production workflow); Onglerie and Esthétique are
+announced « Bientôt disponible » and cannot be selected until their workflows are validated; the
+other identifiers are no longer offered to a new Business but stay valid stored values, so every
+existing Business keeps its activity and label. The activity personalises the starter services,
+their pictograms and a few examples only — never Home, Agenda, Clientèle, Produits, Caisse,
+navigation or a business rule.
 
 Starter services are offered ONLY on this step of a NEWLY created Business, written through the
 normal Service store with fresh ids (they sync like hand-made prestations), at the neutral 0 € price

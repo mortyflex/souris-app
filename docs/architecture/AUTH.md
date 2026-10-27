@@ -52,6 +52,12 @@ one a newer build introduced — reads as `OTHER`, so the Business still resolve
 instead of failing the bootstrap. The app never writes the activity back, so the stored value is
 preserved for builds that know it; the local cache written at binding time holds the decoded value.
 
+Which of these values a NEW Business may be created with is a separate, product-facing rule:
+`PROFESSIONS` / `isProfessionAvailable` (`src/domain/business/professions.ts`,
+`docs/domain/PROFESSIONS.md`) — today `HAIRDRESSING` only, `NAILS` and `ESTHETICS` announced
+« Bientôt disponible ». It is enforced by the setup form and never applied to an existing Business:
+restore, binding and display accept every stored value as before.
+
 ---
 
 ## 3. Boundaries

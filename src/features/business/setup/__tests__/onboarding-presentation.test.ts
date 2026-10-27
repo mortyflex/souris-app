@@ -1,6 +1,6 @@
-import { BUSINESS_ACTIVITY_TYPES } from '@/domain/business';
+import { BUSINESS_ACTIVITY_TYPES, PROFESSIONS } from '@/domain/business';
 
-import { ACTIVITY_OPTIONS } from '../activity-options';
+import { ACTIVITY_OPTIONS, COMING_SOON_LABEL, getActivityIcon } from '../activity-options';
 import { resolveIllustrationSide } from '@/shared/ui/OnboardingStepLayout';
 import { buildSetupRecapRows } from '../components/SetupRecap';
 
@@ -10,18 +10,31 @@ jest.mock('react-native-reanimated', () =>
 );
 
 describe('activity options', () => {
-  it('lists the eight activities once, in the grid order, with their French labels', () => {
-    expect(ACTIVITY_OPTIONS.map((option) => option.label)).toEqual([
-      'Coiffure',
-      'Onglerie',
-      'Esthétique',
-      'Cils & sourcils',
-      'Maquillage',
-      'Barbier',
-      'Bien-être',
-      'Autre',
+  it('lists the three professions once, in product order, with their French labels and availability', () => {
+    expect(ACTIVITY_OPTIONS.map((option) => [option.type, option.label, option.availability])).toEqual([
+      ['HAIRDRESSING', 'Coiffure', 'AVAILABLE'],
+      ['NAILS', 'Onglerie', 'COMING_SOON'],
+      ['ESTHETICS', 'Esthétique', 'COMING_SOON'],
     ]);
-    expect([...ACTIVITY_OPTIONS.map((option) => option.type)].sort()).toEqual([...BUSINESS_ACTIVITY_TYPES].sort());
+    expect(ACTIVITY_OPTIONS.map((option) => option.type)).toEqual(PROFESSIONS.map((profession) => profession.id));
+    expect(COMING_SOON_LABEL).toBe('Bientôt disponible');
+  });
+
+  it('gives every profession a short, distinct description', () => {
+    const descriptions = ACTIVITY_OPTIONS.map((option) => option.description);
+    expect(new Set(descriptions).size).toBe(descriptions.length);
+    for (const description of descriptions) {
+      expect(description.length).toBeGreaterThan(0);
+      expect(description.length).toBeLessThanOrEqual(60);
+    }
+  });
+
+  it('keeps a pictogram for EVERY stored activity, so an existing Business is always recalled with one', () => {
+    for (const activityType of BUSINESS_ACTIVITY_TYPES) {
+      expect(getActivityIcon(activityType)).toEqual(
+        expect.objectContaining({ ios: expect.any(String), android: expect.any(String) }),
+      );
+    }
   });
 });
 

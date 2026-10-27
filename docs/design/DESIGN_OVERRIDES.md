@@ -2567,3 +2567,30 @@ never a subscription template.
 - **No** gradient, glass effect, animation beyond the frame's entrance, countdown, strike-through
   price, « most popular » claim, hard-coded price, fake purchase, or success shown before the
   store confirmed an entitlement.
+
+---
+
+## 44. Onboarding — Profession Cards and « Bientôt disponible »
+
+Step 1 of business setup (`src/features/business/setup/components/ActivityOptionList.tsx`) shows
+ONE full-width option card per profession of `PROFESSIONS` (`docs/domain/PROFESSIONS.md`), stacked
+with a `spacing.md` gap, single selection, in product order: Coiffure, Onglerie, Esthétique. The
+card is the onboarding option card of the reminder opt-in: `surfaceElevated`, 1.5 pt
+`borderSubtle`, `radii.large` (continuous), `spacing.base` padding, 72 pt minimum; the profession
+pictogram (SF Symbol / Material Symbol, never emoji) on a 40 pt `surfaceLavenderStrong` disc, the
+label in `rowTitle`, one supporting line in `metadata` `foregroundSoft`, and the shared
+`SelectionCheck` on the right.
+
+- **Selected.** `surfaceLavender` fill, accent border, accent label, the disc turns accent with the
+  white glyph, the check appears. One selection haptic.
+- **« Bientôt disponible ».** The card keeps its place and its copy, on `surface` with the glyph
+  disc on `surfaceInput` and the glyph in `foregroundMuted`, the label in `foregroundSoft` (still
+  readable, never greyed to illegibility); the selection mark is replaced by the « Bientôt
+  disponible » chip (`surfaceLavenderStrong` pill, accent `chip` text — the « Recommandé » chip).
+  The card is disabled: no press feedback, nothing selected, `Continuer` stays disabled. Assistive
+  technology hears « Onglerie, bientôt disponible », the disabled state and the hint « Cette
+  activité n’est pas encore disponible. ».
+- Each card is a radio inside a radiogroup; the whole card is the touch target.
+
+Never dress an announced profession as a working choice, and never hide the chip behind colour
+alone: the badge text is the signal.

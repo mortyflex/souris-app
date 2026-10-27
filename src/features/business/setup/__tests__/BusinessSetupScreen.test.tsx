@@ -19,6 +19,7 @@ import { isUuidV4 } from '@/shared/lib/uuid';
 import { BusinessSessionProvider, useBusinessSession } from '../../session/BusinessSessionProvider';
 import { createFakeBusinessGateway } from '../../testing/fake-business-gateway';
 import { BusinessSetupScreen } from '../BusinessSetupScreen';
+import { COMING_SOON_LABEL } from '../activity-options';
 import { REMINDER_OPTION_TITLE } from '../components/ReminderOptionCard';
 
 jest.mock('react-native-reanimated', () =>
@@ -77,8 +78,8 @@ const status = (view: View) => view.getByTestId('business-session-status').props
 const isDisabled = (view: View, testID: string) =>
   view.getByTestId(testID).props.accessibilityState.disabled as boolean;
 
-/** activity → details → reminders, with a valid draft. */
-async function reachReminders(view: View, activity = 'NAILS', name = 'Nails by Sofia') {
+/** activity → details → reminders, with a valid draft. Only Coiffure can be chosen today. */
+async function reachReminders(view: View, activity = 'HAIRDRESSING', name = 'Maison Sofia') {
   await press(view.getByTestId(`activity-${activity}`));
   await press(view.getByTestId('continue-activity'));
   await type(view.getByTestId('owner-first-name-input'), 'Sofia');
@@ -87,7 +88,7 @@ async function reachReminders(view: View, activity = 'NAILS', name = 'Nails by S
 }
 
 /** …then « Je préfère configurer ça plus tard »: the Business is created, reminders stay OFF. */
-async function reachServices(view: View, activity = 'NAILS') {
+async function reachServices(view: View, activity = 'HAIRDRESSING') {
   await reachReminders(view, activity);
   await press(view.getByTestId('skip-reminders'));
   await waitFor(() => expect(view.getByTestId('onboarding-services')).toBeTruthy());
@@ -149,33 +150,62 @@ describe('BusinessSetupScreen — the five steps', () => {
 });
 
 describe('BusinessSetupScreen — activity', () => {
-  it('offers the eight activities in French and requires one before continuing', async () => {
+  it('offers the three professions in French and requires Coiffure before continuing', async () => {
     const { view } = await renderSetup();
 
-    for (const label of ['Coiffure', 'Onglerie', 'Esthétique', 'Cils & sourcils', 'Maquillage', 'Barbier', 'Bien-être', 'Autre']) {
+    for (const label of ['Coiffure', 'Onglerie', 'Esthétique']) {
       expect(view.getByText(label)).toBeTruthy();
     }
+    // The activities onboarding no longer offers are not shown at all.
+    for (const label of ['Cils & sourcils', 'Maquillage', 'Barbier', 'Bien-être', 'Autre']) {
+      expect(view.queryByText(label)).toBeNull();
+    }
+    expect(view.getAllByRole('radio')).toHaveLength(3);
     expect(isDisabled(view, 'continue-activity')).toBe(true);
 
-    await press(view.getByTestId('activity-MAKEUP'));
-    expect(view.getByTestId('activity-MAKEUP').props.accessibilityState.selected).toBe(true);
-    expect(view.getByTestId('activity-HAIRDRESSING').props.accessibilityState.selected).toBe(false);
+    await press(view.getByTestId('activity-HAIRDRESSING'));
+    expect(view.getByTestId('activity-HAIRDRESSING').props.accessibilityState).toEqual({
+      selected: true,
+      checked: true,
+      disabled: false,
+    });
     expect(isDisabled(view, 'continue-activity')).toBe(false);
+  });
 
-    // Single selection: choosing another one replaces it.
-    await press(view.getByTestId('activity-WELLNESS'));
-    expect(view.getByTestId('activity-MAKEUP').props.accessibilityState.selected).toBe(false);
-    expect(view.getByTestId('activity-WELLNESS').props.accessibilityState.selected).toBe(true);
+  it('announces Onglerie and Esthétique as « Bientôt disponible » and never lets them be selected', async () => {
+    const { view } = await renderSetup();
+
+    expect(view.getAllByText(COMING_SOON_LABEL)).toHaveLength(2);
+    for (const activity of ['NAILS', 'ESTHETICS']) {
+      const card = view.getByTestId(`activity-${activity}`);
+      expect(card.props.accessibilityState).toEqual({ selected: false, checked: false, disabled: true });
+      expect(card.props.accessibilityLabel).toMatch(/, bientôt disponible$/);
+      expect(view.getByTestId(`activity-${activity}-coming-soon`)).toBeTruthy();
+    }
+    expect(view.queryByTestId('activity-HAIRDRESSING-coming-soon')).toBeNull();
+
+    // A press on an announced profession selects nothing and unlocks nothing.
+    await press(view.getByTestId('activity-NAILS'));
+    await press(view.getByTestId('activity-ESTHETICS'));
+    expect(view.getByTestId('activity-NAILS').props.accessibilityState.selected).toBe(false);
+    expect(view.getByTestId('activity-ESTHETICS').props.accessibilityState.selected).toBe(false);
+    expect(isDisabled(view, 'continue-activity')).toBe(true);
+
+    // Nor does it steal a selection already made.
+    await press(view.getByTestId('activity-HAIRDRESSING'));
+    await press(view.getByTestId('activity-NAILS'));
+    expect(view.getByTestId('activity-HAIRDRESSING').props.accessibilityState.selected).toBe(true);
+    expect(isDisabled(view, 'continue-activity')).toBe(false);
   });
 });
 
 describe('BusinessSetupScreen — details', () => {
   it('requires the first name and the activity name only, and recalls the chosen activity', async () => {
     const { view } = await renderSetup();
-    await press(view.getByTestId('activity-LASHES_BROWS'));
+    await press(view.getByTestId('activity-HAIRDRESSING'));
     await press(view.getByTestId('continue-activity'));
 
-    expect(view.getByTestId('selected-activity-chip').props.accessibilityLabel).toBe('Activité principale : Cils & sourcils');
+    expect(view.getByTestId('selected-activity-chip').props.accessibilityLabel).toBe('Activité principale : Coiffure');
     expect(isDisabled(view, 'continue-details')).toBe(true);
     // No error is shown before the professional typed anything.
     expect(view.queryByText('Votre prénom est requis.')).toBeNull();
@@ -196,11 +226,11 @@ describe('BusinessSetupScreen — details', () => {
 
   it('creates the Business with trimmed values, the optional fields dropped when blank', async () => {
     const { view, business, database } = await renderSetup();
-    await press(view.getByTestId('activity-NAILS'));
+    await press(view.getByTestId('activity-HAIRDRESSING'));
     await press(view.getByTestId('continue-activity'));
     await type(view.getByTestId('owner-first-name-input'), ' Sofia ');
     await type(view.getByTestId('owner-last-name-input'), '  ');
-    await type(view.getByTestId('business-name-input'), 'Nails by Sofia');
+    await type(view.getByTestId('business-name-input'), 'Maison Sofia');
     await type(view.getByTestId('business-phone-input'), ' 06 12 34 56 78 ');
     await press(view.getByTestId('continue-details'));
     await press(view.getByTestId('skip-reminders'));
@@ -209,12 +239,12 @@ describe('BusinessSetupScreen — details', () => {
     expect(business.rows[0]).toMatchObject({
       ownerUserId: 'user-lea',
       ownerFirstName: 'Sofia',
-      name: 'Nails by Sofia',
-      activityType: 'NAILS',
+      name: 'Maison Sofia',
+      activityType: 'HAIRDRESSING',
       phone: '06 12 34 56 78',
     });
     expect(business.rows[0]?.ownerLastName).toBeUndefined();
-    expect(readBusinessProfile(database)?.name).toBe('Nails by Sofia');
+    expect(readBusinessProfile(database)?.name).toBe('Maison Sofia');
   });
 });
 
@@ -285,7 +315,7 @@ describe('BusinessSetupScreen — reminders and the creation point', () => {
 
     // The Business exists (never rolled back)…
     expect(business.calls.create).toBe(1);
-    expect(readBusinessProfile(database)?.name).toBe('Nails by Sofia');
+    expect(readBusinessProfile(database)?.name).toBe('Maison Sofia');
     // …but the professional has NOT moved on believing reminders are on.
     expect(view.getByText('Impossible d’activer les rappels pour le moment.')).toBeTruthy();
     expect(view.getByText(/rappels restent désactivés/)).toBeTruthy();
@@ -402,9 +432,9 @@ describe('BusinessSetupScreen — starter prestations', () => {
 
   it('« Je préfère ajouter mes prestations moi-même » writes nothing', async () => {
     const { view, database } = await renderSetup();
-    await reachServices(view, 'BARBER');
+    await reachServices(view);
 
-    expect(view.getAllByRole('checkbox')).toHaveLength(3);
+    expect(view.getAllByRole('checkbox')).toHaveLength(8);
     await press(view.getByTestId('skip-starter-services'));
 
     expect(loadServices(database)).toHaveLength(0);
@@ -413,9 +443,9 @@ describe('BusinessSetupScreen — starter prestations', () => {
 
   it('deselecting everything turns the action into « Continuer sans prestations »', async () => {
     const { view, database } = await renderSetup();
-    await reachServices(view, 'MAKEUP');
+    await reachServices(view);
 
-    for (const key of ['day', 'evening', 'bridal']) {
+    for (const key of ['cut-women', 'blow-dry', 'cut-blow-dry', 'color', 'balayage', 'gloss', 'cut-men', 'care']) {
       await press(view.getByTestId(`starter-${key}`));
     }
     expect(view.queryByTestId('add-starter-services')).toBeNull();
@@ -425,32 +455,23 @@ describe('BusinessSetupScreen — starter prestations', () => {
     expect(view.getByTestId('onboarding-complete')).toBeTruthy();
   });
 
-  it('« Autre » gets no preset: only the way without prestations is offered', async () => {
-    const { view, database } = await renderSetup();
-    await reachServices(view, 'OTHER');
-
-    expect(view.queryAllByRole('checkbox')).toHaveLength(0);
-    expect(view.getByTestId('starter-services-none')).toBeTruthy();
-    expect(view.queryByTestId('skip-starter-services')).toBeNull();
-    await press(view.getByTestId('continue-without-services'));
-
-    expect(loadServices(database)).toHaveLength(0);
-    expect(view.getByTestId('setup-recap-activity').props.accessibilityLabel).toBe('Votre activité principale : Autre');
-  });
+  // « Autre » (no preset) can no longer be chosen in onboarding: only Coiffure
+  // is available today. The empty-base branch stays covered by
+  // starter-services.test.ts (`getStarterServices('OTHER')` → []).
 });
 
 describe('BusinessSetupScreen — setup complete', () => {
   it('shows the personalised recap and celebrates once', async () => {
     const success = jest.spyOn(haptics, 'success');
     const { view } = await renderSetup();
-    await reachServices(view, 'WELLNESS');
+    await reachServices(view);
     success.mockClear();
 
     await press(view.getByTestId('add-starter-services'));
 
     expect(view.getByText('Votre espace BeautIzzy est prêt ✨')).toBeTruthy();
-    expect(view.getByTestId('setup-recap-activity').props.accessibilityLabel).toBe('Votre activité principale : Bien-être');
-    expect(view.getByTestId('setup-recap-services').props.accessibilityLabel).toBe('Prestations & tarifs : 3 prestations prêtes');
+    expect(view.getByTestId('setup-recap-activity').props.accessibilityLabel).toBe('Votre activité principale : Coiffure');
+    expect(view.getByTestId('setup-recap-services').props.accessibilityLabel).toBe('Prestations & tarifs : 8 prestations prêtes');
     expect(view.getByText('Continuer')).toBeTruthy();
     expect(view.queryByText('Accéder à BeautIzzy')).toBeNull();
     // One success haptic on the first appearance, none on a re-render.

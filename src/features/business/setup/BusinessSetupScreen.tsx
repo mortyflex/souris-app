@@ -4,7 +4,8 @@
 // onboarding-steps.ts — entered right after authentication (Welcome belongs
 // to the first-entry experience, features/auth, and is never repeated here):
 //
-//   1. activity    the ONE primary activity (required)
+//   1. activity    the ONE primary activity (required) — only an AVAILABLE
+//                  profession may be chosen (src/domain/business/professions.ts)
 //   2. details     prénom *, nom, nom de l'activité *, téléphone
 //   3. reminders   the optional EMAIL reminder opt-in (recommended)
 //   4. services    the starter prestations proposed for the activity
@@ -61,7 +62,7 @@ import {
   validateBusinessForm,
   type BusinessFormValues,
 } from './business-form';
-import { ActivityGrid } from './components/ActivityGrid';
+import { ActivityOptionList } from './components/ActivityOptionList';
 import { ReminderOptionCard } from './components/ReminderOptionCard';
 import { SetupRecap } from './components/SetupRecap';
 import { StarterServiceList } from './components/StarterServiceList';
@@ -304,7 +305,7 @@ export function BusinessSetupScreen() {
           testID="onboarding-activity"
           title="Quelle est votre activité principale ?"
         >
-          <ActivityGrid
+          <ActivityOptionList
             onSelect={(activityType) => {
               haptics.selection();
               updateField('activityType', activityType);
