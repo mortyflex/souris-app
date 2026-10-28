@@ -16,6 +16,11 @@ import Animated, {
 import { SymbolView } from 'expo-symbols';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import {
+  getAppointmentWording,
+  getPhaseDisplayName,
+  type CatalogueOrganization,
+} from '@/features/services/catalogue-presentation';
 import { haptics } from '@/shared/lib/haptics';
 import { AppText } from '@/shared/ui/AppText';
 import {
@@ -47,6 +52,8 @@ interface SortablePhaseEditorProps {
   readonly onChangeRequiresStaff: (phaseId: string, requiresStaff: boolean) => void;
   readonly onRemove: (phaseId: string) => void;
   readonly onReorder: (fromIndex: number, toIndex: number) => void;
+  /** How the profession's catalogue is organised (the waiting-phase wording); Services / Techniques by default. */
+  readonly organization?: CatalogueOrganization;
 }
 
 const GAP = spacing.md;
@@ -78,6 +85,7 @@ export function SortablePhaseEditor({
   onChangeRequiresStaff,
   onRemove,
   onReorder,
+  organization = 'SERVICE_TYPES',
 }: SortablePhaseEditorProps) {
   return (
     <View style={styles.list}>
@@ -99,6 +107,7 @@ export function SortablePhaseEditor({
           }
           onRemove={() => onRemove(phase.id)}
           onReorder={onReorder}
+          organization={organization}
           phase={phase}
           total={phases.length}
           validity={validation.phaseValidities[index]}
@@ -123,6 +132,7 @@ interface SortablePhaseRowProps {
   readonly onCollapseAll: () => void;
   readonly onRemove: () => void;
   readonly onReorder: (fromIndex: number, toIndex: number) => void;
+  readonly organization: CatalogueOrganization;
 }
 
 function SortablePhaseRow({
@@ -140,7 +150,9 @@ function SortablePhaseRow({
   onCollapseAll,
   onRemove,
   onReorder,
+  organization,
 }: SortablePhaseRowProps) {
+  const { waitingTimeLabel } = getAppointmentWording(organization);
   const reducedMotion = useReducedMotion();
   const active = useSharedValue(false);
   const translationY = useSharedValue(0);
@@ -278,14 +290,14 @@ function SortablePhaseRow({
               </AppText>
             ) : (
               <AppText variant="control" numberOfLines={1}>
-                {phase.name}
+                {getPhaseDisplayName(phase, organization)}
               </AppText>
             )}
             <AppText
               variant="metadata"
               style={phase.requiresStaff ? styles.activeTypeText : styles.processingTypeText}
             >
-              {phase.requiresStaff ? 'Temps actif' : 'Temps de pose'}
+              {phase.requiresStaff ? 'Temps actif' : waitingTimeLabel}
             </AppText>
           </View>
           <AppText variant="control" style={styles.headerDuration}>
@@ -342,9 +354,9 @@ function SortablePhaseRow({
                 processing={false}
               />
               <PhaseTypeChoice
-                accessibilityLabel={`Phase ${index + 1}, temps de pose`}
+                accessibilityLabel={`Phase ${index + 1}, ${waitingTimeLabel.toLowerCase()}`}
                 description="Professionnelle disponible"
-                label="Temps de pose"
+                label={waitingTimeLabel}
                 onPress={() => onChangeRequiresStaff(false)}
                 selected={!phase.requiresStaff}
                 processing

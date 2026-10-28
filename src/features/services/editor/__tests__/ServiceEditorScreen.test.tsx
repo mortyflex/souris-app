@@ -1181,3 +1181,134 @@ describe("ServiceEditorScreen — categories, descriptions, profession-aware cre
     expect(summary().getByLabelText("Catégorie, Service")).toBeTruthy();
   });
 });
+
+// Multi-profession Step 5: the editor names unattended time by profession.
+describe("ServiceEditorScreen — waiting-phase terminology (Step 5)", () => {
+  beforeEach(() => {
+    mockBack.mockClear();
+  });
+
+  const press = (element: Parameters<typeof fireEvent.press>[0]) =>
+    act(async () => {
+      fireEvent.press(element);
+    });
+  const type = (element: Parameters<typeof fireEvent.changeText>[0], text: string) =>
+    act(async () => {
+      fireEvent.changeText(element, text);
+    });
+
+  const LEGACY_FACIAL = {
+    id: "legacy-facial",
+    businessId: testBusiness.id,
+    name: "Soin du visage",
+    type: "TECHNIQUE" as const,
+    price: 65,
+    phases: [
+      { id: "legacy-facial-a", name: "Application", durationMinutes: 30, requiresStaff: true },
+      // Created before Step 5: the editor's former default name.
+      { id: "legacy-facial-w", name: "Temps de pose", durationMinutes: 15, requiresStaff: false },
+      // A name that is not the app's default: the professional's own, kept as is.
+      { id: "legacy-facial-r", name: "Repos du masque", durationMinutes: 10, requiresStaff: false },
+      { id: "legacy-facial-f", name: "Finition", durationMinutes: 15, requiresStaff: true },
+    ],
+    active: true,
+  };
+
+  function StoredFacial() {
+    const { services } = useServiceCatalog();
+    const facial = services.find((service) => service.name === "Soin du visage");
+    return <Text testID="stored-facial">{facial ? JSON.stringify(facial) : ""}</Text>;
+  }
+
+  function renderFor(activityType: "HAIRDRESSING" | "ESTHETICS", screen: React.ReactNode, withLegacy = false) {
+    const seed = () => {
+      const base = createDevelopmentSeed(new Date("2027-03-10T10:00:00.000Z"));
+      return { ...base, services: withLegacy ? [...base.services, LEGACY_FACIAL] : base.services };
+    };
+    return render(
+      <TestPersistenceProvider business={{ ...testBusiness, activityType }} createSeed={seed}>
+        <ServiceCatalogProvider>
+          {screen}
+          <StoredFacial />
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
+    );
+  }
+
+  const storedFacial = (view: Awaited<ReturnType<typeof render>>) =>
+    JSON.parse(view.getByTestId("stored-facial").props.children as string) as typeof LEGACY_FACIAL;
+
+  it("esthetics: a new phased facial names its waiting phase « Temps d’attente », in the form and in the store", async () => {
+    const view = await renderFor("ESTHETICS", <ServiceEditorScreen mode="create" />);
+    await type(view.getByLabelText("Nom de la prestation"), "Soin du visage");
+    await type(view.getByLabelText("Prix de la prestation"), "65");
+    await type(view.getByLabelText("Durée de la prestation"), "30");
+    await act(async () => {
+      fireEvent(view.getByTestId("service-form-phased-switch"), "valueChange", true);
+    });
+
+    await press(view.getByLabelText("Développer la phase 1"));
+    await type(view.getByLabelText("Nom de la phase 1"), "Nettoyage");
+    await press(view.getByLabelText("Développer la phase 2"));
+    await type(view.getByLabelText("Durée de la phase 2"), "15");
+    // The waiting phase: its header, its type choice and its spoken label.
+    expect(view.getAllByText("Temps d’attente").length).toBeGreaterThanOrEqual(2);
+    expect(view.getByLabelText("Phase 2, temps d’attente")).toBeTruthy();
+    expect(view.queryByText(/Temps de pose|temps de pose|Technique/)).toBeNull();
+
+    await press(view.getByTestId("save-service"));
+    const facial = storedFacial(view);
+    expect(facial.type).toBe("TECHNIQUE");
+    expect(facial.phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff])).toEqual([
+      ["Nettoyage", 30, true],
+      ["Temps d’attente", 15, false],
+    ]);
+  });
+
+  it("esthetics: a phased prestation without waiting time asks for one in neutral words", async () => {
+    const view = await renderFor("ESTHETICS", <ServiceEditorScreen mode="create" />);
+    await act(async () => {
+      fireEvent(view.getByTestId("service-form-phased-switch"), "valueChange", true);
+    });
+    await press(view.getByLabelText("Développer la phase 1"));
+    await type(view.getByLabelText("Nom de la phase 1"), "Nettoyage");
+    await type(view.getByLabelText("Durée de la phase 1"), "30");
+    await press(view.getByLabelText("Développer la phase 2"));
+    await press(view.getByLabelText("Phase 2, temps actif"));
+    await type(view.getByLabelText("Nom de la phase 2"), "Massage");
+    await type(view.getByLabelText("Durée de la phase 2"), "20");
+    expect(view.getByText("Ajoutez au moins une phase de temps d’attente.")).toBeTruthy();
+    expect(view.queryByText(/technique/i)).toBeNull();
+  });
+
+  it("esthetics: a legacy « Temps de pose » reads « Temps d’attente », a custom name stays, and a save rewrites neither", async () => {
+    const view = await renderFor("ESTHETICS", <ServiceEditorScreen mode="existing" serviceId="legacy-facial" />, true);
+
+    const information = within(view.getByTestId("service-information"));
+    expect(information.getByText("Temps d’attente")).toBeTruthy();
+    const phases = within(view.getByTestId("service-phases"));
+    expect(phases.getByText("Repos du masque")).toBeTruthy();
+    expect(phases.getAllByText("Temps d’attente")).toHaveLength(3); // the legacy name + two type labels
+    expect(view.queryByText("Temps de pose")).toBeNull();
+
+    await press(view.getByTestId("edit-service"));
+    expect(view.queryByText("Temps de pose")).toBeNull();
+    expect(view.getByText("Repos du masque")).toBeTruthy();
+    await type(view.getByLabelText("Prix de la prestation"), "70");
+    await press(view.getByTestId("save-service"));
+
+    const facial = storedFacial(view);
+    expect(facial.price).toBe(70);
+    expect(facial.phases).toEqual(LEGACY_FACIAL.phases);
+  });
+
+  it("hairdressing: the same record keeps « Temps de pose » everywhere", async () => {
+    const view = await renderFor("HAIRDRESSING", <ServiceEditorScreen mode="existing" serviceId="legacy-facial" />, true);
+    expect(within(view.getByTestId("service-information")).getByText("Temps de pose")).toBeTruthy();
+    expect(view.queryByText("Temps d’attente")).toBeNull();
+    await press(view.getByTestId("edit-service"));
+    await press(view.getByLabelText("Développer la phase 2"));
+    expect(view.getByLabelText("Phase 2, temps de pose")).toBeTruthy();
+    expect(view.queryByText("Temps d’attente")).toBeNull();
+  });
+});

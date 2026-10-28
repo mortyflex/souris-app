@@ -7,8 +7,8 @@
 // - existing read mode (Prestation Details): the detail-sheet header (name +
 //   « ••• » + ×), price + Active/Inactive + the Service / Technique category,
 //   ONE grouped Informations surface (Durée, Temps de pose only when there is
-//   one), the ordered phases of a Technique, and the sticky « Modifier la
-//   prestation ». Désactiver / Réactiver and Supprimer live in « ••• »;
+//   one — « Temps d’attente » in the unified catalogue), the ordered phases
+//   of a Technique, and the sticky « Modifier la prestation ». Désactiver / Réactiver and Supprimer live in « ••• »;
 // - existing edit mode: the SAME form hydrated with current values, under the
 //   canonical « Annuler » + « Modifier la prestation » header, one
 //   « Informations » section headed by the read-only Service / Technique pill,
@@ -50,7 +50,10 @@ import {
 } from "@/domain/services";
 import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
 import {
+  getAppointmentWording,
   getCataloguePresentation,
+  getPhaseDisplayName,
+  getWaitingPhaseName,
   PHASED_SCHEDULING_DESCRIPTION,
   PHASED_SCHEDULING_LABEL,
   type CataloguePresentation,
@@ -186,6 +189,9 @@ export function ServiceEditorScreen({
   } = useServiceCatalog();
   const presentation = getCataloguePresentation(business.activityType);
   const unified = presentation.organization === "CATEGORIES";
+  // The name a new unattended phase receives (stored as such): « Temps de
+  // pose », « Temps d’attente » in the unified catalogue.
+  const waitingPhaseName = getWaitingPhaseName(presentation.organization);
   const service = getServiceById(serviceId);
   const [runtimeServiceId] = useState(() =>
     mode === "create" ? createServiceId() : (serviceId ?? "missing-service"),
@@ -263,7 +269,12 @@ export function ServiceEditorScreen({
     setAttempted(false);
     setValues((current) =>
       current
-        ? switchServiceFormType(current, phased ? "TECHNIQUE" : "SERVICE", processingPhaseId)
+        ? switchServiceFormType(
+            current,
+            phased ? "TECHNIQUE" : "SERVICE",
+            processingPhaseId,
+            waitingPhaseName,
+          )
         : current,
     );
     setExpandedPhaseId(null);
@@ -287,6 +298,7 @@ export function ServiceEditorScreen({
       businessId: service?.businessId ?? business.id,
       active: service?.active ?? true,
       values,
+      processingPhaseName: waitingPhaseName,
     });
 
     try {
@@ -446,7 +458,7 @@ export function ServiceEditorScreen({
           onChangeRequiresStaff={(phaseId, requiresStaff) =>
             setValues((current) =>
               current
-                ? setPhaseRequiresStaff(current, phaseId, requiresStaff)
+                ? setPhaseRequiresStaff(current, phaseId, requiresStaff, waitingPhaseName)
                 : current,
             )
           }
@@ -825,6 +837,7 @@ function ServiceForm({
             onRemove={onRemovePhase}
             onReorder={onReorderPhases}
             onToggleExpanded={onToggleExpanded}
+            organization={presentation.organization}
             phases={values.phases}
             validation={validation}
           />
@@ -846,7 +859,9 @@ function ServiceForm({
               (phase) => phase.nameValid && phase.durationValid,
             ) && (
               <AppText variant="metadata" style={styles.formError}>
-                Une technique doit contenir au moins un temps de pose.
+                {unified
+                  ? "Ajoutez au moins une phase de temps d’attente."
+                  : "Une technique doit contenir au moins un temps de pose."}
               </AppText>
             )}
         </View>
@@ -871,6 +886,7 @@ function ServiceReadView({
   const category = serviceCategoryColors[service.type];
   const unified = presentation.organization === "CATEGORIES";
   const categoryLabel = presentation.typeLabels[service.type];
+  const wording = getAppointmentWording(presentation.organization);
   // The unified catalogue names the structure only when it is the phased one.
   const showTypePill = !unified || service.type === "TECHNIQUE";
 
@@ -947,7 +963,7 @@ function ServiceReadView({
             <>
               <GroupedSeparator inset={GROUPED_READ_ROW_SEPARATOR_INSET} />
               <GroupedReadRow
-                label="Temps de pose"
+                label={wording.waitingTimeLabel}
                 testID="service-processing"
                 value={formatServiceDuration(processing)}
               />
@@ -997,7 +1013,7 @@ function ServiceReadView({
                   </View>
                   <View style={styles.readPhaseCopy}>
                     <AppText variant="control" numberOfLines={2}>
-                      {phase.name}
+                      {getPhaseDisplayName(phase, presentation.organization)}
                     </AppText>
                     <AppText
                       variant="metadata"
@@ -1007,7 +1023,7 @@ function ServiceReadView({
                           : styles.processingLabel
                       }
                     >
-                      {phase.requiresStaff ? "Temps actif" : "Temps de pose"}
+                      {phase.requiresStaff ? "Temps actif" : wording.waitingTimeLabel}
                     </AppText>
                   </View>
                   <AppText variant="control" style={styles.phaseDuration}>

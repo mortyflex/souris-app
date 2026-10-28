@@ -7,7 +7,8 @@
 // Service / Technique type; hairdressing keeps its segment and « Temps de
 // pose ». Totals come from the domain rules, snapshots survive a catalogue
 // change, and every write stays in the demo database. The modules the demo
-// must never touch throw on load.
+// must never touch throw on load. Step 5 adds the catalogue and the prestation
+// editor of the same demos.
 
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -20,6 +21,8 @@ import { formatCreationPrice } from '@/features/appointments/editor/presentation
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { AuthProvider, useAuth, type AuthState } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway } from '@/features/auth/testing/fake-auth-gateway';
+import { ServiceCatalogScreen } from '@/features/services/catalog/ServiceCatalogScreen';
+import { ServiceEditorScreen } from '@/features/services/editor/ServiceEditorScreen';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import type { SourisDatabase } from '@/persistence/database';
 import { loadAppointments } from '@/persistence/stores/appointments';
@@ -184,6 +187,7 @@ const NOW = new Date(2027, 2, 10, 15, 30);
 
 interface Probe {
   readonly appointments: readonly Appointment[];
+  readonly services: readonly Service[];
   readonly getServiceById: (serviceId: string) => Service | undefined;
   readonly updateService: (service: Service) => void;
 }
@@ -193,10 +197,11 @@ const auth: { current?: AuthState } = {};
 
 function DemoProbe() {
   const { appointments } = useAppointmentSession();
-  const { getServiceById, updateService } = useServiceCatalog();
+  const { services, getServiceById, updateService } = useServiceCatalog();
   useEffect(() => {
     probe.current = {
       appointments: appointments.map((entry) => entry.appointment),
+      services,
       getServiceById,
       updateService,
     };
@@ -391,7 +396,7 @@ describe('Playground Step 4 — esthetics: « Modifier le rendez-vous » and Det
     expect(view.getByTestId('creation-total').props.children).toBe(formatCreationPrice(65));
   });
 
-  it('Details speaks the facial’s waiting phase as « le temps d’attente », its stored name unchanged', async () => {
+  it('Details shows and speaks the facial’s waiting phase as « Temps d’attente », exactly as stored', async () => {
     const { view, scenario } = await renderDemo('ESTHETICS', (data) => (
       <AppointmentDetailsScreen appointmentId={`${data.business.id}-appointment-f2`} />
     ));
@@ -399,10 +404,17 @@ describe('Playground Step 4 — esthetics: « Modifier le rendez-vous » and Det
     await act(async () => {
       fireEvent.press(view.getByLabelText(/^Soin du visage, commence à/));
     });
-    expect(view.getByText('Temps de pose')).toBeTruthy();
+    expect(view.getByText('Temps d’attente')).toBeTruthy();
+    expect(view.queryByText('Temps de pose')).toBeNull();
     expect(view.getByLabelText('le temps d’attente : 15 min')).toBeTruthy();
     expect(view.queryByLabelText(/le temps de pose/)).toBeNull();
-    expect(facialItem.phases.map((phase) => phase.requiresStaff)).toEqual([true, false, true]);
+    // The demo facial comes from the esthetics starter base, so its snapshot carries
+    // the new default name — shown as stored, nothing rewritten.
+    expect(facialItem.phases.map((phase) => [phase.name, phase.requiresStaff])).toEqual([
+      ['Application', true],
+      ['Temps d’attente', false],
+      ['Finition', true],
+    ]);
   });
 });
 
@@ -416,5 +428,66 @@ describe('Playground Step 4 — hairdressing keeps its established vocabulary', 
     expect(view.getByTestId('draft-category-TECHNIQUE')).toBeTruthy();
     expect(view.getByText(/\+ .* de pose$/)).toBeTruthy();
     expect(view.queryByText(/d’attente/)).toBeNull();
+  });
+});
+
+// Multi-profession Step 5: the catalogue and the prestation editor say what the appointment
+// screens say — « Temps d’attente » in nails and esthetics, « Temps de pose » in hairdressing.
+describe('Playground Step 5 — waiting-phase terminology in the catalogue and the editor', () => {
+  const typeText = (view: View, label: string, text: string) =>
+    act(async () => fireEvent.changeText(view.getByLabelText(label), text));
+
+  it('hairdressing: an existing colour keeps « Temps de pose » in its Details, as stored', async () => {
+    const { view, scenario } = await renderDemo('HAIRDRESSING', (data) => (
+      <ServiceEditorScreen mode="existing" serviceId={`${data.business.id}-service-color`} />
+    ));
+    expect(view.getAllByText('Temps de pose').length).toBeGreaterThanOrEqual(2);
+    expect(view.queryByText('Temps d’attente')).toBeNull();
+    expect(probe.current!.getServiceById(serviceId(scenario, 'color'))!.phases[1]!.name).toBe('Temps de pose');
+  });
+
+  it('nails: a standard prestation stays one duration; a new phased one reads and stores « Temps d’attente »', async () => {
+    const { view } = await renderDemo('NAILS', () => <ServiceEditorScreen mode="create" />);
+    // Standard: one duration, no phases, no internal vocabulary.
+    expect(view.getByLabelText('Durée de la prestation')).toBeTruthy();
+    expect(view.queryByText('Phases')).toBeNull();
+    expect(view.queryByText(/Technique|Service\b|de pose/)).toBeNull();
+
+    await typeText(view, 'Nom de la prestation', 'Pose gel avec séchage à l’air');
+    await typeText(view, 'Prix de la prestation', '60');
+    await typeText(view, 'Durée de la prestation', '45');
+    await act(async () => {
+      fireEvent(view.getByTestId('service-form-phased-switch'), 'valueChange', true);
+    });
+    await act(async () => fireEvent.press(view.getByLabelText('Développer la phase 1')));
+    await typeText(view, 'Nom de la phase 1', 'Pose du gel');
+    await act(async () => fireEvent.press(view.getByLabelText('Développer la phase 2')));
+    await typeText(view, 'Durée de la phase 2', '10');
+    expect(view.getByLabelText('Phase 2, temps d’attente')).toBeTruthy();
+    expect(view.queryByText(/Technique|de pose|Temps de pose/)).toBeNull();
+    await press(view, 'save-service');
+
+    const created = probe.current!.services.find((entry) => entry.name === 'Pose gel avec séchage à l’air')!;
+    // The prestation name is the professional's — never read as a waiting phase.
+    expect(created.phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff])).toEqual([
+      ['Pose du gel', 45, true],
+      ['Temps d’attente', 10, false],
+    ]);
+    expect(auth.current?.status).toBe('unauthenticated');
+  });
+
+  it('esthetics: the facial reads « dont 15 min d’attente » in Prestations & tarifs', async () => {
+    const { view } = await renderDemo('ESTHETICS', () => <ServiceCatalogScreen />);
+    expect(view.getByText('1 h · dont 15 min d’attente')).toBeTruthy();
+    expect(view.queryByText(/de pose/)).toBeNull();
+  });
+
+  it('esthetics: the facial’s Details show « Temps d’attente », like its appointment Details', async () => {
+    const { view } = await renderDemo('ESTHETICS', (data) => (
+      <ServiceEditorScreen mode="existing" serviceId={`${data.business.id}-service-facial`} />
+    ));
+    expect(view.getByTestId('service-processing')).toBeTruthy();
+    expect(view.getAllByText('Temps d’attente').length).toBeGreaterThanOrEqual(3);
+    expect(view.queryByText(/Temps de pose|Technique/)).toBeNull();
   });
 });

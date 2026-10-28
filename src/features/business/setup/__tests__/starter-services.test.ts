@@ -1,4 +1,8 @@
 import { BUSINESS_ACTIVITY_TYPES } from '@/domain/business';
+import {
+  getCataloguePresentation,
+  getWaitingPhaseName,
+} from '@/features/services/catalogue-presentation';
 import { createServiceId, createServicePhaseId } from '@/features/services/editor/runtime-ids';
 import {
   buildServiceFromForm,
@@ -52,7 +56,7 @@ describe('starter services', () => {
     expect(names('OTHER')).toEqual([]);
   });
 
-  it('respects the catalog rules: one staff phase per SERVICE, a « Temps de pose » in every TECHNIQUE, positive integer minutes', () => {
+  it('respects the catalog rules: one staff phase per SERVICE, the profession’s waiting phase in every TECHNIQUE, positive integer minutes', () => {
     for (const activity of BUSINESS_ACTIVITY_TYPES) {
       const starters = getStarterServices(activity);
       expect(new Set(starters.map((starter) => starter.key)).size).toBe(starters.length);
@@ -69,7 +73,9 @@ describe('starter services', () => {
         } else {
           const processing = starter.phases.filter((phase) => !phase.requiresStaff);
           expect(processing.length).toBeGreaterThanOrEqual(1);
-          expect(processing.every((phase) => phase.name === PROCESSING_PHASE_NAME)).toBe(true);
+          // « Temps de pose »; « Temps d’attente » in the unified catalogue.
+          const waitingPhaseName = getWaitingPhaseName(getCataloguePresentation(activity).organization);
+          expect(processing.every((phase) => phase.name === waitingPhaseName)).toBe(true);
           expect(starter.phases.some((phase) => phase.requiresStaff)).toBe(true);
         }
         expect(getStarterDurationMinutes(starter)).toBe(
@@ -122,7 +128,7 @@ describe('starter services', () => {
     const facial = catalog.find((service) => service.name === 'Soin du visage');
     expect(facial?.phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff])).toEqual([
       ['Application', 30, true],
-      [PROCESSING_PHASE_NAME, 15, false],
+      ['Temps d’attente', 15, false],
       ['Finition', 15, true],
     ]);
   });

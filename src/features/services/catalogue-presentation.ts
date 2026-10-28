@@ -23,6 +23,8 @@
 import type { ServiceType } from '@/domain/appointments';
 import type { BusinessActivityType } from '@/domain/business';
 
+import { PROCESSING_PHASE_NAME } from './editor/service-form';
+
 export type CatalogueOrganization = 'SERVICE_TYPES' | 'CATEGORIES';
 
 export interface CataloguePresentation {
@@ -99,9 +101,10 @@ export const PHASED_SCHEDULING_DESCRIPTION =
   'À activer seulement si le client attend sans vous — séchage, pose d’un produit — et que vous pouvez vous occuper de quelqu’un d’autre pendant ce temps.';
 
 /**
- * How the appointment flows word a prestation (presentation only): the
- * picker cards, the selected-prestation rows, the Résumé time breakdown and
- * the spoken phase steppers. Stored phase names are always shown as stored.
+ * How a prestation's timing is worded (presentation only): the appointment
+ * picker cards, the selected-prestation rows, the Résumé time breakdown, the
+ * spoken phase steppers, the catalogue rows and the prestation editor. Stored
+ * phase names go through `getPhaseDisplayName`.
  *
  *   SERVICE_TYPES  unchanged: « Temps de pose », the Service / Technique
  *                  colours and the spoken type.
@@ -124,7 +127,7 @@ export interface AppointmentWording {
 const appointmentWordings: Readonly<Record<CatalogueOrganization, AppointmentWording>> = {
   SERVICE_TYPES: {
     distinguishesTypes: true,
-    waitingTimeLabel: 'Temps de pose',
+    waitingTimeLabel: PROCESSING_PHASE_NAME,
     waitingTimeSuffix: 'de pose',
     waitingTimeSubject: 'le temps de pose',
   },
@@ -138,4 +141,34 @@ const appointmentWordings: Readonly<Record<CatalogueOrganization, AppointmentWor
 
 export function getAppointmentWording(organization: CatalogueOrganization): AppointmentWording {
   return appointmentWordings[organization];
+}
+
+/**
+ * The name the app gives a NEW unattended phase of this organisation — stored
+ * like any phase name, so it travels into Appointment snapshots unchanged:
+ * « Temps de pose » (SERVICE_TYPES, as before), « Temps d’attente »
+ * (CATEGORIES). Existing records are never renamed.
+ */
+export function getWaitingPhaseName(organization: CatalogueOrganization): string {
+  return appointmentWordings[organization].waitingTimeLabel;
+}
+
+/**
+ * How a stored phase name is shown (presentation only, nothing is rewritten).
+ *
+ * The editor never lets the professional name an unattended phase: it has
+ * always stored the canonical « Temps de pose » there. So an UNATTENDED phase
+ * named exactly « Temps de pose » is the app's own default label — in the
+ * unified catalogue (records created before Step 5, the legacy adapter,
+ * snapshots taken from them) it reads « Temps d’attente ». Every other name —
+ * an active phase, a different unattended name — is the professional's and is
+ * shown exactly as stored. SERVICE_TYPES shows every name as stored.
+ */
+export function getPhaseDisplayName(
+  phase: { readonly name: string; readonly requiresStaff: boolean },
+  organization: CatalogueOrganization,
+): string {
+  return !phase.requiresStaff && phase.name === PROCESSING_PHASE_NAME
+    ? getWaitingPhaseName(organization)
+    : phase.name;
 }

@@ -18,14 +18,19 @@
 //
 // Types follow the catalog rules (docs/domain/SERVICES.md §3): a SERVICE is
 // one staff-required phase; a TECHNIQUE is used only where the client
-// genuinely waits with something in place (« Temps de pose » — a colour, a
-// mask, a tint), whatever the profession, and then carries
-// Application → Temps de pose → Finition. Several steps alone never make a
+// genuinely waits with something in place (a colour, a mask, a tint),
+// whatever the profession, and then carries Application → waiting phase →
+// Finition. The waiting phase gets the name the profession's editor gives a
+// new one (`getWaitingPhaseName`): « Temps de pose », « Temps d’attente » in
+// the unified catalogue (nails, esthetics). Several steps alone never make a
 // Technique: a gel set or a wax is one SERVICE duration.
 
 import type { BusinessActivityType } from '@/domain/business';
 import type { Service, ServiceType } from '@/domain/appointments';
-import { PROCESSING_PHASE_NAME } from '@/features/services/editor/service-form';
+import {
+  getCataloguePresentation,
+  getWaitingPhaseName,
+} from '@/features/services/catalogue-presentation';
 
 export interface StarterPhase {
   readonly name: string;
@@ -49,17 +54,19 @@ function service(key: string, name: string, durationMinutes: number): StarterSer
 }
 
 function technique(
+  activityType: BusinessActivityType,
   key: string,
   name: string,
   timing: { readonly application: number; readonly processing: number; readonly finishing: number },
 ): StarterService {
+  const waitingPhaseName = getWaitingPhaseName(getCataloguePresentation(activityType).organization);
   return {
     key,
     name,
     type: 'TECHNIQUE',
     phases: [
       { name: 'Application', durationMinutes: timing.application, requiresStaff: true },
-      { name: PROCESSING_PHASE_NAME, durationMinutes: timing.processing, requiresStaff: false },
+      { name: waitingPhaseName, durationMinutes: timing.processing, requiresStaff: false },
       { name: 'Finition', durationMinutes: timing.finishing, requiresStaff: true },
     ],
   };
@@ -70,11 +77,11 @@ const presets: Record<BusinessActivityType, readonly StarterService[]> = {
     service('cut-women', 'Coupe femme', 45),
     service('blow-dry', 'Brushing', 30),
     service('cut-blow-dry', 'Coupe + brushing', 60),
-    technique('color', 'Coloration', { application: 30, processing: 35, finishing: 30 }),
-    technique('balayage', 'Balayage', { application: 45, processing: 40, finishing: 30 }),
-    technique('gloss', 'Patine', { application: 15, processing: 20, finishing: 15 }),
+    technique('HAIRDRESSING', 'color', 'Coloration', { application: 30, processing: 35, finishing: 30 }),
+    technique('HAIRDRESSING', 'balayage', 'Balayage', { application: 45, processing: 40, finishing: 30 }),
+    technique('HAIRDRESSING', 'gloss', 'Patine', { application: 15, processing: 20, finishing: 15 }),
     service('cut-men', 'Coupe homme', 30),
-    technique('care', 'Soin', { application: 10, processing: 15, finishing: 15 }),
+    technique('HAIRDRESSING', 'care', 'Soin', { application: 10, processing: 15, finishing: 15 }),
   ],
   // Nail work keeps the technician with the client from start to finish (a
   // lamp cure lasts seconds): every starter is a SERVICE with one duration.
@@ -88,18 +95,18 @@ const presets: Record<BusinessActivityType, readonly StarterService[]> = {
     service('nail-repair', 'Réparation d’un ongle', 15),
   ],
   // A facial is the one esthetics starter where the client genuinely waits
-  // with something in place (the mask): Application → Temps de pose → Finition.
+  // with something in place (the mask): Application → Temps d’attente → Finition.
   ESTHETICS: [
-    technique('facial', 'Soin du visage', { application: 30, processing: 15, finishing: 15 }),
+    technique('ESTHETICS', 'facial', 'Soin du visage', { application: 30, processing: 15, finishing: 15 }),
     service('brow-wax', 'Épilation sourcils', 15),
     service('leg-wax', 'Épilation jambes', 30),
     service('body-treatment', 'Soin du corps', 60),
     service('eye-beauty', 'Beauté du regard', 30),
   ],
   LASHES_BROWS: [
-    technique('lash-lift', 'Rehaussement de cils', { application: 20, processing: 20, finishing: 15 }),
-    technique('tint', 'Teinture', { application: 10, processing: 10, finishing: 10 }),
-    technique('brow-lift', 'Brow lift', { application: 20, processing: 15, finishing: 10 }),
+    technique('LASHES_BROWS', 'lash-lift', 'Rehaussement de cils', { application: 20, processing: 20, finishing: 15 }),
+    technique('LASHES_BROWS', 'tint', 'Teinture', { application: 10, processing: 10, finishing: 10 }),
+    technique('LASHES_BROWS', 'brow-lift', 'Brow lift', { application: 20, processing: 15, finishing: 10 }),
     service('brow-shaping', 'Restructuration sourcils', 30),
   ],
   MAKEUP: [

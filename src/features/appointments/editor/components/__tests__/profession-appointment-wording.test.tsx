@@ -14,6 +14,8 @@ import { BUSINESS_ACTIVITY_TYPES } from '@/domain/business';
 import {
   getAppointmentWording,
   getCataloguePresentation,
+  getPhaseDisplayName,
+  getWaitingPhaseName,
 } from '@/features/services/catalogue-presentation';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 import { serviceCategoryColors } from '@/shared/ui/theme';
@@ -268,8 +270,42 @@ describe('AppointmentServiceEditorCard — profession wording', () => {
     expect(view.getByText('45 min + 15 min d’attente')).toBeTruthy();
     expect(view.queryByTestId('draft-category-TECHNIQUE')).toBeNull();
     expect(view.getByLabelText('Réduire Soin du visage').props.accessibilityHint).toBeUndefined();
-    // The stored phase names are shown as stored; only the spoken subject follows the wording.
-    expect(view.getByText('Temps de pose')).toBeTruthy();
+    // The snapshot's default « Temps de pose » reads « Temps d’attente »; the snapshot is untouched.
+    expect(view.getByText('Temps d’attente')).toBeTruthy();
+    expect(view.queryByText('Temps de pose')).toBeNull();
+    expect(draft.phases[1]?.name).toBe('Temps de pose');
     expect(view.getByLabelText('le temps d’attente : 15 min')).toBeTruthy();
+  });
+});
+
+// Multi-profession Step 5: the name of an unattended phase.
+describe('waiting-phase names', () => {
+  it('gives a new unattended phase « Temps de pose », « Temps d’attente » in the unified catalogue', () => {
+    for (const activity of BUSINESS_ACTIVITY_TYPES) {
+      const expected = activity === 'NAILS' || activity === 'ESTHETICS' ? 'Temps d’attente' : 'Temps de pose';
+      expect(getWaitingPhaseName(getCataloguePresentation(activity).organization)).toBe(expected);
+    }
+  });
+
+  it('hairdressing shows every stored name exactly as stored', () => {
+    for (const phase of [
+      { name: 'Temps de pose', requiresStaff: false },
+      { name: 'Temps d’attente', requiresStaff: false },
+      { name: 'Séchage sous casque', requiresStaff: false },
+      { name: 'Application', requiresStaff: true },
+    ]) {
+      expect(getPhaseDisplayName(phase, 'SERVICE_TYPES')).toBe(phase.name);
+    }
+  });
+
+  it('the unified catalogue reads only the app’s own default « Temps de pose » as « Temps d’attente »', () => {
+    expect(getPhaseDisplayName({ name: 'Temps de pose', requiresStaff: false }, 'CATEGORIES')).toBe('Temps d’attente');
+    expect(getPhaseDisplayName({ name: 'Temps d’attente', requiresStaff: false }, 'CATEGORIES')).toBe('Temps d’attente');
+    // A different unattended name is the professional's: kept exactly.
+    expect(getPhaseDisplayName({ name: 'Repos du masque', requiresStaff: false }, 'CATEGORIES')).toBe('Repos du masque');
+    expect(getPhaseDisplayName({ name: 'temps de pose', requiresStaff: false }, 'CATEGORIES')).toBe('temps de pose');
+    // A worked phase is never reinterpreted, whatever its words.
+    expect(getPhaseDisplayName({ name: 'Temps de pose', requiresStaff: true }, 'CATEGORIES')).toBe('Temps de pose');
+    expect(getPhaseDisplayName({ name: 'Pose complète gel', requiresStaff: true }, 'CATEGORIES')).toBe('Pose complète gel');
   });
 });

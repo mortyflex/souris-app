@@ -168,8 +168,10 @@ describe('Prestations & tarifs', () => {
     expect(view.getByText('Sans catégorie')).toBeTruthy();
     expect(view.getByText('Inactives')).toBeTruthy();
     expect(view.getByText(long.name)).toBeTruthy();
-    // A phased prestation still reads with its waiting time.
-    expect(view.getByText('50 min · dont 20 min de pose')).toBeTruthy();
+    // A phased prestation still reads with its waiting time — the neutral « d’attente »,
+    // even though « Pose avec séchage » itself is named after the work.
+    expect(view.getByText('50 min · dont 20 min d’attente')).toBeTruthy();
+    expect(view.queryByText(/de pose/)).toBeNull();
     expect(within(view.getByTestId('catalog-manage-categories')).getByText('2 catégories')).toBeTruthy();
 
     await type(view.getByLabelText('Rechercher une prestation'), 'pieds');

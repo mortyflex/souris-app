@@ -116,18 +116,41 @@ unattended time       « Temps de pose », « de pose »     « Temps d’attent
 ```
 
 « Temps d’attente » says the client waits; it never claims the professional is free (a cure, a
-mask) and avoids « pose », which names the work itself in nails (« Pose complète gel »). Stored
-phase names are always shown as stored.
+mask) and avoids « pose », which names the work itself in nails (« Pose complète gel »). How a
+stored phase name is shown: §8.
 
 A prestation with a description offers it from its picker card (an « i », and a VoiceOver action)
 in a read-only sheet titled « Description de la prestation »: catalogue information, never copied
 into the Appointment and never confused with its notes. The card tap still selects.
 
-## 8. Not implemented yet
+## 8. Step 5 — the name of an unattended phase (October 2026)
+
+The catalogue (« Prestations & tarifs » rows), the prestation editor (its phases, their type
+choice and spoken labels, the « au moins un » message, the Details) and the onboarding starters
+now use the same words as the appointment flows (§7): « Temps de pose » for SERVICE_TYPES, « Temps
+d’attente » for CATEGORIES. « Temps actif » is unchanged everywhere.
+
+- New records: the editor gives a NEW unattended phase `getWaitingPhaseName(organization)` —
+  « Temps de pose » as before, « Temps d’attente » in the unified catalogue — and stores it like
+  any phase name, so the Appointment snapshot carries it. The esthetics starter facial
+  (Application → Temps d’attente → Finition) follows the same rule.
+- Existing records are never renamed: no migration, and a save keeps the name an unattended phase
+  already has (the editor used to replace it with « Temps de pose »). Snapshots are never touched.
+- Display: `getPhaseDisplayName`. The editor has never let anyone type the name of an unattended
+  phase, so an UNATTENDED phase named exactly « Temps de pose » is the app's own former default; the
+  unified catalogue shows it as « Temps d’attente » — catalogue, editor, Résumé, Modifier,
+  Details. Any other name (a worked phase, a different unattended name from an import or sync)
+  is the professional's and is shown exactly as stored. SERVICE_TYPES shows every name as stored.
+- Never inferred from words: `requiresStaff` decides what a phase is; a prestation's name
+  (« Pose complète gel ») is never read as a waiting phase.
+
+Ambiguity, chosen least-destructively: a stored « Temps de pose » cannot be told apart from a
+professional who would have meant those exact words for an unattended phase — the editor never
+allowed typing it, so it is read as the default. It is only a reading; the stored value stays.
+
+## 9. Not implemented yet
 
 - the online-booking visibility of a prestation (designed in SERVICES.md §12);
-- profession-specific terminology beyond the touches above (the catalogue list and editor still
-  word an unattended phase « Temps de pose »);
 - any catalogue migration or renaming;
 - making `NAILS` or `ESTHETICS` available.
 

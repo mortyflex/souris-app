@@ -234,7 +234,12 @@ export function AppointmentServiceSection({
           ) : (
             <View style={styles.expandedBody}>
               {timelineItem.phases.map((phase, index) => (
-                <AppointmentPhaseRow key={phase.phaseId} phase={phase} isFirst={index === 0} />
+                <AppointmentPhaseRow
+                  key={phase.phaseId}
+                  phase={phase}
+                  isFirst={index === 0}
+                  organization={organization}
+                />
               ))}
             </View>
           )}

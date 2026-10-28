@@ -9,14 +9,16 @@
 // The editor is presentation only: it renders the phases it is given and
 // reports each change. Every owner (Creation, Editing, Details) treats the
 // value as Appointment snapshot data; the Service catalog is never written.
-// Phase names are shown as stored; only the spoken subject of an unattended
-// phase follows the profession's wording (`getAppointmentWording`).
+// Phase names are shown through `getPhaseDisplayName` (the snapshot is never
+// rewritten); the spoken subject of an unattended phase follows the
+// profession’s wording (`getAppointmentWording`).
 
 import { StyleSheet, View } from 'react-native';
 
 import type { AppointmentPhase, ServiceType } from '@/domain/appointments';
 import {
   getAppointmentWording,
+  getPhaseDisplayName,
   type CatalogueOrganization,
 } from '@/features/services/catalogue-presentation';
 import { AppText } from '@/shared/ui/AppText';
@@ -52,7 +54,7 @@ export function AppointmentPhaseTimingEditor({
   onChangePhaseDuration,
   minimumMinutes,
   disabled,
-  organization,
+  organization = 'SERVICE_TYPES',
 }: AppointmentPhaseTimingEditorProps) {
   const simple = serviceType === 'SERVICE' && phases.length === 1;
 
@@ -71,7 +73,7 @@ export function AppointmentPhaseTimingEditor({
               numberOfLines={1}
               style={[styles.phaseName, processing && styles.processingPhaseName]}
             >
-              {simple ? 'Durée' : phase.name}
+              {simple ? 'Durée' : getPhaseDisplayName(phase, organization)}
             </AppText>
             <DurationStepper
               disabled={disabled}

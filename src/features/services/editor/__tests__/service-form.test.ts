@@ -11,7 +11,9 @@ import {
   createEmptyServiceForm,
   parseServicePriceInput,
   reorderServicePhases,
+  PROCESSING_PHASE_NAME,
   setPhaseRequiresStaff,
+  switchServiceFormType,
   toServiceFormValues,
   validateServiceForm,
   type ServiceFormValues,
@@ -291,5 +293,97 @@ describe('processing phase model', () => {
 
     expect(processingAgain.phases[0].name).toBe('Temps de pose');
     expect(processingAgain.phases[0].previousActiveName).toBe('Application');
+  });
+});
+
+// Multi-profession Step 5: the name the editor gives an unattended phase follows the
+// profession (« Temps d’attente » in the unified catalogue), and a save never rewrites a
+// name a phase already has.
+describe('profession-aware waiting phase name', () => {
+  const WAITING = 'Temps d’attente';
+  const facialForm = (phases: ServiceFormValues['phases']): ServiceFormValues => ({
+    name: 'Soin du visage',
+    price: '65',
+    type: 'TECHNIQUE',
+    simpleDurationMinutes: '',
+    phases,
+  });
+  const build = (values: ServiceFormValues, processingPhaseName?: string) =>
+    buildServiceFromForm({
+      id: 'service-facial',
+      businessId: 'business-1',
+      active: true,
+      values,
+      ...(processingPhaseName !== undefined && { processingPhaseName }),
+    });
+
+  it('keeps « Temps de pose » as the default everywhere it was', () => {
+    expect(PROCESSING_PHASE_NAME).toBe('Temps de pose');
+    const draft = createEmptyServiceForm('SERVICE', 'p1');
+    expect(switchServiceFormType(draft, 'TECHNIQUE', 'p2').phases[1]?.name).toBe('Temps de pose');
+    expect(setPhaseRequiresStaff(draft, 'p1', false).phases[0]?.name).toBe('Temps de pose');
+  });
+
+  it('names a new unattended phase with the given waiting-phase name', () => {
+    const draft = { ...createEmptyServiceForm('SERVICE', 'p1'), simpleDurationMinutes: '30' };
+    const phased = switchServiceFormType(draft, 'TECHNIQUE', 'p2', WAITING);
+    expect(phased.phases.map((phase) => [phase.name, phase.requiresStaff])).toEqual([
+      ['', true],
+      [WAITING, false],
+    ]);
+
+    const toggled = setPhaseRequiresStaff(
+      facialForm([{ id: 'a', name: 'Masque', durationMinutes: '15', requiresStaff: true }]),
+      'a',
+      false,
+      WAITING,
+    );
+    expect(toggled.phases[0]).toMatchObject({ name: WAITING, previousActiveName: 'Masque' });
+    // Back to active: the worked name returns, never the waiting-phase name.
+    expect(setPhaseRequiresStaff(toggled, 'a', true, WAITING).phases[0]?.name).toBe('Masque');
+  });
+
+  it('saves the waiting-phase name, and the snapshot and timing are those of any Technique', () => {
+    const phases = [
+      { id: 'a', name: 'Nettoyage', durationMinutes: '30', requiresStaff: true },
+      { id: 'w', name: '', durationMinutes: '15', requiresStaff: false },
+      { id: 'b', name: 'Finition', durationMinutes: '15', requiresStaff: true },
+    ];
+    const unified = build(facialForm(phases), WAITING);
+    const established = build(facialForm(phases));
+    expect(unified.phases[1]?.name).toBe(WAITING);
+    expect(established.phases[1]?.name).toBe('Temps de pose');
+    // Only the name differs: ids, durations and requiresStaff are identical.
+    expect(unified.phases.map(({ name: _name, ...rest }) => rest)).toEqual(
+      established.phases.map(({ name: _name, ...rest }) => rest),
+    );
+
+    const item = createAppointmentItemSnapshot({ id: 'item-1', order: 0, service: unified });
+    expect(item.phases[1]).toMatchObject({ name: WAITING, durationMinutes: 15, requiresStaff: false });
+    const appointment: Appointment = {
+      id: 'appointment-1',
+      businessId: 'business-1',
+      clientId: 'client-1',
+      staffMemberId: 'staff-1',
+      startAt: new Date(2027, 2, 10, 9),
+      status: 'SCHEDULED',
+      items: [item],
+    };
+    expect(getStaffActiveDurationMinutes(appointment)).toBe(45);
+    expect(getProcessingDurationMinutes(appointment)).toBe(15);
+    expect(getElapsedDurationMinutes(appointment)).toBe(60);
+  });
+
+  it('never rewrites a stored waiting-phase name on save — legacy « Temps de pose » and custom names alike', () => {
+    const stored = build(
+      facialForm([
+        { id: 'a', name: 'Application', durationMinutes: '30', requiresStaff: true },
+        { id: 'w1', name: 'Temps de pose', durationMinutes: '15', requiresStaff: false },
+        { id: 'w2', name: 'Repos du masque', durationMinutes: '10', requiresStaff: false },
+      ]),
+    );
+    const resaved = build({ ...toServiceFormValues(stored), price: '70' }, WAITING);
+    expect(resaved.phases.map((phase) => phase.name)).toEqual(['Application', 'Temps de pose', 'Repos du masque']);
+    expect(resaved.price).toBe(70);
   });
 });

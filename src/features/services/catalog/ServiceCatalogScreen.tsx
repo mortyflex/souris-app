@@ -12,9 +12,10 @@
 //   segment switch, and an empty result offers the other category's matches.
 // - Every row leads with the Prestation's automatic family pictogram
 //   (PrestationIcon — the ONE mapping, shared with Prestation Details), keeps
-//   the name in primary navy, the duration (and « dont … de pose » when
-//   there is one) secondary, the price aligned before the chevron. The whole
-//   row opens Prestation Details; management actions live there.
+//   the name in primary navy, the duration (and « dont … de pose » —
+//   « d’attente » in the unified catalogue — when there is one) secondary,
+//   the price aligned before the chevron. The whole row opens Prestation
+//   Details; management actions live there.
 // - One SectionList carries everything (no nested scroll); its bottom
 //   clearance keeps the last row above the floating « + ».
 // - The « + » opens the shared floating menu: « Nouvelle prestation » (the
@@ -45,6 +46,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Service, ServiceType } from '@/domain/appointments';
 import { filterCatalogServices } from '@/features/appointments/editor/filter-services';
 import { filterServicesOfType } from '@/features/appointments/editor/selection-sections';
+import {
+  getAppointmentWording,
+  type CatalogueOrganization,
+} from '@/features/services/catalogue-presentation';
 import { PrestationIcon } from '@/features/services/components/PrestationIcon';
 import {
   formatServiceDuration,
@@ -224,6 +229,7 @@ export function ServiceCatalogScreen() {
             first={index === 0}
             last={index === section.data.length - 1}
             onPress={() => openService(item.id)}
+            organization={presentation.organization}
             service={item}
           />
         )}
@@ -290,17 +296,20 @@ function ServiceCatalogRow({
   first,
   last,
   onPress,
+  organization,
 }: {
   readonly service: Service;
   readonly first: boolean;
   readonly last: boolean;
   readonly onPress: () => void;
+  readonly organization: CatalogueOrganization;
 }) {
   const duration = getServiceDurationMinutes(service);
   const processing = getServiceProcessingMinutes(service);
+  const { waitingTimeSuffix } = getAppointmentWording(organization);
   const meta =
     service.type === 'TECHNIQUE' && processing > 0
-      ? `${formatServiceDuration(duration)} · dont ${formatServiceDuration(processing)} de pose`
+      ? `${formatServiceDuration(duration)} · dont ${formatServiceDuration(processing)} ${waitingTimeSuffix}`
       : formatServiceDuration(duration);
 
   // Consecutive rows form ONE grouped surface (the GroupedSurface language),

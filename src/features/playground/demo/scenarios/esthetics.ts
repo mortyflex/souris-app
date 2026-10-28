@@ -2,7 +2,7 @@
 //
 // A fictional beauty institute: botanical surnames, a « Démo » business. The
 // catalogue is the ESTHETICS onboarding base, priced: the facial is the one
-// TECHNIQUE (Application → Temps de pose → Finition — the mask sets while the
+// TECHNIQUE (Application → Temps d’attente → Finition — the mask sets while the
 // professional is free), waxing, body treatment and eye beauty are SERVICES.
 // Today's planning books a brow wax DURING a facial's pose.
 //

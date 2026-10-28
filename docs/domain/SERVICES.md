@@ -65,9 +65,11 @@ rule, not a timeline constraint.
 
 User-facing wording: `Temps actif` (`requiresStaff = true`, professionnelle occupée) and `Temps de pose` (`requiresStaff = false`, professionnelle disponible). The picker sections are `Services` / `Techniques` — the raw enum values are never exposed.
 
-A processing phase has ONE canonical user-facing identity: `Temps de pose`. Its name is never
-user-entered — the editor shows only `Durée` and `Type` for it, and saving always records the
-canonical name. Switching an active phase to processing keeps the previous draft name only in
+A processing phase has ONE canonical user-facing identity: `Temps de pose` (`Temps d’attente` in
+the unified catalogue of nails and esthetics — PROFESSIONS.md §8). Its name is never
+user-entered — the editor shows only `Durée` and `Type` for it; a phase that becomes unattended
+receives the canonical name, and a save keeps the name an unattended phase already has (a stored
+name is never rewritten). Switching an active phase to processing keeps the previous draft name only in
 form-session state so switching back can restore it; the canonical `Service` model never stores
 that temporary name. Switching a processing phase back to active always requires a real name —
 an active phase can never silently save as `Temps de pose`.
@@ -356,8 +358,10 @@ selection and snapshots are unchanged.
 
 A nail technique is not an internal TECHNIQUE: a gel application is one SERVICE duration; the
 phased option is only for real waiting time where the professional is free. The SERVICE /
-TECHNIQUE rules of §3 and §8 are unchanged, including the required « Temps de pose » of a phased
-prestation; the stored name of that phase stays « Temps de pose » for every profession.
+TECHNIQUE rules of §3 and §8 are unchanged, including the required waiting phase of a phased
+prestation. Since multi-profession Step 5 a NEW waiting phase of the unified catalogue is named
+« Temps d’attente », and a stored « Temps de pose » there reads « Temps d’attente » without being
+rewritten (PROFESSIONS.md §8).
 
 ### 11.3 Management
 

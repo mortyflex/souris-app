@@ -14,7 +14,12 @@ export interface ServicePhaseFormValues {
   readonly previousActiveName?: string;
 }
 
-/** Canonical user-facing identity of a processing phase. */
+/**
+ * Canonical user-facing identity of a processing phase — the default the
+ * editor gives a new unattended phase in the Services / Techniques
+ * experience. The unified catalogue gives « Temps d’attente » instead
+ * (`getWaitingPhaseName`, catalogue-presentation.ts); callers pass it.
+ */
 export const PROCESSING_PHASE_NAME = 'Temps de pose';
 
 export interface ServiceFormValues {
@@ -69,14 +74,15 @@ export function createEmptyServiceForm(
  * Creation only (the type never changes once saved — SERVICES.md §7): turns
  * the draft into the other structure, keeping name, price, category and
  * description. To phases: the single duration becomes a first active phase,
- * followed by a « Temps de pose » the professional sizes — a phased
- * prestation needs one (§3). Back to one duration: the first active phase's
+ * followed by a waiting phase (`processingPhaseName`, « Temps de pose » by
+ * default) the professional sizes — a phased prestation needs one (§3). Back to one duration: the first active phase's
  * duration is kept when no single duration was typed.
  */
 export function switchServiceFormType(
   values: ServiceFormValues,
   type: ServiceType,
   processingPhaseId: string,
+  processingPhaseName: string = PROCESSING_PHASE_NAME,
 ): ServiceFormValues {
   if (values.type === type) return values;
   const first = values.phases[0];
@@ -87,7 +93,7 @@ export function switchServiceFormType(
       type,
       phases: [
         { id: first.id, name: '', durationMinutes: values.simpleDurationMinutes, requiresStaff: true },
-        { id: processingPhaseId, name: PROCESSING_PHASE_NAME, durationMinutes: '', requiresStaff: false },
+        { id: processingPhaseId, name: processingPhaseName, durationMinutes: '', requiresStaff: false },
       ],
     };
   }
@@ -148,8 +154,8 @@ export function validateServiceForm(values: ServiceFormValues): ServiceFormValid
     values.type !== 'SERVICE' ||
     parsePositiveDurationInput(values.simpleDurationMinutes) !== undefined;
   const phaseValidities = values.phases.map((phase) => ({
-    // Processing phases carry the canonical "Temps de pose" name and need
-    // no user-entered name; only active phases require a real name.
+    // Processing phases carry the app's own name (« Temps de pose », « Temps
+    // d’attente ») and need no user-entered name; only active phases require one.
     nameValid: phase.requiresStaff ? phase.name.trim().length > 0 : true,
     durationValid: parsePositiveDurationInput(phase.durationMinutes) !== undefined,
   }));
@@ -177,6 +183,8 @@ export interface BuildServiceFromFormInput {
   readonly businessId: string;
   readonly active: boolean;
   readonly values: ServiceFormValues;
+  /** The name of an unattended phase that has none yet; « Temps de pose » by default. */
+  readonly processingPhaseName?: string;
 }
 
 export function buildServiceFromForm(input: BuildServiceFromFormInput): Service {
@@ -205,7 +213,12 @@ export function buildServiceFromForm(input: BuildServiceFromFormInput): Service 
         ]
       : input.values.phases.map((phase) => ({
           id: phase.id,
-          name: phase.requiresStaff ? phase.name.trim() : PROCESSING_PHASE_NAME,
+          // An unattended phase keeps the name it already has (its stored
+          // name, or the one given when it became unattended): a stored name is
+          // never rewritten by a save.
+          name: phase.requiresStaff
+            ? phase.name.trim()
+            : phase.name.trim() || (input.processingPhaseName ?? PROCESSING_PHASE_NAME),
           durationMinutes: parsePositiveDurationInput(phase.durationMinutes) as number,
           requiresStaff: phase.requiresStaff,
         }));
@@ -253,18 +266,20 @@ export function updateServicePhase(
 /**
  * Switches a phase between active and processing.
  *
- * active → processing: the canonical name becomes "Temps de pose"; the
+ * active → processing: the name becomes `processingPhaseName` (« Temps de
+ * pose » by default, « Temps d’attente » in the unified catalogue); the
  * previous user-entered name is kept in form-session state only so switching
  * back can restore it.
  *
  * processing → active: the draft name is restored when available, otherwise
  * the phase starts unnamed and requires a valid name before save. An active
- * phase can never silently save as "Temps de pose".
+ * phase can never silently save under the waiting-phase name.
  */
 export function setPhaseRequiresStaff(
   values: ServiceFormValues,
   phaseId: string,
   requiresStaff: boolean,
+  processingPhaseName: string = PROCESSING_PHASE_NAME,
 ): ServiceFormValues {
   return {
     ...values,
@@ -283,7 +298,7 @@ export function setPhaseRequiresStaff(
       return {
         ...phase,
         requiresStaff: false,
-        name: PROCESSING_PHASE_NAME,
+        name: processingPhaseName,
         previousActiveName:
           phase.name.trim().length > 0 ? phase.name : phase.previousActiveName,
       };
