@@ -16,7 +16,10 @@
 // `grouped` (« Modifier le rendez-vous », DESIGN_OVERRIDES.md §27): a row of
 // ONE white grouped list — inset separator, reorder handle leading, and a
 // small category dot (violet Service, azure Technique) whose meaning is also
-// spoken in the row's hint, never colour alone.
+// spoken in the row's hint, never colour alone. With the unified `CATEGORIES`
+// organisation (nails, esthetics) the internal type is not exposed: no dot,
+// no spoken type, and unattended time reads « d’attente »
+// (`getAppointmentWording`).
 
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -28,6 +31,7 @@ import Animated, {
   useReducedMotion,
 } from 'react-native-reanimated';
 
+import { getAppointmentWording } from '@/features/services/catalogue-presentation';
 import { AppText } from '@/shared/ui/AppText';
 import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
 import {
@@ -67,7 +71,10 @@ export function AppointmentServiceEditorCard({
   dragHandle,
   grouped = false,
   separated = false,
+  organization = 'SERVICE_TYPES',
 }: SortableDraftCardProps) {
+  const wording = getAppointmentWording(organization);
+  const showsType = grouped && wording.distinguishesTypes;
   const [priceText, setPriceText] = useState(() => formatPriceInput(draft.price));
   const [priceInvalid, setPriceInvalid] = useState(false);
   const [priceFocused, setPriceFocused] = useState(false);
@@ -94,7 +101,7 @@ export function AppointmentServiceEditorCard({
   const activeDuration = totalDuration - processingDuration;
   const durationSummary =
     processingDuration > 0
-      ? `${formatCreationDuration(activeDuration)} + ${formatCreationDuration(processingDuration)} de pose`
+      ? `${formatCreationDuration(activeDuration)} + ${formatCreationDuration(processingDuration)} ${wording.waitingTimeSuffix}`
       : formatCreationDuration(totalDuration);
 
   const handlePriceChange = (text: string) => {
@@ -132,7 +139,7 @@ export function AppointmentServiceEditorCard({
           accessibilityLabel={
             expanded ? `Réduire ${draft.serviceName}` : `Développer ${draft.serviceName}`
           }
-          accessibilityHint={grouped ? categoryNames[draft.serviceType] : undefined}
+          accessibilityHint={showsType ? categoryNames[draft.serviceType] : undefined}
           accessibilityState={{ expanded }}
           onPress={onToggleExpanded}
           style={({ pressed }) => [
@@ -140,7 +147,7 @@ export function AppointmentServiceEditorCard({
             pressed && (grouped ? styles.groupedHeaderPressed : styles.headerPressed),
           ]}
         >
-          {grouped && (
+          {showsType && (
             <View
               style={[
                 styles.categoryDot,
@@ -212,6 +219,7 @@ export function AppointmentServiceEditorCard({
               )}
               <AppointmentPhaseTimingEditor
                 onChangePhaseDuration={onUpdatePhaseDuration}
+                organization={organization}
                 phases={draft.phases}
                 serviceName={draft.serviceName}
                 serviceType={draft.serviceType}

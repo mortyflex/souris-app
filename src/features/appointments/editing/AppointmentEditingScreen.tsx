@@ -351,6 +351,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
               grouped
               onRemove={removeDraft}
               onReorder={reorderSelectedDrafts}
+              organization={catalogueView.presentation.organization}
               onToggleExpanded={(draftKey) =>
                 setExpandedDraftId((current) => (current === draftKey ? null : draftKey))
               }

@@ -30,6 +30,7 @@ import Animated, {
 import type { AppointmentPhase, AppointmentPhaseDurationUpdate } from '@/domain/appointments';
 import { AppointmentPhaseTimingEditor } from '@/features/appointments/editor/components/AppointmentPhaseTimingEditor';
 import { LEADING_DRAG_HANDLE_WIDTH } from '@/features/appointments/editor/components/SortableRowList';
+import type { CatalogueOrganization } from '@/features/services/catalogue-presentation';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
@@ -66,6 +67,8 @@ interface AppointmentServiceSectionProps {
   readonly dragHandle?: ReactNode;
   /** Draws the inset separator above the row (every row but the first). */
   readonly separated?: boolean;
+  /** How the profession's catalogue is organised (the spoken wording of the timing steppers). */
+  readonly organization?: CatalogueOrganization;
 }
 
 type DraftDurations = Readonly<Record<string, number>>;
@@ -87,6 +90,7 @@ export function AppointmentServiceSection({
   onSaveTiming,
   dragHandle,
   separated = false,
+  organization,
 }: AppointmentServiceSectionProps) {
   const { item, timelineItem } = service;
   const simple = isServicePhaseRedundant(service);
@@ -204,6 +208,7 @@ export function AppointmentServiceSection({
                 onChangePhaseDuration={(phaseId, minutes) =>
                   setDraft((current) => ({ ...current, [phaseId]: minutes }))
                 }
+                organization={organization}
                 phases={draftPhases}
                 serviceName={item.serviceName}
                 serviceType={item.serviceType}

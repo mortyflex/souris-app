@@ -569,6 +569,7 @@ export function AppointmentCreationScreen({
           onEditClient={() => navigateToStep(0)}
           onEditServices={() => navigateToStep(1)}
           onReorder={reorderSelectedDrafts}
+          organization={catalogueView.presentation.organization}
           maxHour={startHourRange.maxHour}
           minHour={startHourRange.minHour}
           onStartAtChange={chooseDraftStartTime}

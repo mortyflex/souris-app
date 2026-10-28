@@ -18,6 +18,7 @@
 
 import type { ReactNode } from 'react';
 
+import type { CatalogueOrganization } from '@/features/services/catalogue-presentation';
 import { SwipeToDeleteRow, useSwipeHintTarget } from '@/shared/ui/SwipeToDeleteRow';
 import { radii, semanticColors } from '@/shared/ui/theme';
 
@@ -40,6 +41,8 @@ export interface SortableDraftCardProps {
   readonly grouped?: boolean;
   /** Grouped rows only: draws the separator above the row (every row but the first). */
   readonly separated?: boolean;
+  /** How the profession's catalogue is organised; the Services / Techniques experience by default. */
+  readonly organization?: CatalogueOrganization;
 }
 
 interface SortableDraftListProps {
@@ -65,6 +68,7 @@ interface SortableDraftListProps {
   readonly renderCard?: (props: SortableDraftCardProps) => ReactNode;
   /** One grouped white list instead of separate cards; the caller provides the surface. */
   readonly grouped?: boolean;
+  readonly organization?: CatalogueOrganization;
 }
 
 function getDraftKey(entry: SortableDraftEntry): string {
@@ -82,6 +86,7 @@ export function SortableDraftList({
   canRemove,
   renderCard,
   grouped = false,
+  organization,
 }: SortableDraftListProps) {
   // The first removable row present when the list mounts plays the swipe
   // hint once; rows added or promoted later never replay it.
@@ -106,6 +111,7 @@ export function SortableDraftList({
           dragHandle,
           grouped,
           separated: grouped && entries.indexOf(entry) > 0,
+          organization,
         };
         const card = renderCard ? renderCard(cardProps) : <AppointmentServiceEditorCard {...cardProps} />;
         if (!canRemove) return card;

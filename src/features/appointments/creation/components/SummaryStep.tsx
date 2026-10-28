@@ -15,7 +15,8 @@
 //                          then the « Acompte » row — a deposit ALREADY
 //                          received, saved with the Appointment — offered only
 //                          while the new Appointment will be financially open
-//   5. Final summary    → Temps actif / Temps de pose only when the
+//   5. Final summary    → Temps actif / Temps de pose (Temps d’attente in the
+//                          unified catalogue) only when the
 //                          Appointment has pose time (otherwise Temps actif
 //                          would repeat Durée totale), then Durée totale and
 //                          Total. The CTA lives in the footer.
@@ -45,6 +46,10 @@ import {
 } from '@/shared/ui/theme';
 
 import { MissingEmailNotice } from '@/features/communications/components/MissingEmailNotice';
+import {
+  getAppointmentWording,
+  type CatalogueOrganization,
+} from '@/features/services/catalogue-presentation';
 import { APPOINTMENT_REMINDER_ROW_LABEL } from '@/features/communications/presentation';
 import { SwitchRow } from '@/shared/ui/SwitchRow';
 
@@ -107,6 +112,8 @@ interface SummaryStepProps {
   /** Hours offered by the start-time wheels, both inclusive. */
   readonly minHour: number;
   readonly maxHour: number;
+  /** How the profession's catalogue is organised; the Services / Techniques experience by default. */
+  readonly organization?: CatalogueOrganization;
 }
 
 export function SummaryStep({
@@ -129,7 +136,9 @@ export function SummaryStep({
   onStartAtChange,
   minHour,
   maxHour,
+  organization = 'SERVICE_TYPES',
 }: SummaryStepProps) {
+  const wording = getAppointmentWording(organization);
   const hasPoseTime = summary.processingMinutes > 0;
   const durationLabel = formatCreationDuration(summary.elapsedMinutes);
   const totalLabel = formatCreationPrice(summary.servicesTotal.netCents / 100);
@@ -193,6 +202,7 @@ export function SummaryStep({
             onToggleExpanded={onToggleExpanded}
             onUpdatePhaseDuration={onUpdatePhaseDuration}
             onUpdatePrice={onUpdatePrice}
+            organization={organization}
           />
         </GroupedSurface>
       </View>
@@ -260,7 +270,7 @@ export function SummaryStep({
             )}
             <TimeRow
               accent={peach.peach700}
-              label="Temps de pose"
+              label={wording.waitingTimeLabel}
               value={formatCreationDuration(summary.processingMinutes)}
             />
           </GroupedSurface>

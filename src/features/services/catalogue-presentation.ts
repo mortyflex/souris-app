@@ -97,3 +97,45 @@ export function getCataloguePresentation(activityType: BusinessActivityType): Ca
 export const PHASED_SCHEDULING_LABEL = 'Plusieurs phases avec temps d’attente';
 export const PHASED_SCHEDULING_DESCRIPTION =
   'À activer seulement si le client attend sans vous — séchage, pose d’un produit — et que vous pouvez vous occuper de quelqu’un d’autre pendant ce temps.';
+
+/**
+ * How the appointment flows word a prestation (presentation only): the
+ * picker cards, the selected-prestation rows, the Résumé time breakdown and
+ * the spoken phase steppers. Stored phase names are always shown as stored.
+ *
+ *   SERVICE_TYPES  unchanged: « Temps de pose », the Service / Technique
+ *                  colours and the spoken type.
+ *   CATEGORIES     « Temps d’attente » — neutral: the client waits, without
+ *                  implying that the professional is free (« pose » also
+ *                  names the work itself in nails, « Pose complète gel ») —
+ *                  and the internal type is neither coloured nor spoken.
+ */
+export interface AppointmentWording {
+  /** Whether SERVICE / TECHNIQUE is told apart (colours, spoken type). */
+  readonly distinguishesTypes: boolean;
+  /** The app's own name for the unattended time of a prestation. */
+  readonly waitingTimeLabel: string;
+  /** « dont 30 min de pose », « 45 min + 30 min d’attente ». */
+  readonly waitingTimeSuffix: string;
+  /** The spoken subject of an unattended phase stepper. */
+  readonly waitingTimeSubject: string;
+}
+
+const appointmentWordings: Readonly<Record<CatalogueOrganization, AppointmentWording>> = {
+  SERVICE_TYPES: {
+    distinguishesTypes: true,
+    waitingTimeLabel: 'Temps de pose',
+    waitingTimeSuffix: 'de pose',
+    waitingTimeSubject: 'le temps de pose',
+  },
+  CATEGORIES: {
+    distinguishesTypes: false,
+    waitingTimeLabel: 'Temps d’attente',
+    waitingTimeSuffix: 'd’attente',
+    waitingTimeSubject: 'le temps d’attente',
+  },
+};
+
+export function getAppointmentWording(organization: CatalogueOrganization): AppointmentWording {
+  return appointmentWordings[organization];
+}

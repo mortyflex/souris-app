@@ -100,10 +100,34 @@ NAILS and ESTHETICS read one « Prestations » catalogue grouped by the professi
 created as single-duration prestations, with the phased model as an advanced option. Availability
 is unchanged: NAILS and ESTHETICS stay « Bientôt disponible ».
 
-## 7. Not implemented yet
+## 7. Step 4 — the appointment experience (October 2026)
+
+The appointment flows (« Nouveau rendez-vous », « Modifier le rendez-vous », Details, the
+estimation picker) follow the catalogue organisation through ONE presentation table,
+`getAppointmentWording` (`src/features/services/catalogue-presentation.ts`). Nothing is stored,
+synced or read by a scheduling rule; enum values, snapshots and timeline calculation are unchanged.
+
+```text
+                      SERVICE_TYPES (hairdressing, …)    CATEGORIES (NAILS, ESTHETICS)
+picker                Services / Techniques segment      the professional's categories, « Sans catégorie »
+card palette          violet Service, azure Technique    one palette, the type never shown
+spoken type           « Service » / « Technique »        none
+unattended time       « Temps de pose », « de pose »     « Temps d’attente », « d’attente »
+```
+
+« Temps d’attente » says the client waits; it never claims the professional is free (a cure, a
+mask) and avoids « pose », which names the work itself in nails (« Pose complète gel »). Stored
+phase names are always shown as stored.
+
+A prestation with a description offers it from its picker card (an « i », and a VoiceOver action)
+in a read-only sheet titled « Description de la prestation »: catalogue information, never copied
+into the Appointment and never confused with its notes. The card tap still selects.
+
+## 8. Not implemented yet
 
 - the online-booking visibility of a prestation (designed in SERVICES.md §12);
-- profession-specific terminology beyond the touches above;
+- profession-specific terminology beyond the touches above (the catalogue list and editor still
+  word an unattended phase « Temps de pose »);
 - any catalogue migration or renaming;
 - making `NAILS` or `ESTHETICS` available.
 

@@ -63,6 +63,8 @@ import { describeAppointmentChangeIntoCalendarBlock } from "@/features/calendar-
 import { useCalendarBlockSession } from "@/features/calendar-blocks/session/CalendarBlockSessionProvider";
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
+import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
+import { getCataloguePresentation } from "@/features/services/catalogue-presentation";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
@@ -173,6 +175,7 @@ export function AppointmentDetailsScreen({
     voidAppointmentDeposit,
   } = useAppointmentSession();
   const { calendarBlocks } = useCalendarBlockSession();
+  const { organization } = getCataloguePresentation(useCurrentBusiness().activityType);
   const { getClientById } = useClientSession();
   const { sales, deleteAppointmentProduct } = useSaleSession();
   const entry = getAppointmentById(appointmentId);
@@ -599,6 +602,7 @@ export function AppointmentDetailsScreen({
                   dragHandle={dragHandle}
                   editable={canModify}
                   expanded={expandedItemIds.has(service.item.id)}
+                  organization={organization}
                   separated={services.indexOf(service) > 0}
                   service={service}
                   onSaveTiming={(updates) => saveServiceTiming(service.item.id, updates)}

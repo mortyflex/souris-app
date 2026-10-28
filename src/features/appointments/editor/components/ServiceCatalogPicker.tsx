@@ -22,7 +22,11 @@
 // unified `CATEGORIES` organisation (nails, esthetics) there is no segment —
 // search covers every prestation and the grid is split under the
 // professional's category titles, then « Sans catégorie ». The cards, the
-// selection and what a tap does are exactly the same.
+// selection and what a tap does are exactly the same; the cards take the
+// organisation's wording (`getAppointmentWording`).
+//
+// A card whose prestation has a description offers it through its « i »
+// (ServiceDescriptionSheet), in both organisations; a tap still selects.
 
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -43,6 +47,7 @@ import {
 
 import { filterCatalogServices } from '../filter-services';
 import { filterServicesOfType, toServiceGridRows } from '../selection-sections';
+import { ServiceDescriptionSheet } from './ServiceDescriptionSheet';
 import { ServiceSelectionCard } from './ServiceSelectionCard';
 
 const categoryLabels: Readonly<Record<ServiceType, string>> = {
@@ -85,38 +90,53 @@ export function ServiceCatalogPicker({
   organization = 'SERVICE_TYPES',
   categories = [],
 }: ServiceCatalogPickerProps) {
-  if (organization === 'CATEGORIES') {
-    return (
-      <CategorizedServicePicker
-        categories={categories}
-        onSelectService={onSelectService}
-        selectedHint={selectedHint}
-        selectedServiceIds={selectedServiceIds}
-        services={services}
-      />
-    );
-  }
+  const [describedService, setDescribedService] = useState<Service>();
+  const [descriptionVisible, setDescriptionVisible] = useState(false);
+  const showDescription = (service: Service) => {
+    setDescribedService(service);
+    setDescriptionVisible(true);
+  };
+  const grid: GridOptions = {
+    organization,
+    onSelectService,
+    onShowDescription: showDescription,
+    selectedHint,
+    selectedServiceIds,
+  };
+
   return (
-    <TypedServicePicker
-      onSelectService={onSelectService}
-      selectedHint={selectedHint}
-      selectedServiceIds={selectedServiceIds}
-      services={services}
-    />
+    <>
+      {organization === 'CATEGORIES' ? (
+        <CategorizedServicePicker categories={categories} grid={grid} services={services} />
+      ) : (
+        <TypedServicePicker grid={grid} services={services} />
+      )}
+      <ServiceDescriptionSheet
+        onClose={() => setDescriptionVisible(false)}
+        onDismissed={() => setDescribedService(undefined)}
+        service={describedService}
+        visible={descriptionVisible}
+      />
+    </>
   );
+}
+
+/** What every card of the grid shares, whatever the organisation. */
+interface GridOptions {
+  readonly organization: CatalogueOrganization;
+  readonly selectedServiceIds: readonly string[];
+  readonly onSelectService: (service: Service) => void;
+  readonly onShowDescription: (service: Service) => void;
+  readonly selectedHint: string;
 }
 
 function ServiceGrid({
   services,
-  selectedServiceIds,
-  onSelectService,
-  selectedHint,
+  grid: { organization, selectedServiceIds, onSelectService, onShowDescription, selectedHint },
   testID,
 }: {
   readonly services: readonly Service[];
-  readonly selectedServiceIds: readonly string[];
-  readonly onSelectService: (service: Service) => void;
-  readonly selectedHint: string;
+  readonly grid: GridOptions;
   readonly testID: string;
 }) {
   return (
@@ -131,6 +151,8 @@ function ServiceGrid({
                   selectedServiceIds.includes(service.id) ? selectedHint : 'Ajouter au rendez-vous'
                 }
                 onPress={() => onSelectService(service)}
+                onShowDescription={() => onShowDescription(service)}
+                organization={organization}
                 selected={selectedServiceIds.includes(service.id)}
                 service={service}
               />
@@ -147,10 +169,12 @@ function ServiceGrid({
 function CategorizedServicePicker({
   services,
   categories,
-  selectedServiceIds,
-  onSelectService,
-  selectedHint,
-}: Required<Omit<ServiceCatalogPickerProps, 'organization'>>) {
+  grid,
+}: {
+  readonly services: readonly Service[];
+  readonly categories: readonly ServiceCategory[];
+  readonly grid: GridOptions;
+}) {
   const [query, setQuery] = useState('');
   const searching = query.trim().length > 0;
   const groups = useMemo(
@@ -171,9 +195,7 @@ function CategorizedServicePicker({
           <View key={group.category?.id ?? 'uncategorized'} style={styles.categoryGroup}>
             <SectionHeader count={group.items.length} title={group.category?.name ?? 'Sans catégorie'} />
             <ServiceGrid
-              onSelectService={onSelectService}
-              selectedHint={selectedHint}
-              selectedServiceIds={selectedServiceIds}
+              grid={grid}
               services={group.items}
               testID={`catalog-list-category-${group.category?.id ?? 'uncategorized'}`}
             />
@@ -195,10 +217,11 @@ function CategorizedServicePicker({
 
 function TypedServicePicker({
   services,
-  selectedServiceIds,
-  onSelectService,
-  selectedHint,
-}: Required<Omit<ServiceCatalogPickerProps, 'organization' | 'categories'>>) {
+  grid,
+}: {
+  readonly services: readonly Service[];
+  readonly grid: GridOptions;
+}) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<ServiceType>('SERVICE');
   const otherCategory: ServiceType = category === 'SERVICE' ? 'TECHNIQUE' : 'SERVICE';
@@ -231,9 +254,7 @@ function TypedServicePicker({
 
       {rows.length > 0 ? (
         <ServiceGrid
-          onSelectService={onSelectService}
-          selectedHint={selectedHint}
-          selectedServiceIds={selectedServiceIds}
+          grid={grid}
           services={rows}
           testID={`catalog-list-${category}`}
         />

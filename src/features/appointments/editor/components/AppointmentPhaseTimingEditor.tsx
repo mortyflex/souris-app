@@ -9,10 +9,16 @@
 // The editor is presentation only: it renders the phases it is given and
 // reports each change. Every owner (Creation, Editing, Details) treats the
 // value as Appointment snapshot data; the Service catalog is never written.
+// Phase names are shown as stored; only the spoken subject of an unattended
+// phase follows the profession's wording (`getAppointmentWording`).
 
 import { StyleSheet, View } from 'react-native';
 
 import type { AppointmentPhase, ServiceType } from '@/domain/appointments';
+import {
+  getAppointmentWording,
+  type CatalogueOrganization,
+} from '@/features/services/catalogue-presentation';
 import { AppText } from '@/shared/ui/AppText';
 import { foregroundSoft, peach, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
@@ -25,15 +31,18 @@ interface AppointmentPhaseTimingEditorProps {
   readonly onChangePhaseDuration: (phaseId: string, durationMinutes: number) => void;
   readonly minimumMinutes?: number;
   readonly disabled?: boolean;
+  /** How the profession's catalogue is organised; the Services / Techniques experience by default. */
+  readonly organization?: CatalogueOrganization;
 }
 
 /** Spoken subject for the accessibility labels of one phase. */
 export function getPhaseTimingSubject(
   phase: Pick<AppointmentPhase, 'name' | 'requiresStaff'>,
   simpleServiceName?: string,
+  organization: CatalogueOrganization = 'SERVICE_TYPES',
 ): string {
   if (simpleServiceName !== undefined) return `la durée de ${simpleServiceName}`;
-  return phase.requiresStaff ? phase.name : 'le temps de pose';
+  return phase.requiresStaff ? phase.name : getAppointmentWording(organization).waitingTimeSubject;
 }
 
 export function AppointmentPhaseTimingEditor({
@@ -43,6 +52,7 @@ export function AppointmentPhaseTimingEditor({
   onChangePhaseDuration,
   minimumMinutes,
   disabled,
+  organization,
 }: AppointmentPhaseTimingEditorProps) {
   const simple = serviceType === 'SERVICE' && phases.length === 1;
 
@@ -68,7 +78,7 @@ export function AppointmentPhaseTimingEditor({
               minimumMinutes={minimumMinutes}
               minutes={phase.durationMinutes}
               onChange={(minutes) => onChangePhaseDuration(phase.id, minutes)}
-              subjectLabel={getPhaseTimingSubject(phase, simple ? serviceName : undefined)}
+              subjectLabel={getPhaseTimingSubject(phase, simple ? serviceName : undefined, organization)}
               testID={`phase-duration-${phase.id}`}
             />
           </View>

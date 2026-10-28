@@ -11,11 +11,23 @@
 //
 // Selection is never colour alone: the check badge, the thicker border, the
 // spoken category and `accessibilityState.selected` go with it.
+//
+// Profession-aware (`getAppointmentWording`): with the unified `CATEGORIES`
+// organisation (nails, esthetics) every card takes the one Service palette,
+// the type is not spoken, and unattended time reads « dont 30 min d’attente ».
+//
+// A prestation with a description carries a small « i » button beside the
+// price (and the matching VoiceOver action): it opens the description, the
+// card tap still selects. Without a description the card is unchanged.
 
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import type { Service, ServiceType } from '@/domain/appointments';
+import {
+  getAppointmentWording,
+  type CatalogueOrganization,
+} from '@/features/services/catalogue-presentation';
 import { AppText } from '@/shared/ui/AppText';
 import {
   foregroundSoft,
@@ -43,19 +55,32 @@ interface ServiceSelectionCardProps {
   readonly selected: boolean;
   readonly onPress: () => void;
   readonly accessibilityHint?: string;
+  /** How the profession's catalogue is organised; the Services / Techniques experience by default. */
+  readonly organization?: CatalogueOrganization;
+  /** Opens the prestation's description; only offered when it has one. */
+  readonly onShowDescription?: () => void;
 }
+
+const SHOW_DESCRIPTION_ACTION = 'showDescription';
 
 export function ServiceSelectionCard({
   service,
   selected,
   onPress,
   accessibilityHint,
+  organization = 'SERVICE_TYPES',
+  onShowDescription,
 }: ServiceSelectionCardProps) {
+  const wording = getAppointmentWording(organization);
   const duration = formatCreationDuration(getServiceDurationMinutes(service));
   const processing = getServiceProcessingMinutes(service);
-  const pose = processing > 0 ? `dont ${formatCreationDuration(processing)} de pose` : undefined;
+  const pose =
+    processing > 0
+      ? `dont ${formatCreationDuration(processing)} ${wording.waitingTimeSuffix}`
+      : undefined;
   const price = formatCreationPrice(service.price);
-  const colors = serviceCategoryColors[service.type];
+  const colors = serviceCategoryColors[wording.distinguishesTypes ? service.type : 'SERVICE'];
+  const showDescription = service.description !== undefined ? onShowDescription : undefined;
 
   return (
     <Pressable
@@ -64,10 +89,18 @@ export function ServiceSelectionCard({
         service.name,
         pose ? `${duration} ${pose}` : duration,
         price,
-        spokenCategory[service.type],
+        ...(wording.distinguishesTypes ? [spokenCategory[service.type]] : []),
       ].join(', ')}
+      accessibilityActions={
+        showDescription
+          ? [{ name: SHOW_DESCRIPTION_ACTION, label: 'Voir la description' }]
+          : undefined
+      }
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === SHOW_DESCRIPTION_ACTION) showDescription?.();
+      }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
@@ -98,9 +131,28 @@ export function ServiceSelectionCard({
           {pose ? `${duration} · ${pose}` : duration}
         </AppText>
       </View>
-      <AppText variant="control" numberOfLines={1} style={styles.price}>
-        {price}
-      </AppText>
+      <View style={styles.footer}>
+        <AppText variant="control" numberOfLines={1} style={styles.price}>
+          {price}
+        </AppText>
+        {showDescription && (
+          // Touch only: VoiceOver reaches the description through the card's action.
+          <Pressable
+            accessibilityElementsHidden
+            hitSlop={spacing.sm}
+            importantForAccessibility="no-hide-descendants"
+            onPress={showDescription}
+            style={({ pressed }) => [styles.infoButton, pressed && styles.infoButtonPressed]}
+            testID={`service-card-${service.id}-description`}
+          >
+            <SymbolView
+              name={{ ios: 'info.circle', android: 'info' }}
+              size={18}
+              tintColor={colors.strong}
+            />
+          </Pressable>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -139,5 +191,8 @@ const styles = StyleSheet.create({
   copy: { gap: 2, paddingRight: checkSize },
   name: { color: semanticColors.foreground },
   meta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  footer: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs, justifyContent: 'space-between' },
+  price: { color: semanticColors.foreground, flexShrink: 1, fontVariant: ['tabular-nums'] },
+  infoButton: { alignItems: 'center', height: 24, justifyContent: 'center', width: 24 },
+  infoButtonPressed: { opacity: interaction.pressedOpacity },
 });
