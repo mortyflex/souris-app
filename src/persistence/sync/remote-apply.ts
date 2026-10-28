@@ -47,6 +47,7 @@ import type {
   RemotePhasePayload,
   RemoteProductPayload,
   RemoteSalePayload,
+  RemoteServiceCategoryPayload,
   RemoteServicePayload,
 } from './remote-gateway';
 import type { RemotePulledEntry } from './remote-snapshot';
@@ -115,11 +116,32 @@ function phaseParams(phase: RemotePhasePayload) {
 }
 
 function applyService(db: SourisDatabase, businessId: string, ref: SyncAggregateRef, service: RemoteServicePayload): void {
-  const params = [service.name, service.type, service.price_cents, toSqlBoolean(service.active)];
-  if (!updateScoped(db, businessId, ref, 'services', 'name = ?, type = ?, price_cents = ?, active = ?', params)) {
+  // The two catalogue fields (§27) are written only when the remote sent
+  // their key: a remote that predates them keeps the local values — never
+  // read as "cleared". On insert an absent key is simply NULL.
+  const assignments = ['name = ?', 'type = ?', 'price_cents = ?', 'active = ?'];
+  const params: (string | number | null)[] = [service.name, service.type, service.price_cents, toSqlBoolean(service.active)];
+  if (service.category_id !== undefined) {
+    assignments.push('category_id = ?');
+    params.push(service.category_id);
+  }
+  if (service.description !== undefined) {
+    assignments.push('description = ?');
+    params.push(service.description);
+  }
+  if (!updateScoped(db, businessId, ref, 'services', assignments.join(', '), params)) {
     db.runSync(
-      'INSERT INTO services (name, type, price_cents, active, id, business_id) VALUES (?, ?, ?, ?, ?, ?)',
-      [...params, ref.aggregateId, businessId],
+      'INSERT INTO services (name, type, price_cents, active, category_id, description, id, business_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        service.name,
+        service.type,
+        service.price_cents,
+        toSqlBoolean(service.active),
+        service.category_id ?? null,
+        service.description ?? null,
+        ref.aggregateId,
+        businessId,
+      ],
     );
   }
   db.runSync('DELETE FROM service_phases WHERE service_id = ?', [ref.aggregateId]);
@@ -127,6 +149,21 @@ function applyService(db: SourisDatabase, businessId: string, ref: SyncAggregate
     db.runSync(
       'INSERT INTO service_phases (service_id, position, id, name, duration_minutes, requires_staff) VALUES (?, ?, ?, ?, ?, ?)',
       [ref.aggregateId, ...phaseParams(phase)],
+    );
+  }
+}
+
+function applyServiceCategory(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+  category: RemoteServiceCategoryPayload,
+): void {
+  const params = [category.name, category.description, category.position];
+  if (!updateScoped(db, businessId, ref, 'service_categories', 'name = ?, description = ?, position = ?', params)) {
+    db.runSync(
+      'INSERT INTO service_categories (name, description, position, id, business_id) VALUES (?, ?, ?, ?, ?)',
+      [...params, ref.aggregateId, businessId],
     );
   }
 }
@@ -356,6 +393,8 @@ export function applyRemoteAggregate(db: SourisDatabase, businessId: string, ent
       return applyCalendarBlock(db, businessId, ref, entry.aggregate.payload);
     case 'APPOINTMENT_DEPOSIT':
       return applyAppointmentDeposit(db, businessId, ref, entry.aggregate.payload);
+    case 'SERVICE_CATEGORY':
+      return applyServiceCategory(db, businessId, ref, entry.aggregate.payload);
   }
 }
 
@@ -375,6 +414,9 @@ const PARENT_TABLE = {
   SALE: 'sales',
   CALENDAR_BLOCK: 'calendar_blocks',
   APPOINTMENT_DEPOSIT: 'appointment_deposits',
+  // A removed category leaves its Services' references dangling — they read as
+  // uncategorized; the deleting device pushes those Services detached anyway.
+  SERVICE_CATEGORY: 'service_categories',
 } as const;
 
 /**

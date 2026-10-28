@@ -103,6 +103,7 @@ export function formatSyncRunResult(result: SyncRunResult): string {
         'RESTORED',
         `clients ${result.restored.clients}`,
         `services ${result.restored.services}`,
+        `categories ${result.restored.serviceCategories}`,
         `products ${result.restored.products}`,
         `appointments ${result.restored.appointments}`,
         `sales ${result.restored.sales}`,

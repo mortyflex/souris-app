@@ -123,6 +123,7 @@ const AGGREGATE_TABLES = [
   'sales',
   'calendar_blocks',
   'appointment_deposits',
+  'service_categories',
 ] as const;
 
 export function isLocalDatabasePopulated(db: SourisDatabase): boolean {

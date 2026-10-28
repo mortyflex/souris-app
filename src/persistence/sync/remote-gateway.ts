@@ -51,7 +51,22 @@ export interface RemoteServicePayload {
   readonly type: string;
   readonly price_cents: number;
   readonly active: boolean;
+  /**
+   * Schema v17 / CLOUD_SYNC.md §27. A build that knows the fields always
+   * SENDS both keys (a value, or null to clear). On a PULLED payload a key
+   * is `undefined` when the remote predates the column: the local value is
+   * then kept, never read as "cleared".
+   */
+  readonly category_id?: string | null;
+  readonly description?: string | null;
   readonly phases: readonly RemotePhasePayload[];
+}
+
+/** A professional-defined catalogue category (CLOUD_SYNC.md §27). */
+export interface RemoteServiceCategoryPayload {
+  readonly name: string;
+  readonly description: string | null;
+  readonly position: number;
 }
 
 export interface RemoteAppointmentItemPayload {
@@ -157,7 +172,8 @@ export type RemoteAggregatePayload =
   | RemoteProductPayload
   | RemoteSalePayload
   | RemoteCalendarBlockPayload
-  | RemoteAppointmentDepositPayload;
+  | RemoteAppointmentDepositPayload
+  | RemoteServiceCategoryPayload;
 
 /**
  * One aggregate as the remote holds it (V1D). `payload` is the same shape a
@@ -192,6 +208,13 @@ export interface RemoteBusinessSnapshot {
   readonly calendarBlocks: readonly RemotePulledAggregate<RemoteCalendarBlockPayload>[];
   /** Empty when the remote functions predate deposits (no `appointment_deposits` key). */
   readonly appointmentDeposits: readonly RemotePulledAggregate<RemoteAppointmentDepositPayload>[];
+  /** Empty when the remote functions predate service categories (no `service_categories` key). */
+  readonly serviceCategories: readonly RemotePulledAggregate<RemoteServiceCategoryPayload>[];
+  /**
+   * Whether the remote answered with the `service_categories` family — the
+   * proof that it stores categories and the two Service fields (§27).
+   */
+  readonly serviceCatalogue: boolean;
 }
 
 export interface RemotePushRequest {

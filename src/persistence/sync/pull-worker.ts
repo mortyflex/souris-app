@@ -10,7 +10,8 @@
 //   3. per aggregate, decided and applied in ONE synchronous turn — local
 //      facts are read after the await, so no local mutation slips in between:
 //
-//        remote version <= acknowledged          known revision → skipped
+//        remote version <= acknowledged          known revision → skipped (except the one-time
+//                                                SERVICE refresh of schema v17, §27)
 //        local DIRTY (a pending outbox entry)    CONFLICT — neither side is touched; the entry
 //                                                stays pending, the conflict is reported (V1E)
 //        local clean, live remote aggregate      ONE transaction: row + complete child set
@@ -38,6 +39,11 @@ import { readBoundBusinessId, type SyncAggregateRef, type SyncConflict } from '.
 import { findSyncOutboxEntry } from './outbox';
 import { nextPullSince, readSyncPullCursor, writeSyncPullCursor } from './pull-cursor';
 import { applyRemoteAggregate, applyRemoteTombstone } from './remote-apply';
+import {
+  disarmServiceCatalogueRefresh,
+  isServiceCatalogueRefreshArmed,
+  markServiceCatalogueRemoteReady,
+} from './service-catalogue-sync';
 import {
   SyncRemoteError,
   type RemoteBusinessSnapshot,
@@ -77,10 +83,28 @@ export type SyncPullSummary =
 
 type Outcome = 'APPLIED' | 'DELETED' | 'SKIPPED' | 'FAILED' | SyncConflict;
 
-function settle(db: SourisDatabase, businessId: string, entry: RemotePulledEntry, now: Date): Outcome {
+function settle(
+  db: SourisDatabase,
+  businessId: string,
+  entry: RemotePulledEntry,
+  now: Date,
+  refreshServices: boolean,
+): Outcome {
   const ref: SyncAggregateRef = { aggregateType: entry.aggregateType, aggregateId: entry.aggregate.id };
   const acknowledgedVersion = readAcknowledgedRemoteVersion(db, businessId, ref)?.remoteVersion;
-  if (acknowledgedVersion !== undefined && entry.aggregate.syncVersion <= acknowledgedVersion) return 'SKIPPED';
+  if (acknowledgedVersion !== undefined && entry.aggregate.syncVersion <= acknowledgedVersion) {
+    // The one-time refresh of schema v17 (service-catalogue-sync.ts): the SAME
+    // Service revision, live, nothing pending locally — re-applied so the
+    // fields a previous build could not store are adopted. Anything else is
+    // a known revision, as always.
+    const refreshable =
+      refreshServices &&
+      entry.aggregateType === 'SERVICE' &&
+      entry.aggregate.payload !== undefined &&
+      entry.aggregate.syncVersion === acknowledgedVersion &&
+      findSyncOutboxEntry(db, businessId, ref) === undefined;
+    if (!refreshable) return 'SKIPPED';
+  }
 
   const pending = findSyncOutboxEntry(db, businessId, ref);
   if (pending) {
@@ -127,10 +151,9 @@ export async function pullRemoteChanges(options: {
 }): Promise<SyncPullSummary> {
   const { database: db, gateway, businessId, now } = options;
   let snapshot: RemoteBusinessSnapshot;
+  const since = nextPullSince(db, businessId);
   try {
-    snapshot = parseRemoteBusinessSnapshot(
-      await gateway.pullBusinessAggregates(businessId, nextPullSince(db, businessId)),
-    );
+    snapshot = parseRemoteBusinessSnapshot(await gateway.pullBusinessAggregates(businessId, since));
   } catch (error) {
     if (error instanceof RemoteSnapshotInvalidError) return { status: 'FAILED', reason: 'INVALID_REMOTE_DATA' };
     return { status: 'FAILED', reason: error instanceof SyncRemoteError ? error.code : 'LOCAL' };
@@ -139,6 +162,10 @@ export async function pullRemoteChanges(options: {
   try {
     // The read was awaited: the device may have been reset or rebound meanwhile.
     if (readBoundBusinessId(db) !== businessId) return { status: 'FAILED', reason: 'LOCAL' };
+    // The remote answered with the `service_categories` family: it stores the
+    // catalogue fields, deferred writes may go (CLOUD_SYNC.md §27).
+    if (snapshot.serviceCatalogue) markServiceCatalogueRemoteReady(db);
+    const refreshServices = isServiceCatalogueRefreshArmed(db);
 
     const entries = listSnapshotEntries(snapshot);
     const live = entries.filter((entry) => entry.aggregate.payload !== undefined);
@@ -150,7 +177,7 @@ export async function pullRemoteChanges(options: {
     let failed = 0;
     const conflicts: SyncConflict[] = [];
     for (const entry of [...live, ...tombstones]) {
-      const outcome = settle(db, businessId, entry, now());
+      const outcome = settle(db, businessId, entry, now(), refreshServices);
       if (outcome === 'APPLIED') applied += 1;
       else if (outcome === 'DELETED') deleted += 1;
       else if (outcome === 'SKIPPED') skipped += 1;
@@ -161,6 +188,8 @@ export async function pullRemoteChanges(options: {
     const cursor = readSyncPullCursor(db, businessId);
     const cursorAdvanced = failed === 0 && (cursor === undefined || snapshot.pulledAt > cursor);
     if (cursorAdvanced) writeSyncPullCursor(db, businessId, snapshot.pulledAt);
+    // The complete dataset was read and fully applied: the refresh is done.
+    if (refreshServices && cursorAdvanced && since === undefined) disarmServiceCatalogueRefresh(db);
 
     return { status: 'PULLED', fetched: entries.length, applied, deleted, skipped, failed, conflicts, cursorAdvanced };
   } catch {

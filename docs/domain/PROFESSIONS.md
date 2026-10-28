@@ -91,10 +91,18 @@ unchanged; the Business activity only personalises the starter prestations, the 
 keywords and the example of the empty « Nom » field. No column, no sync field and no migration were
 added.
 
-## 6. Not implemented yet
+## 6. Step 3 — the professional catalogue (October 2026)
 
-- free service categories, descriptions and the online-bookable property (the smallest safe
-  follow-up of each: SERVICES.md §10.4);
+`docs/domain/SERVICES.md` §11: business-scoped categories and optional descriptions on real
+Services (schema v17, the `SERVICE_CATEGORY` aggregate), and a profession-aware presentation
+(`src/features/services/catalogue-presentation.ts`): HAIRDRESSING keeps Services / Techniques;
+NAILS and ESTHETICS read one « Prestations » catalogue grouped by the professional's categories,
+created as single-duration prestations, with the phased model as an advanced option. Availability
+is unchanged: NAILS and ESTHETICS stay « Bientôt disponible ».
+
+## 7. Not implemented yet
+
+- the online-booking visibility of a prestation (designed in SERVICES.md §12);
 - profession-specific terminology beyond the touches above;
 - any catalogue migration or renaming;
 - making `NAILS` or `ESTHETICS` available.

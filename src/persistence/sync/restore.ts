@@ -40,6 +40,7 @@ import {
   readInitialRestoreApproval,
   writeSyncBootstrapRecord,
 } from './bootstrap';
+import { disarmServiceCatalogueRefresh, markServiceCatalogueRemoteReady } from './service-catalogue-sync';
 import { writeSyncPullCursor } from './pull-cursor';
 import { applyRemoteAggregate } from './remote-apply';
 import { SyncRemoteError, type RemoteBusinessSnapshot, type SyncRemoteFailureCode, type SyncRemoteGateway } from './remote-gateway';
@@ -69,6 +70,7 @@ export interface RestoreCounts {
   readonly sales: number;
   readonly calendarBlocks: number;
   readonly appointmentDeposits: number;
+  readonly serviceCategories: number;
   /** Remote tombstones: acknowledged, never written as rows. */
   readonly tombstones: number;
 }
@@ -81,6 +83,7 @@ const COUNT_KEY = {
   SALE: 'sales',
   CALENDAR_BLOCK: 'calendarBlocks',
   APPOINTMENT_DEPOSIT: 'appointmentDeposits',
+  SERVICE_CATEGORY: 'serviceCategories',
 } as const;
 
 /**
@@ -102,6 +105,7 @@ export function restoreBusinessSnapshot(
     sales: 0,
     calendarBlocks: 0,
     appointmentDeposits: 0,
+    serviceCategories: 0,
     tombstones: 0,
   };
   runInTransaction(db, () => {
@@ -132,6 +136,10 @@ export function restoreBusinessSnapshot(
 
     db.runSync('DELETE FROM sync_outbox WHERE business_id = ?', [businessId]);
     writeSyncPullCursor(db, businessId, snapshot.pulledAt);
+    // A restore reads the complete dataset: the remote is proven ready or not,
+    // and nothing older is left to refresh (service-catalogue-sync.ts).
+    if (snapshot.serviceCatalogue) markServiceCatalogueRemoteReady(db);
+    disarmServiceCatalogueRefresh(db);
     writeSyncBootstrapRecord(db, { businessId, decision: 'ALREADY_SYNCED', decidedAt: now });
     clearInitialRestoreApproval(db);
   });

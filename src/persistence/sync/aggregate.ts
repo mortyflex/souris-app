@@ -1,6 +1,6 @@
 // BeautIzzy — sync aggregate vocabulary (Cloud Sync V1B)
 //
-// The seven aggregate boundaries of the remote contract
+// The eight aggregate boundaries of the remote contract
 // (docs/architecture/CLOUD_SYNC.md §6). Children never sync on their own: a
 // phase, item, or sale line change marks its PARENT aggregate.
 //
@@ -11,6 +11,7 @@
 //   SALE            sales         + sale_items
 //   CALENDAR_BLOCK  calendar_blocks               (CLOUD_SYNC.md §20)
 //   APPOINTMENT_DEPOSIT appointment_deposits      (CLOUD_SYNC.md §21)
+//   SERVICE_CATEGORY    service_categories        (CLOUD_SYNC.md §27)
 
 import type { SourisDatabase } from '../database';
 
@@ -22,6 +23,7 @@ export const SYNC_AGGREGATE_TYPES = [
   'SALE',
   'CALENDAR_BLOCK',
   'APPOINTMENT_DEPOSIT',
+  'SERVICE_CATEGORY',
 ] as const;
 
 export type SyncAggregateType = (typeof SYNC_AGGREGATE_TYPES)[number];

@@ -211,11 +211,12 @@ export function recordSyncOutboxFailure(
  * Push order of the worker (CLOUD_SYNC.md §10.8): remote foreign keys make a
  * Client precede its Appointments and Sales, and an Appointment precede its
  * linked Sale and its deposits; a Calendar Block references nothing; an
- * Appointment deposit references its Appointment and goes last; inside one
+ * Appointment deposit references its Appointment and goes last; a Service
+ * category goes with the Clients, before the Services that name it; inside one
  * type the FIFO `id` order is kept.
  */
 const PUSH_ORDER_SQL = `CASE aggregate_type
-  WHEN 'CLIENT' THEN 0 WHEN 'SERVICE' THEN 1 WHEN 'PRODUCT' THEN 2 WHEN 'APPOINTMENT' THEN 3 WHEN 'SALE' THEN 4
+  WHEN 'CLIENT' THEN 0 WHEN 'SERVICE_CATEGORY' THEN 0 WHEN 'SERVICE' THEN 1 WHEN 'PRODUCT' THEN 2 WHEN 'APPOINTMENT' THEN 3 WHEN 'SALE' THEN 4
   WHEN 'CALENDAR_BLOCK' THEN 5 ELSE 6 END`;
 
 /** Entries of the Business whose backoff elapsed (`next_attempt_at` NULL or <= now), in push order. */
@@ -252,6 +253,7 @@ export function enqueueInitialUpload(db: SourisDatabase, businessId: string, now
     ['SALE', 'sales', true],
     ['CALENDAR_BLOCK', 'calendar_blocks', true],
     ['APPOINTMENT_DEPOSIT', 'appointment_deposits', true],
+    ['SERVICE_CATEGORY', 'service_categories', true],
   ];
   let created = 0;
   runInTransaction(db, () => {

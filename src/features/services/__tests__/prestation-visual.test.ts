@@ -1,6 +1,6 @@
 import { serviceCategoryColors } from '@/shared/ui/theme';
 
-import { getPrestationFamily, getPrestationVisual } from '../prestation-visual';
+import { getCategoryVisual, getPrestationFamily, getPrestationVisual } from '../prestation-visual';
 
 const service = (name: string) => ({ name, type: 'SERVICE' as const });
 const technique = (name: string) => ({ name, type: 'TECHNIQUE' as const });
@@ -42,21 +42,41 @@ describe('getPrestationVisual', () => {
       'Pose complète gel',
       'Remplissage gel',
       'Semi-permanent mains',
-      'Semi-permanent pieds',
-      'Dépose',
-      'Nail art',
-      'Réparation d’un ongle',
+      'Ongles naturels',
       'Beauté des mains',
       'Manucure',
     ]) {
       expect(getPrestationFamily(service(name))).toBe('NAILS');
     }
-    expect(getPrestationVisual(service('Nail art')).icon).toEqual({ ios: 'hand.raised', android: 'back_hand' });
+    expect(getPrestationVisual(service('Pose complète gel')).icon).toEqual({ ios: 'hand.raised', android: 'back_hand' });
     // Hair extensions are also « posées »: the word alone decides nothing.
     expect(getPrestationFamily(service('Pose d’extensions'))).toBe('SERVICE_FALLBACK');
   });
 
-  it('recognises esthetics prestations: hair removal, lashes & brows, body care — a soin stays a soin', () => {
+  it('gives the feet, nail art, removal and repair their own glyph instead of one more hand', () => {
+    for (const name of ['Semi-permanent pieds', 'Pédicure', 'Beauté des pieds', 'Beauté des mains et des pieds']) {
+      expect(getPrestationFamily(service(name))).toBe('FEET');
+    }
+    expect(getPrestationVisual(service('Semi-permanent pieds')).icon).toEqual({ ios: 'shoeprints.fill', android: 'footprint' });
+    expect(getPrestationFamily(service('Nail art'))).toBe('NAIL_ART');
+    expect(getPrestationFamily(service('Nail art et modèles'))).toBe('NAIL_ART');
+    expect(getPrestationFamily(service('Décoration strass'))).toBe('NAIL_ART');
+    expect(getPrestationVisual(service('Nail art')).icon).toEqual({ ios: 'paintpalette', android: 'palette' });
+    expect(getPrestationFamily(service('Dépose'))).toBe('NAIL_REMOVAL');
+    expect(getPrestationFamily(service('Dépose gel'))).toBe('NAIL_REMOVAL');
+    expect(getPrestationFamily(service('Déposes'))).toBe('NAIL_REMOVAL');
+    expect(getPrestationVisual(service('Dépose')).icon).toEqual({ ios: 'eraser', android: 'ink_eraser' });
+    expect(getPrestationFamily(service('Réparation d’un ongle'))).toBe('NAIL_REPAIR');
+    expect(getPrestationVisual(service('Réparation d’un ongle')).icon).toEqual({ ios: 'bandage', android: 'healing' });
+
+    // The demo nail catalogue no longer reads as one repeated hand.
+    const icons = ['Pose complète gel', 'Semi-permanent pieds', 'Dépose', 'Nail art', 'Réparation d’un ongle'].map(
+      (name) => JSON.stringify(getPrestationVisual(service(name)).icon),
+    );
+    expect(new Set(icons).size).toBe(5);
+  });
+
+  it('recognises esthetics prestations: hair removal, lashes & brows, face and body', () => {
     expect(getPrestationFamily(service('Épilation sourcils'))).toBe('HAIR_REMOVAL');
     expect(getPrestationFamily(service('Épilation jambes'))).toBe('HAIR_REMOVAL');
     expect(getPrestationFamily(service('Beauté du regard'))).toBe('LASHES_BROWS');
@@ -64,9 +84,25 @@ describe('getPrestationVisual', () => {
     expect(getPrestationFamily(service('Restructuration sourcils'))).toBe('LASHES_BROWS');
     expect(getPrestationFamily(service('Massage 60 min'))).toBe('BODY');
     expect(getPrestationFamily(service('Gommage corps'))).toBe('BODY');
-    // « Soin » is the family of every care, for every profession.
-    expect(getPrestationFamily(technique('Soin du visage'))).toBe('CARE');
-    expect(getPrestationFamily(service('Soin du corps'))).toBe('CARE');
+    // The body area says more than « soin »: a facial reads as a face, a body care as the body.
+    expect(getPrestationFamily(technique('Soin du visage'))).toBe('FACE');
+    expect(getPrestationFamily(service('Soins du corps'))).toBe('BODY');
+    expect(getPrestationVisual(technique('Soin du visage')).icon).toEqual({ ios: 'face.smiling', android: 'face' });
+    // Any other care stays a soin, for every profession.
+    expect(getPrestationFamily(service('Soin des mains'))).toBe('CARE');
+  });
+
+  it('reads a category name with the same table and a neutral fallback', () => {
+    expect(getCategoryVisual({ name: 'Beauté des pieds' }).icon).toEqual(getPrestationVisual(service('Semi-permanent pieds')).icon);
+    expect(getCategoryVisual({ name: 'Déposes' }).family).toBe('NAIL_REMOVAL');
+    expect(getCategoryVisual({ name: 'Extensions et poses en gel' }).family).toBe('NAILS');
+    expect(getCategoryVisual({ name: 'Soins du visage' }).family).toBe('FACE');
+    expect(getCategoryVisual({ name: 'Couleurs' }).family).toBe('COLOR');
+    // An unknown category is never a haircut.
+    const unknown = getCategoryVisual({ name: 'Forfaits' });
+    expect(unknown.family).toBe('CATEGORY_FALLBACK');
+    expect(unknown.icon).toEqual({ ios: 'square.grid.2x2', android: 'category' });
+    expect(unknown.iconColor).toBe(serviceCategoryColors.SERVICE.accent);
   });
 
   it('keeps every hairdressing family and keyword ahead of the other professions', () => {

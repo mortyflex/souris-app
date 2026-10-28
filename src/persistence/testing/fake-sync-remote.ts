@@ -28,6 +28,15 @@
 //     with milliseconds, the fixed form `sync_instant_text` produces;
 //   * `since` filters on the server `updated_at` (strictly greater).
 //
+// …and the service catalogue migration
+// (supabase/migrations/20261010120000_add_service_categories_and_descriptions.sql,
+// CLOUD_SYNC.md §27): a `service_categories` family, and two SERVICE keys a
+// push that omits keeps as stored. `serviceCatalogue: false` (or
+// `setServiceCatalogue(false)`) models a remote that PREDATES it: the two
+// SERVICE keys are silently dropped (`jsonb_to_record`), a SERVICE_CATEGORY
+// push is rejected (22023, unknown aggregate type), and the pull carries no
+// `service_categories` key and no SERVICE catalogue keys.
+//
 // The server clock is logical: it starts at `FAKE_REMOTE_EPOCH` and advances
 // one second per write and per read; `advanceClock` jumps it.
 //
@@ -75,6 +84,8 @@ export interface FakeSyncRemote extends SyncRemoteGateway {
   answerNextPullWith(data: unknown): void;
   /** Runs while a pull is "in flight", before the answer is built (e.g. a local mutation). */
   beforePull(hook: (() => void) | undefined): void;
+  /** Migrates (true) or un-migrates (false) the modelled remote for the service catalogue fields. */
+  setServiceCatalogue(enabled: boolean): void;
   /** Moves the logical server clock forward. */
   advanceClock(ms: number): void;
   /** Forgets the push and pull logs (not the rows): lets a test start counting after its setup. */
@@ -194,7 +205,13 @@ function affectedAppointmentId(
   return undefined;
 }
 
-export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeSyncRemote {
+const SERVICE_CATALOGUE_KEYS = ['category_id', 'description'] as const;
+
+export function createFakeSyncRemote(
+  ownedBusinessIds: readonly string[],
+  options: { readonly serviceCatalogue?: boolean } = {},
+): FakeSyncRemote {
+  let serviceCatalogue = options.serviceCatalogue ?? true;
   const businesses = new Map<string, Map<string, FakeRemoteAggregate>>();
   const requests: RemotePushRequest[] = [];
   const failures: SyncRemoteError[] = [];
@@ -279,10 +296,37 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
     return { status: 'APPLIED', syncVersion: written.syncVersion };
   }
 
-  function apply(request: RemotePushRequest): RemotePushResult {
-    const rows = rowsOf(request.businessId);
-    const key = `${request.aggregateType}/${request.aggregateId}`;
+  /**
+   * What the server would store from this payload: on a migrated remote a
+   * SERVICE key the push omits keeps its stored value (null when new); on an
+   * unmigrated one the two keys are dropped.
+   */
+  function storedPayload(
+    aggregateType: SyncAggregateType,
+    payload: RemoteAggregatePayload,
+    remote: FakeRemoteAggregate | undefined,
+  ): RemoteAggregatePayload {
+    if (aggregateType !== 'SERVICE') return clone(payload);
+    const next: Record<string, unknown> = { ...clone(payload) };
+    for (const column of SERVICE_CATALOGUE_KEYS) {
+      if (!serviceCatalogue) delete next[column];
+      else if (!(column in next)) next[column] = (remote?.payload as Record<string, unknown> | undefined)?.[column] ?? null;
+    }
+    return next as unknown as RemoteAggregatePayload;
+  }
+
+  function apply(original: RemotePushRequest): RemotePushResult {
+    if (original.aggregateType === 'SERVICE_CATEGORY' && !serviceCatalogue) {
+      rowsOf(original.businessId); // the owner check comes first, as on the server
+      throw new SyncRemoteError('REJECTED', '22023');
+    }
+    const rows = rowsOf(original.businessId);
+    const key = `${original.aggregateType}/${original.aggregateId}`;
     const remote = rows.get(key);
+    const request: RemotePushRequest =
+      original.payload === undefined
+        ? original
+        : { ...original, payload: storedPayload(original.aggregateType, original.payload, remote) };
     const versionMatches = request.expectedVersion === remote?.syncVersion;
 
     if (request.operation === 'DELETE') {
@@ -409,6 +453,9 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
     refuseEntitlement(refused) {
       entitlementRefused = refused;
     },
+    setServiceCatalogue(enabled) {
+      serviceCatalogue = enabled;
+    },
 
     async countBusinessAggregates(businessId) {
       countCalls += 1;
@@ -432,8 +479,15 @@ export function createFakeSyncRemote(ownedBusinessIds: readonly string[]): FakeS
         [...rows.entries()]
           .filter(([key, row]) => key.startsWith(`${aggregateType}/`) && (since === undefined || row.updatedAt > since.getTime()))
           .sort(([leftKey, left], [rightKey, right]) => left.createdAt - right.createdAt || leftKey.localeCompare(rightKey))
-          .map(([key, row]) => toWireAggregate(key, row));
+          .map(([key, row]) => toWireAggregate(key, row))
+          .map((wire) => {
+            if (aggregateType !== 'SERVICE' || serviceCatalogue) return wire;
+            const legacy = { ...wire };
+            for (const column of SERVICE_CATALOGUE_KEYS) delete legacy[column];
+            return legacy;
+          });
       return {
+        ...(serviceCatalogue ? { service_categories: family('SERVICE_CATEGORY') } : {}),
         pulled_at: toWireInstant(tick()),
         clients: family('CLIENT'),
         services: family('SERVICE'),

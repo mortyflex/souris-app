@@ -17,13 +17,22 @@
 // vertical scroll carries it. Search filters inside the chosen category; when
 // it finds nothing there but matches in the other one, the empty state offers
 // the switch instead of silently hiding them.
+//
+// Profession-aware (features/services/catalogue-presentation.ts): with the
+// unified `CATEGORIES` organisation (nails, esthetics) there is no segment —
+// search covers every prestation and the grid is split under the
+// professional's category titles, then « Sans catégorie ». The cards, the
+// selection and what a tap does are exactly the same.
 
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { Service, ServiceType } from '@/domain/appointments';
+import { groupServicesByCategory, type ServiceCategory } from '@/domain/services';
+import type { CatalogueOrganization } from '@/features/services/catalogue-presentation';
 import { AppText } from '@/shared/ui/AppText';
 import { SearchField } from '@/shared/ui/SearchField';
+import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import {
   foregroundSoft,
@@ -32,6 +41,7 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
+import { filterCatalogServices } from '../filter-services';
 import { filterServicesOfType, toServiceGridRows } from '../selection-sections';
 import { ServiceSelectionCard } from './ServiceSelectionCard';
 
@@ -61,6 +71,10 @@ interface ServiceCatalogPickerProps {
   readonly onSelectService: (service: Service) => void;
   /** Spoken on an already selected card: what a tap on it does here. */
   readonly selectedHint?: string;
+  /** How the profession's catalogue is organised; the Services / Techniques segment by default. */
+  readonly organization?: CatalogueOrganization;
+  /** The professional's categories (unified organisation only). */
+  readonly categories?: readonly ServiceCategory[];
 }
 
 export function ServiceCatalogPicker({
@@ -68,7 +82,123 @@ export function ServiceCatalogPicker({
   selectedServiceIds,
   onSelectService,
   selectedHint = 'Déjà dans le rendez-vous',
+  organization = 'SERVICE_TYPES',
+  categories = [],
 }: ServiceCatalogPickerProps) {
+  if (organization === 'CATEGORIES') {
+    return (
+      <CategorizedServicePicker
+        categories={categories}
+        onSelectService={onSelectService}
+        selectedHint={selectedHint}
+        selectedServiceIds={selectedServiceIds}
+        services={services}
+      />
+    );
+  }
+  return (
+    <TypedServicePicker
+      onSelectService={onSelectService}
+      selectedHint={selectedHint}
+      selectedServiceIds={selectedServiceIds}
+      services={services}
+    />
+  );
+}
+
+function ServiceGrid({
+  services,
+  selectedServiceIds,
+  onSelectService,
+  selectedHint,
+  testID,
+}: {
+  readonly services: readonly Service[];
+  readonly selectedServiceIds: readonly string[];
+  readonly onSelectService: (service: Service) => void;
+  readonly selectedHint: string;
+  readonly testID: string;
+}) {
+  return (
+    <View style={styles.grid} testID={testID}>
+      {toServiceGridRows(services).map(([first, second]) => (
+        <View key={first.id} style={styles.gridRow}>
+          {[first, second].map((service, index) =>
+            service ? (
+              <ServiceSelectionCard
+                key={service.id}
+                accessibilityHint={
+                  selectedServiceIds.includes(service.id) ? selectedHint : 'Ajouter au rendez-vous'
+                }
+                onPress={() => onSelectService(service)}
+                selected={selectedServiceIds.includes(service.id)}
+                service={service}
+              />
+            ) : (
+              <View key={`spacer-${index}`} style={styles.gridSpacer} />
+            ),
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function CategorizedServicePicker({
+  services,
+  categories,
+  selectedServiceIds,
+  onSelectService,
+  selectedHint,
+}: Required<Omit<ServiceCatalogPickerProps, 'organization'>>) {
+  const [query, setQuery] = useState('');
+  const searching = query.trim().length > 0;
+  const groups = useMemo(
+    () => groupServicesByCategory(searching ? filterCatalogServices(services, query.trim()) : services, categories),
+    [services, categories, query, searching],
+  );
+
+  return (
+    <View style={styles.container} testID="service-catalog-picker">
+      <SearchField
+        accessibilityLabel="Rechercher une prestation"
+        onChangeText={setQuery}
+        placeholder="Rechercher une prestation"
+        value={query}
+      />
+      {groups.length > 0 ? (
+        groups.map((group) => (
+          <View key={group.category?.id ?? 'uncategorized'} style={styles.categoryGroup}>
+            <SectionHeader count={group.items.length} title={group.category?.name ?? 'Sans catégorie'} />
+            <ServiceGrid
+              onSelectService={onSelectService}
+              selectedHint={selectedHint}
+              selectedServiceIds={selectedServiceIds}
+              services={group.items}
+              testID={`catalog-list-category-${group.category?.id ?? 'uncategorized'}`}
+            />
+          </View>
+        ))
+      ) : (
+        <View style={styles.emptyState} testID="catalog-empty">
+          <AppText variant="stateTitle">
+            {searching ? 'Aucune prestation trouvée' : 'Aucune prestation disponible'}
+          </AppText>
+          <AppText variant="metadata" style={styles.emptyStateText}>
+            {searching ? 'Essayez un autre nom.' : 'Activez une prestation depuis Prestations & tarifs.'}
+          </AppText>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function TypedServicePicker({
+  services,
+  selectedServiceIds,
+  onSelectService,
+  selectedHint,
+}: Required<Omit<ServiceCatalogPickerProps, 'organization' | 'categories'>>) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<ServiceType>('SERVICE');
   const otherCategory: ServiceType = category === 'SERVICE' ? 'TECHNIQUE' : 'SERVICE';
@@ -100,29 +230,13 @@ export function ServiceCatalogPicker({
       />
 
       {rows.length > 0 ? (
-        <View style={styles.grid} testID={`catalog-list-${category}`}>
-          {toServiceGridRows(rows).map(([first, second]) => (
-            <View key={first.id} style={styles.gridRow}>
-              {[first, second].map((service, index) =>
-                service ? (
-                  <ServiceSelectionCard
-                    key={service.id}
-                    accessibilityHint={
-                      selectedServiceIds.includes(service.id)
-                        ? selectedHint
-                        : 'Ajouter au rendez-vous'
-                    }
-                    onPress={() => onSelectService(service)}
-                    selected={selectedServiceIds.includes(service.id)}
-                    service={service}
-                  />
-                ) : (
-                  <View key={`spacer-${index}`} style={styles.gridSpacer} />
-                ),
-              )}
-            </View>
-          ))}
-        </View>
+        <ServiceGrid
+          onSelectService={onSelectService}
+          selectedHint={selectedHint}
+          selectedServiceIds={selectedServiceIds}
+          services={rows}
+          testID={`catalog-list-${category}`}
+        />
       ) : (
         <View style={styles.emptyState} testID="catalog-empty">
           <AppText variant="stateTitle">
@@ -158,6 +272,7 @@ export function ServiceCatalogPicker({
 
 const styles = StyleSheet.create({
   container: { gap: spacing.md },
+  categoryGroup: { gap: spacing.sm },
   grid: { gap: spacing.sm },
   // Two equal columns; a row takes the height of its taller card.
   gridRow: { flexDirection: 'row', gap: spacing.sm },

@@ -1,6 +1,6 @@
 // BeautIzzy — the step 8 migration of BeautIzzy Plus Phase 6.5C stays bounded
 // (source-level guard, like the step 4 and step 5 ones): ONE forward-only
-// migration sorting last, right after step 6; ONE new SECURITY DEFINER helper
+// migration sorting right after step 6; ONE new SECURITY DEFINER helper
 // that writes the three consent columns of the owner's own client to
 // OPTED_OUT and nothing else, granted to authenticated only; the push RPC
 // replaced in place with the step 4 body plus the exception INSIDE its
@@ -32,10 +32,12 @@ function functionBody(sql: string, name: string): string {
 }
 
 describe('Phase 6.5C step 8 — client consent withdrawal migration', () => {
-  it('is ONE forward-only migration sorting last, right after step 6; earlier migrations are untouched', () => {
+  it('is ONE forward-only migration sorting right after step 6; earlier migrations are untouched', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    expect(names.at(-1)).toBe(MIGRATION_NAME);
-    expect(names.at(-2)).toBe(STEP6_MIGRATION_NAME);
+    const index = names.indexOf(MIGRATION_NAME);
+    expect(names[index - 1]).toBe(STEP6_MIGRATION_NAME);
+    // Only later, unrelated phases follow it (multi-profession Step 3: service categories).
+    expect(names.slice(index + 1)).toEqual(['20261010120000_add_service_categories_and_descriptions.sql']);
     expect(names.filter((name) => name.includes('consent_withdrawal'))).toEqual([MIGRATION_NAME]);
     expect(step4).not.toMatch(/sync_withdraw_client_sms_consent/);
   });

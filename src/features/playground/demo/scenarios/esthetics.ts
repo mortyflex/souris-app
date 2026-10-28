@@ -21,6 +21,26 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
     'body-treatment': 75,
     'eye-beauty': 30,
   },
+  // Step 3: categories, one of them still empty (the management screen shows it).
+  categories: [
+    { key: 'face', name: 'Soins du visage' },
+    { key: 'wax', name: 'Épilations', description: 'Cire tiède ou cire froide selon la zone.' },
+    { key: 'body', name: 'Soins du corps' },
+    { key: 'eyes', name: 'Beauté du regard' },
+    { key: 'hands-feet', name: 'Beauté des mains et des pieds' },
+  ],
+  serviceCategories: {
+    facial: 'face',
+    'brow-wax': 'wax',
+    'leg-wax': 'wax',
+    'body-treatment': 'body',
+    'eye-beauty': 'eyes',
+  },
+  descriptions: {
+    facial: 'Nettoyage, gommage, masque adapté à votre peau et massage.\nVenir sans maquillage si possible.',
+    'leg-wax': 'Jambes complètes. Éviter le soleil et le gommage 24 h avant.',
+    'eye-beauty': 'Teinture des cils et des sourcils, restructuration incluse.',
+  },
   clients: [
     {
       key: 'maya',

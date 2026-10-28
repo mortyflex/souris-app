@@ -220,6 +220,61 @@ describe('Playground demo scenarios', () => {
     expect(seed.clients.filter((client) => client.archivedAt !== undefined)).toHaveLength(1);
   });
 
+  it('NAILS and ESTHETICS exercise categories and descriptions; HAIRDRESSING keeps none (Step 3)', () => {
+    const nails = createPlaygroundDemoScenario('NAILS', NOW);
+    const esthetics = createPlaygroundDemoScenario('ESTHETICS', NOW);
+    const hair = createPlaygroundDemoScenario('HAIRDRESSING', NOW);
+
+    expect(nails.seed.serviceCategories?.map((category) => category.name)).toEqual([
+      'Ongles naturels',
+      'Extensions et poses en gel',
+      'Remplissages',
+      'Beauté des pieds',
+      'Déposes',
+      'Nail art et modèles',
+    ]);
+    expect(esthetics.seed.serviceCategories?.map((category) => category.name)).toEqual([
+      'Soins du visage',
+      'Épilations',
+      'Soins du corps',
+      'Beauté du regard',
+      'Beauté des mains et des pieds',
+    ]);
+    expect(hair.seed.serviceCategories).toEqual([]);
+    expect(hair.seed.services.every((service) => service.categoryId === undefined)).toBe(true);
+
+    for (const { business, seed } of [nails, esthetics]) {
+      const categories = seed.serviceCategories ?? [];
+      expect(categories.map((category) => category.position)).toEqual(categories.map((_, index) => index));
+      for (const category of categories) {
+        expect(category.businessId).toBe(business.id);
+        expect(category.id.startsWith(`${business.id}-category-`)).toBe(true);
+      }
+      const ids = new Set(categories.map((category) => category.id));
+      for (const service of seed.services) {
+        if (service.categoryId !== undefined) expect(ids.has(service.categoryId)).toBe(true);
+      }
+      expect(seed.services.filter((service) => service.description !== undefined).length).toBeGreaterThanOrEqual(3);
+      // Appointment snapshots never carry the catalogue fields.
+      for (const appointment of seed.appointments) {
+        for (const item of appointment.items) {
+          expect(item).not.toHaveProperty('categoryId');
+          expect(item).not.toHaveProperty('description');
+        }
+      }
+    }
+    expect(nails.seed.services.find((service) => service.name === 'Réparation d’un ongle')?.categoryId).toBeUndefined();
+    expect(nails.seed.services.find((service) => service.name === 'Pose complète gel')?.description).toContain('\n');
+    const handsFeet = esthetics.seed.serviceCategories?.find((category) => category.name === 'Beauté des mains et des pieds');
+    expect(esthetics.seed.services.some((service) => service.categoryId === handsFeet?.id)).toBe(false);
+  });
+
+  it('refuses a starter mapped to an unknown category', () => {
+    expect(() =>
+      buildDemoScenario({ ...HAIRDRESSING_DEMO, serviceCategories: { color: 'nowhere' } }, NOW),
+    ).toThrow(/unknown category "nowhere"/);
+  });
+
   it('is deterministic for one instant and relative to it', () => {
     const first = createPlaygroundDemoScenario('ESTHETICS', NOW);
     const second = createPlaygroundDemoScenario('ESTHETICS', new Date(NOW));

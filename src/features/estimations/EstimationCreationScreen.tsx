@@ -33,6 +33,7 @@ import type { Service } from '@/domain/appointments';
 import { CreationStepper } from '@/features/appointments/creation/components/CreationStepper';
 import { canNavigateTo, type CreationStep } from '@/features/appointments/creation/steps';
 import { ServiceCatalogPicker } from '@/features/appointments/editor/components/ServiceCatalogPicker';
+import { useCatalogueView } from '@/features/services/use-catalogue-view';
 import {
   formatSelectedServiceNames,
   formatSelectionCountLabel,
@@ -62,6 +63,7 @@ const SUMMARY_STEP: EstimationStep = 1;
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 export function EstimationCreationScreen() {
+  const catalogueView = useCatalogueView();
   const router = useRouter();
   const business = useCurrentBusiness();
   const { activeServices } = useServiceCatalog();
@@ -166,6 +168,8 @@ export function EstimationCreationScreen() {
             ESTIMATION
           </AppText>
           <ServiceCatalogPicker
+            categories={catalogueView.categories}
+            organization={catalogueView.presentation.organization}
             onSelectService={toggleService}
             selectedHint="Retirer de l’estimation"
             selectedServiceIds={selectedServiceIds}

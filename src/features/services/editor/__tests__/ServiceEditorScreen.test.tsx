@@ -12,6 +12,7 @@ import {
 } from "@/providers/testing/TestPersistenceProvider";
 import { serviceCategoryColors } from "@/shared/ui/theme";
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
+import { createDevelopmentSeed } from "@/providers/development-seed";
 
 const mockBack = jest.fn();
 
@@ -210,7 +211,7 @@ describe("ServiceEditorScreen", () => {
     );
   });
 
-  it("suggests a nail example to a nail technician, with the same form, rules and categories", async () => {
+  it("opens the unified Prestations form directly for a nail technician, with nail examples and no Service / Technique", async () => {
     const view = await render(
       <TestPersistenceProvider
         business={{ ...testBusiness, activityType: "NAILS" }}
@@ -221,16 +222,21 @@ describe("ServiceEditorScreen", () => {
       </TestPersistenceProvider>,
     );
 
-    // The same two categories, in the same colours, for every profession.
-    expect(view.getByTestId("choose-service-type-SERVICE")).toBeTruthy();
-    expect(view.getByTestId("choose-service-type-TECHNIQUE")).toBeTruthy();
-    await act(async () => {
-      fireEvent.press(view.getByTestId("choose-service-type-SERVICE"));
-    });
+    // Step 3: no type chooser — a single-duration prestation from the start.
+    expect(view.queryByTestId("choose-service-type-SERVICE")).toBeNull();
+    expect(view.queryByTestId("choose-service-type-TECHNIQUE")).toBeNull();
+    expect(view.queryByTestId("service-form-category-pill")).toBeNull();
+    expect(view.queryByText("Technique")).toBeNull();
     const name = view.getByLabelText("Nom de la prestation");
     expect(name.props.placeholder).toBe("Ex. Pose complète gel");
     // A hint only: the field starts empty and the name stays required.
     expect(name.props.value).toBe("");
+    expect(view.getByLabelText("Durée de la prestation")).toBeTruthy();
+    expect(view.getByTestId("service-form-category")).toBeTruthy();
+    expect(view.getByTestId("service-form-description").props.placeholder).toBe(
+      "Ex. Dépose d’un gel posé ailleurs : prévoir 15 min de plus.",
+    );
+    expect(view.getByTestId("service-form-phased-switch").props.value).toBe(false);
     expect(view.getByTestId("save-service").props.accessibilityState.disabled).toBe(true);
   });
 
@@ -959,5 +965,219 @@ describe("ServiceEditorScreen", () => {
       fireEvent.press(view.getByLabelText("Annuler"));
     });
     expect(outsideTapAllowed()).toBe(true);
+  });
+});
+
+describe("ServiceEditorScreen — categories, descriptions, profession-aware creation (Step 3)", () => {
+  beforeEach(() => {
+    mockBack.mockClear();
+  });
+
+  const press = (element: Parameters<typeof fireEvent.press>[0]) =>
+    act(async () => {
+      fireEvent.press(element);
+    });
+  const type = (element: Parameters<typeof fireEvent.changeText>[0], text: string) =>
+    act(async () => {
+      fireEvent.changeText(element, text);
+    });
+
+  function StoredProbe() {
+    const { services, categories } = useServiceCatalog();
+    const created = services.find((service) => service.name === "Pose complète gel" || service.name === "Coupe enfant" || service.name === "Soin du visage");
+    return (
+      <>
+        <Text testID="stored-service">{created ? JSON.stringify(created) : ""}</Text>
+        <Text testID="stored-categories">{JSON.stringify(categories.map((category) => category.name))}</Text>
+      </>
+    );
+  }
+
+  const withCategories = (names: readonly string[]) => () => ({
+    ...createDevelopmentSeed(new Date("2027-03-10T10:00:00.000Z")),
+    serviceCategories: names.map((name, position) => ({
+      id: `cat-${position}`,
+      businessId: testBusiness.id,
+      name,
+      position,
+    })),
+  });
+
+  function renderFor(
+    activityType: "HAIRDRESSING" | "NAILS" | "ESTHETICS",
+    screen: React.ReactNode,
+    categoryNames: readonly string[] = [],
+  ) {
+    return render(
+      <TestPersistenceProvider
+        business={{ ...testBusiness, activityType }}
+        createSeed={categoryNames.length > 0 ? withCategories(categoryNames) : undefined}
+      >
+        <ServiceCatalogProvider>
+          {screen}
+          <StoredProbe />
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
+    );
+  }
+
+  const stored = (view: Awaited<ReturnType<typeof render>>) =>
+    JSON.parse(view.getByTestId("stored-service").props.children as string);
+
+  it("hairdressing keeps the Service / Technique chooser and its order; category and description come after the timing", async () => {
+    const view = await renderFor("HAIRDRESSING", <ServiceEditorScreen mode="create" />);
+    expect(view.getByTestId("choose-service-type-SERVICE")).toBeTruthy();
+    await press(view.getByTestId("choose-service-type-SERVICE"));
+
+    expect(view.getByTestId("service-form-category-pill")).toBeTruthy();
+    expect(view.queryByTestId("service-form-phased")).toBeNull();
+    // The established order: timing first, then the two optional fields.
+    const json = JSON.stringify(view.toJSON());
+    const order = [
+      "Nom de la prestation",
+      "Prix de la prestation",
+      "Durée de la prestation",
+      "Aucune catégorie",
+      "Description de la prestation, facultative",
+    ].map((label) => json.indexOf(`"accessibilityLabel":"${label}"`));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it("a nail technician creates a categorised, described prestation without knowing anything about scheduling", async () => {
+    const view = await renderFor("NAILS", <ServiceEditorScreen mode="create" />, [
+      "Ongles naturels",
+      "Extensions et poses en gel",
+    ]);
+
+    await type(view.getByLabelText("Nom de la prestation"), "Pose complète gel");
+    // The form only chooses among the existing categories: no creation from here.
+    expect(view.queryByTestId("service-category-create")).toBeNull();
+    expect(view.queryByText(/Nouvelle catégorie/)).toBeNull();
+    expect(view.queryByTestId("service-form-category-hint")).toBeNull();
+    await press(view.getByTestId("service-category-chip-cat-1"));
+    const chips = view.getAllByRole("radio");
+    expect(chips.map((chip) => [chip.props.accessibilityLabel, chip.props.accessibilityState.selected])).toEqual([
+      ["Aucune catégorie", false],
+      ["Ongles naturels", false],
+      ["Extensions et poses en gel", true],
+    ]);
+    expect(view.getByTestId("stored-categories").props.children).toBe('["Ongles naturels","Extensions et poses en gel"]');
+
+    // The description says what it describes.
+    expect(view.getByText("Description de la prestation (facultative)")).toBeTruthy();
+    expect(view.queryByText("Description (facultative)")).toBeNull();
+    await type(view.getByTestId("service-form-description"), "  Inclus : limage et forme.\nExclu : nail art.  ");
+    await type(view.getByLabelText("Durée de la prestation"), "90");
+    await type(view.getByLabelText("Prix de la prestation"), "55");
+    await press(view.getByTestId("save-service"));
+
+    const service = stored(view);
+    expect(service).toMatchObject({
+      name: "Pose complète gel",
+      type: "SERVICE",
+      price: 55,
+      description: "Inclus : limage et forme.\nExclu : nail art.",
+      active: true,
+    });
+    expect(service.categoryId).toBe("cat-1");
+    expect(service.phases).toEqual([{ id: expect.any(String), name: "Pose complète gel", durationMinutes: 90, requiresStaff: true }]);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("without any category, the form offers « Aucune » and says where categories are created", async () => {
+    const view = await renderFor("NAILS", <ServiceEditorScreen mode="create" />);
+    expect(view.getAllByRole("radio").map((chip) => chip.props.accessibilityLabel)).toEqual(["Aucune catégorie"]);
+    expect(view.getByTestId("service-form-category-hint").props.children).toBe(
+      "Créez vos catégories depuis Prestations & tarifs › Catégories.",
+    );
+    expect(view.queryByTestId("service-category-create")).toBeNull();
+    expect(view.getByTestId("stored-categories").props.children).toBe("[]");
+  });
+
+  it("the advanced phased option turns the draft into ordered phases with a waiting time, and back", async () => {
+    const view = await renderFor("ESTHETICS", <ServiceEditorScreen mode="create" />);
+    await type(view.getByLabelText("Nom de la prestation"), "Soin du visage");
+    await type(view.getByLabelText("Durée de la prestation"), "30");
+
+    await act(async () => {
+      fireEvent(view.getByTestId("service-form-phased-switch"), "valueChange", true);
+    });
+    expect(view.queryByLabelText("Durée de la prestation")).toBeNull();
+    expect(view.getByText("Phases")).toBeTruthy();
+    expect(view.queryByText("Technique")).toBeNull();
+
+    await act(async () => {
+      fireEvent(view.getByTestId("service-form-phased-switch"), "valueChange", false);
+    });
+    // Back to one duration: the typed duration survived the round trip.
+    expect(view.getByLabelText("Durée de la prestation").props.value).toBe("30");
+    expect(view.getByLabelText("Nom de la prestation").props.value).toBe("Soin du visage");
+  });
+
+  it("Prestation Details shows the description as plain text and the category; the unified catalogue never says Service", async () => {
+    const seed = () => {
+      const base = createDevelopmentSeed(new Date("2027-03-10T10:00:00.000Z"));
+      return {
+        ...base,
+        serviceCategories: [{ id: "cat-gel", businessId: testBusiness.id, name: "Extensions et poses en gel", position: 0 }],
+        services: [
+          ...base.services,
+          {
+            id: "nail-gel",
+            businessId: testBusiness.id,
+            name: "Pose complète gel",
+            type: "SERVICE" as const,
+            price: 55,
+            phases: [{ id: "nail-gel-phase", name: "Pose complète gel", durationMinutes: 90, requiresStaff: true }],
+            active: true,
+            categoryId: "cat-gel",
+            description: "<b>Inclus</b> : limage.\nExclu : nail art.",
+          },
+        ],
+      };
+    };
+    const view = await render(
+      <TestPersistenceProvider business={{ ...testBusiness, activityType: "NAILS" }} createSeed={seed}>
+        <ServiceCatalogProvider>
+          <ServiceEditorScreen mode="existing" serviceId="nail-gel" />
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
+    );
+
+    const summary = within(view.getByTestId("service-summary"));
+    expect(summary.getByLabelText("Catégorie, Extensions et poses en gel")).toBeTruthy();
+    // A single-duration prestation of the unified catalogue carries no type pill at all.
+    expect(summary.queryByLabelText(/Service|Planification/)).toBeNull();
+    // Shown verbatim: never interpreted as markup.
+    expect(view.getByText("<b>Inclus</b> : limage.\nExclu : nail art.")).toBeTruthy();
+
+    // The editor reopens it with the same values; the type is not switchable once saved.
+    await press(view.getByTestId("edit-service"));
+    expect(view.getByTestId("service-form-description").props.value).toBe("<b>Inclus</b> : limage.\nExclu : nail art.");
+    expect(view.getByLabelText("Extensions et poses en gel").props.accessibilityState.selected).toBe(true);
+    expect(view.queryByTestId("service-form-phased")).toBeNull();
+  });
+
+  it("hairdressing details keep the Service pill and add the description and category when present", async () => {
+    const view = await renderFor(
+      "HAIRDRESSING",
+      <ServiceEditorScreen mode="existing" serviceId="service-brushing-brushing-1" />,
+      ["Coiffage"],
+    );
+    const summary = () => within(view.getByTestId("service-summary"));
+    expect(summary().getByLabelText("Catégorie, Service")).toBeTruthy();
+    expect(view.queryByText("Description")).toBeNull();
+
+    await press(view.getByTestId("edit-service"));
+    await type(view.getByTestId("service-form-description"), "Shampoing inclus.\nSans coupe.");
+    expect(view.getByText("Description de la prestation (facultative)")).toBeTruthy();
+    await press(view.getByTestId("service-category-chip-cat-0"));
+    await press(view.getByTestId("save-service"));
+
+    expect(view.getByText("Description")).toBeTruthy();
+    expect(view.getByText("Shampoing inclus.\nSans coupe.")).toBeTruthy();
+    expect(summary().getByLabelText("Catégorie, Coiffage")).toBeTruthy();
+    expect(summary().getByLabelText("Catégorie, Service")).toBeTruthy();
   });
 });

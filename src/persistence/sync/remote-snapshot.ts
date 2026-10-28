@@ -44,6 +44,7 @@ import type {
   RemotePulledAggregate,
   RemoteSaleItemPayload,
   RemoteSalePayload,
+  RemoteServiceCategoryPayload,
   RemoteServicePayload,
 } from './remote-gateway';
 
@@ -253,13 +254,31 @@ function parseClient(row: Json, field: string): RemoteClientPayload {
   };
 }
 
+/** A key the remote may predate: absent → undefined (keep the local value), null → cleared. */
+function laterText(row: Json, key: string, field: string): string | null | undefined {
+  if (!(key in row)) return undefined;
+  return optionalText(row, key, field);
+}
+
 function parseService(row: Json, field: string): RemoteServicePayload {
+  const categoryId = laterText(row, 'category_id', field);
+  const description = laterText(row, 'description', field);
   return {
     name: text(row, 'name', field),
     type: oneOf(row, 'type', field, SERVICE_TYPES),
     price_cents: integer(row, 'price_cents', field, 0),
     active: flag(row, 'active', field),
+    ...(categoryId !== undefined && { category_id: categoryId }),
+    ...(description !== undefined && { description }),
     phases: children(row.phases, `${field}.phases`, (phase) => phase.position, parsePhase),
+  };
+}
+
+function parseServiceCategory(row: Json, field: string): RemoteServiceCategoryPayload {
+  return {
+    name: nonEmptyText(row, 'name', field),
+    description: optionalText(row, 'description', field),
+    position: integer(row, 'position', field, 0),
   };
 }
 
@@ -417,6 +436,10 @@ export function parseRemoteBusinessSnapshot(data: unknown): RemoteBusinessSnapsh
       'appointment_deposits',
       parseAppointmentDeposit,
     ),
+    // Absent on a remote whose functions predate service categories: no
+    // category, never a failure — and the proof of readiness is missing (§27).
+    serviceCategories: parseFamily(root.service_categories ?? [], 'service_categories', parseServiceCategory),
+    serviceCatalogue: root.service_categories !== undefined && root.service_categories !== null,
   };
 }
 
@@ -449,6 +472,10 @@ export function assertSnapshotReferences(snapshot: RemoteBusinessSnapshot): void
 
 export type RemotePulledEntry =
   | { readonly aggregateType: 'CLIENT'; readonly aggregate: RemotePulledAggregate<RemoteClientPayload> }
+  | {
+      readonly aggregateType: 'SERVICE_CATEGORY';
+      readonly aggregate: RemotePulledAggregate<RemoteServiceCategoryPayload>;
+    }
   | { readonly aggregateType: 'SERVICE'; readonly aggregate: RemotePulledAggregate<RemoteServicePayload> }
   | { readonly aggregateType: 'PRODUCT'; readonly aggregate: RemotePulledAggregate<RemoteProductPayload> }
   | { readonly aggregateType: 'APPOINTMENT'; readonly aggregate: RemotePulledAggregate<RemoteAppointmentPayload> }
@@ -463,7 +490,8 @@ export type RemotePulledEntry =
     };
 
 /**
- * Every aggregate of the snapshot in DEPENDENCY order — CLIENT, SERVICE,
+ * Every aggregate of the snapshot in DEPENDENCY order — CLIENT,
+ * SERVICE_CATEGORY (referenced by Services as plain metadata), SERVICE,
  * PRODUCT, APPOINTMENT, SALE, CALENDAR_BLOCK (it references nothing and nothing
  * references it), then APPOINTMENT_DEPOSIT (it references its Appointment, and
  * its tombstone is therefore removed BEFORE the Appointment's in the reverse
@@ -477,6 +505,7 @@ export function listSnapshotEntries(snapshot: RemoteBusinessSnapshot): readonly 
     <Payload>(aggregate: RemotePulledAggregate<Payload>) => ({ aggregateType, aggregate });
   return [
     ...snapshot.clients.map(tag('CLIENT')),
+    ...snapshot.serviceCategories.map(tag('SERVICE_CATEGORY')),
     ...snapshot.services.map(tag('SERVICE')),
     ...snapshot.products.map(tag('PRODUCT')),
     ...snapshot.appointments.map(tag('APPOINTMENT')),

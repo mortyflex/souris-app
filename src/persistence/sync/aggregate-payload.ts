@@ -8,7 +8,7 @@
 // instant, and the Business scope.
 //
 // Scope rule: a business-scoped row (services, appointments, products,
-// sales, calendar blocks, appointment deposits) is pushed ONLY when its `business_id` is the bound Business. A row
+// sales, calendar blocks, appointment deposits, service categories) is pushed ONLY when its `business_id` is the bound Business. A row
 // carrying another id is refused loudly — never pushed, never mistaken for a
 // deleted aggregate. `clients` has no `business_id` column; the single local
 // address book belongs to the bound Business (PERSISTENCE.md §4b).
@@ -28,6 +28,7 @@ import type {
   RemoteProductPayload,
   RemoteSaleItemPayload,
   RemoteSalePayload,
+  RemoteServiceCategoryPayload,
   RemoteServicePayload,
 } from './remote-gateway';
 
@@ -122,7 +123,12 @@ function readService(
     readonly type: string;
     readonly price_cents: number;
     readonly active: number;
-  }>('SELECT business_id, name, type, price_cents, active FROM services WHERE id = ?', [ref.aggregateId]);
+    readonly category_id: string | null;
+    readonly description: string | null;
+  }>(
+    'SELECT business_id, name, type, price_cents, active, category_id, description FROM services WHERE id = ?',
+    [ref.aggregateId],
+  );
   assertScoped(row, businessId, ref);
   if (!row) return undefined;
   const phases = db.getAllSync<PhaseRow>(
@@ -134,8 +140,27 @@ function readService(
     type: row.type,
     price_cents: assertAmountCents(row.price_cents, 'services.price_cents'),
     active: fromSqlBoolean(row.active),
+    // Always both keys, nulls included (§27): a missing key would read as "a build that predates them".
+    category_id: row.category_id,
+    description: row.description,
     phases: phases.map(toPhase),
   };
+}
+
+function readServiceCategory(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+): RemoteServiceCategoryPayload | undefined {
+  const row = db.getFirstSync<{
+    readonly business_id: string;
+    readonly name: string;
+    readonly description: string | null;
+    readonly position: number;
+  }>('SELECT business_id, name, description, position FROM service_categories WHERE id = ?', [ref.aggregateId]);
+  assertScoped(row, businessId, ref);
+  if (!row) return undefined;
+  return { name: row.name, description: row.description, position: row.position };
 }
 
 function readAppointment(
@@ -396,5 +421,7 @@ export function readAggregatePayload(
       return readCalendarBlock(db, businessId, ref);
     case 'APPOINTMENT_DEPOSIT':
       return readAppointmentDeposit(db, businessId, ref);
+    case 'SERVICE_CATEGORY':
+      return readServiceCategory(db, businessId, ref);
   }
 }

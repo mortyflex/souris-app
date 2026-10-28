@@ -91,8 +91,8 @@ describe('schema v7 migration on an existing v6 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(16);
-    expect(CURRENT_SCHEMA_VERSION).toBe(16);
+    expect(readSchemaVersion(db)).toBe(17);
+    expect(CURRENT_SCHEMA_VERSION).toBe(17);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(tableNames(db)).toEqual(expect.arrayContaining(['sync_outbox', 'sync_state']));
@@ -122,7 +122,7 @@ describe('schema v7 migration on an existing v6 database', () => {
     migrateDatabase(db);
     const before = loadSnapshot(db);
 
-    expect(migrateDatabase(db)).toBe(16);
+    expect(migrateDatabase(db)).toBe(17);
     expect(loadSnapshot(db)).toEqual(before);
     expect(countSyncOutboxRows(db)).toBe(0);
   });

@@ -83,6 +83,7 @@ import { foregroundSoft, gutter, radii, semanticColors, spacing } from '@/shared
 import { createNewAppointmentItemId } from '../creation/runtime-ids';
 import { AppointmentDiscountSection } from '../editor/components/AppointmentDiscountSection';
 import { ServiceCatalogPicker } from '../editor/components/ServiceCatalogPicker';
+import { useCatalogueView } from '@/features/services/use-catalogue-view';
 import { SortableDraftList } from '../editor/components/SortableDraftList';
 import { formatCreationDuration } from '../editor/presentation';
 import {
@@ -108,6 +109,7 @@ interface AppointmentEditingScreenProps {
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
 export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingScreenProps) {
+  const catalogueView = useCatalogueView();
   const router = useRouter();
   const { deposits, getAppointmentById, updateAppointment } = useAppointmentSession();
   const sales = useOptionalSaleSession()?.sales ?? [];
@@ -401,6 +403,8 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
         <View style={styles.section}>
           <SectionHeader title="Ajouter des prestations" />
           <ServiceCatalogPicker
+            categories={catalogueView.categories}
+            organization={catalogueView.presentation.organization}
             services={activeServices}
             selectedServiceIds={drafts.map((draft) => draft.serviceId)}
             onSelectService={addServiceImmediately}

@@ -1019,7 +1019,13 @@ They are synced through the existing aggregate sync as their own aggregate type,
 
 Schema v12 rebuilds `sync_outbox` and `sync_state` with the same procedure as v11.
 
-v11 and v12 are the only non-`ALTER` migrations of the project.
+Service categories and the two optional Service fields (`category_id`, `description`) are persisted locally (SQLite schema v17, `service_categories`).
+
+They are synced through the existing aggregate sync as their own aggregate type, `SERVICE_CATEGORY`, and two optional SERVICE keys (`docs/architecture/CLOUD_SYNC.md` §27).
+
+Schema v17 rebuilds `sync_outbox` and `sync_state` with the same procedure as v11.
+
+v11, v12 and v17 are the only non-`ALTER` migrations of the project.
 
 Sync is per aggregate.
 

@@ -20,7 +20,9 @@ Service
 ├── type        SERVICE | TECHNIQUE
 ├── price       plain number, EUR
 ├── phases[]    ordered ServicePhase values
-└── active      current catalog availability
+├── active      current catalog availability
+├── categoryId? a ServiceCategory id (§11) — absent = « Sans catégorie »
+└── description? optional plain text (§11) — absent = none
 
 ServicePhase
 ├── id            stable across edit/reorder
@@ -29,7 +31,9 @@ ServicePhase
 └── requiresStaff
 ```
 
-The `Service` model has no category, color, options, variants, or aggregate duration. Total duration is always derived from ordered phases. Phase order is array order — no separate order property exists.
+The `Service` model has no colour, options, variants, or aggregate duration. Its optional
+category and description (§11) are catalogue metadata: they never reach an `AppointmentItem`
+snapshot, the timeline, a price or availability. Total duration is always derived from ordered phases. Phase order is array order — no separate order property exists.
 
 ---
 
@@ -216,9 +220,9 @@ Service form rules:
 
 ## 9. Non-Goals
 
-Not in this phase: categories, descriptions, options/variants, discounts, packages, taxes,
-online-booking configuration, staff-specific pricing, service drag ordering. §10 records the
-smallest safe follow-up for the three the multi-profession work may need.
+Not in this phase: options/variants, discounts, packages, taxes, online-booking configuration,
+staff-specific pricing, service drag ordering. Categories and descriptions arrived with
+multi-profession Step 3 (§11); the online-booking visibility is designed, not built (§12).
 
 ---
 
@@ -258,19 +262,23 @@ colours stay the validated violet (Service) / azure (Technique).
 ### 10.3 The two profession-aware presentation touches
 
 - **Family pictogram** (`src/features/services/prestation-visual.ts`): the ordered keyword table
-  keeps every hairdressing family first and unchanged (Coupe, Brushing, Balayage, Couleur, Soin,
-  Chignon, Dose, Gloss), then recognises `NAILS` (ongle, nail, gel, semi, remplissage, dépose,
-  manucure, pédicure, vernis, capsule, main, pied — never « pose » alone, which also starts hair
-  wording), `HAIR_REMOVAL` (épilation, cire), `LASHES_BROWS` (cil, sourcil, regard, rehaussement) and
-  `BODY` (massage, modelage, gommage, corps). « Soin » stays the care family for every profession.
-  The name alone decides — the Business activity is never read — and the type fallbacks (scissors /
-  sparkles) are unchanged.
+  opens with three body-area families that no hairdressing prestation names — `FEET` (pied,
+  pédicure, orteil), `FACE` (visage), `BODY` (corps) — then keeps every hairdressing family in its
+  original order (Coupe, Brushing, Balayage, Couleur, Soin, Chignon, Dose, Gloss), then the nail
+  acts before the nail material: `NAIL_ART` (art, décor, strass, modèle), `NAIL_REMOVAL` (dépose,
+  retrait), `NAIL_REPAIR` (réparation), then `NAILS` (ongle, nail, gel, semi, remplissage, manucure,
+  vernis, capsule, main — never « pose » alone, which also starts hair wording), `HAIR_REMOVAL`
+  (épilation, cire), `LASHES_BROWS` (cil, sourcil, regard, rehaussement) and `BODY` (massage,
+  modelage, gommage). « Soin » stays the care family unless a body area is named (« Soin du
+  visage » is a face). The name alone decides — the Business activity is never read — and the type
+  fallbacks (scissors / sparkles) are unchanged. A professional category reads through the same
+  table (`getCategoryVisual`, Catégories screen), with a neutral grid as its fallback.
 - **Name placeholder** (`src/features/services/editor/name-placeholder.ts`): the empty « Nom »
   field suggests an example of the Business activity (« Ex. Coupe », « Ex. Pose complète gel »,
   « Ex. Soin du visage », one per stored activity). A hint only: never a default, a rule or a
   stored value.
 
-### 10.4 Not represented yet — smallest safe follow-ups
+### 10.4 Not represented yet — smallest safe follow-ups (Step 2; categories and descriptions done in §11)
 
 None of these is needed to represent the three reference catalogues; each needs a persisted field,
 so none is added speculatively. If a pilot requires one, the follow-up is the same shape every time:
@@ -289,3 +297,125 @@ payload, then the editor.
   `services.online_bookable INTEGER NULL CHECK (0, 1)`, absent = NOT bookable (safe for every
   existing record), one switch in the editor, read ONLY by the future availability layer
   (`CLAUDE.md` §17) — never by manual scheduling.
+
+---
+
+## 11. Categories, descriptions and the profession-aware catalogue (multi-profession Step 3, October 2026)
+
+### 11.1 Model
+
+```text
+ServiceCategory                         src/domain/services/categories.ts
+├── id          stable (UUID); Services reference it — never the mutable name
+├── businessId  ownership
+├── name        required, one line, trimmed (≤ 60)
+├── description? optional plain text (the Service description rule)
+└── position    the professional's order (0…n-1; ties by id)
+
+Service.categoryId?   absent = « Sans catégorie »; an id no category carries reads the same
+Service.description?  src/domain/services/description.ts — trimmed, blank = none, \r\n → \n,
+                      line breaks kept, ≤ 1000, plain text never interpreted as markup
+```
+
+- Categories are FREE: the UI shows the profession's example as a placeholder, never a vocabulary,
+  and BeautIzzy never creates a category — not for an existing Business, not at onboarding.
+- Renaming moves nothing (the id is the reference). Reordering writes only the moved categories.
+- Deleting a category never deletes a Service: in ONE transaction its Services become
+  uncategorized (each a SERVICE upsert) and the category is removed (SERVICE_CATEGORY delete). The
+  confirmation says so.
+- The reference is metadata, never a constraint (no foreign key, locally or remotely): a Service
+  pushed before its category, or naming a category removed on another device, simply reads as
+  « Sans catégorie ».
+- Snapshots are untouched: `createAppointmentItemSnapshot` copies name, type, price and phases
+  only; category and description stay in the catalogue (tested).
+
+### 11.2 Profession-aware presentation (`src/features/services/catalogue-presentation.ts`)
+
+ONE editor, ONE catalogue screen, ONE picker; a small table decides how they read.
+
+```text
+SERVICE_TYPES   HAIRDRESSING (and BARBER, LASHES_BROWS, MAKEUP, WELLNESS, OTHER — every
+                existing Business keeps exactly what it had)
+                Services / Techniques segment and type chooser, unchanged. « Catégorie » and
+                « Description de la prestation (facultative) » come after the timing.
+                Categories, once assigned, only subdivide a segment.
+CATEGORIES      NAILS, ESTHETICS
+                One « Prestations » list grouped by the professional's categories, then
+                « Sans catégorie », then « Inactives »; search covers everything. Creation opens
+                the form directly as a single-duration prestation: Nom → Catégorie →
+                Description de la prestation → Durée → Prix. The phased model (internally TECHNIQUE) is the
+                creation-only option « Plusieurs phases avec temps d’attente », explained by what
+                it does (the client waits without you and you can take someone else). The words
+                « Service » / « Technique » are never shown; Prestation Details names the
+                structure only for a phased prestation (« En plusieurs phases »).
+```
+
+The appointment prestation picker (creation, editing, estimation) follows the same organisation:
+category-titled grids for the unified catalogue, the established segment otherwise. Cards,
+selection and snapshots are unchanged.
+
+A nail technique is not an internal TECHNIQUE: a gel application is one SERVICE duration; the
+phased option is only for real waiting time where the professional is free. The SERVICE /
+TECHNIQUE rules of §3 and §8 are unchanged, including the required « Temps de pose » of a phased
+prestation; the stored name of that phase stays « Temps de pose » for every profession.
+
+### 11.3 Management
+
+« Prestations & tarifs › Catégories » (`src/features/services/categories/`) is THE place where
+categories are managed; the Prestation form only chooses among them (« Aucune » first) and, when
+there is none yet, says where they are created.
+
+- One grouped list with the app's list management: the shared drag handle reorders (press and
+  hold, drag, release — `SortableRowList`, its drag haptics and its adjustable accessibility
+  actions « Déplacer vers le haut / vers le bas »); a swipe to the right deletes (`SwipeToDeleteRow`,
+  its one-time hint).
+- A tap edits the row in place: « Nom de la catégorie », « Description de la catégorie
+  (facultative) », « Enregistrer », « Supprimer » (the gesture-free deletion).
+- Deletion always asks first and says that the prestations become « Sans catégorie »; no
+  prestation, appointment or price is deleted. A swiped row closes again until the confirmation.
+- Its « + » opens the inline « Nouvelle catégorie » card at the top of the list directly (once:
+  pressing it again keeps the card). Cancelling closes the card and stays on the screen.
+- The « + » of Prestations & tarifs opens the shared floating menu: « Nouvelle prestation » (the
+  Prestation form) and « Nouvelle catégorie » (this screen, the card already open —
+  `/services/categories?create=1`).
+
+Every mutation passes the business write guard.
+
+### 11.4 Persistence and sync
+
+Schema v17 (`docs/architecture/PERSISTENCE.md`), the `SERVICE_CATEGORY` aggregate and the two
+SERVICE keys (`docs/architecture/CLOUD_SYNC.md` §27), the hand-applied Supabase migration
+`20261010120000_add_service_categories_and_descriptions.sql` (`supabase/README.md`).
+
+---
+
+## 12. Online booking visibility — design only (NOT implemented)
+
+The future online-booking MVP needs to say, per prestation, whether a customer may see it and
+book it. Nothing below exists yet; it is recorded so the field is added once, correctly.
+
+```text
+ServiceOnlineVisibility = 'PRIVATE' | 'VISIBLE' | 'BOOKABLE'
+  PRIVATE    internal only — never published (the DEFAULT, and the meaning of NULL)
+  VISIBLE    shown on the public page with its description and price, not bookable online
+  BOOKABLE   shown and bookable through the availability layer
+```
+
+Smallest safe integration, when the booking phase is requested:
+
+1. Domain: `Service.onlineVisibility?: ServiceOnlineVisibility`, absent = `PRIVATE`; read ONLY by
+   the future availability / publication layer (`CLAUDE.md` §17) — never by manual scheduling.
+2. Local: `services.online_visibility TEXT NULL CHECK (… IN ('PRIVATE','VISIBLE','BOOKABLE'))`,
+   forward migration, every row NULL.
+3. Remote: the same nullable column + CHECK; the SERVICE push keeps the stored value when the key
+   is absent (the §27 rule); the build that writes it defers until a pull proves the column (the
+   same readiness proof, with its own key in the pull).
+4. Public read path: a dedicated, read-only, owner-independent RPC or view exposing ONLY
+   `VISIBLE`/`BOOKABLE` services of a published Business — never the owner sync RPCs, never a
+   `PRIVATE` row, never client data.
+5. Editor: one segmented choice in the unified catalogue's « Planification avancée », defaulting
+   to « Privée ».
+
+Categories and descriptions are already shaped for it: a public page groups by category and shows
+descriptions as plain text. Not designed here: service variants / options (`serviceOptionId`
+exists on snapshots, no catalogue model), add-on prestations, deposits for online bookings.

@@ -15,14 +15,24 @@
 // same way a « Coupe » is. The Business activity is deliberately NOT read:
 // one name always gives one family, whatever the profession.
 //
-// The FIRST matching family wins: « Coupe Brushing 1 » is a Coupe, « Soin du
-// visage » is a Soin. An unknown name falls back on its type — scissors for a
-// Service, sparkles for a Technique — so the icon area is never empty.
+// The FIRST matching family wins: « Coupe Brushing 1 » is a Coupe. A few
+// words name a body area that no hairdressing prestation uses — the feet, the
+// face, the body — and lead the table, so « Semi-permanent pieds » reads as a
+// foot and « Soin du visage » as a face rather than one more hand or bubble.
+// Inside the nail families, the act decides before the material: nail art,
+// removal and repair each have their own glyph; sets, infills and natural
+// nails keep the hand. An unknown name falls back on its type — scissors for
+// a Service, sparkles for a Technique — so the icon area is never empty.
+//
+// A professional category reads through the same table (`getCategoryVisual`):
+// « Beauté des pieds » and « Semi-permanent pieds » share the foot. An unknown
+// category name falls back on a neutral grid, never on a hairdressing glyph.
 //
 // Colours are the validated category colours (`serviceCategoryColors`), keyed
 // by the domain type: violet for a Service, azure for a Technique.
 
 import type { Service, ServiceType } from '@/domain/appointments';
+import type { ServiceCategory } from '@/domain/services';
 import type { PlatformSymbolName } from '@/shared/icons/payment-method-icons';
 import { serviceCategoryColors } from '@/shared/ui/theme';
 
@@ -35,12 +45,18 @@ export type PrestationFamily =
   | 'STYLING'
   | 'CUT'
   | 'BLOW_DRY'
+  | 'FEET'
+  | 'FACE'
+  | 'NAIL_ART'
+  | 'NAIL_REMOVAL'
+  | 'NAIL_REPAIR'
   | 'NAILS'
   | 'HAIR_REMOVAL'
   | 'LASHES_BROWS'
   | 'BODY'
   | 'SERVICE_FALLBACK'
-  | 'TECHNIQUE_FALLBACK';
+  | 'TECHNIQUE_FALLBACK'
+  | 'CATEGORY_FALLBACK';
 
 // SF Symbols ≤ 4.0 only (iOS 16.4 deployment target); Material on Android.
 const familyIcons = {
@@ -53,6 +69,11 @@ const familyIcons = {
   CUT: { ios: 'scissors', android: 'content_cut' },
   // SF Symbols has no hair dryer: the blown air stands for the brushing.
   BLOW_DRY: { ios: 'wind', android: 'air' },
+  FEET: { ios: 'shoeprints.fill', android: 'footprint' },
+  FACE: { ios: 'face.smiling', android: 'face' },
+  NAIL_ART: { ios: 'paintpalette', android: 'palette' },
+  NAIL_REMOVAL: { ios: 'eraser', android: 'ink_eraser' },
+  NAIL_REPAIR: { ios: 'bandage', android: 'healing' },
   // The hand of the profession card (activity-options.ts), so a nail
   // prestation is recognised with the same glyph from onboarding onwards.
   NAILS: { ios: 'hand.raised', android: 'back_hand' },
@@ -62,15 +83,21 @@ const familyIcons = {
   BODY: { ios: 'figure.mind.and.body', android: 'self_improvement' },
   SERVICE_FALLBACK: { ios: 'scissors', android: 'content_cut' },
   TECHNIQUE_FALLBACK: { ios: 'sparkles', android: 'auto_awesome' },
+  CATEGORY_FALLBACK: { ios: 'square.grid.2x2', android: 'category' },
 } as const satisfies Record<PrestationFamily, PlatformSymbolName>;
 
 /**
  * Ordered: the first family whose keyword starts a word of the name wins.
- * The hairdressing families keep their original order and keywords; the
- * other professions follow, so no existing hair prestation changes family.
- * Keywords are compared after accent stripping (« épilation » → `epilation`).
+ * The body-area words lead (no hairdressing prestation names a foot, a face
+ * or the body); the hairdressing families then keep their original order and
+ * keywords, and the other professions follow, so no existing hair prestation
+ * changes family. Keywords are compared after accent stripping
+ * (« épilation » → `epilation`).
  */
 const familyKeywords: readonly (readonly [PrestationFamily, readonly string[]])[] = [
+  ['FEET', ['pied', 'pedicure', 'orteil']],
+  ['FACE', ['visage']],
+  ['BODY', ['corps']],
   ['EXTRA_DOSE', ['dose']],
   ['BALAYAGE', ['balayage', 'meche']],
   ['GLOSS', ['gloss']],
@@ -81,7 +108,12 @@ const familyKeywords: readonly (readonly [PrestationFamily, readonly string[]])[
   ['BLOW_DRY', ['brushing']],
   // « pose » alone is deliberately absent: it also starts hair wording
   // (« Pose d'extensions »); the material or the nail itself is what tells.
-  ['NAILS', ['ongle', 'nail', 'gel', 'semi', 'remplissage', 'depose', 'manucure', 'pedicure', 'vernis', 'capsule', 'main', 'pied']],
+  // The act before the material: « Nail art », « Dépose gel » and « Réparation
+  // d’un ongle » are not one more hand.
+  ['NAIL_ART', ['art', 'decor', 'strass', 'modele']],
+  ['NAIL_REMOVAL', ['depose', 'retrait']],
+  ['NAIL_REPAIR', ['reparation']],
+  ['NAILS', ['ongle', 'nail', 'gel', 'semi', 'remplissage', 'manucure', 'vernis', 'capsule', 'main']],
   ['HAIR_REMOVAL', ['epilation', 'cire']],
   ['LASHES_BROWS', ['cil', 'sourcil', 'regard', 'rehaussement']],
   ['BODY', ['massage', 'modelage', 'gommage', 'corps']],
@@ -108,17 +140,37 @@ function nameWords(name: string): readonly string[] {
     .filter(Boolean);
 }
 
-export function getPrestationFamily(prestation: Pick<Service, 'name' | 'type'>): PrestationFamily {
-  const words = nameWords(prestation.name);
+function matchFamily(name: string): PrestationFamily | undefined {
+  const words = nameWords(name);
   const match = familyKeywords.find(([, keywords]) =>
     words.some((word) => keywords.some((keyword) => word.startsWith(keyword))),
   );
-  return match?.[0] ?? fallbackFamilies[prestation.type];
+  return match?.[0];
+}
+
+export function getPrestationFamily(prestation: Pick<Service, 'name' | 'type'>): PrestationFamily {
+  return matchFamily(prestation.name) ?? fallbackFamilies[prestation.type];
 }
 
 export function getPrestationVisual(prestation: Pick<Service, 'name' | 'type'>): PrestationVisual {
   const family = getPrestationFamily(prestation);
   const colors = serviceCategoryColors[prestation.type];
+  return {
+    family,
+    icon: familyIcons[family],
+    tint: colors.tint,
+    iconColor: colors.accent,
+  };
+}
+
+/**
+ * The pictogram of a professional category, read from its name with the same
+ * table, in the neutral Service colours. An unknown name gets the category
+ * grid — a category is not a haircut.
+ */
+export function getCategoryVisual(category: Pick<ServiceCategory, 'name'>): PrestationVisual {
+  const family = matchFamily(category.name) ?? 'CATEGORY_FALLBACK';
+  const colors = serviceCategoryColors.SERVICE;
   return {
     family,
     icon: familyIcons[family],

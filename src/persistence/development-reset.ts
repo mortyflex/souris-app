@@ -21,6 +21,10 @@ import {
 } from './sync/bootstrap';
 import { SYNC_ENTITLEMENT_HOLD_KEY } from './sync/entitlement-hold';
 import { SYNC_PULL_CURSOR_KEY } from './sync/pull-cursor';
+import {
+  SERVICE_CATALOGUE_REFRESH_KEY,
+  SERVICE_CATALOGUE_REMOTE_KEY,
+} from './sync/service-catalogue-sync';
 
 export function clearPersistedDataForDevelopment(db: SourisDatabase): void {
   if (!__DEV__) {
@@ -36,5 +40,7 @@ export function clearPersistedDataForDevelopment(db: SourisDatabase): void {
     deleteMetadata(db, SYNC_INITIAL_RESTORE_APPROVAL_KEY);
     deleteMetadata(db, SYNC_PULL_CURSOR_KEY);
     deleteMetadata(db, SYNC_ENTITLEMENT_HOLD_KEY);
+    deleteMetadata(db, SERVICE_CATALOGUE_REFRESH_KEY);
+    deleteMetadata(db, SERVICE_CATALOGUE_REMOTE_KEY);
   });
 }

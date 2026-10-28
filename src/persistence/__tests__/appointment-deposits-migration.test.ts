@@ -133,8 +133,8 @@ describe('schema v12 migration on an existing v11 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(16);
-    expect(CURRENT_SCHEMA_VERSION).toBe(16);
+    expect(readSchemaVersion(db)).toBe(17);
+    expect(CURRENT_SCHEMA_VERSION).toBe(17);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     for (const table of OPERATIONAL_TABLES) expect(dump(db, table)).toEqual(before[table]);
@@ -214,14 +214,15 @@ describe('schema v12 migration on an existing v11 database', () => {
     bootstrapPersistence(db, createTestSeed);
 
     const keys = db.getAllSync<{ key: string }>('SELECT key FROM souris_metadata ORDER BY key').map((row) => row.key);
-    expect(keys).toEqual(['seed_version', 'sync_bootstrap']);
+    // Schema v17 (applied on the way to the current version) arms the one-time Service refresh.
+    expect(keys).toEqual(['seed_version', 'sync_bootstrap', 'sync_service_catalogue_refresh']);
   });
 
   it('is idempotent and lets the migrated database record a deposit', () => {
     const db = openSchemaV11Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(16);
+    expect(migrateDatabase(db)).toBe(17);
     insertAppointmentDeposit(db, {
       id: 'deposit-1',
       businessId: BUSINESS_ID,

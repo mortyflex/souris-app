@@ -1,4 +1,5 @@
 import type { Service, ServicePhase, ServiceType } from '@/domain/appointments';
+import { isValidServiceDescription, normalizeServiceDescription } from '@/domain/services';
 
 export interface ServicePhaseFormValues {
   readonly id: string;
@@ -22,10 +23,15 @@ export interface ServiceFormValues {
   readonly type: ServiceType;
   readonly simpleDurationMinutes: string;
   readonly phases: readonly ServicePhaseFormValues[];
+  /** The chosen category id; undefined = « Aucune catégorie ». */
+  readonly categoryId?: string;
+  /** Free multiline text, as typed (absent = empty); normalised — trimmed, blank = none — when saved. */
+  readonly description?: string;
 }
 
 export interface ServiceFormValidation {
   readonly nameValid: boolean;
+  readonly descriptionValid: boolean;
   readonly priceValid: boolean;
   readonly simpleDurationValid: boolean;
   readonly phaseValidities: readonly {
@@ -55,6 +61,42 @@ export function createEmptyServiceForm(
         requiresStaff: true,
       },
     ],
+    description: '',
+  };
+}
+
+/**
+ * Creation only (the type never changes once saved — SERVICES.md §7): turns
+ * the draft into the other structure, keeping name, price, category and
+ * description. To phases: the single duration becomes a first active phase,
+ * followed by a « Temps de pose » the professional sizes — a phased
+ * prestation needs one (§3). Back to one duration: the first active phase's
+ * duration is kept when no single duration was typed.
+ */
+export function switchServiceFormType(
+  values: ServiceFormValues,
+  type: ServiceType,
+  processingPhaseId: string,
+): ServiceFormValues {
+  if (values.type === type) return values;
+  const first = values.phases[0];
+  if (!first) return values;
+  if (type === 'TECHNIQUE') {
+    return {
+      ...values,
+      type,
+      phases: [
+        { id: first.id, name: '', durationMinutes: values.simpleDurationMinutes, requiresStaff: true },
+        { id: processingPhaseId, name: PROCESSING_PHASE_NAME, durationMinutes: '', requiresStaff: false },
+      ],
+    };
+  }
+  const firstActive = values.phases.find((phase) => phase.requiresStaff);
+  return {
+    ...values,
+    type,
+    simpleDurationMinutes: values.simpleDurationMinutes || (firstActive?.durationMinutes ?? ''),
+    phases: [{ id: first.id, name: '', durationMinutes: '', requiresStaff: true }],
   };
 }
 
@@ -73,6 +115,8 @@ export function toServiceFormValues(service: Service): ServiceFormValues {
       durationMinutes: String(phase.durationMinutes),
       requiresStaff: phase.requiresStaff,
     })),
+    ...(service.categoryId !== undefined && { categoryId: service.categoryId }),
+    ...(service.description !== undefined && { description: service.description }),
   };
 }
 
@@ -98,6 +142,7 @@ export function parsePositiveDurationInput(text: string): number | undefined {
 
 export function validateServiceForm(values: ServiceFormValues): ServiceFormValidation {
   const nameValid = values.name.trim().length > 0;
+  const descriptionValid = isValidServiceDescription(values.description);
   const priceValid = parseServicePriceInput(values.price) !== undefined;
   const simpleDurationValid =
     values.type !== 'SERVICE' ||
@@ -117,12 +162,13 @@ export function validateServiceForm(values: ServiceFormValues): ServiceFormValid
 
   return {
     nameValid,
+    descriptionValid,
     priceValid,
     simpleDurationValid,
     phaseValidities,
     hasProcessingPhase,
     phasesValid,
-    valid: nameValid && priceValid && simpleDurationValid && phasesValid,
+    valid: nameValid && descriptionValid && priceValid && simpleDurationValid && phasesValid,
   };
 }
 
@@ -164,6 +210,7 @@ export function buildServiceFromForm(input: BuildServiceFromFormInput): Service 
           requiresStaff: phase.requiresStaff,
         }));
 
+  const description = normalizeServiceDescription(input.values.description);
   return {
     id: input.id,
     businessId: input.businessId,
@@ -172,6 +219,8 @@ export function buildServiceFromForm(input: BuildServiceFromFormInput): Service 
     price,
     phases,
     active: input.active,
+    ...(input.values.categoryId !== undefined && { categoryId: input.values.categoryId }),
+    ...(description !== undefined && { description }),
   };
 }
 
@@ -281,6 +330,8 @@ export function areServiceFormsEqual(
     left.price === right.price &&
     left.type === right.type &&
     left.simpleDurationMinutes === right.simpleDurationMinutes &&
+    left.categoryId === right.categoryId &&
+    (left.description ?? '') === (right.description ?? '') &&
     left.phases.length === right.phases.length &&
     left.phases.every((phase, index) => {
       const other = right.phases[index];

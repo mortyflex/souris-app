@@ -8,14 +8,19 @@
 // recognised from the list to its details. It never outweighs the name or the
 // price. Hidden from VoiceOver: the name and the written category already
 // say everything.
+//
+// `ServiceCategoryIcon` is the same tile for a professional category, from
+// the same mapping (`getCategoryVisual`), so « Beauté des pieds » and its
+// « Semi-permanent pieds » carry the same foot.
 
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
 
 import type { Service } from '@/domain/appointments';
+import type { ServiceCategory } from '@/domain/services';
 import { radii } from '@/shared/ui/theme';
 
-import { getPrestationVisual } from '../prestation-visual';
+import { getCategoryVisual, getPrestationVisual, type PrestationVisual } from '../prestation-visual';
 
 export type PrestationIconSize = 'detail' | 'row';
 
@@ -35,7 +40,30 @@ export function PrestationIcon({
   size = 'detail',
   testID = 'prestation-icon',
 }: PrestationIconProps) {
-  const visual = getPrestationVisual(prestation);
+  return <PictogramTile size={size} testID={testID} visual={getPrestationVisual(prestation)} />;
+}
+
+export function ServiceCategoryIcon({
+  category,
+  size = 'row',
+  testID = 'service-category-icon',
+}: {
+  readonly category: Pick<ServiceCategory, 'name'>;
+  readonly size?: PrestationIconSize;
+  readonly testID?: string;
+}) {
+  return <PictogramTile size={size} testID={testID} visual={getCategoryVisual(category)} />;
+}
+
+function PictogramTile({
+  visual,
+  size,
+  testID,
+}: {
+  readonly visual: PrestationVisual;
+  readonly size: PrestationIconSize;
+  readonly testID: string;
+}) {
   const dimensions = tileSizes[size];
 
   return (

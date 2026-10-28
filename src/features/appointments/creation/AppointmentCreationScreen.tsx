@@ -124,6 +124,7 @@ import { AppointmentScheduleSection } from './components/AppointmentScheduleSect
 import { ClientPickerStep } from '@/features/clients/selection/ClientPickerStep';
 import { CreationStepper } from './components/CreationStepper';
 import { ServiceCatalogPicker } from '../editor/components/ServiceCatalogPicker';
+import { useCatalogueView } from '@/features/services/use-catalogue-view';
 import { SummaryStep } from './components/SummaryStep';
 import {
   createSelectedServiceDraft,
@@ -184,6 +185,7 @@ export function AppointmentCreationScreen({
   startAt,
   initialClientId,
 }: AppointmentCreationScreenProps) {
+  const catalogueView = useCatalogueView();
   const router = useRouter();
   const business = useCurrentBusiness();
   const { addAppointment, appointments } = useAppointmentSession();
@@ -528,6 +530,8 @@ export function AppointmentCreationScreen({
             startAt={draftStartAt}
           />
           <ServiceCatalogPicker
+            categories={catalogueView.categories}
+            organization={catalogueView.presentation.organization}
             services={activeServices}
             selectedServiceIds={selectedDrafts.map((draft) => draft.serviceId)}
             onSelectService={toggleService}

@@ -25,6 +25,7 @@ import type { BusinessProfile } from '@/domain/business';
 import type { SourisDatabase } from '@/persistence/database';
 import { loadAppointments } from '@/persistence/stores/appointments';
 import { loadClients } from '@/persistence/stores/clients';
+import { loadServiceCategories } from '@/persistence/stores/service-categories';
 import { loadServices } from '@/persistence/stores/services';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { usePersistence, type PersistenceValue } from '@/providers/PersistenceProvider';
@@ -198,6 +199,11 @@ describe('PlaygroundDemoRuntime', () => {
       expected.seed.services.map((service) => service.name),
     );
     expect(probe.current!.appointments.appointments).toHaveLength(expected.seed.appointments.length);
+    // Step 3: the demo's categories and described prestations, in the same in-memory database.
+    expect(probe.current!.services.categories.map((category) => category.name)).toEqual(
+      expected.seed.serviceCategories?.map((category) => category.name),
+    );
+    expect(probe.current!.services.services.filter((service) => service.description !== undefined).length).toBeGreaterThan(0);
 
     // The database behind the providers is the injected one — and the only one.
     expect(harness.databases).toHaveLength(1);
@@ -206,6 +212,7 @@ describe('PlaygroundDemoRuntime', () => {
     expect(loadClients(database)).toHaveLength(expected.seed.clients.length);
     expect(loadServices(database)).toHaveLength(expected.seed.services.length);
     expect(loadAppointments(database)).toHaveLength(expected.seed.appointments.length);
+    expect(loadServiceCategories(database)).toHaveLength(expected.seed.serviceCategories?.length ?? 0);
     // The files boundary is the demo's own, never a device directory.
     expect(probe.current!.persistence.files.documentDirectoryUri).toBe('file:///playground-demo/Documents/');
   });
@@ -220,6 +227,10 @@ describe('PlaygroundDemoRuntime', () => {
     await act(async () => {
       probe.current!.clients.addClient({ id: 'demo-added-client', firstName: 'Nouvelle', lastName: 'Cliente' });
     });
+    await act(async () => {
+      probe.current!.services.addCategory({ name: 'Catégorie de démonstration' });
+    });
+    expect(loadServiceCategories(first).some((category) => category.name === 'Catégorie de démonstration')).toBe(true);
     expect(probe.current!.clients.clients).toHaveLength(original + 1);
     expect(loadClients(first).some((client) => client.id === 'demo-added-client')).toBe(true);
 
@@ -231,6 +242,7 @@ describe('PlaygroundDemoRuntime', () => {
 
     expect(probe.current!.clients.clients).toHaveLength(original);
     expect(probe.current!.clients.getClientById('demo-added-client')).toBeUndefined();
+    expect(probe.current!.services.categories.some((category) => category.name === 'Catégorie de démonstration')).toBe(false);
     expect(loadClients(harness.databases[1]!).some((client) => client.id === 'demo-added-client')).toBe(false);
     // The previous generation's database is closed with it: nothing lingers.
     expect(isClosed(first)).toBe(true);

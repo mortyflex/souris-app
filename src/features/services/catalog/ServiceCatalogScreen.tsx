@@ -17,6 +17,17 @@
 //   row opens Prestation Details; management actions live there.
 // - One SectionList carries everything (no nested scroll); its bottom
 //   clearance keeps the last row above the floating « + ».
+// - The « + » opens the shared floating menu: « Nouvelle prestation » (the
+//   Prestation form) and « Nouvelle catégorie » (the Catégories screen, its
+//   creation card already open — `?create=1`).
+//
+// Profession-aware (catalogue-presentation.ts). SERVICE_TYPES keeps all of
+// the above; when the professional created categories and assigned some, the
+// active Prestations of a segment are subdivided by category. CATEGORIES
+// (nails, esthetics) drops the segment: one « Prestations » list, search over
+// everything, grouped by the professional's categories, then « Sans
+// catégorie », then « Inactives ». Both offer « Catégories », the
+// management screen.
 
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -32,6 +43,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { Service, ServiceType } from '@/domain/appointments';
+import { filterCatalogServices } from '@/features/appointments/editor/filter-services';
 import { filterServicesOfType } from '@/features/appointments/editor/selection-sections';
 import { PrestationIcon } from '@/features/services/components/PrestationIcon';
 import {
@@ -41,6 +53,7 @@ import {
   getServiceProcessingMinutes,
 } from '@/features/services/presentation';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
+import { useCatalogueView } from '@/features/services/use-catalogue-view';
 import { AppText } from '@/shared/ui/AppText';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
 import { GlassIconButton, glassIconButtonSize, glassIcons } from '@/shared/ui/GlassIconButton';
@@ -58,7 +71,12 @@ import {
   spacing,
 } from '@/shared/ui/theme';
 
-import { buildCatalogSections, type CatalogListSection } from './catalog-sections';
+import {
+  buildCatalogSections,
+  buildCategoryCatalogSections,
+  hasCategorizedServices,
+  type CatalogListSection,
+} from './catalog-sections';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
@@ -79,6 +97,8 @@ const ROW_SEPARATOR_INSET = spacing.base + ROW_ICON_SIZE + spacing.md;
 export function ServiceCatalogScreen() {
   const router = useRouter();
   const { services } = useServiceCatalog();
+  const { presentation, categories } = useCatalogueView();
+  const unified = presentation.organization === 'CATEGORIES';
   const [category, setCategory] = useState<ServiceType>('SERVICE');
   const [query, setQuery] = useState('');
   const otherCategory: ServiceType = category === 'SERVICE' ? 'TECHNIQUE' : 'SERVICE';
@@ -95,14 +115,25 @@ export function ServiceCatalogScreen() {
       })),
     [services],
   );
-  const sections = useMemo<readonly SectionListData<Service, CatalogListSection>[]>(
-    () => buildCatalogSections(filterServicesOfType(services, category, query)),
-    [services, category, query],
-  );
+  const sections = useMemo<readonly SectionListData<Service, CatalogListSection>[]>(() => {
+    if (unified) {
+      const matching = query.trim().length > 0 ? filterCatalogServices(services, query.trim()) : services;
+      return buildCategoryCatalogSections(matching, categories);
+    }
+    const ofType = filterServicesOfType(services, category, query);
+    return hasCategorizedServices(ofType, categories)
+      ? buildCategoryCatalogSections(ofType, categories)
+      : buildCatalogSections(ofType);
+  }, [services, category, query, unified, categories]);
   const otherMatches = useMemo(
-    () => (searching ? filterServicesOfType(services, otherCategory, query).length : 0),
-    [services, otherCategory, query, searching],
+    () => (searching && !unified ? filterServicesOfType(services, otherCategory, query).length : 0),
+    [services, otherCategory, query, searching, unified],
   );
+
+  const categoriesMeta =
+    categories.length === 0
+      ? 'Organisez vos prestations'
+      : `${categories.length} catégorie${categories.length > 1 ? 's' : ''}`;
 
   const openService = (serviceId: string) => {
     router.push({ pathname: '/services/[serviceId]', params: { serviceId } });
@@ -137,13 +168,15 @@ export function ServiceCatalogScreen() {
             <AppText variant="screenTitle" accessibilityRole="header">
               Prestations & tarifs
             </AppText>
-            <SegmentedControl
-              onChange={setCategory}
-              options={categoryOptions}
-              stretch
-              testID="catalog-category"
-              value={category}
-            />
+            {!unified && (
+              <SegmentedControl
+                onChange={setCategory}
+                options={categoryOptions}
+                stretch
+                testID="catalog-category"
+                value={category}
+              />
+            )}
             <SearchField
               accessibilityLabel="Rechercher une prestation"
               onChangeText={setQuery}
@@ -151,6 +184,30 @@ export function ServiceCatalogScreen() {
               placement="page"
               value={query}
             />
+            <Pressable
+              accessibilityLabel={`Catégories, ${categoriesMeta}`}
+              accessibilityRole="button"
+              onPress={() => router.push('/services/categories')}
+              style={({ pressed }) => [styles.categoriesRow, pressed && styles.pressed]}
+              testID="catalog-manage-categories"
+            >
+              <SymbolView
+                name={{ ios: 'folder', android: 'folder' }}
+                size={17}
+                tintColor={semanticColors.accent}
+              />
+              <View style={styles.categoriesCopy}>
+                <AppText variant="control">Catégories</AppText>
+                <AppText variant="metadata" style={styles.categoriesMeta}>
+                  {categoriesMeta}
+                </AppText>
+              </View>
+              <SymbolView
+                name={{ ios: 'chevron.right', android: 'chevron_right' }}
+                size={14}
+                tintColor={semanticColors.foregroundMuted}
+              />
+            </Pressable>
           </View>
         }
         renderSectionHeader={({ section }) => (
@@ -173,7 +230,11 @@ export function ServiceCatalogScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState} testID="catalog-empty">
             <AppText variant="stateTitle">
-              {searching ? 'Aucune prestation trouvée' : emptyCategoryTitles[category]}
+              {searching
+                ? 'Aucune prestation trouvée'
+                : unified
+                  ? 'Aucune prestation'
+                  : emptyCategoryTitles[category]}
             </AppText>
             {searching && otherMatches > 0 ? (
               <Pressable
@@ -202,8 +263,22 @@ export function ServiceCatalogScreen() {
       />
 
       <FloatingCreateButton
-        accessibilityLabel="Ajouter une prestation"
-        onPress={() => router.push('/services/new')}
+        accessibilityLabel="Ajouter une prestation ou une catégorie"
+        actions={[
+          {
+            icon: { ios: 'sparkles', android: 'auto_awesome' },
+            label: 'Nouvelle prestation',
+            onPress: () => router.push('/services/new'),
+            testID: 'catalog-new-prestation',
+          },
+          // Categories are managed on their own screen: land there with the card open.
+          {
+            icon: { ios: 'folder.badge.plus', android: 'create_new_folder' },
+            label: 'Nouvelle catégorie',
+            onPress: () => router.push('/services/categories?create=1'),
+            testID: 'catalog-new-category',
+          },
+        ]}
         testID="add-service"
       />
     </SafeAreaView>
@@ -283,6 +358,19 @@ const styles = StyleSheet.create({
   topBarSpacer: { height: glassIconButtonSize, width: glassIconButtonSize },
   eyebrow: { color: semanticColors.accent },
   content: { paddingBottom: bottomClearance[Platform.OS === 'android' ? 'android' : 'ios'] },
+  categoriesRow: {
+    alignItems: 'center',
+    backgroundColor: semanticColors.surfaceElevated,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
+    flexDirection: 'row',
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+  },
+  categoriesCopy: { flex: 1, gap: 2, minWidth: 0 },
+  categoriesMeta: { color: foregroundSoft },
   intro: {
     gap: spacing.md,
     paddingHorizontal: horizontalGutter,

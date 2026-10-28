@@ -2357,3 +2357,54 @@ Verification: a 56-check PGlite harness (`supabase/README.md` › Client consent
 source guard `client-consent-withdrawal-migration.test.ts`, the fake remote's replica of the rule
 (`sync-entitlement-hold.test.ts`) and the provider tests
 (`business-mutation-protection.test.tsx`).
+
+## 27. Service categories and descriptions — a new aggregate type and two SERVICE keys (schema v17)
+
+Multi-profession Step 3 (`docs/domain/SERVICES.md` §11). One more aggregate of the same outbox →
+push → pull / restore pipeline, plus two optional keys on SERVICE. No second engine.
+
+```text
+SERVICE_CATEGORY   service_categories        { name, description | null, position }
+SERVICE            services + service_phases  + category_id | null, description | null
+```
+
+- **Push order.** SERVICE_CATEGORY goes with the Clients (rank 0), before the Services that name
+  it. No foreign key either way: the order is a courtesy, not a requirement.
+- **Always both keys.** A build that knows the fields always sends `category_id` and
+  `description` (values or nulls). The remote KEEPS the stored values when a payload omits a key —
+  the payload of a build that predates them — so an older device editing a price never erases a
+  description (`p_payload ? 'description'`, like `clients.notes`).
+- **Pulled payloads.** A pulled SERVICE without the keys (a remote that predates them) keeps the
+  local values; an explicit null clears. The `service_categories` family is optional in the pull
+  (absent = none) and validated like every family.
+- **Deletion.** Deleting a category locally records its DELETE plus one SERVICE upsert per
+  detached Service. A pulled category tombstone removes the local row; Services still naming it
+  read as uncategorized.
+
+### 27.1 Rollout safety — a build ahead of its remote
+
+- **Readiness proof.** The pull of a migrated remote always carries the `service_categories` key
+  (an empty array when there is none). The first pull or restore that sees it records
+  `sync_remote_service_catalogue` (`souris_metadata`).
+- **Deferral.** Until then the push worker DEFERS every write an old remote would lose silently:
+  any SERVICE_CATEGORY entry (the old functions reject the type) and any SERVICE upsert carrying a
+  non-null category or description (`jsonb_to_record` would drop the keys and still acknowledge).
+  A deferred entry is never sent and never acknowledged; it keeps `last_error =
+  REMOTE_SCHEMA_PENDING` and the bounded backoff. The proof clears that backoff, so the writes go
+  with the next run. A SERVICE write without the new fields syncs as always: an unmigrated
+  Production never stalls the existing catalogue.
+- **One-time refresh.** A build that predates v17 stored pulled Services without the two fields
+  and acknowledged their revisions; the pull skips acknowledged revisions, so the upgraded device
+  would never adopt them. Schema v17 therefore clears the pull cursor and arms
+  `sync_service_catalogue_refresh`: while armed, the pull re-applies a SERVICE revision EQUAL to
+  the acknowledged one when nothing is pending locally (exactly the state the device had, plus the
+  fields). The first complete pull that finishes disarms it; a restore disarms it too.
+- **Known limit.** A device that stays on an OLD build while another sets a description, then
+  upgrades WITH a pending local change to that Service, pushes the description it never received
+  (null). The refresh never overrides a pending change by design; the window closes once every
+  device runs the new build. Production has one device per Business today.
+
+Verification: `service-catalogue-sync.test.ts` (fake remote, migrated and unmigrated),
+`service-categories-store.test.ts`, `service-catalogue-migration.test.ts`, the source guard
+`service-catalogue-migration.test.ts` (infrastructure) and a 48-check PGlite harness
+(`supabase/README.md` › Service categories and descriptions).

@@ -7,8 +7,13 @@
 // Phases never sync on their own: every write — including a phase-only edit
 // — marks the SERVICE aggregate in the sync outbox within the same
 // transaction (Cloud Sync V1B). Deletion leaves a SERVICE DELETE entry.
+//
+// Schema v17: `category_id` (a ServiceCategory id, plain metadata — no
+// foreign key) and `description` (plain text) are nullable; NULL is
+// "uncategorized" / "no description", what every older row holds.
 
 import type { Service, ServicePhase, ServiceType } from '@/domain/appointments';
+import { normalizeServiceDescription } from '@/domain/services';
 
 import { runInTransaction, type SourisDatabase } from '../database';
 import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
@@ -21,6 +26,8 @@ interface ServiceRow {
   readonly type: ServiceType;
   readonly price_cents: number;
   readonly active: number;
+  readonly category_id: string | null;
+  readonly description: string | null;
 }
 
 interface ServicePhaseRow {
@@ -52,17 +59,27 @@ export function loadServices(db: SourisDatabase): readonly Service[] {
 
   return db
     .getAllSync<ServiceRow>(
-      'SELECT id, business_id, name, type, price_cents, active FROM services ORDER BY rowid',
+      'SELECT id, business_id, name, type, price_cents, active, category_id, description FROM services ORDER BY rowid',
     )
-    .map((row) => ({
-      id: row.id,
-      businessId: row.business_id,
-      name: row.name,
-      type: row.type,
-      price: fromSqlPriceCents(row.price_cents),
-      phases: phasesByService.get(row.id) ?? [],
-      active: fromSqlBoolean(row.active),
-    }));
+    .map((row) => {
+      const description = normalizeServiceDescription(row.description);
+      return {
+        id: row.id,
+        businessId: row.business_id,
+        name: row.name,
+        type: row.type,
+        price: fromSqlPriceCents(row.price_cents),
+        phases: phasesByService.get(row.id) ?? [],
+        active: fromSqlBoolean(row.active),
+        ...(row.category_id !== null && { categoryId: row.category_id }),
+        ...(description !== undefined && { description }),
+      };
+    });
+}
+
+/** The stored form of the two optional catalogue fields: NULL when absent or blank. */
+function catalogueParams(service: Service): [string | null, string | null] {
+  return [service.categoryId ?? null, normalizeServiceDescription(service.description) ?? null];
 }
 
 function writePhases(db: SourisDatabase, service: Service): void {
@@ -84,7 +101,7 @@ function writePhases(db: SourisDatabase, service: Service): void {
 export function insertService(db: SourisDatabase, service: Service): void {
   runInTransaction(db, () => {
     db.runSync(
-      'INSERT INTO services (id, business_id, name, type, price_cents, active) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO services (id, business_id, name, type, price_cents, active, category_id, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         service.id,
         service.businessId,
@@ -92,6 +109,7 @@ export function insertService(db: SourisDatabase, service: Service): void {
         service.type,
         toSqlPriceCents(service.price, 'services.price_cents'),
         toSqlBoolean(service.active),
+        ...catalogueParams(service),
       ],
     );
     writePhases(db, service);
@@ -99,16 +117,17 @@ export function insertService(db: SourisDatabase, service: Service): void {
   });
 }
 
-/** Rewrites name/type/price/active and the whole phase list; id/businessId never change. */
+/** Rewrites name/type/price/active/category/description and the whole phase list; id/businessId never change. */
 export function updateService(db: SourisDatabase, service: Service): void {
   runInTransaction(db, () => {
     const result = db.runSync(
-      'UPDATE services SET name = ?, type = ?, price_cents = ?, active = ? WHERE id = ?',
+      'UPDATE services SET name = ?, type = ?, price_cents = ?, active = ?, category_id = ?, description = ? WHERE id = ?',
       [
         service.name,
         service.type,
         toSqlPriceCents(service.price, 'services.price_cents'),
         toSqlBoolean(service.active),
+        ...catalogueParams(service),
         service.id,
       ],
     );

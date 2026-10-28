@@ -30,6 +30,7 @@ import {
 } from '@/domain/appointments';
 import type { BusinessProfile, ProfessionId } from '@/domain/business';
 import type { Client, ClientBirthday } from '@/domain/clients';
+import { createServiceCategory, normalizeServiceDescription, type ServiceCategory } from '@/domain/services';
 import { addLocalDays, startOfLocalDay } from '@/features/agenda/calendar/week';
 import { currentStaffMemberId } from '@/features/appointments/current-staff-member';
 import { getStarterServices, type StarterService } from '@/features/business/setup/starter-services';
@@ -98,6 +99,12 @@ export interface DemoAppointmentDefinition {
   readonly reason?: string;
 }
 
+export interface DemoCategoryDefinition {
+  readonly key: string;
+  readonly name: string;
+  readonly description?: string;
+}
+
 export interface DemoScenarioDefinition {
   readonly activityType: ProfessionId;
   readonly businessName: string;
@@ -106,6 +113,12 @@ export interface DemoScenarioDefinition {
   readonly phone?: string;
   /** The demo price (euros) of EVERY starter prestation of the profession. */
   readonly prices: Readonly<Record<string, number>>;
+  /** Professional categories, in their order (multi-profession Step 3). Optional: none by default. */
+  readonly categories?: readonly DemoCategoryDefinition[];
+  /** Starter key → category key; a starter not listed stays « Sans catégorie ». */
+  readonly serviceCategories?: Readonly<Record<string, string>>;
+  /** Starter key → the professional's description of the prestation. */
+  readonly descriptions?: Readonly<Record<string, string>>;
   readonly clients: readonly DemoClientDefinition[];
   readonly appointments: readonly DemoAppointmentDefinition[];
 }
@@ -154,15 +167,32 @@ function buildBusiness(definition: DemoScenarioDefinition, today: Date): Busines
   };
 }
 
+function buildCategories(business: BusinessProfile, definition: DemoScenarioDefinition): readonly ServiceCategory[] {
+  return (definition.categories ?? []).map((category, position) =>
+    createServiceCategory({
+      id: `${business.id}-category-${category.key}`,
+      businessId: business.id,
+      name: category.name,
+      description: category.description,
+      position,
+    }),
+  );
+}
+
 function buildService(
   business: BusinessProfile,
   starter: StarterService,
-  prices: DemoScenarioDefinition['prices'],
+  definition: DemoScenarioDefinition,
 ): Service {
-  const price = prices[starter.key];
+  const price = definition.prices[starter.key];
   if (price === undefined) {
     throw new Error(`Playground demo: no price for the starter "${starter.key}" of ${business.activityType}`);
   }
+  const categoryKey = definition.serviceCategories?.[starter.key];
+  if (categoryKey !== undefined && !(definition.categories ?? []).some((category) => category.key === categoryKey)) {
+    throw new Error(`Playground demo: the starter "${starter.key}" names an unknown category "${categoryKey}"`);
+  }
+  const description = normalizeServiceDescription(definition.descriptions?.[starter.key]);
   const id = `${business.id}-service-${starter.key}`;
   return {
     id,
@@ -177,6 +207,8 @@ function buildService(
       requiresStaff: phase.requiresStaff,
     })),
     active: true,
+    ...(categoryKey !== undefined && { categoryId: `${business.id}-category-${categoryKey}` }),
+    ...(description !== undefined && { description }),
   };
 }
 
@@ -278,11 +310,13 @@ function buildAppointment(
 export function buildDemoScenario(definition: DemoScenarioDefinition, now: Date): PlaygroundDemoScenario {
   assertUniqueKeys('client', definition.clients.map((client) => client.key));
   assertUniqueKeys('appointment', definition.appointments.map((appointment) => appointment.key));
+  assertUniqueKeys('category', (definition.categories ?? []).map((category) => category.key));
 
   const today = startOfLocalDay(now);
   const business = buildBusiness(definition, today);
+  const serviceCategories = buildCategories(business, definition);
   const services = getStarterServices(definition.activityType).map((starter) =>
-    buildService(business, starter, definition.prices),
+    buildService(business, starter, definition),
   );
   const servicesByKey = new Map(
     getStarterServices(definition.activityType).map((starter, index) => [starter.key, services[index]!]),
@@ -296,6 +330,6 @@ export function buildDemoScenario(definition: DemoScenarioDefinition, now: Date)
   return {
     activityType: definition.activityType,
     business,
-    seed: { clients, services, products: [], appointments, sales: [] },
+    seed: { clients, services, serviceCategories, products: [], appointments, sales: [] },
   };
 }

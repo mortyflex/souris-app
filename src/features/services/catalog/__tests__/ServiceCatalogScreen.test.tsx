@@ -288,20 +288,44 @@ describe("ServiceCatalogScreen", () => {
     });
   });
 
-  it("opens the create flow", async () => {
+  it("opens the create flow from the « + » menu: exactly Nouvelle prestation and Nouvelle catégorie", async () => {
+    const view = await renderCatalog();
+
+    await settleFloatingReveal();
+    expect(view.getByTestId("add-service").props.accessibilityLabel).toBe(
+      "Ajouter une prestation ou une catégorie",
+    );
+    await act(async () => {
+      fireEvent.press(view.getByTestId("add-service"));
+    });
+    // A menu, never a direct navigation.
+    expect(mockPush).not.toHaveBeenCalled();
+    const items = within(view.getByTestId("add-service-menu")).getAllByRole("menuitem");
+    expect(items.map((item) => item.props.testID)).toEqual(["catalog-new-prestation", "catalog-new-category"]);
+    expect(view.getByText("Nouvelle prestation")).toBeTruthy();
+    expect(view.getByText("Nouvelle catégorie")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId("catalog-new-prestation"));
+    });
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith("/services/new");
+    // The former large inline CTA is gone; the shared floating + is the only entry.
+    expect(view.queryByText("Ajouter une prestation")).toBeNull();
+  });
+
+  it("« Nouvelle catégorie » opens the Catégories screen with the creation card already open", async () => {
     const view = await renderCatalog();
 
     await settleFloatingReveal();
     await act(async () => {
       fireEvent.press(view.getByTestId("add-service"));
     });
-
-    expect(mockPush).toHaveBeenCalledWith("/services/new");
-    // The former large inline CTA is gone; the shared floating + is the only entry.
-    expect(view.queryByText("Ajouter une prestation")).toBeNull();
-    expect(view.getByTestId("add-service").props.accessibilityLabel).toBe(
-      "Ajouter une prestation",
-    );
+    await act(async () => {
+      fireEvent.press(view.getByTestId("catalog-new-category"));
+    });
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith("/services/categories?create=1");
   });
 
   it("keeps a deactivated Service reachable under « Inactives » of its category", async () => {

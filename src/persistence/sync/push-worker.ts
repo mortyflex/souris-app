@@ -49,6 +49,10 @@
 //                     never a settlement, never an acknowledgement. A hold still
 //                     in force skips the push pass without a single request; an
 //                     answer of any other kind for a write of the Business ends it
+//          deferred → a SERVICE_CATEGORY entry, or a SERVICE upsert carrying a
+//                     category or description, while no pull proved the remote
+//                     knows those fields (CLOUD_SYNC.md §27): nothing is sent,
+//                     the entry stays pending with REMOTE_SCHEMA_PENDING
 //          failure  → the entry stays pending (attempt_count / last_error /
 //                     next_attempt_at); a rejection of this one aggregate moves
 //                     on to the next entry, anything else stops the run
@@ -110,6 +114,11 @@ import {
   type SyncRemoteGateway,
 } from './remote-gateway';
 import { restoreBusinessFromRemote, type RestoreCounts, type RestoreOutcome } from './restore';
+import {
+  isServiceCatalogueRemoteReady,
+  REMOTE_SCHEMA_PENDING_ERROR,
+  requiresServiceCatalogueRemote,
+} from './service-catalogue-sync';
 import {
   clearAcknowledgedRemoteVersion,
   hasAcknowledgedRemoteState,
@@ -381,6 +390,13 @@ export function createSyncPushWorker({
       // aggregate that exists NOW was created during this very run: leave it
       // pending — the next run finds EMPTY stale and goes through the initial upload.
       if (decision === 'EMPTY' && operation === 'UPSERT') continue;
+      // A write an unmigrated remote would lose silently waits for the proof
+      // that the remote knows the catalogue fields (CLOUD_SYNC.md §27): kept
+      // pending, never sent, never acknowledged.
+      if (!isServiceCatalogueRemoteReady(db) && requiresServiceCatalogueRemote(entry, operation, payload)) {
+        fail(entry, REMOTE_SCHEMA_PENDING_ERROR, nextSyncAttemptAt(now(), entry.attemptCount));
+        continue;
+      }
       const acknowledgedVersion = readAcknowledgedRemoteVersion(db, businessId, entry)?.remoteVersion;
 
       let result: RemotePushResult;

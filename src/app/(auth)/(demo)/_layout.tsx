@@ -55,6 +55,7 @@ export default function PlaygroundDemoLayout() {
         <Stack.Screen name="clients/appointments/[clientId]" options={pushedScreen} />
         <Stack.Screen name="clients/purchases/[clientId]" options={pushedScreen} />
         <Stack.Screen name="services/index" options={pushedScreen} />
+        <Stack.Screen name="services/categories" options={pushedScreen} />
         <Stack.Screen name="services/new" options={editorSheet} />
         <Stack.Screen name="services/[serviceId]" options={editorSheet} />
         {/* Step B2: the demo answers « Non disponible » where the product would sell. */}

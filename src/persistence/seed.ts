@@ -9,6 +9,7 @@ import type { Appointment, Service } from '@/domain/appointments';
 import type { Client } from '@/domain/clients';
 import type { Product } from '@/domain/products';
 import type { Sale } from '@/domain/sales';
+import type { ServiceCategory } from '@/domain/services';
 
 import type { SourisDatabase } from './database';
 import { readMetadata, writeMetadata } from './metadata';
@@ -16,6 +17,7 @@ import { insertAppointment } from './stores/appointments';
 import { insertClient } from './stores/clients';
 import { insertProduct } from './stores/products';
 import { completeSale } from './stores/sales';
+import { insertServiceCategory } from './stores/service-categories';
 import { insertService } from './stores/services';
 
 export const SEED_VERSION_KEY = 'seed_version';
@@ -24,6 +26,8 @@ export const CURRENT_SEED_VERSION = 1;
 export interface FirstRunSeed {
   readonly clients: readonly Client[];
   readonly services: readonly Service[];
+  /** Optional: no production or development seed defines categories; the Playground demos do. */
+  readonly serviceCategories?: readonly ServiceCategory[];
   readonly products: readonly Product[];
   readonly appointments: readonly Appointment[];
   /** No real Sale source exists today; kept explicit so the contract is visible. */
@@ -48,6 +52,7 @@ export function seedDatabaseIfNeeded(
   const seed = createSeed();
   db.withTransactionSync(() => {
     for (const client of seed.clients) insertClient(db, client);
+    for (const category of seed.serviceCategories ?? []) insertServiceCategory(db, category);
     for (const service of seed.services) insertService(db, service);
     for (const product of seed.products) insertProduct(db, product);
     for (const appointment of seed.appointments) insertAppointment(db, appointment);

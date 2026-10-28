@@ -574,7 +574,7 @@ describe('sync outbox — restart, settle, development reset', () => {
     const snapshot = bootstrapPersistence(db, createTestSeed);
 
     expect(outbox(db)).toEqual(before);
-    expect(Object.keys(snapshot).sort()).toEqual(['appointmentDeposits', 'appointments', 'calendarBlocks', 'clients', 'products', 'sales', 'services']);
+    expect(Object.keys(snapshot).sort()).toEqual(['appointmentDeposits', 'appointments', 'calendarBlocks', 'clients', 'products', 'sales', 'serviceCategories', 'services']);
     expect(readSeedVersion(db)).toBe(1);
     expect(readBusinessProfile(db)?.id).toBe(REMOTE_BUSINESS_ID);
   });

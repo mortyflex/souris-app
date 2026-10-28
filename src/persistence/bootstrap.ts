@@ -12,6 +12,7 @@ import type { Appointment, AppointmentDeposit, Service } from '@/domain/appointm
 import type { CalendarBlock } from '@/domain/calendar-blocks';
 import type { Client } from '@/domain/clients';
 import type { Product } from '@/domain/products';
+import type { ServiceCategory } from '@/domain/services';
 import type { Sale } from '@/domain/sales';
 
 import type { SourisDatabase } from './database';
@@ -23,11 +24,14 @@ import { loadCalendarBlocks } from './stores/calendar-blocks';
 import { loadClients } from './stores/clients';
 import { loadProducts } from './stores/products';
 import { loadSales } from './stores/sales';
+import { loadServiceCategories } from './stores/service-categories';
 import { loadServices } from './stores/services';
 
 export interface PersistedSnapshot {
   readonly clients: readonly Client[];
   readonly services: readonly Service[];
+  /** Professional-defined catalogue categories (schema v17); empty for every existing Business. */
+  readonly serviceCategories: readonly ServiceCategory[];
   readonly products: readonly Product[];
   readonly appointments: readonly Appointment[];
   readonly sales: readonly Sale[];
@@ -41,6 +45,7 @@ export function loadSnapshot(db: SourisDatabase): PersistedSnapshot {
   return {
     clients: loadClients(db),
     services: loadServices(db),
+    serviceCategories: loadServiceCategories(db),
     products: loadProducts(db),
     appointments: loadAppointments(db),
     sales: loadSales(db),

@@ -12,6 +12,9 @@
 // caller that fails to commit the new order returns `false`, and the rows
 // animate back into the entries' order. Ordinary taps, horizontal swipes and
 // vertical scrolling never start a drag: only the handle, after a long press.
+// Assistive technologies move a row with the handle's adjustable actions
+// (« Déplacer vers le haut / vers le bas »), committed through the same
+// `onReorder`, one place at a time.
 //
 // SharedValue update discipline (Reanimated 4 shareables are frozen on the
 // native side — object-backed shared values must never receive new
@@ -29,7 +32,7 @@
 // avoid an entrance slide.
 
 import { useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, View, type AccessibilityActionEvent, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -157,6 +160,7 @@ export function SortableRowList<TEntry>({
             activeKey={activeKey}
             dragBase={dragBase}
             dragTop={dragTop}
+            count={entries.length}
             fromIndex={index}
             gap={gap}
             label={getLabel(entry)}
@@ -316,15 +320,33 @@ function buildPanGesture(params: DragGestureParams) {
 function DragHandle({
   dragGesture,
   label,
+  fromIndex,
+  count,
+  onReorder,
 }: {
   readonly dragGesture: ReturnType<typeof buildPanGesture>;
   readonly label: string;
+  readonly fromIndex: number;
+  readonly count: number;
+  readonly onReorder: (fromIndex: number, toIndex: number) => void;
 }) {
+  const accessibleMove = (event: AccessibilityActionEvent) => {
+    const target = event.nativeEvent.actionName === 'increment' ? fromIndex + 1 : fromIndex - 1;
+    if (target < 0 || target >= count) return;
+    haptics.selection();
+    onReorder(fromIndex, target);
+  };
+
   return (
     <GestureDetector gesture={dragGesture}>
       <View
+        accessibilityActions={[
+          { name: 'decrement', label: 'Déplacer vers le haut' },
+          { name: 'increment', label: 'Déplacer vers le bas' },
+        ]}
         accessibilityLabel={`Déplacer ${label}`}
         accessibilityRole="adjustable"
+        onAccessibilityAction={accessibleMove}
         style={styles.dragHandle}
       >
         <SymbolView
@@ -341,6 +363,7 @@ interface SortableRowProps {
   readonly rowKey: string;
   readonly label: string;
   readonly fromIndex: number;
+  readonly count: number;
   readonly gap: number;
   readonly activeKey: SharedValue<string | null>;
   readonly dragBase: SharedValue<number>;
@@ -360,6 +383,7 @@ function SortableRow({
   rowKey,
   label,
   fromIndex,
+  count,
   gap,
   activeKey,
   dragBase,
@@ -442,7 +466,17 @@ function SortableRow({
       style={[ready ? styles.rowAbsolute : { marginBottom: gap }, ready && animatedStyle]}
       testID={`sortable-row-${rowKey}`}
     >
-      {children(sortable ? <DragHandle dragGesture={dragGesture} label={label} /> : undefined)}
+      {children(
+        sortable ? (
+          <DragHandle
+            count={count}
+            dragGesture={dragGesture}
+            fromIndex={fromIndex}
+            label={label}
+            onReorder={onReorder}
+          />
+        ) : undefined,
+      )}
     </Animated.View>
   );
 }

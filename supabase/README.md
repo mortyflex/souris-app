@@ -1182,3 +1182,46 @@ Staging validation (project `iteufklnrsmazzvmzqxa`) needs, in this order:
 
 Production activation remains FORBIDDEN until `docs/architecture/SUBSCRIPTIONS.md` §12 holds in
 full.
+
+## Service categories and descriptions (multi-profession Step 3) — NOT applied
+
+`20261010120000_add_service_categories_and_descriptions.sql` adds two nullable columns to
+`public.services` (`category_id`, `description`), the `public.service_categories` table (aggregate
+`SERVICE_CATEGORY`: owner-only RLS, the business-mutation entitlement on writes, select / insert /
+update for `authenticated`, nothing for `anon`, no residue for `service_role`), and replaces the
+three sync RPCs in place (count, push, pull). Additive: no existing row is rewritten, so no
+`sync_version` or `updated_at` moves and no device re-pulls anything because of it. A push that
+omits the two SERVICE keys (an app build that predates them) keeps the stored values. Safe to
+re-run. Background: `docs/architecture/CLOUD_SYNC.md` §27, `docs/domain/SERVICES.md` §11.
+
+Verified against an in-process Postgres (PGlite 0.2.17, strict role stub, every migration in
+order, populated through the PREVIOUS functions before applying this one, then re-applied):
+48 checks — nothing existing rewritten, structure / RLS / grants, push and pull of the two fields
+(kept when omitted, cleared by null, identical replay keeps the version), category lifecycle and
+tombstones, ownership (42501), the entitlement switch, the count, the idempotent re-run.
+
+### Rollout order (Staging first, Production only after Staging is validated)
+
+```text
+ 1. Staging: apply 20261010120000_add_service_categories_and_descriptions.sql by hand, then:
+      select column_name, is_nullable from information_schema.columns
+        where table_schema = 'public' and table_name = 'services'
+          and column_name in ('category_id', 'description');          -- two rows, YES / YES
+      select count(*) from public.services
+        where category_id is not null or description is not null;     -- 0
+      select relrowsecurity from pg_class where oid = 'public.service_categories'::regclass;  -- true
+      select cmd from pg_policies where tablename = 'service_categories' order by cmd;
+                                                                       -- INSERT, SELECT, UPDATE
+ 2. Staging: install a build containing Step 3 on a test device, sign in, let one sync run:
+    the pull must carry `service_categories` (the device then records the readiness proof).
+    Create a category, assign it, write a description; check a second device (or a restore)
+    receives them; edit the same Service from a build WITHOUT Step 3 and check the description
+    survives.
+ 3. Production: apply the same migration by hand, run the step 1 checks against Production.
+ 4. Only then ship the Step 3 build to TestFlight / the App Store.
+```
+
+Shipping the build BEFORE step 3 loses nothing — categories and described Services wait on the
+device as `REMOTE_SCHEMA_PENDING` and go with the first run after the migration — but the
+professional would see them unsynchronized until then. Applying the migration first is the
+supported order. Never apply it automatically.

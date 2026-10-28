@@ -23,6 +23,28 @@ export const NAILS_DEMO: DemoScenarioDefinition = {
     'nail-art': 10,
     'nail-repair': 8,
   },
+  // Step 3: the professional's own categories — « Réparation d’un ongle » stays « Sans catégorie ».
+  categories: [
+    { key: 'natural', name: 'Ongles naturels', description: 'Semi-permanent sur l’ongle naturel, sans rallongement.' },
+    { key: 'gel', name: 'Extensions et poses en gel' },
+    { key: 'infill', name: 'Remplissages', description: 'À prévoir toutes les 3 à 4 semaines.' },
+    { key: 'feet', name: 'Beauté des pieds' },
+    { key: 'removal', name: 'Déposes' },
+    { key: 'art', name: 'Nail art et modèles' },
+  ],
+  serviceCategories: {
+    'semi-permanent-hands': 'natural',
+    'gel-full-set': 'gel',
+    'gel-infill': 'infill',
+    'semi-permanent-feet': 'feet',
+    removal: 'removal',
+    'nail-art': 'art',
+  },
+  descriptions: {
+    'gel-full-set': 'Pose de capsules ou chablons, gel de construction et couleur.\nLimage et soin des cuticules inclus.',
+    removal: 'Dépose d’un gel posé dans un autre salon : prévoir 15 minutes de plus.',
+    'nail-art': 'Jusqu’à deux ongles décorés. Au-delà, sur devis.',
+  },
   clients: [
     {
       key: 'lina',

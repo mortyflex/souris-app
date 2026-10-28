@@ -65,6 +65,7 @@ schema.ts            migrations[] — schema v1 SQL, v2 (clients.archived_at), v
                      v12 (appointment_deposits; sync tables rebuilt), v13 (clients.photo_path),
                      v14 (products.photo_path), v15 (appointments.client_reminder_enabled),
                      v16 (clients.sms_marketing_consent + _updated_at + _source),
+                     v17 (services.category_id + description, service_categories; sync tables rebuilt),
                      SOURIS_TABLES, BUSINESS_SCOPED_TABLES, SYNC_TABLES
 migrations.ts        migrateDatabase(): PRAGMA user_version runner
 metadata.ts          souris_metadata key/value (seed marker)
@@ -87,7 +88,7 @@ stay intact. Product saves are the one asynchronous path because the durable ima
 
 ---
 
-## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15 + v16)
+## 3. Schema (v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15 + v16 + v17)
 
 Canonical string ids are primary keys everywhere; SQLite never assigns identities. Since Cloud
 Sync V1C-0 a NEW top-level id is a UUID v4 generated on the device (`src/shared/lib/uuid.ts`,
@@ -226,6 +227,22 @@ Adding a schema change = appending a new `{ version, up }` entry. Applied migrat
 edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
+
+### Schema v17 — Service categories and descriptions
+
+```text
+ALTER TABLE services ADD COLUMN category_id TEXT;   -- a service_categories id, no foreign key
+ALTER TABLE services ADD COLUMN description TEXT;   -- plain text, NULL = none
+CREATE TABLE service_categories (id PK, business_id, name CHECK (trim <> ''), description, position >= 0);
+-- sync_outbox / sync_state rebuilt with SERVICE_CATEGORY (the v11 copy procedure)
+-- pull cursor cleared, sync_service_catalogue_refresh armed (CLOUD_SYNC.md §27.1)
+```
+
+Multi-profession Step 3 (SERVICES.md §11). Every existing Service keeps NULL in both columns and
+no row is rewritten; the categories table starts empty — no Business receives a category. The
+bookkeeping tables are rebuilt because SQLite cannot alter their `aggregate_type` CHECK: every
+entry keeps its id, revision and retry state, the AUTOINCREMENT sequence is carried over, every
+acknowledged version is kept. v11, v12 and v17 are the only non-`ALTER` migrations.
 
 ### Schema v16 — Client promotional SMS consent
 

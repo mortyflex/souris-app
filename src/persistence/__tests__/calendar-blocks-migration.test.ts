@@ -124,8 +124,8 @@ describe('schema v11 migration on an existing v10 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(16);
-    expect(CURRENT_SCHEMA_VERSION).toBe(16);
+    expect(readSchemaVersion(db)).toBe(17);
+    expect(CURRENT_SCHEMA_VERSION).toBe(17);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     for (const table of OPERATIONAL_TABLES) expect(dump(db, table)).toEqual(before[table]);
@@ -241,7 +241,8 @@ describe('schema v11 migration on an existing v10 database', () => {
     const keys = db
       .getAllSync<{ key: string }>('SELECT key FROM souris_metadata ORDER BY key')
       .map((row) => row.key);
-    expect(keys).toEqual(['seed_version', 'sync_bootstrap']);
+    // Schema v17 (applied on the way to the current version) arms the one-time Service refresh.
+    expect(keys).toEqual(['seed_version', 'sync_bootstrap', 'sync_service_catalogue_refresh']);
   });
 
   it('writes nothing to the outbox: no aggregate changed', () => {
@@ -257,7 +258,7 @@ describe('schema v11 migration on an existing v10 database', () => {
     const db = openSchemaV10Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(16);
+    expect(migrateDatabase(db)).toBe(17);
     insertCalendarBlock(db, {
       id: 'block-1',
       businessId: BUSINESS_ID,

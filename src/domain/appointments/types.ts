@@ -48,6 +48,20 @@ export interface Service {
   readonly price: number;
   readonly phases: readonly ServicePhase[];
   readonly active: boolean;
+  /**
+   * The professional-defined category (`ServiceCategory.id`, src/domain/services).
+   * Absent = uncategorized, which every pre-existing Service is. A reference
+   * to a category that no longer exists reads as uncategorized too: it is
+   * plain catalogue metadata, never a constraint.
+   */
+  readonly categoryId?: string;
+  /**
+   * Optional professional description (what is included or excluded,
+   * preparation, conditions): plain text, trimmed, line breaks kept, absent
+   * when blank (src/domain/services/description.ts). Catalogue metadata only:
+   * it is NEVER copied into an AppointmentItem snapshot.
+   */
+  readonly description?: string;
 }
 
 /**

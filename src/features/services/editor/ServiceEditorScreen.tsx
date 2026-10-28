@@ -14,6 +14,19 @@
 //   « Informations » section headed by the read-only Service / Technique pill,
 //   and ONE sticky « Enregistrer ».
 //
+// Profession-aware (catalogue-presentation.ts), never a parallel editor:
+// - SERVICE_TYPES (hairdressing and every other stored activity): the
+//   established flow above, unchanged; « Catégorie » and « Description de la
+//   prestation » come after the timing, both optional;
+// - CATEGORIES (nails, esthetics): creation opens the form directly as a
+//   single-duration prestation, ordered Nom → Catégorie → Description de la
+//   prestation → Durée → Prix; the phased model is the « Plusieurs phases avec temps
+//   d’attente » option at the end (creation only — the type never changes
+//   once saved), and « Service / Technique » is never shown.
+// « Catégorie » only chooses among the professional's categories; they are
+// created and managed in Prestations & tarifs › Catégories.
+// The description is plain text, shown as text — never interpreted as markup.
+//
 // Durations come from the catalogue presentation helpers; the details never
 // compute timing of their own. Deactivation and deletion keep the shared
 // BeautIzzy confirmation dialog; each runs once the « ••• » drawer is gone.
@@ -30,7 +43,18 @@ import {
 } from "react-native";
 
 import type { Service, ServiceType } from "@/domain/appointments";
+import {
+  resolveServiceCategory,
+  SERVICE_DESCRIPTION_MAX_LENGTH,
+  type ServiceCategory,
+} from "@/domain/services";
 import { useCurrentBusiness } from "@/features/business/session/CurrentBusinessProvider";
+import {
+  getCataloguePresentation,
+  PHASED_SCHEDULING_DESCRIPTION,
+  PHASED_SCHEDULING_LABEL,
+  type CataloguePresentation,
+} from "@/features/services/catalogue-presentation";
 import {
   formatServiceDuration,
   formatServicePrice,
@@ -59,6 +83,7 @@ import { SheetActionBar } from "@/shared/ui/SheetActionBar";
 import { SheetEditingHeader } from "@/shared/ui/SheetEditingHeader";
 import { SheetScreen } from "@/shared/ui/SheetScreen";
 import { StatePill, statePillTones } from "@/shared/ui/StatePill";
+import { SwitchRow } from "@/shared/ui/SwitchRow";
 import {
   foregroundSoft,
   gutter,
@@ -71,6 +96,7 @@ import {
 } from "@/shared/ui/theme";
 
 import { TextField } from "@/shared/ui/TextField";
+import { ServiceCategoryField } from "./components/ServiceCategoryField";
 import { SortablePhaseEditor } from "./components/SortablePhaseEditor";
 import { getServiceNamePlaceholder } from "./name-placeholder";
 import { createServiceId, createServicePhaseId } from "./runtime-ids";
@@ -81,6 +107,7 @@ import {
   removeServicePhase,
   reorderServicePhases,
   setPhaseRequiresStaff,
+  switchServiceFormType,
   toServiceFormValues,
   updateServicePhase,
   validateServiceForm,
@@ -92,10 +119,20 @@ export type ServiceEditorMode = "create" | "existing";
 type ServiceConfirmation = "deactivate" | "delete";
 type ServiceSecondaryAction = "toggle-active" | "delete";
 
+/** Always says WHAT is described: a category has its own description (Catégories screen). */
+export const PRESTATION_DESCRIPTION_LABEL = "Description de la prestation (facultative)";
+
 const serviceCategoryLabels: Record<ServiceType, string> = {
   SERVICE: "Service",
   TECHNIQUE: "Technique",
 };
+
+/** The neutral pill of a professional-defined category: its name, never a colour code. */
+const categoryPillColors = {
+  fill: semanticColors.surfaceLavender,
+  dot: semanticColors.accent,
+  text: semanticColors.accent,
+} as const;
 
 function serviceActionGroups(
   active: boolean,
@@ -141,18 +178,25 @@ export function ServiceEditorScreen({
   const business = useCurrentBusiness();
   const {
     addService,
+    categories,
     deleteService,
     getServiceById,
     setServiceActive,
     updateService,
   } = useServiceCatalog();
+  const presentation = getCataloguePresentation(business.activityType);
+  const unified = presentation.organization === "CATEGORIES";
   const service = getServiceById(serviceId);
   const [runtimeServiceId] = useState(() =>
     mode === "create" ? createServiceId() : (serviceId ?? "missing-service"),
   );
-  const [values, setValues] = useState<ServiceFormValues | null>(() =>
-    mode === "existing" && service ? toServiceFormValues(service) : null,
-  );
+  const [values, setValues] = useState<ServiceFormValues | null>(() => {
+    if (mode === "existing") return service ? toServiceFormValues(service) : null;
+    // The unified catalogue skips the type chooser: a single-duration prestation.
+    return unified
+      ? createEmptyServiceForm("SERVICE", createServicePhaseId(runtimeServiceId))
+      : null;
+  });
   const [editing, setEditing] = useState(mode === "create");
   const [attempted, setAttempted] = useState(false);
   const [expandedPhaseId, setExpandedPhaseId] = useState<string | null>(null);
@@ -210,6 +254,19 @@ export function ServiceEditorScreen({
     setValues((current) =>
       current ? removeServicePhase(current, phaseId) : current,
     );
+  };
+
+
+  const switchPhased = (phased: boolean) => {
+    haptics.selection();
+    const processingPhaseId = createServicePhaseId(runtimeServiceId);
+    setAttempted(false);
+    setValues((current) =>
+      current
+        ? switchServiceFormType(current, phased ? "TECHNIQUE" : "SERVICE", processingPhaseId)
+        : current,
+    );
+    setExpandedPhaseId(null);
   };
 
   const updateField = <Key extends keyof ServiceFormValues>(
@@ -367,9 +424,15 @@ export function ServiceEditorScreen({
           attempted={attempted}
           expandedPhaseId={expandedPhaseId}
           namePlaceholder={getServiceNamePlaceholder(business.activityType)}
+          presentation={presentation}
+          categories={categories}
+          canSwitchStructure={mode === "create" && unified}
           validation={validation}
           values={values}
           onAddPhase={addPhase}
+          onChangeCategory={(categoryId) => updateField("categoryId", categoryId)}
+          onChangeDescription={(description) => updateField("description", description)}
+          onSwitchPhased={switchPhased}
           onChangeName={(name) => updateField("name", name)}
           onChangePrice={(price) => updateField("price", price)}
           onChangeSimpleDuration={(duration) =>
@@ -398,7 +461,11 @@ export function ServiceEditorScreen({
           onToggleExpanded={setExpandedPhaseId}
         />
       ) : service ? (
-        <ServiceReadView service={service} />
+        <ServiceReadView
+          category={resolveServiceCategory(service, categories)}
+          presentation={presentation}
+          service={service}
+        />
       ) : null}
 
       {values && editing && (
@@ -571,6 +638,13 @@ interface ServiceFormProps {
   readonly values: ServiceFormValues;
   /** The example of the empty « Nom » field — the Business activity's, never a default value. */
   readonly namePlaceholder: string;
+  readonly presentation: CataloguePresentation;
+  readonly categories: readonly ServiceCategory[];
+  /** Creation in the unified catalogue: the advanced phased option is offered. */
+  readonly canSwitchStructure: boolean;
+  readonly onChangeCategory: (categoryId: string | undefined) => void;
+  readonly onChangeDescription: (description: string) => void;
+  readonly onSwitchPhased: (phased: boolean) => void;
   readonly attempted: boolean;
   readonly validation: ReturnType<typeof validateServiceForm>;
   readonly expandedPhaseId: string | null;
@@ -594,6 +668,12 @@ interface ServiceFormProps {
 function ServiceForm({
   values,
   namePlaceholder,
+  presentation,
+  categories,
+  canSwitchStructure,
+  onChangeCategory,
+  onChangeDescription,
+  onSwitchPhased,
   attempted,
   validation,
   expandedPhaseId,
@@ -607,6 +687,71 @@ function ServiceForm({
   onRemovePhase,
   onReorderPhases,
 }: ServiceFormProps) {
+  const unified = presentation.organization === "CATEGORIES";
+  const nameField = (
+    <TextField
+      accessibilityLabel="Nom de la prestation"
+      error={attempted && !validation.nameValid ? "Le nom est requis." : undefined}
+      label="Nom"
+      onChangeText={onChangeName}
+      placeholder={namePlaceholder}
+      value={values.name}
+    />
+  );
+  const priceField = (
+    <TextField
+      accessibilityLabel="Prix de la prestation"
+      error={
+        attempted && !validation.priceValid
+          ? "Indiquez un prix valide, positif ou nul."
+          : undefined
+      }
+      keyboardType="decimal-pad"
+      label="Prix"
+      onChangeText={onChangePrice}
+      placeholder="42,00"
+      suffix="€"
+      value={values.price}
+    />
+  );
+  const durationField =
+    values.type === "SERVICE" ? (
+      <TextField
+        accessibilityLabel="Durée de la prestation"
+        error={
+          attempted && !validation.simpleDurationValid
+            ? "Indiquez une durée positive en minutes."
+            : undefined
+        }
+        keyboardType="number-pad"
+        label="Durée"
+        onChangeText={onChangeSimpleDuration}
+        placeholder="45"
+        suffix="min"
+        value={values.simpleDurationMinutes}
+      />
+    ) : null;
+  const categoryField = (
+    <ServiceCategoryField categories={categories} onChange={onChangeCategory} value={values.categoryId} />
+  );
+  const descriptionField = (
+    <TextField
+      accessibilityLabel="Description de la prestation, facultative"
+      error={
+        attempted && !validation.descriptionValid
+          ? `${SERVICE_DESCRIPTION_MAX_LENGTH} caractères au maximum.`
+          : undefined
+      }
+      label={PRESTATION_DESCRIPTION_LABEL}
+      maxLength={SERVICE_DESCRIPTION_MAX_LENGTH}
+      multiline
+      onChangeText={onChangeDescription}
+      placeholder={presentation.descriptionExample}
+      testID="service-form-description"
+      value={values.description ?? ""}
+    />
+  );
+
   return (
     <ScrollView
       keyboardDismissMode="on-drag"
@@ -617,63 +762,52 @@ function ServiceForm({
     >
       <View style={styles.formSection} testID="service-form-information">
         {/* The type is chosen at creation and never edited: a read-only pill in
-          the validated category colours, next to the section title. */}
+          the validated category colours, next to the section title. The
+          unified catalogue never names the internal type. */}
         <SectionHeader title="Informations">
-          <StatePill
-            accessibilityLabel={`Catégorie, ${serviceCategoryLabels[values.type]}`}
-            colors={{
-              fill: serviceCategoryColors[values.type].tint,
-              dot: serviceCategoryColors[values.type].accent,
-              text: serviceCategoryColors[values.type].strong,
-            }}
-            label={serviceCategoryLabels[values.type]}
-            testID="service-form-category-pill"
-          />
+          {!unified && (
+            <StatePill
+              accessibilityLabel={`Catégorie, ${serviceCategoryLabels[values.type]}`}
+              colors={{
+                fill: serviceCategoryColors[values.type].tint,
+                dot: serviceCategoryColors[values.type].accent,
+                text: serviceCategoryColors[values.type].strong,
+              }}
+              label={serviceCategoryLabels[values.type]}
+              testID="service-form-category-pill"
+            />
+          )}
         </SectionHeader>
-        <TextField
-          accessibilityLabel="Nom de la prestation"
-          error={
-            attempted && !validation.nameValid
-              ? "Le nom est requis."
-              : undefined
-          }
-          label="Nom"
-          onChangeText={onChangeName}
-          placeholder={namePlaceholder}
-          value={values.name}
-        />
-        <TextField
-          accessibilityLabel="Prix de la prestation"
-          error={
-            attempted && !validation.priceValid
-              ? "Indiquez un prix valide, positif ou nul."
-              : undefined
-          }
-          keyboardType="decimal-pad"
-          label="Prix"
-          onChangeText={onChangePrice}
-          placeholder="42,00"
-          suffix="€"
-          value={values.price}
-        />
-
-        {values.type === "SERVICE" && (
-          <TextField
-            accessibilityLabel="Durée de la prestation"
-            error={
-              attempted && !validation.simpleDurationValid
-                ? "Indiquez une durée positive en minutes."
-                : undefined
-            }
-            keyboardType="number-pad"
-            label="Durée"
-            onChangeText={onChangeSimpleDuration}
-            placeholder="45"
-            suffix="min"
-            value={values.simpleDurationMinutes}
-          />
+        {nameField}
+        {unified ? (
+          <>
+            {categoryField}
+            {descriptionField}
+            {durationField}
+            {priceField}
+          </>
+        ) : (
+          <>
+            {priceField}
+            {durationField}
+            {categoryField}
+            {descriptionField}
+          </>
         )}
       </View>
+
+      {canSwitchStructure && (
+        <View style={styles.phasesSection} testID="service-form-scheduling">
+          <SectionHeader title="Planification avancée" />
+          <SwitchRow
+            description={PHASED_SCHEDULING_DESCRIPTION}
+            label={PHASED_SCHEDULING_LABEL}
+            onValueChange={onSwitchPhased}
+            testID="service-form-phased"
+            value={values.type === "TECHNIQUE"}
+          />
+        </View>
+      )}
 
       {/* A Technique's timing — Temps de pose included — is its ordered
           phases; a Service has one duration and no pose. */}
@@ -721,12 +855,24 @@ function ServiceForm({
   );
 }
 
-function ServiceReadView({ service }: { readonly service: Service }) {
+function ServiceReadView({
+  service,
+  category: professionalCategory,
+  presentation,
+}: {
+  readonly service: Service;
+  /** The professional's category, when the Service has a known one. */
+  readonly category: ServiceCategory | undefined;
+  readonly presentation: CataloguePresentation;
+}) {
   const duration = getServiceDurationMinutes(service);
   const processing = getServiceProcessingMinutes(service);
   const price = formatServicePrice(service.price);
   const category = serviceCategoryColors[service.type];
-  const categoryLabel = serviceCategoryLabels[service.type];
+  const unified = presentation.organization === "CATEGORIES";
+  const categoryLabel = presentation.typeLabels[service.type];
+  // The unified catalogue names the structure only when it is the phased one.
+  const showTypePill = !unified || service.type === "TECHNIQUE";
 
   return (
     <ScrollView
@@ -764,17 +910,27 @@ function ServiceReadView({ service }: { readonly service: Service }) {
               label={service.active ? "Active" : "Inactive"}
               testID="service-status-pill"
             />
-            {/* The category keeps its own validated colours, never the status ones. */}
-            <StatePill
-              accessibilityLabel={`Catégorie, ${categoryLabel}`}
-              colors={{
-                fill: category.tint,
-                dot: category.accent,
-                text: category.strong,
-              }}
-              label={categoryLabel}
-              testID="service-category-pill"
-            />
+            {/* The type keeps its own validated colours, never the status ones. */}
+            {showTypePill && (
+              <StatePill
+                accessibilityLabel={unified ? `Planification, ${categoryLabel}` : `Catégorie, ${categoryLabel}`}
+                colors={{
+                  fill: category.tint,
+                  dot: category.accent,
+                  text: category.strong,
+                }}
+                label={categoryLabel}
+                testID="service-category-pill"
+              />
+            )}
+            {professionalCategory && (
+              <StatePill
+                accessibilityLabel={`Catégorie, ${professionalCategory.name}`}
+                colors={categoryPillColors}
+                label={professionalCategory.name}
+                testID="service-professional-category-pill"
+              />
+            )}
           </View>
         </View>
       </View>
@@ -799,6 +955,18 @@ function ServiceReadView({ service }: { readonly service: Service }) {
           )}
         </GroupedSurface>
       </View>
+
+      {service.description !== undefined && (
+        <View style={styles.readSection}>
+          <SectionHeader title="Description" />
+          <GroupedSurface testID="service-description">
+            {/* Plain text: shown as typed, line breaks kept, never interpreted. */}
+            <AppText selectable style={styles.descriptionText} variant="body">
+              {service.description}
+            </AppText>
+          </GroupedSurface>
+        </View>
+      )}
 
       {service.type === "TECHNIQUE" && (
         <View style={styles.readSection}>
@@ -918,6 +1086,11 @@ const styles = StyleSheet.create({
   },
   summaryPills: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   readSection: { gap: spacing.sm },
+  descriptionText: {
+    color: semanticColors.foreground,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+  },
   readPhase: {
     alignItems: "center",
     flexDirection: "row",

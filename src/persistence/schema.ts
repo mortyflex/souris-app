@@ -610,6 +610,111 @@ ALTER TABLE clients ADD COLUMN sms_marketing_consent_source TEXT
   );
 `;
 
+/**
+ * Schema v17 — Service categories and descriptions (multi-profession Step 3).
+ *
+ * 1. `services.category_id` and `services.description` — two NULLABLE text
+ *    columns. NULL means "uncategorized" / "no description", which is what
+ *    every existing Service keeps: no row is rewritten, no id, type, phase,
+ *    price or Appointment snapshot is touched. `category_id` is plain
+ *    catalogue metadata with NO foreign key, like `sales.appointment_id`: a
+ *    reference to a category this device does not hold (pushed before it,
+ *    removed elsewhere) simply reads as uncategorized.
+ *
+ * 2. `service_categories` — a NEW table, created empty: business-scoped,
+ *    stable id, a meaningful name, an optional description and the
+ *    professional's position. No existing Business receives a category.
+ *
+ * 3. The `aggregate_type` vocabulary of `sync_outbox` and `sync_state` gains
+ *    `SERVICE_CATEGORY` (its own aggregate, CLOUD_SYNC.md §27). SQLite cannot
+ *    alter a CHECK, so both bookkeeping tables are rebuilt with the
+ *    documented copy procedure of schema v11 — every row copied unchanged,
+ *    `id` (FIFO position), revision and retry state kept, the AUTOINCREMENT
+ *    sequence carried over, every acknowledged remote version preserved.
+ *
+ * 4. The pull cursor is cleared and the one-time SERVICE refresh is armed
+ *    (`sync_service_catalogue_refresh`). A build that predates this schema
+ *    stored the pulled Services without the two new fields and acknowledged
+ *    their revisions; without the refresh the next pulls would skip those
+ *    revisions forever and this device would never adopt a description or a
+ *    category set elsewhere. The next (complete) pull re-applies each Service
+ *    revision this device already acknowledged — only when nothing is pending
+ *    locally, so no local change is ever overwritten — then the refresh is
+ *    disarmed (service-catalogue-sync.ts).
+ *
+ * No existing Client, Service, Appointment, Product, Sale, Calendar Block or
+ * deposit row is touched; no wipe, no reseed; the migration records nothing
+ * in the outbox.
+ */
+const SYNC_AGGREGATE_TYPE_CHECK_V17 =
+  "aggregate_type IN ('CLIENT', 'SERVICE', 'APPOINTMENT', 'PRODUCT', 'SALE', 'CALENDAR_BLOCK', 'APPOINTMENT_DEPOSIT', 'SERVICE_CATEGORY')";
+
+const SCHEMA_V17 = `
+ALTER TABLE services ADD COLUMN category_id TEXT;
+ALTER TABLE services ADD COLUMN description TEXT;
+
+CREATE TABLE IF NOT EXISTS service_categories (
+  id TEXT PRIMARY KEY NOT NULL,
+  business_id TEXT NOT NULL,
+  name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  description TEXT,
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_service_categories_business_position
+  ON service_categories(business_id, position);
+
+CREATE TABLE sync_outbox_v17 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (${SYNC_AGGREGATE_TYPE_CHECK_V17}),
+  aggregate_id TEXT NOT NULL,
+  operation TEXT NOT NULL CHECK (operation IN ('UPSERT', 'DELETE')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  last_error TEXT,
+  next_attempt_at TEXT,
+  UNIQUE (business_id, aggregate_type, aggregate_id)
+);
+
+INSERT INTO sync_outbox_v17
+  (id, business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at,
+   attempt_count, last_error, next_attempt_at)
+SELECT id, business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at,
+       attempt_count, last_error, next_attempt_at
+FROM sync_outbox
+ORDER BY id;
+
+DELETE FROM sqlite_sequence WHERE name = 'sync_outbox_v17';
+INSERT INTO sqlite_sequence (name, seq)
+SELECT 'sync_outbox_v17', seq FROM sqlite_sequence WHERE name = 'sync_outbox';
+
+DROP TABLE sync_outbox;
+ALTER TABLE sync_outbox_v17 RENAME TO sync_outbox;
+
+CREATE TABLE sync_state_v17 (
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (${SYNC_AGGREGATE_TYPE_CHECK_V17}),
+  aggregate_id TEXT NOT NULL,
+  remote_version INTEGER NOT NULL CHECK (remote_version >= 1),
+  last_synced_at TEXT NOT NULL,
+  PRIMARY KEY (business_id, aggregate_type, aggregate_id)
+);
+
+INSERT INTO sync_state_v17 (business_id, aggregate_type, aggregate_id, remote_version, last_synced_at)
+SELECT business_id, aggregate_type, aggregate_id, remote_version, last_synced_at
+FROM sync_state;
+
+DROP TABLE sync_state;
+ALTER TABLE sync_state_v17 RENAME TO sync_state;
+
+DELETE FROM souris_metadata WHERE key = 'sync_pull_cursor';
+INSERT INTO souris_metadata (key, value) VALUES ('sync_service_catalogue_refresh', '1')
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -627,6 +732,7 @@ export const migrations: readonly Migration[] = [
   { version: 14, up: (db) => db.execSync(SCHEMA_V14) },
   { version: 15, up: (db) => db.execSync(SCHEMA_V15) },
   { version: 16, up: (db) => db.execSync(SCHEMA_V16) },
+  { version: 17, up: (db) => db.execSync(SCHEMA_V17) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;
@@ -646,6 +752,7 @@ export const SOURIS_TABLES = [
   'appointments',
   'service_phases',
   'services',
+  'service_categories',
   'products',
   'clients',
 ] as const;
@@ -653,6 +760,7 @@ export const SOURIS_TABLES = [
 /** The tables whose rows carry a `business_id`; the ONLY columns account binding rewrites. */
 export const BUSINESS_SCOPED_TABLES = [
   'services',
+  'service_categories',
   'appointments',
   'products',
   'sales',

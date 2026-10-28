@@ -1,4 +1,5 @@
 import type { Service } from '@/domain/appointments';
+import { groupServicesByCategory, type ServiceCategory } from '@/domain/services';
 
 export type CatalogGroupLabel = 'ACTIVES' | 'INACTIVES';
 export type CatalogSectionTitle = 'Services' | 'Techniques';
@@ -8,8 +9,47 @@ export interface CatalogListSection {
   readonly groupLabel: CatalogGroupLabel;
   /** True for the first rendered subsection of its group. */
   readonly showGroupLabel: boolean;
-  readonly title: CatalogSectionTitle;
+  /** A type title, a professional category name, « Sans catégorie » or « Inactives ». */
+  readonly title: string;
   readonly data: readonly Service[];
+}
+
+export const UNCATEGORIZED_TITLE = 'Sans catégorie';
+export const INACTIVES_TITLE = 'Inactives';
+
+/** Whether any of these Services names a category that exists. */
+export function hasCategorizedServices(
+  services: readonly Service[],
+  categories: readonly ServiceCategory[],
+): boolean {
+  const known = new Set(categories.map((category) => category.id));
+  return services.some((service) => service.categoryId !== undefined && known.has(service.categoryId));
+}
+
+/**
+ * The catalogue grouped by the professional's categories: the ACTIVE
+ * Services under each category in the professional's order, then « Sans
+ * catégorie » (no category, or one that no longer exists), then every
+ * inactive Service under « Inactives » — so nothing reachable before is
+ * hidden. Source order is kept inside a section; empty sections are omitted.
+ */
+export function buildCategoryCatalogSections(
+  services: readonly Service[],
+  categories: readonly ServiceCategory[],
+): readonly CatalogListSection[] {
+  const actives = services.filter((service) => service.active);
+  const inactives = services.filter((service) => !service.active);
+  const sections: CatalogListSection[] = groupServicesByCategory(actives, categories).map((group, index) => ({
+    key: `ACTIVES:${group.category?.id ?? 'uncategorized'}`,
+    groupLabel: 'ACTIVES',
+    showGroupLabel: index === 0,
+    title: group.category?.name ?? UNCATEGORIZED_TITLE,
+    data: group.items,
+  }));
+  if (inactives.length > 0) {
+    sections.push({ key: 'INACTIVES', groupLabel: 'INACTIVES', showGroupLabel: true, title: INACTIVES_TITLE, data: inactives });
+  }
+  return sections;
 }
 
 /**

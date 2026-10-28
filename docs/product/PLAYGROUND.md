@@ -88,8 +88,8 @@ fictional (plant, gemstone and botanical surnames, `@exemple.fr`, `06 00 00 00 x
 | Profession   | Business                 | Catalogue                                                       |
 | ------------ | ------------------------ | --------------------------------------------------------------- |
 | HAIRDRESSING | Studio Coiffure Démo     | the HAIRDRESSING starter base, priced (colour, balayage, gloss and care are TECHNIQUES with a pose) |
-| NAILS        | Atelier Ongles Démo      | the seven NAILS starters, priced (every one a SERVICE)          |
-| ESTHETICS    | Institut Beauté Démo     | the five ESTHETICS starters, priced (the facial is a TECHNIQUE) |
+| NAILS        | Atelier Ongles Démo      | the seven NAILS starters, priced (every one a SERVICE), in six categories (« Réparation d’un ongle » left « Sans catégorie »), three with a description |
+| ESTHETICS    | Institut Beauté Démo     | the five ESTHETICS starters, priced (the facial is a TECHNIQUE), in five categories (« Beauté des mains et des pieds » empty), three with a description |
 
 Each demo holds seven to eight clients (one birthday on the day the demo is opened, one archived,
 notes and contact details on several) and about twenty appointments: three weeks of history
@@ -100,7 +100,8 @@ where the profession has one — and the next two weeks planned.
 ### 3.3 What is interactive
 
 Everything the reused screens do, on the demo data: create, edit, archive and restore clients;
-create, edit, activate and delete prestations; create and edit appointments (services, timing,
+create, edit, activate and delete prestations — with categories and descriptions, and the
+categories screen (create, rename, reorder, delete) since multi-profession Step 3; create and edit appointments (services, timing,
 start, client, discount, notes), change their status (checkout, cancellation, no-show, deletion),
 record and void deposits; create, edit and delete calendar blocks; estimations; the client import
 flow (paste or CSV — into the demo only). Every change is visible at once in every demo screen.
@@ -131,6 +132,9 @@ persisted between sessions.
 ---
 
 ## 4. Catalogue gaps observed while building the demos
+
+Step 3 (`docs/domain/SERVICES.md` §11) resolved the first two gaps below — free categories and
+descriptions — and the unified « Prestations » wording for NAILS and ESTHETICS. The others remain.
 
 Concrete usability gaps of the current domain model, met while expressing the three catalogues.
 Each has a smallest safe follow-up in `docs/domain/SERVICES.md` §10.4; none was implemented here.

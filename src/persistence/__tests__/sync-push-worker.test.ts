@@ -636,6 +636,9 @@ describe('incremental push — current aggregate state', () => {
       type: 'TECHNIQUE',
       price_cents: 9500,
       active: true,
+      // Schema v17: both catalogue keys always travel, null for an uncategorized, undescribed Service (§27).
+      category_id: null,
+      description: null,
       phases: [
         { id: 'color-application', position: 0, name: 'Application', duration_minutes: 15, requires_staff: true },
         { id: 'color-processing', position: 1, name: 'Temps de pose', duration_minutes: 35, requires_staff: false },
