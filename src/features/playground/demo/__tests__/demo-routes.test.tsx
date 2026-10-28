@@ -1,6 +1,6 @@
 // BeautIzzy — Playground demo routes: the guard is enforced by the routes themselves
 //
-// The `(demo)` group layout, its tabs and its Step B2 placeholder, rendered
+// The `(demo)` group layout, its tabs and its Step B2 routes, rendered
 // the way Expo Router mounts them, with a Stack whose Protected groups render
 // their screens only while their guard is true. The device database binding
 // is mocked: the layout only hands its opener to the runtime.
@@ -12,6 +12,11 @@ import AuthLayout from '@/app/(auth)/_layout';
 import PlaygroundDemoLayout from '@/app/(auth)/(demo)/_layout';
 import PlaygroundDemoTabsLayout from '@/app/(auth)/(demo)/(tabs)/_layout';
 import PlaygroundDemoHubRoute from '@/app/(auth)/(demo)/(tabs)/demo';
+import PlaygroundDemoAccueilRoute from '@/app/(auth)/(demo)/(tabs)/accueil';
+import PlaygroundDemoProduitsRoute from '@/app/(auth)/(demo)/(tabs)/produits';
+import PlaygroundDemoCashRegisterRoute from '@/app/(auth)/(demo)/cash-register/index';
+import PlaygroundDemoProductRoute from '@/app/(auth)/(demo)/products/[productId]';
+import PlaygroundDemoNewProductRoute from '@/app/(auth)/(demo)/products/new';
 import PlaygroundDemoSaleRoute from '@/app/(auth)/(demo)/sales/new';
 
 import { isPlaygroundAvailable } from '../../availability';
@@ -56,6 +61,12 @@ jest.mock('expo-router/unstable-native-tabs', () => {
   return { NativeTabs };
 });
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+// The « Tops & tendances » ticket (Step B2) can save / share its image: no native module in Jest.
+jest.mock('react-native-view-shot', () => ({ captureRef: jest.fn(), releaseCapture: jest.fn() }));
+jest.mock('@/shared/lib/image-pixel-size', () => ({ fitImageToPixelSize: jest.fn(async () => undefined) }));
+jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
+jest.mock('expo-media-library', () => ({ requestPermissionsAsync: jest.fn(), Asset: { create: jest.fn() } }));
+jest.mock('react-native-reanimated', () => jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'));
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -108,26 +119,39 @@ describe('Playground demo routes', () => {
     expect(available.getByTestId('route-playground/index')).toBeTruthy();
   });
 
-  it('declare the demo tabs: Agenda, Clientèle and Démo, on the product bar', async () => {
+  it('declare the demo tabs in the product’s order — Accueil, Agenda, Clientèle, Produits — then Démo where Plus stands', async () => {
     const view = await renderRoute(<PlaygroundDemoTabsLayout />);
     const triggers = view.getByTestId('native-tabs').children;
     expect(triggers.map((trigger) => (typeof trigger === 'string' ? trigger : trigger.props.name))).toEqual([
+      'accueil',
       'agenda',
       'clientes',
+      'produits',
       'demo',
     ]);
     expect(view.getAllByTestId('trigger-label').map((label) => label.props.children)).toEqual([
+      'Accueil',
       'Agenda',
       'Clientèle',
+      'Produits',
       'Démo',
     ]);
   });
 
-  it('answer « Non disponible dans la démonstration » where the product would sell a product', async () => {
-    const view = await renderRoute(<PlaygroundDemoSaleRoute />);
-    expect(view.getByTestId('playground-demo-unavailable')).toBeTruthy();
-    expect(view.getByText('Non disponible dans la démonstration')).toBeTruthy();
-    expect(view.getByText(/La vente de produits ne fait pas partie/)).toBeTruthy();
+  it('compose the Step B2 routes from the product’s own screens — no « Non disponible » placeholder left', () => {
+    for (const route of [
+      PlaygroundDemoAccueilRoute,
+      PlaygroundDemoProduitsRoute,
+      PlaygroundDemoCashRegisterRoute,
+      PlaygroundDemoProductRoute,
+      PlaygroundDemoNewProductRoute,
+      PlaygroundDemoSaleRoute,
+    ]) {
+      expect(typeof route).toBe('function');
+    }
+    expect(PlaygroundDemoSaleRoute.toString()).toContain('SaleCreationScreen');
+    expect(PlaygroundDemoAccueilRoute.toString()).toContain('HomeScreen');
+    expect(PlaygroundDemoCashRegisterRoute.toString()).toContain('CashRegisterScreen');
   });
 
   it('compose the hub tab from the development module', () => {

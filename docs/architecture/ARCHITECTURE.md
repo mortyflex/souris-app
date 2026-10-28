@@ -84,8 +84,9 @@ src/app/(auth)/          index = Product Discovery (3 slides), sign-up, sign-in,
                          playground/index, playground/[activityType] — the developer Playground
                          (development build on Supabase Staging ONLY; absent everywhere else)
                          (demo)/ — the Playground demo group: the (app) operational routes it
-                         needs (tabs agenda · clientes · demo, appointments, clients, services,
-                         calendar blocks, estimations, sales/new placeholder) inside the demo runtime
+                         needs (tabs accueil · agenda · clientes · produits · demo, appointments,
+                         clients, services, calendar blocks, estimations, products, sales/new,
+                         cash-register) inside the demo runtime
 src/app/(onboarding)/    five-step business setup (one route)         — session, no Business
                          (starts at the primary activity: Discovery is owned by (auth))
 src/app/(app)/           tabs + every operational sheet route         — session + bound Business
@@ -142,8 +143,15 @@ profession — the announced ones included — without an account, a network req
   session. The group's paths are the `(app)` paths; Expo Router resolves a shared path to the
   current group, so the real screens' pushes stay inside the demo. Product reference and the list
   of what is interactive or deliberately unavailable: `docs/product/PLAYGROUND.md`.
-- Not implemented: a simulated authenticated session, the cash register, sales, products and
-  insights on demo data (Step B2), persisted demos.
+- Step B2 (October 2026) completes the demo with the product's own Accueil, Produits, product
+  editor, « Nouvelle vente » (standalone and « Revente »), Cash Register and Tops & tendances —
+  new `(demo)` routes over the SAME screens and the providers the runtime already mounted (products
+  and sales). The fixtures add a retail shelf and product sales per profession; seeded stock is the
+  initial stock minus the seeded sale lines, and a paid appointment settles its expected total
+  (`getAppointmentExpectedTotal`). Accueil is the `accueil` route: the signed-out `(auth)/index`
+  owns `/`. Payments are tracking records only, as in the product.
+- Not implemented: a simulated authenticated session, persisted demos, the Plus tab (account,
+  reminders and SMS settings, BeautIzzy Plus).
 
 Route files should remain thin.
 

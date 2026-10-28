@@ -5,6 +5,8 @@ import { isSameLocalDay, startOfLocalDay } from '@/features/agenda/calendar/week
 import { currentStaffMemberId } from '@/features/appointments/current-staff-member';
 import { getStarterServices } from '@/features/business/setup/starter-services';
 
+import { getAppointmentExpectedTotal, getSaleTotalCents } from '@/domain/appointments';
+
 import { createPlaygroundDemoScenario, getDemoBusinessId } from '../scenarios';
 import { buildDemoScenario } from '../scenarios/scenario';
 import { HAIRDRESSING_DEMO } from '../scenarios/hairdressing';
@@ -26,11 +28,13 @@ describe('Playground demo scenarios', () => {
     expect(business.ownerUserId).toBe('playground-demo-owner');
     for (const service of seed.services) expect(service.businessId).toBe(business.id);
     for (const appointment of seed.appointments) expect(appointment.businessId).toBe(business.id);
-    for (const record of [...seed.clients, ...seed.services, ...seed.appointments]) {
+    for (const record of [...seed.clients, ...seed.services, ...seed.appointments, ...seed.products, ...seed.sales]) {
       expect(record.id.startsWith(business.id)).toBe(true);
     }
-    expect(seed.products).toEqual([]);
-    expect(seed.sales).toEqual([]);
+    // Step B2: a retail shelf and its sales, owned by the same Business.
+    for (const record of [...seed.products, ...seed.sales]) expect(record.businessId).toBe(business.id);
+    expect(seed.products.length).toBeGreaterThanOrEqual(5);
+    expect(seed.sales.length).toBeGreaterThanOrEqual(4);
   });
 
   it('builds three distinct datasets that share nothing', () => {
@@ -48,6 +52,8 @@ describe('Playground demo scenarios', () => {
           ...scenario.seed.clients.map((client) => client.id),
           ...scenario.seed.services.map((service) => service.id),
           ...scenario.seed.appointments.map((appointment) => appointment.id),
+          ...scenario.seed.products.map((product) => product.id),
+          ...scenario.seed.sales.map((sale) => sale.id),
         ]),
     );
     for (const [index, set] of ids.entries()) {
@@ -174,10 +180,11 @@ describe('Playground demo scenarios', () => {
     expect(paid.length).toBeGreaterThanOrEqual(3);
     for (const appointment of paid) {
       expect(appointment.status).toBe('COMPLETED');
-      const gross = appointment.items.reduce((total, item) => total + Math.round(item.price * 100), 0);
+      // The checkout settles the expected total: services net of the discount + products sold during it.
+      const { expectedTotalCents } = getAppointmentExpectedTotal(appointment, seed.sales);
       const received = appointment.payment!.cardAmountCents + appointment.payment!.cashAmountCents;
       expect(received).toBeGreaterThan(0);
-      expect(received).toBeLessThanOrEqual(gross);
+      expect(received).toBe(expectedTotalCents);
       expect(appointment.payment!.paidAt.getTime()).toBeGreaterThan(appointment.startAt.getTime());
     }
     expect(paid.some((appointment) => appointment.payment!.cashAmountCents > 0)).toBe(true);
@@ -312,5 +319,103 @@ describe('Playground demo scenarios', () => {
     expect(() =>
       buildDemoScenario({ ...base, clients: [base.clients[0]!, base.clients[0]!] }, NOW),
     ).toThrow(/duplicate client key/);
+  });
+
+  describe('Step B2 — products, sales and payments agree', () => {
+    it.each(PROFESSION_IDS)('%s: profession products, stock = initial stock − every seeded sale line', (activityType) => {
+      const { seed } = createPlaygroundDemoScenario(activityType, NOW);
+      const definitionStock = new Map(seed.products.map((product) => [product.id, product.stockQuantity]));
+      const sold = new Map<string, number>();
+      for (const item of seed.sales.flatMap((sale) => sale.items)) {
+        sold.set(item.productId, (sold.get(item.productId) ?? 0) + item.quantity);
+      }
+      for (const product of seed.products) {
+        expect(Number.isInteger(product.stockQuantity)).toBe(true);
+        expect(product.stockQuantity).toBeGreaterThanOrEqual(0);
+        expect(product.price).toBeGreaterThan(0);
+      }
+      // Something sold, something sold out or inactive: the catalogue states are all visible.
+      expect([...sold.keys()].length).toBeGreaterThanOrEqual(3);
+      expect(seed.products.some((product) => !product.active)).toBe(true);
+      expect(definitionStock.size).toBe(seed.products.length);
+      // Every line names a product of THIS catalogue, with its snapshot name and price.
+      const products = new Map(seed.products.map((product) => [product.id, product]));
+      for (const item of seed.sales.flatMap((sale) => sale.items)) {
+        const product = products.get(item.productId)!;
+        expect(product).toBeDefined();
+        expect(product.active).toBe(true);
+        expect(item.productName).toBe(product.name);
+        expect(item.unitPrice).toBe(product.price);
+      }
+    });
+
+    it('stores what remains after the seeded sales (hairdressing: 12 shampoos, 4 sold)', () => {
+      const { seed, business } = createPlaygroundDemoScenario('HAIRDRESSING', NOW);
+      const product = (key: string) => seed.products.find((entry) => entry.id === `${business.id}-product-${key}`)!;
+      expect(product('shampoo').stockQuantity).toBe(12 - 4);
+      expect(product('wax').stockQuantity).toBe(0);
+      expect(product('hairspray').active).toBe(false);
+    });
+
+    it.each(PROFESSION_IDS)('%s: linked sales belong to done appointments; standalone sales record their payment', (activityType) => {
+      const { seed } = createPlaygroundDemoScenario(activityType, NOW);
+      const appointments = new Map(seed.appointments.map((appointment) => [appointment.id, appointment]));
+      const clientIds = new Set(seed.clients.map((client) => client.id));
+      const linked = seed.sales.filter((sale) => sale.appointmentId !== undefined);
+      const standalone = seed.sales.filter((sale) => sale.appointmentId === undefined);
+      expect(linked.length).toBeGreaterThanOrEqual(2);
+      expect(standalone.length).toBeGreaterThanOrEqual(3);
+
+      for (const sale of linked) {
+        const appointment = appointments.get(sale.appointmentId!)!;
+        expect(appointment.status).toBe('COMPLETED');
+        expect(sale.clientId).toBe(appointment.clientId);
+        // « Revente » never carries its own payment: the checkout counts it once.
+        expect(sale.payment).toBeUndefined();
+      }
+      for (const sale of standalone) {
+        if (sale.clientId !== undefined) expect(clientIds.has(sale.clientId)).toBe(true);
+        const received = sale.payment!.cardAmountCents + sale.payment!.cashAmountCents;
+        expect(received).toBe(getSaleTotalCents(sale));
+        expect(sale.payment!.paidAt).toEqual(sale.completedAt);
+      }
+      expect(standalone.some((sale) => sale.payment!.cashAmountCents > 0)).toBe(true);
+      expect(standalone.some((sale) => sale.payment!.cardAmountCents > 0)).toBe(true);
+      expect(standalone.some((sale) => sale.clientId === undefined)).toBe(true);
+      // Never in the future; one made earlier today feeds Accueil and the Cash Register.
+      for (const sale of seed.sales) expect(sale.completedAt.getTime()).toBeLessThanOrEqual(NOW.getTime());
+      expect(seed.sales.some((sale) => isSameLocalDay(sale.completedAt, NOW))).toBe(true);
+    });
+
+    it('keeps a sale made « earlier today » inside today, even just after midnight', () => {
+      const justAfterMidnight = new Date(2027, 2, 10, 0, 10);
+      const { seed } = createPlaygroundDemoScenario('NAILS', justAfterMidnight);
+      const todays = seed.sales.filter((sale) => isSameLocalDay(sale.completedAt, justAfterMidnight));
+      expect(todays.length).toBe(1);
+      expect(todays[0]!.completedAt.getTime()).toBeLessThanOrEqual(justAfterMidnight.getTime());
+      expect(todays[0]!.completedAt.getTime()).toBeGreaterThan(startOfLocalDay(justAfterMidnight).getTime());
+    });
+
+    it('refuses an incoherent retail definition at build time', () => {
+      const base = HAIRDRESSING_DEMO;
+      expect(() =>
+        buildDemoScenario({ ...base, sales: [{ key: 'x', minutesAgo: 5, lines: [{ product: 'ghost', quantity: 1 }] }] }, NOW),
+      ).toThrow(/unknown product "ghost"/);
+      expect(() =>
+        buildDemoScenario({ ...base, sales: [{ key: 'x', minutesAgo: 5, lines: [{ product: 'wax', quantity: 9 }] }] }, NOW),
+      ).toThrow(/more "Cire coiffante mate" than its initial stock/);
+      expect(() =>
+        buildDemoScenario({ ...base, sales: [{ key: 'x', minutesAgo: 5, lines: [{ product: 'hairspray', quantity: 1 }] }] }, NOW),
+      ).toThrow(/inactive product/);
+      expect(() =>
+        buildDemoScenario({ ...base, sales: [{ key: 'x', dayOffset: 2, hour: 9, minute: 0, lines: [{ product: 'mask', quantity: 1 }] }] }, NOW),
+      ).toThrow(/must be in the past/);
+      const scheduledWithProducts = base.appointments.map((appointment) =>
+        appointment.key === 't1' ? { ...appointment, products: [{ product: 'mask', quantity: 1 }] } : appointment,
+      );
+      expect(() => buildDemoScenario({ ...base, appointments: scheduledWithProducts }, NOW)).toThrow(
+        /sells products without being done/,
+      );
+    });
   });
 });

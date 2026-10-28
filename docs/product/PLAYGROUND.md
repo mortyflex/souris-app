@@ -48,7 +48,8 @@ persisted, synced, scheduled or requested. See ARCHITECTURE.md.
 « Explorer l’application » enters the **demo runtime**: the real operational screens — Agenda,
 appointment details, creation and editing, calendar blocks, client directory and profile, client
 history, Prestations & tarifs and the service editor, estimations — on a fictional dataset of the
-chosen profession, kept in memory only.
+chosen profession, kept in memory only. Step B2 adds Accueil, Produits, product sales, the Cash
+Register and Tops & tendances (§4).
 
 ### 3.1 Isolation
 
@@ -85,41 +86,59 @@ relative to the moment the demo is opened (`buildDemoScenario`). Identifiers are
 readable (`playground-demo-<profession>-…`); every record belongs to the demo Business; names are
 fictional (plant, gemstone and botanical surnames, `@exemple.fr`, `06 00 00 00 xx`).
 
-| Profession   | Business                 | Catalogue                                                       |
-| ------------ | ------------------------ | --------------------------------------------------------------- |
-| HAIRDRESSING | Studio Coiffure Démo     | the HAIRDRESSING starter base, priced (colour, balayage, gloss and care are TECHNIQUES with a pose) |
-| NAILS        | Atelier Ongles Démo      | the seven NAILS starters, priced (every one a SERVICE), in six categories (« Réparation d’un ongle » left « Sans catégorie »), three with a description |
-| ESTHETICS    | Institut Beauté Démo     | the five ESTHETICS starters, priced (the facial is a TECHNIQUE), in five categories (« Beauté des mains et des pieds » empty), three with a description |
+| Profession   | Business                 | Catalogue                                                       | Products (Step B2) |
+| ------------ | ------------------------ | --------------------------------------------------------------- | ------------------ |
+| HAIRDRESSING | Studio Coiffure Démo     | the HAIRDRESSING starter base, priced (colour, balayage, gloss and care are TECHNIQUES with a pose) | shampoo, mask, serum, heat spray, styling wax (sold out), an inactive hairspray |
+| NAILS        | Atelier Ongles Démo      | the seven NAILS starters, priced (every one a SERVICE), in six categories (« Réparation d’un ongle » left « Sans catégorie »), three with a description | cuticle oil, strengthening base, hand cream, foot cream, glass file, an inactive seasonal polish |
+| ESTHETICS    | Institut Beauté Démo     | the five ESTHETICS starters, priced (the facial is a TECHNIQUE), in five categories (« Beauté des mains et des pieds » empty), three with a description | cleanser, moisturiser, serum, body oil, body scrub, an inactive gift box |
 
 Each demo holds seven to eight clients (one birthday on the day the demo is opened, one archived,
-notes and contact details on several) and about twenty appointments: three weeks of history
-(completed, checked out by card or cash, with and without discount, cancelled by the client or the
-business, no-show), a busy today — with a prestation booked during another's processing time
-where the profession has one — and the next two weeks planned.
+notes and contact details on several) and about twenty-five appointments: five to seven weeks of
+history (completed, checked out by card or cash, with and without discount, cancelled by the client
+or the business, no-show), a busy today — with a prestation booked during another's processing
+time where the profession has one — and the next two weeks planned. Products are fictional
+« Marque Démo » items; four to five standalone sales (card and cash, with a client or walk-in, one
+« earlier today » — never in the future, whatever the hour) and two to three products sold during
+paid appointments.
+
+Money and stock agree as the product makes them agree: a product's seeded stock is its initial
+stock minus every seeded sale line; a product sold during an appointment is a Sale linked to it,
+without payment; a paid appointment settles its expected total (services net of the discount +
+those products). Nothing on screen is a hardcoded figure: Accueil, the Cash Register and Tops &
+tendances compute everything from these records with the product's domain rules.
 
 ### 3.3 What is interactive
 
-Everything the reused screens do, on the demo data: create, edit, archive and restore clients;
+Everything the reused screens do, on the demo data: Accueil (today, the week, shortcuts, the day
+and week summaries); create, edit, archive and restore clients;
 create, edit, activate and delete prestations — with categories and descriptions, and the
 categories screen (create, rename, reorder, delete) since multi-profession Step 3; create and edit appointments (services, timing,
 start, client, discount, notes), change their status (checkout, cancellation, no-show, deletion),
 record and void deposits; create, edit and delete calendar blocks; estimations; the client import
-flow (paste or CSV — into the demo only). Every change is visible at once in every demo screen.
+flow (paste or CSV — into the demo only); create, edit, activate and delete products and adjust
+their stock; « Nouvelle vente » from Produits, Accueil or a product, and « Revente » from
+Appointment Details (stock decremented, the payment recorded by card or cash, or settled by the
+appointment checkout); the Cash Register (day and month, card / cash, the revenue calendar);
+Tops & tendances (periods, carousel, a client place opens the demo client profile and the ticket
+comes back). Every change is visible at once in every demo screen.
 
 ### 3.4 What is deliberately unavailable
 
 - Client and product photos: the media remote is undefined; the screens say the photo could not be
   saved, nothing is written.
 - Reminders and lifecycle SMS: the gateway is undefined; the reminder row reads as disabled.
-- Product sales from Appointment Details (`/sales/new`): « Non disponible dans la démonstration »
-  (Step B2).
-- Accueil, Produits, Plus, Cash Register, Tops & tendances data beyond the Agenda ticket, account
-  actions, the development reset of Plus: not part of the demo tabs (Step B2 or never).
+- Payments: tracking records only, as in the product — no payment is processed anywhere.
+- Barcode scanning uses the device camera and matches demo products only; nothing leaves the device.
+- Tops & tendances « Enregistrer / Partager »: the product's own image export, to Photos or the share
+  sheet — fictional figures only.
+- Plus (account, BeautIzzy Plus, reminders and SMS settings, the development reset): not part of the
+  demo tabs; its two operational entries, « Prestations & tarifs » and « Caisse », are on Démo.
 
 ### 3.5 Controls
 
-The « Démo » tab (`PlaygroundDemoHubScreen`): the Business, the dataset counts, « Prestations &
-tarifs », and:
+The « Démo » tab (`PlaygroundDemoHubScreen`), where Plus stands: the Business, the dataset counts
+(clients, prestations, appointments, products, sales), « Prestations & tarifs », « Caisse »,
+« Tops & tendances », and:
 
 - « Réinitialiser la démonstration » — after confirmation, a new generation of the same profession:
   the runtime remounts on the original dataset (the previous in-memory database is closed);
@@ -131,7 +150,21 @@ persisted between sessions.
 
 ---
 
-## 4. Catalogue gaps observed while building the demos
+## 4. Step B2 — the complete business demonstration (October 2026)
+
+Tabs, in the product's order: Accueil · Agenda · Clientèle · Produits · Démo (where Plus stands).
+New `(demo)` routes over the product's own screens, nothing re-implemented: `(tabs)/accueil`
+(`HomeScreen` — `accueil`, because the signed-out `(auth)/index` owns `/`), `(tabs)/produits`,
+`products/new`, `products/[productId]`, `sales/new` (`SaleCreationScreen`, replacing the B1
+« Non disponible » placeholder) and `cash-register`. Every path the reused screens push
+(`/sales/new`, `/products/…`, `/cash-register`, `/clients/[clientId]` from a podium) exists in the
+group and resolves inside it; `/reminder-settings` and `/lifecycle-sms-settings` are pushed only by
+Plus, which the demo does not mount. The runtime already provided the product and sale sessions;
+no provider, store or boundary was added.
+
+---
+
+## 5. Catalogue gaps observed while building the demos
 
 Step 3 (`docs/domain/SERVICES.md` §11) resolved the first two gaps below — free categories and
 descriptions — and the unified « Prestations » wording for NAILS and ESTHETICS. The others remain.
@@ -162,8 +195,7 @@ Each has a smallest safe follow-up in `docs/domain/SERVICES.md` §10.4; none was
 
 ---
 
-## 5. Not implemented yet
+## 6. Not implemented yet
 
-- Step B2: the cash register, sales, products and insights on demo data; a demo Accueil tab.
 - Persisting a demo between sessions, sharing a demo between devices, exporting one.
 - Any Production surface: the Playground remains absent from release and TestFlight bundles.

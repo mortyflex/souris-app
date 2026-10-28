@@ -36,8 +36,8 @@ export { PLAYGROUND_MODE_LABEL } from './mode-label';
 export const PLAYGROUND_TITLE = 'Playground développeur';
 export const EXPLORE_APP_TITLE = 'Explorer l’application';
 export const PREVIEW_ONBOARDING_TITLE = 'Prévisualiser l’onboarding';
-/** Where a demo starts: its Agenda, inside the `(demo)` group of the signed-out stack. */
-export const DEMO_ENTRY_HREF = '/(auth)/(demo)/(tabs)/agenda';
+/** Where a demo starts: its Accueil, as the product does, inside the `(demo)` group of the signed-out stack. */
+export const DEMO_ENTRY_HREF = '/(auth)/(demo)/(tabs)/accueil';
 
 export function PlaygroundScreen() {
   const router = useRouter();

@@ -5,6 +5,9 @@
 // TECHNIQUE (Application → Temps de pose → Finition — the mask sets while the
 // professional is free), waxing, body treatment and eye beauty are SERVICES.
 // Today's planning books a brow wax DURING a facial's pose.
+//
+// Retail (Step B2): face and body care from a fictional « Marque Démo » — a
+// cleanser, a moisturiser, a serum, body care; one product is inactive.
 
 import type { DemoScenarioDefinition } from './scenario';
 
@@ -64,11 +67,60 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
     { key: 'louise', firstName: 'Louise', lastName: 'Figue', email: 'louise.figue@exemple.fr', birthday: { month: 9, day: 3 } },
     { key: 'lucie', firstName: 'Lucie', lastName: 'Verveine', archived: true },
   ],
+  products: [
+    { key: 'cleanser', name: 'Gel nettoyant douceur', brand: 'Marque Démo', category: 'Visage', barcode: '2000000000031', price: 19, initialStock: 9 },
+    { key: 'moisturizer', name: 'Crème hydratante', brand: 'Marque Démo', category: 'Visage', price: 32, initialStock: 7 },
+    { key: 'serum', name: 'Sérum éclat', brand: 'Marque Démo', category: 'Visage', price: 39, initialStock: 4 },
+    { key: 'body-oil', name: 'Huile sèche corps', brand: 'Marque Démo', category: 'Corps', price: 27, initialStock: 6 },
+    { key: 'scrub', name: 'Gommage corps sucré', brand: 'Marque Démo', category: 'Corps', price: 22, initialStock: 3 },
+    { key: 'gift-box', name: 'Coffret fêtes (édition passée)', brand: 'Marque Démo', category: 'Coffrets', price: 45, initialStock: 0, inactive: true },
+  ],
+  sales: [
+    {
+      key: 's1',
+      client: 'jade',
+      dayOffset: -13,
+      hour: 16,
+      minute: 0,
+      lines: [
+        { product: 'body-oil', quantity: 1 },
+        { product: 'scrub', quantity: 1 },
+      ],
+    },
+    { key: 's2', dayOffset: -8, hour: 12, minute: 30, lines: [{ product: 'cleanser', quantity: 1 }], paidBy: 'CASH' },
+    { key: 's3', client: 'louise', dayOffset: -4, hour: 18, minute: 15, lines: [{ product: 'moisturizer', quantity: 1 }] },
+    { key: 's4', minutesAgo: 55, lines: [{ product: 'cleanser', quantity: 1 }], paidBy: 'CASH' },
+  ],
   appointments: [
+    // Earlier history, so Tops & tendances has loyal clients to rank.
+    { key: 'h0a', client: 'maya', services: ['facial'], dayOffset: -45, hour: 10, minute: 0, outcome: 'PAID' },
+    { key: 'h0b', client: 'alice', services: ['leg-wax'], dayOffset: -38, hour: 14, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
+    { key: 'h0c', client: 'jade', services: ['eye-beauty'], dayOffset: -31, hour: 11, minute: 0, outcome: 'PAID' },
     // History.
-    { key: 'h1', client: 'maya', services: ['facial'], dayOffset: -24, hour: 10, minute: 0, outcome: 'PAID' },
+    {
+      key: 'h1',
+      client: 'maya',
+      services: ['facial'],
+      dayOffset: -24,
+      hour: 10,
+      minute: 0,
+      outcome: 'PAID',
+      products: [
+        { product: 'serum', quantity: 1 },
+        { product: 'moisturizer', quantity: 1 },
+      ],
+    },
     { key: 'h2', client: 'alice', services: ['leg-wax', 'brow-wax'], dayOffset: -18, hour: 14, minute: 0, outcome: 'PAID' },
-    { key: 'h3', client: 'jade', services: ['body-treatment'], dayOffset: -14, hour: 15, minute: 0, outcome: 'PAID' },
+    {
+      key: 'h3',
+      client: 'jade',
+      services: ['body-treatment'],
+      dayOffset: -14,
+      hour: 15,
+      minute: 0,
+      outcome: 'PAID',
+      products: [{ product: 'body-oil', quantity: 1 }],
+    },
     { key: 'h4', client: 'nour', services: ['eye-beauty'], dayOffset: -11, hour: 11, minute: 30, outcome: 'COMPLETED' },
     {
       key: 'h5',
@@ -90,6 +142,7 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
       minute: 0,
       outcome: 'PAID',
       discount: { type: 'PERCENT', percent: 10 },
+      products: [{ product: 'cleanser', quantity: 1 }],
     },
     { key: 'h8', client: 'maya', services: ['brow-wax'], dayOffset: -1, hour: 16, minute: 30, outcome: 'PAID', paidBy: 'CASH' },
     // Today: a facial at 9:30 whose mask pose frees the professional for a brow wax at 10:15.

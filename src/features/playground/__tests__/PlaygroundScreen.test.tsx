@@ -110,7 +110,7 @@ describe('PlaygroundScreen', () => {
     expect(view.getByText('Explorer l’application Esthétique')).toBeTruthy();
     await press(view.getByTestId('playground-explore-app'));
     expect(mockStart).toHaveBeenCalledWith('ESTHETICS');
-    expect(mockPush).toHaveBeenCalledWith('/(auth)/(demo)/(tabs)/agenda');
+    expect(mockPush).toHaveBeenCalledWith('/(auth)/(demo)/(tabs)/accueil');
     expect(mockStart.mock.invocationCallOrder[0]!).toBeLessThan(mockPush.mock.invocationCallOrder[0]!);
     // The announced professions are explorable here, and only here: nothing about their availability changed.
     await press(view.getByTestId('activity-NAILS'));

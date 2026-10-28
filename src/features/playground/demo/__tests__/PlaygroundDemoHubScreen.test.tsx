@@ -26,10 +26,17 @@ jest.mock('expo-router', () => {
   const { Text } = jest.requireActual('react-native') as typeof import('react-native');
   return {
     Redirect: ({ href }: { readonly href: string }) => React.createElement(Text, { testID: 'redirect' }, href),
+    useFocusEffect: (effect: () => void) => React.useEffect(effect, [effect]),
     useRouter: () => ({ push: mockPush, dismissTo: mockDismissTo, back: jest.fn(), replace: jest.fn() }),
   };
 });
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+// The « Tops & tendances » ticket (Step B2) can save / share its image: no native module in Jest.
+jest.mock('react-native-view-shot', () => ({ captureRef: jest.fn(), releaseCapture: jest.fn() }));
+jest.mock('@/shared/lib/image-pixel-size', () => ({ fitImageToPixelSize: jest.fn(async () => undefined) }));
+jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
+jest.mock('expo-media-library', () => ({ requestPermissionsAsync: jest.fn(), Asset: { create: jest.fn() } }));
+jest.mock('react-native-reanimated', () => jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'));
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -116,7 +123,7 @@ describe('PlaygroundDemoHubScreen', () => {
     expect(view.getByText('ESTHÉTIQUE')).toBeTruthy();
     expect(
       view.getByText(
-        `${active} clients · ${expected.seed.services.length} prestations · ${expected.seed.appointments.length} rendez-vous · 1 archivée`,
+        `${active} clients · ${expected.seed.services.length} prestations · ${expected.seed.appointments.length} rendez-vous · ${expected.seed.products.length} produits · ${expected.seed.sales.length} ventes · 1 archivée`,
       ),
     ).toBeTruthy();
     expect(view.getByTestId('playground-demo-notice')).toBeTruthy();

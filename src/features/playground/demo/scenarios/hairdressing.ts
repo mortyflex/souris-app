@@ -7,6 +7,13 @@
 // (TECHNIQUE: Application → Temps de pose → Finition, the professional free
 // during the pose). Today's planning deliberately books a cut DURING a
 // colour's processing time, the way a real studio works.
+//
+// Retail (Step B2): a small shelf of fictional « Marque Démo » hair care —
+// one product already sold out, one from a discontinued range left inactive.
+// Products are sold during appointments (« Revente », settled by the
+// checkout) and on their own (paid by card or cash), one of them earlier
+// today, so Accueil, the Cash Register and Tops & tendances have something
+// real to read.
 
 import type { DemoScenarioDefinition } from './scenario';
 
@@ -50,10 +57,62 @@ export const HAIRDRESSING_DEMO: DemoScenarioDefinition = {
     { key: 'julie', firstName: 'Julie', lastName: 'Mimosa', email: 'julie.mimosa@exemple.fr' },
     { key: 'amelie', firstName: 'Amélie', lastName: 'Tulipe', archived: true },
   ],
+  products: [
+    { key: 'shampoo', name: 'Shampooing doux', brand: 'Marque Démo', category: 'Shampoings', barcode: '2000000000017', price: 18, initialStock: 12 },
+    { key: 'mask', name: 'Masque nourrissant', brand: 'Marque Démo', category: 'Soins', price: 24, initialStock: 8 },
+    { key: 'serum', name: 'Sérum pointes sèches', brand: 'Marque Démo', category: 'Soins', price: 21, initialStock: 6 },
+    { key: 'spray', name: 'Spray thermoprotecteur', brand: 'Marque Démo', category: 'Coiffage', price: 16, initialStock: 5 },
+    { key: 'wax', name: 'Cire coiffante mate', brand: 'Marque Démo', category: 'Coiffage', price: 14, initialStock: 2 },
+    { key: 'hairspray', name: 'Laque forte (ancienne gamme)', brand: 'Marque Démo', category: 'Coiffage', price: 12, initialStock: 0, inactive: true },
+  ],
+  sales: [
+    { key: 's1', client: 'lea', dayOffset: -12, hour: 16, minute: 30, lines: [{ product: 'shampoo', quantity: 2 }] },
+    { key: 's2', dayOffset: -9, hour: 11, minute: 15, lines: [{ product: 'wax', quantity: 1 }], paidBy: 'CASH' },
+    { key: 's3', client: 'hugo', dayOffset: -5, hour: 18, minute: 10, lines: [{ product: 'wax', quantity: 1 }], paidBy: 'CASH' },
+    {
+      key: 's4',
+      client: 'ines',
+      dayOffset: -2,
+      hour: 10,
+      minute: 0,
+      lines: [
+        { product: 'mask', quantity: 1 },
+        { product: 'serum', quantity: 1 },
+      ],
+    },
+    { key: 's5', minutesAgo: 40, lines: [{ product: 'shampoo', quantity: 1 }] },
+  ],
   appointments: [
+    // Earlier history, so Tops & tendances has loyal clients to rank.
+    { key: 'h0a', client: 'lea', services: ['cut-blow-dry'], dayOffset: -35, hour: 10, minute: 0, outcome: 'PAID' },
+    { key: 'h0b', client: 'hugo', services: ['cut-men'], dayOffset: -30, hour: 18, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
+    { key: 'h0c', client: 'sofia', services: ['color'], dayOffset: -28, hour: 9, minute: 30, outcome: 'PAID' },
+    { key: 'h0d', client: 'julie', services: ['cut-women'], dayOffset: -26, hour: 14, minute: 0, outcome: 'PAID' },
     // History: three weeks of activity, every outcome represented.
-    { key: 'h1', client: 'lea', services: ['color', 'cut-women'], dayOffset: -21, hour: 9, minute: 0, outcome: 'PAID' },
-    { key: 'h2', client: 'sofia', services: ['balayage'], dayOffset: -14, hour: 10, minute: 0, outcome: 'PAID' },
+    {
+      key: 'h1',
+      client: 'lea',
+      services: ['color', 'cut-women'],
+      dayOffset: -21,
+      hour: 9,
+      minute: 0,
+      outcome: 'PAID',
+      products: [{ product: 'mask', quantity: 1 }],
+    },
+    {
+      key: 'h2',
+      client: 'sofia',
+      services: ['balayage'],
+      dayOffset: -14,
+      hour: 10,
+      minute: 0,
+      outcome: 'PAID',
+      products: [
+        { product: 'serum', quantity: 1 },
+        { product: 'shampoo', quantity: 1 },
+      ],
+    },
+    { key: 'h2b', client: 'ines', services: ['color'], dayOffset: -17, hour: 9, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
     { key: 'h3', client: 'hugo', services: ['cut-men'], dayOffset: -14, hour: 14, minute: 30, outcome: 'PAID', paidBy: 'CASH' },
     { key: 'h4', client: 'ines', services: ['cut-blow-dry'], dayOffset: -10, hour: 11, minute: 0, outcome: 'COMPLETED' },
     { key: 'h5', client: 'nadia', services: ['color'], dayOffset: -7, hour: 9, minute: 30, outcome: 'NO_SHOW' },
@@ -76,6 +135,7 @@ export const HAIRDRESSING_DEMO: DemoScenarioDefinition = {
       minute: 0,
       outcome: 'PAID',
       discount: { type: 'PERCENT', percent: 10 },
+      products: [{ product: 'spray', quantity: 1 }],
     },
     { key: 'h8', client: 'lea', services: ['blow-dry'], dayOffset: -1, hour: 12, minute: 0, outcome: 'PAID' },
     // Today: a colour at 9:00 whose pose frees the professional for a men's cut at 9:30.

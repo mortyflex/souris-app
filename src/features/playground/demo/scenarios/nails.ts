@@ -5,6 +5,10 @@
 // with one duration (a lamp cure lasts seconds; the technician stays). Long
 // sets and infills shape the day; nail art and repairs are quick add-ons
 // booked together with a set.
+//
+// Retail (Step B2): nail and hand care from a fictional « Marque Démo » —
+// cuticle oil and hand cream sell best; one product is nearly out of stock,
+// a seasonal polish is inactive.
 
 import type { DemoScenarioDefinition } from './scenario';
 
@@ -70,9 +74,47 @@ export const NAILS_DEMO: DemoScenarioDefinition = {
     { key: 'yasmine', firstName: 'Yasmine', lastName: 'Topaze', email: 'yasmine.topaze@exemple.fr' },
     { key: 'rosalie', firstName: 'Rosalie', lastName: 'Quartz', archived: true },
   ],
+  products: [
+    { key: 'cuticle-oil', name: 'Huile cuticules', brand: 'Marque Démo', category: 'Soins des ongles', barcode: '2000000000024', price: 12, initialStock: 15 },
+    { key: 'base', name: 'Base fortifiante', brand: 'Marque Démo', category: 'Soins des ongles', price: 15, initialStock: 6 },
+    { key: 'hand-cream', name: 'Crème mains karité', brand: 'Marque Démo', category: 'Mains et pieds', price: 14, initialStock: 10 },
+    { key: 'foot-cream', name: 'Crème pieds réparatrice', brand: 'Marque Démo', category: 'Mains et pieds', price: 16, initialStock: 4 },
+    { key: 'file', name: 'Lime en verre', brand: 'Marque Démo', category: 'Accessoires', price: 9, initialStock: 3 },
+    { key: 'summer-polish', name: 'Vernis édition été', brand: 'Marque Démo', category: 'Vernis', price: 11, initialStock: 0, inactive: true },
+  ],
+  sales: [
+    { key: 's1', client: 'zoe', dayOffset: -16, hour: 17, minute: 45, lines: [{ product: 'cuticle-oil', quantity: 1 }] },
+    {
+      key: 's2',
+      dayOffset: -10,
+      hour: 12,
+      minute: 0,
+      lines: [
+        { product: 'hand-cream', quantity: 1 },
+        { product: 'file', quantity: 1 },
+      ],
+      paidBy: 'CASH',
+    },
+    { key: 's3', client: 'yasmine', dayOffset: -6, hour: 15, minute: 20, lines: [{ product: 'hand-cream', quantity: 2 }] },
+    { key: 's4', client: 'lina', dayOffset: -3, hour: 18, minute: 0, lines: [{ product: 'cuticle-oil', quantity: 1 }], paidBy: 'CASH' },
+    { key: 's5', minutesAgo: 25, lines: [{ product: 'file', quantity: 1 }] },
+  ],
   appointments: [
+    // Earlier history, so Tops & tendances has loyal clients to rank.
+    { key: 'h0a', client: 'lina', services: ['gel-infill'], dayOffset: -49, hour: 10, minute: 0, outcome: 'PAID' },
+    { key: 'h0b', client: 'manon', services: ['semi-permanent-hands'], dayOffset: -42, hour: 14, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
+    { key: 'h0c', client: 'sarah', services: ['semi-permanent-feet'], dayOffset: -33, hour: 11, minute: 0, outcome: 'PAID' },
     // History.
-    { key: 'h1', client: 'lina', services: ['gel-full-set'], dayOffset: -28, hour: 10, minute: 0, outcome: 'PAID' },
+    {
+      key: 'h1',
+      client: 'lina',
+      services: ['gel-full-set'],
+      dayOffset: -28,
+      hour: 10,
+      minute: 0,
+      outcome: 'PAID',
+      products: [{ product: 'cuticle-oil', quantity: 1 }],
+    },
     {
       key: 'h2',
       client: 'manon',
@@ -82,11 +124,21 @@ export const NAILS_DEMO: DemoScenarioDefinition = {
       minute: 0,
       outcome: 'PAID',
       discount: { type: 'FIXED', amountCents: 500 },
+      products: [{ product: 'base', quantity: 1 }],
     },
     { key: 'h3', client: 'lina', services: ['gel-infill'], dayOffset: -14, hour: 10, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
     { key: 'h4', client: 'chloe', services: ['semi-permanent-feet'], dayOffset: -12, hour: 16, minute: 0, outcome: 'COMPLETED' },
     { key: 'h5', client: 'emma', services: ['gel-full-set'], dayOffset: -8, hour: 9, minute: 30, outcome: 'NO_SHOW' },
-    { key: 'h6', client: 'sarah', services: ['removal', 'semi-permanent-hands'], dayOffset: -5, hour: 11, minute: 0, outcome: 'PAID' },
+    {
+      key: 'h6',
+      client: 'sarah',
+      services: ['removal', 'semi-permanent-hands'],
+      dayOffset: -5,
+      hour: 11,
+      minute: 0,
+      outcome: 'PAID',
+      products: [{ product: 'foot-cream', quantity: 1 }],
+    },
     {
       key: 'h7',
       client: 'zoe',

@@ -1,11 +1,12 @@
 // BeautIzzy — Playground demo group (development ONLY)
 //
 // The SAME operational routes as `(app)` — tabs, appointment and client
-// screens, the catalogue and its editor — mounted inside the Playground demo
+// screens, the catalogue and its editor, products, sales and the Cash
+// Register (Step B2) — mounted inside the Playground demo
 // runtime instead of the account's providers: the real screens, on the
 // in-memory data of the chosen profession. Being a group of `(auth)`, it
 // exists only while signed out, and its paths (`/agenda`, `/clients/…`,
-// `/services/…`) resolve here from inside the demo because Expo Router
+// `/services/…`, `/products/…`, `/sales/new`, `/cash-register`) resolve here from inside the demo because Expo Router
 // prefers the current group: every push of the real screens stays in the
 // demo.
 //
@@ -58,8 +59,11 @@ export default function PlaygroundDemoLayout() {
         <Stack.Screen name="services/categories" options={pushedScreen} />
         <Stack.Screen name="services/new" options={editorSheet} />
         <Stack.Screen name="services/[serviceId]" options={editorSheet} />
-        {/* Step B2: the demo answers « Non disponible » where the product would sell. */}
-        <Stack.Screen name="sales/new" options={pushedScreen} />
+        {/* Step B2: retail, sales and the Cash Register — the product's routes, on the demo data. */}
+        <Stack.Screen name="cash-register/index" options={pushedScreen} />
+        <Stack.Screen name="products/new" options={editorSheet} />
+        <Stack.Screen name="products/[productId]" options={editorSheet} />
+        <Stack.Screen name="sales/new" options={editorSheet} />
       </Stack>
     </PlaygroundDemoRuntime>
   );

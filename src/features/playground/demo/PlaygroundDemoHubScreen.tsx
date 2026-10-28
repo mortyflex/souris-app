@@ -1,11 +1,12 @@
 // BeautIzzy — the « Démo » tab of a Playground demo (development ONLY)
 //
 // What the Plus tab is to the product, this tab is to the demo: the
-// Business being explored, what the dataset holds, the entry to
-// « Prestations & tarifs » (the same pushed catalogue as the product), and
-// the three demo controls — reset, change profession, leave. It reads the
-// same session providers as every other screen, so the counts follow every
-// edit made in the demo at once.
+// Business being explored, what the dataset holds, the entries the product
+// keeps in Plus — « Prestations & tarifs », « Caisse » (the same pushed
+// screens) and « Tops & tendances » (the same ticket as Accueil) — and the
+// three demo controls — reset, change profession, leave. It reads the same
+// session providers as every other screen, so the counts follow every edit,
+// sale and payment made in the demo at once.
 //
 // Reset asks first (the canonical destructive dialog), then starts a new
 // generation of the same profession: the runtime remounts on the original
@@ -14,6 +15,7 @@
 // clears the session as it unmounts.
 
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,7 +24,12 @@ import { useAppointmentSession } from '@/features/appointments/session/Appointme
 import { formatBusinessActivityType } from '@/features/business/presentation';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
+import { BusinessInsightsTicket } from '@/features/insights/BusinessInsightsTicket';
+import { useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
+import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
+import { insightsIcon } from '@/shared/icons/insights-icon';
+import { cashRegisterIcon } from '@/shared/icons/payment-method-icons';
 import { haptics } from '@/shared/lib/haptics';
 import { AppText } from '@/shared/ui/AppText';
 import { MainScreenHeader } from '@/shared/ui/MainScreenHeader';
@@ -35,6 +42,10 @@ import { usePlaygroundDemoSession } from './session';
 export const RESET_DEMO_TITLE = 'Réinitialiser la démonstration';
 export const CHANGE_PROFESSION_TITLE = 'Changer de métier';
 export const LEAVE_PLAYGROUND_TITLE = 'Quitter le Playground';
+
+/** What the demo is, and what it deliberately does not do. */
+export const DEMO_NOTICE =
+  'Données fictives en mémoire : aucun compte, aucune synchronisation, rien n’est conservé à la sortie. Les encaissements sont un simple suivi : aucun paiement réel. Photos, rappels et SMS sont désactivés.';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
@@ -49,11 +60,16 @@ export function PlaygroundDemoHubScreen() {
   const { activeClients, archivedClients } = useClientSession();
   const { services } = useServiceCatalog();
   const { appointments } = useAppointmentSession();
+  const { products } = useProductCatalog();
+  const { sales } = useSaleSession();
+  const [insightsVisible, setInsightsVisible] = useState(false);
 
   const summary = [
     plural(activeClients.length, 'client'),
     plural(services.length, 'prestation'),
     plural(appointments.length, 'rendez-vous', 'rendez-vous'),
+    plural(products.length, 'produit'),
+    plural(sales.length, 'vente'),
   ].join(' · ');
 
   const confirmReset = () => {
@@ -109,6 +125,20 @@ export function PlaygroundDemoHubScreen() {
               testID="playground-demo-services"
               title="Prestations & tarifs"
             />
+            <HubRow
+              icon={cashRegisterIcon}
+              meta="Encaissements du jour et du mois"
+              onPress={() => router.push('/cash-register')}
+              testID="playground-demo-cash-register"
+              title="Caisse"
+            />
+            <HubRow
+              icon={insightsIcon}
+              meta="Classements calculés sur cette démonstration"
+              onPress={() => setInsightsVisible(true)}
+              testID="playground-demo-insights"
+              title="Tops & tendances"
+            />
           </View>
 
           <View style={styles.section}>
@@ -138,7 +168,7 @@ export function PlaygroundDemoHubScreen() {
 
           <View
             accessible
-            accessibilityLabel="Outil interne de développement. Données fictives en mémoire : aucun compte, aucune synchronisation, rien n’est conservé à la sortie. Caisse, ventes, produits et statistiques ne font pas partie de cette démonstration."
+            accessibilityLabel={`Outil interne de développement. ${DEMO_NOTICE}`}
             style={styles.notice}
             testID="playground-demo-notice"
           >
@@ -146,12 +176,16 @@ export function PlaygroundDemoHubScreen() {
               Outil interne de développement
             </AppText>
             <AppText style={styles.noticeBody} variant="metadata">
-              Données fictives en mémoire : aucun compte, aucune synchronisation, rien n’est conservé à la
-              sortie. Caisse, ventes, produits et statistiques ne font pas partie de cette démonstration.
+              {DEMO_NOTICE}
             </AppText>
           </View>
         </View>
       </ScrollView>
+      <BusinessInsightsTicket
+        anchor={new Date()}
+        onClose={() => setInsightsVisible(false)}
+        visible={insightsVisible}
+      />
     </SafeAreaView>
   );
 }
