@@ -2,9 +2,11 @@
 //
 // A fictional nail studio: gemstone surnames, a « Démo » business. The
 // catalogue is the NAILS onboarding base, priced — every prestation a SERVICE
-// with one duration (a lamp cure lasts seconds; the technician stays). Long
-// sets and infills shape the day; nail art and repairs are quick add-ons
-// booked together with a set.
+// with one duration (a lamp cure lasts seconds; the technician stays), except
+// « Dépose par dissolution »: 10 min of wraps, 10 min of waiting while they
+// soak (the technician is free), 15 min of removal and finishing. Long sets
+// and infills shape the day; nail art and repairs are quick add-ons booked
+// together with a set.
 //
 // Retail (Step B2): nail and hand care from a fictional « Marque Démo » —
 // cuticle oil and hand cream sell best; one product is nearly out of stock,
@@ -24,6 +26,7 @@ export const NAILS_DEMO: DemoScenarioDefinition = {
     'semi-permanent-hands': 35,
     'semi-permanent-feet': 38,
     removal: 15,
+    'soak-off': 20,
     'nail-art': 10,
     'nail-repair': 8,
   },
@@ -42,11 +45,14 @@ export const NAILS_DEMO: DemoScenarioDefinition = {
     'gel-infill': 'infill',
     'semi-permanent-feet': 'feet',
     removal: 'removal',
+    'soak-off': 'removal',
     'nail-art': 'art',
   },
   descriptions: {
     'gel-full-set': 'Pose de capsules ou chablons, gel de construction et couleur.\nLimage et soin des cuticules inclus.',
     removal: 'Dépose d’un gel posé dans un autre salon : prévoir 15 minutes de plus.',
+    'soak-off':
+      'Gel ou semi-permanent retiré au dissolvant, sans ponçage.\nPendant le temps d’attente, les papillotes agissent seules : la professionnelle peut s’occuper de quelqu’un d’autre.',
     'nail-art': 'Jusqu’à deux ongles décorés. Au-delà, sur devis.',
   },
   clients: [
@@ -153,6 +159,16 @@ export const NAILS_DEMO: DemoScenarioDefinition = {
     // Today.
     { key: 't1', client: 'lina', services: ['gel-infill', 'nail-art'], dayOffset: 0, hour: 9, minute: 0, outcome: 'CONFIRMED' },
     { key: 't2', client: 'manon', services: ['semi-permanent-hands'], dayOffset: 0, hour: 10, minute: 45, outcome: 'SCHEDULED' },
+    // A soak-off removal before a new semi-permanent: 12:00 → 13:20, waiting 12:10 → 12:20.
+    {
+      key: 't6',
+      client: 'yasmine',
+      services: ['soak-off', 'semi-permanent-hands'],
+      dayOffset: 0,
+      hour: 12,
+      minute: 0,
+      outcome: 'SCHEDULED',
+    },
     {
       key: 't3',
       client: 'emma',

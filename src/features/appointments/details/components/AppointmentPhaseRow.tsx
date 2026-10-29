@@ -35,7 +35,7 @@ export function AppointmentPhaseRow({
         {formatAppointmentTime(phase.startAt)}
       </AppText>
       <View style={styles.body}>
-        <AppText variant="body" numberOfLines={1} style={styles.phaseName}>
+        <AppText variant="body" numberOfLines={2} style={styles.phaseName}>
           {name}
         </AppText>
       </View>
@@ -66,8 +66,8 @@ const styles = StyleSheet.create({
   },
   activeBar: { backgroundColor: semanticColors.borderLavender },
   processingBar: { backgroundColor: peach.peach700 },
-  startTime: { color: foregroundSoft, fontVariant: ['tabular-nums'], width: 40 },
+  startTime: { color: foregroundSoft, flexShrink: 0, fontVariant: ['tabular-nums'], width: 40 },
   body: { flex: 1, gap: 1, minWidth: 0 },
   phaseName: { fontSize: 13, lineHeight: 18 },
-  duration: { color: foregroundSoft, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
+  duration: { color: foregroundSoft, flexShrink: 0, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
 });

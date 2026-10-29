@@ -148,7 +148,33 @@ Ambiguity, chosen least-destructively: a stored « Temps de pose » cannot be to
 professional who would have meant those exact words for an unattended phase — the editor never
 allowed typing it, so it is read as the default. It is only a reading; the stored value stays.
 
-## 9. Not implemented yet
+## 9. Realistic workflow fixes (October 2026)
+
+Three corrections after realistic nail and esthetics workflows in the Playground.
+
+- **Long names.** In the appointment Details (prestation rows and their phases) and the Résumé /
+  Modifier cards (name and phase timing rows), a prestation or phase name wraps on two lines
+  instead of being cut after one; the time, the price, the duration stepper and the chevron keep
+  their width. The catalogue rows and picker cards already wrapped.
+- **Prestation icons** (`getPrestationFamily(prestation, context)`, presentation only, nothing
+  stored). Deterministic priority:
+  1. the prestation's name, through the keyword table (unchanged mappings);
+  2. CATEGORIES only: its professional category's CURRENT name, through the same table — the
+     category is found by id among the Business's categories and only if it belongs to the same
+     Business (`findPrestationCategory`); a missing, deleted or foreign category is ignored;
+  3. CATEGORIES only: the profession's glyph — the hand (NAILS), the care bubbles (ESTHETICS);
+  4. otherwise (hairdressing and every other stored activity) the type fallback, scissors /
+     sparkles, exactly as before — the category is not read there.
+  « French classique » in « Nail art et modèles » → the palette. Applied in Prestations & tarifs and
+  Prestation Details; the onboarding starters have no category and all match by name.
+- **Multi-phase examples.** NAILS gains « Dépose par dissolution » (10 min active, 10 min Temps
+  d’attente, 15 min active — 35 min); the ESTHETICS facial becomes « Soin du visage avec masque »
+  (20 + 15 + 25 = 60 min). The waiting phases are staff-free because the professional genuinely can
+  see someone else. Starters reach NEW Businesses only. The Playground prices them (20 €, 65 €),
+  files the removal under « Déposes », describes the waiting in the description and books both
+  today (nails 12:00; esthetics 9:30, with a brow wax inside the mask's waiting time, 9:50).
+
+## 10. Not implemented yet
 
 - the online-booking visibility of a prestation (designed in SERVICES.md §12);
 - any catalogue migration or renaming;

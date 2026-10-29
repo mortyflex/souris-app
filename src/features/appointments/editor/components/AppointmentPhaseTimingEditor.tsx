@@ -70,7 +70,7 @@ export function AppointmentPhaseTimingEditor({
           >
             <AppText
               variant="metadata"
-              numberOfLines={1}
+              numberOfLines={2}
               style={[styles.phaseName, processing && styles.processingPhaseName]}
             >
               {simple ? 'Durée' : getPhaseDisplayName(phase, organization)}

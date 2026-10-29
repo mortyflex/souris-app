@@ -39,11 +39,12 @@ describe('starter services', () => {
       'Semi-permanent mains',
       'Semi-permanent pieds',
       'Dépose',
+      'Dépose par dissolution',
       'Nail art',
       'Réparation d’un ongle',
     ]);
     expect(names('ESTHETICS')).toEqual([
-      'Soin du visage',
+      'Soin du visage avec masque',
       'Épilation sourcils',
       'Épilation jambes',
       'Soin du corps',
@@ -86,9 +87,11 @@ describe('starter services', () => {
     // Only chemical / resting work is a Technique — a haircut never is.
     expect(getStarterServices('HAIRDRESSING').find((s) => s.name === 'Coloration')?.type).toBe('TECHNIQUE');
     expect(getStarterServices('HAIRDRESSING').find((s) => s.name === 'Coupe femme')?.type).toBe('SERVICE');
-    // Nail work never leaves the client waiting; a facial does (the mask).
-    expect(getStarterServices('NAILS').every((s) => s.type === 'SERVICE')).toBe(true);
-    expect(getStarterServices('ESTHETICS').find((s) => s.name === 'Soin du visage')?.type).toBe('TECHNIQUE');
+    // Nail work keeps the technician busy — only the soak-off leaves the client waiting on
+    // her own; a facial does too (the mask).
+    expect(getStarterServices('NAILS').filter((s) => s.type === 'TECHNIQUE').map((s) => s.key)).toEqual(['soak-off']);
+    expect(getStarterServices('NAILS').find((s) => s.key === 'removal')?.type).toBe('SERVICE');
+    expect(getStarterServices('ESTHETICS').find((s) => s.name === 'Soin du visage avec masque')?.type).toBe('TECHNIQUE');
     expect(getStarterServices('ESTHETICS').filter((s) => s.type === 'TECHNIQUE')).toHaveLength(1);
   });
 
@@ -117,7 +120,7 @@ describe('starter services', () => {
       ...getStarterServices('ESTHETICS'),
     ], identity);
 
-    expect(catalog).toHaveLength(12);
+    expect(catalog).toHaveLength(13);
     for (const service of catalog) {
       const values = toServiceFormValues(service);
       expect(validateServiceForm(values).valid).toBe(true);
@@ -125,11 +128,19 @@ describe('starter services', () => {
         buildServiceFromForm({ id: service.id, businessId: service.businessId, active: service.active, values }),
       ).toEqual(service);
     }
-    const facial = catalog.find((service) => service.name === 'Soin du visage');
-    expect(facial?.phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff])).toEqual([
-      ['Application', 30, true],
+    const timing = (name: string) =>
+      catalog
+        .find((service) => service.name === name)
+        ?.phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff]);
+    expect(timing('Dépose par dissolution')).toEqual([
+      ['Préparation et pose des papillotes', 10, true],
+      ['Temps d’attente', 10, false],
+      ['Retrait et finition', 15, true],
+    ]);
+    expect(timing('Soin du visage avec masque')).toEqual([
+      ['Nettoyage et pose du masque', 20, true],
       ['Temps d’attente', 15, false],
-      ['Finition', 15, true],
+      ['Retrait du masque et finition', 25, true],
     ]);
   });
 

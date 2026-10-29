@@ -156,11 +156,16 @@ the neutral price `0` the professional sets afterwards; they sync like hand-made
 onboarding step is the eligibility boundary: there is NO « catalogue empty → seed » rule, so an
 existing Business (including one being restored on a new, temporarily empty device) never receives
 them. Types follow §3: a SERVICE is one staff-required phase; only work where the client genuinely
-waits with something in place is a TECHNIQUE (Application → Temps de pose → Finition), whatever the
-profession: Coloration, Balayage, Patine and Soin for Coiffure, « Soin du visage » (the mask) for
-Esthétique. Several steps alone never make a Technique — every Onglerie starter (« Pose complète
-gel », « Remplissage gel », « Semi-permanent mains / pieds », « Dépose », « Nail art », « Réparation
-d’un ongle ») is one SERVICE duration. Presets stay short (at most eight), with 5-minute durations
+waits with something in place is a TECHNIQUE (a worked phase → the waiting phase → a worked
+phase), whatever the profession: Coloration, Balayage, Patine and Soin for Coiffure (Application →
+Temps de pose → Finition), « Soin du visage avec masque » for Esthétique (Nettoyage et pose du
+masque 20 min → Temps d’attente 15 min → Retrait du masque et finition 25 min), « Dépose par
+dissolution » for Onglerie (Préparation et pose des papillotes 10 min → Temps d’attente 10 min →
+Retrait et finition 15 min). Their waiting phase is staff-free only because the example genuinely
+lets the professional see someone else (the wraps soak, the mask sets). Several steps alone never
+make a Technique — every other Onglerie starter (« Pose complète gel », « Remplissage gel »,
+« Semi-permanent mains / pieds », « Dépose », « Nail art », « Réparation d’un ongle ») is one
+SERVICE duration. Starters only reach a NEW Business; no existing catalogue changes. Presets stay short (at most eight), with 5-minute durations
 between 15 min and 2 h, and are only proposed for the profession the new Business chose.
 
 ---
@@ -243,8 +248,8 @@ A free name, a price (≥ 0, decimals allowed), a single duration (SERVICE) or o
 ```text
 HAIRDRESSING   Coupe femme · Brushing · Coloration · Balayage · Patine
 NAILS          Pose complète gel · Remplissage gel · Semi-permanent mains · Semi-permanent pieds
-               Dépose · Nail art · Réparation d’un ongle
-ESTHETICS      Soin du visage · Épilation sourcils · Épilation jambes · Soin du corps · Beauté du regard
+               Dépose · Dépose par dissolution · Nail art · Réparation d’un ongle
+ESTHETICS      Soin du visage avec masque · Épilation sourcils · Épilation jambes · Soin du corps · Beauté du regard
 ```
 
 The professional names her prestations freely; no vocabulary is enforced and nothing is renamed.
@@ -272,8 +277,10 @@ colours stay the validated violet (Service) / azure (Technique).
   vernis, capsule, main — never « pose » alone, which also starts hair wording), `HAIR_REMOVAL`
   (épilation, cire), `LASHES_BROWS` (cil, sourcil, regard, rehaussement) and `BODY` (massage,
   modelage, gommage). « Soin » stays the care family unless a body area is named (« Soin du
-  visage » is a face). The name alone decides — the Business activity is never read — and the type
-  fallbacks (scissors / sparkles) are unchanged. A professional category reads through the same
+  visage » is a face). A recognised name always decides. When it tells nothing, the unified
+  catalogue (nails, esthetics) reads the prestation's own category name through the same table,
+  then falls back on the profession's glyph (the hand, the care bubbles) — PROFESSIONS.md §9; the
+  Services / Techniques experience keeps the type fallbacks (scissors / sparkles) unchanged. A professional category reads through the same
   table (`getCategoryVisual`, Catégories screen), with a neutral grid as its fallback.
 - **Name placeholder** (`src/features/services/editor/name-placeholder.ts`): the empty « Nom »
   field suggests an example of the Business activity (« Ex. Coupe », « Ex. Pose complète gel »,

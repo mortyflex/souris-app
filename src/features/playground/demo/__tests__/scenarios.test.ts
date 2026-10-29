@@ -5,7 +5,16 @@ import { isSameLocalDay, startOfLocalDay } from '@/features/agenda/calendar/week
 import { currentStaffMemberId } from '@/features/appointments/current-staff-member';
 import { getStarterServices } from '@/features/business/setup/starter-services';
 
-import { getAppointmentExpectedTotal, getSaleTotalCents } from '@/domain/appointments';
+import {
+  getAppointmentExpectedTotal,
+  getAppointmentStaffBusyIntervals,
+  getElapsedDurationMinutes,
+  getProcessingDurationMinutes,
+  getSaleTotalCents,
+  getStaffActiveDurationMinutes,
+  type Appointment,
+} from '@/domain/appointments';
+import { findAppointmentCalendarBlockConflict } from '@/domain/calendar-blocks';
 
 import { createPlaygroundDemoScenario, getDemoBusinessId } from '../scenarios';
 import { buildDemoScenario } from '../scenarios/scenario';
@@ -91,11 +100,12 @@ describe('Playground demo scenarios', () => {
       'Semi-permanent mains',
       'Semi-permanent pieds',
       'Dépose',
+      'Dépose par dissolution',
       'Nail art',
       'Réparation d’un ongle',
     ]);
     expect(createPlaygroundDemoScenario('ESTHETICS', NOW).seed.services.map((service) => service.name)).toEqual([
-      'Soin du visage',
+      'Soin du visage avec masque',
       'Épilation sourcils',
       'Épilation jambes',
       'Soin du corps',
@@ -417,5 +427,83 @@ describe('Playground demo scenarios', () => {
         /sells products without being done/,
       );
     });
+  });
+});
+
+// Realistic multi-phase examples: one per profession beyond hairdressing, visible in the
+// demo agenda today. Their waiting phase is staff-free (`requiresStaff = false`) because the
+// example genuinely lets the professional see someone else — nothing else changes.
+describe('Playground multi-phase examples (nails, esthetics)', () => {
+  const at = (hour: number, minute: number) => new Date(2027, 2, 10, hour, minute);
+  const appointment = (activityType: 'NAILS' | 'ESTHETICS', key: string): Appointment => {
+    const { business, seed } = createPlaygroundDemoScenario(activityType, NOW);
+    return seed.appointments.find((entry) => entry.id === `${business.id}-appointment-${key}`)!;
+  };
+  const timing = (activityType: 'NAILS' | 'ESTHETICS', key: string) => {
+    const { business, seed } = createPlaygroundDemoScenario(activityType, NOW);
+    const service = seed.services.find((entry) => entry.id === `${business.id}-service-${key}`)!;
+    return { service, phases: service.phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff]) };
+  };
+  const block = (startAt: Date, endAt: Date) => ({
+    id: 'block',
+    businessId: 'any',
+    staffMemberId: currentStaffMemberId,
+    startAt,
+    endAt,
+    reason: 'Pause',
+  });
+
+  it('nails: « Dépose par dissolution » — 10 min active, 10 min waiting, 15 min active, in « Déposes »', () => {
+    const { service, phases } = timing('NAILS', 'soak-off');
+    expect(service.type).toBe('TECHNIQUE');
+    expect(service.price).toBe(20);
+    expect(service.description).toContain('peut s’occuper de quelqu’un d’autre');
+    expect(phases).toEqual([
+      ['Préparation et pose des papillotes', 10, true],
+      ['Temps d’attente', 10, false],
+      ['Retrait et finition', 15, true],
+    ]);
+    const { seed } = createPlaygroundDemoScenario('NAILS', NOW);
+    expect(seed.serviceCategories?.find((category) => category.id === service.categoryId)?.name).toBe('Déposes');
+    // The plain « Dépose » stays one uninterrupted duration.
+    expect(seed.services.find((entry) => entry.name === 'Dépose')?.type).toBe('SERVICE');
+  });
+
+  it('nails: today’s soak-off before a semi-permanent — active, waiting and total durations, and staff-free waiting', () => {
+    const booked = appointment('NAILS', 't6');
+    expect(booked.startAt).toEqual(at(12, 0));
+    expect(getStaffActiveDurationMinutes(booked)).toBe(10 + 15 + 45);
+    expect(getProcessingDurationMinutes(booked)).toBe(10);
+    expect(getElapsedDurationMinutes(booked)).toBe(80);
+    expect(getAppointmentStaffBusyIntervals(booked).map(({ startAt, endAt }) => [startAt, endAt])).toEqual([
+      [at(12, 0), at(12, 10)],
+      [at(12, 20), at(13, 20)],
+    ]);
+    // A block during the waiting time is fine; one over a worked phase is not.
+    expect(findAppointmentCalendarBlockConflict(booked, [block(at(12, 10), at(12, 20))])).toBeUndefined();
+    expect(findAppointmentCalendarBlockConflict(booked, [block(at(12, 5), at(12, 15))])).toBeDefined();
+  });
+
+  it('esthetics: « Soin du visage avec masque » — 20 + 15 waiting + 25 = 1 h, the brow wax booked inside the waiting time', () => {
+    const { service, phases } = timing('ESTHETICS', 'facial');
+    expect(service.name).toBe('Soin du visage avec masque');
+    expect(phases).toEqual([
+      ['Nettoyage et pose du masque', 20, true],
+      ['Temps d’attente', 15, false],
+      ['Retrait du masque et finition', 25, true],
+    ]);
+    const facial = appointment('ESTHETICS', 't1');
+    expect(getStaffActiveDurationMinutes(facial)).toBe(45);
+    expect(getProcessingDurationMinutes(facial)).toBe(15);
+    expect(getElapsedDurationMinutes(facial)).toBe(60);
+    const browWax = appointment('ESTHETICS', 't2');
+    expect(browWax.startAt).toEqual(at(9, 50));
+    expect(getElapsedDurationMinutes(browWax)).toBe(15);
+    // The wax fits the facial's waiting time exactly (9:50 → 10:05): no staff-busy overlap.
+    const facialBusy = getAppointmentStaffBusyIntervals(facial);
+    expect(facialBusy.map(({ startAt, endAt }) => [startAt, endAt])).toEqual([
+      [at(9, 30), at(9, 50)],
+      [at(10, 5), at(10, 30)],
+    ]);
   });
 });

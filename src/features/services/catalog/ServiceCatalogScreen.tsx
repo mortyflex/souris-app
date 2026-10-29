@@ -52,6 +52,10 @@ import {
 } from '@/features/services/catalogue-presentation';
 import { PrestationIcon } from '@/features/services/components/PrestationIcon';
 import {
+  findPrestationCategory,
+  type PrestationVisualContext,
+} from '@/features/services/prestation-visual';
+import {
   formatServiceDuration,
   formatServicePrice,
   getServiceDurationMinutes,
@@ -102,7 +106,7 @@ const ROW_SEPARATOR_INSET = spacing.base + ROW_ICON_SIZE + spacing.md;
 export function ServiceCatalogScreen() {
   const router = useRouter();
   const { services } = useServiceCatalog();
-  const { presentation, categories } = useCatalogueView();
+  const { activityType, presentation, categories } = useCatalogueView();
   const unified = presentation.organization === 'CATEGORIES';
   const [category, setCategory] = useState<ServiceType>('SERVICE');
   const [query, setQuery] = useState('');
@@ -231,6 +235,7 @@ export function ServiceCatalogScreen() {
             onPress={() => openService(item.id)}
             organization={presentation.organization}
             service={item}
+            visualContext={{ activityType, category: findPrestationCategory(item, categories) }}
           />
         )}
         ListEmptyComponent={
@@ -297,12 +302,14 @@ function ServiceCatalogRow({
   last,
   onPress,
   organization,
+  visualContext,
 }: {
   readonly service: Service;
   readonly first: boolean;
   readonly last: boolean;
   readonly onPress: () => void;
   readonly organization: CatalogueOrganization;
+  readonly visualContext: PrestationVisualContext;
 }) {
   const duration = getServiceDurationMinutes(service);
   const processing = getServiceProcessingMinutes(service);
@@ -327,6 +334,7 @@ function ServiceCatalogRow({
         testID={`catalog-service-${service.id}`}
       >
         <PrestationIcon
+          context={visualContext}
           prestation={service}
           size="row"
           testID={`catalog-service-icon-${service.id}`}

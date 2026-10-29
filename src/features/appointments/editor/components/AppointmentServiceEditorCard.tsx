@@ -157,7 +157,7 @@ export function AppointmentServiceEditorCard({
             />
           )}
           <View style={styles.cardCopy}>
-            <AppText variant="control" numberOfLines={1} style={styles.serviceName}>
+            <AppText variant="control" numberOfLines={2} style={styles.serviceName}>
               {draft.serviceName}
             </AppText>
             <AppText variant="metadata" numberOfLines={1} style={styles.serviceMeta}>
@@ -264,12 +264,14 @@ const styles = StyleSheet.create({
   cardCopy: { flex: 1, gap: 2, minWidth: 0 },
   serviceName: { color: semanticColors.foreground },
   serviceMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
+  // A long name wraps (two lines at most); the price and chevron keep their width.
   cardPrice: {
     color: semanticColors.foreground,
+    flexShrink: 0,
     fontVariant: ['tabular-nums'],
     marginLeft: spacing.sm,
   },
-  disclosure: { marginLeft: spacing.sm },
+  disclosure: { flexShrink: 0, marginLeft: spacing.sm },
   expandedPanel: {
     backgroundColor: semanticColors.surfaceElevated,
     borderRadius: radii.medium,

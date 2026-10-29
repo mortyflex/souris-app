@@ -12,8 +12,9 @@
 // first (the validated Production catalogue, unchanged), then nail services,
 // hair removal, lashes & brows and body care — so a nail technician's « Pose
 // complète gel » or an esthetician's « Épilation jambes » is recognised the
-// same way a « Coupe » is. The Business activity is deliberately NOT read:
-// one name always gives one family, whatever the profession.
+// same way a « Coupe » is. A recognised name always gives one family,
+// whatever the profession; the activity only decides what an unrecognised
+// name reads instead (below).
 //
 // The FIRST matching family wins: « Coupe Brushing 1 » is a Coupe. A few
 // words name a body area that no hairdressing prestation uses — the feet, the
@@ -24,6 +25,20 @@
 // nails keep the hand. An unknown name falls back on its type — scissors for
 // a Service, sparkles for a Technique — so the icon area is never empty.
 //
+// Profession- and category-aware (`PrestationVisualContext`), for the unified
+// catalogue (nails, esthetics) only — the priority is deterministic:
+//   1. the prestation's NAME, through the table above;
+//   2. otherwise its professional CATEGORY's name, through the same table
+//      (« French classique » in « Nail art et modèles » → the palette) — the
+//      category is read by id from the Business's own categories
+//      (`findPrestationCategory`), so a renamed category is read under its
+//      current name, and a missing, deleted or foreign one is ignored;
+//   3. otherwise the profession's neutral glyph: the hand for nails, the
+//      care bubbles for esthetics — never scissors.
+// The Services / Techniques experience (hairdressing and every other stored
+// activity) ignores the context: the name, then the type fallback, exactly
+// as before. Nothing is stored.
+//
 // A professional category reads through the same table (`getCategoryVisual`):
 // « Beauté des pieds » and « Semi-permanent pieds » share the foot. An unknown
 // category name falls back on a neutral grid, never on a hairdressing glyph.
@@ -32,7 +47,9 @@
 // by the domain type: violet for a Service, azure for a Technique.
 
 import type { Service, ServiceType } from '@/domain/appointments';
-import type { ServiceCategory } from '@/domain/services';
+import type { BusinessActivityType } from '@/domain/business';
+import { resolveServiceCategory, type ServiceCategory } from '@/domain/services';
+import { getCataloguePresentation } from '@/features/services/catalogue-presentation';
 import type { PlatformSymbolName } from '@/shared/icons/payment-method-icons';
 import { serviceCategoryColors } from '@/shared/ui/theme';
 
@@ -148,12 +165,52 @@ function matchFamily(name: string): PrestationFamily | undefined {
   return match?.[0];
 }
 
-export function getPrestationFamily(prestation: Pick<Service, 'name' | 'type'>): PrestationFamily {
-  return matchFamily(prestation.name) ?? fallbackFamilies[prestation.type];
+/** What the unified catalogue may read beyond the name (presentation only). */
+export interface PrestationVisualContext {
+  readonly activityType: BusinessActivityType;
+  /** The prestation's category, from `findPrestationCategory`; absent when uncategorised. */
+  readonly category?: Pick<ServiceCategory, 'name'>;
 }
 
-export function getPrestationVisual(prestation: Pick<Service, 'name' | 'type'>): PrestationVisual {
-  const family = getPrestationFamily(prestation);
+/** The profession's neutral glyph when neither the name nor the category tells. */
+const professionFallbackFamilies: Partial<Record<BusinessActivityType, PrestationFamily>> = {
+  NAILS: 'NAILS',
+  ESTHETICS: 'CARE',
+};
+
+/**
+ * The prestation's category among the Business's categories: by id, and only
+ * when it belongs to the prestation's own Business. A dangling id (a deleted
+ * category, one not synced yet) gives none.
+ */
+export function findPrestationCategory(
+  prestation: Pick<Service, 'businessId' | 'categoryId'>,
+  categories: readonly ServiceCategory[],
+): ServiceCategory | undefined {
+  const category = resolveServiceCategory(prestation, categories);
+  return category?.businessId === prestation.businessId ? category : undefined;
+}
+
+export function getPrestationFamily(
+  prestation: Pick<Service, 'name' | 'type'>,
+  context?: PrestationVisualContext,
+): PrestationFamily {
+  const named = matchFamily(prestation.name);
+  if (named) return named;
+  if (context && getCataloguePresentation(context.activityType).organization === 'CATEGORIES') {
+    const categorised = context.category && matchFamily(context.category.name);
+    if (categorised) return categorised;
+    const professional = professionFallbackFamilies[context.activityType];
+    if (professional) return professional;
+  }
+  return fallbackFamilies[prestation.type];
+}
+
+export function getPrestationVisual(
+  prestation: Pick<Service, 'name' | 'type'>,
+  context?: PrestationVisualContext,
+): PrestationVisual {
+  const family = getPrestationFamily(prestation, context);
   const colors = serviceCategoryColors[prestation.type];
   return {
     family,

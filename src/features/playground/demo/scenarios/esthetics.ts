@@ -2,9 +2,10 @@
 //
 // A fictional beauty institute: botanical surnames, a « Démo » business. The
 // catalogue is the ESTHETICS onboarding base, priced: the facial is the one
-// TECHNIQUE (Application → Temps d’attente → Finition — the mask sets while the
-// professional is free), waxing, body treatment and eye beauty are SERVICES.
-// Today's planning books a brow wax DURING a facial's pose.
+// TECHNIQUE (« Soin du visage avec masque »: 20 min cleansing and mask, 15 min
+// Temps d’attente while the mask sets and the professional is free, 25 min
+// removal and finishing — 1 h), waxing, body treatment and eye beauty are
+// SERVICES. Today's planning books a brow wax DURING the facial's waiting time.
 //
 // Retail (Step B2): face and body care from a fictional « Marque Démo » — a
 // cleanser, a moisturiser, a serum, body care; one product is inactive.
@@ -40,7 +41,8 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
     'eye-beauty': 'eyes',
   },
   descriptions: {
-    facial: 'Nettoyage, gommage, masque adapté à votre peau et massage.\nVenir sans maquillage si possible.',
+    facial:
+      'Nettoyage, masque adapté à votre peau, puis retrait, massage et finition.\nPendant le temps d’attente du masque, la professionnelle peut s’occuper de quelqu’un d’autre.\nVenir sans maquillage si possible.',
     'leg-wax': 'Jambes complètes. Éviter le soleil et le gommage 24 h avant.',
     'eye-beauty': 'Teinture des cils et des sourcils, restructuration incluse.',
   },
@@ -145,9 +147,9 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
       products: [{ product: 'cleanser', quantity: 1 }],
     },
     { key: 'h8', client: 'maya', services: ['brow-wax'], dayOffset: -1, hour: 16, minute: 30, outcome: 'PAID', paidBy: 'CASH' },
-    // Today: a facial at 9:30 whose mask pose frees the professional for a brow wax at 10:15.
+    // Today: a facial at 9:30 whose mask (9:50 → 10:05) frees the professional for a brow wax at 9:50.
     { key: 't1', client: 'maya', services: ['facial'], dayOffset: 0, hour: 9, minute: 30, outcome: 'CONFIRMED' },
-    { key: 't2', client: 'nour', services: ['brow-wax'], dayOffset: 0, hour: 10, minute: 15, outcome: 'SCHEDULED' },
+    { key: 't2', client: 'nour', services: ['brow-wax'], dayOffset: 0, hour: 9, minute: 50, outcome: 'SCHEDULED' },
     { key: 't3', client: 'jade', services: ['leg-wax'], dayOffset: 0, hour: 11, minute: 30, outcome: 'SCHEDULED' },
     {
       key: 't4',

@@ -12,6 +12,11 @@
 // `ServiceCategoryIcon` is the same tile for a professional category, from
 // the same mapping (`getCategoryVisual`), so « Beauté des pieds » and its
 // « Semi-permanent pieds » carry the same foot.
+//
+// `context` (the Business activity and the prestation's own category) lets
+// the unified catalogue fall back on the category, then on the profession's
+// glyph, when the name tells nothing; without it the icon reads the name and
+// the type only, as the Services / Techniques experience always has.
 
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
@@ -20,7 +25,12 @@ import type { Service } from '@/domain/appointments';
 import type { ServiceCategory } from '@/domain/services';
 import { radii } from '@/shared/ui/theme';
 
-import { getCategoryVisual, getPrestationVisual, type PrestationVisual } from '../prestation-visual';
+import {
+  getCategoryVisual,
+  getPrestationVisual,
+  type PrestationVisual,
+  type PrestationVisualContext,
+} from '../prestation-visual';
 
 export type PrestationIconSize = 'detail' | 'row';
 
@@ -31,16 +41,18 @@ const tileSizes: Record<PrestationIconSize, { readonly tile: number; readonly gl
 
 interface PrestationIconProps {
   readonly prestation: Pick<Service, 'name' | 'type'>;
+  readonly context?: PrestationVisualContext;
   readonly size?: PrestationIconSize;
   readonly testID?: string;
 }
 
 export function PrestationIcon({
   prestation,
+  context,
   size = 'detail',
   testID = 'prestation-icon',
 }: PrestationIconProps) {
-  return <PictogramTile size={size} testID={testID} visual={getPrestationVisual(prestation)} />;
+  return <PictogramTile size={size} testID={testID} visual={getPrestationVisual(prestation, context)} />;
 }
 
 export function ServiceCategoryIcon({

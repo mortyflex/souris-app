@@ -53,11 +53,20 @@ function service(key: string, name: string, durationMinutes: number): StarterSer
   return { key, name, type: 'SERVICE', phases: [{ name, durationMinutes, requiresStaff: true }] };
 }
 
+/** The worked phases around the waiting one; « Application » / « Finition » unless named. */
+interface TechniquePhaseNames {
+  readonly application: string;
+  readonly finishing: string;
+}
+
+const DEFAULT_PHASE_NAMES: TechniquePhaseNames = { application: 'Application', finishing: 'Finition' };
+
 function technique(
   activityType: BusinessActivityType,
   key: string,
   name: string,
   timing: { readonly application: number; readonly processing: number; readonly finishing: number },
+  phaseNames: TechniquePhaseNames = DEFAULT_PHASE_NAMES,
 ): StarterService {
   const waitingPhaseName = getWaitingPhaseName(getCataloguePresentation(activityType).organization);
   return {
@@ -65,9 +74,9 @@ function technique(
     name,
     type: 'TECHNIQUE',
     phases: [
-      { name: 'Application', durationMinutes: timing.application, requiresStaff: true },
+      { name: phaseNames.application, durationMinutes: timing.application, requiresStaff: true },
       { name: waitingPhaseName, durationMinutes: timing.processing, requiresStaff: false },
-      { name: 'Finition', durationMinutes: timing.finishing, requiresStaff: true },
+      { name: phaseNames.finishing, durationMinutes: timing.finishing, requiresStaff: true },
     ],
   };
 }
@@ -84,20 +93,36 @@ const presets: Record<BusinessActivityType, readonly StarterService[]> = {
     technique('HAIRDRESSING', 'care', 'Soin', { application: 10, processing: 15, finishing: 15 }),
   ],
   // Nail work keeps the technician with the client from start to finish (a
-  // lamp cure lasts seconds): every starter is a SERVICE with one duration.
+  // lamp cure lasts seconds): every starter is a SERVICE with one duration —
+  // except the soak-off removal, the one method where the client genuinely
+  // waits on her own (the wraps soak; the technician may see someone else).
   NAILS: [
     service('gel-full-set', 'Pose complète gel', 90),
     service('gel-infill', 'Remplissage gel', 75),
     service('semi-permanent-hands', 'Semi-permanent mains', 45),
     service('semi-permanent-feet', 'Semi-permanent pieds', 45),
     service('removal', 'Dépose', 30),
+    technique(
+      'NAILS',
+      'soak-off',
+      'Dépose par dissolution',
+      { application: 10, processing: 10, finishing: 15 },
+      { application: 'Préparation et pose des papillotes', finishing: 'Retrait et finition' },
+    ),
     service('nail-art', 'Nail art', 15),
     service('nail-repair', 'Réparation d’un ongle', 15),
   ],
   // A facial is the one esthetics starter where the client genuinely waits
-  // with something in place (the mask): Application → Temps d’attente → Finition.
+  // with something in place (the mask, while the esthetician may see someone
+  // else): cleansing and mask → Temps d’attente → removal and finishing.
   ESTHETICS: [
-    technique('ESTHETICS', 'facial', 'Soin du visage', { application: 30, processing: 15, finishing: 15 }),
+    technique(
+      'ESTHETICS',
+      'facial',
+      'Soin du visage avec masque',
+      { application: 20, processing: 15, finishing: 25 },
+      { application: 'Nettoyage et pose du masque', finishing: 'Retrait du masque et finition' },
+    ),
     service('brow-wax', 'Épilation sourcils', 15),
     service('leg-wax', 'Épilation jambes', 30),
     service('body-treatment', 'Soin du corps', 60),

@@ -309,3 +309,37 @@ describe('waiting-phase names', () => {
     expect(getPhaseDisplayName({ name: 'Pose complète gel', requiresStaff: true }, 'CATEGORIES')).toBe('Pose complète gel');
   });
 });
+
+// Final UX: a long prestation name wraps on two lines in the Résumé / Modifier card; its
+// duration, price and chevron keep their width, and the timing rows wrap the same way.
+describe('AppointmentServiceEditorCard — long names', () => {
+  it('wraps the name and the phase names on two lines, the price never shrinks', async () => {
+    const long: Service = {
+      ...facial,
+      name: 'Soin du visage avec masque hydratant, modelage relaxant et finition éclat sur mesure',
+      phases: [
+        { id: 'long-a', name: 'Nettoyage, gommage et pose du masque hydratant', durationMinutes: 20, requiresStaff: true },
+        { id: 'long-w', name: 'Temps d’attente', durationMinutes: 15, requiresStaff: false },
+        { id: 'long-f', name: 'Retrait du masque et finition', durationMinutes: 25, requiresStaff: true },
+      ],
+    };
+    const draft = createSelectedServiceDraft(long);
+    const view = await render(
+      <AppointmentServiceEditorCard
+        draft={draft}
+        expanded
+        grouped
+        onToggleExpanded={jest.fn()}
+        onUpdatePhaseDuration={jest.fn()}
+        onUpdatePrice={jest.fn()}
+        organization="CATEGORIES"
+      />,
+    );
+    expect(view.getByText(long.name).props.numberOfLines).toBe(2);
+    expect(view.getByText('45 min + 15 min d’attente')).toBeTruthy();
+    expect(StyleSheet.flatten(view.getByText(formatCreationPrice(65)).props.style).flexShrink).toBe(0);
+    expect(view.getByText('Nettoyage, gommage et pose du masque hydratant').props.numberOfLines).toBe(2);
+    // The total stays the snapshot's: 20 + 15 + 25.
+    expect(draft.phases.reduce((total, phase) => total + phase.durationMinutes, 0)).toBe(60);
+  });
+});

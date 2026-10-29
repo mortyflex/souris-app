@@ -29,7 +29,15 @@ jest.mock('expo-router', () => ({
   },
   useRouter: () => ({ push: mockPush, back: mockBack }),
 }));
-jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+// The glyph is exposed by name so the icon a row resolves can be checked.
+jest.mock('expo-symbols', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
+  return {
+    SymbolView: ({ name }: { readonly name: string | { readonly ios: string } }) =>
+      React.createElement(View, { testID: `symbol-${typeof name === 'string' ? name : name.ios}` }),
+  };
+});
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -211,6 +219,43 @@ describe('Prestations & tarifs', () => {
     expect(view.getAllByText('Coupes').length).toBeGreaterThan(0);
     expect(view.getByText('Sans catégorie')).toBeTruthy();
     expect(view.queryByText('Services')).not.toBeNull(); // the segment option
+  });
+});
+
+describe('prestation icons in Prestations & tarifs', () => {
+  const glyph = (view: Awaited<ReturnType<typeof render>>, serviceId: string, symbol: string) =>
+    within(view.getByTestId(`catalog-service-icon-${serviceId}`, { includeHiddenElements: true })).queryByTestId(
+      `symbol-${symbol}`,
+      { includeHiddenElements: true },
+    );
+
+  it('nails: « French classique » takes its category’s palette; an unknown, uncategorised name the hand', async () => {
+    const art = category('cat-art', 'Nail art et modèles', 0);
+    const view = await renderWith(
+      'NAILS',
+      <ServiceCatalogScreen />,
+      [
+        service('french', 'French classique', { categoryId: 'cat-art' }),
+        service('custom', 'Création sur mesure'),
+        service('soak', 'Dépose par dissolution', { categoryId: 'cat-art' }),
+      ],
+      [art],
+    );
+    expect(glyph(view, 'french', 'paintpalette')).toBeTruthy();
+    expect(glyph(view, 'french', 'scissors')).toBeNull();
+    expect(glyph(view, 'custom', 'hand.raised')).toBeTruthy();
+    // The name still decides first.
+    expect(glyph(view, 'soak', 'eraser')).toBeTruthy();
+  });
+
+  it('hairdressing: an unknown name keeps the scissors, whatever its category', async () => {
+    const view = await renderWith(
+      'HAIRDRESSING',
+      <ServiceCatalogScreen />,
+      [service('ombre', 'Ombré', { categoryId: 'cat-art' })],
+      [category('cat-art', 'Nail art et modèles', 0)],
+    );
+    expect(glyph(view, 'ombre', 'scissors')).toBeTruthy();
   });
 });
 

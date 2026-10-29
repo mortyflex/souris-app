@@ -43,8 +43,8 @@ import {
 } from "react-native";
 
 import type { Service, ServiceType } from "@/domain/appointments";
+import type { BusinessActivityType } from "@/domain/business";
 import {
-  resolveServiceCategory,
   SERVICE_DESCRIPTION_MAX_LENGTH,
   type ServiceCategory,
 } from "@/domain/services";
@@ -66,6 +66,7 @@ import {
 } from "@/features/services/presentation";
 import { useServiceCatalog } from "@/features/services/session/ServiceCatalogProvider";
 import { PrestationIcon } from "@/features/services/components/PrestationIcon";
+import { findPrestationCategory } from "@/features/services/prestation-visual";
 import { alertPersistenceFailure } from "@/providers/persistence-failure";
 import { haptics } from "@/shared/lib/haptics";
 import { AppButton } from "@/shared/ui/AppButton";
@@ -474,7 +475,8 @@ export function ServiceEditorScreen({
         />
       ) : service ? (
         <ServiceReadView
-          category={resolveServiceCategory(service, categories)}
+          activityType={business.activityType}
+          category={findPrestationCategory(service, categories)}
           presentation={presentation}
           service={service}
         />
@@ -874,7 +876,9 @@ function ServiceReadView({
   service,
   category: professionalCategory,
   presentation,
+  activityType,
 }: {
+  readonly activityType: BusinessActivityType;
   readonly service: Service;
   /** The professional's category, when the Service has a known one. */
   readonly category: ServiceCategory | undefined;
@@ -899,7 +903,11 @@ function ServiceReadView({
     >
       {/* Identity: the decorative family pictogram, then price and pills. */}
       <View style={styles.identity} testID="service-identity">
-        <PrestationIcon prestation={service} testID="service-family-icon" />
+        <PrestationIcon
+          context={{ activityType, category: professionalCategory }}
+          prestation={service}
+          testID="service-family-icon"
+        />
         <View style={styles.summary} testID="service-summary">
           <AppText
             accessibilityLabel={`Prix, ${price}`}

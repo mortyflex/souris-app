@@ -1,5 +1,6 @@
 // BeautIzzy — the catalogue organisation of the current Business (presentation only)
 
+import type { BusinessActivityType } from '@/domain/business';
 import type { ServiceCategory } from '@/domain/services';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
@@ -7,6 +8,7 @@ import { useServiceCatalog } from '@/features/services/session/ServiceCatalogPro
 import { getCataloguePresentation, type CataloguePresentation } from './catalogue-presentation';
 
 export interface CatalogueView {
+  readonly activityType: BusinessActivityType;
   readonly presentation: CataloguePresentation;
   readonly categories: readonly ServiceCategory[];
 }
@@ -15,5 +17,9 @@ export interface CatalogueView {
 export function useCatalogueView(): CatalogueView {
   const business = useCurrentBusiness();
   const { categories } = useServiceCatalog();
-  return { presentation: getCataloguePresentation(business.activityType), categories };
+  return {
+    activityType: business.activityType,
+    presentation: getCataloguePresentation(business.activityType),
+    categories,
+  };
 }

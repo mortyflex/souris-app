@@ -10,8 +10,9 @@
 // must never touch throw on load. Step 5 adds the catalogue and the prestation
 // editor of the same demos.
 
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { useEffect, useState, type ReactNode } from 'react';
+import { StyleSheet } from 'react-native';
 
 import { getAppointmentServicesTotal, type Appointment, type Service } from '@/domain/appointments';
 import { AppointmentCreationScreen } from '@/features/appointments/creation/AppointmentCreationScreen';
@@ -367,7 +368,7 @@ describe('Playground Step 4 — esthetics: « Modifier le rendez-vous » and Det
     const saved = findAppointment(id);
     expect(saved.items[0]).toEqual(facialItem);
     expect(saved.items[0].price).toBe(65);
-    expect(saved.items.map((item) => item.serviceName)).toEqual(['Soin du visage', 'Épilation sourcils']);
+    expect(saved.items.map((item) => item.serviceName)).toEqual(['Soin du visage avec masque', 'Épilation sourcils']);
     const browWax = probe.current!.getServiceById(serviceId(scenario, 'brow-wax'))!;
     expect(saved.items[1]).toMatchObject({ serviceId: browWax.id, serviceName: browWax.name, price: 12, serviceType: 'SERVICE', order: 1 });
     expect(saved.items[1].phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff])).toEqual(
@@ -402,7 +403,7 @@ describe('Playground Step 4 — esthetics: « Modifier le rendez-vous » and Det
     ));
     const [facialItem] = findAppointment(appointmentId(scenario, 'f2')).items;
     await act(async () => {
-      fireEvent.press(view.getByLabelText(/^Soin du visage, commence à/));
+      fireEvent.press(view.getByLabelText(/^Soin du visage avec masque, commence à/));
     });
     expect(view.getByText('Temps d’attente')).toBeTruthy();
     expect(view.queryByText('Temps de pose')).toBeNull();
@@ -411,9 +412,9 @@ describe('Playground Step 4 — esthetics: « Modifier le rendez-vous » and Det
     // The demo facial comes from the esthetics starter base, so its snapshot carries
     // the new default name — shown as stored, nothing rewritten.
     expect(facialItem.phases.map((phase) => [phase.name, phase.requiresStaff])).toEqual([
-      ['Application', true],
+      ['Nettoyage et pose du masque', true],
       ['Temps d’attente', false],
-      ['Finition', true],
+      ['Retrait du masque et finition', true],
     ]);
   });
 });
@@ -489,5 +490,30 @@ describe('Playground Step 5 — waiting-phase terminology in the catalogue and t
     expect(view.getByTestId('service-processing')).toBeTruthy();
     expect(view.getAllByText('Temps d’attente').length).toBeGreaterThanOrEqual(3);
     expect(view.queryByText(/Temps de pose|Technique/)).toBeNull();
+  });
+});
+
+// Final UX: long prestation names wrap instead of being cut, while the time, the price and
+// the chevron keep their place; the nails soak-off example is booked today.
+describe('Playground — long prestation names in appointment Details', () => {
+  it('nails: « Dépose par dissolution » and its phases wrap on two lines; time and price never shrink', async () => {
+    const { view, scenario } = await renderDemo('NAILS', (data) => (
+      <AppointmentDetailsScreen appointmentId={`${data.business.id}-appointment-t6`} />
+    ));
+    const [soakOff, semi] = findAppointment(appointmentId(scenario, 't6')).items;
+    expect([soakOff!.serviceName, semi!.serviceName]).toEqual(['Dépose par dissolution', 'Semi-permanent mains']);
+
+    const section = within(view.getByTestId(`service-section-${soakOff!.id}`));
+    expect(section.getByText('Dépose par dissolution').props.numberOfLines).toBe(2);
+    expect(StyleSheet.flatten(section.getByText('12:00').props.style).flexShrink).toBe(0);
+    expect(StyleSheet.flatten(section.getByText(/€/).props.style).flexShrink).toBe(0);
+    expect(section.getByText('35 min · 3 phases')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText(/^Dépose par dissolution, commence à/));
+    });
+    expect(section.getByText('Préparation et pose des papillotes').props.numberOfLines).toBe(2);
+    expect(section.getByText('Temps d’attente')).toBeTruthy();
+    expect(section.getByText('Retrait et finition')).toBeTruthy();
   });
 });

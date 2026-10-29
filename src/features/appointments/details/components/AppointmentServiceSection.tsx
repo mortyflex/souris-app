@@ -142,7 +142,7 @@ export function AppointmentServiceSection({
         {formatAppointmentTime(timelineItem.startAt)}
       </AppText>
       <View style={styles.titleBody}>
-        <AppText variant="control" numberOfLines={1} selectable style={styles.serviceName}>
+        <AppText variant="control" numberOfLines={2} selectable style={styles.serviceName}>
           {item.serviceName}
         </AppText>
         <AppText variant="metadata" style={styles.serviceMeta} testID={`service-meta-${item.id}`}>
@@ -272,15 +272,22 @@ const styles = StyleSheet.create({
   time: {
     color: semanticColors.accent,
     fontVariant: ['tabular-nums'],
+    flexShrink: 0,
     marginRight: spacing.sm,
     width: TIME_COLUMN_WIDTH,
   },
   titleBody: { flex: 1, gap: 2, minWidth: 0 },
   serviceName: { color: semanticColors.foreground },
   serviceMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
-  price: { color: semanticColors.foreground, fontVariant: ['tabular-nums'], marginLeft: spacing.sm },
-  chevron: { marginLeft: spacing.xs },
-  chevronSlot: { marginLeft: spacing.xs, width: 24 },
+  // A long name wraps (two lines at most); the time, price and chevron keep their width.
+  price: {
+    color: semanticColors.foreground,
+    flexShrink: 0,
+    fontVariant: ['tabular-nums'],
+    marginLeft: spacing.sm,
+  },
+  chevron: { flexShrink: 0, marginLeft: spacing.xs },
+  chevronSlot: { flexShrink: 0, marginLeft: spacing.xs, width: 24 },
   expandedBody: { paddingBottom: spacing.sm, paddingHorizontal: spacing.sm },
   timingBody: {
     gap: spacing.sm,
