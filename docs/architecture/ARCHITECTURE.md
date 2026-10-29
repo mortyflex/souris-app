@@ -265,6 +265,14 @@ supported retail formats, torch presentation, and the one-result-per-opening loc
 the scanned string through a callback. It imports no Product catalog, routing, stock, or Sales state;
 Product-specific exact lookup and navigation remain under `src/features/products`.
 
+`FormScrollView` is the ONE scroll container of forms (`src/shared/ui/FormScrollView.tsx`): a
+ScrollView that keeps the focused input visible above the keyboard from measured geometry only
+(`keyboard-visibility.ts` holds the pure rule, `form-scroll-geometry.ts` the two native
+measurements). The sheet shells keep lifting their fixed actions (`KeyboardAvoidingView` on iOS,
+the window resize on Android); the form scroll only moves its own offset once that layout has
+settled. Screens never add keyboard code of their own: they use `FormScrollView` and the shared
+`TextField`, or call `useFormScrollView().revealFocusedInput()` from a raw input's `onFocus`.
+
 `PhotoSourceFlow` is the reusable photo-selection boundary shared by Product and Client photos:
 source sheet (`PhotoSourceSheet`), camera permission resolved on the « Prendre une photo » tap
 (`src/shared/lib/photo-acquisition.ts`), the photo camera (`PhotoCameraModal`) and the system

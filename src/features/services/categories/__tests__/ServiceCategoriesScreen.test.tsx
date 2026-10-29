@@ -16,6 +16,9 @@ import type { FirstRunSeed } from '@/persistence/seed';
 import { TestPersistenceProvider, testBusiness } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
 import { settleFloatingReveal } from '@/shared/ui/testing/sheet-transitions';
+import { FORM_SCROLL_REVEAL_MARGIN } from '@/shared/ui/FormScrollView';
+import { scrollToMock, settleFormScroll, stageFocusedInput } from '@/shared/ui/testing/form-scroll';
+import { captureKeyboardEvents } from '@/shared/ui/testing/sheet-keyboard';
 
 import { ServiceCategoriesScreen } from '../ServiceCategoriesScreen';
 
@@ -83,6 +86,8 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () =>
   jest.requireActual('@/shared/ui/testing/mock-reanimated-swipeable'),
 );
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+// Jest lays nothing out: the keyboard test states the geometry itself.
+jest.mock('@/shared/ui/form-scroll-geometry');
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -377,5 +382,35 @@ describe('Catégories screen', () => {
       view.getByText('Créez votre première catégorie avec le bouton +, par exemple « Extensions et poses en gel ».'),
     ).toBeTruthy();
     expect(view.queryByTestId('service-categories-list')).toBeNull();
+  });
+});
+
+describe('Catégories screen — keyboard', () => {
+  it('keeps the inline category name visible above the keyboard; « + » still brings the card into view', async () => {
+    const keyboard = captureKeyboardEvents();
+    scrollToMock().mockClear();
+    const view = await renderScreen();
+    await settleFloatingReveal();
+    await press(view.getByTestId('service-categories-add'));
+    // The card sits at the top of the list: the screen scrolls there through the form's ref.
+    expect(scrollToMock()).toHaveBeenCalledWith({ y: 0, animated: true });
+    scrollToMock().mockClear();
+
+    // A page without a keyboard-avoiding shell: the scroll runs to the window
+    // bottom (820) and the test keyboard top is at 500 → 320 pt covered.
+    const staged = stageFocusedInput({ viewport: { top: 120, height: 700 }, input: { top: 620, height: 44 } });
+    await act(async () => fireEvent(view.getByTestId('service-category-new-name'), 'focus'));
+    await keyboard.show();
+    await settleFormScroll();
+
+    expect(view.getByTestId('form-scroll-keyboard-spacer')).toHaveStyle({ height: 320 });
+    expect(scrollToMock()).toHaveBeenCalledWith({ y: 664 + FORM_SCROLL_REVEAL_MARGIN - 380, animated: true });
+    await type(view.getByTestId('service-category-new-name'), 'Remplissages');
+    expect(view.getByTestId('service-category-new-name').props.value).toBe('Remplissages');
+
+    await keyboard.hide();
+    expect(view.queryByTestId('form-scroll-keyboard-spacer')).toBeNull();
+    staged.restore();
+    keyboard.restore();
   });
 });

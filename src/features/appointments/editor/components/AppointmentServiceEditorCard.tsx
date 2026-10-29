@@ -34,6 +34,7 @@ import Animated, {
 import { getAppointmentWording } from '@/features/services/catalogue-presentation';
 import { AppText } from '@/shared/ui/AppText';
 import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
+import { useFormScrollView } from '@/shared/ui/FormScrollView';
 import {
   duration,
   easing,
@@ -78,6 +79,8 @@ export function AppointmentServiceEditorCard({
   const [priceText, setPriceText] = useState(() => formatPriceInput(draft.price));
   const [priceInvalid, setPriceInvalid] = useState(false);
   const [priceFocused, setPriceFocused] = useState(false);
+  // An expanded card may sit low in the list: the form keeps the price visible above the keyboard.
+  const formScroll = useFormScrollView();
   const reducedMotion = useReducedMotion();
 
   const layoutTransition = useMemo(
@@ -195,7 +198,10 @@ export function AppointmentServiceEditorCard({
                   keyboardType="decimal-pad"
                   onBlur={handlePriceBlur}
                   onChangeText={handlePriceChange}
-                  onFocus={() => setPriceFocused(true)}
+                  onFocus={() => {
+                    setPriceFocused(true);
+                    formScroll?.revealFocusedInput();
+                  }}
                   selectTextOnFocus
                   style={styles.input}
                   value={priceText}

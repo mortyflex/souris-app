@@ -6,11 +6,12 @@
 // while the field is blank and sits in a fixed footer, reachable above the
 // keyboard whatever the length of the pasted list.
 
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { FormScrollView } from '@/shared/ui/FormScrollView';
 import { GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { TextField } from '@/shared/ui/TextField';
 import { spacing } from '@/shared/ui/theme';
@@ -34,7 +35,7 @@ export function ClientImportPasteStep({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.fill}
     >
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.content}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
@@ -63,7 +64,7 @@ export function ClientImportPasteStep({
             {'Sophie Martin 06 12 34 56 78\nNadia 07 45 67 89 12'}
           </AppText>
         </GroupedSurface>
-      </ScrollView>
+      </FormScrollView>
       <SafeAreaView edges={['bottom']} style={styles.footer}>
         <AppButton
           disabled={text.trim().length === 0}

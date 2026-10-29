@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
+import { useFormScrollView } from '@/shared/ui/FormScrollView';
 import { fontFamilies, radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 /**
@@ -82,6 +83,8 @@ export function TextField({
   testID,
 }: TextFieldProps) {
   const [focused, setFocused] = useState(false);
+  // Inside a FormScrollView, taking focus keeps the field visible above the keyboard.
+  const formScroll = useFormScrollView();
 
   return (
     <View style={styles.field}>
@@ -109,7 +112,10 @@ export function TextField({
           multiline={multiline}
           onBlur={() => setFocused(false)}
           onChangeText={onChangeText}
-          onFocus={() => setFocused(true)}
+          onFocus={() => {
+            setFocused(true);
+            formScroll?.revealFocusedInput();
+          }}
           onSubmitEditing={onSubmitEditing}
           placeholder={placeholder}
           placeholderTextColor={semanticColors.foregroundMuted}

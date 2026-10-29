@@ -39,6 +39,7 @@ import { haptics } from '@/shared/lib/haptics';
 import { formatCentsAsInput, formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
 import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
+import { useFormScrollView } from '@/shared/ui/FormScrollView';
 import { KeyboardDismissAccessory } from '@/shared/ui/KeyboardDismissAccessory';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import {
@@ -101,6 +102,8 @@ export function formatCreationDepositAccessibilityLabel(state: CreationDepositSt
 export function CreationDepositEditor({ draft, state, onChange }: CreationDepositEditorProps) {
   const [expanded, setExpanded] = useState(draft !== undefined);
   const keyboardAccessoryID = useId();
+  // The entry sits low on the Résumé: the form keeps it visible above the keyboard.
+  const formScroll = useFormScrollView();
   const method = draft?.paymentMethod ?? 'CARD';
   const amountText = draft?.amountText ?? '';
   const { form, position } = state;
@@ -222,6 +225,7 @@ export function CreationDepositEditor({ draft, state, onChange }: CreationDeposi
                 inputAccessoryViewID={keyboardAccessoryID}
                 keyboardType="decimal-pad"
                 onChangeText={typeAmount}
+                onFocus={() => formScroll?.revealFocusedInput()}
                 placeholder="0,00"
                 placeholderTextColor={semanticColors.foregroundMuted}
                 returnKeyType="done"

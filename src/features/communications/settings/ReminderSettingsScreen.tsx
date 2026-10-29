@@ -19,7 +19,7 @@
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isUsableCommunicationEmail } from '@/domain/communications';
@@ -27,6 +27,7 @@ import { useAuth } from '@/features/auth/session/AuthProvider';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { FormScrollView } from '@/shared/ui/FormScrollView';
 import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
 import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { GroupedReadRow } from '@/shared/ui/GroupedReadRow';
@@ -142,7 +143,7 @@ export function ReminderSettingsScreen() {
         <View style={styles.topBarSpacer} />
       </View>
 
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -214,7 +215,7 @@ export function ReminderSettingsScreen() {
             {failure}
           </AppText>
         )}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

@@ -570,6 +570,15 @@ Plus › Compte sheet (drawers) and the permanent Client deletion dialog (confir
 - **Keyboard** — presenting a drawer, form or sheet NEVER opens the keyboard: no `autoFocus`,
   no imperative focus. The keyboard opens only when a field is tapped; the focused field stays
   visible inside the bounded, keyboard-safe scroll (`keyboardShouldPersistTaps="handled"`).
+  Every form scrolls in the shared `FormScrollView` (the sheet body of `scrollable` sheets, the
+  onboarding frame, the Prestation / Product / Appointment forms, the inline category card): once
+  the shell has lifted or shrunk the body, it measures the focused field and scrolls JUST enough
+  to keep it above the keyboard with one `spacing.xl` margin — nothing moves when the field is
+  already visible, a growing multiline field is followed under the caret, a page without a
+  keyboard-avoiding shell gets a trailing spacer as tall as the overlap, and closing the keyboard
+  never leaves a blank area. Fields report their focus through `useFormScrollView` (the shared
+  `TextField` does; a raw `TextInput` opts in with one `onFocus` line). The professional never
+  scrolls by hand to see what she types.
 
 ### Confirmation dialog (`src/shared/ui/ConfirmationDialog.tsx`)
 

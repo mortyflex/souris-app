@@ -34,7 +34,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import {
   areAppointmentDiscountsEqual,
@@ -72,6 +72,7 @@ import { formatEuroCents } from '@/shared/lib/money';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
+import { FormScrollView } from '@/shared/ui/FormScrollView';
 import { GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SheetActionBar } from '@/shared/ui/SheetActionBar';
@@ -322,7 +323,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
         />
       </View>
 
-      <ScrollView
+      <FormScrollView
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -411,7 +412,7 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
             onSelectService={addServiceImmediately}
           />
         </View>
-      </ScrollView>
+      </FormScrollView>
 
       <SheetActionBar style={styles.footer} testID="appointment-edit-footer">
         {blockInTheWay && (

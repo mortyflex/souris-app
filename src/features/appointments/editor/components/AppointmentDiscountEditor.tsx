@@ -58,6 +58,7 @@ import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
 import { DisclosureChevron } from '@/shared/ui/DisclosureChevron';
+import { useFormScrollView } from '@/shared/ui/FormScrollView';
 import { KeyboardDismissAccessory } from '@/shared/ui/KeyboardDismissAccessory';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
 import {
@@ -147,6 +148,8 @@ export function AppointmentDiscountEditor({
   // leaves it empty. Kept as typed so `7,` survives until the next digit.
   const [entryText, setEntryText] = useState(() => formatDiscountEntryText(discount, mode));
   const keyboardAccessoryID = useId();
+  // The entry sits low on the Résumé: the form keeps it visible above the keyboard.
+  const formScroll = useFormScrollView();
   const summary = formatDiscountSummary(discount, servicesTotal.discountCents);
   const entry = deriveDiscountEntryState(mode, entryText);
   const copy = entryCopy[mode];
@@ -273,6 +276,7 @@ export function AppointmentDiscountEditor({
                 keyboardType={copy.keyboardType}
                 maxLength={DISCOUNT_ENTRY_MAX_LENGTH[mode]}
                 onChangeText={typeEntry}
+                onFocus={() => formScroll?.revealFocusedInput()}
                 placeholder={copy.placeholder}
                 placeholderTextColor={semanticColors.foregroundMuted}
                 returnKeyType="done"

@@ -77,6 +77,7 @@ import {
   type DetailAction,
 } from "@/shared/ui/DetailActionsSheet";
 import { DetailSheetHeader } from "@/shared/ui/DetailSheetHeader";
+import { FormScrollView } from "@/shared/ui/FormScrollView";
 import {
   GROUPED_READ_ROW_SEPARATOR_INSET,
   GroupedReadRow,
@@ -767,12 +768,13 @@ function ServiceForm({
   );
 
   return (
-    <ScrollView
+    <FormScrollView
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.formContent}
       style={styles.scroll}
+      testID="service-form-scroll"
     >
       <View style={styles.formSection} testID="service-form-information">
         {/* The type is chosen at creation and never edited: a read-only pill in
@@ -868,7 +870,7 @@ function ServiceForm({
             )}
         </View>
       )}
-    </ScrollView>
+    </FormScrollView>
   );
 }
 

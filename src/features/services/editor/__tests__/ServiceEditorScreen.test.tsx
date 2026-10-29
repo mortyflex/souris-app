@@ -12,6 +12,9 @@ import {
 } from "@/providers/testing/TestPersistenceProvider";
 import { serviceCategoryColors } from "@/shared/ui/theme";
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
+import { FORM_SCROLL_REVEAL_MARGIN } from "@/shared/ui/FormScrollView";
+import { scrollToMock, settleFormScroll, stageFocusedInput } from "@/shared/ui/testing/form-scroll";
+import { captureKeyboardEvents } from "@/shared/ui/testing/sheet-keyboard";
 import { createDevelopmentSeed } from "@/providers/development-seed";
 
 const mockBack = jest.fn();
@@ -63,6 +66,9 @@ jest.mock("react-native-worklets", () => ({
 }));
 
 jest.mock("expo-symbols", () => ({ SymbolView: () => null }));
+
+// Jest lays nothing out: the keyboard tests state the geometry themselves.
+jest.mock("@/shared/ui/form-scroll-geometry");
 
 // Mirrors the iOS Modal contract (onDismiss once `visible` has dropped) so the
 // « ••• » drawer → confirmation hand-off can be verified.
@@ -1310,5 +1316,45 @@ describe("ServiceEditorScreen — waiting-phase terminology (Step 5)", () => {
     await press(view.getByLabelText("Développer la phase 2"));
     expect(view.getByLabelText("Phase 2, temps de pose")).toBeTruthy();
     expect(view.queryByText("Temps d’attente")).toBeNull();
+  });
+});
+
+describe("ServiceEditorScreen — keyboard", () => {
+  // The unified catalogue (nails) opens the form directly, description included.
+  function renderNailsCreation() {
+    return render(
+      <TestPersistenceProvider business={{ ...testBusiness, activityType: "NAILS" }}>
+        <ServiceCatalogProvider>
+          <ServiceEditorScreen mode="create" />
+        </ServiceCatalogProvider>
+      </TestPersistenceProvider>,
+    );
+  }
+
+  it("keeps the multiline description visible above the keyboard, and follows it as it grows", async () => {
+    const keyboard = captureKeyboardEvents();
+    scrollToMock().mockClear();
+    const view = await renderNailsCreation();
+    // The sheet body starts 100 pt below the window top and is 600 pt tall; the
+    // test keyboard top is at 500 → 400 pt stay visible.
+    let staged = stageFocusedInput({ viewport: { top: 100, height: 600 }, input: { top: 650, height: 96 } });
+
+    await act(async () => fireEvent(view.getByTestId("service-form-description"), "focus"));
+    await keyboard.show();
+    await settleFormScroll();
+    expect(scrollToMock()).toHaveBeenLastCalledWith({ y: 746 + FORM_SCROLL_REVEAL_MARGIN - 400, animated: true });
+
+    // Three lines typed: the field grows under the caret and the form follows.
+    staged.restore();
+    staged = stageFocusedInput({ viewport: { top: 100, height: 600 }, input: { top: 650, height: 140 } });
+    await act(async () => fireEvent.changeText(view.getByTestId("service-form-description"), "Dépose\nLimage\nPose"));
+    await act(async () => fireEvent(view.getByTestId("service-form-scroll"), "contentSizeChange", 390, 1400));
+    await settleFormScroll();
+    expect(scrollToMock()).toHaveBeenLastCalledWith({ y: 790 + FORM_SCROLL_REVEAL_MARGIN - 400, animated: true });
+    expect(view.getByTestId("service-form-description").props.value).toBe("Dépose\nLimage\nPose");
+
+    await keyboard.hide();
+    staged.restore();
+    keyboard.restore();
   });
 });

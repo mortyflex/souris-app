@@ -14,8 +14,9 @@
 //   the screen's own content;
 //   a fixed footer holding the primary action and its optional secondary.
 //
-// The body scrolls and avoids the keyboard, so the primary action stays
-// reachable on a small phone with a form open. The two framing steps
+// The body scrolls and avoids the keyboard (a FormScrollView keeps the focused
+// field visible above it), so the primary action stays reachable on a small
+// phone with a form open. The two framing steps
 // (Welcome, setup complete) centre their composition when it is shorter than
 // the viewport.
 //
@@ -35,7 +36,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -55,6 +55,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from './AppText';
 import { BrandMark, brandMarkInsets } from './BrandMark';
+import { FormScrollView } from './FormScrollView';
 import { GlassIconButton, glassIcons, glassIconButtonSize } from './GlassIconButton';
 import { easing, gutter, radii, semanticColors, spacing } from './theme';
 
@@ -269,7 +270,7 @@ export function OnboardingStepLayout({
             <View style={[styles.topBarSide, topBarEnd !== undefined && styles.topBarEnd]}>{topBarEnd}</View>
           </View>
         )}
-        <ScrollView
+        <FormScrollView
           alwaysBounceVertical={false}
           contentContainerStyle={[
             styles.scrollContent,
@@ -340,7 +341,7 @@ export function OnboardingStepLayout({
               {children}
             </Entrance>
           )}
-        </ScrollView>
+        </FormScrollView>
         <Entrance delay={entranceDelays.footer} style={styles.footer}>
           {footer}
         </Entrance>

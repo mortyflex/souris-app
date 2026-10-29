@@ -32,7 +32,7 @@
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useRef, useState, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View, type ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -52,6 +52,7 @@ import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
 import { FloatingCreateButton } from '@/shared/ui/FloatingCreateButton';
+import { FormScrollView } from '@/shared/ui/FormScrollView';
 import { GlassIconButton, glassIconButtonSize, glassIcons } from '@/shared/ui/GlassIconButton';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SwipeToDeleteRow, useSwipeHintTarget } from '@/shared/ui/SwipeToDeleteRow';
@@ -294,7 +295,7 @@ export function ServiceCategoriesScreen({ startCreating: createOnArrival = false
         <View style={styles.topBarSpacer} />
       </View>
 
-      <ScrollView
+      <FormScrollView
         ref={scrollView}
         contentContainerStyle={styles.content}
         keyboardDismissMode="on-drag"
@@ -361,7 +362,7 @@ export function ServiceCategoriesScreen({ startCreating: createOnArrival = false
             </View>
           </View>
         )}
-      </ScrollView>
+      </FormScrollView>
 
       <FloatingCreateButton
         accessibilityLabel="Nouvelle catégorie"

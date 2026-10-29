@@ -36,7 +36,8 @@
 //   content then sits on the home indicator. The inset therefore comes from the
 //   window metrics known at launch (BeautIzzy is portrait-locked), a resting probe
 //   only ever raising it;
-// - optional canonical header, scrollable body, fixed action area and
+// - optional canonical header, scrollable body (a FormScrollView: the focused
+//   field is kept visible above the keyboard), fixed action area and
 //   keyboard-safe layout (the bottom safe-area inset is dropped while the
 //   keyboard is up, so no double inset; a tall surface shrinks to the space
 //   left above the keyboard, below the detent's top gap). Only the TOP sheet
@@ -56,7 +57,6 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -66,6 +66,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context';
 
+import { FormScrollView } from './FormScrollView';
 import { SheetGlassBackdrop, sheetSurfaceStyle, useSheetGlass, type SheetMaterial } from './sheet-material';
 import { SheetLayer, useSheetLayer } from './sheet-layers';
 import { SurfaceGloss } from './SurfaceGloss';
@@ -501,7 +502,7 @@ function SheetSurface({
           {header && <View style={styles.padded}>{header}</View>}
         </View>
         {scrollable ? (
-          <ScrollView
+          <FormScrollView
             contentContainerStyle={bodyStyle}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
@@ -509,7 +510,7 @@ function SheetSurface({
             style={[styles.scroll, fillsSurface && styles.fill]}
           >
             {children}
-          </ScrollView>
+          </FormScrollView>
         ) : (
           <View style={[styles.body, fillsSurface && styles.fill, bodyStyle]}>{children}</View>
         )}

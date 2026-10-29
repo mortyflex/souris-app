@@ -13,6 +13,9 @@ import { WHEEL_ROW_HEIGHT } from '../components/BirthdayWheelPicker';
 import type { Client } from '@/domain/clients';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
+import { FORM_SCROLL_REVEAL_MARGIN } from '@/shared/ui/FormScrollView';
+import { scrollToMock, settleFormScroll, stageFocusedInput } from '@/shared/ui/testing/form-scroll';
+import { captureKeyboardEvents } from '@/shared/ui/testing/sheet-keyboard';
 
 jest.mock('expo-symbols', () => {
   const React = jest.requireActual('react') as typeof import('react');
@@ -29,6 +32,9 @@ jest.mock('react-native-safe-area-context', () => {
       React.createElement(View, props, children),
   };
 });
+
+// Jest lays nothing out: the keyboard tests state the geometry themselves.
+jest.mock('@/shared/ui/form-scroll-geometry');
 
 const selectionHaptic = jest.spyOn(haptics, 'selection').mockImplementation();
 
@@ -431,5 +437,29 @@ describe('ClientFormSheet', () => {
 
     await act(async () => fireEvent.changeText(view.getByLabelText('Téléphone'), '06 12 34 56 78'));
     expect(view.queryByTestId('sms-consent-phone-notice')).toBeNull();
+  });
+});
+
+describe('ClientFormSheet — keyboard', () => {
+  it('keeps the focused Notes field, at the bottom of the form, visible above the keyboard', async () => {
+    const keyboard = captureKeyboardEvents();
+    scrollToMock().mockClear();
+    const view = await renderSheet('create');
+    // The body starts 100 pt below the window top and is 600 pt tall; the test
+    // keyboard top is at 500 → 200 pt of it are covered, 400 stay visible.
+    const staged = stageFocusedInput({ viewport: { top: 100, height: 600 }, input: { top: 700, height: 96 } });
+
+    await act(async () => fireEvent(view.getByTestId('client-notes-input'), 'focus'));
+    await keyboard.show();
+    await settleFormScroll();
+
+    expect(scrollToMock()).toHaveBeenCalledWith({ y: 796 + FORM_SCROLL_REVEAL_MARGIN - 400, animated: true });
+    // Only the scroll moved: the field keeps its focus and takes the text.
+    await act(async () => fireEvent.changeText(view.getByTestId('client-notes-input'), 'Allergie au PPD'));
+    expect(view.getByTestId('client-notes-input').props.value).toBe('Allergie au PPD');
+
+    await keyboard.hide();
+    staged.restore();
+    keyboard.restore();
   });
 });

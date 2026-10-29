@@ -20,13 +20,14 @@
 // or opened wheel; the success haptic belongs to the caller's committed save.
 
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import type { SymbolViewProps } from 'expo-symbols';
 
 import { CALENDAR_BLOCK_REASON_MAX_LENGTH } from '@/domain/calendar-blocks';
 import { haptics } from '@/shared/lib/haptics';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { FormScrollView } from '@/shared/ui/FormScrollView';
 import {
   GROUPED_DATA_ROW_SEPARATOR_INSET,
   GroupedDataRow,
@@ -159,7 +160,7 @@ export function CalendarBlockForm({
 
   return (
     <View style={fill ? styles.fill : styles.fit}>
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.content}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
@@ -317,7 +318,7 @@ export function CalendarBlockForm({
             testID="calendar-block-conflict"
           />
         )}
-      </ScrollView>
+      </FormScrollView>
 
       <SheetActionBar testID="calendar-block-actions">
         <AppButton

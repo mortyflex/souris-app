@@ -20,6 +20,9 @@ import { BusinessMediaProvider } from "@/providers/BusinessMediaProvider";
 import { usePersistence } from "@/providers/PersistenceProvider";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
+import { FORM_SCROLL_REVEAL_MARGIN } from "@/shared/ui/FormScrollView";
+import { scrollToMock, settleFormScroll, stageFocusedInput } from "@/shared/ui/testing/form-scroll";
+import { captureKeyboardEvents } from "@/shared/ui/testing/sheet-keyboard";
 import { rose, semanticColors } from "@/shared/ui/theme";
 
 const mockBack = jest.fn();
@@ -73,6 +76,8 @@ jest.mock("expo-router", () => ({
 jest.mock("expo-router/react-navigation", () => ({ usePreventRemove: jest.fn() }));
 
 jest.mock("expo-symbols", () => ({ SymbolView: () => null }));
+// Jest lays nothing out: the keyboard test states the geometry itself.
+jest.mock("@/shared/ui/form-scroll-geometry");
 
 jest.mock("react-native-reanimated", () => {
   const React = jest.requireActual("react") as typeof import("react");
@@ -1358,5 +1363,29 @@ describe("ProductEditorScreen", () => {
     expect(view.getByTestId("managed-product").props.children).toContain(
       ":0012345678901:",
     );
+  });
+});
+
+describe("ProductEditorScreen — keyboard", () => {
+  it("keeps the price, low in the form, visible above the decimal keyboard without touching its entry", async () => {
+    const keyboard = captureKeyboardEvents();
+    scrollToMock().mockClear();
+    const view = await renderEditor(<ProductEditorScreen mode="create" />);
+    // The sheet body starts 100 pt below the window top and is 600 pt tall; the
+    // test keyboard top is at 500 → 400 pt stay visible.
+    const staged = stageFocusedInput({ viewport: { top: 100, height: 600 }, input: { top: 720, height: 44 } });
+
+    await act(async () => fireEvent(view.getByLabelText("Prix du produit"), "focus"));
+    await keyboard.show();
+    await settleFormScroll();
+
+    expect(scrollToMock()).toHaveBeenCalledWith({ y: 764 + FORM_SCROLL_REVEAL_MARGIN - 400, animated: true });
+    await act(async () => fireEvent.changeText(view.getByLabelText("Prix du produit"), "25"));
+    expect(view.getByLabelText("Prix du produit").props.value).toBe("25");
+    expect(view.getByLabelText("Prix du produit").props.keyboardType).toBe("decimal-pad");
+
+    await keyboard.hide();
+    staged.restore();
+    keyboard.restore();
   });
 });

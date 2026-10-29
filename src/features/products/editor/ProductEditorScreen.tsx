@@ -57,6 +57,7 @@ import {
   type DetailAction,
 } from "@/shared/ui/DetailActionsSheet";
 import { DetailSheetHeader } from "@/shared/ui/DetailSheetHeader";
+import { FormScrollView } from "@/shared/ui/FormScrollView";
 import {
   GROUPED_READ_ROW_SEPARATOR_INSET,
   GroupedReadRow,
@@ -516,12 +517,13 @@ function ProductForm({
 
   return (
     <>
-      <ScrollView
+      <FormScrollView
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.formContent}
         style={styles.scroll}
+        testID="product-form-scroll"
       >
         <ProductPhotoField
           imageUri={getDraftPhotoUri(values.photo, currentImageUri)}
@@ -602,7 +604,7 @@ function ProductForm({
             value={values.stockQuantity}
           />
         </View>
-      </ScrollView>
+      </FormScrollView>
       <BarcodeScannerModal
         onClose={() => setScannerVisible(false)}
         onScanned={(barcode) => {

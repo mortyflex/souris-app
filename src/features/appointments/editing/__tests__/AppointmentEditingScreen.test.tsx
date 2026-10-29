@@ -17,7 +17,13 @@ import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { createDevelopmentSeed } from '@/providers/development-seed';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
+import { FORM_SCROLL_REVEAL_MARGIN } from '@/shared/ui/FormScrollView';
+import { scrollToMock, settleFormScroll, stageFocusedInput } from '@/shared/ui/testing/form-scroll';
+import { captureKeyboardEvents } from '@/shared/ui/testing/sheet-keyboard';
 import { settleWheelOn, wheelRowKeys, wheelValue } from '@/shared/ui/testing/wheels';
+
+// Jest lays nothing out: the keyboard test states the geometry itself.
+jest.mock('@/shared/ui/form-scroll-geometry');
 
 const mockBack = jest.fn();
 const mockSuccessHaptic = jest.spyOn(haptics, 'success').mockImplementation();
@@ -1462,5 +1468,51 @@ describe('AppointmentEditingScreen — deposits', () => {
       fireEvent.press(view.getByTestId('save-appointment-edit'));
     });
     expect(loadAppointments(database).find((appointment) => appointment.id === 'agenda-sofia')?.items[0]?.price).toBe(60);
+  });
+});
+
+describe('AppointmentEditingScreen — keyboard', () => {
+  beforeAll(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  it('reveals the price of an expanded service when it takes focus under a keyboard already up', async () => {
+    const keyboard = captureKeyboardEvents();
+    scrollToMock().mockClear();
+    const view = await renderEditor();
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Développer Balayage'));
+    });
+
+    // The keyboard is up for a field near the top: nothing to reveal.
+    // The sheet body starts 60 pt below the window top and is 700 pt tall; the
+    // test keyboard top is at 500 → 440 pt stay visible.
+    let staged = stageFocusedInput({ viewport: { top: 60, height: 700 }, input: { top: 100, height: 44 } });
+    await keyboard.show();
+    await settleFormScroll();
+    expect(scrollToMock()).not.toHaveBeenCalled();
+
+    // The price of the expanded card, low in the list, takes focus: the form reveals it.
+    staged.restore();
+    staged = stageFocusedInput({ viewport: { top: 60, height: 700 }, input: { top: 900, height: 44 } });
+    await act(async () => {
+      fireEvent(view.getByLabelText('Prix de Balayage'), 'focus');
+    });
+    await settleFormScroll();
+    expect(scrollToMock()).toHaveBeenCalledWith({ y: 944 + FORM_SCROLL_REVEAL_MARGIN - 440, animated: true });
+
+    // The entry itself is untouched.
+    await act(async () => {
+      fireEvent.changeText(view.getByLabelText('Prix de Balayage'), '90');
+    });
+    expect(view.getByLabelText('Prix de Balayage').props.value).toBe('90');
+
+    await keyboard.hide();
+    staged.restore();
+    keyboard.restore();
   });
 });

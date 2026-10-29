@@ -24,13 +24,14 @@
 // Every value comes from the draft snapshot (adjusted prices and durations
 // included), never from stale catalog defaults.
 
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import type { SymbolViewProps } from 'expo-symbols';
 
 import type { AppointmentDiscount } from '@/domain/appointments';
 import { formatDiscountAmount, formatDiscountLabel } from '@/features/appointments/presentation';
 import { formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
+import { FormScrollView } from '@/shared/ui/FormScrollView';
 import { GroupedDataRow } from '@/shared/ui/GroupedDataRow';
 import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
@@ -144,7 +145,7 @@ export function SummaryStep({
   const totalLabel = formatCreationPrice(summary.servicesTotal.netCents / 100);
 
   return (
-    <ScrollView
+    <FormScrollView
       contentContainerStyle={[styles.content, { paddingHorizontal: horizontalGutter }]}
       // The discount entry types: a chip or the CTA answers the first tap while
       // the keyboard is up, and dragging the step lowers the keyboard.
@@ -307,7 +308,7 @@ export function SummaryStep({
           </View>
         </View>
       </View>
-    </ScrollView>
+    </FormScrollView>
   );
 }
 
