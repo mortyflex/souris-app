@@ -1264,6 +1264,60 @@ encaissé aujourd’hui                     (« encaissé ce jour » / « encais
 - an empty day or month simply shows `0,00 €` with `Carte 0,00 €` / `Espèces 0,00 €` — no illustration;
 - no chart, accounting table, VAT, expense, or profit view. Not V1.
 
+**Comparaisons (Mois only).** Under « Total encaissé », one small badge and one caption say how the month
+compares with an EQUIVALENT earlier span (`src/domain/cash-register/comparison.ts`,
+`getCashRegisterMonthInsights`), read from the SAME payments as the total:
+
+```text
+1 240,00 €
+[ ↗ +12,4 % ]  vs 1er–29 sept.          (badge: glyph + figure on the mint / rose / neutral state tone)
+↗ +8,2 % vs 1er–29 oct. 2025            (quiet, only when the same span a year earlier is covered)
+```
+
+- the CURRENT month (month to date, i.e. the whole month — nothing is ever dated after now) is compared
+  with the same elapsed span of the previous month: the 1st up to the same day of month at the same
+  local time (« vs 1er–29 sept. »). It is never compared with a whole previous month;
+- a COMPLETED month is compared with the whole previous month (« vs sept. », « vs déc. 2026 » when the
+  year differs), whatever their lengths;
+- a future month compares nothing;
+- the comparison is OMITTED — no badge, no empty arrow — when the previous month has no equivalent day
+  (the 31st against a 30-day month; 29–31 March against February; a 29 February against a non-leap
+  year), or when the recorded history does not COVER the reference span from its first day: the history
+  begins on the local day of the earliest recorded Appointment, Sale, payment or deposit
+  (`getCashRegisterHistoryStart`), and an empty earlier period is a real zero only when BeautIzzy was
+  already recording then. The domain names the ONE reason (`cashComparison`: `FUTURE_MONTH`,
+  `NO_EQUIVALENT_SPAN`, `HISTORY_NOT_COVERED`, `NOTHING_TO_COMPARE`, in that order of precedence);
+- when the month collected money and the comparison is omitted, ONE quiet sentence under the amount says
+  why — « Historique insuffisant pour comparer avec septembre » (the month named in French, its year when
+  it differs), or « Pas de 31 septembre : comparaison indisponible aujourd’hui » for a missing day. It is
+  spoken with the total. An empty month, a future month and two empty spans say nothing: browsing the
+  months before the history began never repeats the message;
+- a zero reference never divides: the badge shows the change itself (« +1 240,00 € », never a
+  percentage); two zeros compare nothing; an unchanged total reads « Stable »; the direction is decided
+  on exact cents. A covered previous month at 0 € is a real zero and IS compared; an uncovered one at
+  0 € is unknown and is explained instead;
+- a secondary, quieter line compares with the same span of the same month a year earlier, under the
+  same coverage rule — no selector, no second badge;
+- `Jour` shows no comparison: a partial day against another day would mislead;
+- the comparison is spoken in words with the total (« En hausse de 12,4 % par rapport à la période du 1er
+  au 29 septembre »): never colour alone, never a sign alone.
+
+**Produits vendus.** A restrained card under the card / cash breakdown, in Jour and Mois, present only
+when the period sold a product (or Mois has a unit trend to report):
+
+- `N unités`: the product QUANTITIES of the Sale lines completed in the period — standalone Sales and
+  Sales sold during an Appointment alike, each line once (never the number of Sales or of
+  transactions); a split « 7 en vente directe · 5 pendant des rendez-vous » when some were sold during
+  an Appointment; in Mois, a unit badge against the same elapsed span of the previous month
+  (« +3 », never a percentage on small counts);
+- `Ventes directes encaissées`: the money received for STANDALONE Sales in the period — exactly the
+  Caisse « Vente » entries. A product sold during an Appointment is paid inside its checkout, which
+  records services and products as ONE amount: no product amount is ever derived from it, and the card
+  says so (« Les produits vendus pendant un rendez-vous sont encaissés avec celui-ci. »). An unpaid
+  historical Sale counts its units, never money.
+
+Nothing here is stored or synced; the totals, breakdown, counters and list are unchanged.
+
 The Client `Total dépensé` metric is independent from the Cash Register: deposits never add to
 it (`100 €` paid as `30 €` + `70 €` counts `100 €`).
 

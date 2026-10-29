@@ -1201,6 +1201,8 @@ BeautIzzy: every `appointment.payment`, `sale.payment` of STANDALONE Sales (no `
 checkout already recorded that money (services 75 € + linked products 20 € recorded as 95 € → Caisse 95 €, not
 115 €). Each payment is grouped by the device-local civil day or calendar month of its own `paidAt` — never
 from status alone, from the Client `Total dépensé` metric, or from Sale snapshot totals. Totals are never stored.
+The Caisse month comparisons (`src/domain/cash-register/comparison.ts`, `docs/product/PRODUCT.md` « Caisse —
+Comparaisons ») read this same selection over explicit local windows; they never change what is counted.
 
 Client `Total dépensé` (`docs/domain/CLIENTS.md` §6) is independent of any recorded payment: for
 Appointments it reads the expected total of `COMPLETED` Appointments from their snapshots — services NET of

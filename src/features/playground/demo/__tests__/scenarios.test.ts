@@ -15,9 +15,15 @@ import {
   type Appointment,
 } from '@/domain/appointments';
 import { findAppointmentCalendarBlockConflict } from '@/domain/calendar-blocks';
+import {
+  getCashRegisterMonthInsights,
+  getCashRegisterMonthSummary,
+  type CashRegisterSources,
+} from '@/domain/cash-register';
 
 import { createPlaygroundDemoScenario, getDemoBusinessId } from '../scenarios';
 import { buildDemoScenario } from '../scenarios/scenario';
+import { ESTHETICS_DEMO } from '../scenarios/esthetics';
 import { HAIRDRESSING_DEMO } from '../scenarios/hairdressing';
 
 // A fixed instant far from the real clock (a Wednesday afternoon), so the
@@ -298,7 +304,18 @@ describe('Playground demo scenarios', () => {
     expect(JSON.parse(JSON.stringify(second))).toEqual(JSON.parse(JSON.stringify(first)));
 
     const later = createPlaygroundDemoScenario('ESTHETICS', new Date(2027, 2, 17, 9, 0));
+    const anchoredInAMonth = new Set(
+      ESTHETICS_DEMO.appointments
+        .filter((definition) => definition.monthsAgo !== undefined)
+        .map((definition) => `${first.business.id}-appointment-${definition.key}`),
+    );
+    expect(anchoredInAMonth.size).toBeGreaterThan(0);
     for (const [index, appointment] of first.seed.appointments.entries()) {
+      if (anchoredInAMonth.has(appointment.id)) {
+        // Anchored on a day of an earlier month: the same instant a week later, inside the same month.
+        expect(later.seed.appointments[index]!.startAt).toEqual(appointment.startAt);
+        continue;
+      }
       // Seven local days later, same local time — whatever daylight saving does in between.
       const shifted = new Date(
         appointment.startAt.getFullYear(),
@@ -505,5 +522,104 @@ describe('Playground multi-phase examples (nails, esthetics)', () => {
       [at(9, 30), at(9, 50)],
       [at(10, 5), at(10, 30)],
     ]);
+  });
+});
+
+// The Caisse month comparisons read the demo like any business. Each profession
+// shows one situation, STABLE whatever the day of the month the demo is opened:
+// hairdressing a rise (and a year-over-year line), esthetics a fall, nails no
+// comparison at all (a studio recording for four weeks only).
+describe('Playground demo scenarios — Caisse comparisons', () => {
+  const sourcesOf = (activityType: ProfessionId, now: Date): CashRegisterSources => {
+    const { seed } = createPlaygroundDemoScenario(activityType, now);
+    return { appointments: seed.appointments, sales: seed.sales, deposits: [] };
+  };
+  const monthOf = (now: Date) => new Date(now.getFullYear(), now.getMonth(), 1);
+  const insightsOf = (activityType: ProfessionId, now: Date) =>
+    getCashRegisterMonthInsights(sourcesOf(activityType, now), monthOf(now), now);
+  // Every day of March 2027 that February 2027 can be compared with, mid-afternoon.
+  const DAYS = Array.from({ length: 28 }, (_, index) => new Date(2027, 2, index + 1, 15, 30));
+
+  it.each(DAYS.map((now) => [now.getDate(), now]))(
+    'HAIRDRESSING on the %i: a rise against last month, a year-over-year line, more units sold',
+    (_day, now) => {
+      const insights = insightsOf('HAIRDRESSING', now);
+      expect(insights.cashComparison.status).toBe('AVAILABLE');
+      expect(insights.cashTrend?.direction).toBe('UP');
+      expect(insights.cashYearTrend).toBeDefined();
+      expect(insights.cashYearTrend?.comparison.reference).toBe('PREVIOUS_YEAR');
+      expect(insights.products.unitCount).toBeGreaterThan(0);
+      expect(insights.productUnitTrend?.direction).toBe('UP');
+    },
+  );
+
+  it.each(DAYS.map((now) => [now.getDate(), now]))(
+    'ESTHETICS on the %i: a fall against last month, no year-over-year line',
+    (_day, now) => {
+      const insights = insightsOf('ESTHETICS', now);
+      expect(insights.cashComparison.status).toBe('AVAILABLE');
+      expect(insights.cashTrend?.direction).toBe('DOWN');
+      expect(insights.cashTrend?.ratio).toBeLessThan(0);
+      expect(insights.cashYearTrend).toBeUndefined();
+      expect(insights.products.unitCount).toBeGreaterThan(0);
+    },
+  );
+
+  it.each(DAYS.map((now) => [now.getDate(), now]))(
+    'NAILS on the %i: money collected, but no comparison — the four-week history does not cover February',
+    (_day, now) => {
+      const insights = insightsOf('NAILS', now);
+      expect(insights.cashTrend).toBeUndefined();
+      expect(insights.cashYearTrend).toBeUndefined();
+      expect(insights.productUnitTrend).toBeUndefined();
+      expect(insights.products.unitCount).toBeGreaterThan(0);
+      // The Caisse explains it: « Historique insuffisant pour comparer avec février ».
+      expect(insights.cashComparison).toEqual({
+        status: 'UNAVAILABLE',
+        reason: 'HISTORY_NOT_COVERED',
+        reference: 'PREVIOUS_MONTH',
+        month: new Date(2027, 2, 1),
+        referenceMonth: new Date(2027, 1, 1),
+      });
+      // The month always holds today's sale, so the explanation is actually shown.
+      expect(getCashRegisterMonthSummary(sourcesOf('NAILS', now), monthOf(now)).checkoutCount).toBeGreaterThan(0);
+    },
+  );
+
+  it('hairdressing: the previous month holds products sold during a checkout, so the unit trend has a real reference', () => {
+    const insights = insightsOf('HAIRDRESSING', new Date(2027, 2, 20, 15, 30));
+    expect(insights.productUnitTrend).toMatchObject({ previous: 1 });
+    expect(insights.products.appointmentUnitCount).toBeGreaterThan(0);
+  });
+
+  it('on the 1st at dawn, the rise is this morning’s sale against a reference of zero: no percentage', () => {
+    const insights = insightsOf('HAIRDRESSING', new Date(2027, 2, 1, 8, 0));
+    expect(insights.cashTrend).toMatchObject({ direction: 'UP', previous: 0, ratio: undefined });
+  });
+
+  it('offers no month comparison on the 29th–31st of March: February has no such day', () => {
+    for (const day of [29, 30, 31]) {
+      const insights = insightsOf('HAIRDRESSING', new Date(2027, 2, day, 15, 30));
+      expect(insights.cashTrend).toBeUndefined();
+      expect(insights.cashComparison).toMatchObject({ status: 'UNAVAILABLE', reason: 'NO_EQUIVALENT_SPAN' });
+      // The year-over-year span exists: March 2026 has those days.
+      expect(insights.cashYearTrend).toBeDefined();
+    }
+  });
+
+  it('refuses an appointment anchored outside an earlier month or on a day some months lack', () => {
+    const base = HAIRDRESSING_DEMO;
+    const anchored = base.appointments.find((appointment) => appointment.monthsAgo !== undefined)!;
+    expect(() =>
+      buildDemoScenario({ ...base, appointments: [{ ...anchored, monthsAgo: 0 }] }, NOW),
+    ).toThrow(/anchored in an earlier month/);
+    expect(() =>
+      buildDemoScenario({ ...base, appointments: [{ ...anchored, dayOfMonth: 31 }] }, NOW),
+    ).toThrow(/dayOfMonth between 1 and 28/);
+    expect(() =>
+      buildDemoScenario({ ...base, appointments: [{ ...anchored, dayOffset: -3 }] }, NOW),
+    ).toThrow(/mixes dayOffset/);
+    const { dayOffset: _dayOffset, ...unplaced } = base.appointments.find((appointment) => appointment.dayOffset !== undefined)!;
+    expect(() => buildDemoScenario({ ...base, appointments: [unplaced] }, NOW)).toThrow(/needs a dayOffset/);
   });
 });

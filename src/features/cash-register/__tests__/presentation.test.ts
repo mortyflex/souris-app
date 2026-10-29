@@ -1,10 +1,23 @@
 import {
+  compareCashRegisterValues,
+  type CashRegisterComparison,
+  type CashRegisterTrend,
+} from '@/domain/cash-register';
+import { formatEuroCents } from '@/shared/lib/money';
+
+import {
+  describeCashRegisterComparisonUnavailability,
+  describeCashRegisterTrend,
+  formatCashRegisterComparisonReference,
   formatCashRegisterEmptyTitle,
   formatCashRegisterEntryDay,
   formatCashRegisterEntryMethods,
   formatCashRegisterMonth,
+  formatCashRegisterTrendValue,
   formatCheckoutCount,
   formatPayingClientCount,
+  formatProductUnitCount,
+  formatProductUnitSplit,
   isSameLocalDay,
   isSameLocalMonth,
   shiftLocalDay,
@@ -63,5 +76,120 @@ describe('Cash Register presentation', () => {
 
   it('dates a Month mode entry compactly', () => {
     expect(formatCashRegisterEntryDay(new Date(2026, 8, 22, 9, 0))).toBe('22 sept.');
+  });
+});
+
+describe('Cash Register comparison presentation', () => {
+  const elapsed: CashRegisterComparison = {
+    reference: 'PREVIOUS_MONTH',
+    elapsed: true,
+    current: { start: new Date(2026, 9, 1), end: new Date(2026, 9, 29, 14, 35) },
+    previous: { start: new Date(2026, 8, 1), end: new Date(2026, 8, 29, 14, 35) },
+  };
+  const whole: CashRegisterComparison = {
+    reference: 'PREVIOUS_MONTH',
+    elapsed: false,
+    current: { start: new Date(2027, 0, 1), end: new Date(2027, 1, 1) },
+    previous: { start: new Date(2026, 11, 1), end: new Date(2027, 0, 1) },
+  };
+  const year: CashRegisterComparison = {
+    reference: 'PREVIOUS_YEAR',
+    elapsed: true,
+    current: { start: new Date(2026, 9, 1), end: new Date(2026, 9, 1, 8, 0) },
+    previous: { start: new Date(2025, 9, 1), end: new Date(2025, 9, 1, 8, 0) },
+  };
+  const trend = (current: number, previous: number, comparison = elapsed): CashRegisterTrend =>
+    compareCashRegisterValues(current, previous, comparison)!;
+
+  it('writes a percentage with its sign for money against a non-zero reference, « Stable » when unchanged', () => {
+    expect(formatCashRegisterTrendValue(trend(112_400, 100_000), 'cents')).toMatch(/^\+12,4\s%$/);
+    expect(formatCashRegisterTrendValue(trend(92_000, 100_000), 'cents')).toMatch(/^−8,0\s%$/);
+    expect(formatCashRegisterTrendValue(trend(100_000, 100_000), 'cents')).toBe('Stable');
+    // Rounded to one decimal, never Infinity or NaN.
+    expect(formatCashRegisterTrendValue(trend(100_001, 100_000), 'cents')).toMatch(/^\+0,0\s%$/);
+    expect(formatCashRegisterTrendValue(trend(1_000_000, 100), 'cents')).toMatch(/^\+999\s?900,0\s%$/);
+  });
+
+  it('writes the change itself against a zero reference, and whole units for products', () => {
+    expect(formatCashRegisterTrendValue(trend(124_000, 0), 'cents')).toBe(`+${formatEuroCents(124_000)}`);
+    expect(formatCashRegisterTrendValue(trend(5, 2), 'units')).toBe('+3');
+    expect(formatCashRegisterTrendValue(trend(2, 5), 'units')).toBe('−3');
+    expect(formatCashRegisterTrendValue(trend(7, 0), 'units')).toBe('+7');
+    expect(formatCashRegisterTrendValue(trend(4, 4), 'units')).toBe('Stable');
+  });
+
+  it('names the compared window, short, with the year only when it differs', () => {
+    expect(formatCashRegisterComparisonReference(elapsed)).toBe('vs 1er–29 sept.');
+    expect(formatCashRegisterComparisonReference(whole)).toBe('vs déc. 2026');
+    expect(formatCashRegisterComparisonReference(year)).toBe('vs 1er oct. 2025');
+    expect(
+      formatCashRegisterComparisonReference({
+        ...whole,
+        current: { start: new Date(2026, 8, 1), end: new Date(2026, 9, 1) },
+        previous: { start: new Date(2026, 7, 1), end: new Date(2026, 8, 1) },
+      }),
+    ).toBe('vs août');
+  });
+
+  it('speaks the direction in words, never a sign or a colour', () => {
+    expect(describeCashRegisterTrend(trend(112_400, 100_000), 'cents')).toMatch(
+      /^En hausse de 12,4\s% par rapport à la période du 1er au 29 septembre$/,
+    );
+    expect(describeCashRegisterTrend(trend(2, 5), 'units')).toBe(
+      'En baisse de 3 unités par rapport à la période du 1er au 29 septembre',
+    );
+    expect(describeCashRegisterTrend(trend(5_000, 0, whole), 'cents')).toBe(
+      `En hausse de ${formatEuroCents(5_000)} par rapport à décembre 2026`,
+    );
+    expect(describeCashRegisterTrend(trend(3, 3, year), 'units')).toBe('Stable par rapport au 1er octobre 2025');
+  });
+
+  it('explains an unavailable comparison only when the reason helps, naming the localized month', () => {
+    const now = new Date(2026, 9, 31, 10, 0);
+    const unavailable = (
+      reason: 'FUTURE_MONTH' | 'NO_EQUIVALENT_SPAN' | 'HISTORY_NOT_COVERED' | 'NOTHING_TO_COMPARE',
+      month = new Date(2026, 9, 1),
+      referenceMonth = new Date(2026, 8, 1),
+    ) => ({ status: 'UNAVAILABLE' as const, reason, reference: 'PREVIOUS_MONTH' as const, month, referenceMonth });
+
+    expect(describeCashRegisterComparisonUnavailability(unavailable('HISTORY_NOT_COVERED'), now)).toBe(
+      'Historique insuffisant pour comparer avec septembre',
+    );
+    // The year is written only when the reference month belongs to another one.
+    expect(
+      describeCashRegisterComparisonUnavailability(
+        unavailable('HISTORY_NOT_COVERED', new Date(2026, 0, 1), new Date(2025, 11, 1)),
+        now,
+      ),
+    ).toBe('Historique insuffisant pour comparer avec décembre 2025');
+    // A missing day is never blamed on the history.
+    expect(describeCashRegisterComparisonUnavailability(unavailable('NO_EQUIVALENT_SPAN'), now)).toBe(
+      'Pas de 31 septembre : comparaison indisponible aujourd’hui',
+    );
+    expect(
+      describeCashRegisterComparisonUnavailability(
+        unavailable('NO_EQUIVALENT_SPAN', new Date(2027, 2, 1), new Date(2027, 1, 1)),
+        new Date(2027, 2, 29, 9, 0),
+      ),
+    ).toBe('Pas de 29 février : comparaison indisponible aujourd’hui');
+    // Nothing to say: a future month, two empty months, or an available comparison.
+    expect(describeCashRegisterComparisonUnavailability(unavailable('FUTURE_MONTH'), now)).toBeUndefined();
+    expect(describeCashRegisterComparisonUnavailability(unavailable('NOTHING_TO_COMPARE'), now)).toBeUndefined();
+    expect(
+      describeCashRegisterComparisonUnavailability({ status: 'AVAILABLE', trend: trend(2, 1) }, now),
+    ).toBeUndefined();
+  });
+
+  it('counts units and tells where they were sold', () => {
+    expect(formatProductUnitCount(0)).toBe('Aucune unité');
+    expect(formatProductUnitCount(1)).toBe('1 unité');
+    expect(formatProductUnitCount(12)).toBe('12 unités');
+    expect(formatProductUnitSplit({ standaloneUnitCount: 7, appointmentUnitCount: 5 })).toBe(
+      '7 en vente directe · 5 pendant des rendez-vous',
+    );
+    expect(formatProductUnitSplit({ standaloneUnitCount: 0, appointmentUnitCount: 2 })).toBe(
+      '0 en vente directe · 2 pendant des rendez-vous',
+    );
+    expect(formatProductUnitSplit({ standaloneUnitCount: 7, appointmentUnitCount: 0 })).toBeUndefined();
   });
 });

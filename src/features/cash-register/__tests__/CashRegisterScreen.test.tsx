@@ -14,8 +14,9 @@ import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/Sa
 import { formatEuroCents } from '@/shared/lib/money';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { glassIconButtonSize } from '@/shared/ui/GlassIconButton';
+import { statePillTones } from '@/shared/ui/StatePill';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
-import { calendarIntensity, semanticColors, watermark as watermarkTheme } from '@/shared/ui/theme';
+import { calendarIntensity, foregroundSoft, semanticColors, watermark as watermarkTheme } from '@/shared/ui/theme';
 
 import { CashRegisterScreen } from '../CashRegisterScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -90,6 +91,18 @@ function CheckoutProbe() {
           })
         }
       />
+      <Pressable
+        testID="sell-anonymous-again"
+        onPress={() =>
+          completeSale({
+            id: 'sale-anonymous-2',
+            businessId: 'business-test',
+            payment: { cardAmountCents: 1500, cashAmountCents: 0 },
+            completedAt: new Date(),
+            lines: [{ id: 'sale-anonymous-2-1', productId: MASQUE_ID, quantity: 1 }],
+          })
+        }
+      />
       <Pressable testID="sell-linked-sofia" onPress={() => sell('sale-linked-sofia', 'agenda-sofia')} />
       <Pressable testID="sell-linked-lea" onPress={() => sell('sale-linked-lea', 'agenda-lea')} />
       <Pressable
@@ -159,8 +172,9 @@ function periodLabel(view: Awaited<ReturnType<typeof render>>): string {
 
 function totals(view: Awaited<ReturnType<typeof render>>) {
   const total = view.getByTestId('cash-register-total').props.children as string;
-  // The period caption is spoken with the KPI: « Total encaissé aujourd’hui : 0,00 € ».
-  const totalLabel = view.getByTestId('cash-register-total-card').props.accessibilityLabel as string;
+  // The period caption is spoken with the KPI: « Total encaissé aujourd’hui : 0,00 € » — the first
+  // sentence; Mois may follow it with the comparison or its explanation.
+  const totalLabel = (view.getByTestId('cash-register-total-card').props.accessibilityLabel as string).split('. ')[0]!;
   // Spoken « Encaissements, 2 encaissements, 1 client ».
   const [, count, clients] = (view.getByTestId('cash-register-count').props.accessibilityLabel as string).split(', ');
   return {
@@ -994,6 +1008,274 @@ describe('CashRegisterScreen', () => {
 
       expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: 'Aucun encaissement' });
       expect(view.queryByTestId('cash-register-entry-deposit-sofia')).toBeNull();
+    });
+  });
+
+  describe('comparisons and products', () => {
+    const NOW = new Date(2026, 7, 29, 15, 0);
+
+    /** Records money at `at` through a probe, then comes back to the fake « now ». */
+    async function collectAt(view: Awaited<ReturnType<typeof render>>, at: Date, probe: string) {
+      jest.setSystemTime(at);
+      await press(view, probe);
+      jest.setSystemTime(NOW);
+    }
+
+    function badgeFill(view: Awaited<ReturnType<typeof render>>, testID: string) {
+      return StyleSheet.flatten(view.getByTestId(testID).props.style).backgroundColor;
+    }
+
+    it('Jour keeps the compact card: no comparison, and no products card without a product sold', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'checkout-sofia');
+
+      expect(view.queryByTestId('cash-register-trends')).toBeNull();
+      expect(view.queryByTestId('cash-register-products')).toBeNull();
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé aujourd’hui : ${formatEuroCents(9500)}`,
+      );
+    });
+
+    it('Mois compares the month to date with the same elapsed span of the previous month, written and spoken', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      // Recorded since 1 June (50 €); 50 € on 10 July, inside 1 → 29 July 15:00; 95 € in August.
+      await collectAt(view, new Date(2026, 5, 1, 10, 0), 'sell-standalone-card');
+      await collectAt(view, new Date(2026, 6, 10, 10, 0), 'sell-standalone-mixed');
+      await press(view, 'checkout-sofia');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 encaissement' });
+      // (95 − 50) / 50: a rise, on the mint tone, glyph and figure written.
+      expect(view.getByTestId('cash-register-trend-badge-value').props.children).toMatch(/^\+90,0\s%$/);
+      expect(view.getByTestId('cash-register-trend-reference').props.children).toBe('vs 1er–29 juil.');
+      expect(badgeFill(view, 'cash-register-trend-badge')).toBe(statePillTones.positive.fill);
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toMatch(
+        new RegExp(
+          `^Total encaissé ce mois-ci : ${formatEuroCents(9500)}\\. En hausse de 90,0\\s% par rapport à la période du 1er au 29 juillet$`,
+        ),
+      );
+      // Nothing recorded in August 2025: no year-over-year line, no placeholder.
+      expect(view.queryByTestId('cash-register-trend-year')).toBeNull();
+      // The existing figures are untouched.
+      expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
+        'Encaissements, 1 encaissement, 1 client',
+      );
+
+      // July, completed, against the whole of June: 50 € against 50 €.
+      await press(view, 'cash-register-previous');
+      expect(view.getByTestId('cash-register-trend-badge-value').props.children).toBe('Stable');
+      expect(view.getByTestId('cash-register-trend-reference').props.children).toBe('vs juin');
+      expect(badgeFill(view, 'cash-register-trend-badge')).toBe(statePillTones.neutral.fill);
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé ce mois : ${formatEuroCents(5000)}. Stable par rapport à juin`,
+      );
+
+      // June against May: nothing was recorded before 1 June, so no trend is claimed — and the
+      // month, which collected money, says why in one quiet sentence.
+      await press(view, 'cash-register-previous');
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(5000) });
+      expect(view.queryByTestId('cash-register-trend')).toBeNull();
+      expect(view.getByTestId('cash-register-comparison-note-text').props.children).toBe(
+        'Historique insuffisant pour comparer avec mai',
+      );
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé ce mois : ${formatEuroCents(5000)}. Historique insuffisant pour comparer avec mai`,
+      );
+    });
+
+    it('explains an uncovered previous month once there is money, and stays silent on empty history', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      // A business that started recording on 10 July: July holds 50 €, August 95 €.
+      await collectAt(view, new Date(2026, 6, 10, 10, 0), 'sell-standalone-card');
+      await press(view, 'checkout-sofia');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+
+      // August against 1 → 29 July: the history begins on the 10th, after the span's first day, so
+      // July's 50 € is not a known baseline. No invented growth: a quiet explanation, no badge.
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 encaissement' });
+      expect(view.queryByTestId('cash-register-trend')).toBeNull();
+      expect(view.queryByTestId('cash-register-trend-year')).toBeNull();
+      const note = view.getByTestId('cash-register-comparison-note');
+      expect(within(note).getByText('Historique insuffisant pour comparer avec juillet')).toBeTruthy();
+      // Quiet metadata, soft colour, wrapping sentence next to a glyph pinned to its first line.
+      const text = view.getByTestId('cash-register-comparison-note-text');
+      expect(StyleSheet.flatten(text.props.style)).toMatchObject({ color: foregroundSoft, flex: 1 });
+      expect(StyleSheet.flatten(note.props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'flex-start' });
+      expect(view.queryByText(/⚠|Attention/)).toBeNull();
+      // Spoken with the total by VoiceOver / TalkBack; the card stays the one accessible element.
+      expect(view.getByTestId('cash-register-total-card').props.accessible).toBe(true);
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé ce mois-ci : ${formatEuroCents(9500)}. Historique insuffisant pour comparer avec juillet`,
+      );
+      // The existing figures are untouched.
+      expect(totals(view)).toMatchObject({ clients: '1 client', clientPill: 1 });
+
+      // July (50 €) against June: uncovered too, named correctly.
+      await press(view, 'cash-register-previous');
+      expect(view.getByTestId('cash-register-comparison-note-text').props.children).toBe(
+        'Historique insuffisant pour comparer avec juin',
+      );
+
+      // June, May…: empty months before the history began say nothing — no repeated message.
+      await press(view, 'cash-register-previous');
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Juin 2026' });
+      expect(view.queryByTestId('cash-register-trends')).toBeNull();
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé ce mois : ${formatEuroCents(0)}`,
+      );
+      await press(view, 'cash-register-previous');
+      expect(view.queryByTestId('cash-register-trends')).toBeNull();
+
+      // A future month compares nothing and explains nothing either.
+      await press(view, 'cash-register-current');
+      await press(view, 'cash-register-next');
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(0), period: 'Septembre 2026' });
+      expect(view.queryByTestId('cash-register-trends')).toBeNull();
+    });
+
+    it('two covered empty months compare nothing and explain nothing', async () => {
+      const view = await renderCashRegister();
+      // Recorded since 1 May: a deposit taken and voided the same day — a trace, no money.
+      await collectAt(view, new Date(2026, 4, 1, 10, 0), 'deposit-sofia');
+      await collectAt(view, new Date(2026, 4, 1, 10, 5), 'void-deposit-sofia');
+      await press(view, 'checkout-sofia');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+
+      // August (95 €) against July (0 €, covered): the change itself.
+      expect(view.getByTestId('cash-register-trend-badge-value').props.children).toBe(`+${formatEuroCents(9500)}`);
+      expect(view.queryByTestId('cash-register-comparison-note')).toBeNull();
+      // July (0) against June (0), June (0) against May (0): nothing to compare, nothing to explain.
+      await press(view, 'cash-register-previous');
+      expect(view.queryByTestId('cash-register-trends')).toBeNull();
+      await press(view, 'cash-register-previous');
+      expect(view.queryByTestId('cash-register-trends')).toBeNull();
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé ce mois : ${formatEuroCents(0)}`,
+      );
+    });
+
+    it('on the 31st against a 30-day month, names the missing day rather than the history', async () => {
+      // Friday 31 July 2026: June has no 31st.
+      jest.setSystemTime(new Date(2026, 6, 31, 15, 0));
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      await press(view, 'sell-standalone-card');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(5000), period: 'Juillet 2026' });
+      expect(view.queryByTestId('cash-register-trend')).toBeNull();
+      expect(view.getByTestId('cash-register-comparison-note-text').props.children).toBe(
+        'Pas de 31 juin : comparaison indisponible aujourd’hui',
+      );
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé ce mois-ci : ${formatEuroCents(5000)}. Pas de 31 juin : comparaison indisponible aujourd’hui`,
+      );
+      // Jour is untouched by any of this.
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Jour'));
+      });
+      expect(view.queryByTestId('cash-register-trends')).toBeNull();
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé aujourd’hui : ${formatEuroCents(5000)}`,
+      );
+    });
+
+    it('shows a fall on the rose tone, and the products card with its unit trend and direct sales', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      await collectAt(view, new Date(2026, 5, 1, 10, 0), 'sell-standalone-card');
+      // July: 50 € + 15 €, two units. August: one anonymous 15 € sale, one unit.
+      await collectAt(view, new Date(2026, 6, 10, 10, 0), 'sell-standalone-mixed');
+      await collectAt(view, new Date(2026, 6, 12, 10, 0), 'sell-anonymous');
+      await press(view, 'sell-anonymous-again');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+
+      // (15 − 65) / 65 = −76,9 %.
+      expect(view.getByTestId('cash-register-trend-badge-value').props.children).toMatch(/^−76,9\s%$/);
+      expect(badgeFill(view, 'cash-register-trend-badge')).toBe(statePillTones.exception.fill);
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toMatch(
+        /En baisse de 76,9\s% par rapport à la période du 1er au 29 juillet$/,
+      );
+
+      const products = view.getByTestId('cash-register-products');
+      expect(within(products).getByTestId('cash-register-products-units').props.children).toBe('1 unité');
+      expect(within(products).getByTestId('cash-register-products-trend-badge-value').props.children).toBe('−1');
+      expect(within(products).getByTestId('cash-register-products-trend-reference').props.children).toBe(
+        'vs 1er–29 juil.',
+      );
+      expect(within(products).getByTestId('cash-register-products-direct-value').props.children).toBe(
+        formatEuroCents(1500),
+      );
+      // Every unit was a direct sale: no split, no Revente note.
+      expect(within(products).queryByTestId('cash-register-products-split')).toBeNull();
+      expect(within(products).queryByTestId('cash-register-products-note')).toBeNull();
+      expect(view.getByTestId('cash-register-products-summary').props.accessibilityLabel).toBe(
+        'Produits vendus, 1 unité. En baisse de 1 unité par rapport à la période du 1er au 29 juillet',
+      );
+      expect(view.getByTestId('cash-register-products-direct').props.accessibilityLabel).toBe(
+        `Ventes directes encaissées : ${formatEuroCents(1500)}`,
+      );
+      // A walk-in sale is money and a unit, but identifies nobody.
+      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: 'Aucun client' });
+    });
+
+    it('a zero reference shows the change itself, never a percentage', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      // Recorded since 1 June; nothing in July; 95 € in August.
+      await collectAt(view, new Date(2026, 5, 1, 10, 0), 'sell-standalone-card');
+      await press(view, 'checkout-sofia');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+
+      expect(view.getByTestId('cash-register-trend-badge-value').props.children).toBe(`+${formatEuroCents(9500)}`);
+      expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
+        `Total encaissé ce mois-ci : ${formatEuroCents(9500)}. En hausse de ${formatEuroCents(9500)} par rapport à la période du 1er au 29 juillet`,
+      );
+
+      // July (0 €) against June (50 €): a real, covered zero.
+      await press(view, 'cash-register-previous');
+      expect(view.getByTestId('cash-register-trend-badge-value').props.children).toMatch(/^−100,0\s%$/);
+      expect(within(view.getByTestId('cash-register-empty')).getByText('Aucun encaissement ce mois')).toBeTruthy();
+    });
+
+    it('Jour counts the units of a product sold during a checkout once, and never splits that checkout', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      await press(view, 'sell-linked-sofia');
+      await press(view, 'checkout-sofia-with-product');
+      await press(view, 'sell-standalone-card');
+
+      // 145 € (95 € + the 50 € Masque) + 50 € direct: the Revente adds nothing of its own.
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(19500), count: '2 encaissements', clients: '1 client' });
+      const products = view.getByTestId('cash-register-products');
+      expect(within(products).getByTestId('cash-register-products-units').props.children).toBe('2 unités');
+      expect(within(products).getByTestId('cash-register-products-split').props.children).toBe(
+        '1 en vente directe · 1 pendant des rendez-vous',
+      );
+      expect(within(products).getByTestId('cash-register-products-direct-value').props.children).toBe(
+        formatEuroCents(5000),
+      );
+      expect(within(products).getByText('Les produits vendus pendant un rendez-vous sont encaissés avec celui-ci.')).toBeTruthy();
+      expect(view.getByTestId('cash-register-products-direct').props.accessibilityLabel).toBe(
+        `Ventes directes encaissées : ${formatEuroCents(5000)}. Les produits vendus pendant un rendez-vous sont encaissés avec celui-ci.`,
+      );
+      // Jour: no trend anywhere.
+      expect(within(products).queryByTestId('cash-register-products-trend')).toBeNull();
+      expect(view.queryByTestId('cash-register-trends')).toBeNull();
     });
   });
 });

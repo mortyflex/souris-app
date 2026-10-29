@@ -24,7 +24,11 @@
 // records, with stable readable identifiers (`playground-demo-<profession>-…`)
 // that no real record can carry. Dates are RELATIVE to `now` (day offsets),
 // so the Agenda is meaningful whenever the Playground is opened: history
-// behind, today busy, the next two weeks planned. A definition error (an
+// behind, today busy, the next two weeks planned. Some history is instead
+// ANCHORED in an earlier calendar month (`monthsAgo` + `dayOfMonth`), so the
+// Caisse month comparisons tell the same story on every day of the month:
+// hairdressing a rise and a year-over-year line, esthetics a fall, nails
+// (nothing older than four weeks) no comparison. A definition error (an
 // unknown client or prestation key, a missing price) throws at build time —
 // the tests catch it, a developer never sees a half-built demo.
 //
@@ -100,8 +104,20 @@ export interface DemoAppointmentDefinition {
   readonly client: string;
   /** Starter keys of the profession, in booking order (one item each). */
   readonly services: readonly string[];
-  /** Local days from today: negative is history, 0 today, positive ahead. */
-  readonly dayOffset: number;
+  /**
+   * Local days from today: negative is history, 0 today, positive ahead.
+   * Either this, or `monthsAgo` + `dayOfMonth`.
+   */
+  readonly dayOffset?: number;
+  /**
+   * Anchored in an EARLIER CALENDAR MONTH (1 = the month before today's), on
+   * `dayOfMonth` (1–28, so the day exists in every month), whatever today's
+   * date. This is how a demo keeps the Caisse month comparisons stable: the
+   * compared span of the previous month always holds the same payments,
+   * while day-relative history drifts with the day the demo is opened.
+   */
+  readonly monthsAgo?: number;
+  readonly dayOfMonth?: number;
   readonly hour: number;
   readonly minute: number;
   readonly outcome: DemoAppointmentOutcome;
@@ -318,6 +334,28 @@ function buildSaleItems(
   });
 }
 
+/** The local day of an appointment definition: relative to today, or anchored in an earlier month. */
+function appointmentDay(definition: DemoAppointmentDefinition, today: Date): Date {
+  const { key, dayOffset, monthsAgo, dayOfMonth } = definition;
+  if (monthsAgo === undefined && dayOfMonth === undefined) {
+    if (dayOffset === undefined) {
+      throw new Error(`Playground demo: appointment "${key}" needs a dayOffset, or monthsAgo and dayOfMonth`);
+    }
+    return addLocalDays(today, dayOffset);
+  }
+  if (dayOffset !== undefined || monthsAgo === undefined || dayOfMonth === undefined) {
+    throw new Error(`Playground demo: appointment "${key}" mixes dayOffset with monthsAgo / dayOfMonth`);
+  }
+  if (!Number.isInteger(monthsAgo) || monthsAgo < 1) {
+    throw new Error(`Playground demo: appointment "${key}" must be anchored in an earlier month (monthsAgo >= 1)`);
+  }
+  if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 28) {
+    throw new Error(`Playground demo: appointment "${key}" needs a dayOfMonth between 1 and 28`);
+  }
+  const firstOfMonth = new Date(today.getFullYear(), today.getMonth() - monthsAgo, 1);
+  return new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), dayOfMonth);
+}
+
 function buildAppointment(
   business: BusinessProfile,
   definition: DemoAppointmentDefinition,
@@ -341,7 +379,7 @@ function buildAppointment(
     }
     return createAppointmentItemSnapshot({ id: `${id}-item-${index + 1}`, service, order: index });
   });
-  const startAt = localTime(addLocalDays(today, definition.dayOffset), definition.hour, definition.minute);
+  const startAt = localTime(appointmentDay(definition, today), definition.hour, definition.minute);
   const endAt = new Date(startAt.getTime() + totalDurationMinutes(items) * 60_000);
   const base: Appointment = {
     id,

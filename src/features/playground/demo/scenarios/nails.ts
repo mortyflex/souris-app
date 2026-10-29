@@ -106,16 +106,19 @@ export const NAILS_DEMO: DemoScenarioDefinition = {
     { key: 's5', minutesAgo: 25, lines: [{ product: 'file', quantity: 1 }] },
   ],
   appointments: [
-    // Earlier history, so Tops & tendances has loyal clients to rank.
-    { key: 'h0a', client: 'lina', services: ['gel-infill'], dayOffset: -49, hour: 10, minute: 0, outcome: 'PAID' },
-    { key: 'h0b', client: 'manon', services: ['semi-permanent-hands'], dayOffset: -42, hour: 14, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
-    { key: 'h0c', client: 'sarah', services: ['semi-permanent-feet'], dayOffset: -33, hour: 11, minute: 0, outcome: 'PAID' },
+    // A studio that started recording four weeks ago: NOTHING older than 27 days,
+    // so the history never reaches the 1st of the previous month and the Caisse
+    // offers no month comparison — whatever the day the demo is opened. Still
+    // enough earlier history for Tops & tendances to rank loyal clients.
+    { key: 'h0a', client: 'lina', services: ['gel-infill'], dayOffset: -27, hour: 10, minute: 0, outcome: 'PAID' },
+    { key: 'h0b', client: 'manon', services: ['semi-permanent-hands'], dayOffset: -25, hour: 14, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
+    { key: 'h0c', client: 'sarah', services: ['semi-permanent-feet'], dayOffset: -23, hour: 11, minute: 0, outcome: 'PAID' },
     // History.
     {
       key: 'h1',
       client: 'lina',
       services: ['gel-full-set'],
-      dayOffset: -28,
+      dayOffset: -19,
       hour: 10,
       minute: 0,
       outcome: 'PAID',

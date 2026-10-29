@@ -94,10 +94,18 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
     { key: 's4', minutesAgo: 55, lines: [{ product: 'cleanser', quantity: 1 }], paidBy: 'CASH' },
   ],
   appointments: [
-    // Earlier history, so Tops & tendances has loyal clients to rank.
-    { key: 'h0a', client: 'maya', services: ['facial'], dayOffset: -45, hour: 10, minute: 0, outcome: 'PAID' },
-    { key: 'h0b', client: 'alice', services: ['leg-wax'], dayOffset: -38, hour: 14, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
-    { key: 'h0c', client: 'jade', services: ['eye-beauty'], dayOffset: -31, hour: 11, minute: 0, outcome: 'PAID' },
+    // The previous calendar month, anchored on fixed days: a BUSIER month than the
+    // current one whatever the day the demo is opened, so the Caisse shows a FALL
+    // (its elapsed span always collects more than this month to date — except on
+    // the 1st before the 9:00 appointment below has its counterpart). Tops &
+    // tendances also finds loyal clients here.
+    { key: 'p1', client: 'jade', services: ['body-treatment'], monthsAgo: 1, dayOfMonth: 1, hour: 9, minute: 0, outcome: 'PAID' },
+    { key: 'p2', client: 'maya', services: ['facial', 'eye-beauty'], monthsAgo: 1, dayOfMonth: 2, hour: 14, minute: 0, outcome: 'PAID' },
+    { key: 'p3', client: 'alice', services: ['leg-wax', 'brow-wax'], monthsAgo: 1, dayOfMonth: 5, hour: 11, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
+    { key: 'p4', client: 'elena', services: ['facial'], monthsAgo: 1, dayOfMonth: 9, hour: 10, minute: 0, outcome: 'PAID' },
+    { key: 'p5', client: 'nour', services: ['body-treatment', 'leg-wax'], monthsAgo: 1, dayOfMonth: 13, hour: 15, minute: 0, outcome: 'PAID' },
+    { key: 'p6', client: 'jade', services: ['facial', 'brow-wax'], monthsAgo: 1, dayOfMonth: 18, hour: 14, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
+    { key: 'p7', client: 'louise', services: ['body-treatment'], monthsAgo: 1, dayOfMonth: 24, hour: 10, minute: 0, outcome: 'PAID' },
     // History.
     {
       key: 'h1',

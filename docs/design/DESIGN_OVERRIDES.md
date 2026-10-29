@@ -1602,6 +1602,25 @@ unchanged.
 - **Total encaissé.** One `surfaceLavender` card: the label in `foregroundSoft`, the amount in
   navy `display`. No period sentence, no count, no empty wording; the period is spoken with it
   (« Total encaissé aujourd’hui : 245,00 € »).
+- **Comparison (Mois only).** Under the amount, when the domain offers one
+  (`getCashRegisterMonthInsights`, PRODUCT.md « Comparaisons »): ONE trend badge — a 12 pt direction
+  glyph (`shared/icons/trend-icons`: `arrow.up.right` / `arrow.down.right` / `arrow.right`,
+  `trending_*` on Android) and the figure in `chip`, tabular, on the EXISTING StatePill tones
+  (`statePillTones.positive` mint for a rise, `exception` rose for a fall, `neutral` when « Stable »)
+  — followed by the compared span in `foregroundSoft` `metadata` (« vs 1er–29 sept. »); the row wraps
+  under large text. Then, only when covered, the quieter year-over-year line: an 11 pt tinted glyph and
+  one `metadata` line (« +8,2 % vs 1er–29 oct. 2025 »). Colour never carries the direction alone: glyph
+  and figure are written, and the card speaks it in words (« En hausse de 12,4 % par rapport à la
+  période du 1er au 29 septembre »). No comparison → no badge, no placeholder, no empty arrow; when the
+  month collected money and the domain names a reason worth telling (`cashComparison`:
+  `HISTORY_NOT_COVERED`, `NO_EQUIVALENT_SPAN`), ONE quiet row takes the badge's place
+  (`CashRegisterComparisonNote`): a 13 pt `info.circle` / `info` glyph in `foregroundSoft` and one
+  `foregroundSoft` `metadata` sentence (« Historique insuffisant pour comparer avec septembre »,
+  « Pas de 31 septembre : comparaison indisponible aujourd’hui ») that wraps freely, the glyph pinned
+  to its first line. No tone, no fill, no banner, no icon of warning; it never competes with the
+  amount, and the card speaks it after the total. An empty month, a future month and two empty spans
+  show nothing at all. Jour never shows one. The badge is the Caisse's ONE use of the mint / rose state
+  tones; amounts stay navy.
 - **Breakdown.** One `GroupedSurface`, one column per payment method (Carte | Espèces) split by
   a hairline: small accent glyph in a `surfaceLavenderStrong` tile, label in `metadata`, value
   in navy `summaryValue`.
@@ -1617,10 +1636,18 @@ unchanged.
   secondary (`Carte`, `Espèces`, `Carte + Espèces`). An Appointment checkout lists its
   prestations and opens Appointment Details (muted chevron); a standalone Sale reads
   « Vente · products » and stays read-only — no Sale detail exists.
+- **Produits vendus.** Between the breakdown and « Encaissements », one `GroupedSurface`, present
+  only when the period sold a product (or Mois has a unit trend): the `saleIcon` in the same 34 pt
+  `surfaceLavenderStrong` tile as the methods, « Produits vendus » in `foregroundSoft` `metadata`,
+  the units in navy `summaryValue` (« 12 unités ») with, in Mois, the same trend badge and span
+  caption (« +3 vs 1er–29 sept. ») wrapping after it; then the split « 7 en vente directe · 5 pendant
+  des rendez-vous » when Reventes are counted. Under an inset hairline, « Ventes directes encaissées »
+  (`body`, soft) with its amount (`control`, tabular) and, when Reventes are counted, the one-sentence
+  note on how they are paid. Two accessible groups, each spoken whole.
 - **Empty.** A compact `surfaceLavender` block: 44 pt glyph circle, « Aucun encaissement
   aujourd’hui » (ce jour / ce mois-ci / ce mois), « Les paiements encaissés apparaîtront
   ici. » Never taller than it needs; the page may end in whitespace.
-- **No** chart, illustration or extra KPI. Amounts stay navy: green is not introduced here.
+- **No** chart, illustration or further KPI. Apart from the trend badges above, amounts stay navy.
 
 ## 32. Grouped Period Navigation — Agenda and Caisse
 

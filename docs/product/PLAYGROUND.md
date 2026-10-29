@@ -93,13 +93,27 @@ fictional (plant, gemstone and botanical surnames, `@exemple.fr`, `06 00 00 00 x
 | ESTHETICS    | Institut Beauté Démo     | the five ESTHETICS starters, priced (the facial is a TECHNIQUE), in five categories (« Beauté des mains et des pieds » empty), three with a description | cleanser, moisturiser, serum, body oil, body scrub, an inactive gift box |
 
 Each demo holds seven to eight clients (one birthday on the day the demo is opened, one archived,
-notes and contact details on several) and about twenty-five appointments: five to seven weeks of
+notes and contact details on several) and about twenty-five appointments: several weeks of
 history (completed, checked out by card or cash, with and without discount, cancelled by the client
 or the business, no-show), a busy today — with a prestation booked during another's processing
 time where the profession has one — and the next two weeks planned. Products are fictional
 « Marque Démo » items; four to five standalone sales (card and cash, with a client or walk-in, one
 « earlier today » — never in the future, whatever the hour) and two to three products sold during
 paid appointments.
+
+**Caisse comparisons.** Most history is day-relative (`dayOffset`), which drifts with the day the demo
+is opened. Part of it is instead ANCHORED in an earlier calendar month (`monthsAgo` + `dayOfMonth`,
+1–28), so the Caisse « Comparaisons » (PRODUCT.md, Caisse) tell the same story on every day of the
+month:
+
+| Profession   | Caisse, Mois                                                                                   |
+| ------------ | ---------------------------------------------------------------------------------------------- |
+| HAIRDRESSING | a RISE against the previous month (four modest paid appointments anchored on its 3rd, 8th, 13th and 19th, one with a product sold during it, so the unit trend has a real reference), plus a year-over-year line (three appointments twelve and thirteen months ago) |
+| ESTHETICS    | a FALL against the previous month (seven busier paid appointments anchored on its 1st–24th), no year-over-year line; on the 1st before 9:00 the reference span is still empty, so the badge shows the morning's sale instead |
+| NAILS        | NO comparison: nothing older than 27 days, so the history never covers the previous month from its 1st — the month collects money (today's sale at least), so the Caisse shows the quiet explanation « Historique insuffisant pour comparer avec <mois précédent> » instead of a badge |
+
+Day-relative products sold during appointments and standalone sales give every demo a « Produits
+vendus » card.
 
 Money and stock agree as the product makes them agree: a product's seeded stock is its initial
 stock minus every seeded sale line; a product sold during an appointment is a Sale linked to it,

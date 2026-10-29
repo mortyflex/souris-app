@@ -18,6 +18,18 @@
 // charted; planned or potential revenue belongs to « Résumé du jour », never
 // here.
 //
+// Mois adds two derived readings (`getCashRegisterMonthInsights`, the SAME
+// selection over explicit local windows): under « Total encaissé », how the
+// month compares with the equivalent span of the previous month (and, quietly,
+// of the same month a year earlier) — month-to-date against the same elapsed
+// days and time, a completed month against the whole previous month. When no
+// comparison can be offered for a month that collected money, one quiet
+// sentence says why (the history does not cover the reference month, or the
+// reference month has no such day); an empty month, a future month or two
+// empty spans say nothing. And a « Produits vendus » card: the units sold
+// (quantities, Reventes included), their unit trend, and the money received for
+// DIRECT sales only. Jour shows the day's products without any comparison.
+//
 // The day is chosen through the shared month calendar (the Agenda's), each
 // day haloed by the money received on it relative to the best day of the
 // displayed month — from `getCashRegisterDailyTotals`, the same selection
@@ -41,9 +53,11 @@ import {
   countCashRegisterPayingClients,
   getCashRegisterDailyTotals,
   getCashRegisterDayEntries,
+  getCashRegisterDayProductSummary,
   getCashRegisterDaySummary,
   getCashRegisterEntryClientId,
   getCashRegisterMonthEntries,
+  getCashRegisterMonthInsights,
   getCashRegisterMonthSummary,
   type CashRegisterEntry,
   type CashRegisterSummary,
@@ -91,6 +105,12 @@ import {
   CASH_REGISTER_ENTRY_SEPARATOR_INSET,
   getCashRegisterEntryKey,
 } from "./components/CashRegisterEntryRow";
+import { CashRegisterProductsCard } from "./components/CashRegisterProductsCard";
+import {
+  CashRegisterComparisonNote,
+  CashRegisterTrendNote,
+  CashRegisterTrendRow,
+} from "./components/CashRegisterTrendBadge";
 import {
   RevenueHeatmapHint,
   RevenueHeatmapInfoButton,
@@ -100,6 +120,8 @@ import {
   markCashRegisterHeatmapHintSeen,
 } from "./heatmap-hint";
 import {
+  describeCashRegisterComparisonUnavailability,
+  describeCashRegisterTrend,
   formatCashRegisterCaption,
   formatCashRegisterEmptyTitle,
   formatCashRegisterMonth,
@@ -208,8 +230,34 @@ export function CashRegisterScreen() {
   const shiftMonth = (amount: number) =>
     setSelectedMonth((current) => shiftLocalMonth(current, amount));
 
+  // Mois: the comparisons and the month's products; Jour: the day's products
+  // only (no daily comparison — see docs/product/PRODUCT.md, Caisse).
+  const monthInsights =
+    period === "month"
+      ? getCashRegisterMonthInsights(sources, selectedMonth, now)
+      : undefined;
+  const products =
+    monthInsights?.products ??
+    getCashRegisterDayProductSummary(sources, selectedDay);
+  const cashTrend = monthInsights?.cashTrend;
+  const cashYearTrend = monthInsights?.cashYearTrend;
+  // Why Mois shows no comparison — only for a month that collected something:
+  // an empty month explains nothing, and browsing empty history stays silent.
+  const comparisonNote =
+    monthInsights !== undefined && summary.checkoutCount > 0
+      ? describeCashRegisterComparisonUnavailability(monthInsights.cashComparison, now)
+      : undefined;
+
   const caption = formatCashRegisterCaption(period, isCurrentPeriod);
   const total = formatEuroCents(summary.totalCents);
+  // Spoken with the KPI, direction in words: « Total encaissé ce mois-ci :
+  // 1 240,00 €. En hausse de 12,4 % par rapport à la période du 1er au 29 septembre ».
+  const totalLabel = [
+    `Total ${caption} : ${total}`,
+    ...(cashTrend ? [describeCashRegisterTrend(cashTrend, "cents")] : []),
+    ...(cashYearTrend ? [describeCashRegisterTrend(cashYearTrend, "cents")] : []),
+    ...(comparisonNote ? [comparisonNote] : []),
+  ].join(". ");
 
   const clientNameOf = (entry: CashRegisterEntry): string | undefined => {
     const clientId = getCashRegisterEntryClientId(entry);
@@ -309,7 +357,7 @@ export function CashRegisterScreen() {
 
         <View
           accessible
-          accessibilityLabel={`Total ${caption} : ${total}`}
+          accessibilityLabel={totalLabel}
           style={styles.totalCard}
           testID="cash-register-total-card"
         >
@@ -324,6 +372,31 @@ export function CashRegisterScreen() {
           >
             {total}
           </AppText>
+          {(cashTrend !== undefined ||
+            cashYearTrend !== undefined ||
+            comparisonNote !== undefined) && (
+            <View style={styles.totalTrends} testID="cash-register-trends">
+              {cashTrend && (
+                <CashRegisterTrendRow
+                  testID="cash-register-trend"
+                  trend={cashTrend}
+                  unit="cents"
+                />
+              )}
+              {cashYearTrend && (
+                <CashRegisterTrendNote
+                  testID="cash-register-trend-year"
+                  trend={cashYearTrend}
+                  unit="cents"
+                />
+              )}
+              {comparisonNote && (
+                <CashRegisterComparisonNote testID="cash-register-comparison-note">
+                  {comparisonNote}
+                </CashRegisterComparisonNote>
+              )}
+            </View>
+          )}
         </View>
 
         <GroupedSurface style={styles.methods} testID="cash-register-methods">
@@ -339,6 +412,12 @@ export function CashRegisterScreen() {
             </View>
           ))}
         </GroupedSurface>
+
+        <CashRegisterProductsCard
+          summary={products}
+          testID="cash-register-products"
+          unitTrend={monthInsights?.productUnitTrend}
+        />
 
         <View style={styles.entriesSection}>
           <View
@@ -508,6 +587,8 @@ const styles = StyleSheet.create({
     color: semanticColors.foreground,
     fontVariant: ["tabular-nums"],
   },
+  // The comparison under the amount: the badge row, then the quiet year line.
+  totalTrends: { gap: spacing.sm, marginTop: spacing.xs },
   methods: { flexDirection: "row" },
   methodColumn: { flex: 1, flexDirection: "row", minWidth: 0 },
   methodDivider: {

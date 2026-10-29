@@ -83,11 +83,30 @@ export const HAIRDRESSING_DEMO: DemoScenarioDefinition = {
     { key: 's5', minutesAgo: 40, lines: [{ product: 'shampoo', quantity: 1 }] },
   ],
   appointments: [
-    // Earlier history, so Tops & tendances has loyal clients to rank.
-    { key: 'h0a', client: 'lea', services: ['cut-blow-dry'], dayOffset: -35, hour: 10, minute: 0, outcome: 'PAID' },
-    { key: 'h0b', client: 'hugo', services: ['cut-men'], dayOffset: -30, hour: 18, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
-    { key: 'h0c', client: 'sofia', services: ['color'], dayOffset: -28, hour: 9, minute: 30, outcome: 'PAID' },
-    { key: 'h0d', client: 'julie', services: ['cut-women'], dayOffset: -26, hour: 14, minute: 0, outcome: 'PAID' },
+    // A year ago, so the Caisse month view can add its year-over-year line
+    // (the history must cover the same month of the previous year from its 1st).
+    { key: 'y1', client: 'lea', services: ['cut-women'], monthsAgo: 13, dayOfMonth: 20, hour: 10, minute: 0, outcome: 'PAID' },
+    { key: 'y2', client: 'sofia', services: ['color'], monthsAgo: 12, dayOfMonth: 6, hour: 9, minute: 30, outcome: 'PAID', paidBy: 'CASH' },
+    { key: 'y3', client: 'lea', services: ['cut-blow-dry'], monthsAgo: 12, dayOfMonth: 18, hour: 14, minute: 0, outcome: 'PAID' },
+    // The previous calendar month, anchored on fixed days: a quieter month than the
+    // current one whatever the day the demo is opened, so the Caisse shows a RISE
+    // (the elapsed span of last month always collects less than this month to date,
+    // which holds at least the sale made earlier today). Tops & tendances also finds
+    // loyal clients here.
+    { key: 'h0a', client: 'hugo', services: ['cut-men'], monthsAgo: 1, dayOfMonth: 3, hour: 18, minute: 0, outcome: 'PAID', paidBy: 'CASH' },
+    { key: 'h0b', client: 'julie', services: ['cut-women'], monthsAgo: 1, dayOfMonth: 8, hour: 14, minute: 0, outcome: 'PAID' },
+    {
+      key: 'h0c',
+      client: 'lea',
+      services: ['cut-blow-dry'],
+      monthsAgo: 1,
+      dayOfMonth: 13,
+      hour: 10,
+      minute: 0,
+      outcome: 'PAID',
+      products: [{ product: 'mask', quantity: 1 }],
+    },
+    { key: 'h0d', client: 'sofia', services: ['color'], monthsAgo: 1, dayOfMonth: 19, hour: 9, minute: 30, outcome: 'PAID' },
     // History: three weeks of activity, every outcome represented.
     {
       key: 'h1',
