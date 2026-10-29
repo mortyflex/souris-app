@@ -1608,8 +1608,17 @@ unchanged.
   `trending_*` on Android) and the figure in `chip`, tabular, on the EXISTING StatePill tones
   (`statePillTones.positive` mint for a rise, `exception` rose for a fall, `neutral` when « Stable »)
   — followed by the compared span in `foregroundSoft` `metadata` (« vs 1er–29 sept. »); the row wraps
-  under large text. Then, only when covered, the quieter year-over-year line: an 11 pt tinted glyph and
-  one `metadata` line (« +8,2 % vs 1er–29 oct. 2025 »). Colour never carries the direction alone: glyph
+  under large text. Then, only when covered, the quieter year-over-year pill in the same row layout
+  (`CashRegisterTrendBadge` `variant="secondary"`): the plain `statePillTones.neutral` surface, the
+  same tone-tinted glyph at 11 pt, the figure in `foregroundSoft`, 24 pt tall, then its span
+  (« vs 1er–29 oct. 2025 »). Both rows sit in ONE tap area (`CashRegisterTrendToggle`, pressed
+  opacity, a vertical hit slop so a lone pill still offers 44 pt): a tap switches both figures between
+  percent (default) and euros with one `haptics.selection()`; never stored. The card is then the
+  accessible button (activate action, hint « Touchez pour afficher la variation en euros / en
+  pourcentage ») and speaks the figures shown. No switch when nothing would change (« Stable », zero
+  reference). The cue: the first pill of a card that can switch ends with a hairline in the tone's
+  glyph colour and a 10 pt ⇄ glyph (`trendDisplayToggleIcon`: `arrow.left.arrow.right` /
+  `swap_horiz`) at 55 % opacity — ONE per card, never on a pill that cannot switch. Colour never carries the direction alone: glyph
   and figure are written, and the card speaks it in words (« En hausse de 12,4 % par rapport à la
   période du 1er au 29 septembre »). No comparison → no badge, no placeholder, no empty arrow; when the
   month collected money and the domain names a reason worth telling (`cashComparison`:
@@ -1640,7 +1649,8 @@ unchanged.
   only when the period sold a product (or Mois has a unit trend): the `saleIcon` in the same 34 pt
   `surfaceLavenderStrong` tile as the methods, « Produits vendus » in `foregroundSoft` `metadata`,
   the units in navy `summaryValue` (« 12 unités ») with, in Mois, the same trend badge and span
-  caption (« +3 vs 1er–29 sept. ») wrapping after it; then the split « 7 en vente directe · 5 pendant
+  caption (« +3 vs 1er–29 sept. ») wrapping after it — the same tap switch and ⇄ cue, units first, then
+  percent; then the split « 7 en vente directe · 5 pendant
   des rendez-vous » when Reventes are counted. Under an inset hairline, « Ventes directes encaissées »
   (`body`, soft) with its amount (`control`, tabular) and, when Reventes are counted, the one-sentence
   note on how they are paid. Two accessible groups, each spoken whole.

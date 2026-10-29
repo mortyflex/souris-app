@@ -114,6 +114,40 @@ export function formatCashRegisterEntryDay(date: Date): string {
 /** What a trend counts: integer cents, or product units. */
 export type CashRegisterTrendUnit = 'cents' | 'units';
 
+/**
+ * How a trend's figure is written — a presentation choice the professional
+ * toggles by tapping the comparison, never stored:
+ *   percent   → the change relative to the reference (`+12,4 %`)
+ *   absolute  → the change itself (`+396,30 €`, `+3`)
+ */
+export type CashRegisterTrendDisplay = 'percent' | 'absolute';
+
+/** « Total encaissé » opens in percent; « Produits vendus » in units (small counts). */
+export function getDefaultCashRegisterTrendDisplay(unit: CashRegisterTrendUnit): CashRegisterTrendDisplay {
+  return unit === 'cents' ? 'percent' : 'absolute';
+}
+
+export function toggleCashRegisterTrendDisplay(display: CashRegisterTrendDisplay): CashRegisterTrendDisplay {
+  return display === 'percent' ? 'absolute' : 'percent';
+}
+
+/**
+ * Whether the two displays of a trend actually differ: never for « Stable »,
+ * never against a zero reference (nothing to divide by — both read the change).
+ */
+export function canToggleCashRegisterTrendDisplay(trend: CashRegisterTrend): boolean {
+  return trend.direction !== 'FLAT' && trend.ratio !== undefined;
+}
+
+/** What tapping the comparison would show next, spoken as the accessibility hint. */
+export function describeCashRegisterTrendToggle(
+  display: CashRegisterTrendDisplay,
+  unit: CashRegisterTrendUnit,
+): string {
+  if (display === 'absolute') return 'Touchez pour afficher la variation en pourcentage';
+  return unit === 'cents' ? 'Touchez pour afficher la variation en euros' : 'Touchez pour afficher la variation en unités';
+}
+
 const percentFormatter = new Intl.NumberFormat('fr-FR', {
   maximumFractionDigits: 1,
   minimumFractionDigits: 1,
@@ -138,17 +172,22 @@ function formatAbsoluteDelta(trend: CashRegisterTrend, unit: CashRegisterTrendUn
 }
 
 /**
- * The figure of a trend badge.
- *   cents, reference > 0   → `+12,4 %` / `−8,0 %`
- *   cents, reference = 0   → `+1 240,00 €` (nothing to divide by: the change itself)
- *   units                  → `+3` / `−2` (small counts: a percentage would mislead)
- *   unchanged              → `Stable`
+ * The figure of a trend badge, in the chosen display (by default, the unit's own).
+ *   percent, reference > 0   → `+12,4 %` / `−8,0 %`
+ *   absolute, cents          → `+1 240,00 €`
+ *   absolute, units          → `+3` / `−2` (the default: on small counts a percentage misleads)
+ *   reference = 0            → the change itself, whatever the display (nothing to divide by)
+ *   unchanged                → `Stable`
  */
-export function formatCashRegisterTrendValue(trend: CashRegisterTrend, unit: CashRegisterTrendUnit): string {
+export function formatCashRegisterTrendValue(
+  trend: CashRegisterTrend,
+  unit: CashRegisterTrendUnit,
+  display: CashRegisterTrendDisplay = getDefaultCashRegisterTrendDisplay(unit),
+): string {
   if (trend.direction === 'FLAT') return 'Stable';
+  if (display === 'percent' && trend.ratio !== undefined) return `${signOf(trend)}${formatRatio(trend.ratio)}`;
   if (unit === 'units') return `${signOf(trend)}${Math.abs(trend.delta)}`;
-  if (trend.ratio === undefined) return `${signOf(trend)}${formatEuroCents(Math.abs(trend.delta))}`;
-  return `${signOf(trend)}${formatRatio(trend.ratio)}`;
+  return `${signOf(trend)}${formatEuroCents(Math.abs(trend.delta))}`;
 }
 
 function formatReferenceMonth(comparison: CashRegisterComparison, month: 'short' | 'long'): string {
@@ -175,12 +214,18 @@ export function formatCashRegisterComparisonReference(comparison: CashRegisterCo
 }
 
 /**
- * The spoken trend, direction in words (never a sign or a colour):
+ * The spoken trend, direction in words (never a sign or a colour), in the
+ * display shown on screen:
  * « En hausse de 12,4 % par rapport à la période du 1er au 29 septembre »,
+ * « En hausse de 396,30 € par rapport à la période du 1er au 29 septembre »,
  * « En baisse de 2 unités par rapport à septembre »,
  * « Stable par rapport à octobre 2025 ».
  */
-export function describeCashRegisterTrend(trend: CashRegisterTrend, unit: CashRegisterTrendUnit): string {
+export function describeCashRegisterTrend(
+  trend: CashRegisterTrend,
+  unit: CashRegisterTrendUnit,
+  display: CashRegisterTrendDisplay = getDefaultCashRegisterTrendDisplay(unit),
+): string {
   const month = formatReferenceMonth(trend.comparison, 'long');
   const lastDay = trend.comparison.previous.end.getDate();
   const reference = !trend.comparison.elapsed
@@ -191,7 +236,7 @@ export function describeCashRegisterTrend(trend: CashRegisterTrend, unit: CashRe
   if (trend.direction === 'FLAT') return `Stable ${reference}`;
   const direction = trend.direction === 'UP' ? 'En hausse' : 'En baisse';
   const amount =
-    unit === 'cents' && trend.ratio !== undefined ? formatRatio(trend.ratio) : formatAbsoluteDelta(trend, unit);
+    display === 'percent' && trend.ratio !== undefined ? formatRatio(trend.ratio) : formatAbsoluteDelta(trend, unit);
   return `${direction} de ${amount} ${reference}`;
 }
 

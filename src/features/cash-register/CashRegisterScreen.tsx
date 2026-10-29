@@ -20,9 +20,11 @@
 //
 // Mois adds two derived readings (`getCashRegisterMonthInsights`, the SAME
 // selection over explicit local windows): under « Total encaissé », how the
-// month compares with the equivalent span of the previous month (and, quietly,
-// of the same month a year earlier) — month-to-date against the same elapsed
-// days and time, a completed month against the whole previous month. When no
+// month compares with the equivalent span of the previous month (and, in a
+// quieter pill, of the same month a year earlier) — month-to-date against the
+// same elapsed days and time, a completed month against the whole previous
+// month. A tap on the comparison switches both figures between percent and
+// euros (`useCashRegisterTrendDisplay`, percent first, never stored). When no
 // comparison can be offered for a month that collected money, one quiet
 // sentence says why (the history does not cover the reference month, or the
 // reference month has no such day); an empty month, a future month or two
@@ -108,8 +110,8 @@ import {
 import { CashRegisterProductsCard } from "./components/CashRegisterProductsCard";
 import {
   CashRegisterComparisonNote,
-  CashRegisterTrendNote,
   CashRegisterTrendRow,
+  CashRegisterTrendToggle,
 } from "./components/CashRegisterTrendBadge";
 import {
   RevenueHeatmapHint,
@@ -136,6 +138,7 @@ import {
   type CashRegisterPeriod,
 } from "./presentation";
 import { decorateRevenueMonth } from "./revenue-calendar";
+import { useCashRegisterTrendDisplay } from "./use-cash-register-trend-display";
 
 const horizontalGutter =
   Platform.OS === "android" ? gutter.android : gutter.ios;
@@ -241,6 +244,10 @@ export function CashRegisterScreen() {
     getCashRegisterDayProductSummary(sources, selectedDay);
   const cashTrend = monthInsights?.cashTrend;
   const cashYearTrend = monthInsights?.cashYearTrend;
+  const cashTrendDisplay = useCashRegisterTrendDisplay("cents", [
+    cashTrend,
+    cashYearTrend,
+  ]);
   // Why Mois shows no comparison — only for a month that collected something:
   // an empty month explains nothing, and browsing empty history stays silent.
   const comparisonNote =
@@ -254,8 +261,12 @@ export function CashRegisterScreen() {
   // 1 240,00 €. En hausse de 12,4 % par rapport à la période du 1er au 29 septembre ».
   const totalLabel = [
     `Total ${caption} : ${total}`,
-    ...(cashTrend ? [describeCashRegisterTrend(cashTrend, "cents")] : []),
-    ...(cashYearTrend ? [describeCashRegisterTrend(cashYearTrend, "cents")] : []),
+    ...(cashTrend
+      ? [describeCashRegisterTrend(cashTrend, "cents", cashTrendDisplay.display)]
+      : []),
+    ...(cashYearTrend
+      ? [describeCashRegisterTrend(cashYearTrend, "cents", cashTrendDisplay.display)]
+      : []),
     ...(comparisonNote ? [comparisonNote] : []),
   ].join(". ");
 
@@ -358,6 +369,7 @@ export function CashRegisterScreen() {
         <View
           accessible
           accessibilityLabel={totalLabel}
+          {...cashTrendDisplay.accessibilityProps}
           style={styles.totalCard}
           testID="cash-register-total-card"
         >
@@ -376,19 +388,35 @@ export function CashRegisterScreen() {
             cashYearTrend !== undefined ||
             comparisonNote !== undefined) && (
             <View style={styles.totalTrends} testID="cash-register-trends">
-              {cashTrend && (
-                <CashRegisterTrendRow
-                  testID="cash-register-trend"
-                  trend={cashTrend}
-                  unit="cents"
-                />
-              )}
-              {cashYearTrend && (
-                <CashRegisterTrendNote
-                  testID="cash-register-trend-year"
-                  trend={cashYearTrend}
-                  unit="cents"
-                />
+              {(cashTrend !== undefined || cashYearTrend !== undefined) && (
+                <CashRegisterTrendToggle
+                  onToggle={cashTrendDisplay.toggle}
+                  testID="cash-register-trends-toggle"
+                >
+                  {cashTrend && (
+                    <CashRegisterTrendRow
+                      display={cashTrendDisplay.display}
+                      testID="cash-register-trend"
+                      toggleable={cashTrendDisplay.toggle !== undefined}
+                      trend={cashTrend}
+                      unit="cents"
+                    />
+                  )}
+                  {cashYearTrend && (
+                    <CashRegisterTrendRow
+                      display={cashTrendDisplay.display}
+                      testID="cash-register-trend-year"
+                      // ONE cue per card: on the first pill shown.
+                      toggleable={
+                        cashTrend === undefined &&
+                        cashTrendDisplay.toggle !== undefined
+                      }
+                      trend={cashYearTrend}
+                      unit="cents"
+                      variant="secondary"
+                    />
+                  )}
+                </CashRegisterTrendToggle>
               )}
               {comparisonNote && (
                 <CashRegisterComparisonNote testID="cash-register-comparison-note">
@@ -587,7 +615,7 @@ const styles = StyleSheet.create({
     color: semanticColors.foreground,
     fontVariant: ["tabular-nums"],
   },
-  // The comparison under the amount: the badge row, then the quiet year line.
+  // The comparison under the amount: the badge row, then the quieter year pill.
   totalTrends: { gap: spacing.sm, marginTop: spacing.xs },
   methods: { flexDirection: "row" },
   methodColumn: { flex: 1, flexDirection: "row", minWidth: 0 },

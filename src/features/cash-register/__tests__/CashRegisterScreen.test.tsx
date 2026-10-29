@@ -11,6 +11,7 @@ import {
   useProductCatalog,
 } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/SaleSessionProvider';
+import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { glassIconButtonSize } from '@/shared/ui/GlassIconButton';
@@ -1250,6 +1251,122 @@ describe('CashRegisterScreen', () => {
       await press(view, 'cash-register-previous');
       expect(view.getByTestId('cash-register-trend-badge-value').props.children).toMatch(/^−100,0\s%$/);
       expect(within(view.getByTestId('cash-register-empty')).getByText('Aucun encaissement ce mois')).toBeTruthy();
+    });
+
+    it('shows the year-over-year comparison as a quieter pill, and one tap switches both pills between percent and euros', async () => {
+      const selection = jest.spyOn(haptics, 'selection');
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      // Recorded since 1 July 2025; 15 € on 10 August 2025; 50 € on 10 July 2026; 95 € in August 2026.
+      await collectAt(view, new Date(2025, 6, 1, 10, 0), 'sell-standalone-card');
+      await collectAt(view, new Date(2025, 7, 10, 10, 0), 'sell-anonymous');
+      await collectAt(view, new Date(2026, 6, 10, 10, 0), 'sell-standalone-mixed');
+      await press(view, 'checkout-sofia');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+      // Only the toggles count from here (the segmented switch ticks too).
+      selection.mockClear();
+
+      const card = () => view.getByTestId('cash-register-total-card');
+      const value = (id: string) => view.getByTestId(`${id}-badge-value`).props.children as string;
+
+      // Percent first. Previous month (95 − 50) / 50; a year earlier (95 − 15) / 15.
+      expect(value('cash-register-trend')).toMatch(/^\+90,0\s%$/);
+      expect(value('cash-register-trend-year')).toMatch(/^\+533,3\s%$/);
+      expect(view.getByTestId('cash-register-trend-year-reference').props.children).toBe('vs 1er–29 août 2025');
+      // Both are pills; the year's is the quieter one (plain surface, soft ink), primary first.
+      expect(badgeFill(view, 'cash-register-trend-badge')).toBe(statePillTones.positive.fill);
+      expect(badgeFill(view, 'cash-register-trend-year-badge')).toBe(statePillTones.neutral.fill);
+      expect(StyleSheet.flatten(view.getByTestId('cash-register-trend-year-badge-value').props.style).color).toBe(
+        foregroundSoft,
+      );
+      const rows = within(view.getByTestId('cash-register-trends-toggle')).getAllByTestId(/^cash-register-trend(-year)?$/);
+      expect(rows.map((row) => row.props.testID)).toEqual(['cash-register-trend', 'cash-register-trend-year']);
+      // The card is the one accessible button, spoken in the display shown.
+      expect(card().props.accessibilityRole).toBe('button');
+      expect(card().props.accessibilityLabel).toMatch(
+        new RegExp(
+          `^Total encaissé ce mois-ci : ${formatEuroCents(9500)}\\. En hausse de 90,0\\s% par rapport à la période du 1er au 29 juillet\\. En hausse de 533,3\\s% par rapport à la période du 1er au 29 août 2025$`,
+        ),
+      );
+      expect(card().props.accessibilityHint).toBe('Touchez pour afficher la variation en euros');
+      // ONE quiet ⇄ cue for the card, on the primary pill only.
+      expect(view.getByTestId('cash-register-trend-badge-toggle-cue')).toBeTruthy();
+      expect(view.queryByTestId('cash-register-trend-year-badge-toggle-cue')).toBeNull();
+
+      // One tap: both pills switch to euros, one light haptic.
+      await press(view, 'cash-register-trends-toggle');
+      expect(value('cash-register-trend')).toBe(`+${formatEuroCents(4500)}`);
+      expect(value('cash-register-trend-year')).toBe(`+${formatEuroCents(8000)}`);
+      expect(card().props.accessibilityLabel).toBe(
+        `Total encaissé ce mois-ci : ${formatEuroCents(9500)}. En hausse de ${formatEuroCents(4500)} par rapport à la période du 1er au 29 juillet. En hausse de ${formatEuroCents(8000)} par rapport à la période du 1er au 29 août 2025`,
+      );
+      expect(card().props.accessibilityHint).toBe('Touchez pour afficher la variation en pourcentage');
+      expect(selection).toHaveBeenCalledTimes(1);
+      // The total and its caption stay as they were.
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 encaissement' });
+
+      // VoiceOver / TalkBack activate the card: back to percent.
+      await act(async () => {
+        fireEvent(card(), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
+      });
+      expect(value('cash-register-trend')).toMatch(/^\+90,0\s%$/);
+      expect(value('cash-register-trend-year')).toMatch(/^\+533,3\s%$/);
+      expect(selection).toHaveBeenCalledTimes(2);
+
+      // « Produits vendus » keeps its own display, untouched by the total's: units first.
+      expect(view.getByTestId('cash-register-products-trend-badge-value').props.children).toBe('−1');
+
+      // July 2026 against June, covered since July 2025 and empty: 50 € against a real zero reads the
+      // change itself in either display — nothing would switch, so no button.
+      await press(view, 'cash-register-previous');
+      expect(value('cash-register-trend')).toBe(`+${formatEuroCents(5000)}`);
+      // 50 € against July 2025's 50 €: « Stable » in either display too.
+      expect(value('cash-register-trend-year')).toBe('Stable');
+      expect(card().props.accessibilityRole).toBeUndefined();
+      expect(card().props.accessibilityHint).toBeUndefined();
+      expect(view.getByTestId('cash-register-trends-toggle').props.onPress).toBeUndefined();
+      expect(view.queryByTestId('cash-register-trend-badge-toggle-cue')).toBeNull();
+      expect(selection).toHaveBeenCalledTimes(2);
+      selection.mockRestore();
+    });
+
+    it('« Produits vendus » opens on the unit change; one tap switches it to percent and back', async () => {
+      const selection = jest.spyOn(haptics, 'selection');
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      await collectAt(view, new Date(2026, 5, 1, 10, 0), 'sell-standalone-card');
+      // July: two units; August: one.
+      await collectAt(view, new Date(2026, 6, 10, 10, 0), 'sell-standalone-mixed');
+      await collectAt(view, new Date(2026, 6, 12, 10, 0), 'sell-anonymous');
+      await press(view, 'sell-anonymous-again');
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+      // Only the toggles count from here (the segmented switch ticks too).
+      selection.mockClear();
+
+      const summary = () => view.getByTestId('cash-register-products-summary');
+      const value = () => view.getByTestId('cash-register-products-trend-badge-value').props.children as string;
+      expect(value()).toBe('−1');
+      expect(summary().props.accessibilityRole).toBe('button');
+      expect(summary().props.accessibilityHint).toBe('Touchez pour afficher la variation en pourcentage');
+
+      await press(view, 'cash-register-products-trend-toggle');
+      expect(value()).toMatch(/^−50,0\s%$/);
+      expect(summary().props.accessibilityLabel).toMatch(
+        /^Produits vendus, 1 unité\. En baisse de 50,0\s% par rapport à la période du 1er au 29 juillet$/,
+      );
+      expect(summary().props.accessibilityHint).toBe('Touchez pour afficher la variation en unités');
+      expect(selection).toHaveBeenCalledTimes(1);
+      // Each card keeps its own display: the total is still in percent.
+      expect(view.getByTestId('cash-register-trend-badge-value').props.children).toMatch(/^−76,9\s%$/);
+
+      await press(view, 'cash-register-products-trend-toggle');
+      expect(value()).toBe('−1');
+      expect(selection).toHaveBeenCalledTimes(2);
+      selection.mockRestore();
     });
 
     it('Jour counts the units of a product sold during a checkout once, and never splits that checkout', async () => {

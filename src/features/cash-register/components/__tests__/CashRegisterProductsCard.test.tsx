@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 import {
@@ -6,6 +6,7 @@ import {
   type CashRegisterComparison,
   type CashRegisterProductSummary,
 } from '@/domain/cash-register';
+import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { statePillTones } from '@/shared/ui/StatePill';
 
@@ -13,7 +14,7 @@ import { CashRegisterProductsCard, DIRECT_SALES_LABEL, REVENTE_NOTE } from '../C
 import {
   CashRegisterComparisonNote,
   CashRegisterTrendBadge,
-  CashRegisterTrendNote,
+  CashRegisterTrendRow,
   trendTones,
 } from '../CashRegisterTrendBadge';
 import { foregroundSoft } from '@/shared/ui/theme';
@@ -88,6 +89,72 @@ describe('CashRegisterProductsCard', () => {
   });
 });
 
+describe('CashRegisterProductsCard unit trend display', () => {
+  const summaryLabel = (view: Awaited<ReturnType<typeof render>>) =>
+    view.getByTestId('products-summary').props.accessibilityLabel as string;
+
+  it('opens on the unit change, and one tap switches to percent and back, with one light haptic each', async () => {
+    const selection = jest.spyOn(haptics, 'selection');
+    const view = await render(
+      <CashRegisterProductsCard summary={summary} testID="products" unitTrend={compareCashRegisterValues(12, 9, comparison)} />,
+    );
+    const card = view.getByTestId('products-summary');
+    expect(card.props.accessibilityRole).toBe('button');
+    expect(view.getByTestId('products-trend-badge-value').props.children).toBe('+3');
+    expect(summaryLabel(view)).toMatch(/En hausse de 3 unités par rapport à la période du 1er au 29 septembre$/);
+    expect(card.props.accessibilityHint).toBe('Touchez pour afficher la variation en pourcentage');
+    // The quiet ⇄ cue inside the pill says a tap switches the figure.
+    expect(view.getByTestId('products-trend-badge-toggle-cue')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('products-trend-toggle'));
+    });
+    // (12 − 9) / 9.
+    expect(view.getByTestId('products-trend-badge-value').props.children).toMatch(/^\+33,3\s%$/);
+    expect(summaryLabel(view)).toMatch(/En hausse de 33,3\s% par rapport à la période du 1er au 29 septembre$/);
+    expect(view.getByTestId('products-summary').props.accessibilityHint).toBe('Touchez pour afficher la variation en unités');
+    expect(selection).toHaveBeenCalledTimes(1);
+    // The rest of the card is unchanged.
+    expect(view.getByTestId('products-units').props.children).toBe('12 unités');
+    expect(view.getByTestId('products-trend-reference').props.children).toBe('vs 1er–29 sept.');
+
+    // VoiceOver / TalkBack activate the card itself.
+    await act(async () => {
+      fireEvent(view.getByTestId('products-summary'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
+    });
+    expect(view.getByTestId('products-trend-badge-value').props.children).toBe('+3');
+    expect(selection).toHaveBeenCalledTimes(2);
+    selection.mockRestore();
+  });
+
+  it('offers no switch when both displays would read the same: a zero reference, or « Stable »', async () => {
+    const selection = jest.spyOn(haptics, 'selection');
+    const view = await render(
+      <>
+        <CashRegisterProductsCard summary={summary} testID="products" unitTrend={compareCashRegisterValues(5, 0, comparison)} />
+        <CashRegisterProductsCard summary={summary} testID="flat" unitTrend={compareCashRegisterValues(4, 4, comparison)} />
+      </>,
+    );
+    for (const id of ['products', 'flat']) {
+      expect(view.getByTestId(`${id}-summary`).props.accessibilityRole).toBeUndefined();
+      expect(view.getByTestId(`${id}-summary`).props.accessibilityHint).toBeUndefined();
+      expect(view.getByTestId(`${id}-trend-toggle`).props.onPress).toBeUndefined();
+      // No cue promising a switch that would change nothing.
+      expect(view.queryByTestId(`${id}-trend-badge-toggle-cue`)).toBeNull();
+    }
+    expect(view.getByTestId('products-trend-badge-value').props.children).toBe('+5');
+    expect(view.getByTestId('flat-trend-badge-value').props.children).toBe('Stable');
+    expect(selection).not.toHaveBeenCalled();
+    selection.mockRestore();
+  });
+
+  it('a card without a unit trend (Jour) has no switch and no pill', async () => {
+    const view = await render(<CashRegisterProductsCard summary={summary} testID="products" />);
+    expect(view.queryByTestId('products-trend-toggle')).toBeNull();
+    expect(view.getByTestId('products-summary').props.accessibilityRole).toBeUndefined();
+  });
+});
+
 describe('CashRegisterTrendBadge', () => {
   it('uses the existing state tones: mint for a rise, rose for a fall, neutral when stable', async () => {
     expect(trendTones).toEqual({
@@ -100,14 +167,31 @@ describe('CashRegisterTrendBadge', () => {
         <CashRegisterTrendBadge direction="UP" label="+12,4 %" testID="up" />
         <CashRegisterTrendBadge direction="DOWN" label="−8,0 %" testID="down" />
         <CashRegisterTrendBadge direction="FLAT" label="Stable" testID="flat" />
-        <CashRegisterTrendNote testID="year" trend={compareCashRegisterValues(10_800, 10_000, comparison)!} unit="cents" />
+        <CashRegisterTrendRow
+          testID="year"
+          trend={compareCashRegisterValues(10_800, 10_000, comparison)!}
+          unit="cents"
+          variant="secondary"
+        />
       </>,
     );
     expect(StyleSheet.flatten(view.getByTestId('up').props.style).backgroundColor).toBe(statePillTones.positive.fill);
     expect(StyleSheet.flatten(view.getByTestId('down').props.style).backgroundColor).toBe(statePillTones.exception.fill);
     expect(StyleSheet.flatten(view.getByTestId('flat').props.style).backgroundColor).toBe(statePillTones.neutral.fill);
     expect(view.getByTestId('up-value').props.children).toBe('+12,4 %');
-    expect(view.getByTestId('year-value').props.children).toMatch(/^\+8,0\s% vs 1er–29 sept\.$/);
+    // The year-over-year pill: the same glyph tone on the plain neutral surface, soft ink, a size smaller.
+    const year = StyleSheet.flatten(view.getByTestId('year-badge').props.style);
+    expect(year.backgroundColor).toBe(statePillTones.neutral.fill);
+    expect(year.minHeight).toBeLessThan(StyleSheet.flatten(view.getByTestId('up').props.style).minHeight as number);
+    expect(StyleSheet.flatten(view.getByTestId('year-badge-value').props.style).color).toBe(foregroundSoft);
+    // A plain badge carries no switch cue.
+    expect(view.queryByTestId('up-toggle-cue')).toBeNull();
+    expect(view.queryByTestId('year-badge-toggle-cue')).toBeNull();
+    expect(view.getByTestId('year-badge-value').props.children).toMatch(/^\+8,0\s%$/);
+    expect(view.getByTestId('year-reference').props.children).toBe('vs 1er–29 sept.');
+    // Narrow phone, large text: the caption wraps under its pill rather than overflowing.
+    expect(StyleSheet.flatten(view.getByTestId('year').props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
+    expect(StyleSheet.flatten(view.getByTestId('year-reference').props.style)).toMatchObject({ flexShrink: 1 });
   });
 });
 

@@ -1271,7 +1271,7 @@ compares with an EQUIVALENT earlier span (`src/domain/cash-register/comparison.t
 ```text
 1 240,00 €
 [ ↗ +12,4 % ]  vs 1er–29 sept.          (badge: glyph + figure on the mint / rose / neutral state tone)
-↗ +8,2 % vs 1er–29 oct. 2025            (quiet, only when the same span a year earlier is covered)
+[ ↗ +8,2 % ]  vs 1er–29 oct. 2025       (quieter pill, only when the same span a year earlier is covered)
 ```
 
 - the CURRENT month (month to date, i.e. the whole month — nothing is ever dated after now) is compared
@@ -1296,11 +1296,17 @@ compares with an EQUIVALENT earlier span (`src/domain/cash-register/comparison.t
   percentage); two zeros compare nothing; an unchanged total reads « Stable »; the direction is decided
   on exact cents. A covered previous month at 0 € is a real zero and IS compared; an uncovered one at
   0 € is unknown and is explained instead;
-- a secondary, quieter line compares with the same span of the same month a year earlier, under the
-  same coverage rule — no selector, no second badge;
+- a secondary, quieter pill compares with the same span of the same month a year earlier, under the
+  same coverage rule — no selector;
+- one tap on the comparison switches BOTH pills between percent (the default) and the change in euros
+  (« +396,30 € »), with one light haptic; it is a display choice only — nothing is stored, and the
+  screen reopens in percent. Offered only when a figure would change: « Stable » and a zero reference
+  read the same either way, and then nothing is tappable;
 - `Jour` shows no comparison: a partial day against another day would mislead;
 - the comparison is spoken in words with the total (« En hausse de 12,4 % par rapport à la période du 1er
-  au 29 septembre »): never colour alone, never a sign alone.
+  au 29 septembre »), in the display shown: never colour alone, never a sign alone. When it can switch,
+  the card is a button whose hint says what comes next (« Touchez pour afficher la variation en
+  euros »).
 
 **Produits vendus.** A restrained card under the card / cash breakdown, in Jour and Mois, present only
 when the period sold a product (or Mois has a unit trend to report):
@@ -1309,7 +1315,8 @@ when the period sold a product (or Mois has a unit trend to report):
   Sales sold during an Appointment alike, each line once (never the number of Sales or of
   transactions); a split « 7 en vente directe · 5 pendant des rendez-vous » when some were sold during
   an Appointment; in Mois, a unit badge against the same elapsed span of the previous month
-  (« +3 », never a percentage on small counts);
+  (« +3 » by default; one tap switches it to percent and back, with the same light haptic — never
+  offered against a zero reference or for « Stable »);
 - `Ventes directes encaissées`: the money received for STANDALONE Sales in the period — exactly the
   Caisse « Vente » entries. A product sold during an Appointment is paid inside its checkout, which
   records services and products as ONE amount: no product amount is ever derived from it, and the card

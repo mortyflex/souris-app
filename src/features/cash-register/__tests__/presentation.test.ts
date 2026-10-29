@@ -6,8 +6,10 @@ import {
 import { formatEuroCents } from '@/shared/lib/money';
 
 import {
+  canToggleCashRegisterTrendDisplay,
   describeCashRegisterComparisonUnavailability,
   describeCashRegisterTrend,
+  describeCashRegisterTrendToggle,
   formatCashRegisterComparisonReference,
   formatCashRegisterEmptyTitle,
   formatCashRegisterEntryDay,
@@ -18,12 +20,14 @@ import {
   formatPayingClientCount,
   formatProductUnitCount,
   formatProductUnitSplit,
+  getDefaultCashRegisterTrendDisplay,
   isSameLocalDay,
   isSameLocalMonth,
   shiftLocalDay,
   shiftLocalMonth,
   startOfLocalDay,
   startOfLocalMonth,
+  toggleCashRegisterTrendDisplay,
 } from '../presentation';
 
 describe('Cash Register presentation', () => {
@@ -118,6 +122,26 @@ describe('Cash Register comparison presentation', () => {
     expect(formatCashRegisterTrendValue(trend(4, 4), 'units')).toBe('Stable');
   });
 
+  it('writes either display on demand, and the change itself whenever nothing can be divided', () => {
+    expect(formatCashRegisterTrendValue(trend(112_400, 100_000), 'cents', 'absolute')).toBe(`+${formatEuroCents(12_400)}`);
+    expect(formatCashRegisterTrendValue(trend(92_000, 100_000), 'cents', 'absolute')).toBe(`−${formatEuroCents(8_000)}`);
+    expect(formatCashRegisterTrendValue(trend(12, 9), 'units', 'percent')).toMatch(/^\+33,3\s%$/);
+    expect(formatCashRegisterTrendValue(trend(124_000, 0), 'cents', 'percent')).toBe(`+${formatEuroCents(124_000)}`);
+    expect(formatCashRegisterTrendValue(trend(7, 0), 'units', 'percent')).toBe('+7');
+    expect(formatCashRegisterTrendValue(trend(4, 4), 'units', 'percent')).toBe('Stable');
+
+    expect(getDefaultCashRegisterTrendDisplay('cents')).toBe('percent');
+    expect(getDefaultCashRegisterTrendDisplay('units')).toBe('absolute');
+    expect(toggleCashRegisterTrendDisplay('percent')).toBe('absolute');
+    expect(toggleCashRegisterTrendDisplay('absolute')).toBe('percent');
+    expect(canToggleCashRegisterTrendDisplay(trend(112_400, 100_000))).toBe(true);
+    expect(canToggleCashRegisterTrendDisplay(trend(124_000, 0))).toBe(false);
+    expect(canToggleCashRegisterTrendDisplay(trend(100_000, 100_000))).toBe(false);
+    expect(describeCashRegisterTrendToggle('percent', 'cents')).toBe('Touchez pour afficher la variation en euros');
+    expect(describeCashRegisterTrendToggle('percent', 'units')).toBe('Touchez pour afficher la variation en unités');
+    expect(describeCashRegisterTrendToggle('absolute', 'cents')).toBe('Touchez pour afficher la variation en pourcentage');
+  });
+
   it('names the compared window, short, with the year only when it differs', () => {
     expect(formatCashRegisterComparisonReference(elapsed)).toBe('vs 1er–29 sept.');
     expect(formatCashRegisterComparisonReference(whole)).toBe('vs déc. 2026');
@@ -142,6 +166,13 @@ describe('Cash Register comparison presentation', () => {
       `En hausse de ${formatEuroCents(5_000)} par rapport à décembre 2026`,
     );
     expect(describeCashRegisterTrend(trend(3, 3, year), 'units')).toBe('Stable par rapport au 1er octobre 2025');
+    // Spoken in the display shown on screen.
+    expect(describeCashRegisterTrend(trend(112_400, 100_000), 'cents', 'absolute')).toBe(
+      `En hausse de ${formatEuroCents(12_400)} par rapport à la période du 1er au 29 septembre`,
+    );
+    expect(describeCashRegisterTrend(trend(2, 5), 'units', 'percent')).toMatch(
+      /^En baisse de 60,0\s% par rapport à la période du 1er au 29 septembre$/,
+    );
   });
 
   it('explains an unavailable comparison only when the reason helps, naming the localized month', () => {

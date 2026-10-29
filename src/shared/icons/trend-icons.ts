@@ -15,3 +15,12 @@ export const trendIcons = {
   DOWN: { ios: 'arrow.down.right', android: 'trending_down' },
   FLAT: { ios: 'arrow.right', android: 'trending_flat' },
 } as const satisfies Record<CashRegisterTrendDirection, PlatformSymbolName>;
+
+/**
+ * The quiet « tap to switch » cue inside a Caisse trend pill whose figure can
+ * switch between percent and the change itself — shown only when it can.
+ */
+export const trendDisplayToggleIcon = {
+  ios: 'arrow.left.arrow.right',
+  android: 'swap_horiz',
+} as const satisfies PlatformSymbolName;
