@@ -4,6 +4,7 @@ import {
   formatCashRegisterEntryMethods,
   formatCashRegisterMonth,
   formatCheckoutCount,
+  formatPayingClientCount,
   isSameLocalDay,
   isSameLocalMonth,
   shiftLocalDay,
@@ -38,6 +39,12 @@ describe('Cash Register presentation', () => {
     expect(formatCheckoutCount(0)).toBe('Aucun encaissement');
     expect(formatCheckoutCount(1)).toBe('1 encaissement');
     expect(formatCheckoutCount(3)).toBe('3 encaissements');
+  });
+
+  it('counts the distinct paying clients in neutral wording', () => {
+    expect(formatPayingClientCount(0)).toBe('Aucun client');
+    expect(formatPayingClientCount(1)).toBe('1 client');
+    expect(formatPayingClientCount(7)).toBe('7 clients');
   });
 
   it('words the empty Encaissements heading for the selected period', () => {

@@ -9,10 +9,12 @@ import {
 import type { Sale } from '../../sales';
 import {
   EMPTY_CASH_REGISTER_SUMMARY,
+  countCashRegisterPayingClients,
   getCashRegisterDailyTotals,
   getCashRegisterDayKey,
   getCashRegisterDayEntries,
   getCashRegisterDaySummary,
+  getCashRegisterEntryClientId,
   getCashRegisterIntervalSummary,
   getCashRegisterMonthEntries,
   getCashRegisterMonthSummary,
@@ -461,5 +463,130 @@ describe('Cash Register — daily totals', () => {
       expect(totals.get(getCashRegisterDayKey(day)) ?? 0).toBe(getCashRegisterDaySummary(sources, day).totalCents);
     }
     expect(totals.has('2026-10-05')).toBe(false);
+  });
+});
+
+describe('Cash Register — distinct paying clients', () => {
+  const day = new Date(2026, 8, 12, 12, 0);
+  const service: AppointmentItem = {
+    id: 'cut',
+    serviceId: 'service-cut',
+    order: 0,
+    serviceName: 'Coupe',
+    serviceType: 'SERVICE',
+    price: 40,
+    phases: [{ id: 'p', name: 'Coupe', durationMinutes: 30, requiresStaff: true }],
+  };
+  const deposit = (id: string, appointmentId: string, paidAt: Date, overrides: Partial<AppointmentDeposit> = {}): AppointmentDeposit => ({
+    id,
+    businessId: 'business-a',
+    appointmentId,
+    amountCents: 2000,
+    paymentMethod: 'CASH',
+    paidAt,
+    status: 'ACTIVE',
+    createdAt: paidAt,
+    ...overrides,
+  });
+
+  it('names the client behind each entry kind by stable id — never a name or a phone', () => {
+    const paidAppointment = paid('a', day, 4000, 0);
+    const scheduled = appointment('b', { clientId: 'client-b', items: [service], startAt: new Date(2026, 9, 1, 10, 0) });
+    const sources = {
+      appointments: [paidAppointment, scheduled],
+      sales: [standaloneSale('s', day, 1000, 0), standaloneSale('walk-in', day, 500, 0)].map((sale, index) =>
+        index === 0 ? { ...sale, clientId: 'client-s' } : sale,
+      ),
+      deposits: [deposit('d', 'b', day), deposit('orphan', 'not-loaded', day)],
+    };
+
+    const entries = getCashRegisterDayEntries(sources, day);
+    const clientOf = (id: string) => getCashRegisterEntryClientId(entries.find((entry) => (entry.kind === 'SALE' ? entry.sale.id : entry.kind === 'DEPOSIT' ? entry.deposit.id : entry.appointment.id) === id)!);
+
+    expect(clientOf('a')).toBe('client-a');
+    expect(clientOf('s')).toBe('client-s');
+    expect(clientOf('walk-in')).toBeUndefined();
+    expect(clientOf('d')).toBe('client-b');
+    // The money of a deposit whose Appointment is not loaded is counted, but identifies nobody.
+    expect(clientOf('orphan')).toBeUndefined();
+  });
+
+  it('counts a client once however many times they paid: checkout, deposit and standalone Sale', () => {
+    const sources = {
+      appointments: [paid('cut', new Date(2026, 8, 12, 10, 0), 4000, 0), appointment('later', { items: [service], startAt: new Date(2026, 9, 1, 10, 0) })],
+      sales: [{ ...standaloneSale('shampoo', new Date(2026, 8, 12, 10, 20), 2000, 0), clientId: 'client-a' }],
+      deposits: [deposit('advance', 'later', new Date(2026, 8, 12, 16, 0))],
+    };
+    const entries = getCashRegisterDayEntries(sources, day);
+
+    expect(entries).toHaveLength(3);
+    expect(getCashRegisterDaySummary(sources, day).checkoutCount).toBe(3);
+    expect(countCashRegisterPayingClients(entries)).toBe(1);
+  });
+
+  it('counts each distinct client, across Appointment and product payments', () => {
+    const sources = {
+      appointments: [
+        paid('a', new Date(2026, 8, 12, 9, 0), 4000, 0),
+        { ...paid('b', new Date(2026, 8, 12, 11, 0), 6000, 0), clientId: 'client-b' },
+      ],
+      sales: [
+        { ...standaloneSale('s1', new Date(2026, 8, 12, 12, 0), 1500, 0), clientId: 'client-c' },
+        { ...standaloneSale('s2', new Date(2026, 8, 12, 13, 0), 1500, 0), clientId: 'client-b' },
+      ],
+    };
+
+    expect(countCashRegisterPayingClients(getCashRegisterDayEntries(sources, day))).toBe(3);
+    expect(getCashRegisterDaySummary(sources, day).checkoutCount).toBe(4);
+  });
+
+  it('never counts anonymous payments as clients, and counts zero for an empty period', () => {
+    const sources = {
+      appointments: [],
+      sales: [standaloneSale('walk-in-1', day, 500, 0), standaloneSale('walk-in-2', day, 700, 300)],
+    };
+
+    expect(getCashRegisterDaySummary(sources, day).checkoutCount).toBe(2);
+    expect(countCashRegisterPayingClients(getCashRegisterDayEntries(sources, day))).toBe(0);
+    expect(countCashRegisterPayingClients([])).toBe(0);
+  });
+
+  it('follows the period: a client paid on another day counts in the month, not the day', () => {
+    const sources = {
+      appointments: [
+        paid('today', new Date(2026, 8, 12, 10, 0), 4000, 0),
+        { ...paid('earlier-this-month', new Date(2026, 8, 3, 10, 0), 4000, 0), clientId: 'client-b' },
+        { ...paid('last-month', new Date(2026, 7, 30, 10, 0), 4000, 0), clientId: 'client-c' },
+      ],
+      ...noSales,
+    };
+
+    expect(countCashRegisterPayingClients(getCashRegisterDayEntries(sources, day))).toBe(1);
+    expect(countCashRegisterPayingClients(getCashRegisterMonthEntries(sources, day))).toBe(2);
+  });
+
+  it('ignores what the totals ignore: VOIDED deposits, unpaid Sales, Sales sold during an Appointment, cancellations', () => {
+    const sources = {
+      appointments: [
+        paid('paid', day, 4000, 0),
+        appointment('cancelled', {
+          clientId: 'client-cancelled',
+          status: 'CANCELLED',
+          cancellation: { cancelledAt: day, cancelledBy: 'CLIENT' },
+        }),
+        appointment('pending', { clientId: 'client-pending', items: [service], startAt: new Date(2026, 9, 1, 10, 0) }),
+      ],
+      sales: [
+        { ...sale('linked', { appointmentId: 'paid', completedAt: day, payment: { paidAt: day, cardAmountCents: 2000, cashAmountCents: 0 } }), clientId: 'client-linked' },
+        { ...sale('unpaid', { completedAt: day }), clientId: 'client-unpaid' },
+      ],
+      deposits: [deposit('voided', 'pending', day, { status: 'VOIDED', voidedAt: day })],
+    };
+    const entries = getCashRegisterDayEntries(sources, day);
+
+    expect(entries).toHaveLength(1);
+    expect(countCashRegisterPayingClients(entries)).toBe(1);
+    // The summary itself is untouched by the client count.
+    expect(getCashRegisterDaySummary(sources, day)).toEqual({ totalCents: 4000, cardCents: 4000, cashCents: 0, checkoutCount: 1 });
   });
 });

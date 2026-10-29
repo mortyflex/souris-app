@@ -17,6 +17,27 @@ interface SectionHeaderProps {
   readonly testID?: string;
 }
 
+interface SectionCountChipProps {
+  readonly count: number;
+  /** Identifies the count text. */
+  readonly testID?: string;
+}
+
+/**
+ * The section count pill on its own, for a header that carries more than
+ * one figure (Caisse: « Encaissements [n] · Clients [n] »). Same geometry
+ * and colours as the built-in count.
+ */
+export function SectionCountChip({ count, testID }: SectionCountChipProps) {
+  return (
+    <View style={styles.countChip}>
+      <AppText variant="chip" style={styles.countText} testID={testID}>
+        {count}
+      </AppText>
+    </View>
+  );
+}
+
 export function SectionHeader({ title, count, children, style, testID }: SectionHeaderProps) {
   return (
     <View style={[styles.container, style]} testID={testID}>
@@ -25,15 +46,10 @@ export function SectionHeader({ title, count, children, style, testID }: Section
       </AppText>
       <View style={styles.trailing}>
         {count !== undefined && (
-          <View style={styles.countChip}>
-            <AppText
-              variant="chip"
-              style={styles.countText}
-              testID={testID === undefined ? undefined : `${testID}-count`}
-            >
-              {count}
-            </AppText>
-          </View>
+          <SectionCountChip
+            count={count}
+            testID={testID === undefined ? undefined : `${testID}-count`}
+          />
         )}
         {children}
       </View>

@@ -131,6 +131,35 @@ function getCashRegisterEntries(sources: CashRegisterSources): readonly CashRegi
   return entries;
 }
 
+/**
+ * The identified client whose money an entry records: the Appointment's
+ * client for a checkout or a deposit, the Sale's client for a standalone
+ * Sale. Undefined for a walk-in Sale and for a deposit whose Appointment is
+ * not loaded — such money is counted, but it identifies nobody.
+ */
+export function getCashRegisterEntryClientId(entry: CashRegisterEntry): string | undefined {
+  return entry.kind === 'SALE' ? entry.sale.clientId : entry.appointment?.clientId;
+}
+
+/**
+ * How many DISTINCT identified clients the entries' money came from, by
+ * stable client id — never by name or phone. A client who paid several
+ * times over the period (a checkout, a deposit, a standalone Sale) counts
+ * once; an entry without a client counts nobody. Give it the entries of the
+ * period (`getCashRegisterDayEntries` / `getCashRegisterMonthEntries`): the
+ * count then covers exactly the payments the period's totals count — a
+ * VOIDED deposit, an unpaid Sale or a Sale sold during an Appointment never
+ * reach it.
+ */
+export function countCashRegisterPayingClients(entries: readonly CashRegisterEntry[]): number {
+  const clientIds = new Set<string>();
+  for (const entry of entries) {
+    const clientId = getCashRegisterEntryClientId(entry);
+    if (clientId !== undefined) clientIds.add(clientId);
+  }
+  return clientIds.size;
+}
+
 /** Every payment the Cash Register may count, in source order. */
 export function getCashRegisterPayments(sources: CashRegisterSources): readonly RecordedPayment[] {
   return getCashRegisterEntries(sources).map((entry) => entry.payment);

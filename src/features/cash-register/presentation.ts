@@ -63,6 +63,15 @@ export function formatCheckoutCount(count: number): string {
 }
 
 /**
+ * `Aucun client` / `1 client` / `7 clients` — the distinct identified clients
+ * behind the period's payments (`countCashRegisterPayingClients`).
+ */
+export function formatPayingClientCount(count: number): string {
+  if (count === 0) return 'Aucun client';
+  return `${count} client${count > 1 ? 's' : ''}`;
+}
+
+/**
  * Empty « Encaissements » heading, worded for the selected period.
  *   Day   → « Aucun encaissement aujourd’hui » / « Aucun encaissement ce jour »
  *   Month → « Aucun encaissement ce mois-ci » / « Aucun encaissement ce mois »

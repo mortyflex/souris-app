@@ -78,6 +78,18 @@ function CheckoutProbe() {
         testID="sell-standalone-mixed"
         onPress={() => sell('sale-standalone-mixed', undefined, { cardAmountCents: 1000, cashAmountCents: 4000 })}
       />
+      <Pressable
+        testID="sell-anonymous"
+        onPress={() =>
+          completeSale({
+            id: 'sale-anonymous',
+            businessId: 'business-test',
+            payment: { cardAmountCents: 1500, cashAmountCents: 0 },
+            completedAt: new Date(),
+            lines: [{ id: 'sale-anonymous-1', productId: MASQUE_ID, quantity: 1 }],
+          })
+        }
+      />
       <Pressable testID="sell-linked-sofia" onPress={() => sell('sale-linked-sofia', 'agenda-sofia')} />
       <Pressable testID="sell-linked-lea" onPress={() => sell('sale-linked-lea', 'agenda-lea')} />
       <Pressable
@@ -149,12 +161,15 @@ function totals(view: Awaited<ReturnType<typeof render>>) {
   const total = view.getByTestId('cash-register-total').props.children as string;
   // The period caption is spoken with the KPI: « Total encaissé aujourd’hui : 0,00 € ».
   const totalLabel = view.getByTestId('cash-register-total-card').props.accessibilityLabel as string;
-  const countLabel = view.getByTestId('cash-register-count').props.accessibilityLabel as string;
+  // Spoken « Encaissements, 2 encaissements, 1 client ».
+  const [, count, clients] = (view.getByTestId('cash-register-count').props.accessibilityLabel as string).split(', ');
   return {
     total,
     card: within(view.getByTestId('cash-register-card')).getAllByText(/€/)[0]!.props.children as string,
     cash: within(view.getByTestId('cash-register-cash')).getAllByText(/€/)[0]!.props.children as string,
-    count: countLabel.replace('Encaissements, ', ''),
+    count,
+    clients,
+    clientPill: view.getByTestId('cash-register-client-count-value').props.children as number,
     caption: totalLabel.replace(/^Total /, '').replace(` : ${total}`, ''),
     period: periodLabel(view),
   };
@@ -191,6 +206,8 @@ describe('CashRegisterScreen', () => {
       card: formatEuroCents(0),
       cash: formatEuroCents(0),
       count: 'Aucun encaissement',
+      clients: 'Aucun client',
+      clientPill: 0,
       caption: 'encaissé aujourd’hui',
       period: 'Samedi 29 août',
     });
@@ -219,7 +236,10 @@ describe('CashRegisterScreen', () => {
     expect(view.getByLabelText(`Carte ${formatEuroCents(0)}`)).toBeTruthy();
 
     expect(view.getByText('Encaissements')).toBeTruthy();
-    expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe('Encaissements, Aucun encaissement');
+    expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
+      'Encaissements, Aucun encaissement, Aucun client',
+    );
+    expect(view.getByTestId('cash-register-client-count-value').props.children).toBe(0);
     const empty = view.getByTestId('cash-register-empty');
     expect(within(empty).getByText('Aucun encaissement aujourd’hui')).toBeTruthy();
     expect(within(empty).getByText('Les paiements encaissés apparaîtront ici.')).toBeTruthy();
@@ -251,7 +271,10 @@ describe('CashRegisterScreen', () => {
 
     expect(view.queryByTestId('cash-register-empty')).toBeNull();
     expect(totals(view)).toMatchObject({ total: formatEuroCents(14500), count: '2 encaissements' });
-    expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe('Encaissements, 2 encaissements');
+    // Sofia paid the standalone Sale AND the checkout: one client behind two encaissements.
+    expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
+      'Encaissements, 2 encaissements, 1 client',
+    );
 
     const rows = entryRows(view);
     expect(rows.map((row) => row.props.testID)).toEqual([
@@ -832,6 +855,95 @@ describe('CashRegisterScreen', () => {
     });
 
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  describe('distinct paying clients', () => {
+    it('shows a second compact counter « Clients » after the Encaissements count, zero included', async () => {
+      const view = await renderCashRegister();
+
+      const header = view.getByTestId('cash-register-count');
+      const counter = within(header).getByTestId('cash-register-client-count');
+      expect(within(counter).getByText('Clients')).toBeTruthy();
+      expect(within(counter).getByTestId('cash-register-client-count-value').props.children).toBe(0);
+      // Both pills share one geometry; the header wraps rather than truncating on narrow phones.
+      const pills = within(header)
+        .getAllByText('0')
+        .map((figure) => StyleSheet.flatten(figure.parent!.props.style));
+      expect(pills).toHaveLength(2);
+      expect(pills[1]).toEqual(pills[0]);
+      expect(StyleSheet.flatten(within(header).getByText('Encaissements').parent!.props.style)).toMatchObject({
+        flexWrap: 'wrap',
+      });
+      expect(totals(view)).toMatchObject({ count: 'Aucun encaissement', clients: 'Aucun client', clientPill: 0 });
+    });
+
+    it('counts a client once across a service checkout, a deposit and a product purchase', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      await press(view, 'deposit-sofia');
+      await press(view, 'checkout-sofia-rest');
+      await press(view, 'sell-standalone-card');
+
+      expect(totals(view)).toMatchObject({
+        total: formatEuroCents(14500),
+        count: '3 encaissements',
+        clients: '1 client',
+        clientPill: 1,
+      });
+    });
+
+    it('counts each distinct client, never an anonymous Sale, and keeps the transaction count', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      await press(view, 'checkout-sofia');
+      await press(view, 'checkout-ines');
+      await press(view, 'checkout-elodie');
+      await press(view, 'sell-standalone-mixed');
+      await press(view, 'sell-anonymous');
+
+      expect(totals(view)).toMatchObject({
+        total: formatEuroCents(9500 + 4200 + 4200 + 5000 + 1500),
+        count: '5 encaissements',
+        clients: '3 clients',
+        clientPill: 3,
+      });
+      expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
+        'Encaissements, 5 encaissements, 3 clients',
+      );
+    });
+
+    it('follows the selected day and month', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      // Sofia: a product purchase last month, then her checkout today.
+      jest.setSystemTime(new Date(2026, 6, 31, 18, 0));
+      await press(view, 'sell-standalone-card');
+      jest.setSystemTime(new Date(2026, 7, 28, 18, 0));
+      await press(view, 'checkout-elodie');
+      jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+      await press(view, 'checkout-sofia');
+
+      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: '1 client', clientPill: 1 });
+      await press(view, 'cash-register-previous');
+      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: '1 client', clientPill: 1 });
+
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+      expect(totals(view)).toMatchObject({ count: '2 encaissements', clients: '2 clients', clientPill: 2 });
+      // July: Sofia alone again — the same person, counted in her own month.
+      await press(view, 'cash-register-previous');
+      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: '1 client', clientPill: 1 });
+    });
+
+    it('a VOIDED deposit identifies nobody, like the money it no longer counts', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'deposit-sofia');
+      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: '1 client' });
+
+      await press(view, 'void-deposit-sofia');
+      expect(totals(view)).toMatchObject({ count: 'Aucun encaissement', clients: 'Aucun client', clientPill: 0 });
+    });
   });
 
   describe('deposits', () => {

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Pressable, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import type { Appointment, AppointmentItem } from '@/domain/appointments';
 import type { Product } from '@/domain/products';
@@ -22,7 +22,7 @@ import { ClientProfileScreen } from '../ClientProfileScreen';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
-import { caution, rose, semanticColors } from '@/shared/ui/theme';
+import { caution, rose, semanticColors, typography } from '@/shared/ui/theme';
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -719,6 +719,23 @@ describe('ClientProfileScreen', () => {
       fireEvent.press(view.getByText('Enregistrer les modifications'));
     });
     expect(view.queryByTestId('client-notes-section')).toBeNull();
+  });
+
+  it('renders the four Activité figures at one fixed prominent size, zero or not, never auto-shrunk', async () => {
+    const withoutAppointments = initialClients[0];
+
+    const view = await renderProfile(withoutAppointments.id);
+
+    const metrics = ['metric-completed', 'metric-spent', 'metric-noshow', 'metric-cancelled'];
+    const sizes = metrics.map((testID) => {
+      const figure = view.getByTestId(testID);
+      expect(figure.props.adjustsFontSizeToFit).toBeUndefined();
+      expect(figure.props.minimumFontScale).toBeUndefined();
+      expect(figure.props.numberOfLines).toBe(1);
+      return StyleSheet.flatten(figure.props.style).fontSize;
+    });
+    expect(sizes).toEqual(metrics.map(() => typography.daySummaryValue.fontSize));
+    expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(0));
   });
 
   it('keeps the profile structure stable at zero: Activité with four zeros and the empty Rendez-vous state', async () => {

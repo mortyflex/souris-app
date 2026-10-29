@@ -1605,8 +1605,13 @@ unchanged.
 - **Breakdown.** One `GroupedSurface`, one column per payment method (Carte | Espèces) split by
   a hairline: small accent glyph in a `surfaceLavenderStrong` tile, label in `metadata`, value
   in navy `summaryValue`.
-- **Encaissements.** `SectionHeader` with its count chip, spoken « Encaissements, 4
-  encaissements ». Rows come from the same domain selection as the totals
+- **Encaissements.** `SectionHeader` with its count chip, then a second compact counter
+  « Clients [n] » (a `foregroundSoft` `metadata` label and the same `SectionCountChip`): the
+  DISTINCT identified clients behind the period's entries (`countCashRegisterPayingClients`,
+  stable ids — a client who paid a service and bought products counts once, a walk-in Sale
+  counts nobody). Both counters follow the title; on a narrow phone with large text they wrap
+  under it as a group. Spoken « Encaissements, 4 encaissements, 3 clients ». Rows come from the
+  same domain selection as the totals
   (`getCashRegisterDayEntries` / `getCashRegisterMonthEntries`), oldest payment first: time
   (Mois: the day above it), client name and amount as primary, source and method as
   secondary (`Carte`, `Espèces`, `Carte + Espèces`). An Appointment checkout lists its

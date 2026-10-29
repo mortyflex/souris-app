@@ -11,8 +11,12 @@
 // A Sale sold during an Appointment is never counted separately: the
 // Appointment checkout already recorded that money. Totals and list come
 // from the same domain selection, so a listed payment is always a counted
-// one. Nothing is stored, cached or charted; planned or potential revenue
-// belongs to « Résumé du jour », never here.
+// one. Next to the « Encaissements » count, a second pill counts the DISTINCT
+// identified clients behind those same entries (`countCashRegisterPayingClients`,
+// stable ids): a client who paid a service and bought products in the period
+// counts once; a walk-in Sale counts nobody. Nothing is stored, cached or
+// charted; planned or potential revenue belongs to « Résumé du jour », never
+// here.
 //
 // The day is chosen through the shared month calendar (the Agenda's), each
 // day haloed by the money received on it relative to the best day of the
@@ -34,9 +38,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  countCashRegisterPayingClients,
   getCashRegisterDailyTotals,
   getCashRegisterDayEntries,
   getCashRegisterDaySummary,
+  getCashRegisterEntryClientId,
   getCashRegisterMonthEntries,
   getCashRegisterMonthSummary,
   type CashRegisterEntry,
@@ -70,7 +76,7 @@ import {
   glassIcons,
 } from "@/shared/ui/GlassIconButton";
 import { PushedScreenWatermark } from "@/shared/ui/ScreenWatermarkIcon";
-import { SectionHeader } from "@/shared/ui/SectionHeader";
+import { SectionCountChip, SectionHeader } from "@/shared/ui/SectionHeader";
 import { SegmentedControl } from "@/shared/ui/SegmentedControl";
 import {
   foregroundSoft,
@@ -98,6 +104,7 @@ import {
   formatCashRegisterEmptyTitle,
   formatCashRegisterMonth,
   formatCheckoutCount,
+  formatPayingClientCount,
   isSameLocalDay,
   isSameLocalMonth,
   shiftLocalDay,
@@ -189,6 +196,8 @@ export function CashRegisterScreen() {
     period === "day"
       ? getCashRegisterDayEntries(sources, selectedDay)
       : getCashRegisterMonthEntries(sources, selectedMonth);
+  // Over the period's entries: exactly the payments the totals count.
+  const payingClientCount = countCashRegisterPayingClients(entries);
   const isCurrentPeriod =
     period === "day"
       ? isSameLocalDay(selectedDay, now)
@@ -203,8 +212,7 @@ export function CashRegisterScreen() {
   const total = formatEuroCents(summary.totalCents);
 
   const clientNameOf = (entry: CashRegisterEntry): string | undefined => {
-    const clientId =
-      entry.kind === "SALE" ? entry.sale.clientId : entry.appointment?.clientId;
+    const clientId = getCashRegisterEntryClientId(entry);
     return clientId === undefined
       ? undefined
       : getResolvedClientDisplayName(getClientById(clientId));
@@ -335,7 +343,7 @@ export function CashRegisterScreen() {
         <View style={styles.entriesSection}>
           <View
             accessible
-            accessibilityLabel={`Encaissements, ${formatCheckoutCount(summary.checkoutCount)}`}
+            accessibilityLabel={`Encaissements, ${formatCheckoutCount(summary.checkoutCount)}, ${formatPayingClientCount(payingClientCount)}`}
             accessibilityRole="header"
             testID="cash-register-count"
           >
@@ -343,7 +351,17 @@ export function CashRegisterScreen() {
               count={summary.checkoutCount}
               style={styles.entriesHeader}
               title="Encaissements"
-            />
+            >
+              <View style={styles.clientCounter} testID="cash-register-client-count">
+                <AppText variant="metadata" style={styles.clientCounterLabel}>
+                  Clients
+                </AppText>
+                <SectionCountChip
+                  count={payingClientCount}
+                  testID="cash-register-client-count-value"
+                />
+              </View>
+            </SectionHeader>
           </View>
 
           {entries.length === 0 ? (
@@ -521,7 +539,20 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   entriesSection: { gap: spacing.md, marginTop: spacing.xs },
-  entriesHeader: { justifyContent: "flex-start", gap: spacing.sm },
+  // Two counters after the title. On a narrow phone with large text the
+  // counters wrap under the title as a group instead of truncating it.
+  entriesHeader: {
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    justifyContent: "flex-start",
+  },
+  // « Clients [n] »: a quiet label then the same chip as the Encaissements count.
+  clientCounter: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+  },
+  clientCounterLabel: { color: foregroundSoft },
   // Quieter than the figures: a white card, a small lavender glyph, two lines.
   emptyState: {
     alignItems: "center",
