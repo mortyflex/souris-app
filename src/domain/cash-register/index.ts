@@ -41,6 +41,7 @@ export {
   getCashRegisterDayProductSummary,
   getCashRegisterHistoryStart,
   getCashRegisterMonthComparison,
+  getCashRegisterMonthInterval,
   getCashRegisterMonthInsights,
   getCashRegisterProductSummary,
   isCashRegisterIntervalCovered,

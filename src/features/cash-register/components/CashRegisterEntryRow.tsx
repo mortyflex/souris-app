@@ -9,9 +9,9 @@
 // payment and how it was received. An Appointment checkout reads its item
 // snapshots and opens the existing Appointment Details; a deposit reads
 // « Acompte » + its Appointment's services and opens the same Details; a
-// standalone Sale reads its item snapshots and stays read-only — no Sale
-// detail exists, so no chevron is drawn. Month mode adds the day above the
-// time.
+// standalone Sale reads its item snapshots and opens its read-only Sale
+// detail (the caller decides: without a handler no chevron is drawn). Month
+// mode adds the day above the time.
 
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';

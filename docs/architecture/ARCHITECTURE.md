@@ -86,7 +86,7 @@ src/app/(auth)/          index = Product Discovery (3 slides), sign-up, sign-in,
                          (demo)/ — the Playground demo group: the (app) operational routes it
                          needs (tabs accueil · agenda · clientes · produits · demo, appointments,
                          clients, services, calendar blocks, estimations, products, sales/new,
-                         cash-register) inside the demo runtime
+                         sales (history) and sales/[saleId], cash-register) inside the demo runtime
 src/app/(onboarding)/    five-step business setup (one route)         — session, no Business
                          (starts at the primary activity: Discovery is owned by (auth))
 src/app/(app)/           tabs + every operational sheet route         — session + bound Business

@@ -297,14 +297,20 @@ describe('CashRegisterScreen', () => {
       'cash-register-entry-agenda-sofia',
     ]);
 
-    // A standalone Sale names its source and its mixed payment; no detail exists, so it is read-only.
+    // A standalone Sale names its source and its mixed payment, and opens its read-only detail.
     const sale = view.getByTestId('cash-register-entry-sale-standalone-mixed');
-    expect(sale.props.accessibilityRole).toBeUndefined();
+    expect(sale.props.accessibilityRole).toBe('button');
     expect(within(sale).getByText('10:30')).toBeTruthy();
     expect(within(sale).getByText('Sofia Petit')).toBeTruthy();
     expect(within(sale).getByText(/^Vente · /)).toBeTruthy();
     expect(within(sale).getByText(formatEuroCents(5000))).toBeTruthy();
     expect(within(sale).getByText('Carte + Espèces')).toBeTruthy();
+    await press(view, 'cash-register-entry-sale-standalone-mixed');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/sales/[saleId]',
+      params: { saleId: 'sale-standalone-mixed' },
+    });
+    mockPush.mockClear();
 
     // An Appointment checkout opens the existing Appointment Details.
     const appointment = view.getByTestId('cash-register-entry-agenda-sofia');
@@ -1035,6 +1041,37 @@ describe('CashRegisterScreen', () => {
       expect(view.getByTestId('cash-register-total-card').props.accessibilityLabel).toBe(
         `Total encaissé aujourd’hui : ${formatEuroCents(9500)}`,
       );
+    });
+
+    it('the « Produits vendus » card opens the sale history on the period the Caisse shows', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      await press(view, 'sell-standalone-card');
+
+      // Jour: the selected day.
+      await press(view, 'cash-register-previous');
+      await press(view, 'cash-register-next');
+      await press(view, 'cash-register-products-open');
+      expect(mockPush).toHaveBeenLastCalledWith({
+        pathname: '/sales',
+        params: { period: 'day', date: '2026-08-29' },
+      });
+
+      // Mois: the 1st of the selected month, a month back.
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+      await press(view, 'cash-register-previous');
+      // July sold nothing and has no unit trend: no card, no entry point to an empty history.
+      expect(view.queryByTestId('cash-register-products')).toBeNull();
+      await press(view, 'cash-register-next');
+      await press(view, 'cash-register-products-open');
+      expect(mockPush).toHaveBeenLastCalledWith({
+        pathname: '/sales',
+        params: { period: 'month', date: '2026-08-01' },
+      });
+      // The totals are exactly what they were: the history changes nothing here.
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(5000), count: '1 encaissement' });
     });
 
     it('Mois compares the month to date with the same elapsed span of the previous month, written and spoken', async () => {

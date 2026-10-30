@@ -303,6 +303,40 @@ COMPLETED. A standalone Sale without a recorded payment is listed here but adds 
 
 ---
 
+## 11b. Sale History (Caisse « Produits vendus »)
+
+The Caisse « Produits vendus » card ends with « Voir les ventes », which opens the READ-ONLY sale
+history of the period the Caisse is showing (`/sales?period=day|month&date=YYYY-MM-DD`); a « Vente »
+entry of the Caisse « Encaissements » list opens the detail of that Sale (`/sales/[saleId]`). Both
+derive from the Sale session alone (`src/domain/sales/history.ts`):
+
+```text
+listSaleHistory(sales, interval)       the Sales whose completedAt falls in [start, end), newest first
+describeSaleHistoryEntry(sale)         { sale, channel, paymentRecord, totalCents, unitCount }
+summarizeSaleHistory(entries)          sales, units, direct units, Appointment units
+findSaleHistoryEntry(sales, saleId)    one Sale, or undefined
+```
+
+- **Period.** A Sale belongs to the local civil day / calendar month of its own `completedAt` — the
+  SAME intervals as the Caisse card (`getCashRegisterDayInterval`, `getCashRegisterMonthInterval`), so
+  the units counted by the card and the Sales listed always agree. The history has the Caisse controls
+  (Jour | Mois, the shared DateNavigator and month calendar, the grouped month navigator).
+- **Channel.** `DIRECT` (no `appointmentId`) or `APPOINTMENT` (a Sale sold during an Appointment,
+  « Pendant un rendez-vous »). Rows and detail name it; nothing else distinguishes them.
+- **Payment record.** `SALE_PAYMENT` (a direct Sale with its own card / cash record: « Carte »,
+  « Espèces », « Carte + Espèces »), `APPOINTMENT_CHECKOUT` (a Revente: « Avec le rendez-vous », the
+  detail leads to the Appointment, or says it is not on this device), `NONE` (a historical direct Sale
+  without any record: « Non renseigné » — no method is ever invented). A Sale sold during an
+  Appointment is never counted as money of its own here either: the history shows its snapshot total
+  and says the Appointment checkout recorded it.
+- **Snapshots only.** Lines show `productName`, `quantity`, `unitPrice` and the exact cents line total
+  (`getSaleTotalCents`) as sold; a later catalog rename or price change never changes the history.
+- **Read-only.** Nothing is stored, cached, edited, refunded or deleted from these screens, and the
+  Caisse totals, breakdown, counters and list are unchanged by their existence. Corrections and refunds
+  are the next milestone (`docs/product/SALE_ADJUSTMENTS_PLAN.md`).
+
+---
+
 ## 12. Legacy Source
 
 There is NO legacy Sale, transaction, order, or purchase dataset in the repository. The legacy
@@ -325,5 +359,7 @@ never in the domain.
 
 Not in this phase: pending orders, payment providers, card terminal, payment correction on
 a completed Sale, line-by-line Sale editing or deletion, deletion of a standalone (paid) Sale,
-refunds, returns, discounts, tax/VAT, receipts/invoices, accounting, revenue dashboard, sales
-history screen, loyalty, per-sale price editing, image snapshots, cloud sync.
+refunds, returns, discounts, tax/VAT, receipts/invoices, accounting, revenue dashboard, loyalty,
+per-sale price editing, image snapshots. The read-only sale history exists (§11b); corrections
+and refunds follow the approved plan in `docs/product/SALE_ADJUSTMENTS_PLAN.md` and are not
+implemented yet.

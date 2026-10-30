@@ -1548,7 +1548,7 @@ lifecycle are unchanged.
 - **Rows.** Appointment: date (`Mar. 22 sept.`, year only outside the current one) over time,
   prestation summary (+ status in rose for cancellations / no-shows), amount, muted chevron;
   the whole row opens Appointment Details. Sale: product summary, `date · ×1` or
-  `date · 3 produits`, total; read-only (no Sale detail exists).
+  `date · 3 produits`, total; read-only here (the Caisse sale detail, §47, is reached from the Caisse).
 - **Complete histories.** Pushed full screens (`clients/appointments/[clientId]`,
   `clients/purchases/[clientId]`): centred title with the client's name under it, a
   virtualized list whose rows carry the grouped surface slice by slice. Appointments filter
@@ -1644,7 +1644,7 @@ unchanged.
   (Mois: the day above it), client name and amount as primary, source and method as
   secondary (`Carte`, `Espèces`, `Carte + Espèces`). An Appointment checkout lists its
   prestations and opens Appointment Details (muted chevron); a standalone Sale reads
-  « Vente · products » and stays read-only — no Sale detail exists.
+  « Vente · products » and opens its read-only Sale detail (§47, same muted chevron).
 - **Produits vendus.** Between the breakdown and « Encaissements », one `GroupedSurface`, present
   only when the period sold a product (or Mois has a unit trend): the `saleIcon` in the same 34 pt
   `surfaceLavenderStrong` tile as the methods, « Produits vendus » in `foregroundSoft` `metadata`,
@@ -1653,7 +1653,10 @@ unchanged.
   percent; then the split « 7 en vente directe · 5 pendant
   des rendez-vous » when Reventes are counted. Under an inset hairline, « Ventes directes encaissées »
   (`body`, soft) with its amount (`control`, tabular) and, when Reventes are counted, the one-sentence
-  note on how they are paid. Two accessible groups, each spoken whole.
+  note on how they are paid. Two accessible groups, each spoken whole. Under a second inset hairline,
+  ONE last row « Voir les ventes » (accent `control`, the directory `NavigationChevron`, 50 pt, pressed
+  `surfaceLavender`), a button with the hint « Ouvre l’historique des ventes de produits de la
+  période »: it pushes the sale history (§47) on the period shown.
 - **Empty.** A compact `surfaceLavender` block: 44 pt glyph circle, « Aucun encaissement
   aujourd’hui » (ce jour / ce mois-ci / ce mois), « Les paiements encaissés apparaîtront
   ici. » Never taller than it needs; the page may end in whitespace.
@@ -2729,3 +2732,37 @@ required steps done, accent on `surfaceLavenderStrong`) under its header.
 - **Reduce Motion.** Every state change and the « ready » message for the whole 3 s reading
   period, without movement; then the card is removed without a fold.
 - A guide mounted already complete closes silently. Every timer is cleared on unmount.
+
+---
+
+## 47. Caisse — Sale History and Sale Detail (read-only)
+
+The Caisse « Produits vendus » card and its « Vente » entries open two pushed Gestion screens
+(`src/features/sales/history`). Both are read-only: no action, no edit, no refund, nothing stored.
+
+- **Top bar.** The Caisse's own: glass back, « GESTION » eyebrow centred, mirrored spacer; the
+  `cashRegister` watermark at the same optics. The `screenTitle` follows in the content.
+- **Produits vendus (history).** The Caisse period module as is: `SegmentedControl` Jour | Mois,
+  then the shared `DateNavigator` (with the month calendar, no halos) or the grouped month navigator
+  (« Octobre 2026 », « Ce mois-ci » / « Revenir à ce mois-ci »). Then a `SectionHeader` « Ventes »
+  with its count chip and a second quiet counter « Unités [n] » (the §31 « Clients [n] » pattern),
+  spoken « Ventes, 3 ventes, 7 unités ». Rows share the §31 entry grid (58 pt when column, name,
+  money, 14 pt chevron, 64 pt minimum, pressed `surfaceLavender`) in a virtualized grouped list
+  (`shared/ui/grouped-list`): time (Mois: the day above it), the client in `rowTitle` (« Vente sans
+  client »), « Vente directe · Shampooing + Soin » or « Pendant un rendez-vous · Soin » in
+  `metadata`; the exact snapshot total in `control` with, under it, « Carte », « Espèces »,
+  « Carte + Espèces », « Avec le rendez-vous » or « Non renseigné ». The whole row is the button
+  (hint « Ouvre le détail de la vente »). Empty: the §31 block, « Aucune vente aujourd’hui » (ce jour /
+  ce mois-ci / ce mois), « Les ventes de produits apparaîtront ici. ».
+- **Détail de la vente.** One `surfaceLavender` summary (the Appointment payment summary surface):
+  eyebrow « VENTE DIRECTE » / « VENDUE PENDANT UN RENDEZ-VOUS » in accent, the total in navy
+  `display`, « Jeudi 15 octobre 2026 à 14:35 » and « 5 produits » in soft `metadata`, spoken whole.
+  Then a `GroupedSurface` « Client » row (fixed 112 pt label, the name; a button with the
+  `NavigationChevron` when the client exists, read-only otherwise — « Vente sans client », « Client
+  inconnu »). « Produits » (`SectionHeader`, unit count) lists every snapshot line on one
+  `GroupedSurface`: name in `rowTitle`, « ×2 · 18,00 € » in `metadata`, the line total in `control`.
+  « Encaissement »: `GroupedReadRow`s « Total reçu », « Carte » / « Espèces » (only the methods used),
+  « Encaissé le » only when the payment day differs; for a Revente, one soft note and the accent row
+  « Voir le rendez-vous » (or « Rendez-vous introuvable sur cet appareil », read-only); for a
+  historical Sale, one soft note — never a method. Not found: « Vente introuvable », the top bar stays.
+- **No** amount in a state tone, no chart, no action button of any kind.

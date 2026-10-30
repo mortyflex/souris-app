@@ -30,7 +30,9 @@
 // reference month has no such day); an empty month, a future month or two
 // empty spans say nothing. And a « Produits vendus » card: the units sold
 // (quantities, Reventes included), their unit trend, and the money received for
-// DIRECT sales only. Jour shows the day's products without any comparison.
+// DIRECT sales only. Jour shows the day's products without any comparison. Its
+// last row opens the read-only sale history on the SAME period, and a « Vente »
+// entry of the list opens that Sale's detail (docs/domain/SALES.md §11b).
 //
 // The day is chosen through the shared month calendar (the Agenda's), each
 // day haloed by the money received on it relative to the best day of the
@@ -67,6 +69,7 @@ import {
 import { useAppointmentSession } from "@/features/appointments/session/AppointmentSessionProvider";
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
+import { toSaleHistoryRouteParams } from "@/features/sales/history/route-params";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import { usePersistence } from "@/providers/PersistenceProvider";
 import {
@@ -277,9 +280,13 @@ export function CashRegisterScreen() {
       : getResolvedClientDisplayName(getClientById(clientId));
   };
   // An Appointment checkout and a deposit open their Appointment Details; a
-  // standalone Sale has no detail screen.
+  // standalone Sale opens its read-only detail.
   const openEntry = (entry: CashRegisterEntry) => {
-    const appointmentId = entry.kind === "SALE" ? undefined : entry.appointment?.id;
+    if (entry.kind === "SALE") {
+      return () =>
+        router.push({ pathname: "/sales/[saleId]", params: { saleId: entry.sale.id } });
+    }
+    const appointmentId = entry.appointment?.id;
     return appointmentId === undefined
       ? undefined
       : () =>
@@ -288,6 +295,12 @@ export function CashRegisterScreen() {
             params: { appointmentId },
           });
   };
+  // The sale history opens on the period the Caisse is showing.
+  const openSales = () =>
+    router.push({
+      pathname: "/sales",
+      params: toSaleHistoryRouteParams(period, period === "day" ? selectedDay : selectedMonth),
+    });
 
   return (
     <SafeAreaView
@@ -442,6 +455,7 @@ export function CashRegisterScreen() {
         </GroupedSurface>
 
         <CashRegisterProductsCard
+          onOpenSales={openSales}
           summary={products}
           testID="cash-register-products"
           unitTrend={monthInsights?.productUnitTrend}

@@ -31,3 +31,18 @@ export type {
   ProductStockRestoration,
 } from './deletion';
 export { isAppointmentLinkedSale, removeAppointmentProduct } from './deletion';
+export type {
+  SaleChannel,
+  SaleHistoryEntry,
+  SaleHistoryInterval,
+  SaleHistorySummary,
+  SalePaymentRecord,
+} from './history';
+export {
+  describeSaleHistoryEntry,
+  findSaleHistoryEntry,
+  getSaleChannel,
+  getSalePaymentRecord,
+  listSaleHistory,
+  summarizeSaleHistory,
+} from './history';

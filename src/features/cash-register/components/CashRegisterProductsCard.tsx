@@ -12,13 +12,14 @@
 // Absent when the period sold nothing and has no unit trend to report.
 
 import { SymbolView } from 'expo-symbols';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { CashRegisterProductSummary, CashRegisterTrend } from '@/domain/cash-register';
 import { saleIcon } from '@/shared/icons/sale-icon';
 import { formatEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
 import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
+import { NavigationChevron } from '@/shared/ui/NavigationChevron';
 import { foregroundSoft, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
@@ -32,15 +33,19 @@ import { CashRegisterTrendRow, CashRegisterTrendToggle } from './CashRegisterTre
 export const PRODUCTS_TITLE = 'Produits vendus';
 export const DIRECT_SALES_LABEL = 'Ventes directes encaissées';
 export const REVENTE_NOTE = 'Les produits vendus pendant un rendez-vous sont encaissés avec celui-ci.';
+export const OPEN_SALES_LABEL = 'Voir les ventes';
+export const OPEN_SALES_HINT = 'Ouvre l’historique des ventes de produits de la période';
 
 interface CashRegisterProductsCardProps {
   readonly summary: CashRegisterProductSummary;
   /** Month view only: units against the equivalent span of the previous month. */
   readonly unitTrend?: CashRegisterTrend;
+  /** Opens the sale history of the period; absent, the card stays a summary. */
+  readonly onOpenSales?: () => void;
   readonly testID: string;
 }
 
-export function CashRegisterProductsCard({ summary, unitTrend, testID }: CashRegisterProductsCardProps) {
+export function CashRegisterProductsCard({ summary, unitTrend, onOpenSales, testID }: CashRegisterProductsCardProps) {
   const trendDisplay = useCashRegisterTrendDisplay('units', [unitTrend]);
   if (summary.unitCount === 0 && unitTrend === undefined) return null;
 
@@ -112,6 +117,24 @@ export function CashRegisterProductsCard({ summary, unitTrend, testID }: CashReg
           </AppText>
         )}
       </View>
+      {onOpenSales && (
+        <>
+          <GroupedSeparator inset={spacing.base} />
+          <Pressable
+            accessibilityHint={OPEN_SALES_HINT}
+            accessibilityLabel={OPEN_SALES_LABEL}
+            accessibilityRole="button"
+            onPress={onOpenSales}
+            style={({ pressed }) => [styles.open, pressed && styles.openPressed]}
+            testID={`${testID}-open`}
+          >
+            <AppText style={styles.openLabel} variant="control">
+              {OPEN_SALES_LABEL}
+            </AppText>
+            <NavigationChevron />
+          </Pressable>
+        </>
+      )}
     </GroupedSurface>
   );
 }
@@ -165,4 +188,16 @@ const styles = StyleSheet.create({
   directLabel: { color: foregroundSoft, flexShrink: 1 },
   directValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   note: { color: foregroundSoft },
+  // The way to the sale history: an accent label and the directory chevron, one row.
+  open: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'space-between',
+    minHeight: 50,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+  },
+  openPressed: { backgroundColor: semanticColors.surfaceLavender },
+  openLabel: { color: semanticColors.accent, flexShrink: 1 },
 });

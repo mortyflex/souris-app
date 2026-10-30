@@ -171,7 +171,8 @@ Tabs, in the product's order: Accueil · Agenda · Clientèle · Produits · Dé
 New `(demo)` routes over the product's own screens, nothing re-implemented: `(tabs)/accueil`
 (`HomeScreen` — `accueil`, because the signed-out `(auth)/index` owns `/`), `(tabs)/produits`,
 `products/new`, `products/[productId]`, `sales/new` (`SaleCreationScreen`, replacing the B1
-« Non disponible » placeholder) and `cash-register`. Every path the reused screens push
+« Non disponible » placeholder), `cash-register`, and the read-only Caisse sale history
+`sales` / `sales/[saleId]`. Every path the reused screens push
 (`/sales/new`, `/products/…`, `/cash-register`, `/clients/[clientId]` from a podium) exists in the
 group and resolves inside it; `/reminder-settings` and `/lifecycle-sms-settings` are pushed only by
 Plus, which the demo does not mount. The runtime already provided the product and sale sessions;

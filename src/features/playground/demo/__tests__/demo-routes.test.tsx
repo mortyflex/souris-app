@@ -17,6 +17,8 @@ import PlaygroundDemoProduitsRoute from '@/app/(auth)/(demo)/(tabs)/produits';
 import PlaygroundDemoCashRegisterRoute from '@/app/(auth)/(demo)/cash-register/index';
 import PlaygroundDemoProductRoute from '@/app/(auth)/(demo)/products/[productId]';
 import PlaygroundDemoNewProductRoute from '@/app/(auth)/(demo)/products/new';
+import PlaygroundDemoSaleDetailRoute from '@/app/(auth)/(demo)/sales/[saleId]';
+import PlaygroundDemoSalesHistoryRoute from '@/app/(auth)/(demo)/sales/index';
 import PlaygroundDemoSaleRoute from '@/app/(auth)/(demo)/sales/new';
 
 import { isPlaygroundAvailable } from '../../availability';
@@ -146,10 +148,15 @@ describe('Playground demo routes', () => {
       PlaygroundDemoProductRoute,
       PlaygroundDemoNewProductRoute,
       PlaygroundDemoSaleRoute,
+      PlaygroundDemoSalesHistoryRoute,
+      PlaygroundDemoSaleDetailRoute,
     ]) {
       expect(typeof route).toBe('function');
     }
     expect(PlaygroundDemoSaleRoute.toString()).toContain('SaleCreationScreen');
+    // The Caisse sale history and detail (read-only) follow the Caisse into the demo.
+    expect(PlaygroundDemoSalesHistoryRoute.toString()).toContain('SalesHistoryScreen');
+    expect(PlaygroundDemoSaleDetailRoute.toString()).toContain('SaleDetailScreen');
     expect(PlaygroundDemoAccueilRoute.toString()).toContain('HomeScreen');
     expect(PlaygroundDemoCashRegisterRoute.toString()).toContain('CashRegisterScreen');
   });

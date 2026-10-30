@@ -1,8 +1,15 @@
 import type { Sale } from '@/domain/sales';
 
 import {
+  SALE_PAID_WITH_APPOINTMENT_SHORT,
+  SALE_PAYMENT_UNKNOWN_SHORT,
   describeSaleCompletionIssue,
+  formatSaleCount,
   formatSaleDate,
+  formatSaleDateTime,
+  formatSaleHistoryEmptyTitle,
+  formatSalePaymentMethods,
+  formatSalePaymentRecordShort,
   formatSaleQuantity,
   formatSaleQuantitySummary,
   formatSaleSummary,
@@ -89,5 +96,49 @@ describe('Sale history summary', () => {
     expect(formatSaleQuantitySummary({ items: [item('Shampooing', 1), item('Soin', 2)] })).toBe(
       '3 produits',
     );
+  });
+});
+
+describe('Sale history presentation', () => {
+  const direct: Sale = {
+    id: 'sale-direct',
+    businessId: 'business',
+    clientId: 'client-a',
+    completedAt: new Date(2026, 9, 12, 14, 5),
+    items: [],
+    payment: { paidAt: new Date(2026, 9, 12, 14, 5), cardAmountCents: 1000, cashAmountCents: 1500 },
+  };
+
+  it('counts sales with French pluralisation', () => {
+    expect(formatSaleCount(0)).toBe('Aucune vente');
+    expect(formatSaleCount(1)).toBe('1 vente');
+    expect(formatSaleCount(3)).toBe('3 ventes');
+  });
+
+  it('names how a recorded payment was received, and never invents one', () => {
+    expect(formatSalePaymentMethods({ cardAmountCents: 1000, cashAmountCents: 1500 })).toBe('Carte + Espèces');
+    expect(formatSalePaymentMethods({ cardAmountCents: 0, cashAmountCents: 1500 })).toBe('Espèces');
+    expect(formatSalePaymentMethods({ cardAmountCents: 0, cashAmountCents: 0 })).toBe('');
+    expect(formatSalePaymentRecordShort({ paymentRecord: 'SALE_PAYMENT', sale: direct })).toBe('Carte + Espèces');
+    expect(
+      formatSalePaymentRecordShort({
+        paymentRecord: 'APPOINTMENT_CHECKOUT',
+        sale: { ...direct, appointmentId: 'a', payment: undefined },
+      }),
+    ).toBe(SALE_PAID_WITH_APPOINTMENT_SHORT);
+    expect(formatSalePaymentRecordShort({ paymentRecord: 'NONE', sale: { ...direct, payment: undefined } })).toBe(
+      SALE_PAYMENT_UNKNOWN_SHORT,
+    );
+  });
+
+  it('words the empty history for the selected period', () => {
+    expect(formatSaleHistoryEmptyTitle('day', true)).toBe('Aucune vente aujourd’hui');
+    expect(formatSaleHistoryEmptyTitle('day', false)).toBe('Aucune vente ce jour');
+    expect(formatSaleHistoryEmptyTitle('month', true)).toBe('Aucune vente ce mois-ci');
+    expect(formatSaleHistoryEmptyTitle('month', false)).toBe('Aucune vente ce mois');
+  });
+
+  it('writes the validation instant in full French, capitalised', () => {
+    expect(formatSaleDateTime(new Date(2026, 9, 12, 14, 5))).toBe('Lundi 12 octobre 2026 à 14:05');
   });
 });

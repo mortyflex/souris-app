@@ -71,6 +71,8 @@ export default function AppLayout() {
                       <Stack.Screen name="products/new" options={editorSheet} />
                       <Stack.Screen name="products/[productId]" options={editorSheet} />
                       <Stack.Screen name="sales/new" options={editorSheet} />
+                      <Stack.Screen name="sales/index" options={pushedScreen} />
+                      <Stack.Screen name="sales/[saleId]" options={pushedScreen} />
                     </Stack>
                   </CommunicationPreferencesProvider>
                 </CalendarBlockSessionProvider>

@@ -1044,9 +1044,10 @@ back can discard it. The flow itself:
   returns to `Produits` where the updated stock is visible immediately. A final stock failure
   keeps the screen open, explains which Product lacks stock, and mutates nothing.
 
-Sales V1 deliberately excludes: pending orders, payment methods on standalone Sales, card
-terminal, refunds, returns, discounts, per-sale price editing, VAT, receipts, accounting, revenue
-dashboard, a Sales history screen or tab, and loyalty. Stock remains direct V1 state: there is
+Sales V1 deliberately excludes: pending orders, card terminal, refunds, returns, discounts,
+per-sale price editing, VAT, receipts, accounting, revenue dashboard, a Sales tab, and loyalty.
+The Caisse offers a READ-ONLY sale history and detail (« Caisse », *Historique des ventes*);
+corrections and refunds follow `docs/product/SALE_ADJUSTMENTS_PLAN.md` and are not implemented. Stock remains direct V1 state: there is
 still no stock-movement history — a completed Sale simply decrements the quantity.
 
 **Standalone Product Sale payment.** `Produits → Nouvelle vente`: after `Valider la vente` the same
@@ -1321,9 +1322,31 @@ when the period sold a product (or Mois has a unit trend to report):
   Caisse « Vente » entries. A product sold during an Appointment is paid inside its checkout, which
   records services and products as ONE amount: no product amount is ever derived from it, and the card
   says so (« Les produits vendus pendant un rendez-vous sont encaissés avec celui-ci. »). An unpaid
-  historical Sale counts its units, never money.
+  historical Sale counts its units, never money;
+- « Voir les ventes »: the last row of the card opens the sale history of the SAME period (below).
 
 Nothing here is stored or synced; the totals, breakdown, counters and list are unchanged.
+
+**Historique des ventes (read-only).** `Caisse → Produits vendus → Voir les ventes` pushes
+« Produits vendus », the list of the Product Sales validated over the selected period, with the
+Caisse controls (Jour | Mois, the same day navigator and month calendar, the same month navigator)
+and opened on the period the Caisse was showing (`docs/domain/SALES.md` §11b):
+
+- a « Ventes [n] · Unités [n] » header, then one row per Sale, newest first: time (Mois: the day
+  above it), the client (« Vente sans client » for a walk-in Sale), « Vente directe · products » or
+  « Pendant un rendez-vous · products », the exact snapshot total, and how the money was recorded —
+  « Carte », « Espèces », « Carte + Espèces », « Avec le rendez-vous », or « Non renseigné » for a
+  historical Sale without any record. Nothing is ever invented;
+- an empty period says « Aucune vente aujourd’hui » (ce jour / ce mois-ci / ce mois);
+- every row — and every « Vente » entry of the Caisse « Encaissements » list — opens « Détail de la
+  vente »: « VENTE DIRECTE » or « VENDUE PENDANT UN RENDEZ-VOUS », the total, « Lundi 12 octobre 2026 à
+  14:35 », the unit count, the client row (opens the profile), every line as sold (name, « ×2 ·
+  18,00 € », line total), then « Encaissement »: the received total and its Carte / Espèces split
+  (and « Encaissé le » when the day differs) for a direct Sale; « Le montant a été encaissé avec le
+  rendez-vous… » and « Voir le rendez-vous » for a Revente (or that the Appointment is not on this
+  device); « Aucun encaissement n’a été enregistré pour cette vente… » for a historical Sale;
+- strictly read-only: no edit, no refund, no deletion, no stock or payment change, no new storage.
+  The Caisse totals are exactly what they were.
 
 The Client `Total dépensé` metric is independent from the Cash Register: deposits never add to
 it (`100 €` paid as `30 €` + `70 €` counts `100 €`).

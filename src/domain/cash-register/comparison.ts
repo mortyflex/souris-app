@@ -158,6 +158,14 @@ export function getCashRegisterDayInterval(day: Date): CashRegisterInterval {
   };
 }
 
+/** `[local midnight of the 1st, local midnight of the next month's 1st)`. */
+export function getCashRegisterMonthInterval(month: Date): CashRegisterInterval {
+  return {
+    start: localDate(month.getFullYear(), month.getMonth(), 1),
+    end: localDate(month.getFullYear(), month.getMonth() + 1, 1),
+  };
+}
+
 /** The windows of a month comparison, or the reason none exists (see the header). */
 type MonthComparisonResolution =
   | { readonly comparison: CashRegisterComparison }

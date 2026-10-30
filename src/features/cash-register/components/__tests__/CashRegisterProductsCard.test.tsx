@@ -10,7 +10,13 @@ import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { statePillTones } from '@/shared/ui/StatePill';
 
-import { CashRegisterProductsCard, DIRECT_SALES_LABEL, REVENTE_NOTE } from '../CashRegisterProductsCard';
+import {
+  CashRegisterProductsCard,
+  DIRECT_SALES_LABEL,
+  OPEN_SALES_HINT,
+  OPEN_SALES_LABEL,
+  REVENTE_NOTE,
+} from '../CashRegisterProductsCard';
 import {
   CashRegisterComparisonNote,
   CashRegisterTrendBadge,
@@ -206,5 +212,33 @@ describe('CashRegisterComparisonNote', () => {
     // No fill of its own: it reads as part of the card, never as a warning.
     expect(StyleSheet.flatten(note.props.style).backgroundColor).toBeUndefined();
     expect(StyleSheet.flatten(note.props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'flex-start' });
+  });
+});
+
+describe('CashRegisterProductsCard « Voir les ventes »', () => {
+  it('ends with the one row that opens the sale history, spoken as a button, only when the caller offers it', async () => {
+    const onOpenSales = jest.fn();
+    const view = await render(
+      <>
+        <CashRegisterProductsCard onOpenSales={onOpenSales} summary={summary} testID="products" />
+        <CashRegisterProductsCard summary={summary} testID="summary-only" />
+      </>,
+    );
+
+    const open = view.getByTestId('products-open');
+    expect(open.props.accessibilityRole).toBe('button');
+    expect(open.props.accessibilityLabel).toBe(OPEN_SALES_LABEL);
+    expect(open.props.accessibilityHint).toBe(OPEN_SALES_HINT);
+    expect(view.getByText(OPEN_SALES_LABEL)).toBeTruthy();
+    // The existing groups are untouched: the row is a third, separate stop.
+    expect(view.getByTestId('products-summary').props.accessibilityLabel).toContain('Produits vendus, 12 unités');
+    expect(view.getByTestId('products-direct').props.accessibilityLabel).toContain(DIRECT_SALES_LABEL);
+
+    await act(async () => {
+      fireEvent.press(open);
+    });
+    expect(onOpenSales).toHaveBeenCalledTimes(1);
+
+    expect(view.queryByTestId('summary-only-open')).toBeNull();
   });
 });
