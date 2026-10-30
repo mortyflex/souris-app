@@ -5,7 +5,9 @@ import { Text } from 'react-native';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser, type FakeAuthGateway } from '@/features/auth/testing/fake-auth-gateway';
 import type { SourisDatabase } from '@/persistence/database';
+import { BUSINESS_ACTIVITY_TYPES } from '@/domain/business';
 import { listLocalBusinessIds, readBusinessProfile } from '@/persistence/stores/business-profile';
+import { loadServices } from '@/persistence/stores/services';
 import { createTestSeed } from '@/persistence/testing/fixtures';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -157,6 +159,22 @@ describe('BusinessSessionProvider', () => {
     await waitFor(() => expect(stateOf(view)).toBe(`ready:${REMOTE_BUSINESS_ID}`));
     expect(business.calls.list).toBe(1);
   });
+
+  it.each(BUSINESS_ACTIVITY_TYPES)(
+    'opens an existing %s Business directly: never setup, never a creation, never a starter prestation',
+    async (activityType) => {
+      const database = openTestDatabase();
+      const business = createFakeBusinessGateway([createRemoteBusiness({ activityType })]);
+      const auth = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
+      const view = await renderSession({ database, auth, business });
+      await waitFor(() => expect(stateOf(view)).toBe(`ready:${REMOTE_BUSINESS_ID}`));
+
+      expect(business.calls.create).toBe(0);
+      expect(readBusinessProfile(database)?.activityType).toBe(activityType);
+      // Whatever the profession availability says, the catalogue is exactly what was there.
+      expect(loadServices(database)).toHaveLength(createTestSeed().services.length);
+    },
+  );
 
   it('reports DEVICE_ACCOUNT_CONFLICT when a different account signs in on a bound device', async () => {
     const database = openTestDatabase();

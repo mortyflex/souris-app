@@ -141,9 +141,9 @@ beforeEach(() => {
 });
 
 describe('catalogue presentation per profession', () => {
-  it('unifies Prestations for nails and esthetics only; every other stored activity keeps Services / Techniques', () => {
+  it('unifies Prestations for nails, esthetics and wellness only; every other stored activity keeps Services / Techniques', () => {
     for (const activity of BUSINESS_ACTIVITY_TYPES) {
-      const expected = activity === 'NAILS' || activity === 'ESTHETICS' ? 'CATEGORIES' : 'SERVICE_TYPES';
+      const expected = ['NAILS', 'ESTHETICS', 'WELLNESS'].includes(activity) ? 'CATEGORIES' : 'SERVICE_TYPES';
       expect(getCataloguePresentation(activity).organization).toBe(expected);
       expect(getCataloguePresentation(activity).categoryNameExample.startsWith('Ex. ')).toBe(true);
     }

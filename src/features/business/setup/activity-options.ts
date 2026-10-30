@@ -43,6 +43,7 @@ const activityDescriptions: Record<ProfessionId, string> = {
   HAIRDRESSING: 'Coupes, colorations, techniques et temps de pose.',
   NAILS: 'Poses, remplissages, semi-permanent et nail art.',
   ESTHETICS: 'Soins du visage et du corps, épilations.',
+  WELLNESS: 'Massages et modelages bien-être, soins relaxants.',
 };
 
 export const ACTIVITY_OPTIONS: readonly ActivityOption[] = PROFESSIONS.map((profession) => ({

@@ -108,6 +108,9 @@ const gelSet: Service = {
   active: true,
 };
 
+
+/** The professions of the unified « Prestations » catalogue. */
+const UNIFIED: readonly string[] = ['NAILS', 'ESTHETICS', 'WELLNESS'];
 describe('getAppointmentWording', () => {
   it('keeps « Temps de pose » and the Service / Technique distinction for hairdressing', () => {
     const wording = getAppointmentWording(getCataloguePresentation('HAIRDRESSING').organization);
@@ -119,7 +122,7 @@ describe('getAppointmentWording', () => {
     });
   });
 
-  it.each(['NAILS', 'ESTHETICS'] as const)('reads « Temps d’attente » without the internal type for %s', (activity) => {
+  it.each(['NAILS', 'ESTHETICS', 'WELLNESS'] as const)('reads « Temps d’attente » without the internal type for %s', (activity) => {
     const wording = getAppointmentWording(getCataloguePresentation(activity).organization);
     expect(wording).toEqual({
       distinguishesTypes: false,
@@ -130,7 +133,7 @@ describe('getAppointmentWording', () => {
   });
 
   it('leaves every other stored activity on the established wording', () => {
-    for (const activity of BUSINESS_ACTIVITY_TYPES.filter((entry) => entry !== 'NAILS' && entry !== 'ESTHETICS')) {
+    for (const activity of BUSINESS_ACTIVITY_TYPES.filter((entry) => !UNIFIED.includes(entry))) {
       expect(getAppointmentWording(getCataloguePresentation(activity).organization).waitingTimeLabel).toBe('Temps de pose');
     }
   });
@@ -282,7 +285,7 @@ describe('AppointmentServiceEditorCard — profession wording', () => {
 describe('waiting-phase names', () => {
   it('gives a new unattended phase « Temps de pose », « Temps d’attente » in the unified catalogue', () => {
     for (const activity of BUSINESS_ACTIVITY_TYPES) {
-      const expected = activity === 'NAILS' || activity === 'ESTHETICS' ? 'Temps d’attente' : 'Temps de pose';
+      const expected = UNIFIED.includes(activity) ? 'Temps d’attente' : 'Temps de pose';
       expect(getWaitingPhaseName(getCataloguePresentation(activity).organization)).toBe(expected);
     }
   });

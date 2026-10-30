@@ -5,6 +5,8 @@
 //
 //   BOOTING                  → nothing but the branded surface (splash stays)
 //   NO SESSION               → Welcome / Auth group
+//   PASSWORD RECOVERY        → Auth group (the reset screen): a recovery
+//                              session is not a sign-in until the password is chosen
 //   SESSION + NO BUSINESS    → Business setup
 //   SESSION + BUSINESS       → protected app (tabs + sheets) — but an EMPTY device
 //                              first waits for its data: a waiting state while
@@ -44,6 +46,7 @@ export function resolveRootRoute(
     case 'error':
       return 'auth-error';
     case 'unauthenticated':
+    case 'recovering-password':
       return 'auth';
     case 'authenticated':
       switch (business.status) {

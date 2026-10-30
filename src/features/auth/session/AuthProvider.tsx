@@ -11,6 +11,17 @@
 //                    └─ error                     not configured / no network
 //                                                 without a local binding / unknown
 //
+//   unauthenticated → startPasswordRecovery(code) → recovering-password
+//                       ├─ completePasswordRecovery  → authenticated (live)
+//                       └─ cancelPasswordRecovery    → unauthenticated
+//
+// A recovery session is NOT a sign-in: while the new password is not chosen,
+// nothing downstream (Business resolution, sync, access) sees an
+// authenticated user, and session events of that recovery session are
+// ignored. A signed-in session is never replaced by a recovery link. The
+// gateway persists that rule across restarts: an unfinished recovery is never
+// restored as a session (auth-gateway.ts, the pending-recovery marker).
+//
 // Business resolution is a separate provider (BusinessSessionProvider). No
 // raw provider error, token, or session payload ever reaches the UI: the
 // gateway returns outcomes with stable codes. The session listener is
@@ -32,6 +43,9 @@ import {
   type AuthFailure,
   type AuthGateway,
   type AuthUser,
+  type PasswordRecoveryOutcome,
+  type PasswordResetRequestOutcome,
+  type PasswordUpdateOutcome,
   type ResendOutcome,
   type SignInOutcome,
   type SignUpOutcome,
@@ -46,6 +60,8 @@ export type AuthState =
       /** `offline`: restored from the local account binding while the stored session waits for network. */
       readonly session: 'live' | 'offline';
     }
+  /** A valid recovery link opened a session; the new password is still to be chosen. */
+  | { readonly status: 'recovering-password'; readonly user: AuthUser }
   | { readonly status: 'error'; readonly failure: AuthFailure };
 
 export interface AuthSessionValue {
@@ -54,6 +70,13 @@ export interface AuthSessionValue {
   readonly signIn: (credentials: AuthCredentials) => Promise<SignInOutcome>;
   readonly signOut: () => Promise<void>;
   readonly resendSignUpConfirmation: (email: string) => Promise<ResendOutcome>;
+  readonly requestPasswordReset: (email: string) => Promise<PasswordResetRequestOutcome>;
+  /** Opens the recovery session of a recovery link's code; refused while signed in. */
+  readonly startPasswordRecovery: (code: string) => Promise<PasswordRecoveryOutcome>;
+  /** Saves the new password, then enters like a sign-in. */
+  readonly completePasswordRecovery: (password: string) => Promise<PasswordUpdateOutcome>;
+  /** Abandons the recovery: the recovery session is signed out, nothing else changes. */
+  readonly cancelPasswordRecovery: () => Promise<void>;
   /** Re-runs session restoration after an error. */
   readonly retry: () => void;
 }
@@ -79,6 +102,12 @@ export function AuthProvider({
   children,
 }: PropsWithChildren<AuthProviderProps>) {
   const [state, setState] = useState<AuthState>({ status: 'initializing' });
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  /** True from the start of a recovery exchange until the password is saved or the recovery abandoned. */
+  const recovering = useRef(false);
   const resolveLocalOwnerRef = useRef(resolveLocalOwner);
   const restoreGeneration = useRef(0);
   useEffect(() => {
@@ -119,6 +148,9 @@ export function AuthProvider({
   useEffect(
     () =>
       gateway.onSessionChange((user) => {
+        // The recovery session refreshing or being updated is not a sign-in.
+        if (user && recovering.current) return;
+        recovering.current = false;
         setState(user ? { status: 'authenticated', user, session: 'live' } : { status: 'unauthenticated' });
       }),
     [gateway],
@@ -133,6 +165,7 @@ export function AuthProvider({
         return { kind: 'failed', failure: toFailure(error) };
       }
       if (outcome.kind === 'authenticated') {
+        recovering.current = false;
         setState({ status: 'authenticated', user: outcome.user, session: 'live' });
       }
       return outcome;
@@ -149,6 +182,7 @@ export function AuthProvider({
         return { kind: 'failed', failure: toFailure(error) };
       }
       if (outcome.kind === 'authenticated') {
+        recovering.current = false;
         setState({ status: 'authenticated', user: outcome.user, session: 'live' });
       }
       return outcome;
@@ -162,6 +196,7 @@ export function AuthProvider({
     } finally {
       // The persisted session is gone either way; local business data stays.
       restoreGeneration.current += 1;
+      recovering.current = false;
       setState({ status: 'unauthenticated' });
     }
   }, [gateway]);
@@ -177,6 +212,69 @@ export function AuthProvider({
     [gateway],
   );
 
+  const requestPasswordReset = useCallback(
+    async (email: string): Promise<PasswordResetRequestOutcome> => {
+      try {
+        return await gateway.requestPasswordReset(email);
+      } catch (error) {
+        return { kind: 'failed', failure: toFailure(error) };
+      }
+    },
+    [gateway],
+  );
+
+  const startPasswordRecovery = useCallback(
+    async (code: string): Promise<PasswordRecoveryOutcome> => {
+      // A recovery link never replaces the session of a signed-in owner.
+      if (stateRef.current.status === 'authenticated') {
+        return { kind: 'failed', failure: { code: 'RECOVERY_LINK_INVALID' } };
+      }
+      recovering.current = true;
+      let outcome: PasswordRecoveryOutcome;
+      try {
+        outcome = await gateway.startPasswordRecovery(code);
+      } catch (error) {
+        outcome = { kind: 'failed', failure: toFailure(error) };
+      }
+      if (outcome.kind === 'recovering') {
+        restoreGeneration.current += 1;
+        setState({ status: 'recovering-password', user: outcome.user });
+      } else {
+        recovering.current = false;
+      }
+      return outcome;
+    },
+    [gateway],
+  );
+
+  const completePasswordRecovery = useCallback(
+    async (password: string): Promise<PasswordUpdateOutcome> => {
+      let outcome: PasswordUpdateOutcome;
+      try {
+        outcome = await gateway.updatePassword(password);
+      } catch (error) {
+        return { kind: 'failed', failure: toFailure(error) };
+      }
+      if (outcome.kind === 'updated') {
+        recovering.current = false;
+        setState({ status: 'authenticated', user: outcome.user, session: 'live' });
+      }
+      return outcome;
+    },
+    [gateway],
+  );
+
+  const cancelPasswordRecovery = useCallback(async () => {
+    try {
+      // This device's recovery session only — never the global sign-out.
+      await gateway.discardPasswordRecovery();
+    } finally {
+      restoreGeneration.current += 1;
+      recovering.current = false;
+      setState({ status: 'unauthenticated' });
+    }
+  }, [gateway]);
+
   const retry = useCallback(() => {
     setState({ status: 'initializing' });
     void restore();
@@ -184,7 +282,18 @@ export function AuthProvider({
 
   return (
     <AuthContext.Provider
-      value={{ state, signUp, signIn, signOut, resendSignUpConfirmation, retry }}
+      value={{
+        state,
+        signUp,
+        signIn,
+        signOut,
+        resendSignUpConfirmation,
+        requestPasswordReset,
+        startPasswordRecovery,
+        completePasswordRecovery,
+        cancelPasswordRecovery,
+        retry,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -39,6 +39,11 @@ export function getSupabaseClient(): SourisSupabaseClient {
       autoRefreshToken: true,
       // Native app: there is no URL to detect a session in.
       detectSessionInUrl: false,
+      // Email links return a one-time code, never tokens in the URL: the
+      // exchange needs the verifier this installation stored when it asked
+      // (password recovery, docs/architecture/AUTH.md §4). Sign-in with a
+      // password and stored sessions are unaffected.
+      flowType: 'pkce',
     },
   });
 

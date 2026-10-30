@@ -175,6 +175,14 @@ describe('SignInScreen', () => {
     expect(mockReplace).toHaveBeenCalledWith('/');
   });
 
+  it('offers « Mot de passe oublié ? », carrying the email already typed', async () => {
+    const view = await renderWithAuth(createFakeAuthGateway(), <SignInScreen />);
+
+    await type(view.getByTestId('email-input'), '  Lea@Example.com ');
+    await press(view.getByRole('button', { name: 'Mot de passe oublié ?' }));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/forgot-password', params: { email: 'lea@example.com' } });
+  });
+
   it('requires both fields, reports wrong credentials, then signs in', async () => {
     const gateway = createFakeAuthGateway({
       signIn: async ({ password }) =>

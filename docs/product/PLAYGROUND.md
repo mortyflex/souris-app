@@ -84,13 +84,14 @@ availability rule; without a chosen demo its layout redirects to the landing.
 `src/features/playground/demo/scenarios/`: one deterministic definition per profession, built
 relative to the moment the demo is opened (`buildDemoScenario`). Identifiers are stable and
 readable (`playground-demo-<profession>-…`); every record belongs to the demo Business; names are
-fictional (plant, gemstone and botanical surnames, `@exemple.fr`, `06 00 00 00 xx`).
+fictional (plant, gemstone, botanical and mineral surnames, `@exemple.fr`, `06 00 00 00 xx`).
 
 | Profession   | Business                 | Catalogue                                                       | Products (Step B2) |
 | ------------ | ------------------------ | --------------------------------------------------------------- | ------------------ |
 | HAIRDRESSING | Studio Coiffure Démo     | the HAIRDRESSING starter base, priced (colour, balayage, gloss and care are TECHNIQUES with a pose) | shampoo, mask, serum, heat spray, styling wax (sold out), an inactive hairspray |
 | NAILS        | Atelier Ongles Démo      | the seven NAILS starters, priced (every one a SERVICE), in six categories (« Réparation d’un ongle » left « Sans catégorie »), three with a description | cuticle oil, strengthening base, hand cream, foot cream, glass file, an inactive seasonal polish |
-| ESTHETICS    | Institut Beauté Démo     | the five ESTHETICS starters, priced (the facial is a TECHNIQUE), in five categories (« Beauté des mains et des pieds » empty), three with a description | cleanser, moisturiser, serum, body oil, body scrub, an inactive gift box |
+| ESTHETICS    | Institut Beauté Démo     | the eight ESTHETICS starters, priced (the facial is a TECHNIQUE; waxing by zone), in five categories (« Beauté des mains et des pieds » empty), three with a description | cleanser, moisturiser, serum, body oil, body scrub, an inactive gift box |
+| WELLNESS     | Espace Bien-être Démo    | the seven WELLNESS starters, priced (every one a SERVICE: one client at a time, no overlap), in four categories (« Bons cadeaux » empty), three with a description | massage oils, a warming balm, a massage candle, an inactive gift box |
 
 Each demo holds seven to eight clients (one birthday on the day the demo is opened, one archived,
 notes and contact details on several) and about twenty-five appointments: several weeks of
@@ -181,7 +182,8 @@ no provider, store or boundary was added.
 ## 5. Catalogue gaps observed while building the demos
 
 Step 3 (`docs/domain/SERVICES.md` §11) resolved the first two gaps below — free categories and
-descriptions — and the unified « Prestations » wording for NAILS and ESTHETICS. The others remain.
+descriptions — and the unified « Prestations » wording for NAILS and ESTHETICS (WELLNESS since
+October 2026). The others remain.
 
 Concrete usability gaps of the current domain model, met while expressing the three catalogues.
 Each has a smallest safe follow-up in `docs/domain/SERVICES.md` §10.4; none was implemented here.

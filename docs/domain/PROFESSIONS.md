@@ -27,18 +27,23 @@ availability:
 
 ```text
 HAIRDRESSING   AVAILABLE      the validated Production workflow (a real hairdresser)
-NAILS          COMING_SOON    announced — « Bientôt disponible » — never selectable
-ESTHETICS      COMING_SOON    announced — « Bientôt disponible » — never selectable
+NAILS          AVAILABLE      opened to the pilot professionals (October 2026)
+ESTHETICS      AVAILABLE      opened to the pilot professionals (October 2026)
+WELLNESS       AVAILABLE      opened to the pilot professionals (October 2026) — Bien-être
 ```
 
-`AVAILABLE` means the profession's workflows were validated with a real professional. A
-`COMING_SOON` profession is announced so the professional knows BeautIzzy is coming for them; it
-becomes `AVAILABLE` only by an explicit product decision, once its workflows (catalogue, services,
-online booking where needed) have been validated. An identifier or a label existing never makes a
+`AVAILABLE` means a NEW Business may be created with it. Hairdressing is validated in Production;
+nail services, esthetics and wellness were opened by an explicit product decision so that real
+pilot professionals — a nail technician, an esthetician, a wellness massage practitioner — can
+set up their business on their own (`docs/product/LAUNCH_ROADMAP.md`, milestone M1). Their
+workflows are validated WITH them, during the pilot.
+
+`COMING_SOON` stays in the model for the next professions: announced « Bientôt disponible », never
+selectable. No profession is announced today. An identifier or a label existing never makes a
 profession supported.
 
-The five other stored identifiers (`BARBER`, `LASHES_BROWS`, `MAKEUP`, `WELLNESS`, `OTHER`) remain
-valid stored values with their labels and pictograms; they are not offered to a new Business.
+The four other stored identifiers (`BARBER`, `LASHES_BROWS`, `MAKEUP`, `OTHER`) remain valid stored
+values with their labels and pictograms; they are not offered to a new Business.
 
 ONE rule decides what a new Business may be created with: `isProfessionAvailable`. It is applied in
 the setup form (`validateBusinessForm` / `buildBusinessSetupInput`) and reflected by the onboarding
@@ -71,7 +76,7 @@ to assistive technology; pressing it selects nothing. `Continuer` stays disabled
 profession is chosen. Design: `docs/design/DESIGN_OVERRIDES.md` §44.
 
 The developer Playground (`docs/architecture/ARCHITECTURE.md` §4, development builds on Staging only)
-previews the same five steps for EVERY profession of `PROFESSIONS`, the announced ones included,
+previews the same five steps for EVERY profession of `PROFESSIONS`, an announced one included,
 through the explicit `ActivityAcceptance = 'every-profession'` of the setup form and the
 `comingSoonSelectable` opt-in of the cards. Its actions never create a Business: the availability of
 the real onboarding is unchanged by it, and a stored activity can never come from a preview.
@@ -97,8 +102,8 @@ added.
 Services (schema v17, the `SERVICE_CATEGORY` aggregate), and a profession-aware presentation
 (`src/features/services/catalogue-presentation.ts`): HAIRDRESSING keeps Services / Techniques;
 NAILS and ESTHETICS read one « Prestations » catalogue grouped by the professional's categories,
-created as single-duration prestations, with the phased model as an advanced option. Availability
-is unchanged: NAILS and ESTHETICS stay « Bientôt disponible ».
+created as single-duration prestations, with the phased model as an advanced option. (Availability
+was unchanged by this step; see §10 for the pilot opening, which also moved WELLNESS here.)
 
 ## 7. Step 4 — the appointment experience (October 2026)
 
@@ -108,7 +113,7 @@ estimation picker) follow the catalogue organisation through ONE presentation ta
 synced or read by a scheduling rule; enum values, snapshots and timeline calculation are unchanged.
 
 ```text
-                      SERVICE_TYPES (hairdressing, …)    CATEGORIES (NAILS, ESTHETICS)
+                      SERVICE_TYPES (hairdressing, …)    CATEGORIES (NAILS, ESTHETICS, WELLNESS)
 picker                Services / Techniques segment      the professional's categories, « Sans catégorie »
 card palette          violet Service, azure Technique    one palette, the type never shown
 spoken type           « Service » / « Technique »        none
@@ -174,11 +179,36 @@ Three corrections after realistic nail and esthetics workflows in the Playground
   files the removal under « Déposes », describes the waiting in the description and books both
   today (nails 12:00; esthetics 9:30, with a brow wax inside the mask's waiting time, 9:50).
 
-## 10. Not implemented yet
+## 10. Pilot opening (October 2026)
+
+Milestone M1 of `docs/product/LAUNCH_ROADMAP.md`. Code: `PROFESSIONS`, the WELLNESS card line
+(`activity-options.ts`), the WELLNESS presentation and glyph fallback, the reviewed starters.
+
+- **Availability.** NAILS, ESTHETICS and WELLNESS become `AVAILABLE`. HAIRDRESSING is unchanged.
+  Nothing is stored or migrated: the identifiers already existed (`businesses.activity_type` is
+  free text, `business_profile.activity_type` too).
+- **Wellness reads like nails and esthetics.** `CATEGORIES` organisation: one « Prestations »
+  catalogue grouped by the professional's categories, « Temps d’attente », never « Technique » or
+  « Temps de pose ». The glyph fallback is the body at rest (`figure.mind.and.body` /
+  `self_improvement`), the card line « Massages et modelages bien-être, soins relaxants. », the name
+  example « Ex. Massage relaxant ». This changes only how a WELLNESS Business READS — including
+  one created before Step 1, when onboarding still offered « Bien-être »: its prestations, phases
+  and appointment snapshots are untouched, a stored « Temps de pose » simply reads « Temps
+  d’attente » (§8), and no rule changes.
+- **Starters.** HAIRDRESSING and NAILS unchanged. ESTHETICS splits waxing by zone (sourcils,
+  aisselles, maillot, demi-jambes, jambes complètes — the catalogue has no price variants).
+  WELLNESS proposes seven single-duration SERVICES, the length in the name because a massage menu is
+  priced by duration: Massage relaxant 30 min / 1 h / 1 h 30, Massage du dos, Massage des pieds,
+  Massage aux pierres chaudes, Gommage du corps. Still at 0 €, still for NEW Businesses only.
+- **Existing Businesses.** Never re-checked, never routed to onboarding, never given a starter —
+  covered by tests for every stored activity (`root-route.test.ts`, `BusinessSessionProvider.test.tsx`).
+- **Playground.** A WELLNESS demo, « Espace Bien-être Démo » (`docs/product/PLAYGROUND.md`).
+
+## 11. Not implemented yet
 
 - the online-booking visibility of a prestation (designed in SERVICES.md §12);
 - any catalogue migration or renaming;
-- making `NAILS` or `ESTHETICS` available.
+- starter categories, starter prices set during onboarding, a buffer time between two massages.
 
 Do not build these before their dedicated phase. The profession definition is the one place to
 extend when they come; nothing speculative is modelled in it today.

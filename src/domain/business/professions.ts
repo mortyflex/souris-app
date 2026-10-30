@@ -11,16 +11,18 @@
 // and opens as always, whatever this table says about that value.
 //
 // Terminology, service categories and online-booking eligibility per
-// profession belong to the catalogue work (Step 2) and are deliberately not
-// modelled here yet.
+// profession belong to the catalogue presentation
+// (`src/features/services/catalogue-presentation.ts`), never to this table.
 
 import type { BusinessActivityType } from './types';
 
 /**
- * `AVAILABLE`   — the workflows were validated with a real professional; a new
- *                 Business may be created with it.
+ * `AVAILABLE`   — a new Business may be created with it: the validated
+ *                 hairdressing workflow, and the professions opened to the
+ *                 pilot professionals by product decision (October 2026).
  * `COMING_SOON` — announced in onboarding (« Bientôt disponible »), never
- *                 selectable until its workflows are validated.
+ *                 selectable until its workflows are ready. No profession is
+ *                 announced today; the state stays for the next ones.
  */
 export type ProfessionAvailability = 'AVAILABLE' | 'COMING_SOON';
 
@@ -31,15 +33,17 @@ export interface ProfessionDefinition {
 
 /**
  * The professions BeautIzzy is prepared for, in product order. Hairdressing
- * is the validated Production workflow; nail services and esthetics are
- * announced. The other stored identifiers (`BARBER`, `LASHES_BROWS`,
- * `MAKEUP`, `WELLNESS`, `OTHER`) remain valid stored values and keep their
- * labels; they are simply not offered to a new Business.
+ * is the validated Production workflow; nail services, esthetics and wellness
+ * are opened for the pilot professionals (docs/product/LAUNCH_ROADMAP.md).
+ * The other stored identifiers (`BARBER`, `LASHES_BROWS`, `MAKEUP`, `OTHER`)
+ * remain valid stored values and keep their labels; they are simply not
+ * offered to a new Business.
  */
 export const PROFESSIONS = [
   { id: 'HAIRDRESSING', availability: 'AVAILABLE' },
-  { id: 'NAILS', availability: 'COMING_SOON' },
-  { id: 'ESTHETICS', availability: 'COMING_SOON' },
+  { id: 'NAILS', availability: 'AVAILABLE' },
+  { id: 'ESTHETICS', availability: 'AVAILABLE' },
+  { id: 'WELLNESS', availability: 'AVAILABLE' },
 ] as const satisfies readonly ProfessionDefinition[];
 
 export type ProfessionId = (typeof PROFESSIONS)[number]['id'];

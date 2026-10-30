@@ -46,14 +46,25 @@ describe('starter services', () => {
     expect(names('ESTHETICS')).toEqual([
       'Soin du visage avec masque',
       'Épilation sourcils',
-      'Épilation jambes',
+      'Épilation aisselles',
+      'Épilation maillot',
+      'Épilation demi-jambes',
+      'Épilation jambes complètes',
       'Soin du corps',
       'Beauté du regard',
     ]);
     expect(names('LASHES_BROWS')).toEqual(['Rehaussement de cils', 'Teinture', 'Brow lift', 'Restructuration sourcils']);
     expect(names('MAKEUP')).toEqual(['Maquillage jour', 'Maquillage soirée', 'Maquillage mariée']);
     expect(names('BARBER')).toEqual(['Coupe', 'Taille de barbe', 'Coupe + barbe']);
-    expect(names('WELLNESS')).toEqual(['Massage 30 min', 'Massage 60 min', 'Soin relaxant']);
+    expect(names('WELLNESS')).toEqual([
+      'Massage relaxant 30 min',
+      'Massage relaxant 1 h',
+      'Massage relaxant 1 h 30',
+      'Massage du dos',
+      'Massage des pieds',
+      'Massage aux pierres chaudes',
+      'Gommage du corps',
+    ]);
     expect(names('OTHER')).toEqual([]);
   });
 
@@ -93,6 +104,37 @@ describe('starter services', () => {
     expect(getStarterServices('NAILS').find((s) => s.key === 'removal')?.type).toBe('SERVICE');
     expect(getStarterServices('ESTHETICS').find((s) => s.name === 'Soin du visage avec masque')?.type).toBe('TECHNIQUE');
     expect(getStarterServices('ESTHETICS').filter((s) => s.type === 'TECHNIQUE')).toHaveLength(1);
+    // A massage keeps the practitioner with the client: never a waiting phase.
+    expect(getStarterServices('WELLNESS').every((s) => s.type === 'SERVICE')).toBe(true);
+  });
+
+  it('keeps the hairdressing base exactly as it was, timing included', () => {
+    expect(
+      getStarterServices('HAIRDRESSING').map((starter) => [
+        starter.key,
+        starter.type,
+        starter.phases.map((phase) => [phase.name, phase.durationMinutes, phase.requiresStaff]),
+      ]),
+    ).toEqual([
+      ['cut-women', 'SERVICE', [['Coupe femme', 45, true]]],
+      ['blow-dry', 'SERVICE', [['Brushing', 30, true]]],
+      ['cut-blow-dry', 'SERVICE', [['Coupe + brushing', 60, true]]],
+      ['color', 'TECHNIQUE', [['Application', 30, true], ['Temps de pose', 35, false], ['Finition', 30, true]]],
+      ['balayage', 'TECHNIQUE', [['Application', 45, true], ['Temps de pose', 40, false], ['Finition', 30, true]]],
+      ['gloss', 'TECHNIQUE', [['Application', 15, true], ['Temps de pose', 20, false], ['Finition', 15, true]]],
+      ['cut-men', 'SERVICE', [['Coupe homme', 30, true]]],
+      ['care', 'TECHNIQUE', [['Application', 10, true], ['Temps de pose', 15, false], ['Finition', 15, true]]],
+    ]);
+  });
+
+  it('never words a pilot base with hairdressing vocabulary', () => {
+    for (const activity of ['NAILS', 'ESTHETICS', 'WELLNESS'] as const) {
+      expect(getCataloguePresentation(activity).organization).toBe('CATEGORIES');
+      for (const starter of getStarterServices(activity)) {
+        expect(starter.name).not.toMatch(/coupe|brushing|coloration|balayage|technique/i);
+        for (const phase of starter.phases) expect(phase.name).not.toBe(PROCESSING_PHASE_NAME);
+      }
+    }
   });
 
   it('keeps every preset short and coherent: no more than eight starters, 15 min to 2 h each', () => {
@@ -109,7 +151,7 @@ describe('starter services', () => {
     }
   });
 
-  it('builds nail and esthetics starters the Prestation editor can reopen and save unchanged', () => {
+  it('builds nail, esthetics and wellness starters the Prestation editor can reopen and save unchanged', () => {
     let sequence = 0;
     const identity = {
       createServiceId: () => `service-${++sequence}`,
@@ -118,9 +160,10 @@ describe('starter services', () => {
     const catalog = buildStarterCatalog('business-nails', [
       ...getStarterServices('NAILS'),
       ...getStarterServices('ESTHETICS'),
+      ...getStarterServices('WELLNESS'),
     ], identity);
 
-    expect(catalog).toHaveLength(13);
+    expect(catalog).toHaveLength(23);
     for (const service of catalog) {
       const values = toServiceFormValues(service);
       expect(validateServiceForm(values).valid).toBe(true);

@@ -10,12 +10,19 @@ jest.mock('react-native-reanimated', () =>
 );
 
 describe('activity options', () => {
-  it('lists the three professions once, in product order, with their French labels and availability', () => {
+  it('lists the four professions once, in product order, with their French labels and availability', () => {
     expect(ACTIVITY_OPTIONS.map((option) => [option.type, option.label, option.availability])).toEqual([
       ['HAIRDRESSING', 'Coiffure', 'AVAILABLE'],
-      ['NAILS', 'Onglerie', 'COMING_SOON'],
-      ['ESTHETICS', 'Esthétique', 'COMING_SOON'],
+      ['NAILS', 'Onglerie', 'AVAILABLE'],
+      ['ESTHETICS', 'Esthétique', 'AVAILABLE'],
+      ['WELLNESS', 'Bien-être', 'AVAILABLE'],
     ]);
+    expect(ACTIVITY_OPTIONS.find((option) => option.type === 'WELLNESS')).toEqual(
+      expect.objectContaining({
+        description: 'Massages et modelages bien-être, soins relaxants.',
+        icon: { ios: 'figure.mind.and.body', android: 'self_improvement' },
+      }),
+    );
     expect(ACTIVITY_OPTIONS.map((option) => option.type)).toEqual(PROFESSIONS.map((profession) => profession.id));
     expect(COMING_SOON_LABEL).toBe('Bientôt disponible');
   });

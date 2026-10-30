@@ -2625,7 +2625,9 @@ never a subscription template.
 
 Step 1 of business setup (`src/features/business/setup/components/ActivityOptionList.tsx`) shows
 ONE full-width option card per profession of `PROFESSIONS` (`docs/domain/PROFESSIONS.md`), stacked
-with a `spacing.md` gap, single selection, in product order: Coiffure, Onglerie, Esthétique. The
+with a `spacing.md` gap, single selection, in product order: Coiffure, Onglerie, Esthétique,
+Bien-être (the body at rest — `figure.mind.and.body` / `self_improvement`). No profession is
+announced today (October 2026); the « Bientôt disponible » card below stays for the next ones. The
 card is the onboarding option card of the reminder opt-in: `surfaceElevated`, 1.5 pt
 `borderSubtle`, `radii.large` (continuous), `spacing.base` padding, 72 pt minimum; the profession
 pictogram (SF Symbol / Material Symbol, never emoji) on a 40 pt `surfaceLavenderStrong` disc, the

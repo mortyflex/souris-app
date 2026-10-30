@@ -1,3 +1,4 @@
+import { BUSINESS_ACTIVITY_TYPES } from '@/domain/business';
 import type { AuthState } from '@/features/auth/session/AuthProvider';
 import type { BusinessSessionState } from '@/features/business/session/BusinessSessionProvider';
 import { createRemoteBusiness } from '@/features/business/testing/fake-business-gateway';
@@ -35,6 +36,28 @@ describe('resolveRootRoute', () => {
     expect(resolveRootRoute({ status: 'unauthenticated' }, ready, 'unavailable')).toBe('auth');
     expect(resolveRootRoute(live, { status: 'setup-required' }, 'unavailable')).toBe('onboarding');
     expect(resolveRootRoute(live, { status: 'device-account-conflict', business }, 'resolving')).toBe('device-account-conflict');
+  });
+
+  it('opens the app for an existing Business of ANY stored activity: onboarding is never re-entered', () => {
+    for (const activityType of BUSINESS_ACTIVITY_TYPES) {
+      const existing: BusinessSessionState = { status: 'ready', business: createRemoteBusiness({ activityType }) };
+      expect(resolveRootRoute(live, existing)).toBe('app');
+      expect(resolveRootRoute({ ...live, session: 'offline' }, existing)).toBe('app');
+    }
+  });
+
+  it('keeps a password recovery in the signed-out group: a recovery session is not a sign-in', () => {
+    const recovering = { status: 'recovering-password', user: { id: 'user-lea' } } as const;
+    for (const state of [
+      { status: 'idle' },
+      { status: 'ready', business },
+      { status: 'setup-required' },
+      // Another owner's bound device: the conflict screen waits for a real sign-in.
+      { status: 'device-account-conflict', business },
+    ] as const) {
+      expect(resolveRootRoute(recovering, state)).toBe('auth');
+      expect(resolveRootRoute(recovering, state, 'unavailable')).toBe('auth');
+    }
   });
 
   it('never exposes the app while signed out, whatever the business state says', () => {

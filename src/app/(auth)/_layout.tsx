@@ -25,6 +25,9 @@ export default function AuthLayout() {
       <Stack.Screen name="sign-up" />
       <Stack.Screen name="sign-in" />
       <Stack.Screen name="verify-email" />
+      <Stack.Screen name="forgot-password" />
+      {/* The recovery link's landing: no swipe back into the signed-out screens mid-recovery. */}
+      <Stack.Screen name="reset-password" options={{ gestureEnabled: false }} />
       {/* Developer Playground: exists in a Staging development build only — the routes enforce the same rule. */}
       <Stack.Protected guard={isPlaygroundAvailable()}>
         <Stack.Screen name="playground/index" />

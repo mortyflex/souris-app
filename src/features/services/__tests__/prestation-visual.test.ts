@@ -148,7 +148,7 @@ describe('getPrestationVisual', () => {
 });
 
 // Icons that read the category, then the profession, when the name tells nothing — the
-// unified catalogue (nails, esthetics) only.
+// unified catalogue (nails, esthetics, wellness) only.
 describe('profession- and category-aware prestation icons', () => {
   const category = (id: string, name: string, businessId = 'business-1'): ServiceCategory => ({
     id,
@@ -159,7 +159,7 @@ describe('profession- and category-aware prestation icons', () => {
   const ART = category('cat-art', 'Nail art et modèles');
   const french = { ...service('French classique'), businessId: 'business-1', categoryId: 'cat-art' };
   const familyIn = (
-    activityType: 'NAILS' | 'ESTHETICS' | 'HAIRDRESSING',
+    activityType: 'NAILS' | 'ESTHETICS' | 'WELLNESS' | 'HAIRDRESSING',
     prestation: Parameters<typeof getPrestationFamily>[0] & Parameters<typeof findPrestationCategory>[0],
     categories: readonly ServiceCategory[],
   ) => getPrestationFamily(prestation, { activityType, category: findPrestationCategory(prestation, categories) });
@@ -216,8 +216,20 @@ describe('profession- and category-aware prestation icons', () => {
     expect(familyIn('HAIRDRESSING', ombre, [colours])).toBe('SERVICE_FALLBACK');
     expect(familyIn('HAIRDRESSING', { ...ombre, type: 'TECHNIQUE' }, [colours])).toBe('TECHNIQUE_FALLBACK');
     expect(familyIn('HAIRDRESSING', { ...service('Brushing 2'), businessId: 'business-1' }, [])).toBe('BLOW_DRY');
-    for (const activity of ['BARBER', 'LASHES_BROWS', 'MAKEUP', 'WELLNESS', 'OTHER'] as const) {
+    for (const activity of ['BARBER', 'LASHES_BROWS', 'MAKEUP', 'OTHER'] as const) {
       expect(getPrestationFamily(service('Création sur mesure'), { activityType: activity })).toBe('SERVICE_FALLBACK');
     }
+  });
+
+  it('wellness reads the name, then the category, then the body at rest — never scissors', () => {
+    expect(familyIn('WELLNESS', { ...service('Massage relaxant 1 h'), businessId: 'business-1' }, [])).toBe('BODY');
+    expect(familyIn('WELLNESS', { ...service('Massage des pieds'), businessId: 'business-1' }, [])).toBe('FEET');
+    const unknown = { ...service('Rituel signature'), businessId: 'business-1', categoryId: 'cat-face' };
+    expect(familyIn('WELLNESS', unknown, [category('cat-face', 'Soins du visage')])).toBe('FACE');
+    expect(familyIn('WELLNESS', unknown, [])).toBe('BODY');
+    expect(getPrestationVisual(unknown, { activityType: 'WELLNESS' }).icon).toEqual({
+      ios: 'figure.mind.and.body',
+      android: 'self_improvement',
+    });
   });
 });

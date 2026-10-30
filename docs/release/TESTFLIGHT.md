@@ -91,6 +91,7 @@ Authentication › URL Configuration:
 ```text
 Site URL         sourisapp://sign-in        (replaces http://localhost:3000)
 Redirect URLs    sourisapp://sign-in        (add; remove any localhost entry)
+                 sourisapp://reset-password (password recovery, M2 — docs/architecture/AUTH.md §4a)
 ```
 
 The app sends `emailRedirectTo = sourisapp://sign-in` on sign-up and on "Renvoyer l'email"
@@ -100,9 +101,10 @@ falls back to the Site URL, hence both settings.
 Also confirm:
 
 - Authentication › Sign In / Providers › Email: "Confirm email" enabled;
-- Authentication › Emails: the default "Confirm signup" template (`{{ .ConfirmationURL }}`);
-  the built-in mailer is rate-limited to a few emails per hour — enough for a pilot, configure
-  custom SMTP before widening the test group;
+- Authentication › Emails: the BeautIzzy French templates of `supabase/templates/auth/`
+  (`{{ .ConfirmationURL }}` kept) and custom SMTP — `docs/release/AUTH_EMAILS.md`. The built-in
+  mailer is rate-limited and is not meant for real users' addresses: configure custom SMTP before
+  any external pilot;
 - Project Settings › API Keys: the app uses the publishable key only;
 - every file under `supabase/migrations` is applied, in order (`supabase/README.md`), and RLS is
   enabled on every table. Without the V1C migration nothing syncs; without the V1D one the push
@@ -116,8 +118,9 @@ sign-up → "Vérifiez votre boîte mail" → link opened on the phone
   → BeautIzzy opens on "Connexion" → the owner signs in with their password
 ```
 
-The app does not consume the tokens carried by the redirect (`detectSessionInUrl: false`); the
-session always comes from a password sign-in. A link opened on another device (computer) still
+The app does not consume the one-time code carried by the redirect (PKCE flow,
+`detectSessionInUrl: false`); the session always comes from a password sign-in. Password recovery
+is the one link the app does consume (`docs/architecture/AUTH.md` §4a). A link opened on another device (computer) still
 confirms the address; the browser simply cannot open BeautIzzy there.
 
 ## 5. Real-device checklist (not automated)

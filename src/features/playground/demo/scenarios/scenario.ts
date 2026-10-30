@@ -202,6 +202,7 @@ const SLUGS: Readonly<Record<ProfessionId, string>> = {
   HAIRDRESSING: 'hairdressing',
   NAILS: 'nails',
   ESTHETICS: 'esthetics',
+  WELLNESS: 'wellness',
 };
 
 export function getDemoBusinessId(activityType: ProfessionId): string {

@@ -7,6 +7,7 @@ describe('getServiceNamePlaceholder', () => {
     expect(getServiceNamePlaceholder('HAIRDRESSING')).toBe('Ex. Coupe');
     expect(getServiceNamePlaceholder('NAILS')).toBe('Ex. Pose complète gel');
     expect(getServiceNamePlaceholder('ESTHETICS')).toBe('Ex. Soin du visage');
+    expect(getServiceNamePlaceholder('WELLNESS')).toBe('Ex. Massage relaxant');
   });
 
   it('has a short example for EVERY stored activity, including the ones onboarding no longer offers', () => {

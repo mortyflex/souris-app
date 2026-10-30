@@ -16,6 +16,9 @@ interface PasswordFieldProps {
   readonly onSubmitEditing?: () => void;
   readonly inputRef?: Ref<TextInput>;
   readonly editable?: boolean;
+  /** Defaults to « Mot de passe »; also the accessibility label. */
+  readonly label?: string;
+  readonly testID?: string;
 }
 
 export function PasswordField({
@@ -26,25 +29,27 @@ export function PasswordField({
   onSubmitEditing,
   inputRef,
   editable = true,
+  label = 'Mot de passe',
+  testID = 'password-input',
 }: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
 
   return (
     <TextField
-      accessibilityLabel="Mot de passe"
+      accessibilityLabel={label}
       placement="page"
       autoCapitalize="none"
       autoComplete={intent === 'new' ? 'new-password' : 'password'}
       editable={editable}
       error={error}
       inputRef={inputRef}
-      label="Mot de passe"
+      label={label}
       onChangeText={onChangeText}
       onSubmitEditing={onSubmitEditing}
       placeholder={intent === 'new' ? '8 caractères minimum' : 'Votre mot de passe'}
       returnKeyType="done"
       secureTextEntry={!visible}
-      testID="password-input"
+      testID={testID}
       textContentType={intent === 'new' ? 'newPassword' : 'password'}
       trailingAccessory={
         <Pressable

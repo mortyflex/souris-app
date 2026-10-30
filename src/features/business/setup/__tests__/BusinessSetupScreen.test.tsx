@@ -20,6 +20,7 @@ import { BusinessSessionProvider, useBusinessSession } from '../../session/Busin
 import { createFakeBusinessGateway } from '../../testing/fake-business-gateway';
 import { BusinessSetupScreen } from '../BusinessSetupScreen';
 import { COMING_SOON_LABEL } from '../activity-options';
+import { getStarterServices } from '../starter-services';
 import { REMINDER_OPTION_TITLE } from '../components/ReminderOptionCard';
 
 jest.mock('react-native-reanimated', () =>
@@ -78,7 +79,7 @@ const status = (view: View) => view.getByTestId('business-session-status').props
 const isDisabled = (view: View, testID: string) =>
   view.getByTestId(testID).props.accessibilityState.disabled as boolean;
 
-/** activity → details → reminders, with a valid draft. Only Coiffure can be chosen today. */
+/** activity → details → reminders, with a valid draft. */
 async function reachReminders(view: View, activity = 'HAIRDRESSING', name = 'Maison Sofia') {
   await press(view.getByTestId(`activity-${activity}`));
   await press(view.getByTestId('continue-activity'));
@@ -150,52 +151,35 @@ describe('BusinessSetupScreen — the five steps', () => {
 });
 
 describe('BusinessSetupScreen — activity', () => {
-  it('offers the three professions in French and requires Coiffure before continuing', async () => {
+  it('offers the four professions in French, all selectable, and requires one before continuing', async () => {
     const { view } = await renderSetup();
 
-    for (const label of ['Coiffure', 'Onglerie', 'Esthétique']) {
+    for (const label of ['Coiffure', 'Onglerie', 'Esthétique', 'Bien-être']) {
       expect(view.getByText(label)).toBeTruthy();
     }
-    // The activities onboarding no longer offers are not shown at all.
-    for (const label of ['Cils & sourcils', 'Maquillage', 'Barbier', 'Bien-être', 'Autre']) {
+    // The activities onboarding does not offer are not shown at all.
+    for (const label of ['Cils & sourcils', 'Maquillage', 'Barbier', 'Autre']) {
       expect(view.queryByText(label)).toBeNull();
     }
-    expect(view.getAllByRole('radio')).toHaveLength(3);
+    expect(view.getAllByRole('radio')).toHaveLength(4);
+    // Nothing is announced « Bientôt disponible » any more.
+    expect(view.queryByText(COMING_SOON_LABEL)).toBeNull();
     expect(isDisabled(view, 'continue-activity')).toBe(true);
 
-    await press(view.getByTestId('activity-HAIRDRESSING'));
-    expect(view.getByTestId('activity-HAIRDRESSING').props.accessibilityState).toEqual({
-      selected: true,
-      checked: true,
-      disabled: false,
-    });
-    expect(isDisabled(view, 'continue-activity')).toBe(false);
-  });
-
-  it('announces Onglerie and Esthétique as « Bientôt disponible » and never lets them be selected', async () => {
-    const { view } = await renderSetup();
-
-    expect(view.getAllByText(COMING_SOON_LABEL)).toHaveLength(2);
-    for (const activity of ['NAILS', 'ESTHETICS']) {
-      const card = view.getByTestId(`activity-${activity}`);
-      expect(card.props.accessibilityState).toEqual({ selected: false, checked: false, disabled: true });
-      expect(card.props.accessibilityLabel).toMatch(/, bientôt disponible$/);
-      expect(view.getByTestId(`activity-${activity}-coming-soon`)).toBeTruthy();
+    for (const activity of ['HAIRDRESSING', 'NAILS', 'ESTHETICS', 'WELLNESS']) {
+      expect(view.queryByTestId(`activity-${activity}-coming-soon`)).toBeNull();
+      await press(view.getByTestId(`activity-${activity}`));
+      expect(view.getByTestId(`activity-${activity}`).props.accessibilityState).toEqual({
+        selected: true,
+        checked: true,
+        disabled: false,
+      });
+      expect(view.getByTestId(`activity-${activity}`).props.accessibilityLabel).not.toMatch(/bientôt disponible/);
+      expect(isDisabled(view, 'continue-activity')).toBe(false);
     }
-    expect(view.queryByTestId('activity-HAIRDRESSING-coming-soon')).toBeNull();
-
-    // A press on an announced profession selects nothing and unlocks nothing.
-    await press(view.getByTestId('activity-NAILS'));
-    await press(view.getByTestId('activity-ESTHETICS'));
-    expect(view.getByTestId('activity-NAILS').props.accessibilityState.selected).toBe(false);
-    expect(view.getByTestId('activity-ESTHETICS').props.accessibilityState.selected).toBe(false);
-    expect(isDisabled(view, 'continue-activity')).toBe(true);
-
-    // Nor does it steal a selection already made.
-    await press(view.getByTestId('activity-HAIRDRESSING'));
-    await press(view.getByTestId('activity-NAILS'));
-    expect(view.getByTestId('activity-HAIRDRESSING').props.accessibilityState.selected).toBe(true);
-    expect(isDisabled(view, 'continue-activity')).toBe(false);
+    // Single selection: the last choice wins.
+    expect(view.getByTestId('activity-HAIRDRESSING').props.accessibilityState.selected).toBe(false);
+    expect(view.getByTestId('activity-WELLNESS').props.accessibilityState.selected).toBe(true);
   });
 });
 
@@ -455,9 +439,36 @@ describe('BusinessSetupScreen — starter prestations', () => {
     expect(view.getByTestId('onboarding-complete')).toBeTruthy();
   });
 
-  // « Autre » (no preset) can no longer be chosen in onboarding: only Coiffure
-  // is available today. The empty-base branch stays covered by
-  // starter-services.test.ts (`getStarterServices('OTHER')` → []).
+  it.each([
+    ['NAILS', 'Onglerie', 8, 'Pose complète gel'],
+    ['ESTHETICS', 'Esthétique', 8, 'Épilation jambes complètes'],
+    ['WELLNESS', 'Bien-être', 7, 'Massage relaxant 1 h'],
+  ] as const)('a %s pilot creates her Business with that activity and receives its own base', async (activity, label, count, sample) => {
+    const { view, business, database } = await renderSetup();
+    await reachServices(view, activity);
+
+    expect(business.rows[0]?.activityType).toBe(activity);
+    expect(readBusinessProfile(database)?.activityType).toBe(activity);
+    const proposed = getStarterServices(activity);
+    expect(proposed).toHaveLength(count);
+    for (const starter of proposed) expect(view.getByText(starter.name)).toBeTruthy();
+    // Never the hairdressing base.
+    expect(view.queryByText('Coupe femme')).toBeNull();
+
+    await press(view.getByTestId('add-starter-services'));
+
+    const services = loadServices(database);
+    expect(services.map((service) => service.name)).toEqual(proposed.map((starter) => starter.name));
+    expect(services.map((service) => service.name)).toContain(sample);
+    expect(services.every((service) => service.businessId === business.rows[0]!.id && service.price === 0)).toBe(true);
+    expect(view.getByTestId('setup-recap-activity').props.accessibilityLabel).toBe(`Votre activité principale : ${label}`);
+    expect(view.getByTestId('setup-recap-services').props.accessibilityLabel).toBe(
+      `Prestations & tarifs : ${count} prestations prêtes`,
+    );
+  });
+
+  // « Autre » (no preset) cannot be chosen in onboarding. The empty-base
+  // branch stays covered by starter-services.test.ts (`getStarterServices('OTHER')` → []).
 });
 
 describe('BusinessSetupScreen — setup complete', () => {

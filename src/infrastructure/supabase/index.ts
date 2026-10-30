@@ -39,6 +39,10 @@ function createUnconfiguredGateways(): AccountGateways {
       signIn: fail,
       signOut: () => Promise.resolve(),
       resendSignUpConfirmation: fail,
+      requestPasswordReset: fail,
+      startPasswordRecovery: fail,
+      updatePassword: fail,
+      discardPasswordRecovery: () => Promise.resolve(),
       onSessionChange: () => () => {},
     },
     business: {
@@ -55,7 +59,8 @@ export function createAccountGateways(): AccountGateways {
   try {
     const client = getSupabaseClient();
     return {
-      auth: createSupabaseAuthGateway(client.auth),
+      // The recovery marker shares the session's storage (client.ts installs it).
+      auth: createSupabaseAuthGateway(client.auth, localStorage),
       business: createSupabaseBusinessGateway(client),
       sync: createSupabaseSyncGateway(client),
       media: createSupabaseBusinessMediaGateway(client, expoPhotoFileIO),

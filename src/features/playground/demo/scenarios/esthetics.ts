@@ -21,6 +21,9 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
   prices: {
     facial: 65,
     'brow-wax': 12,
+    'underarm-wax': 12,
+    'bikini-wax': 18,
+    'half-leg-wax': 22,
     'leg-wax': 32,
     'body-treatment': 75,
     'eye-beauty': 30,
@@ -36,6 +39,9 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
   serviceCategories: {
     facial: 'face',
     'brow-wax': 'wax',
+    'underarm-wax': 'wax',
+    'bikini-wax': 'wax',
+    'half-leg-wax': 'wax',
     'leg-wax': 'wax',
     'body-treatment': 'body',
     'eye-beauty': 'eyes',
@@ -43,7 +49,7 @@ export const ESTHETICS_DEMO: DemoScenarioDefinition = {
   descriptions: {
     facial:
       'Nettoyage, masque adapté à votre peau, puis retrait, massage et finition.\nPendant le temps d’attente du masque, la professionnelle peut s’occuper de quelqu’un d’autre.\nVenir sans maquillage si possible.',
-    'leg-wax': 'Jambes complètes. Éviter le soleil et le gommage 24 h avant.',
+    'leg-wax': 'Éviter le soleil et le gommage 24 h avant.',
     'eye-beauty': 'Teinture des cils et des sourcils, restructuration incluse.',
   },
   clients: [

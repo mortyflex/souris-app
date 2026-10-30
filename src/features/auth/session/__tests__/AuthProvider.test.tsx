@@ -19,7 +19,9 @@ function Probe() {
       ? `authenticated:${state.user.id}:${state.session}`
       : state.status === 'error'
         ? `error:${state.failure.code}`
-        : state.status;
+        : state.status === 'recovering-password'
+          ? `recovering:${state.user.id}`
+          : state.status;
   return <Text testID="auth-state">{label}</Text>;
 }
 
@@ -205,5 +207,114 @@ describe('AuthProvider', () => {
     expect(gateway.listenerCount()).toBe(1);
     await view.unmount();
     expect(gateway.listenerCount()).toBe(0);
+  });
+
+  describe('password recovery', () => {
+    it('opens a recovery session that is NOT a sign-in, ignoring its session events', async () => {
+      const gateway = createFakeAuthGateway();
+      const view = await renderAuth(gateway);
+
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await latest?.startPasswordRecovery('code-1234');
+      });
+      expect(outcome).toEqual({ kind: 'recovering', user: fakeUser });
+      expect(gateway.calls.startPasswordRecovery).toEqual(['code-1234']);
+      expect(stateOf(view)).toBe('recovering:user-lea');
+
+      // A token refresh or the password update of the recovery session never signs in by itself.
+      await act(async () => gateway.emitSession(fakeUser));
+      expect(stateOf(view)).toBe('recovering:user-lea');
+    });
+
+    it('enters like a sign-in once the new password is saved', async () => {
+      const gateway = createFakeAuthGateway();
+      const view = await renderAuth(gateway);
+      await act(async () => {
+        await latest?.startPasswordRecovery('code-1234');
+      });
+
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await latest?.completePasswordRecovery('password123');
+      });
+      expect(outcome).toEqual({ kind: 'updated', user: fakeUser });
+      expect(gateway.calls.updatePassword).toEqual(['password123']);
+      expect(stateOf(view)).toBe('authenticated:user-lea:live');
+
+      // Back to normal: later session changes apply again.
+      await act(async () => gateway.emitSession(null));
+      expect(stateOf(view)).toBe('unauthenticated');
+    });
+
+    it('stays in recovery when the new password is refused', async () => {
+      const gateway = createFakeAuthGateway({
+        updatePassword: async () => ({ kind: 'failed', failure: { code: 'SAME_PASSWORD' } }),
+      });
+      const view = await renderAuth(gateway);
+      await act(async () => {
+        await latest?.startPasswordRecovery('code-1234');
+      });
+      await act(async () => {
+        await latest?.completePasswordRecovery('password123');
+      });
+      expect(stateOf(view)).toBe('recovering:user-lea');
+    });
+
+    it('signs the recovery session out when the recovery is abandoned', async () => {
+      const gateway = createFakeAuthGateway();
+      const view = await renderAuth(gateway);
+      await act(async () => {
+        await latest?.startPasswordRecovery('code-1234');
+      });
+      await act(async () => {
+        await latest?.cancelPasswordRecovery();
+      });
+      // This device's recovery session only: never the global sign-out of the account.
+      expect(gateway.calls.discardPasswordRecovery).toBe(1);
+      expect(gateway.calls.signOut).toBe(0);
+      expect(stateOf(view)).toBe('unauthenticated');
+    });
+
+    it('stays signed out when the link fails', async () => {
+      const gateway = createFakeAuthGateway({
+        startPasswordRecovery: async () => ({ kind: 'failed', failure: { code: 'RECOVERY_LINK_EXPIRED' } }),
+      });
+      const view = await renderAuth(gateway);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await latest?.startPasswordRecovery('code-1234');
+      });
+      expect(outcome).toEqual({ kind: 'failed', failure: { code: 'RECOVERY_LINK_EXPIRED' } });
+      expect(stateOf(view)).toBe('unauthenticated');
+
+      // A later real sign-in is not mistaken for a recovery event.
+      await act(async () => gateway.emitSession(fakeUser));
+      expect(stateOf(view)).toBe('authenticated:user-lea:live');
+    });
+
+    it('never replaces the session of a signed-in owner with a recovery link', async () => {
+      const gateway = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
+      const view = await renderAuth(gateway);
+
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await latest?.startPasswordRecovery('code-1234');
+      });
+      expect(outcome).toEqual({ kind: 'failed', failure: { code: 'RECOVERY_LINK_INVALID' } });
+      expect(gateway.calls.startPasswordRecovery).toEqual([]);
+      expect(stateOf(view)).toBe('authenticated:user-lea:live');
+    });
+
+    it('reports a request failure without throwing', async () => {
+      const { AuthGatewayError } = jest.requireActual('../../gateway') as typeof import('../../gateway');
+      const gateway = createFakeAuthGateway({ requestPasswordReset: () => Promise.reject(new AuthGatewayError('NOT_CONFIGURED')) });
+      await renderAuth(gateway);
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await latest?.requestPasswordReset('lea@example.com');
+      });
+      expect(outcome).toEqual({ kind: 'failed', failure: { code: 'NOT_CONFIGURED' } });
+    });
   });
 });

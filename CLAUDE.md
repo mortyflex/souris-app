@@ -30,8 +30,8 @@ Product principle:
 
 Profession model: `docs/domain/PROFESSIONS.md`. A profession IS the stored `BusinessActivityType`;
 `PROFESSIONS` / `isProfessionAvailable` decide what a NEW Business may choose (today
-`HAIRDRESSING`; `NAILS` and `ESTHETICS` announced « Bientôt disponible »). An existing Business is
-never re-checked. Never infer that a profession is supported because its identifier or label exists.
+`HAIRDRESSING`, plus `NAILS`, `ESTHETICS` and `WELLNESS` opened to the pilot professionals). An
+existing Business is never re-checked. Never infer that a profession is supported because its identifier or label exists.
 
 ---
 

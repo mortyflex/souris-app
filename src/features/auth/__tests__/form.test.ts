@@ -1,4 +1,10 @@
-import { hasCredentialErrors, normalizeEmail, validateCredentials } from '../form';
+import {
+  hasCredentialErrors,
+  hasNewPasswordErrors,
+  normalizeEmail,
+  validateCredentials,
+  validateNewPassword,
+} from '../form';
 
 describe('credential form', () => {
   it('normalizes the email', () => {
@@ -21,5 +27,19 @@ describe('credential form', () => {
     expect(validateCredentials({ email: 'lea@example.com', password: 'short' }, 'sign-in')).toEqual({});
     expect(hasCredentialErrors(validateCredentials({ email: 'lea@example.com', password: '' }, 'sign-in'))).toBe(true);
     expect(hasCredentialErrors({})).toBe(false);
+  });
+
+  it('asks for a new password of the sign-up length, typed twice identically', () => {
+    expect(validateNewPassword({ password: '', confirmation: '' })).toEqual({
+      password: 'Le mot de passe est requis.',
+      confirmation: 'Confirmez le mot de passe.',
+    });
+    expect(validateNewPassword({ password: 'short', confirmation: 'short' })).toEqual({ password: '8 caractères minimum.' });
+    expect(validateNewPassword({ password: 'password123', confirmation: 'password124' })).toEqual({
+      confirmation: 'Les deux mots de passe ne correspondent pas.',
+    });
+    expect(validateNewPassword({ password: 'password123', confirmation: 'password123' })).toEqual({});
+    expect(hasNewPasswordErrors({ confirmation: 'x' })).toBe(true);
+    expect(hasNewPasswordErrors({})).toBe(false);
   });
 });

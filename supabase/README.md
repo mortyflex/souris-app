@@ -267,6 +267,9 @@ select policyname, cmd, roles from pg_policies where tablename = 'businesses';
   sign-up flow shows "Vérifiez votre boîte mail" and the owner signs in after clicking the link
   (the link opens in the browser; no deep link into the app is required for V1).
 - No OAuth / magic link / SMS providers are used.
+- Password recovery (M2): `sourisapp://reset-password` in URL Configuration › Redirect URLs, the
+  French templates of `templates/auth/` and custom SMTP — `docs/release/AUTH_EMAILS.md`. The
+  templates are pasted by hand; no `config.toml` references them.
 
 ## Verifying the operational schema (Cloud Sync V1A)
 

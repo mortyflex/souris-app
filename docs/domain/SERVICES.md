@@ -66,7 +66,7 @@ rule, not a timeline constraint.
 User-facing wording: `Temps actif` (`requiresStaff = true`, professionnelle occupée) and `Temps de pose` (`requiresStaff = false`, professionnelle disponible). The picker sections are `Services` / `Techniques` — the raw enum values are never exposed.
 
 A processing phase has ONE canonical user-facing identity: `Temps de pose` (`Temps d’attente` in
-the unified catalogue of nails and esthetics — PROFESSIONS.md §8). Its name is never
+the unified catalogue of nails, esthetics and wellness — PROFESSIONS.md §8). Its name is never
 user-entered — the editor shows only `Durée` and `Type` for it; a phase that becomes unattended
 receives the canonical name, and a save keeps the name an unattended phase already has (a stored
 name is never rewritten). Switching an active phase to processing keeps the previous draft name only in
@@ -343,12 +343,13 @@ Service.description?  src/domain/services/description.ts — trimmed, blank = no
 ONE editor, ONE catalogue screen, ONE picker; a small table decides how they read.
 
 ```text
-SERVICE_TYPES   HAIRDRESSING (and BARBER, LASHES_BROWS, MAKEUP, WELLNESS, OTHER — every
+SERVICE_TYPES   HAIRDRESSING (and BARBER, LASHES_BROWS, MAKEUP, OTHER — every
                 existing Business keeps exactly what it had)
                 Services / Techniques segment and type chooser, unchanged. « Catégorie » and
                 « Description de la prestation (facultative) » come after the timing.
                 Categories, once assigned, only subdivide a segment.
-CATEGORIES      NAILS, ESTHETICS
+CATEGORIES      NAILS, ESTHETICS, WELLNESS (since its opening to the pilots, October 2026 —
+                PROFESSIONS.md §10)
                 One « Prestations » list grouped by the professional's categories, then
                 « Sans catégorie », then « Inactives »; search covers everything. Creation opens
                 the form directly as a single-duration prestation: Nom → Catégorie →

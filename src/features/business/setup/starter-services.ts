@@ -22,7 +22,7 @@
 // whatever the profession, and then carries Application → waiting phase →
 // Finition. The waiting phase gets the name the profession's editor gives a
 // new one (`getWaitingPhaseName`): « Temps de pose », « Temps d’attente » in
-// the unified catalogue (nails, esthetics). Several steps alone never make a
+// the unified catalogue (nails, esthetics, wellness). Several steps alone never make a
 // Technique: a gel set or a wax is one SERVICE duration.
 
 import type { BusinessActivityType } from '@/domain/business';
@@ -115,6 +115,8 @@ const presets: Record<BusinessActivityType, readonly StarterService[]> = {
   // A facial is the one esthetics starter where the client genuinely waits
   // with something in place (the mask, while the esthetician may see someone
   // else): cleansing and mask → Temps d’attente → removal and finishing.
+  // Waxing is priced by zone, so the common zones are separate prestations
+  // (the catalogue has no price variants).
   ESTHETICS: [
     technique(
       'ESTHETICS',
@@ -124,7 +126,10 @@ const presets: Record<BusinessActivityType, readonly StarterService[]> = {
       { application: 'Nettoyage et pose du masque', finishing: 'Retrait du masque et finition' },
     ),
     service('brow-wax', 'Épilation sourcils', 15),
-    service('leg-wax', 'Épilation jambes', 30),
+    service('underarm-wax', 'Épilation aisselles', 15),
+    service('bikini-wax', 'Épilation maillot', 15),
+    service('half-leg-wax', 'Épilation demi-jambes', 20),
+    service('leg-wax', 'Épilation jambes complètes', 30),
     service('body-treatment', 'Soin du corps', 60),
     service('eye-beauty', 'Beauté du regard', 30),
   ],
@@ -144,10 +149,18 @@ const presets: Record<BusinessActivityType, readonly StarterService[]> = {
     service('beard', 'Taille de barbe', 20),
     service('cut-beard', 'Coupe + barbe', 45),
   ],
+  // A wellness massage keeps the practitioner with the client from start to
+  // finish: every starter is a SERVICE with one duration, never a waiting
+  // phase. The length is part of the name because a massage menu is priced
+  // by duration and the catalogue has no price variants.
   WELLNESS: [
-    service('massage-30', 'Massage 30 min', 30),
-    service('massage-60', 'Massage 60 min', 60),
-    service('relaxing', 'Soin relaxant', 60),
+    service('relaxing-30', 'Massage relaxant 30 min', 30),
+    service('relaxing-60', 'Massage relaxant 1 h', 60),
+    service('relaxing-90', 'Massage relaxant 1 h 30', 90),
+    service('back', 'Massage du dos', 30),
+    service('feet', 'Massage des pieds', 30),
+    service('hot-stones', 'Massage aux pierres chaudes', 75),
+    service('body-scrub', 'Gommage du corps', 30),
   ],
   // « Autre »: no generic prestations are invented; the professional adds their own.
   OTHER: [],

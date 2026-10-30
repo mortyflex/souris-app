@@ -11,14 +11,16 @@
 //                  Categories, when the professional creates some, only
 //                  subdivide a segment.
 //   CATEGORIES     one « Prestations » catalogue grouped by the
-//                  professional's own categories (NAILS, ESTHETICS). Creation
+//                  professional's own categories (NAILS, ESTHETICS, WELLNESS). Creation
 //                  opens the form directly as a single-duration prestation;
 //                  the phased model (internally a TECHNIQUE) stays available
 //                  as an advanced option described by what it does — several
 //                  work phases with waiting time — never as « Technique ».
 //
-// Every stored activity resolves: the five identifiers onboarding no longer
-// offers keep the established experience, so no existing Business changes.
+// Every stored activity resolves: the four identifiers onboarding does not
+// offer keep the established experience, so no existing Business changes.
+// WELLNESS moved to CATEGORIES when it was opened to the pilots (October
+// 2026): presentation only — no stored record, snapshot or rule changes.
 
 import type { ServiceType } from '@/domain/appointments';
 import type { BusinessActivityType } from '@/domain/business';
@@ -78,10 +80,10 @@ const presentations: Readonly<Record<BusinessActivityType, CataloguePresentation
     descriptionExample: 'Ex. Essai conseillé avant le jour J.',
   },
   WELLNESS: {
-    organization: 'SERVICE_TYPES',
-    typeLabels: HAIRDRESSING_TYPE_LABELS,
-    categoryNameExample: 'Ex. Massages',
-    descriptionExample: 'Ex. Huiles neutres, sans parfum.',
+    organization: 'CATEGORIES',
+    typeLabels: UNIFIED_TYPE_LABELS,
+    categoryNameExample: 'Ex. Massages relaxants',
+    descriptionExample: 'Ex. Huiles neutres, sans parfum. Prévoir une tenue confortable.',
   },
   OTHER: {
     organization: 'SERVICE_TYPES',

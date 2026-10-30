@@ -21,7 +21,7 @@ import type { BusinessActivityType } from '@/domain/business';
 import { AppText } from '@/shared/ui/AppText';
 import { interaction, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
-import { ACTIVITY_OPTIONS, COMING_SOON_LABEL } from '../activity-options';
+import { ACTIVITY_OPTIONS, COMING_SOON_LABEL, type ActivityOption } from '../activity-options';
 import { SelectionCheck } from './SelectionCheck';
 
 interface ActivityOptionListProps {
@@ -30,6 +30,8 @@ interface ActivityOptionListProps {
   readonly disabled?: boolean;
   /** Development Playground only: a « Bientôt disponible » profession may be selected for a preview. */
   readonly comingSoonSelectable?: boolean;
+  /** The cards to draw; the professions of the domain by default (tests may pass an announced one). */
+  readonly options?: readonly ActivityOption[];
 }
 
 export function ActivityOptionList({
@@ -37,10 +39,11 @@ export function ActivityOptionList({
   onSelect,
   disabled = false,
   comingSoonSelectable = false,
+  options = ACTIVITY_OPTIONS,
 }: ActivityOptionListProps) {
   return (
     <View accessibilityRole="radiogroup" style={styles.list} testID="activity-options">
-      {ACTIVITY_OPTIONS.map((option) => {
+      {options.map((option) => {
         const available = option.availability === 'AVAILABLE';
         const selectable = available || comingSoonSelectable;
         const selected = selectable && option.type === value;

@@ -17,6 +17,12 @@ export type AuthFailureCode =
   | 'WEAK_PASSWORD'
   | 'INVALID_EMAIL'
   | 'RATE_LIMITED'
+  /** Password recovery: the link expired, was already used, or a newer one replaced it. */
+  | 'RECOVERY_LINK_EXPIRED'
+  /** Password recovery: the link cannot be used here (another device, a reinstall, a damaged link). */
+  | 'RECOVERY_LINK_INVALID'
+  /** Password recovery: the new password is the current one. */
+  | 'SAME_PASSWORD'
   | 'NETWORK'
   | 'NOT_CONFIGURED'
   | 'UNKNOWN';
@@ -61,14 +67,45 @@ export type ResendOutcome =
   | { readonly kind: 'sent' }
   | { readonly kind: 'failed'; readonly failure: AuthFailure };
 
+/** Supabase answers the same way whether or not an account exists for the address. */
+export type PasswordResetRequestOutcome =
+  | { readonly kind: 'sent' }
+  | { readonly kind: 'failed'; readonly failure: AuthFailure };
+
+export type PasswordRecoveryOutcome =
+  /** The link was valid: a recovery session exists, the new password is still to be chosen. */
+  | { readonly kind: 'recovering'; readonly user: AuthUser }
+  | { readonly kind: 'failed'; readonly failure: AuthFailure };
+
+export type PasswordUpdateOutcome =
+  | { readonly kind: 'updated'; readonly user: AuthUser }
+  | { readonly kind: 'failed'; readonly failure: AuthFailure };
+
 export interface AuthGateway {
-  /** Local restoration; must not require network for a still-valid session. */
+  /**
+   * Local restoration; must not require network for a still-valid session.
+   * Never reports the session of an unfinished password recovery.
+   */
   restoreSession(): Promise<RestoredSession>;
   signUp(credentials: AuthCredentials): Promise<SignUpOutcome>;
   signIn(credentials: AuthCredentials): Promise<SignInOutcome>;
   /** Clears the persisted session; never touches BeautIzzy local data. */
   signOut(): Promise<void>;
   resendSignUpConfirmation(email: string): Promise<ResendOutcome>;
+  /** Emails a recovery link that returns to the app (sourisapp://reset-password). */
+  requestPasswordReset(email: string): Promise<PasswordResetRequestOutcome>;
+  /**
+   * Exchanges the one-time code carried by the recovery link for a recovery
+   * session. PKCE: the exchange only succeeds on the installation that asked.
+   */
+  startPasswordRecovery(code: string): Promise<PasswordRecoveryOutcome>;
+  /** Sets the new password of the recovery session's account. */
+  updatePassword(password: string): Promise<PasswordUpdateOutcome>;
+  /**
+   * Abandons an unfinished recovery: signs out THIS device's recovery session
+   * only (the account's other devices stay signed in). Never touches local data.
+   */
+  discardPasswordRecovery(): Promise<void>;
   /** Session changes after the initial restoration; returns the cleanup function. */
   onSessionChange(listener: (user: AuthUser | null) => void): () => void;
 }

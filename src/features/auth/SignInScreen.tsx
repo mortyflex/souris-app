@@ -1,8 +1,8 @@
 // BeautIzzy — Sign in (email + password)
 //
 // Wrong credentials, unconfirmed accounts, and network failures each get one
-// concise sentence; the entered email survives every failure. Password
-// recovery is intentionally absent in V1 (see docs/architecture/AUTH.md).
+// concise sentence; the entered email survives every failure. « Mot de passe
+// oublié ? » opens the recovery request with that email (docs/architecture/AUTH.md §4).
 // The returning-user screen carries no illustration: the large editorial
 // brand mark anchors it, then the title, the line and the two fields form one
 // block above the actions. The celebration master belongs to sign-up.
@@ -116,6 +116,16 @@ export function SignInScreen() {
         onSubmitEditing={() => void submit()}
         value={values.password}
       />
+      <AppButton
+        disabled={submitting}
+        onPress={() =>
+          router.push({ pathname: '/forgot-password', params: { email: normalizeEmail(values.email) } })
+        }
+        style={styles.forgotPassword}
+        testID="forgot-password"
+        title="Mot de passe oublié ?"
+        variant="tertiary"
+      />
       {failure && (
         <AppText variant="metadata" style={styles.failure} accessibilityLiveRegion="polite">
           {failure}
@@ -139,4 +149,5 @@ const styles = StyleSheet.create({
   // Text on the app background: rose600 falls to ~4.3:1 there.
   failure: { color: rose.rose700, paddingTop: spacing.xs },
   inlineAction: { alignSelf: 'flex-start', paddingHorizontal: spacing.base },
+  forgotPassword: { alignSelf: 'flex-end' },
 });

@@ -52,13 +52,14 @@ describe('Playground demo scenarios', () => {
     expect(seed.sales.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('builds three distinct datasets that share nothing', () => {
+  it('builds one distinct dataset per profession, sharing nothing', () => {
     const scenarios = PROFESSION_IDS.map((activityType) => createPlaygroundDemoScenario(activityType, NOW));
 
     expect(scenarios.map((scenario) => scenario.business.name)).toEqual([
       'Studio Coiffure Démo',
       'Atelier Ongles Démo',
       'Institut Beauté Démo',
+      'Espace Bien-être Démo',
     ]);
     const ids = scenarios.map(
       (scenario) =>
@@ -99,7 +100,7 @@ describe('Playground demo scenarios', () => {
     expect(new Set(seed.services.map((service) => service.id)).size).toBe(seed.services.length);
   });
 
-  it('NAILS and ESTHETICS carry the requested prestations', () => {
+  it('NAILS, ESTHETICS and WELLNESS carry the requested prestations', () => {
     expect(createPlaygroundDemoScenario('NAILS', NOW).seed.services.map((service) => service.name)).toEqual([
       'Pose complète gel',
       'Remplissage gel',
@@ -113,10 +114,40 @@ describe('Playground demo scenarios', () => {
     expect(createPlaygroundDemoScenario('ESTHETICS', NOW).seed.services.map((service) => service.name)).toEqual([
       'Soin du visage avec masque',
       'Épilation sourcils',
-      'Épilation jambes',
+      'Épilation aisselles',
+      'Épilation maillot',
+      'Épilation demi-jambes',
+      'Épilation jambes complètes',
       'Soin du corps',
       'Beauté du regard',
     ]);
+    expect(createPlaygroundDemoScenario('WELLNESS', NOW).seed.services.map((service) => service.name)).toEqual([
+      'Massage relaxant 30 min',
+      'Massage relaxant 1 h',
+      'Massage relaxant 1 h 30',
+      'Massage du dos',
+      'Massage des pieds',
+      'Massage aux pierres chaudes',
+      'Gommage du corps',
+    ]);
+  });
+
+  it('WELLNESS books one client at a time: no appointment of a day overlaps another', () => {
+    const { seed } = createPlaygroundDemoScenario('WELLNESS', NOW);
+    const live = seed.appointments
+      .filter((appointment) => appointment.status !== 'CANCELLED')
+      .map((appointment) => {
+        const minutes = appointment.items.reduce(
+          (total, item) => total + item.phases.reduce((sum, phase) => sum + phase.durationMinutes, 0),
+          0,
+        );
+        return { start: appointment.startAt.getTime(), end: appointment.startAt.getTime() + minutes * 60_000 };
+      })
+      .sort((a, b) => a.start - b.start);
+    for (let index = 1; index < live.length; index += 1) {
+      expect(live[index]!.start).toBeGreaterThanOrEqual(live[index - 1]!.end);
+    }
+    expect(seed.services.every((service) => service.type === 'SERVICE')).toBe(true);
   });
 
   it('HAIRDRESSING carries cuts, blow-dries, colouring and balayage, with a multi-phase TECHNIQUE booked today', () => {

@@ -1,7 +1,7 @@
 // BeautIzzy — credential form rules (pure)
 //
-// Email normalization and the minimal local validation shared by sign-up
-// and sign-in. Supabase remains the authority (its own rules are surfaced
+// Email normalization and the minimal local validation shared by sign-up,
+// sign-in and password recovery. Supabase remains the authority (its own rules are surfaced
 // through AuthFailure codes); these checks only avoid pointless round trips.
 
 export const PASSWORD_MIN_LENGTH = 8;
@@ -55,4 +55,40 @@ export function validateCredentials(
 
 export function hasCredentialErrors(errors: CredentialFormErrors): boolean {
   return errors.email !== undefined || errors.password !== undefined;
+}
+
+/** Password recovery: the new password, typed twice. */
+export interface NewPasswordFormValues {
+  readonly password: string;
+  readonly confirmation: string;
+}
+
+export const EMPTY_NEW_PASSWORD: NewPasswordFormValues = { password: '', confirmation: '' };
+
+export interface NewPasswordFormErrors {
+  readonly password?: string;
+  readonly confirmation?: string;
+}
+
+/** The sign-up length rule, plus the two entries matching. */
+export function validateNewPassword(values: NewPasswordFormValues): NewPasswordFormErrors {
+  const errors: { password?: string; confirmation?: string } = {};
+
+  if (values.password.length === 0) {
+    errors.password = 'Le mot de passe est requis.';
+  } else if (values.password.length < PASSWORD_MIN_LENGTH) {
+    errors.password = `${PASSWORD_MIN_LENGTH} caractères minimum.`;
+  }
+
+  if (values.confirmation.length === 0) {
+    errors.confirmation = 'Confirmez le mot de passe.';
+  } else if (values.confirmation !== values.password) {
+    errors.confirmation = 'Les deux mots de passe ne correspondent pas.';
+  }
+
+  return errors;
+}
+
+export function hasNewPasswordErrors(errors: NewPasswordFormErrors): boolean {
+  return errors.password !== undefined || errors.confirmation !== undefined;
 }

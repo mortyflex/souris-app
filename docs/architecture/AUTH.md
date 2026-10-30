@@ -54,8 +54,8 @@ preserved for builds that know it; the local cache written at binding time holds
 
 Which of these values a NEW Business may be created with is a separate, product-facing rule:
 `PROFESSIONS` / `isProfessionAvailable` (`src/domain/business/professions.ts`,
-`docs/domain/PROFESSIONS.md`) — today `HAIRDRESSING` only, `NAILS` and `ESTHETICS` announced
-« Bientôt disponible ». It is enforced by the setup form and never applied to an existing Business:
+`docs/domain/PROFESSIONS.md`) — today `HAIRDRESSING`, `NAILS`, `ESTHETICS` and `WELLNESS` (the
+last three opened to the pilot professionals, October 2026). It is enforced by the setup form and never applied to an existing Business:
 restore, binding and display accept every stored value as before.
 
 ---
@@ -96,16 +96,24 @@ initializing → restoreSession()
   authenticated (offline)  the stored session could not be refreshed (no network) AND the local
                            binding names that owner → local access continues
   error                    NOT_CONFIGURED, NETWORK without a local binding, UNKNOWN → "Réessayer"
+
+unauthenticated → startPasswordRecovery(code) → recovering-password
+  completePasswordRecovery(password)   → authenticated (live)
+  cancelPasswordRecovery()             → unauthenticated (THIS device's recovery session is signed out)
+restart while a recovery is unfinished → unauthenticated (never the stored session, never offline)
 ```
 
-Operations: `signUp`, `signIn`, `signOut`, `resendSignUpConfirmation`, `retry`. Outcomes carry stable
-codes (`INVALID_CREDENTIALS`, `EMAIL_NOT_CONFIRMED`, `EMAIL_ALREADY_REGISTERED`, `WEAK_PASSWORD`,
-`INVALID_EMAIL`, `RATE_LIMITED`, `NETWORK`, `NOT_CONFIGURED`, `UNKNOWN`) mapped to one French
-sentence each in `src/features/auth/messages.ts`.
+Operations: `signUp`, `signIn`, `signOut`, `resendSignUpConfirmation`, `requestPasswordReset`,
+`startPasswordRecovery`, `completePasswordRecovery`, `cancelPasswordRecovery`, `retry`. Outcomes
+carry stable codes (`INVALID_CREDENTIALS`, `EMAIL_NOT_CONFIRMED`, `EMAIL_ALREADY_REGISTERED`,
+`WEAK_PASSWORD`, `INVALID_EMAIL`, `RATE_LIMITED`, `RECOVERY_LINK_EXPIRED`, `RECOVERY_LINK_INVALID`,
+`SAME_PASSWORD`, `NETWORK`, `NOT_CONFIGURED`, `UNKNOWN`) mapped to one French sentence each in
+`src/features/auth/messages.ts`.
 
 The session listener is registered once per gateway and removed on unmount. `INITIAL_SESSION` is
-ignored (restoreSession already covers it); `SIGNED_IN` / `TOKEN_REFRESHED` / `SIGNED_OUT` update
-the state.
+ignored (restoreSession already covers it), and so is `PASSWORD_RECOVERY` (`startPasswordRecovery`
+reports it); `SIGNED_IN` / `TOKEN_REFRESHED` / `SIGNED_OUT` update the state — except that, during a
+recovery, an event carrying a user is ignored (§4a).
 
 Email confirmation: `signUp` returns either an immediate session (confirmation disabled) or
 `confirmation-required` (confirmation enabled) → the "Vérifiez votre boîte mail" screen with
@@ -116,8 +124,85 @@ in the browser, then returns to the app on the sign-in screen, never to the Supa
 (docs/release/TESTFLIGHT.md §3). The app does not consume the tokens carried by that redirect in
 V1: the owner signs in with their password. An already registered email is reported as such.
 
-Password recovery is **deliberately absent** in V1: no "Mot de passe oublié ?" entry exists until
-the native recovery / deep-link flow is designed properly. No dead button.
+With the PKCE flow (§4a) the confirmation redirect is `sourisapp://sign-in?code=…` (or
+`?error=…` for an expired link). Supabase confirms the address at its `/verify` step, BEFORE the
+redirect; the app never exchanges that code — `sign-in` reads no route parameter and only the
+reset screen calls the one exchange (`startPasswordRecovery`, source-guarded by a test) — so
+confirming never opens a session, exactly as before PKCE. A confirmation code pasted on the reset
+route is refused: the exchange reports a non-recovery code, its session is signed out at once.
+
+### 4a. Password recovery (M2)
+
+```text
+Se connecter › « Mot de passe oublié ? »
+  → (auth)/forgot-password  email prefilled → requestPasswordReset(email)
+       resetPasswordForEmail(email, { redirectTo: sourisapp://reset-password })
+       « Si un compte existe pour cette adresse, un lien vient d’être envoyé à … » — always, so the
+       screen never tells whether an account exists; « Renvoyer le lien » restrained
+  → the email (supabase/templates/auth/reset-password.html) → {{ .ConfirmationURL }}
+  → Supabase verifies the link → sourisapp://reset-password?code=<one-time code>
+       or ?error=…&error_code=otp_expired when it expired or was already used
+  → (auth)/reset-password   readRecoveryLink(params) → startPasswordRecovery(code), ONCE
+       recovering-password  « Nouveau mot de passe », typed twice (8 characters minimum)
+         → updateUser({ password }) → authenticated (live) → the normal root gate
+         « Annuler » → discardPasswordRecovery (signOut scope `local`) → « Se connecter »
+       failed               « Ce lien a expiré » / « Lien inutilisable » → « Demander un nouveau lien »
+```
+
+Deep-link security:
+
+- the Supabase client uses `flowType: 'pkce'` (`src/infrastructure/supabase/client.ts`): the link
+  returns a one-time code, never an access or refresh token. Exchanging it requires the code
+  verifier stored by the installation that requested the reset — an app intercepting the custom
+  scheme gets nothing usable. Consequence, said in the screen and the email: the link must be
+  opened on the phone that asked; a link opened elsewhere (another phone, a reinstall) reads
+  `RECOVERY_LINK_INVALID`;
+- the code is exchanged at most once per screen; Supabase consumes it (and the verifier) on the
+  first exchange, whatever its outcome — a network failure therefore asks for a new link;
+- a link carrying an error is never exchanged; a missing or malformed code is refused before any
+  network call (`src/features/auth/recovery-link.ts`);
+- a recovery session is not a sign-in: `recovering-password` routes to the `(auth)` group only;
+  Business resolution, sync, access and every `status === 'authenticated'` consumer see nothing
+  until the password is saved, and session events of the recovery session are ignored;
+- a recovery link never replaces a signed-in session: `reset-password` lives in `(auth)`, which is
+  not mounted while signed in, and `startPasswordRecovery` refuses while authenticated;
+- the code, the new password and the session never reach a log, the UI or a BeautIzzy table
+  (tested); the route parameter is the only place the code transits.
+
+Unfinished recovery — the pending-recovery marker (`src/infrastructure/supabase/auth-gateway.ts`):
+supabase-js SAVES the recovery session during the exchange, exactly like a sign-in, so a restart
+would otherwise restore it and open the app without a new password. One key,
+`beautizzy.auth.password-recovery-pending`, in the same device storage as the session (no token,
+no email, no id):
+
+```text
+set      before the exchange (an interruption mid-exchange is covered)
+cleared  password saved · recovery abandoned · exchange failed · password sign-in · sign-up with
+         a session · sign-out
+while set
+  restoreSession()   discards the stored session (signOut scope `local`) and reports
+                     `unauthenticated` — checked before the session, so the offline fallback
+                     (`unavailable` + local binding) cannot open the bound Business either;
+                     offline, if supabase-js cannot remove it, the marker stays and the next
+                     launch tries again
+  onSessionChange    forwards no event carrying a session (token refresh, USER_UPDATED,
+                     SIGNED_IN) — only a sign-out
+```
+
+After a restart the professional asks for a new link (the old one is consumed) or signs in with
+her current password. Abandoning (« Annuler », or a restart) signs out THIS device only: the
+account's other devices keep their session.
+
+Account and data: nothing local is read or written by recovery. Saving the password signs in the
+same account; the binding rules of §5 / §6 then apply exactly as after a sign-in (same owner →
+ready; another owner on a bound device → `DEVICE_ACCOUNT_CONFLICT`, reached only after the password
+is saved). Supabase may sign the account's other sessions out after a password change — they sign
+back in with the new password; their local data is untouched.
+
+Supabase Dashboard (manual, Staging then Production): `sourisapp://reset-password` in
+Authentication › URL Configuration › Redirect URLs — otherwise the link falls back to the Site
+URL (`sourisapp://sign-in`) and the code is ignored. Templates, SMTP and the sending domain:
+`docs/release/AUTH_EMAILS.md`.
 
 ---
 

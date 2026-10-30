@@ -1,0 +1,47 @@
+<!--
+  BeautIzzy — Auth email « Change email address »
+  Paste into Supabase › Authentication › Emails (Staging AND Production).
+  Source of truth: this file. Guide: docs/release/AUTH_EMAILS.md.
+  Keep {{ .ConfirmationURL }}: the app relies on Supabase verifying the link
+  first (PKCE). Never replace it by a link built from the token or its hash.
+-->
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Confirmez votre nouvelle adresse email</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#FAF7F2;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FAF7F2;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#FFFFFF;border-radius:16px;padding:32px 28px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-align:left;">
+            <tr>
+              <td>
+                <p style="margin:0 0 20px;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#654199;font-weight:600;">BeautIzzy</p>
+                <p style="margin:0 0 16px;font-size:20px;font-weight:600;color:#19163F;">Confirmez votre nouvelle adresse</p>
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#19163F;">Pour utiliser {{ .NewEmail }} avec votre compte BeautIzzy (actuellement {{ .Email }}), confirmez ce changement.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;">
+                  <tr>
+                    <td style="border-radius:12px;background-color:#654199;">
+                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 24px;font-size:16px;font-weight:600;color:#FFFFFF;text-decoration:none;border-radius:12px;">Confirmer la nouvelle adresse</a>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;border-collapse:separate;background-color:#F4EFFA;border-radius:12px;">
+                  <tr>
+                    <td style="padding:14px 16px;font-size:14px;line-height:1.5;color:#19163F;">Ouvrez ce lien sur le téléphone où BeautIzzy est installée. Tant que le changement n’est pas confirmé, votre adresse actuelle reste celle du compte.</td>
+                  </tr>
+                </table>
+                <p style="margin:24px 0 0;font-size:14px;line-height:1.5;color:#5D5A7A;">Vous n’avez pas demandé ce changement&nbsp;? Ignorez cet email&nbsp;: votre adresse reste inchangée.</p>
+                <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#5D5A7A;word-break:break-all;">Le bouton ne s’ouvre pas&nbsp;? Copiez ce lien dans votre navigateur&nbsp;:<br />{{ .ConfirmationURL }}</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:20px 0 0;font-size:12px;color:#5D5A7A;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Envoyé par BeautIzzy</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

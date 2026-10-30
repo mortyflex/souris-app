@@ -4,6 +4,9 @@ import type {
   AuthCredentials,
   AuthGateway,
   AuthUser,
+  PasswordRecoveryOutcome,
+  PasswordResetRequestOutcome,
+  PasswordUpdateOutcome,
   ResendOutcome,
   RestoredSession,
   SignInOutcome,
@@ -20,6 +23,10 @@ export interface FakeAuthGateway extends AuthGateway {
     signIn: AuthCredentials[];
     signOut: number;
     resend: string[];
+    requestPasswordReset: string[];
+    startPasswordRecovery: string[];
+    updatePassword: string[];
+    discardPasswordRecovery: number;
   };
 }
 
@@ -28,6 +35,9 @@ interface FakeAuthGatewayOptions {
   readonly signUp?: (credentials: AuthCredentials) => Promise<SignUpOutcome>;
   readonly signIn?: (credentials: AuthCredentials) => Promise<SignInOutcome>;
   readonly resend?: (email: string) => Promise<ResendOutcome>;
+  readonly requestPasswordReset?: (email: string) => Promise<PasswordResetRequestOutcome>;
+  readonly startPasswordRecovery?: (code: string) => Promise<PasswordRecoveryOutcome>;
+  readonly updatePassword?: (password: string) => Promise<PasswordUpdateOutcome>;
 }
 
 export const fakeUser: AuthUser = { id: 'user-lea', email: 'lea@example.com' };
@@ -40,6 +50,10 @@ export function createFakeAuthGateway(options: FakeAuthGatewayOptions = {}): Fak
     signIn: [],
     signOut: 0,
     resend: [],
+    requestPasswordReset: [],
+    startPasswordRecovery: [],
+    updatePassword: [],
+    discardPasswordRecovery: 0,
   };
 
   return {
@@ -71,6 +85,24 @@ export function createFakeAuthGateway(options: FakeAuthGatewayOptions = {}): Fak
     resendSignUpConfirmation: (email) => {
       calls.resend.push(email);
       return options.resend ? options.resend(email) : Promise.resolve({ kind: 'sent' });
+    },
+    requestPasswordReset: (email) => {
+      calls.requestPasswordReset.push(email);
+      return options.requestPasswordReset ? options.requestPasswordReset(email) : Promise.resolve({ kind: 'sent' });
+    },
+    startPasswordRecovery: (code) => {
+      calls.startPasswordRecovery.push(code);
+      return options.startPasswordRecovery
+        ? options.startPasswordRecovery(code)
+        : Promise.resolve({ kind: 'recovering', user: fakeUser });
+    },
+    updatePassword: (password) => {
+      calls.updatePassword.push(password);
+      return options.updatePassword ? options.updatePassword(password) : Promise.resolve({ kind: 'updated', user: fakeUser });
+    },
+    discardPasswordRecovery: () => {
+      calls.discardPasswordRecovery += 1;
+      return Promise.resolve();
     },
     onSessionChange: (listener) => {
       listeners.add(listener);

@@ -17,7 +17,7 @@ const serviceNameExamples: Record<BusinessActivityType, string> = {
   ESTHETICS: 'Soin du visage',
   LASHES_BROWS: 'Rehaussement de cils',
   MAKEUP: 'Maquillage jour',
-  WELLNESS: 'Massage 60 min',
+  WELLNESS: 'Massage relaxant',
   OTHER: 'Soin',
 };
 

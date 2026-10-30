@@ -73,21 +73,21 @@ beforeEach(() => {
 });
 
 describe('PlaygroundOnboardingPreviewScreen', () => {
-  it('walks the real five steps for an announced profession and ends by leaving — never by entering anything', async () => {
+  it('walks the real five steps for a pilot profession and ends by leaving — never by entering anything', async () => {
     const view = await renderPreview('NAILS');
 
-    // 1. Activity — preselected, still changeable, announced professions selectable, the mention on every step.
+    // 1. Activity — preselected, still changeable, the mention on every step.
     expect(view.getByTestId('onboarding-activity')).toBeTruthy();
     expect(view.getByText('Mode démonstration')).toBeTruthy();
     expect(view.getByTestId('playground-leave-preview')).toBeTruthy();
     expect(view.getByTestId('activity-NAILS').props.accessibilityState.selected).toBe(true);
-    expect(view.getByTestId('activity-NAILS-coming-soon')).toBeTruthy();
+    expect(view.queryByTestId('activity-NAILS-coming-soon')).toBeNull();
     expect(isDisabled(view, 'activity-ESTHETICS')).toBe(false);
     expect(isDisabled(view, 'continue-activity')).toBe(false);
     expect(view.getByTestId('onboarding-progress').props.accessibilityValue.text).toBe('Étape 1 sur 5');
     await press(view.getByTestId('continue-activity'));
 
-    // 2. Details — the announced profession is recalled and accepted here (preview only).
+    // 2. Details — the chosen profession is recalled.
     expect(view.getByTestId('onboarding-details')).toBeTruthy();
     expect(view.getByLabelText('Activité principale : Onglerie')).toBeTruthy();
     expect(view.getByText('Mode démonstration')).toBeTruthy();

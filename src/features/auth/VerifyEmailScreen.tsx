@@ -11,14 +11,14 @@
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { StyleSheet } from 'react-native';
 
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { OnboardingStepLayout } from '@/shared/ui/OnboardingStepLayout';
-import { radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
+import { rose, semanticColors } from '@/shared/ui/theme';
 
+import { EmailSentNotice } from './components/EmailSentNotice';
 import { formatAuthFailure } from './messages';
 import { useAuth } from './session/AuthProvider';
 
@@ -70,27 +70,7 @@ export function VerifyEmailScreen({ email }: VerifyEmailScreenProps) {
       // A no-break space keeps the sparkle with « mail » on a narrow phone.
       title={'Vérifiez votre boîte mail\u00a0✨'}
     >
-      <View
-        accessible
-        accessibilityLabel={`Nous vous avons envoyé un lien à ${email}`}
-        style={styles.notice}
-      >
-        <View style={styles.glyph}>
-          <SymbolView
-            name={{ ios: 'envelope', android: 'mail' }}
-            size={20}
-            tintColor={semanticColors.accent}
-          />
-        </View>
-        <View style={styles.noticeCopy}>
-          <AppText variant="metadata" style={styles.copy}>
-            Nous vous avons envoyé un lien à
-          </AppText>
-          <AppText variant="rowTitle" testID="verify-email-address">
-            {email}
-          </AppText>
-        </View>
-      </View>
+      <EmailSentNotice email={email} emailTestID="verify-email-address" lead="Nous vous avons envoyé un lien à" />
       {notice && (
         <AppText
           variant="metadata"
@@ -105,27 +85,6 @@ export function VerifyEmailScreen({ email }: VerifyEmailScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  // The same calm lavender notice as the setup steps: nothing went wrong.
-  notice: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavender,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-  },
-  glyph: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderRadius: radii.pill,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  noticeCopy: { flex: 1, gap: 2, minWidth: 0 },
-  copy: { color: semanticColors.foregroundSoft },
   info: { color: semanticColors.foregroundSoft },
   // Text on the app background: rose600 falls to ~4.3:1 there.
   error: { color: rose.rose700 },

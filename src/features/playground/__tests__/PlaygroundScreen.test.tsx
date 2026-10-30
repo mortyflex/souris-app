@@ -54,7 +54,7 @@ beforeEach(() => {
 });
 
 describe('PlaygroundScreen', () => {
-  it('says what it is, lists the three professions and makes the announced ones selectable here only', async () => {
+  it('says what it is and lists every profession, each selectable', async () => {
     const view = await renderPlayground();
 
     expect(view.getByTestId('playground-screen')).toBeTruthy();
@@ -63,17 +63,15 @@ describe('PlaygroundScreen', () => {
     expect(view.getByTestId('playground-notice')).toBeTruthy();
     expect(view.getByText('Outil interne de développement')).toBeTruthy();
 
-    expect(PROFESSIONS.map((profession) => profession.id)).toEqual(['HAIRDRESSING', 'NAILS', 'ESTHETICS']);
-    for (const id of ['HAIRDRESSING', 'NAILS', 'ESTHETICS'] as const) {
+    expect(PROFESSIONS.map((profession) => profession.id)).toEqual(['HAIRDRESSING', 'NAILS', 'ESTHETICS', 'WELLNESS']);
+    for (const id of ['HAIRDRESSING', 'NAILS', 'ESTHETICS', 'WELLNESS'] as const) {
       expect(view.getByTestId(`activity-${id}`).props.accessibilityState.disabled).toBe(false);
+      // Every profession is available: no announcement left to show.
+      expect(view.queryByTestId(`activity-${id}-coming-soon`)).toBeNull();
     }
-    expect(view.getByText('Coiffure')).toBeTruthy();
-    expect(view.getByText('Onglerie')).toBeTruthy();
-    expect(view.getByText('Esthétique')).toBeTruthy();
-    // The announcement stays visible: a preview never pretends a profession is available.
-    expect(view.getByTestId('activity-NAILS-coming-soon')).toBeTruthy();
-    expect(view.getByTestId('activity-ESTHETICS-coming-soon')).toBeTruthy();
-    expect(view.queryByTestId('activity-HAIRDRESSING-coming-soon')).toBeNull();
+    for (const label of ['Coiffure', 'Onglerie', 'Esthétique', 'Bien-être']) {
+      expect(view.getByText(label)).toBeTruthy();
+    }
   });
 
   it('previews the chosen profession on its own route, and nothing before a choice', async () => {

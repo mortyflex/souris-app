@@ -26,7 +26,7 @@
 // a Service, sparkles for a Technique — so the icon area is never empty.
 //
 // Profession- and category-aware (`PrestationVisualContext`), for the unified
-// catalogue (nails, esthetics) only — the priority is deterministic:
+// catalogue (nails, esthetics, wellness) only — the priority is deterministic:
 //   1. the prestation's NAME, through the table above;
 //   2. otherwise its professional CATEGORY's name, through the same table
 //      (« French classique » in « Nail art et modèles » → the palette) — the
@@ -34,7 +34,8 @@
 //      (`findPrestationCategory`), so a renamed category is read under its
 //      current name, and a missing, deleted or foreign one is ignored;
 //   3. otherwise the profession's neutral glyph: the hand for nails, the
-//      care bubbles for esthetics — never scissors.
+//      care bubbles for esthetics, the body at rest for wellness — never
+//      scissors.
 // The Services / Techniques experience (hairdressing and every other stored
 // activity) ignores the context: the name, then the type fallback, exactly
 // as before. Nothing is stored.
@@ -176,6 +177,7 @@ export interface PrestationVisualContext {
 const professionFallbackFamilies: Partial<Record<BusinessActivityType, PrestationFamily>> = {
   NAILS: 'NAILS',
   ESTHETICS: 'CARE',
+  WELLNESS: 'BODY',
 };
 
 /**
