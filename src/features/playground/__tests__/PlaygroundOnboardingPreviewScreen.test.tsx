@@ -7,13 +7,19 @@
 // loudly here.
 
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { useEffect } from 'react';
 
 import * as businessSession from '@/features/business/session/BusinessSessionProvider';
 import { getStarterServices } from '@/features/business/setup/starter-services';
 import * as servicesStore from '@/persistence/stores/services';
 import * as persistence from '@/providers/PersistenceProvider';
+import { setupPreparation } from '@/shared/ui/theme';
+
+import { consumeFirstArrival } from '@/features/home/first-steps/arrival';
 
 import { isPlaygroundAvailable } from '../availability';
+import { PlaygroundDemoSessionProvider, usePlaygroundDemoSession, type PlaygroundDemoSessionValue } from '../demo/session';
+import { DEMO_ENTRY_HREF } from '../PlaygroundScreen';
 import { PlaygroundOnboardingPreviewScreen } from '../PlaygroundOnboardingPreviewScreen';
 import { createPreviewSetupActions, PREVIEW_ACCOUNT_EMAIL, PREVIEW_BUSINESS_ID } from '../preview-actions';
 
@@ -52,8 +58,23 @@ const useBusinessSessionSpy = jest.spyOn(businessSession, 'useBusinessSession');
 const usePersistenceSpy = jest.spyOn(persistence, 'usePersistence');
 const insertServiceSpy = jest.spyOn(servicesStore, 'insertService');
 
+/** The demo session the preview hands over to, as the (auth) layout provides it. */
+const session: { current?: PlaygroundDemoSessionValue } = {};
+function SessionProbe() {
+  const value = usePlaygroundDemoSession();
+  useEffect(() => {
+    session.current = value;
+  });
+  return null;
+}
+
 async function renderPreview(activityType: 'HAIRDRESSING' | 'NAILS' | 'ESTHETICS') {
-  const view = await render(<PlaygroundOnboardingPreviewScreen activityType={activityType} />);
+  const view = await render(
+    <PlaygroundDemoSessionProvider>
+      <PlaygroundOnboardingPreviewScreen activityType={activityType} />
+      <SessionProbe />
+    </PlaygroundDemoSessionProvider>,
+  );
   await act(async () => {});
   return view;
 }
@@ -62,6 +83,7 @@ type View = Awaited<ReturnType<typeof renderPreview>>;
 const isDisabled = (view: View, testID: string) => view.getByTestId(testID).props.accessibilityState.disabled as boolean;
 
 beforeEach(() => {
+  consumeFirstArrival();
   mockPush.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
@@ -70,6 +92,12 @@ beforeEach(() => {
   usePersistenceSpy.mockClear();
   insertServiceSpy.mockClear();
   jest.mocked(isPlaygroundAvailable).mockReturnValue(true);
+  // « On prépare votre espace… » runs on a timer; promises keep their real queue.
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('PlaygroundOnboardingPreviewScreen', () => {
@@ -116,20 +144,71 @@ describe('PlaygroundOnboardingPreviewScreen', () => {
     expect(view.getByText('Ajouter ces prestations')).toBeTruthy();
     await press(view.getByTestId('add-starter-services'));
 
-    // 5. Complete — the recap reads the preview choices; the action ends the preview.
+    // 5. Complete — after the same short interlude as the product.
+    expect(view.getByTestId('onboarding-preparing')).toBeTruthy();
+    await act(async () => {
+      jest.advanceTimersByTime(setupPreparation.total);
+    });
+    // The recap reads the preview choices; the product's own final card and actions.
     expect(view.getByTestId('onboarding-complete')).toBeTruthy();
     expect(view.getByLabelText('Votre activité principale : Onglerie')).toBeTruthy();
     expect(view.getByLabelText('Rappels par e-mail : Rappels activés')).toBeTruthy();
     expect(view.getByLabelText(`Prestations & tarifs : ${starters.length} prestations prêtes`)).toBeTruthy();
-    expect(view.getByText('Terminer l’aperçu')).toBeTruthy();
-    expect(view.queryByText('Continuer')).toBeNull();
-    expect(mockBack).not.toHaveBeenCalled();
+    expect(view.getByTestId('client-import-card')).toBeTruthy();
+    expect(view.getByText('Importer ma clientèle')).toBeTruthy();
+    expect(view.getByText('Accéder à mon espace')).toBeTruthy();
+    expect(session.current!.scenario).toBeNull();
+
+    // « Accéder à mon espace » — once, however many presses — continues in a
+    // first-use demo of THIS Business: name typed, starters kept, in memory.
     await press(view.getByTestId('enter-app'));
-    expect(mockBack).toHaveBeenCalledTimes(1);
-    expect(mockReplace).not.toHaveBeenCalled();
+    await press(view.getByTestId('enter-app'));
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(DEMO_ENTRY_HREF);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(session.current!.scenario).toEqual({
+      activityType: 'NAILS',
+      generation: 1,
+      firstUse: {
+        stage: 'just-onboarded',
+        origin: {
+          businessName: 'Nails by Sofia',
+          ownerFirstName: 'Sofia',
+          ownerLastName: undefined,
+          keptStarterKeys: starters.map((starter) => starter.key),
+        },
+      },
+    });
+    // No import requested.
+    expect(consumeFirstArrival()).toBeUndefined();
 
     // Nothing real was ever touched.
     expect(useBusinessSessionSpy).not.toHaveBeenCalled();
+    expect(usePersistenceSpy).not.toHaveBeenCalled();
+    expect(insertServiceSpy).not.toHaveBeenCalled();
+  });
+
+  it('« Importer ma clientèle » continues in the first-use demo and asks its Accueil to open the import', async () => {
+    const view = await renderPreview('HAIRDRESSING');
+    await press(view.getByTestId('continue-activity'));
+    await type(view.getByTestId('owner-first-name-input'), 'Léa');
+    await type(view.getByTestId('business-name-input'), 'Maison Léa');
+    await press(view.getByTestId('continue-details'));
+    await press(view.getByTestId('skip-reminders'));
+    await waitFor(() => expect(view.getByTestId('onboarding-services')).toBeTruthy());
+    await press(view.getByTestId('skip-starter-services'));
+    await act(async () => {
+      jest.advanceTimersByTime(setupPreparation.total);
+    });
+
+    await press(view.getByTestId('import-clients'));
+
+    expect(mockReplace).toHaveBeenCalledWith(DEMO_ENTRY_HREF);
+    expect(session.current!.scenario?.firstUse).toMatchObject({
+      stage: 'just-onboarded',
+      origin: { businessName: 'Maison Léa', keptStarterKeys: [] },
+    });
+    expect(consumeFirstArrival()).toBe('client-import');
     expect(usePersistenceSpy).not.toHaveBeenCalled();
     expect(insertServiceSpy).not.toHaveBeenCalled();
   });
@@ -208,13 +287,24 @@ describe('preview actions', () => {
     expect(actions.writeStarterServices(outcome.business, kept)).toBe(2);
     expect(onFinish).not.toHaveBeenCalled();
     actions.enterBusiness(outcome.business);
-    expect(onFinish).toHaveBeenCalledTimes(1);
+    expect(onFinish).toHaveBeenLastCalledWith({
+      business: outcome.business,
+      keptStarterKeys: kept.map((starter) => starter.key),
+      importClients: false,
+    });
+    actions.importClients!(outcome.business);
+    expect(onFinish).toHaveBeenLastCalledWith({
+      business: outcome.business,
+      keptStarterKeys: kept.map((starter) => starter.key),
+      importClients: true,
+    });
 
     expect(actions.calls).toEqual({
       createBusiness: [{ ownerFirstName: 'Sofia', name: 'Nails by Sofia', activityType: 'NAILS' }],
       activateReminders: [{ businessId: PREVIEW_BUSINESS_ID, replyToEmail: 'sofia@exemple.fr' }],
       writeStarterServices: [{ businessId: PREVIEW_BUSINESS_ID, keptKeys: kept.map((starter) => starter.key) }],
       enterBusiness: [outcome.business],
+      importClients: [outcome.business],
     });
   });
 });

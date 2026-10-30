@@ -178,4 +178,34 @@ describe('PlaygroundDemoHubScreen', () => {
     expect(mockDismissTo).toHaveBeenLastCalledWith('/');
     expect(mockPush).not.toHaveBeenCalled();
   });
+
+  it('offers « Prévisualiser les premiers pas » from the established demo: a just-onboarded Business of the same profession', async () => {
+    const view = await renderHub('NAILS');
+    expect(view.queryByTestId('playground-demo-first-use-clients-imported')).toBeNull();
+
+    await press(view.getByTestId('playground-demo-preview-first-steps'));
+
+    await waitFor(() => expect(session.current!.scenario!.firstUse).toEqual({ stage: 'just-onboarded', origin: undefined }));
+    expect(session.current!.scenario!.activityType).toBe('NAILS');
+  });
+
+  it('lists the first-use stages, marks the one shown, switches stage keeping the origin, and goes back to the established demo', async () => {
+    const view = await renderHub('ESTHETICS');
+    const origin = { businessName: 'Institut Inès', ownerFirstName: 'Inès' };
+    await act(async () => {
+      session.current!.start('ESTHETICS', { stage: 'just-onboarded', origin });
+    });
+    await waitFor(() => expect(view.getByTestId('playground-demo-first-use-just-onboarded')).toBeTruthy());
+    expect(view.getByTestId('playground-demo-first-use-just-onboarded').props.accessibilityLabel).toMatch(/état affiché$/);
+    expect(view.getByTestId('playground-demo-first-use-priced-with-products').props.accessibilityLabel).not.toMatch(/état affiché/);
+
+    await press(view.getByTestId('playground-demo-first-use-first-appointment'));
+    await waitFor(() =>
+      expect(session.current!.scenario!.firstUse).toEqual({ stage: 'first-appointment', origin }),
+    );
+
+    await waitFor(() => expect(view.getByTestId('playground-demo-established')).toBeTruthy());
+    await press(view.getByTestId('playground-demo-established'));
+    await waitFor(() => expect(session.current!.scenario!.firstUse).toBeUndefined());
+  });
 });

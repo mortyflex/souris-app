@@ -3,8 +3,8 @@
 // Used through `jest.mock('react-native-reanimated', () =>
 // jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'))`
 // by screens that render BirthdayConfetti, by the Agenda for the
-// « Résumé du jour » receipt printer, and by the Caisse for its heatmap
-// hint. Nothing animates: a shared value
+// « Résumé du jour » receipt printer, by the Caisse for its heatmap
+// hint, and by the onboarding for « On prépare votre espace… ». Nothing animates: a shared value
 // jumps straight to its target and an animated style is evaluated once.
 // `reducedMotion.enabled` is the switch a test flips to simulate the system
 // preference. Never imported by application code.
@@ -19,7 +19,10 @@ const AnimatedView = (props: { readonly children?: ReactNode }) => createElement
 export default Object.assign(AnimatedView, { View: AnimatedView });
 export const Easing = {
   linear: (value: number) => value,
+  quad: (value: number) => value,
   bezier: () => (value: number) => value,
+  out: (easing: (value: number) => number) => easing,
+  inOut: (easing: (value: number) => number) => easing,
 };
 export const useReducedMotion = () => reducedMotion.enabled;
 export const useAnimatedStyle = (style: () => object) => style();

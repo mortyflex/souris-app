@@ -3,8 +3,10 @@
 // The Playground mounts the REAL five-step flow (`BusinessSetupFlow`) and
 // binds its four effects here instead of to the session: a « Business » that
 // lives in this object only, a reminder activation that accepts at once, a
-// starter write that counts and stores nothing, and a finish that hands
-// control back to the Playground. Nothing is persisted, synced, scheduled,
+// starter write that counts and stores nothing, and two finishes — the
+// product's « Accéder à mon espace » and « Importer ma clientèle » — that hand
+// control back to the Playground with what the preview chose (it then opens
+// the first-use demo, in memory too). Nothing is persisted, synced, scheduled,
 // purchased or requested: no gateway, no database, no provider is involved,
 // and the object is discarded with the preview.
 //
@@ -25,6 +27,16 @@ export interface PreviewSetupCalls {
   readonly activateReminders: readonly { readonly businessId: string; readonly replyToEmail: string }[];
   readonly writeStarterServices: readonly { readonly businessId: string; readonly keptKeys: readonly string[] }[];
   readonly enterBusiness: readonly BusinessProfile[];
+  readonly importClients: readonly BusinessProfile[];
+}
+
+/** How the preview ended, for the Playground to continue in a first-use demo. */
+export interface PreviewFinish {
+  readonly business: BusinessProfile;
+  /** The starters kept at step 4: empty when none were added. */
+  readonly keptStarterKeys: readonly string[];
+  /** « Importer ma clientèle » rather than « Accéder à mon espace ». */
+  readonly importClients: boolean;
 }
 
 export interface PreviewSetupActions extends BusinessSetupActions {
@@ -33,8 +45,8 @@ export interface PreviewSetupActions extends BusinessSetupActions {
 }
 
 export interface PreviewSetupOptions {
-  /** Called at « Terminer l’aperçu »: the Playground takes over (nothing is entered). */
-  readonly onFinish: () => void;
+  /** Called by either last action: the Playground takes over (nothing is entered). */
+  readonly onFinish: (finish: PreviewFinish) => void;
   readonly now?: () => Date;
 }
 
@@ -44,7 +56,9 @@ export function createPreviewSetupActions({ onFinish, now = () => new Date() }: 
     activateReminders: [] as { businessId: string; replyToEmail: string }[],
     writeStarterServices: [] as { businessId: string; keptKeys: string[] }[],
     enterBusiness: [] as BusinessProfile[],
+    importClients: [] as BusinessProfile[],
   };
+  const keptStarterKeys = () => calls.writeStarterServices.at(-1)?.keptKeys ?? [];
 
   return {
     calls,
@@ -77,7 +91,11 @@ export function createPreviewSetupActions({ onFinish, now = () => new Date() }: 
     },
     enterBusiness: (business) => {
       calls.enterBusiness.push(business);
-      onFinish();
+      onFinish({ business, keptStarterKeys: keptStarterKeys(), importClients: false });
+    },
+    importClients: (business) => {
+      calls.importClients.push(business);
+      onFinish({ business, keptStarterKeys: keptStarterKeys(), importClients: true });
     },
   };
 }

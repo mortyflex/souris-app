@@ -2647,3 +2647,85 @@ label in `rowTitle`, one supporting line in `metadata` `foregroundSoft`, and the
 
 Never dress an announced profession as a working choice, and never hide the chip behind colour
 alone: the badge text is the signal.
+
+## 45. Onboarding — « On prépare votre espace… »
+
+Step 5 of business setup opens on a short visual interlude
+(`src/features/business/setup/components/SetupPreparation.tsx`) before the recap « Votre espace
+BeautIzzy est prêt ✨ ». It is NOT a loading state: the Business, the reminder preference and the
+starter prestations are all settled before step 5 is reached; the interlude waits for nothing,
+requests nothing and ends on a fixed clock (`setupPreparation` motion tokens, 2.9 s in all).
+
+- **Composition.** Centred on `screen`, no top bar and no action: a `surfaceLavenderStrong` halo
+  (132 pt, 108 pt on a small phone) holding a white `borderLavender` core with the brand symbol
+  (`BrandMark` `symbol`, decorative); « On prépare votre espace… » (`screenTitle`, `foreground`)
+  and « Quelques petites touches pour que tout soit parfait. » (`body`, `foregroundSoft`); a
+  120 pt × 3 pt lavender track whose accent line fills. Never a spinner.
+- **Sequence.** Halo and symbol settle in (scale + fade, 520 ms, `easing.out`); the copy rises
+  160 ms later; from ~0.7 s the composition HOLDS fully visible for ~1.8 s while ONE accent ring
+  breathes out of the halo and the line keeps filling (2.4 s); from 2.52 s the whole composition
+  fades with a 3 % settle (380 ms), then the recap enters with its usual entrance and its ONE
+  success haptic.
+- **Reduced Motion.** No interlude: the recap appears at once.
+- Shown once, only at the end of a NEW Business's setup — an existing Business never mounts the
+  setup flow.
+
+### 45.1 The recap's optional client import
+
+Under the recap, a quiet `surfaceLavender` card (hairline `borderLavender`, `radii.large`, a
+white 36 pt disc with the accent `person.2` glyph): « Retrouvez vos clients en quelques secondes »
+/ « Importez votre carnet depuis un fichier CSV ou une liste copiée. C’est facultatif : vous
+pourrez aussi le faire plus tard depuis Clientèle. ». Footer: primary « Importer ma clientèle »,
+tertiary « Accéder à mon espace ». Both enter the Business — once, however many presses — and
+offer the « Premiers pas » guide (§46). « Importer ma clientèle » then opens the EXISTING import
+flow (§41) over Accueil: cancelling it lands on Accueil, onboarding complete. The Playground
+preview shows the same card and actions; they continue in an in-memory first-use demo
+(PLAYGROUND.md §4.1).
+
+## 46. Accueil — « Premiers pas avec BeautIzzy »
+
+`src/features/home/first-steps/FirstStepsCard.tsx`, under the hero row of Accueil, ONLY for a
+Business whose onboarding was finished on this device (`first_steps:<businessId>` = `active` in
+the local `souris_metadata`, never synced, no schema change). An established Business never has
+that flag and never sees the card, whatever its data.
+
+- A borderless white grouped card: the title (`rowTitle`), « N sur 3 · à votre rythme »
+  (`metadata`), a 28 pt lavender « ✕ » (« Masquer les premiers pas »), then four rows — a 24 pt
+  ring (accent fill + white check once done), the title (`control`), one `metadata` line, an
+  accent chevron while to do:
+  - « Compléter vos prestations et tarifs » → Prestations & tarifs — done when every active
+    prestation has a price (« N tarifs à renseigner » otherwise);
+  - « Importer votre clientèle » → the existing import — done once a client exists;
+  - « Créer votre premier rendez-vous » → new appointment — done once an appointment exists;
+  - « Ajouter vos produits » « Facultatif » → new product — optional, never counted.
+- Every state is derived from the data; nothing is ticked without evidence; a done row leads
+  nowhere. Every required step done → the card closes for good (`completed`); « ✕ » closes it for
+  good (`dismissed`). Online booking is never mentioned.
+
+### 46.1 Motion and feedback
+
+`firstSteps` motion tokens; the card is the white Accueil surface with a 3 pt progress line (the
+required steps done, accent on `surfaceLavenderStrong`) under its header.
+
+- **Entrance.** The card fades in and rises 14 pt (450 ms, `easing.out`); its rows follow 60 ms
+  apart with half the rise.
+- **A step done.** Only a step that turns done WHILE the card is mounted — never the data it
+  mounted with, never a remount (a return to Accueil, a Playground stage), never the same state
+  twice. A change made while Accueil is covered (a pushed screen, a sheet) is celebrated when
+  Accueil is in front again. The check pops from 0.5 on a soft spring (damping 13, stiffness 240)
+  over a `surfaceLavender` row highlight (180 ms in, 420 ms held, 420 ms out); the line glides to
+  its value (360 ms). One `haptics.selection()` per batch with a counted step; the optional
+  products get the visual tick only and never move the « N sur 3 ». One spoken sentence per batch
+  (« Importer votre clientèle : fait. 1 sur 3. »).
+- **3 sur 3.** The card stays: last check, full line, a `surfaceLavender` wash, a small accent
+  `sparkles` beside the title and « Votre espace est prêt à vous accompagner ! » in accent in
+  place of the progress; « ✕ » and the chevrons leave. One `haptics.success()` (no selection on
+  top), « Premiers pas terminés. … » spoken, `completed` written at once. Once the visuals have
+  settled (`finalSettle`, 600 ms), the card stays still for a 3 s reading period (`finalHold`),
+  then fades and folds its height — and the gap before it — away (`exit`, 480 ms); nothing below
+  jumps.
+- **VoiceOver.** No clock removes the « ready » card: it shows a « Fermer les premiers pas »
+  button and waits for it, so neither the announcement nor the message is cut short.
+- **Reduce Motion.** Every state change and the « ready » message for the whole 3 s reading
+  period, without movement; then the card is removed without a fold.
+- A guide mounted already complete closes silently. Every timer is cleared on unmount.

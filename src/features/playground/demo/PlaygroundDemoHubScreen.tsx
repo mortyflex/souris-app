@@ -8,6 +8,12 @@
 // session providers as every other screen, so the counts follow every edit,
 // sale and payment made in the demo at once.
 //
+// « Premiers pas »: the established demo offers to switch to a just-onboarded
+// Business of the same profession; a first-use demo lists its stages
+// (scenarios/first-use.ts) — each one a NEW generation seeded at that stage,
+// the identity typed in the onboarding preview kept — and a way back to the
+// established demo. The runtime remounts on Accueil, where the card shows.
+//
 // Reset asks first (the canonical destructive dialog), then starts a new
 // generation of the same profession: the runtime remounts on the original
 // dataset. Changing profession and leaving both dismiss the demo group —
@@ -37,11 +43,13 @@ import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { gutter, interaction, radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { PLAYGROUND_MODE_LABEL } from '../mode-label';
+import { FIRST_USE_STAGES, type FirstUseStage } from './scenarios';
 import { usePlaygroundDemoSession } from './session';
 
 export const RESET_DEMO_TITLE = 'Réinitialiser la démonstration';
 export const CHANGE_PROFESSION_TITLE = 'Changer de métier';
 export const LEAVE_PLAYGROUND_TITLE = 'Quitter le Playground';
+export const PREVIEW_FIRST_STEPS_TITLE = 'Prévisualiser les premiers pas';
 
 /** What the demo is, and what it deliberately does not do. */
 export const DEMO_NOTICE =
@@ -55,7 +63,8 @@ function plural(count: number, singular: string, pluralForm = `${singular}s`): s
 
 export function PlaygroundDemoHubScreen() {
   const router = useRouter();
-  const { reset } = usePlaygroundDemoSession();
+  const { reset, start, scenario } = usePlaygroundDemoSession();
+  const firstUse = scenario?.firstUse;
   const business = useCurrentBusiness();
   const { activeClients, archivedClients } = useClientSession();
   const { services } = useServiceCatalog();
@@ -82,6 +91,19 @@ export function PlaygroundDemoHubScreen() {
         { text: 'Réinitialiser', style: 'destructive', onPress: reset },
       ],
     );
+  };
+
+  // A NEW generation at that stage: the runtime remounts on the fresh data.
+  const startFirstUse = (stage: FirstUseStage) => {
+    if (scenario === null) return;
+    haptics.action();
+    start(scenario.activityType, { stage, origin: firstUse?.origin });
+  };
+
+  const backToEstablishedDemo = () => {
+    if (scenario === null) return;
+    haptics.action();
+    start(scenario.activityType);
   };
 
   const changeProfession = () => {
@@ -139,6 +161,47 @@ export function PlaygroundDemoHubScreen() {
               testID="playground-demo-insights"
               title="Tops & tendances"
             />
+          </View>
+
+          <View style={styles.section} testID="playground-demo-first-steps">
+            <SectionHeader title="Premiers pas" />
+            {firstUse ? (
+              <>
+                {FIRST_USE_STAGES.map((option) => {
+                  const current = option.stage === firstUse.stage;
+                  return (
+                    <HubRow
+                      accessibilityLabel={`${option.title}, ${option.description}${current ? ', état affiché' : ''}`}
+                      icon={
+                        current
+                          ? { ios: 'checkmark.circle.fill', android: 'check_circle' }
+                          : { ios: 'circle', android: 'radio_button_unchecked' }
+                      }
+                      key={option.stage}
+                      meta={option.description}
+                      onPress={() => startFirstUse(option.stage)}
+                      testID={`playground-demo-first-use-${option.stage}`}
+                      title={option.title}
+                    />
+                  );
+                })}
+                <HubRow
+                  icon={{ ios: 'building.2', android: 'store' }}
+                  meta="Revenir au salon établi de ce métier"
+                  onPress={backToEstablishedDemo}
+                  testID="playground-demo-established"
+                  title="Activité établie"
+                />
+              </>
+            ) : (
+              <HubRow
+                icon={{ ios: 'sparkles', android: 'auto_awesome' }}
+                meta="Une activité tout juste créée, avec la carte d’Accueil"
+                onPress={() => startFirstUse('just-onboarded')}
+                testID="playground-demo-preview-first-steps"
+                title={PREVIEW_FIRST_STEPS_TITLE}
+              />
+            )}
           </View>
 
           <View style={styles.section}>

@@ -29,6 +29,9 @@ import { loadServiceCategories } from '@/persistence/stores/service-categories';
 import { loadServices } from '@/persistence/stores/services';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { usePersistence, type PersistenceValue } from '@/providers/PersistenceProvider';
+import { readMetadata } from '@/persistence/metadata';
+import { consumeFirstArrival, requestFirstArrival } from '@/features/home/first-steps/arrival';
+import { firstStepsKey } from '@/features/home/first-steps/first-steps-store';
 
 import { isPlaygroundAvailable } from '../../availability';
 import { PlaygroundDemoRuntime } from '../PlaygroundDemoRuntime';
@@ -304,5 +307,66 @@ describe('PlaygroundDemoRuntime', () => {
     expect(session.current!.scenario).toBeNull();
     expect(isClosed(harness.databases[0]!)).toBe(true);
     expect(harness.databases).toHaveLength(1);
+  });
+
+  describe('first-use demos (« Premiers pas »)', () => {
+    it('a first-use demo is a just-onboarded Business with the guide ON — in its own memory only', async () => {
+      const { harness } = await renderRuntime();
+      await act(async () => {
+        session.current!.start('WELLNESS', {
+          stage: 'just-onboarded',
+          origin: { businessName: 'Spa Inès', ownerFirstName: 'Inès', keptStarterKeys: [] },
+        });
+      });
+      await waitFor(() => expect(probe.current).toBeDefined());
+
+      const { business, persistence } = probe.current!;
+      expect(business).toMatchObject({ id: 'playground-demo-wellness', name: 'Spa Inès', activityType: 'WELLNESS' });
+      expect(readMetadata(persistence.database, firstStepsKey(business.id))).toBe('active');
+      expect(probe.current!.services.services).toHaveLength(0);
+      expect(probe.current!.clients.clients).toHaveLength(0);
+      expect(harness.databases).toHaveLength(1);
+    });
+
+    it('the established demo never turns the guide on', async () => {
+      await renderRuntime();
+      await start('NAILS');
+      await waitFor(() => expect(probe.current).toBeDefined());
+      const { business, persistence } = probe.current!;
+      expect(readMetadata(persistence.database, firstStepsKey(business.id))).toBeUndefined();
+    });
+
+    it('a stage switch keeps the origin and reseeds a NEW database at that stage', async () => {
+      const { harness } = await renderRuntime();
+      const origin = { businessName: 'Maison Léa', ownerFirstName: 'Léa' };
+      await act(async () => {
+        session.current!.start('HAIRDRESSING', { stage: 'just-onboarded', origin });
+      });
+      await waitFor(() => expect(probe.current).toBeDefined());
+      await act(async () => {
+        session.current!.start('HAIRDRESSING', { stage: 'clients-imported', origin });
+      });
+      await waitFor(() => expect(probe.current!.clients.clients.length).toBeGreaterThan(0));
+
+      expect(probe.current!.business.name).toBe('Maison Léa');
+      expect(harness.databases).toHaveLength(2);
+      expect(isClosed(harness.databases[0]!)).toBe(true);
+      expect(readMetadata(probe.current!.persistence.database, firstStepsKey(probe.current!.business.id))).toBe('active');
+    });
+
+    it('leaving the demo drops an import request its Accueil never consumed', async () => {
+      await renderRuntime();
+      await act(async () => {
+        session.current!.start('NAILS', { stage: 'just-onboarded' });
+      });
+      await waitFor(() => expect(probe.current).toBeDefined());
+      requestFirstArrival('client-import');
+
+      await act(async () => {
+        controls.hideRuntime!();
+      });
+
+      expect(consumeFirstArrival()).toBeUndefined();
+    });
   });
 });

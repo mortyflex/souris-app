@@ -1408,9 +1408,12 @@ Setup     1. Primary activity   ONE profession, one option card each (Coiffure, 
                                 kept ones are written — « Ajouter ces prestations » /
                                 « Continuer sans prestations » / « Je préfère ajouter mes
                                 prestations moi-même »
-          5. Setup complete     « Votre espace BeautIzzy est prêt ✨ » + the personalised recap
+          5. Setup complete     « On prépare votre espace… » (visual, ~3 s, skipped under Reduced Motion),
+                                then « Votre espace BeautIzzy est prêt ✨ » + the personalised recap
                                 (activity · rappels activés / à configurer plus tard · N prestations
-                                prêtes / prestations à ajouter plus tard) — `Continuer`
+                                prêtes / prestations à ajouter plus tard) + the optional client
+                                import card — « Importer ma clientèle » / « Accéder à mon espace »
+                                (DESIGN_OVERRIDES §45–46; Accueil then shows « Premiers pas »)
 App
 ```
 

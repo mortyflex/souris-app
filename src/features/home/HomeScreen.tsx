@@ -9,6 +9,8 @@
 //   [ PROCHAIN RENDEZ-VOUS — the one tinted hero card ]   → Appointment Details
 //     (the two cards share one row, 35 : 65, on every phone; with nothing to
 //     come the same slot holds its quiet empty card, never a row of its own)
+//   [ Premiers pas avec BeautIzzy ]   ONLY for a Business that just finished
+//     its onboarding on this device, until dismissed or done (first-steps/)
 //   Aujourd’hui                       Résumé du jour ›
 //   [ 2  Rendez-vous ]   [ 100 €  CA potentiel ]          the two primary figures
 //   [ Encaissements du jour ›  0 € encaissé | 100 € restant ]   secondary → Caisse
@@ -68,6 +70,8 @@ import {
 } from '@/shared/ui/theme';
 
 import { HomeCollectionSummary } from './components/HomeCollectionSummary';
+import { consumeFirstArrival } from './first-steps/arrival';
+import { FirstStepsCard } from './first-steps/FirstStepsCard';
 import { HomeGreetingCard } from './components/HomeGreetingCard';
 import { HomeHeader } from './components/HomeHeader';
 import { HomeKpiCard } from './components/HomeKpiCard';
@@ -109,6 +113,8 @@ const bottomPadding = Platform.OS === 'android' ? bottomClearance.android : bott
  */
 export const HOME_HERO_ROW_MIN_WIDTH = 340;
 const HERO_ROW_GAP = 10;
+/** The gap of the logo, hero and first-steps group. */
+const HOME_TOP_GAP = spacing.lg;
 
 export function HomeScreen() {
   const router = useRouter();
@@ -123,6 +129,12 @@ export function HomeScreen() {
   const [daySummaryVisible, setDaySummaryVisible] = useState(false);
   const [weekSummaryVisible, setWeekSummaryVisible] = useState(false);
   const [insightsVisible, setInsightsVisible] = useState(false);
+
+  // « Importer ma clientèle » at the end of onboarding: the existing import
+  // flow opens over Accueil, once — cancelling it lands here.
+  useEffect(() => {
+    if (consumeFirstArrival() === 'client-import') router.push('/clients/import');
+  }, [router]);
 
   const refreshNow = useCallback(() => setNow(new Date()), []);
   useFocusEffect(refreshNow);
@@ -197,6 +209,8 @@ export function HomeScreen() {
             </View>
             {/* BeautIzzy Plus: only while the access policy reports read-only with enforcement enabled. */}
             <ReadOnlyStatusCard />
+            {/* Its fold-away takes back the gap of this group: nothing below jumps. */}
+            <FirstStepsCard stackGap={HOME_TOP_GAP} />
           </View>
 
           <View>
@@ -369,7 +383,7 @@ const styles = StyleSheet.create({
   // Generous between sections; the cards themselves stay compact.
   content: { gap: spacing['2xl'], paddingHorizontal: horizontalGutter },
   // The logo and the row it introduces read as one group.
-  top: { gap: spacing.lg },
+  top: { gap: HOME_TOP_GAP },
   sectionHeader: { marginBottom: spacing.sm },
   figures: { gap: spacing.sm },
   // Borderless like every other card of the page.

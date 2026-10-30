@@ -177,6 +177,25 @@ group and resolves inside it; `/reminder-settings` and `/lifecycle-sms-settings`
 Plus, which the demo does not mount. The runtime already provided the product and sale sessions;
 no provider, store or boundary was added.
 
+## 4.1 First-time experience (October 2026)
+
+The onboarding preview now ends exactly like the product: the « On prépare votre espace… »
+interlude, the recap, the optional client import card and its two actions (DESIGN_OVERRIDES §45).
+Either action continues in a **first-use demo** — a new in-memory runtime of a just-onboarded
+Business (`demo/scenarios/first-use.ts`): the name typed in the preview, only the starters kept
+there, at 0 €, created today, with the « Premiers pas » flag written in THAT in-memory database
+(§46). « Importer ma clientèle » also opens the real import flow over the demo's Accueil, on the
+demo's memory. A request the demo Accueil did not consume is dropped when the demo unmounts.
+
+The Démo tab gains a « Premiers pas » section: from an established demo, « Prévisualiser les
+premiers pas »; inside a first-use demo, its four stages — « Juste après l’onboarding » (0 sur 3),
+« Clientèle importée » (1 sur 3), « Premier rendez-vous créé » (2 sur 3, tarifs à renseigner),
+« Tarifs et produits renseignés » (2 sur 3, produits faits) — each a NEW generation, the preview
+identity kept, and « Activité établie » to go back. Creating an appointment in the demo closes the
+card live, as in the product. Nothing here creates a Business, a client, a request or a write
+outside the demo's in-memory database; the product's onboarding and the existing-business
+isolation are unchanged.
+
 ---
 
 ## 5. Catalogue gaps observed while building the demos

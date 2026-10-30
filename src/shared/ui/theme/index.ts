@@ -57,7 +57,7 @@ export {
   tabIos,
   tabAndroid,
 } from './typography';
-export { duration, easing, interaction, receiptPrint } from './motion';
+export { duration, easing, firstSteps, interaction, receiptPrint, setupPreparation } from './motion';
 export {
   agenda,
   dialog,

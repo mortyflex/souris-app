@@ -9,7 +9,11 @@
 //   2. details     prénom *, nom, nom de l'activité *, téléphone
 //   3. reminders   the optional EMAIL reminder opt-in (recommended)
 //   4. services    the starter prestations proposed for the activity
-//   5. complete    the personalised recap, « Continuer » → the app
+//   5. complete    « On prépare votre espace… » (a short visual interlude,
+//                  skipped under Reduced Motion), then the personalised
+//                  recap, with the optional client import card:
+//                  « Importer ma clientèle » → the app, then the existing
+//                  import flow; « Accéder à mon espace » → the app
 //
 // The Business is created and bound EXACTLY ONCE, at the reminders decision
 // (step 3), with the session's deferred entry: it exists remotely and
@@ -48,6 +52,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import { SymbolView } from 'expo-symbols';
 
 import type { BusinessActivityType, BusinessProfile, BusinessSetupInput } from '@/domain/business';
@@ -55,6 +60,8 @@ import { isUsableCommunicationEmail } from '@/domain/communications';
 import { useAuth } from '@/features/auth/session/AuthProvider';
 import type { UpdateCommunicationPreferencesResult } from '@/features/communications/gateway';
 import { useCommunicationsGateway } from '@/features/communications/session/CommunicationsGatewayProvider';
+import { requestFirstArrival } from '@/features/home/first-steps/arrival';
+import { startFirstSteps } from '@/features/home/first-steps/first-steps-store';
 import { createServiceId, createServicePhaseId } from '@/features/services/editor/runtime-ids';
 import { runInTransaction } from '@/persistence/database';
 import { insertService } from '@/persistence/stores/services';
@@ -80,6 +87,7 @@ import {
 } from './business-form';
 import { ActivityOptionList } from './components/ActivityOptionList';
 import { ReminderOptionCard } from './components/ReminderOptionCard';
+import { SetupPreparation } from './components/SetupPreparation';
 import { SetupRecap } from './components/SetupRecap';
 import { StarterServiceList } from './components/StarterServiceList';
 import { onboardingIllustrations } from './onboarding-illustrations';
@@ -96,6 +104,9 @@ const ACTIVATION_FAILURE_TITLE = 'Impossible d’activer les rappels pour le mom
 const ACTIVATION_FAILURE_BODY =
   'Votre activité a bien été créée, mais les rappels restent désactivés.';
 const STARTER_WRITE_FAILURE = 'Impossible d’enregistrer ces prestations pour le moment. Réessayez.';
+const CLIENT_IMPORT_CARD_TITLE = 'Retrouvez vos clients en quelques secondes';
+const CLIENT_IMPORT_CARD_BODY =
+  'Importez votre carnet depuis un fichier CSV ou une liste copiée. C’est facultatif : vous pourrez aussi le faire plus tard depuis Clientèle.';
 
 /**
  * The FOUR effects of the five steps — everything that leaves the screen.
@@ -121,6 +132,12 @@ export interface BusinessSetupActions {
   readonly writeStarterServices: (business: BusinessProfile, kept: readonly StarterService[]) => number;
   /** Step 5: enters the created Business (the product), or leaves the preview (the Playground). */
   readonly enterBusiness: (business: BusinessProfile) => void;
+  /**
+   * Step 5, optional: enters the created Business and opens the EXISTING
+   * client import over Accueil. Absent in the Playground preview, which
+   * creates nothing to import into: the card is then not offered.
+   */
+  readonly importClients?: (business: BusinessProfile) => void;
 }
 
 /** The real effects: the Business session, the communications gateway, the Service store, the account. */
@@ -152,7 +169,16 @@ function useBusinessSetupActions(): BusinessSetupActions {
         reloadSnapshot();
         return catalog.length;
       },
-      enterBusiness: enterCreatedBusiness,
+      // Either way out offers the « Premiers pas » guide to THIS new Business.
+      enterBusiness: (business) => {
+        startFirstSteps(database, business.id);
+        enterCreatedBusiness(business);
+      },
+      importClients: (business) => {
+        startFirstSteps(database, business.id);
+        requestFirstArrival('client-import');
+        enterCreatedBusiness(business);
+      },
     }),
     [accountEmail, communications, createBusiness, database, enterCreatedBusiness, reloadSnapshot],
   );
@@ -178,7 +204,7 @@ export interface BusinessSetupFlowProps {
   readonly eyebrow?: string;
   /** A compact action at the end of every top bar (the Playground: « Quitter »). */
   readonly topBarEnd?: ReactNode;
-  /** The title of the last step's action; the product enters the app with « Continuer ». */
+  /** The title of the last step's way into the app; the product reads « Accéder à mon espace ». */
   readonly finishTitle?: string;
 }
 
@@ -188,7 +214,7 @@ export function BusinessSetupFlow({
   initialActivityType,
   eyebrow,
   topBarEnd,
-  finishTitle = 'Continuer',
+  finishTitle = 'Accéder à mon espace',
 }: BusinessSetupFlowProps) {
   const previewing = activityAcceptance === 'every-profession';
 
@@ -222,6 +248,8 @@ export function BusinessSetupFlow({
   const [starterServiceCount, setStarterServiceCount] = useState(0);
   // Written exactly once: a second press, however it arrives, writes nothing.
   const startersWritten = useRef(false);
+  // The app is entered once: a second press of either last action does nothing.
+  const entered = useRef(false);
 
   const replyToValue = replyToDraft ?? actions.accountEmail ?? '';
   const errors = validateBusinessForm(values, activityAcceptance);
@@ -373,10 +401,21 @@ export function BusinessSetupFlow({
   };
 
   const enterApp = () => {
-    if (!createdBusiness) return;
+    if (!createdBusiness || entered.current) return;
+    entered.current = true;
     haptics.action();
     actions.enterBusiness(createdBusiness);
   };
+
+  const { importClients } = actions;
+  const enterAndImportClients = importClients
+    ? () => {
+        if (!createdBusiness || entered.current) return;
+        entered.current = true;
+        haptics.action();
+        importClients(createdBusiness);
+      }
+    : undefined;
 
   switch (step) {
     case 'activity':
@@ -612,6 +651,7 @@ export function BusinessSetupFlow({
           eyebrow={eyebrow}
           finishTitle={finishTitle}
           onContinue={enterApp}
+          onImportClients={enterAndImportClients}
           progress={progress}
           remindersEnabled={remindersEnabled}
           starterServiceCount={starterServiceCount}
@@ -752,10 +792,26 @@ interface CompleteStepProps {
   readonly topBarEnd?: ReactNode;
   readonly finishTitle: string;
   readonly onContinue: () => void;
+  /** Absent: no client import card (the Playground preview). */
+  readonly onImportClients?: () => void;
 }
 
-/** Step 5: the recap. ONE success haptic on its first appearance, never on a re-render. */
-function CompleteStep({
+/**
+ * Step 5: the « On prépare votre espace… » interlude, then the recap. The
+ * interlude is purely visual — the Business, the reminders and the starters
+ * are all settled before this step is reached — and it is never shown again:
+ * nothing leaves this step but entering the app. Reduced Motion goes straight
+ * to the recap.
+ */
+function CompleteStep(props: CompleteStepProps) {
+  const reducedMotion = useReducedMotion();
+  const [revealed, setRevealed] = useState(reducedMotion);
+  if (!revealed) return <SetupPreparation onFinished={() => setRevealed(true)} />;
+  return <SetupReady {...props} />;
+}
+
+/** The recap. ONE success haptic on its first appearance, never on a re-render. */
+function SetupReady({
   activityType,
   remindersEnabled,
   starterServiceCount,
@@ -764,6 +820,7 @@ function CompleteStep({
   topBarEnd,
   finishTitle,
   onContinue,
+  onImportClients,
 }: CompleteStepProps) {
   const celebrated = useRef(false);
   useEffect(() => {
@@ -776,7 +833,16 @@ function CompleteStep({
     <OnboardingStepLayout
       align="center"
       eyebrow={eyebrow}
-      footer={<AppButton onPress={onContinue} testID="enter-app" title={finishTitle} />}
+      footer={
+        onImportClients ? (
+          <>
+            <AppButton onPress={onImportClients} testID="import-clients" title="Importer ma clientèle" />
+            <AppButton onPress={onContinue} testID="enter-app" title={finishTitle} variant="tertiary" />
+          </>
+        ) : (
+          <AppButton onPress={onContinue} testID="enter-app" title={finishTitle} />
+        )
+      }
       illustration={onboardingIllustrations.complete}
       progress={progress}
       subtitle="Tout est en place pour vous aider à gérer votre activité plus simplement."
@@ -789,6 +855,30 @@ function CompleteStep({
         remindersEnabled={remindersEnabled}
         starterServiceCount={starterServiceCount}
       />
+      {onImportClients && (
+        <View
+          accessible
+          accessibilityLabel={`${CLIENT_IMPORT_CARD_TITLE}. ${CLIENT_IMPORT_CARD_BODY}`}
+          style={styles.importCard}
+          testID="client-import-card"
+        >
+          <View style={styles.importGlyph}>
+            <SymbolView
+              name={{ ios: 'person.2', android: 'group' }}
+              size={18}
+              tintColor={semanticColors.accent}
+            />
+          </View>
+          <View style={styles.importCopy}>
+            <AppText style={styles.importTitle} variant="control">
+              {CLIENT_IMPORT_CARD_TITLE}
+            </AppText>
+            <AppText style={styles.noticeBody} variant="metadata">
+              {CLIENT_IMPORT_CARD_BODY}
+            </AppText>
+          </View>
+        </View>
+      )}
     </OnboardingStepLayout>
   );
 }
@@ -818,6 +908,29 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   noticeTitle: { color: semanticColors.accent },
+  // The optional client import offer of the recap: a quiet lavender card.
+  importCard: {
+    alignItems: 'flex-start',
+    backgroundColor: semanticColors.surfaceLavender,
+    borderColor: semanticColors.borderLavender,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+  },
+  importGlyph: {
+    alignItems: 'center',
+    backgroundColor: semanticColors.surfaceElevated,
+    borderRadius: radii.pill,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  importCopy: { flex: 1, gap: 2, minWidth: 0 },
+  importTitle: { color: semanticColors.foreground },
   noticeBody: { color: semanticColors.foregroundSoft },
   // Text on the app background: rose600 falls to ~4.3:1 there.
   failure: { color: rose.rose700 },

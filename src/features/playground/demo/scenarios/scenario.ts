@@ -228,7 +228,7 @@ function assertUniqueKeys(kind: string, keys: readonly string[]): void {
   }
 }
 
-function buildBusiness(definition: DemoScenarioDefinition, today: Date): BusinessProfile {
+export function buildBusiness(definition: DemoScenarioDefinition, today: Date): BusinessProfile {
   const createdAt = addLocalDays(today, -90);
   return {
     id: getDemoBusinessId(definition.activityType),
@@ -255,7 +255,7 @@ function buildCategories(business: BusinessProfile, definition: DemoScenarioDefi
   );
 }
 
-function buildService(
+export function buildService(
   business: BusinessProfile,
   starter: StarterService,
   definition: DemoScenarioDefinition,
@@ -288,7 +288,7 @@ function buildService(
   };
 }
 
-function buildClient(business: BusinessProfile, definition: DemoClientDefinition, today: Date): Client {
+export function buildClient(business: BusinessProfile, definition: DemoClientDefinition, today: Date): Client {
   const birthday =
     definition.birthday === 'today'
       ? { month: today.getMonth() + 1, day: today.getDate() }
@@ -305,7 +305,7 @@ function buildClient(business: BusinessProfile, definition: DemoClientDefinition
   };
 }
 
-function buildProduct(business: BusinessProfile, definition: DemoProductDefinition): Product {
+export function buildProduct(business: BusinessProfile, definition: DemoProductDefinition): Product {
   return {
     id: `${business.id}-product-${definition.key}`,
     businessId: business.id,

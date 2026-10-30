@@ -15,6 +15,11 @@ import { createFirstRunSeed } from '@/providers/first-run-seed';
 import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
 import { haptics } from '@/shared/lib/haptics';
 import { isUuidV4 } from '@/shared/lib/uuid';
+import { readMetadata } from '@/persistence/metadata';
+import { consumeFirstArrival } from '@/features/home/first-steps/arrival';
+import { firstStepsKey } from '@/features/home/first-steps/first-steps-store';
+import { setupPreparation } from '@/shared/ui/theme';
+import { reducedMotion } from '@/features/clients/birthday/testing/mock-reanimated';
 
 import { BusinessSessionProvider, useBusinessSession } from '../../session/BusinessSessionProvider';
 import { createFakeBusinessGateway } from '../../testing/fake-business-gateway';
@@ -40,6 +45,11 @@ jest.mock('react-native-safe-area-context', () => {
 const press = (element: unknown) =>
   act(async () => {
     fireEvent.press(element as Parameters<typeof fireEvent.press>[0]);
+  });
+/** « On prépare votre espace… » runs on a fixed clock: let it end. */
+const revealRecap = () =>
+  act(async () => {
+    jest.advanceTimersByTime(setupPreparation.total);
   });
 const type = (element: unknown, text: string) =>
   act(async () => {
@@ -95,6 +105,17 @@ async function reachServices(view: View, activity = 'HAIRDRESSING') {
   await waitFor(() => expect(view.getByTestId('onboarding-services')).toBeTruthy());
 }
 
+// The completion interlude runs on a timer; promises keep their real queue.
+beforeEach(() => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
+  reducedMotion.enabled = false;
+  consumeFirstArrival();
+});
+afterEach(() => {
+  jest.useRealTimers();
+  reducedMotion.enabled = false;
+});
+
 describe('BusinessSetupScreen — the five steps', () => {
   it('starts at the primary activity (no second Welcome), walks to the recap, and offers back only before the creation', async () => {
     const { view, business } = await renderSetup();
@@ -139,6 +160,7 @@ describe('BusinessSetupScreen — the five steps', () => {
     expect(view.queryByTestId('onboarding-back')).toBeNull();
     expect(view.getByTestId('onboarding-progress').props.accessibilityValue.now).toBe(4);
     await press(view.getByTestId('skip-starter-services'));
+    await revealRecap();
 
     // 5. Complete: progress 5/5, no back either; the app is entered from here only.
     expect(view.getByTestId('onboarding-complete')).toBeTruthy();
@@ -258,6 +280,7 @@ describe('BusinessSetupScreen — reminders and the creation point', () => {
     expect(status(view)).toBe('setup-required');
 
     await press(view.getByTestId('skip-starter-services'));
+    await revealRecap();
     expect(view.getByTestId('setup-recap-reminders').props.accessibilityLabel).toBe('Rappels par e-mail : Rappels activés');
   });
 
@@ -273,6 +296,7 @@ describe('BusinessSetupScreen — reminders and the creation point', () => {
     expect(status(view)).toBe('setup-required');
 
     await press(view.getByTestId('skip-starter-services'));
+    await revealRecap();
     expect(view.getByTestId('setup-recap-reminders').props.accessibilityLabel).toBe('Rappels par e-mail : À configurer plus tard');
   });
 
@@ -387,6 +411,7 @@ describe('BusinessSetupScreen — starter prestations', () => {
     await press(view.getByTestId('starter-care'));
     expect(view.getByTestId('starter-gloss').props.accessibilityState.checked).toBe(false);
     await press(view.getByTestId('add-starter-services'));
+    await revealRecap();
 
     const services = loadServices(database);
     expect(services.map((service) => service.name)).toEqual([
@@ -420,6 +445,7 @@ describe('BusinessSetupScreen — starter prestations', () => {
 
     expect(view.getAllByRole('checkbox')).toHaveLength(8);
     await press(view.getByTestId('skip-starter-services'));
+    await revealRecap();
 
     expect(loadServices(database)).toHaveLength(0);
     expect(view.getByTestId('setup-recap-services').props.accessibilityLabel).toBe('Prestations & tarifs : Prestations à ajouter plus tard');
@@ -434,6 +460,7 @@ describe('BusinessSetupScreen — starter prestations', () => {
     }
     expect(view.queryByTestId('add-starter-services')).toBeNull();
     await press(view.getByTestId('continue-without-services'));
+    await revealRecap();
 
     expect(loadServices(database)).toHaveLength(0);
     expect(view.getByTestId('onboarding-complete')).toBeTruthy();
@@ -456,6 +483,7 @@ describe('BusinessSetupScreen — starter prestations', () => {
     expect(view.queryByText('Coupe femme')).toBeNull();
 
     await press(view.getByTestId('add-starter-services'));
+    await revealRecap();
 
     const services = loadServices(database);
     expect(services.map((service) => service.name)).toEqual(proposed.map((starter) => starter.name));
@@ -479,15 +507,147 @@ describe('BusinessSetupScreen — setup complete', () => {
     success.mockClear();
 
     await press(view.getByTestId('add-starter-services'));
+    await revealRecap();
 
     expect(view.getByText('Votre espace BeautIzzy est prêt ✨')).toBeTruthy();
     expect(view.getByTestId('setup-recap-activity').props.accessibilityLabel).toBe('Votre activité principale : Coiffure');
     expect(view.getByTestId('setup-recap-services').props.accessibilityLabel).toBe('Prestations & tarifs : 8 prestations prêtes');
-    expect(view.getByText('Continuer')).toBeTruthy();
+    // The optional client import offer, and the plain way in.
+    expect(view.getByTestId('client-import-card').props.accessibilityLabel).toMatch(
+      /^Retrouvez vos clients en quelques secondes\. Importez votre carnet depuis un fichier CSV ou une liste copiée\. C’est facultatif/,
+    );
+    expect(view.getByText('Importer ma clientèle')).toBeTruthy();
+    expect(view.getByText('Accéder à mon espace')).toBeTruthy();
     expect(view.queryByText('Accéder à BeautIzzy')).toBeNull();
+    expect(view.queryByText(/réservation en ligne/i)).toBeNull();
     // One success haptic on the first appearance, none on a re-render.
     await act(async () => {});
     expect(success).toHaveBeenCalledTimes(1);
     success.mockRestore();
+  });
+
+  it('« On prépare votre espace… » comes first, settles nothing, then gives way to the recap', async () => {
+    const success = jest.spyOn(haptics, 'success');
+    const { view, database, business, communications } = await renderSetup();
+    await reachServices(view);
+    success.mockClear();
+
+    await press(view.getByTestId('add-starter-services'));
+
+    // The interlude: its two lines, no recap, no way into the app yet, no celebration yet.
+    expect(view.getByTestId('onboarding-preparing')).toBeTruthy();
+    expect(view.getByText('On prépare votre espace…')).toBeTruthy();
+    expect(view.getByText('Quelques petites touches pour que tout soit parfait.')).toBeTruthy();
+    expect(view.queryByTestId('onboarding-complete')).toBeNull();
+    expect(view.queryByTestId('enter-app')).toBeNull();
+    expect(success).not.toHaveBeenCalled();
+    // Everything was already settled before it appeared.
+    expect(business.calls.create).toBe(1);
+    expect(loadServices(database)).toHaveLength(8);
+
+    // Still there a moment before its end: it never cuts short…
+    await act(async () => {
+      jest.advanceTimersByTime(setupPreparation.total - 1);
+    });
+    expect(view.getByTestId('onboarding-preparing')).toBeTruthy();
+
+    // …and after about three seconds, the recap — celebrated once, at its appearance.
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(view.queryByTestId('onboarding-preparing')).toBeNull();
+    expect(view.getByTestId('onboarding-complete')).toBeTruthy();
+    expect(success).toHaveBeenCalledTimes(1);
+
+    // The interlude recreated nothing and requested nothing.
+    await act(async () => {
+      jest.advanceTimersByTime(setupPreparation.total * 2);
+    });
+    expect(view.getByTestId('onboarding-complete')).toBeTruthy();
+    expect(success).toHaveBeenCalledTimes(1);
+    expect(business.calls.create).toBe(1);
+    expect(communications.calls.update).toBe(0);
+    expect(loadServices(database)).toHaveLength(8);
+    expect(status(view)).toBe('setup-required');
+    success.mockRestore();
+  });
+
+  it('Reduced Motion skips the interlude: the recap appears at once', async () => {
+    reducedMotion.enabled = true;
+    const success = jest.spyOn(haptics, 'success');
+    const { view } = await renderSetup();
+    await reachServices(view);
+    success.mockClear();
+
+    await press(view.getByTestId('skip-starter-services'));
+
+    expect(view.queryByTestId('onboarding-preparing')).toBeNull();
+    expect(view.queryByText('On prépare votre espace…')).toBeNull();
+    expect(view.getByTestId('onboarding-complete')).toBeTruthy();
+    expect(success).toHaveBeenCalledTimes(1);
+    success.mockRestore();
+  });
+
+  it('lasts about three seconds, with a long fully visible hold between its entrance and its exit', () => {
+    expect(setupPreparation.total).toBeGreaterThanOrEqual(2800);
+    expect(setupPreparation.total).toBeLessThanOrEqual(3000);
+    const settled = setupPreparation.copyDelay + setupPreparation.enter;
+    const exitStart = setupPreparation.total - setupPreparation.exit;
+    expect(exitStart - settled).toBeGreaterThanOrEqual(1500);
+    // The line is still filling while everything is visible, and done before the exit.
+    expect(setupPreparation.fill).toBeGreaterThan(settled);
+    expect(setupPreparation.fill).toBeLessThanOrEqual(exitStart);
+  });
+
+  it('« Accéder à mon espace » enters the app and offers the « Premiers pas » guide to this new Business', async () => {
+    const { view, database, business } = await renderSetup();
+    await reachServices(view);
+    await press(view.getByTestId('skip-starter-services'));
+    await revealRecap();
+    expect(readMetadata(database, firstStepsKey(business.rows[0]!.id))).toBeUndefined();
+
+    await press(view.getByTestId('enter-app'));
+
+    expect(status(view)).toBe('ready');
+    expect(readMetadata(database, firstStepsKey(business.rows[0]!.id))).toBe('active');
+    // No import requested.
+    expect(consumeFirstArrival()).toBeUndefined();
+  });
+
+  it('« Importer ma clientèle » enters the Business ONCE and hands over to the existing import, onboarding complete', async () => {
+    const { view, database, business } = await renderSetup();
+    await reachServices(view);
+    await press(view.getByTestId('add-starter-services'));
+    await revealRecap();
+
+    await press(view.getByTestId('import-clients'));
+    await press(view.getByTestId('import-clients'));
+    await press(view.getByTestId('enter-app'));
+
+    // The onboarding is complete whatever happens in the import: the Business
+    // is entered, its prestations kept, the guide offered.
+    expect(status(view)).toBe('ready');
+    expect(business.calls.create).toBe(1);
+    expect(loadServices(database)).toHaveLength(8);
+    expect(readMetadata(database, firstStepsKey(business.rows[0]!.id))).toBe('active');
+    // Accueil will open the import, once.
+    expect(consumeFirstArrival()).toBe('client-import');
+    expect(consumeFirstArrival()).toBeUndefined();
+  });
+
+  it('enters the app once, however many times « Accéder à mon espace » is pressed', async () => {
+    const action = jest.spyOn(haptics, 'action');
+    const { view } = await renderSetup();
+    await reachServices(view);
+    await press(view.getByTestId('skip-starter-services'));
+    await revealRecap();
+    action.mockClear();
+
+    await press(view.getByTestId('enter-app'));
+    await press(view.getByTestId('enter-app'));
+
+    expect(status(view)).toBe('ready');
+    expect(action).toHaveBeenCalledTimes(1);
+    action.mockRestore();
   });
 });

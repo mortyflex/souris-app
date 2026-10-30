@@ -14,7 +14,10 @@
 //   communications undefined — reminders read as disabled, nothing is sent;
 //   access         enforcement disabled, no subscription source: every
 //                  mutation permitted, no store or RevenueCat call;
-//   business       the fictional demo Business, through CurrentBusinessProvider.
+//   business       the fictional demo Business, through CurrentBusinessProvider;
+//   first use      for a just-onboarded scenario, the « Premiers pas » flag is
+//                  written in THAT in-memory database, exactly as the real
+//                  onboarding writes it in the device's.
 //
 // What is deliberately NOT here: an AuthProvider (the root's stays as it is —
 // signed out — and nothing fakes a session), a BusinessSessionProvider (no
@@ -42,12 +45,14 @@ import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { CommunicationPreferencesProvider } from '@/features/communications/preferences/CommunicationPreferencesProvider';
 import { CommunicationsGatewayProvider } from '@/features/communications/session/CommunicationsGatewayProvider';
+import { consumeFirstArrival } from '@/features/home/first-steps/arrival';
+import { startFirstSteps } from '@/features/home/first-steps/first-steps-store';
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
 import type { SourisDatabase } from '@/persistence/database';
 import { BusinessMediaProvider } from '@/providers/BusinessMediaProvider';
-import { PersistenceProvider } from '@/providers/PersistenceProvider';
+import { PersistenceProvider, usePersistence } from '@/providers/PersistenceProvider';
 import { AppText } from '@/shared/ui/AppText';
 import { radii, semanticColors, spacing } from '@/shared/ui/theme';
 
@@ -73,8 +78,15 @@ export function PlaygroundDemoRuntime({
 }: PropsWithChildren<PlaygroundDemoRuntimeProps>) {
   const { scenario, exit } = usePlaygroundDemoSession();
 
-  // Leaving the demo group ends the demo: the next entry is always a fresh one.
-  useEffect(() => () => exit(), [exit]);
+  // Leaving the demo group ends the demo: the next entry is always a fresh one,
+  // and an import request its Accueil did not consume never reaches anything else.
+  useEffect(
+    () => () => {
+      consumeFirstArrival();
+      exit();
+    },
+    [exit],
+  );
 
   if (!isPlaygroundAvailable()) return <Redirect href="/" />;
   // A direct navigation into the group without a chosen demo: back to the landing.
@@ -111,7 +123,7 @@ function PlaygroundDemoScenarioRuntime({
   now,
   children,
 }: PropsWithChildren<PlaygroundDemoScenarioRuntimeProps>) {
-  const [data] = useState(() => createPlaygroundDemoScenario(scenario.activityType, now()));
+  const [data] = useState(() => createPlaygroundDemoScenario(scenario.activityType, now(), scenario.firstUse));
   const [files] = useState(createPlaygroundDemoFiles);
   // Every database this generation opened (the bootstrap, a retry): closed with it.
   const databases = useRef<SourisDatabase[]>([]);
@@ -148,7 +160,9 @@ function PlaygroundDemoScenarioRuntime({
                       <SaleSessionProvider>
                         <AppointmentSessionProvider>
                           <CalendarBlockSessionProvider>
-                            <CommunicationPreferencesProvider>{children}</CommunicationPreferencesProvider>
+                            <CommunicationPreferencesProvider>
+                              {scenario.firstUse ? <FirstUseFlag business={data.business}>{children}</FirstUseFlag> : children}
+                            </CommunicationPreferencesProvider>
                           </CalendarBlockSessionProvider>
                         </AppointmentSessionProvider>
                       </SaleSessionProvider>
@@ -163,6 +177,16 @@ function PlaygroundDemoScenarioRuntime({
       <DemoIndicator business={data.business} />
     </View>
   );
+}
+
+/**
+ * Offers the « Premiers pas » guide to the just-onboarded demo Business, in
+ * the demo's own in-memory database, BEFORE Accueil reads it. Idempotent.
+ */
+function FirstUseFlag({ business, children }: PropsWithChildren<{ readonly business: BusinessProfile }>) {
+  const { database } = usePersistence();
+  useState(() => startFirstSteps(database, business.id));
+  return children;
 }
 
 /** A small non-interactive pill under the status bar: visible on every demo screen, in the way of none. */
