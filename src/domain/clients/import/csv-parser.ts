@@ -9,6 +9,8 @@
 //   text  → records   delimiter detection (« ; », « , », tab, or an Excel
 //                     « sep=; » first line), quoted fields, doubled quotes,
 //                     line breaks inside quotes, CRLF / CR / LF
+//                     — a quoted cell never closed, or closed mid-cell after
+//                     swallowing lines, refuses the whole file (MALFORMED_QUOTES)
 //   records → rows    completely empty records are dropped; a cell holding a
 //                     year-first date (1990-04-12) is rewritten day first so
 //                     the French birthday reader cannot swap day and month
@@ -16,9 +18,12 @@
 // The rows then enter the SAME table reader as a tabular paste
 // (`parseClientImportTable`): header mapping, name split, phone / email /
 // birthday extraction and every review issue are the shared rules, not CSV
-// ones. No software-specific (Planity, Fresha…) column mapping exists.
+// ones. A first row that reads as column titles but maps no allowed field
+// refuses the file (UNSUPPORTED_COLUMNS) instead of becoming a client. No
+// software-specific (Planity, Fresha…) column mapping exists.
 
 import {
+  hasUnsupportedClientImportHeader,
   parseClientImportTable,
   type ClientImportParseResult,
   type ClientImportTableRow,
@@ -28,11 +33,20 @@ export type ClientImportCsvFailure =
   /** Not text at all: a spreadsheet workbook, a PDF, an image… */
   | 'NOT_TEXT'
   /** Nothing but blank lines. */
-  | 'EMPTY';
+  | 'EMPTY'
+  /** A quoted cell never closed, or closed in the middle of a cell after swallowing lines. */
+  | 'MALFORMED_QUOTES'
+  /** A header row whose columns map no allowed field: nothing is guessed from it. */
+  | 'UNSUPPORTED_COLUMNS';
 
 export type ClientImportCsvResult =
   | ({ readonly status: 'PARSED' } & ClientImportParseResult)
-  | { readonly status: 'UNUSABLE'; readonly reason: ClientImportCsvFailure };
+  | {
+      readonly status: 'UNUSABLE';
+      readonly reason: ClientImportCsvFailure;
+      /** MALFORMED_QUOTES: the 1-based line of the file where the faulty quoted cell opens. */
+      readonly lineNumber?: number;
+    };
 
 // ─── Bytes → text ──────────────────────────────────────────────────────────
 
@@ -127,24 +141,45 @@ interface CsvRecord {
   readonly cells: readonly string[];
 }
 
+interface CsvReading {
+  readonly records: CsvRecord[];
+  /**
+   * 1-based line where a quoted cell opens that cannot be trusted: it is never
+   * closed (it would swallow the rest of the file), or it spans lines and its
+   * closing quote is followed by more text (it swallowed the rows in between).
+   */
+  readonly malformedQuoteLine?: number;
+}
+
 /**
  * Cuts the text into records. Without a delimiter each line is one cell.
- * Lenient on purpose: an unclosed quote runs to the end of the file, text
- * after a closing quote stays in its cell — nothing is thrown away.
+ * Text after the closing quote of a one-line cell stays in its cell; a quoted
+ * cell that is never closed, or that runs over several lines and is closed in
+ * the middle of a cell, is reported instead of being read.
  */
-function readRecords(text: string, delimiter: string | undefined): CsvRecord[] {
+function readRecords(text: string, delimiter: string | undefined): CsvReading {
   const records: CsvRecord[] = [];
   let cells: string[] = [];
   let cell = '';
   let quoted = false;
+  let quoteLine = 0;
   let line = 1;
   let recordLine = 1;
+  let malformedQuoteLine: number | undefined;
 
   const endRecord = () => {
     cells.push(cell);
     records.push({ lineNumber: recordLine, cells });
     cells = [];
     cell = '';
+  };
+
+  /** The closing quote at `index` is followed by the end of its cell. */
+  const closesCell = (index: number) => {
+    let next = index + 1;
+    while (text.charAt(next) === ' ' || (text.charAt(next) === '\t' && delimiter !== '\t')) next += 1;
+    const char = text.charAt(next);
+    return char === '' || char === '\n' || char === '\r' || char === delimiter;
   };
 
   for (let index = 0; index < text.length; index += 1) {
@@ -158,10 +193,14 @@ function readRecords(text: string, delimiter: string | undefined): CsvRecord[] {
       else if (text.charAt(index + 1) === '"') {
         cell += '"';
         index += 1;
-      } else quoted = false;
+      } else {
+        quoted = false;
+        if (line > quoteLine && !closesCell(index)) malformedQuoteLine ??= quoteLine;
+      }
     } else if (char === '"' && cell.trim().length === 0) {
       cell = '';
       quoted = true;
+      quoteLine = line;
     } else if (lineBreak) {
       endRecord();
       recordLine = line;
@@ -170,12 +209,21 @@ function readRecords(text: string, delimiter: string | undefined): CsvRecord[] {
       cell = '';
     } else cell += char;
   }
+  if (quoted) malformedQuoteLine ??= quoteLine;
   if (cell.length > 0 || cells.length > 0) endRecord();
-  return records;
+  return { records, ...(malformedQuoteLine !== undefined ? { malformedQuoteLine } : {}) };
 }
 
 function isBlank(record: CsvRecord): boolean {
   return record.cells.every((cell) => cell.trim().length === 0);
+}
+
+function withoutBlankRecords(reading: CsvReading): CsvReading {
+  return { ...reading, records: reading.records.filter((record) => !isBlank(record)) };
+}
+
+function withoutSeparatorLine(reading: CsvReading): CsvReading {
+  return { ...reading, records: reading.records.slice(1) };
 }
 
 /** « ; » first: on a tie it is the French export. */
@@ -187,19 +235,19 @@ const EXCEL_SEPARATOR_LINE = /^sep=(.)[ \t]*(?:\r\n|\r|\n|$)/i;
  * The delimiter that cuts the first rows into the same number (2+) of cells
  * most often; undefined when none does — a single-column file.
  */
-function readDelimitedRecords(text: string): CsvRecord[] {
-  let best: { readonly records: CsvRecord[]; readonly consistent: number; readonly width: number } | undefined;
+function readDelimitedRecords(text: string): CsvReading {
+  let best: { readonly reading: CsvReading; readonly consistent: number; readonly width: number } | undefined;
   for (const delimiter of DELIMITERS) {
-    const records = readRecords(text, delimiter).filter((record) => !isBlank(record));
-    const sample = records.slice(0, SAMPLE_SIZE);
+    const reading = withoutBlankRecords(readRecords(text, delimiter));
+    const sample = reading.records.slice(0, SAMPLE_SIZE);
     const width = sample[0]?.cells.length ?? 0;
     if (width < 2) continue;
     const consistent = sample.filter((record) => record.cells.length === width).length;
     if (!best || consistent > best.consistent || (consistent === best.consistent && width > best.width)) {
-      best = { records, consistent, width };
+      best = { reading, consistent, width };
     }
   }
-  return best?.records ?? readRecords(text, undefined).filter((record) => !isBlank(record));
+  return best?.reading ?? withoutBlankRecords(readRecords(text, undefined));
 }
 
 // ─── Records → rows ────────────────────────────────────────────────────────
@@ -226,23 +274,30 @@ function toRow(record: CsvRecord): ClientImportTableRow {
 
 // ─── Entry points ──────────────────────────────────────────────────────────
 
-/** Parses CSV text into review candidates (source `CSV`). Never throws. */
-export function parseClientImportCsvText(text: string): ClientImportParseResult {
+/**
+ * Parses CSV text into review candidates (source `CSV`), or refuses it when
+ * it cannot be read without losing or inventing clients. Never throws.
+ */
+export function parseClientImportCsvText(text: string): ClientImportCsvResult {
   const content = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const separatorLine = EXCEL_SEPARATOR_LINE.exec(content);
-  const records = separatorLine
+  const reading = separatorLine
     ? // The announced delimiter is used as is; line numbers keep counting the « sep= » line.
-      readRecords(content, separatorLine[1])
-        .slice(1)
-        .filter((record) => !isBlank(record))
+      withoutSeparatorLine(withoutBlankRecords(readRecords(content, separatorLine[1])))
     : readDelimitedRecords(content);
-  return parseClientImportTable(records.map(toRow), 'CSV', { cellsAreFields: true });
+  // Nothing is read from a file whose quotes swallowed rows: partial reading would lose clients silently.
+  if (reading.malformedQuoteLine !== undefined) {
+    return { status: 'UNUSABLE', reason: 'MALFORMED_QUOTES', lineNumber: reading.malformedQuoteLine };
+  }
+  const rows = reading.records.map(toRow);
+  if (hasUnsupportedClientImportHeader(rows)) return { status: 'UNUSABLE', reason: 'UNSUPPORTED_COLUMNS' };
+  return { status: 'PARSED', ...parseClientImportTable(rows, 'CSV', { cellsAreFields: true }) };
 }
 
 /** Parses the bytes of a picked file. Never throws. */
 export function parseClientImportCsv(bytes: Uint8Array): ClientImportCsvResult {
   const text = decodeClientImportCsv(bytes);
   if (text === undefined) return { status: 'UNUSABLE', reason: 'NOT_TEXT' };
-  if (text.replace(/^﻿/, '').trim().length === 0) return { status: 'UNUSABLE', reason: 'EMPTY' };
-  return { status: 'PARSED', ...parseClientImportCsvText(text) };
+  if (text.replace(/^\uFEFF/, '').trim().length === 0) return { status: 'UNUSABLE', reason: 'EMPTY' };
+  return parseClientImportCsvText(text);
 }

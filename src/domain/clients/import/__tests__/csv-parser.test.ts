@@ -2,12 +2,23 @@
 
 import type { Client } from '../../types';
 import { classifyClientImportCandidates } from '../classification';
-import { decodeClientImportCsv, parseClientImportCsv, parseClientImportCsvText } from '../csv-parser';
-import { parseClientImportText } from '../text-parser';
+import { decodeClientImportCsv, parseClientImportCsv, parseClientImportCsvText as readCsvText } from '../csv-parser';
+import {
+  findCriticalClientImportColumns,
+  parseClientImportText,
+  type ClientImportParseResult,
+} from '../text-parser';
 import type { ClientImportCandidate } from '../types';
 
 function codes(candidate: ClientImportCandidate | undefined): readonly string[] {
   return candidate?.issues.map((issue) => issue.code) ?? [];
+}
+
+/** The candidates of a file that must be read, failing the test when it is refused. */
+function parseClientImportCsvText(text: string): ClientImportParseResult {
+  const result = readCsvText(text);
+  if (result.status !== 'PARSED') throw new Error(`refused: ${result.reason}`);
+  return result;
 }
 
 function utf8(text: string): Uint8Array {
@@ -344,5 +355,172 @@ describe('parseClientImportCsv — bytes', () => {
 
   it('parses a text file holding nobody into no candidate, without failing', () => {
     expect(parseClientImportCsv(utf8('12;34\n--;--'))).toMatchObject({ status: 'PARSED', candidates: [] });
+  });
+});
+
+describe('parseClientImportCsvText — malformed quotes', () => {
+  it('refuses a quoted cell never closed instead of swallowing every following client', () => {
+    const text = ['Prénom;Nom;Téléphone', 'Sophie;"Martin;0612345678', 'Nadia;Benali;0745678912', 'Lina;Haddad;0698765432'].join(
+      '\n',
+    );
+
+    expect(readCsvText(text)).toEqual({ status: 'UNUSABLE', reason: 'MALFORMED_QUOTES', lineNumber: 2 });
+    expect(parseClientImportCsv(utf8(text))).toEqual({ status: 'UNUSABLE', reason: 'MALFORMED_QUOTES', lineNumber: 2 });
+  });
+
+  it('refuses an unclosed quote opening a line, in a comma, single-column or « sep= » file', () => {
+    expect(readCsvText('Prénom,Téléphone\n"Sophie,0612345678\nNadia,0745678912')).toMatchObject({
+      reason: 'MALFORMED_QUOTES',
+      lineNumber: 2,
+    });
+    expect(readCsvText('Sophie Martin 0612345678\n"Nadia Benali 0745678912\nLina 0698765432')).toMatchObject({
+      reason: 'MALFORMED_QUOTES',
+      lineNumber: 2,
+    });
+    expect(readCsvText('sep=;\r\nPrénom;Téléphone\r\nSophie;"0612345678\r\nNadia;0745678912')).toMatchObject({
+      reason: 'MALFORMED_QUOTES',
+      lineNumber: 3,
+    });
+  });
+
+  it('refuses a quote closed in the middle of a later row, which merged the rows in between', () => {
+    const text = [
+      'Prénom;Nom;Téléphone',
+      'Sophie;"Martin;0612345678',
+      'Nadia;Benali;0745678912',
+      'Lina;"Haddad";0698765432',
+    ].join('\r\n');
+
+    expect(readCsvText(text)).toEqual({ status: 'UNUSABLE', reason: 'MALFORMED_QUOTES', lineNumber: 2 });
+  });
+
+  it('still reads multiline cells, doubled quotes, both delimiters inside quotes and CRLF', () => {
+    const text = [
+      'Client;Téléphone;Commentaire',
+      '"Martin; Sophie";0612345678;"dit ""Soso"", vient le mardi',
+      'sur deux lignes"',
+      '"Benali, Nadia" ;"0745678912";""',
+      '"Haddad Lina";0698765432;"""cuivré"""',
+    ].join('\r\n');
+    const result = parseClientImportCsvText(text);
+
+    expect(result.candidates.map((candidate) => candidate.sourceRef)).toEqual(['2', '4', '5']);
+    expect(result.candidates[0]).toMatchObject({ phone: '0612345678' });
+    expect(result.candidates[1]).toMatchObject({ phone: '0745678912' });
+    expect(result.candidates[2]).toMatchObject({ firstName: 'Haddad', lastName: 'Lina', phone: '0698765432' });
+    expect(result.ignoredColumns).toEqual(['Commentaire']);
+  });
+
+  it('keeps reading text after the closing quote of a one-line cell', () => {
+    const result = parseClientImportCsvText('Client;Téléphone\n"Sophie" Martin;0612345678');
+
+    expect(result.candidates[0]).toMatchObject({ firstName: 'Sophie', lastName: 'Martin', phone: '0612345678' });
+  });
+});
+
+describe('parseClientImportCsvText — unsupported headers', () => {
+  it.each([
+    ['Nom client;Tél. mobile;Courriel perso\nSophie Martin;0612345678;sophie@example.com', 'header words'],
+    ['Fiche;Portable perso\nSophie Martin;0612345678\nNadia Benali;0745678912', 'a partly matching word'],
+    ['Identité,Coordonnées,Remarque\nSophie Martin,0612345678,\nNadia Benali,0745678912,', 'a title above phones'],
+    ['Qui;Quand\nSophie;12/04/1990\nNadia;03/05', 'a title above dates'],
+    ['Nom et prénom de la cliente', 'a single title line'],
+  ])('refuses a header row mapping no column, never making it a client (%#: %s)', (text) => {
+    expect(readCsvText(text)).toEqual({ status: 'UNUSABLE', reason: 'UNSUPPORTED_COLUMNS' });
+    expect(parseClientImportCsv(utf8(text))).toEqual({ status: 'UNUSABLE', reason: 'UNSUPPORTED_COLUMNS' });
+  });
+
+  it('still maps a recognized header, its unknown columns ignored', () => {
+    const result = parseClientImportCsvText('Prénom;Nom;Tél. mobile;Notes\nSophie;Martin;0612345678;Allergie');
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]).toMatchObject({ firstName: 'Sophie', lastName: 'Martin', sourceRef: '2' });
+    expect(result.ignoredColumns).toEqual(['Tél. mobile', 'Notes']);
+  });
+
+  it.each([
+    ['Sophie;Martin;0612345678\nNadia;Benali;0745678912', 'first row holding a phone'],
+    ['Sophie;Martin;\nNadia;Benali;0745678912\nLina;Haddad;0698765432', 'first client without a phone'],
+    ['Sophie Martin\nNadia Benali\nLina Haddad', 'names only, one column'],
+    ['Sophie;Martin\nNadia;Benali', 'names only, two columns'],
+  ])('still reads a header-less list from its first row (%s)', (text) => {
+    const result = parseClientImportCsvText(text);
+
+    expect(result.candidates[0]).toMatchObject({ firstName: 'Sophie', lastName: 'Martin', sourceRef: '1' });
+    expect(result.ignoredColumns).toEqual([]);
+  });
+});
+
+describe('findCriticalClientImportColumns — ignored columns holding client data', () => {
+  it('flags the unknown columns of a mixed header, never mapping them', () => {
+    const result = parseClientImportCsvText(
+      'Prénom;Nom;Téléphone;Portable 2;Notes\nSophie;Martin;0612345678;0745678912;VIP',
+    );
+
+    expect(result.candidates[0]).toMatchObject({ firstName: 'Sophie', phone: '0612345678', issues: [] });
+    expect(result.ignoredColumns).toEqual(['Portable 2', 'Notes']);
+    expect(findCriticalClientImportColumns(result.ignoredColumns)).toEqual([{ column: 'Portable 2', field: 'phone' }]);
+  });
+
+  it.each([
+    ['Téléphone 2', 'phone'],
+    ['Tel2', 'phone'],
+    ['telephone_mobile_1', 'phone'],
+    ['Mobile perso', 'phone'],
+    ['N° GSM', 'phone'],
+    ['PhoneNumber2', 'phone'],
+    ['Telefone', 'phone'],
+    ['E-mails', 'email'],
+    ['eMail 2', 'email'],
+    ['Adresse mél', 'email'],
+    ['Courriel pro', 'email'],
+    ['Prénom 2', 'name'],
+    ['Prénoms', 'name'],
+    ['Nom de jeune fille', 'name'],
+    ['FirstName2', 'name'],
+    ['Date naiss.', 'birthday'],
+    ['Né le / naissance', 'birthday'],
+    ['Anniv.', 'birthday'],
+    ['BirthDate (jj/mm)', 'birthday'],
+  ])('flags « %s » as %s data (accents, punctuation, spaces, numeric suffixes)', (column, field) => {
+    expect(findCriticalClientImportColumns([column])).toEqual([{ column, field }]);
+  });
+
+  it('leaves unrelated ignored columns as plain ignored ones', () => {
+    expect(
+      findCriticalClientImportColumns([
+        'Notes',
+        'Total dépensé',
+        'Dernière visite',
+        'Numéro client',
+        'Date de création',
+        'Adresse',
+        'Ville',
+        'Code postal',
+        'Client depuis',
+        'Remarques',
+        'Fidélité',
+      ]),
+    ).toEqual([]);
+  });
+
+  it('flags every critical column of a file, in column order, by their original names', () => {
+    const result = parseClientImportCsvText(
+      'Prénom;Nom;Téléphone 2;Notes;Email 2;Anniversaire client;Prénom 2\nSophie;Martin;0612345678;;sophie@example.com;12/04;Lina',
+    );
+
+    expect(findCriticalClientImportColumns(result.ignoredColumns)).toEqual([
+      { column: 'Téléphone 2', field: 'phone' },
+      { column: 'Email 2', field: 'email' },
+      { column: 'Anniversaire client', field: 'birthday' },
+      { column: 'Prénom 2', field: 'name' },
+    ]);
+  });
+
+  it('finds nothing in a header-less file, which has no ignored column', () => {
+    const result = parseClientImportCsvText('Sophie;Martin;0612345678\nNadia;Benali;0745678912');
+
+    expect(result.ignoredColumns).toEqual([]);
+    expect(findCriticalClientImportColumns(result.ignoredColumns)).toEqual([]);
   });
 });

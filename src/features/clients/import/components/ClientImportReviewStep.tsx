@@ -13,6 +13,10 @@
 // folded into « N doublons détectés — ignorés » and can be inspected, never
 // imported; candidates to fix only open their correction drawer. Tapping a
 // card opens that drawer. The fixed footer names the exact number imported.
+//
+// An ignored column whose title names a phone, an email, a name or a
+// birthday (« Téléphone 2 ») would lose client data: it is named in a warning
+// card at the top and blocks the import until the list is fixed at its source.
 
 import { useMemo, useState } from 'react';
 import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -20,7 +24,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
 import { formatClientBirthday, type Client } from '@/domain/clients';
-import type { ClassifiedClientImportCandidate, ClientImportCandidate } from '@/domain/clients/import';
+import type {
+  ClassifiedClientImportCandidate,
+  ClientImportCandidate,
+  ClientImportCriticalColumn,
+} from '@/domain/clients/import';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { GroupedSurface } from '@/shared/ui/GroupedSurface';
@@ -29,9 +37,13 @@ import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { radii, rose, semanticColors, spacing, touchTarget } from '@/shared/ui/theme';
 
 import {
+  CRITICAL_COLUMNS_BLOCKED,
   candidateDisplayName,
+  criticalColumnMessage,
+  criticalColumnsTitle,
   detectedTitle,
   exactDuplicatesSummary,
+  ignoredColumnsLabel,
   importButtonTitle,
   issueLabel,
   matchLabel,
@@ -58,6 +70,8 @@ interface ClientImportReviewStepProps {
   readonly onEdit: (key: string) => void;
   readonly existingClients: readonly Client[];
   readonly ignoredColumns: readonly string[];
+  /** Ignored columns that hold client data: the import stays blocked while any exists. */
+  readonly criticalColumns: readonly ClientImportCriticalColumn[];
   /** Source lines with nothing to import (no name, number, email or date). */
   readonly unreadLines: readonly string[];
   readonly selectedCount: number;
@@ -77,12 +91,17 @@ export function ClientImportReviewStep({
   onEdit,
   existingClients,
   ignoredColumns,
+  criticalColumns,
   unreadLines,
   selectedCount,
   refreshed,
   onImport,
 }: ClientImportReviewStepProps) {
   const [exactExpanded, setExactExpanded] = useState(false);
+  const blocked = criticalColumns.length > 0;
+  const otherIgnoredColumns = ignoredColumns.filter(
+    (column) => !criticalColumns.some((critical) => critical.column === column),
+  );
   const counts = countBySegment(classified);
   const clientsById = useMemo(
     () => new Map(existingClients.map((client) => [client.id, client])),
@@ -110,6 +129,23 @@ export function ClientImportReviewStep({
       <AppText accessibilityRole="header" testID="client-import-detected" variant="sectionTitle">
         {detectedTitle(classified.length)}
       </AppText>
+      {blocked ? (
+        <View accessibilityLiveRegion="polite" style={styles.critical} testID="client-import-critical-columns">
+          <AppText accessibilityRole="header" style={styles.criticalTitle} variant="control">
+            {`⚠︎ ${criticalColumnsTitle(criticalColumns.length)}`}
+          </AppText>
+          {criticalColumns.map((critical) => (
+            <AppText
+              key={critical.column}
+              style={styles.criticalText}
+              testID={`client-import-critical-column-${critical.column}`}
+              variant="metadata"
+            >
+              {criticalColumnMessage(critical)}
+            </AppText>
+          ))}
+        </View>
+      ) : null}
       <SegmentedControl
         density="compact"
         onChange={onSegmentChange}
@@ -132,9 +168,9 @@ export function ClientImportReviewStep({
           Votre clientèle a changé pendant la vérification : la sélection a été mise à jour.
         </AppText>
       ) : null}
-      {ignoredColumns.length > 0 ? (
+      {otherIgnoredColumns.length > 0 ? (
         <AppText testID="client-import-ignored-columns" variant="metadata">
-          {`Colonnes ignorées : ${ignoredColumns.join(', ')}`}
+          {ignoredColumnsLabel(otherIgnoredColumns)}
         </AppText>
       ) : null}
       {unreadLines.length > 0 ? (
@@ -186,8 +222,13 @@ export function ClientImportReviewStep({
         showsVerticalScrollIndicator={false}
       />
       <SafeAreaView edges={['bottom']} style={styles.footer}>
+        {blocked ? (
+          <AppText style={styles.criticalText} testID="client-import-blocked" variant="metadata">
+            {CRITICAL_COLUMNS_BLOCKED}
+          </AppText>
+        ) : null}
         <AppButton
-          disabled={selectedCount === 0}
+          disabled={selectedCount === 0 || blocked}
           onPress={onImport}
           testID="client-import-confirm"
           title={importButtonTitle(selectedCount)}
@@ -304,6 +345,18 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   header: { gap: spacing.md, paddingBottom: spacing.md, paddingTop: spacing.sm },
   notice: { color: semanticColors.accent },
+  // rose700 on rose050: the error pairing of the app, readable at small sizes.
+  critical: {
+    backgroundColor: semanticColors.surfaceRose,
+    borderColor: rose.rose200,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
+    padding: spacing.base,
+  },
+  criticalTitle: { color: rose.rose700 },
+  criticalText: { color: rose.rose700 },
   list: { paddingBottom: spacing.xl },
   gap: { height: spacing.sm },
   empty: { paddingVertical: spacing.xl, textAlign: 'center' },
@@ -351,5 +404,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
   },
   forceImportText: { color: semanticColors.accent, flex: 1 },
-  footer: { paddingBottom: spacing.base, paddingTop: spacing.md },
+  footer: { gap: spacing.sm, paddingBottom: spacing.base, paddingTop: spacing.md },
 });

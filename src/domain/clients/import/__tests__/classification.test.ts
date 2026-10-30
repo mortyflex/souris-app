@@ -83,13 +83,28 @@ describe('classifyClientImportCandidates', () => {
     const results = classifyClientImportCandidates(
       [
         candidate('a', { firstName: 'Lina', phone: '06 99 88 77 66' }),
-        candidate('b', { firstName: 'Lina B', phone: '0699887766' }),
+        candidate('b', { firstName: 'lina', phone: '0699887766' }),
       ],
       [],
     );
 
     expect(results.map((result) => result.status)).toEqual(['NEW', 'EXACT_DUPLICATE']);
     expect(results[1]?.match).toEqual({ reason: 'PHONE', target: { kind: 'CANDIDATE', candidateKey: 'a' } });
+  });
+
+  // Product rule (October 2026): a phone is a contact detail, not an identity.
+  // « Lina » then « Lina B » on one number used to be an EXACT duplicate.
+  it('only proposes a shared number under a different first name, even a longer one', () => {
+    const results = classifyClientImportCandidates(
+      [
+        candidate('a', { firstName: 'Lina', phone: '06 99 88 77 66' }),
+        candidate('b', { firstName: 'Lina B', phone: '0699887766' }),
+      ],
+      [],
+    );
+
+    expect(results.map((result) => result.status)).toEqual(['NEW', 'POSSIBLE_DUPLICATE']);
+    expect(results[1]?.match).toEqual({ reason: 'SHARED_PHONE', target: { kind: 'CANDIDATE', candidateKey: 'a' } });
   });
 
   it('never matches against an invalid earlier candidate', () => {
@@ -219,5 +234,129 @@ describe('classifyClientImportCandidates', () => {
 
     expect(results).toHaveLength(500);
     expect(results.every((result) => result.status === 'NEW')).toBe(true);
+  });
+
+  describe('shared phone numbers', () => {
+    it('lets two family members share one number in the same file', () => {
+      const results = classifyClientImportCandidates(
+        [
+          candidate('mother', { firstName: 'Sophie', lastName: 'Martin', phone: '06 12 34 56 78' }),
+          candidate('daughter', { firstName: 'Chloé', lastName: 'Martin', phone: '+33 6 12 34 56 78' }),
+        ],
+        [],
+      );
+
+      expect(results.map((result) => result.status)).toEqual(['NEW', 'POSSIBLE_DUPLICATE']);
+      expect(results[1]?.match).toEqual({
+        reason: 'SHARED_PHONE',
+        target: { kind: 'CANDIDATE', candidateKey: 'mother' },
+      });
+    });
+
+    it('proposes, never blocks, a client sharing the number of an existing or archived client', () => {
+      const results = classifyClientImportCandidates(
+        [
+          candidate('a', { firstName: 'Chloé', lastName: 'Martin', phone: '0612345678' }),
+          candidate('b', { firstName: 'Léa', phone: '07 45 67 89 12' }),
+        ],
+        [sophie, archivedEmma],
+      );
+
+      expect(results.map((result) => result.status)).toEqual(['POSSIBLE_DUPLICATE', 'POSSIBLE_DUPLICATE']);
+      expect(results[0]?.match).toEqual({
+        reason: 'SHARED_PHONE',
+        target: { kind: 'CLIENT', clientId: 'client-sophie', archived: false },
+      });
+      expect(results[1]?.match).toEqual({
+        reason: 'SHARED_PHONE',
+        target: { kind: 'CLIENT', clientId: 'client-emma', archived: true },
+      });
+    });
+
+    it('keeps a genuine duplicate exact: accents, case, spaces, hyphens and a missing last name ignored', () => {
+      const marieClaire: Client = { id: 'client-mc', firstName: 'Marie-Claire', lastName: 'Lefèvre', phone: '06 11 22 33 44' };
+      const results = classifyClientImportCandidates(
+        [
+          candidate('a', { firstName: '  marie claire ', lastName: 'LEFEVRE', phone: '0611223344' }),
+          candidate('b', { firstName: 'Marie-Claire', phone: '+33 6 11 22 33 44' }),
+          candidate('c', { firstName: 'Sophie', phone: '06 12 34 56 78' }),
+          candidate('d', { firstName: 'Emma', lastName: 'Durand', phone: '0745678912' }),
+        ],
+        [marieClaire, sophie, archivedEmma],
+      );
+
+      expect(results.map((result) => result.status)).toEqual([
+        'EXACT_DUPLICATE',
+        'EXACT_DUPLICATE',
+        'EXACT_DUPLICATE',
+        'EXACT_DUPLICATE',
+      ]);
+      expect(results[3]?.match?.target).toEqual({ kind: 'CLIENT', clientId: 'client-emma', archived: true });
+    });
+
+    it('recognizes first and last names read in the other order', () => {
+      const [result] = classifyClientImportCandidates(
+        [candidate('a', { firstName: 'Martin', lastName: 'Sophie', phone: '0612345678' })],
+        [sophie],
+      );
+
+      expect(result?.status).toBe('EXACT_DUPLICATE');
+    });
+
+    it('keeps repeated rows of the same person exact duplicates of the first one', () => {
+      const row = { firstName: 'Nadia', lastName: 'Benali', phone: '07 11 22 33 44' };
+      const results = classifyClientImportCandidates(
+        [candidate('a', row), candidate('b', row), candidate('c', { ...row, phone: '0711223344' })],
+        [],
+      );
+
+      expect(results.map((result) => result.status)).toEqual(['NEW', 'EXACT_DUPLICATE', 'EXACT_DUPLICATE']);
+      expect(results[2]?.match?.target).toEqual({ kind: 'CANDIDATE', candidateKey: 'a' });
+    });
+
+    it('treats an ambiguous identity as a shared number: same first name, two different last names', () => {
+      const results = classifyClientImportCandidates(
+        [
+          candidate('a', { firstName: 'Sophie', lastName: 'Bernard', phone: '0612345678' }),
+          candidate('b', { firstName: 'Marie', phone: '0612345678' }),
+        ],
+        [sophie],
+      );
+
+      expect(results.map((result) => result.match?.reason)).toEqual(['SHARED_PHONE', 'SHARED_PHONE']);
+      expect(results.map((result) => result.status)).toEqual(['POSSIBLE_DUPLICATE', 'POSSIBLE_DUPLICATE']);
+    });
+
+    it('matches the record with a compatible name when several clients share the number', () => {
+      const chloe: Client = { id: 'client-chloe', firstName: 'Chloé', lastName: 'Martin', phone: '06 12 34 56 78' };
+      const [result] = classifyClientImportCandidates(
+        [candidate('a', { firstName: 'Chloe', lastName: 'Martin', phone: '0612345678' })],
+        [sophie, chloe],
+      );
+
+      expect(result?.status).toBe('EXACT_DUPLICATE');
+      expect(result?.match?.target).toEqual({ kind: 'CLIENT', clientId: 'client-chloe', archived: false });
+    });
+
+    it('keeps the email a strong identifier, even under another first name (a shared family email)', () => {
+      const family: Client = { ...sophie, email: 'famille.martin@example.com' };
+      const results = classifyClientImportCandidates(
+        [
+          candidate('a', { firstName: 'Chloé', email: 'famille.martin@example.com' }),
+          candidate('b', { firstName: 'Chloé', phone: '0612345678', email: 'famille.martin@example.com' }),
+        ],
+        [family],
+      );
+
+      expect(results.map((result) => result.status)).toEqual(['EXACT_DUPLICATE', 'EXACT_DUPLICATE']);
+      expect(results.map((result) => result.match?.reason)).toEqual(['EMAIL', 'PHONE']);
+    });
+
+    it('never changes an existing client', () => {
+      const before = structuredClone(sophie);
+      classifyClientImportCandidates([candidate('a', { firstName: 'Chloé', phone: '0612345678' })], [sophie]);
+
+      expect(sophie).toEqual(before);
+    });
   });
 });

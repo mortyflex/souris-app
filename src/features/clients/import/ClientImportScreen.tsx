@@ -41,6 +41,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import type { Client } from '@/domain/clients';
 import {
   classifyClientImportCandidates,
+  findCriticalClientImportColumns,
   parseClientImportCsv,
   parseClientImportText,
   toImportedClient,
@@ -128,7 +129,10 @@ export function ClientImportScreen() {
   const [step, setStep] = useState<Step>(INITIAL_STEP);
   const [text, setText] = useState('');
   const [nothingDetected, setNothingDetected] = useState(false);
-  const [csvProblem, setCsvProblem] = useState<ClientImportCsvProblem>();
+  const [csvProblem, setCsvProblem] = useState<{
+    readonly problem: ClientImportCsvProblem;
+    readonly lineNumber?: number;
+  }>();
   const [csvPicking, setCsvPicking] = useState(false);
   // Bumped when the CSV step is left: a file still being read is then forgotten.
   const csvRequest = useRef(0);
@@ -148,6 +152,8 @@ export function ClientImportScreen() {
     [candidates, existingClients],
   );
   const selectedCount = selectedCandidates(classified, choices).length;
+  // Ignored columns holding client data: nothing is imported while any exists.
+  const criticalColumns = useMemo(() => findCriticalClientImportColumns(ignoredColumns), [ignoredColumns]);
   const editing = candidates.find((candidate) => candidate.key === editingKey);
 
   const [discardRequested, setDiscardRequested] = useState(false);
@@ -207,12 +213,16 @@ export function ClientImportScreen() {
     // A cancelled picker changes nothing: the step and its last message stay.
     if (picked.status === 'cancelled') return;
     if (picked.status !== 'selected') {
-      setCsvProblem(picked.status === 'too-large' ? 'TOO_LARGE' : 'UNREADABLE');
+      setCsvProblem({ problem: picked.status === 'too-large' ? 'TOO_LARGE' : 'UNREADABLE' });
       return;
     }
     const result = parseClientImportCsv(picked.bytes);
-    if (result.status === 'UNUSABLE') setCsvProblem(result.reason);
-    else if (result.candidates.length === 0) setCsvProblem('NO_CLIENT');
+    if (result.status === 'UNUSABLE') {
+      setCsvProblem({
+        problem: result.reason,
+        ...(result.lineNumber !== undefined ? { lineNumber: result.lineNumber } : {}),
+      });
+    } else if (result.candidates.length === 0) setCsvProblem({ problem: 'NO_CLIENT' });
     else {
       setCsvProblem(undefined);
       stage(result);
@@ -263,6 +273,7 @@ export function ClientImportScreen() {
   };
 
   const confirm = () => {
+    if (criticalColumns.length > 0) return;
     let stored: readonly Client[];
     try {
       stored = loadClients(database);
@@ -302,7 +313,7 @@ export function ClientImportScreen() {
         <ClientImportCsvStep
           onPickFile={() => void pickCsvFile()}
           picking={csvPicking}
-          {...(csvProblem ? { error: csvProblemMessage(csvProblem) } : {})}
+          {...(csvProblem ? { error: csvProblemMessage(csvProblem.problem, csvProblem.lineNumber) } : {})}
         />
       )}
       {step === 'paste' && (
@@ -321,6 +332,7 @@ export function ClientImportScreen() {
           choices={choices}
           classified={classified}
           existingClients={existingClients}
+          criticalColumns={criticalColumns}
           ignoredColumns={ignoredColumns}
           onChoice={(key, selected) => setChoices((current) => withChoice(current, key, selected))}
           onEdit={setEditingKey}

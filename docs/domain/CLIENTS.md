@@ -429,6 +429,9 @@ An impossible day + month pair (`31/04`) is dropped with `BIRTHDAY_DROPPED`.
   `sep=;` first line; without any, each line is one cell. Quoted cells, doubled quotes, line breaks
   inside quotes and CRLF / CR / LF are read; completely empty rows are dropped. A row keeps the line
   number of the FILE as its `sourceRef`, and its own cells as `raw`;
+- **malformed quotes**: a quoted cell that is never closed, or that runs over several lines and is
+  closed in the middle of a cell, would have swallowed the following rows. The whole file is then
+  refused as `MALFORMED_QUOTES`, with the line where that cell opens — nothing is read from it;
 - **year-first dates**: a cell that is exactly `1990-04-12` (or `1990-04-12T00:00:00`) is handed
   over day first, so the French birthday reader cannot swap day and month.
 
@@ -440,6 +443,19 @@ Headers (accent-, case- and underscore-insensitive): `Prénom` / `First name`; `
 `Tél` / `Portable` / `Mobile` / `Phone`; `Email` / `E-mail` / `Mail` / `Courriel`;
 `Anniversaire` / `Date de naissance` / `DDN` / `Birthday` / `Date of birth`. Any other column
 is ignored as a whole and listed once. No software-specific mapping (Planity, Fresha…) exists.
+
+A first row that maps NO column but reads as column titles — no cell looks like data (an `@`, two
+digits), and a cell holds a word of the names above (`Nom client`, `Tél. mobile`) or stands above a
+column of phones, emails or dates — refuses the file as `UNSUPPORTED_COLUMNS`: it never becomes a
+client and no column is guessed (`hasUnsupportedClientImportHeader`).
+
+An ignored column whose title names client data — a phone, an email, a name or a birthday, with
+accents, punctuation, spaces, plurals and numeric suffixes ignored (`Téléphone 2`, `Tel2`,
+`E-mails`, `Prénom 2`, `Date naiss.`) — is CRITICAL (`findCriticalClientImportColumns`). It is
+never mapped: the review names it as written, says in French that its data would not be imported,
+suggests the supported header to rename it to (or removing it), and the import stays blocked until
+the list is fixed at its source. The other ignored columns (`Notes`, `Total dépensé`…) stay listed
+once and never block. This applies to every tabular source (CSV and tab-separated paste).
 
 Without a header row, a file row is read cell by cell with the line rules above — two cells never
 merge into one number or one date. A name spread over several cells has an unknown column order
@@ -474,12 +490,29 @@ candidates of the same batch.
 
 ```text
 INVALID             a blocking issue
-EXACT_DUPLICATE     same canonical phone, or same email key
-POSSIBLE_DUPLICATE  phone matches one record while email matches another
+EXACT_DUPLICATE     same email key
+                    same canonical phone AND a compatible name
+POSSIBLE_DUPLICATE  same canonical phone, every name different (SHARED_PHONE)
+                    phone matches one record while email matches another
                     same last nine digits where canonical forms cannot decide
                     same first + last name (accent-, case-, separator-insensitive)
 NEW                 nothing matches
 ```
+
+A phone is a contact detail, not an identity: a mother and her daughter may share one number.
+Names are compatible when, accent-, case-, space- and hyphen-insensitive, the first names are
+equal and the last names are equal or missing on one side, or when first and last names are
+swapped. Anything else — `Lina` / `Lina B`, `Marie` / `Marie-Claire`, the same first name with two
+different last names — is conservatively NOT the same person: the shared number only proposes a
+possible duplicate, unticked, which « Importer quand même » imports after review. When several
+records share the number, the one with a compatible name is the exact match.
+
+The email stays a strong identifier, whatever the names: a family email shared by two people
+still makes the second an exact duplicate (a known ambiguity, kept on purpose; such a client is
+added by hand or with another email).
+
+The ignored-column warning never suggests that a second phone, email, name or birthday column
+could be kept: a client stores ONE of each.
 
 A first name alone never makes a duplicate. An archived match is named as such. Nothing is ever
 merged: no field of an existing Client is filled or changed by an import.

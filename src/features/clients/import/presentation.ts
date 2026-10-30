@@ -9,6 +9,8 @@ import { formatClientBirthday, getClientDisplayName, type Client } from '@/domai
 import type {
   ClassifiedClientImportCandidate,
   ClientImportCandidate,
+  ClientImportCriticalColumn,
+  ClientImportCriticalField,
   ClientImportCsvFailure,
   ClientImportIssue,
 } from '@/domain/clients/import';
@@ -55,7 +57,8 @@ export function importedClientDetail(client: Client): string | undefined {
 /** Why a picked file gave nothing to review — always a way forward, never a technical error. */
 export type ClientImportCsvProblem = ClientImportCsvFailure | 'UNREADABLE' | 'TOO_LARGE' | 'NO_CLIENT';
 
-export function csvProblemMessage(problem: ClientImportCsvProblem): string {
+/** `lineNumber`: where the faulty quoted cell of a MALFORMED_QUOTES file opens. */
+export function csvProblemMessage(problem: ClientImportCsvProblem, lineNumber?: number): string {
   switch (problem) {
     case 'UNREADABLE':
       return 'Impossible de lire ce fichier. Réessayez ou choisissez-en un autre.';
@@ -67,7 +70,51 @@ export function csvProblemMessage(problem: ClientImportCsvProblem): string {
       return 'Ce fichier est vide. Choisissez-en un autre.';
     case 'NO_CLIENT':
       return 'Aucun client détecté dans ce fichier. Choisissez-en un autre.';
+    case 'MALFORMED_QUOTES':
+      return `Ce fichier est mal formé : un guillemet ${lineNumber !== undefined ? `ouvert ligne ${lineNumber} ` : ''}n’est pas refermé correctement. Aucun client n’a été lu. Corrigez cette ligne, ou exportez de nouveau votre liste au format CSV depuis Excel, Numbers ou Google Sheets.`;
+    case 'UNSUPPORTED_COLUMNS':
+      return 'Les colonnes de ce fichier ne sont pas reconnues. Nommez-les Prénom, Nom, Téléphone, Email et Anniversaire, puis exportez de nouveau votre liste au format CSV.';
   }
+}
+
+// A client keeps ONE phone, ONE email, ONE birthday, one first + last name:
+// the advice never suggests that a second column could be kept as well.
+const CRITICAL_FIELD_COPY: Record<ClientImportCriticalField, { readonly data: string; readonly keep: string }> = {
+  phone: {
+    data: 'des numéros de téléphone',
+    keep: 'Un seul numéro est conservé par client : placez le numéro à garder dans la colonne « Téléphone », puis supprimez cette colonne.',
+  },
+  email: {
+    data: 'des adresses email',
+    keep: 'Une seule adresse est conservée par client : placez l’adresse à garder dans la colonne « Email », puis supprimez cette colonne.',
+  },
+  name: {
+    data: 'des noms ou prénoms',
+    keep: 'Un client a un seul prénom et un seul nom : placez-les dans les colonnes « Prénom » et « Nom », puis supprimez cette colonne.',
+  },
+  birthday: {
+    data: 'des dates d’anniversaire',
+    keep: 'Un seul anniversaire est conservé par client : placez la date à garder dans la colonne « Anniversaire », puis supprimez cette colonne.',
+  },
+};
+
+export function criticalColumnsTitle(count: number): string {
+  return count === 1
+    ? 'Une colonne importante n’est pas reconnue'
+    : `${count} colonnes importantes ne sont pas reconnues`;
+}
+
+/** One ignored column whose data would be lost, named exactly as in the source. */
+export function criticalColumnMessage({ column, field }: ClientImportCriticalColumn): string {
+  const copy = CRITICAL_FIELD_COPY[field];
+  return `« ${column} » semble contenir ${copy.data}. Ses données ne seraient pas importées. ${copy.keep} Recommencez ensuite l’import.`;
+}
+
+export const CRITICAL_COLUMNS_BLOCKED =
+  'Import impossible tant que les colonnes signalées restent dans votre liste.';
+
+export function ignoredColumnsLabel(columns: readonly string[]): string {
+  return `Colonnes ignorées : ${columns.join(', ')}`;
 }
 
 export function unreadLinesLabel(lines: readonly string[]): string {
@@ -126,6 +173,8 @@ export function matchLabel(
   switch (match.reason) {
     case 'PHONE':
       return `Même numéro que ${name}`;
+    case 'SHARED_PHONE':
+      return `Numéro partagé avec ${name}, sous un autre nom : un proche ou la même personne ? Vérifiez avant d’importer.`;
     case 'EMAIL':
       return `Même email que ${name}`;
     case 'NAME':

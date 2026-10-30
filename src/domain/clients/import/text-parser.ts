@@ -549,6 +549,96 @@ function looksLikeData(cell: string): boolean {
   return cell.includes('@') || /\d{2}/.test(cell);
 }
 
+export type ClientImportCriticalField = 'name' | 'phone' | 'email' | 'birthday';
+
+/** An ignored column whose title names client identity / contact data. */
+export interface ClientImportCriticalColumn {
+  /** The column title exactly as written in the source. */
+  readonly column: string;
+  readonly field: ClientImportCriticalField;
+}
+
+/**
+ * Title words that name an allowed field, spelling variants included. Only
+ * used to WARN about an ignored column: a column is never mapped from them.
+ * « client », « numéro », « date » alone are left out (« Numéro client »,
+ * « Date de création » are not contact data).
+ */
+const CRITICAL_COLUMN_WORDS: readonly (readonly [ClientImportCriticalField, readonly string[]])[] = [
+  [
+    'phone',
+    ['telephone', 'telephon', 'telefone', 'telefono', 'tel', 'phone', 'mobile', 'portable', 'gsm', 'fixe', 'cell', 'cellulaire', 'cellphone'],
+  ],
+  ['email', ['email', 'mail', 'courriel', 'mel']],
+  ['birthday', ['anniversaire', 'anniv', 'naissance', 'naiss', 'ddn', 'birthday', 'birthdate', 'birth', 'dob']],
+  ['name', ['prenom', 'nom', 'name', 'firstname', 'lastname', 'surname', 'fullname', 'givenname', 'patronyme']],
+];
+
+function titleWords(cell: string): string[] {
+  return wordKey(cell.replace(/([a-z])([A-Z])/g, '$1 $2'))
+    .split(/[^a-z0-9]+/)
+    .map((word) => word.replace(/\d+$/, ''))
+    .filter((word) => word.length > 0);
+}
+
+/** The word as written, or without its plural « s » (« E-mails », « Prénoms »). */
+function namesWord(names: readonly string[], word: string): boolean {
+  return names.includes(word) || (word.endsWith('s') && names.includes(word.slice(0, -1)));
+}
+
+/**
+ * The ignored columns (`ClientImportParseResult.ignoredColumns`) whose title
+ * names a phone, an email, a name or a birthday — « Téléphone 2 »,
+ * « Tél. portable », « E-mails », « Prénom 2 », « Date naiss. »: their data
+ * would be lost. Accent-, case-, punctuation- and numeric-suffix-insensitive.
+ * The other ignored columns (notes, totals, visits…) stay plain ignored ones.
+ */
+export function findCriticalClientImportColumns(
+  ignoredColumns: readonly string[],
+): readonly ClientImportCriticalColumn[] {
+  return ignoredColumns.flatMap((column) => {
+    const words = titleWords(column);
+    const found = CRITICAL_COLUMN_WORDS.find(([, names]) => words.some((word) => namesWord(names, word)));
+    return found ? [{ column, field: found[0] }] : [];
+  });
+}
+
+/** The words of the allowed header names (« tel », « mobile », « naissance »…), never a new name. */
+const HEADER_WORDS = new Set(
+  HEADER_ROLES.flatMap(([, names]) => names.flatMap((name) => name.split(/[\s-]+/))).filter(
+    (word) => word.length >= 3,
+  ),
+);
+
+function holdsHeaderWord(cell: string): boolean {
+  return wordKey(cell)
+    .split(/[^a-z0-9]+/)
+    .some((word) => HEADER_WORDS.has(word));
+}
+
+/**
+ * True when the first row reads as column titles that map NO allowed field:
+ * no cell looks like data, and a cell holds a word of the header vocabulary
+ * (« Nom client », « Tél. mobile ») or stands above a column of data
+ * (phones, emails, dates). Such a row must never become a client, and its
+ * columns must never be guessed. A header-less list starts with a client: its
+ * row holds data, or names above names.
+ */
+export function hasUnsupportedClientImportHeader(tableRows: readonly ClientImportTableRow[]): boolean {
+  const rows = tableRows.filter((row) => row.cells.some((cell) => cell.trim().length > 0));
+  const [first, ...body] = rows;
+  if (!first) return false;
+  const titles = first.cells.map(collapse);
+  if (titles.some((cell) => headerRole(cell) !== undefined || looksLikeData(cell))) return false;
+  if (titles.some(holdsHeaderWord)) return true;
+  return titles.some((title, column) => {
+    if (title.length === 0) return false;
+    const values = body.map((row) => collapse(row.cells[column] ?? '')).filter(Boolean);
+    const data = values.filter(looksLikeData).length;
+    return data > 0 && data * 2 >= values.length;
+  });
+}
+
 /** One row of a table, whatever cut it into cells (tabs of a paste, the delimiter of a file). */
 export interface ClientImportTableRow {
   /** 1-based line of the row in its source. */

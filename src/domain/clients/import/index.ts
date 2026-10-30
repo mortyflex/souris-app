@@ -14,9 +14,13 @@ export { BLOCKING_CLIENT_IMPORT_ISSUES, isBlockingClientImportIssue } from './ty
 export { clientImportPhoneKey, isRecognizedClientImportPhone, type ClientImportPhoneKey } from './phone-key';
 export { findClientImportBirthday, type ClientImportBirthdayMatch } from './birthday-text';
 export {
+  findCriticalClientImportColumns,
+  hasUnsupportedClientImportHeader,
   parseClientImportTable,
   parseClientImportText,
   splitClientImportName,
+  type ClientImportCriticalColumn,
+  type ClientImportCriticalField,
   type ClientImportParseResult,
   type ClientImportTableOptions,
   type ClientImportTableRow,

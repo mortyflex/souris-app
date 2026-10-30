@@ -577,6 +577,89 @@ describe('ClientImportScreen — CSV file', () => {
     expect(countSyncOutboxRows(db)).toBe(0);
   });
 
+  it('names ignored columns holding client data and blocks the import, never reporting a success', async () => {
+    mockPickFileBytes.mockResolvedValue(
+      selectedFile(
+        [
+          'Prénom;Nom;Téléphone;Téléphone 2;E-mails;Date naiss.;Notes',
+          'Nadia;Benali;0745678912;0612345678;nadia@example.com;12/04;VIP',
+          'Lina;Haddad;0698765432;;;;',
+        ].join('\r\n'),
+      ),
+    );
+    const { view, db } = await renderImport();
+    const before = sessionCount(view);
+    await press(view, 'client-import-source-csv');
+
+    expect(view.getByTestId('client-import-critical-columns')).toHaveTextContent(
+      /^⚠︎ 3 colonnes importantes ne sont pas reconnues/,
+    );
+    expect(view.getByTestId('client-import-critical-column-Téléphone 2')).toHaveTextContent(
+      '« Téléphone 2 » semble contenir des numéros de téléphone. Ses données ne seraient pas importées. Un seul numéro est conservé par client : placez le numéro à garder dans la colonne « Téléphone », puis supprimez cette colonne. Recommencez ensuite l’import.',
+    );
+    expect(view.getByTestId('client-import-critical-column-E-mails')).toHaveTextContent(
+      /des adresses email.*Une seule adresse est conservée par client.*« Email »/,
+    );
+    expect(view.getByTestId('client-import-critical-column-Date naiss.')).toHaveTextContent(
+      /des dates d’anniversaire.*« Anniversaire »/,
+    );
+    // The unrelated column stays a plain ignored one.
+    expect(view.getByTestId('client-import-ignored-columns')).toHaveTextContent('Colonnes ignorées : Notes');
+    expect(view.getByTestId('client-import-blocked')).toHaveTextContent(
+      'Import impossible tant que les colonnes signalées restent dans votre liste.',
+    );
+    expect(view.getByTestId('client-import-confirm').props.accessibilityState.disabled).toBe(true);
+
+    await press(view, 'client-import-confirm');
+
+    expect(view.queryByTestId('client-import-result-title')).toBeNull();
+    expect(sessionCount(view)).toBe(before);
+    expect(countSyncOutboxRows(db)).toBe(0);
+  });
+
+  it('keeps the import open when only unrelated columns are ignored', async () => {
+    mockPickFileBytes.mockResolvedValue(selectedFile('Prénom;Téléphone;Notes;Total dépensé\r\nNadia;0745678912;VIP;30 €'));
+    const { view } = await renderImport();
+    await press(view, 'client-import-source-csv');
+
+    expect(view.queryByTestId('client-import-critical-columns')).toBeNull();
+    expect(view.queryByTestId('client-import-blocked')).toBeNull();
+    expect(view.getByTestId('client-import-ignored-columns')).toHaveTextContent('Colonnes ignorées : Notes, Total dépensé');
+    expect(view.getByTestId('client-import-confirm').props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('proposes a client sharing a family number unticked, and imports it only once chosen', async () => {
+    mockPickFileBytes.mockResolvedValue(
+      selectedFile('Prénom;Nom;Téléphone\r\nInès;Haddad;07 22 33 44 55\r\nJade;Haddad;0722334455'),
+    );
+    const { view, db } = await renderImport();
+    const before = sessionCount(view);
+    await press(view, 'client-import-source-csv');
+
+    expect(view.getByTestId('client-import-segment-new')).toHaveTextContent(/Nouveaux.*1/);
+    expect(view.getByTestId('client-import-segment-duplicates')).toHaveTextContent(/Doublons.*1/);
+    expect(view.getByTestId('client-import-confirm')).toHaveTextContent('Importer 1 client');
+
+    await press(view, 'client-import-segment-duplicates');
+    expect(view.getByTestId('client-import-match-csv-2')).toHaveTextContent(
+      'Numéro partagé avec Inès Haddad, plus haut dans la liste, sous un autre nom : un proche ou la même personne ? Vérifiez avant d’importer.',
+    );
+    expect(view.getByTestId('client-import-force-csv-2')).toHaveTextContent('Importer quand même');
+
+    await press(view, 'client-import-force-csv-2');
+    expect(view.getByTestId('client-import-confirm')).toHaveTextContent('Importer 2 clients');
+    await press(view, 'client-import-confirm');
+
+    expect(view.getByTestId('client-import-result-title')).toHaveTextContent('2 clients importés');
+    expect(sessionCount(view)).toBe(before + 2);
+    expect(countSyncOutboxRows(db)).toBe(2);
+    const haddads = clientStore.loadClients(db).filter((client) => client.lastName === 'Haddad');
+    expect(haddads.map((client) => [client.firstName, client.phone])).toEqual([
+      ['Inès', '07 22 33 44 55'],
+      ['Jade', '0722334455'],
+    ]);
+  });
+
   it('corrects a CSV row in the review drawer, quoting its line of the file', async () => {
     mockPickFileBytes.mockResolvedValue(selectedFile(CSV_FILE));
     const { view } = await renderImport();
@@ -616,6 +699,14 @@ describe('ClientImportScreen — CSV file', () => {
     ],
     [selectedFile('  \n'), 'Ce fichier est vide. Choisissez-en un autre.'],
     [selectedFile('12;34\n--;--'), 'Aucun client détecté dans ce fichier. Choisissez-en un autre.'],
+    [
+      selectedFile('Prénom;Téléphone\r\nNadia;"0745678912\r\nSophie;0612345678'),
+      'Ce fichier est mal formé : un guillemet ouvert ligne 2 n’est pas refermé correctement. Aucun client n’a été lu. Corrigez cette ligne, ou exportez de nouveau votre liste au format CSV depuis Excel, Numbers ou Google Sheets.',
+    ],
+    [
+      selectedFile('Nom client;Tél. mobile\r\nNadia Benali;0745678912'),
+      'Les colonnes de ce fichier ne sont pas reconnues. Nommez-les Prénom, Nom, Téléphone, Email et Anniversaire, puis exportez de nouveau votre liste au format CSV.',
+    ],
   ])('says in French why a file cannot be used and lets another one be chosen (%#)', async (picked, message) => {
     mockPickFileBytes.mockResolvedValueOnce(picked);
     const { view } = await renderImport();

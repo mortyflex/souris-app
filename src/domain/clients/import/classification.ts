@@ -5,14 +5,19 @@
 // the batch — and the result is never stored: an edit simply re-runs it.
 //
 //   INVALID             a blocking issue: no first name, an invalid email
-//   EXACT_DUPLICATE     a strong identifier matches — the canonical phone, or
-//                       the email (trimmed, lowercased)
-//   POSSIBLE_DUPLICATE  a weak or contradictory match — same first + last
-//                       name; the same last nine digits where canonical forms
-//                       cannot decide; the phone matching one record while the
-//                       email matches another
+//   EXACT_DUPLICATE     a strong identifier matches — the email (trimmed,
+//                       lowercased), or the canonical phone of a record with a
+//                       COMPATIBLE name (see `namesAreCompatible`)
+//   POSSIBLE_DUPLICATE  a weak or contradictory match — the canonical phone of
+//                       records whose names all differ (a family number shared
+//                       by a mother and her daughter); same first + last name;
+//                       the same last nine digits where canonical forms cannot
+//                       decide; the phone matching one record while the email
+//                       matches another
 //   NEW                 nothing matches
 //
+// A phone is a contact detail, not an identity: several clients may share
+// one. An email stays a strong identifier, even if a family may share one.
 // A first name alone never makes a duplicate. Nothing here ever merges or
 // fills anything: classification only decides what the review proposes.
 
@@ -31,6 +36,8 @@ export type ClientImportStatus = 'NEW' | 'EXACT_DUPLICATE' | 'POSSIBLE_DUPLICATE
 
 export type ClientImportMatchReason =
   | 'PHONE'
+  /** Same canonical phone as a record whose name differs: possibly another person. */
+  | 'SHARED_PHONE'
   | 'EMAIL'
   | 'NAME'
   | 'PHONE_LAST_DIGITS'
@@ -69,19 +76,40 @@ export function validateClientImportCandidate(
   return issues;
 }
 
+/** Accent-, case- and separator-insensitive name part; '' when blank. */
+function normalizeNamePart(value: string | undefined): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[-'’.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Accent-, case- and separator-insensitive first + last name; undefined without both. */
 function nameKey(firstName: string | undefined, lastName: string | undefined): string | undefined {
-  const normalize = (value: string | undefined) =>
-    (value ?? '')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .toLowerCase()
-      .replace(/[-'’.]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  const first = normalize(firstName);
-  const last = normalize(lastName);
+  const first = normalizeNamePart(firstName);
+  const last = normalizeNamePart(lastName);
   return first && last ? `${first}|${last}` : undefined;
+}
+
+interface PersonName {
+  readonly first: string;
+  readonly last: string;
+}
+
+/**
+ * Names that may be the same person: the same first name with the same last
+ * name or a last name missing on one side, or first and last names swapped
+ * (« MARTIN Sophie » read in the other order). Conservative: « Lina » and
+ * « Lina B », « Marie » and « Marie-Claire », two different first names are
+ * NOT compatible — a shared phone then only makes a possible duplicate.
+ */
+function namesAreCompatible(a: PersonName, b: PersonName): boolean {
+  if (a.first.length === 0 || b.first.length === 0) return false;
+  if (a.first === b.first) return a.last === b.last || a.last.length === 0 || b.last.length === 0;
+  return a.last.length > 0 && a.first === b.last && a.last === b.first;
 }
 
 interface Identity {
@@ -89,6 +117,7 @@ interface Identity {
   readonly lastNine?: string;
   readonly email?: string;
   readonly name?: string;
+  readonly person: PersonName;
 }
 
 function identityOf(record: {
@@ -103,10 +132,15 @@ function identityOf(record: {
     lastNine: phone.lastNine,
     email: clientEmailComparisonKey(record.email),
     name: nameKey(record.firstName, record.lastName),
+    person: { first: normalizeNamePart(record.firstName), last: normalizeNamePart(record.lastName) },
   };
 }
 
-type IdentityKind = keyof Identity;
+type IdentityKind = Exclude<keyof Identity, 'person'>;
+
+function targetKey(target: ClientImportMatchTarget): string {
+  return target.kind === 'CLIENT' ? `client:${target.clientId}` : `candidate:${target.candidateKey}`;
+}
 
 /** Existing records by comparison key; insertion order = precedence (Clients first). */
 class IdentityIndex {
@@ -116,8 +150,10 @@ class IdentityIndex {
     email: new Map(),
     name: new Map(),
   };
+  private readonly persons = new Map<string, PersonName>();
 
   add(identity: Identity, target: ClientImportMatchTarget): void {
+    this.persons.set(targetKey(target), identity.person);
     for (const kind of Object.keys(this.maps) as IdentityKind[]) {
       const key = identity[kind];
       if (key === undefined) continue;
@@ -130,6 +166,10 @@ class IdentityIndex {
   find(kind: IdentityKind, identity: Identity): readonly ClientImportMatchTarget[] {
     const key = identity[kind];
     return key === undefined ? [] : (this.maps[kind].get(key) ?? []);
+  }
+
+  personOf(target: ClientImportMatchTarget): PersonName {
+    return this.persons.get(targetKey(target)) ?? { first: '', last: '' };
   }
 }
 
@@ -152,7 +192,13 @@ function findMatch(identity: Identity, index: IdentityIndex): {
       ? { status: 'EXACT_DUPLICATE', match: { reason: 'PHONE', target: common } }
       : { status: 'POSSIBLE_DUPLICATE', match: { reason: 'PHONE_EMAIL_CONFLICT', target: byPhone[0]! } };
   }
-  if (byPhone.length > 0) return { status: 'EXACT_DUPLICATE', match: { reason: 'PHONE', target: byPhone[0]! } };
+  if (byPhone.length > 0) {
+    // The same number is the same person only under a compatible name; otherwise a shared number.
+    const samePerson = byPhone.find((target) => namesAreCompatible(identity.person, index.personOf(target)));
+    return samePerson
+      ? { status: 'EXACT_DUPLICATE', match: { reason: 'PHONE', target: samePerson } }
+      : { status: 'POSSIBLE_DUPLICATE', match: { reason: 'SHARED_PHONE', target: byPhone[0]! } };
+  }
   if (byEmail.length > 0) return { status: 'EXACT_DUPLICATE', match: { reason: 'EMAIL', target: byEmail[0]! } };
 
   // Canonical forms did not decide (one side unrecognized, or different
