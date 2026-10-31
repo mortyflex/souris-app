@@ -8,6 +8,7 @@
 export type {
   CashRegisterEntry,
   CashRegisterInterval,
+  CashRegisterRefundSummary,
   CashRegisterSources,
   CashRegisterSummary,
   RecordedPayment,
@@ -24,6 +25,8 @@ export {
   getCashRegisterMonthEntries,
   getCashRegisterMonthSummary,
   getCashRegisterPayments,
+  getCashRegisterRefundSummary,
+  isCashRegisterReceipt,
 } from './register';
 export type {
   CashRegisterComparison,

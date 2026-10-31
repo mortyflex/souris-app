@@ -19,6 +19,12 @@
 //      a Sale with a `clientId`, no `appointmentId` and a recorded `payment`:
 //      its snapshot total (unit price × quantity).
 //
+//   C. SETTLED Sale adjustments of the client's Sales (docs/domain/SALES.md §15)
+//      money actually given back lowers what the client spent (a refund),
+//      a compensating reversal raises it again — signed, on its `refundedAt`.
+//      A PENDING or VOIDED record changes nothing; a correction without money
+//      (units, stock) changes nothing either: spending follows money.
+//
 // A Sale sold during an Appointment counts ONLY through that Appointment —
 // its checkout is what paid it — so never a second time as a Sale. A Sale
 // without a client belongs to nobody. A standalone Sale without a recorded
@@ -31,6 +37,7 @@
 
 import { getAppointmentExpectedTotal, getSaleTotalCents } from '../appointments/expected-total';
 import type { Appointment } from '../appointments/types';
+import { getSaleAdjustmentCashMovement, type SaleAdjustment } from '../sales/adjustment';
 import type { Sale } from '../sales/types';
 
 /**
@@ -56,21 +63,39 @@ export function getSaleClientSpendingCents(sale: Sale): number {
   return getSaleTotalCents(sale);
 }
 
+/**
+ * What one SETTLED adjustment changes in the spending of its Sale's client:
+ * the signed money movement (negative for a refund), 0 otherwise or when the
+ * Sale has no client. Its date is `getSaleAdjustmentCashMovement(...).at`.
+ */
+export function getSaleAdjustmentClientSpendingCents(adjustment: SaleAdjustment, sale: Sale | undefined): number {
+  if (!sale || sale.clientId === undefined) return 0;
+  const movement = getSaleAdjustmentCashMovement(adjustment);
+  return movement ? movement.cardCents + movement.cashCents : 0;
+}
+
 export interface ClientSpendingSources {
   readonly appointments: readonly Appointment[];
   readonly sales: readonly Sale[];
+  /** Corrections and refunds; only SETTLED money counts (rule C). Absent = none. */
+  readonly saleAdjustments?: readonly SaleAdjustment[];
 }
 
-/** Everything one client ever spent: rules A + B over the whole history. */
+/** Everything one client ever spent: rules A + B + C over the whole history. */
 export function getClientTotalSpentCents(sources: ClientSpendingSources, clientId: string): number {
   let totalCents = 0;
   for (const appointment of sources.appointments) {
     if (appointment.clientId !== clientId) continue;
     totalCents += getAppointmentClientSpendingCents(appointment, sources.sales);
   }
+  const clientSales = new Map<string, Sale>();
   for (const sale of sources.sales) {
     if (sale.clientId !== clientId) continue;
+    clientSales.set(sale.id, sale);
     totalCents += getSaleClientSpendingCents(sale);
+  }
+  for (const adjustment of sources.saleAdjustments ?? []) {
+    totalCents += getSaleAdjustmentClientSpendingCents(adjustment, clientSales.get(adjustment.saleId));
   }
   return totalCents;
 }

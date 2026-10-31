@@ -10,8 +10,10 @@
 // snapshots and opens the existing Appointment Details; a deposit reads
 // « Acompte » + its Appointment's services and opens the same Details; a
 // standalone Sale reads its item snapshots and opens its read-only Sale
-// detail (the caller decides: without a handler no chevron is drawn). Month
-// mode adds the day above the time.
+// detail (the caller decides: without a handler no chevron is drawn); a
+// settled refund reads « Remboursement · products » with a signed amount
+// (« −32,00 € ») and opens its Sale; a reversal reads « Remboursement annulé ».
+// Month mode adds the day above the time.
 
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -22,7 +24,7 @@ import {
   formatAppointmentTime,
 } from '@/features/appointments/presentation';
 import { formatSaleSummary } from '@/features/sales/presentation';
-import { formatEuroCents } from '@/shared/lib/money';
+import { formatEuroCents, formatSignedEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
 import { foregroundSoft, semanticColors, spacing } from '@/shared/ui/theme';
 
@@ -36,6 +38,11 @@ import {
 const SALE_SOURCE_LABEL = 'Vente';
 /** A deposit is named as such next to its Appointment's services. */
 const DEPOSIT_SOURCE_LABEL = 'Acompte';
+/** A settled Sale refund, and its compensating reversal. */
+export const REFUND_SOURCE_LABEL = 'Remboursement';
+/** A mistaken refund neutralised on its own day, and money that came back. */
+export const RECORDED_IN_ERROR_SOURCE_LABEL = 'Correction de saisie';
+export const REFUND_RETURNED_SOURCE_LABEL = 'Remboursement rendu';
 /** A walk-in Sale has no Client to name; nothing is invented. */
 export const WALK_IN_SALE_LABEL = 'Vente sans client';
 
@@ -53,6 +60,8 @@ export function getCashRegisterEntryKey(entry: CashRegisterEntry): string {
       return `sale-${entry.sale.id}`;
     case 'DEPOSIT':
       return `deposit-${entry.deposit.id}`;
+    case 'SALE_ADJUSTMENT':
+      return `adjustment-${entry.adjustment.id}`;
   }
 }
 
@@ -64,6 +73,17 @@ function formatEntrySource(entry: CashRegisterEntry): string {
       return [SALE_SOURCE_LABEL, formatSaleSummary(entry.sale)].filter(Boolean).join(' · ');
     case 'DEPOSIT':
       return [DEPOSIT_SOURCE_LABEL, entry.appointment ? formatAppointmentServiceSummary(entry.appointment) : '']
+        .filter(Boolean)
+        .join(' · ');
+    case 'SALE_ADJUSTMENT':
+      return [
+        entry.adjustment.kind === 'REFUND'
+          ? REFUND_SOURCE_LABEL
+          : entry.adjustment.reason === 'REFUND_RETURNED'
+            ? REFUND_RETURNED_SOURCE_LABEL
+            : RECORDED_IN_ERROR_SOURCE_LABEL,
+        entry.sale ? formatSaleSummary(entry.sale) : '',
+      ]
         .filter(Boolean)
         .join(' · ');
   }
@@ -85,13 +105,20 @@ export function CashRegisterEntryRow({ entry, period, clientName, onPress }: Cas
       ? entry.appointment.id
       : entry.kind === 'SALE'
         ? entry.sale.id
-        : entry.deposit.id;
+        : entry.kind === 'DEPOSIT'
+          ? entry.deposit.id
+          : entry.adjustment.id;
   const time = formatAppointmentTime(payment.paidAt);
   const day = period === 'month' ? formatCashRegisterEntryDay(payment.paidAt) : undefined;
   const name = clientName ?? WALK_IN_SALE_LABEL;
   const source = formatEntrySource(entry);
-  const amount = formatEuroCents(payment.cardAmountCents + payment.cashAmountCents);
-  const methods = formatCashRegisterEntryMethods(payment);
+  const totalCents = payment.cardAmountCents + payment.cashAmountCents;
+  // A refund is written with its sign (« −32,00 € »), never as money received.
+  const amount = entry.kind === 'SALE_ADJUSTMENT' ? formatSignedEuroCents(totalCents) : formatEuroCents(totalCents);
+  const methods = formatCashRegisterEntryMethods({
+    cardAmountCents: Math.abs(payment.cardAmountCents),
+    cashAmountCents: Math.abs(payment.cashAmountCents),
+  });
 
   const accessibilityLabel = [
     day ? `${day} à ${time}` : time,

@@ -65,8 +65,8 @@ describe('schema v9 migration on an existing v8 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(17);
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+    expect(readSchemaVersion(db)).toBe(18);
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
 
@@ -105,7 +105,7 @@ describe('schema v9 migration on an existing v8 database', () => {
     const db = openSchemaV8Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(17);
+    expect(migrateDatabase(db)).toBe(18);
     expect(countRows(db, 'clients')).toBe(3);
 
     const felix = loadClients(db).find((client) => client.id === 'client-felix');
@@ -131,14 +131,14 @@ describe('schema v9 migration on an existing v8 database', () => {
   it('changes no other table definition', () => {
     const db = openSchemaV8Database();
     const tablesBefore = db.getAllSync<{ name: string; sql: string }>(
-      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('clients', 'appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'products', 'services', 'service_categories') ORDER BY name",
+      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('clients', 'appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'products', 'services', 'service_categories', 'sale_adjustments', 'sale_adjustment_items') ORDER BY name",
     );
 
     bootstrapPersistence(db, createTestSeed);
 
     expect(
       db.getAllSync<{ name: string; sql: string }>(
-        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('clients', 'appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'products', 'services', 'service_categories') ORDER BY name",
+        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('clients', 'appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'products', 'services', 'service_categories', 'sale_adjustments', 'sale_adjustment_items') ORDER BY name",
       ),
     ).toEqual(tablesBefore);
   });

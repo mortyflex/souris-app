@@ -7,7 +7,9 @@
 // key: deleting a Product never changes a Sale.
 //
 // Removing a Product sold during an Appointment is the inverse, also ONE
-// transaction: every matching item snapshot of the Sales linked to that
+// transaction, and only while that Appointment has not received its money and
+// no matching Sale holds an adjustment — afterwards a sold product is corrected
+// or refunded (sale-adjustments.ts), never removed: every matching item snapshot of the Sales linked to that
 // Appointment is located and re-verified (no Sale payment), the summed
 // quantity is given back to the Product, the matching items are deleted,
 // and a parent Sale is deleted only once it holds no item any more. A
@@ -28,6 +30,7 @@ import { runInTransaction, type SourisDatabase } from '../database';
 import { markAggregateDeleted, markAggregateUpserted } from '../sync/outbox';
 import {
   assertAppointmentDepositsCovered,
+  isStoredAppointmentSettled,
   readAppointmentDepositPosition,
 } from './appointment-deposits';
 import {
@@ -76,7 +79,15 @@ export type AppointmentProductDeleteRefusal =
   /** A matching Sale carries its own recorded payment; nothing of it is touched. */
   | 'SALE_HAS_PAYMENT'
   /** The Product no longer exists, so its stock cannot be restored; every line is kept. */
-  | 'PRODUCT_MISSING';
+  | 'PRODUCT_MISSING'
+  /**
+   * The Appointment received its money (final payment, or completed and fully
+   * prepaid): a sold product is then corrected or refunded through a Sale
+   * adjustment, never removed (docs/domain/SALES.md §10, §15).
+   */
+  | 'APPOINTMENT_SETTLED'
+  /** A matching Sale holds a correction or a refund: its history is never removed. */
+  | 'SALE_HAS_ADJUSTMENT';
 
 /** The stored rows refuse this deletion; nothing was written. */
 export class AppointmentProductDeleteConflictError extends Error {
@@ -101,19 +112,54 @@ export interface AppointmentProductDeletionOutcome {
   readonly trimmedSaleIds: readonly string[];
 }
 
+function toSale(row: SaleRow, items: readonly SaleItem[]): Sale {
+  const clientId = fromSqlOptional(row.client_id);
+  const appointmentId = fromSqlOptional(row.appointment_id);
+  const payment: SalePayment | undefined = fromSqlPaymentColumns(row);
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    ...(clientId !== undefined ? { clientId } : {}),
+    ...(appointmentId !== undefined ? { appointmentId } : {}),
+    completedAt: fromSqlInstant(row.completed_at),
+    items,
+    ...(payment ? { payment } : {}),
+  };
+}
+
+function toSaleItem(row: SaleItemRow): SaleItem {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    productName: row.product_name,
+    unitPrice: fromSqlPriceCents(row.unit_price_cents),
+    quantity: row.quantity,
+  };
+}
+
+/** ONE stored Sale with its ordered snapshot lines, or undefined. */
+export function findSale(db: SourisDatabase, saleId: string): Sale | undefined {
+  const row = db.getFirstSync<SaleRow>(
+    'SELECT id, business_id, client_id, appointment_id, completed_at, paid_at, card_amount_cents, cash_amount_cents FROM sales WHERE id = ?',
+    [saleId],
+  );
+  if (!row) return undefined;
+  const items = db
+    .getAllSync<SaleItemRow>(
+      'SELECT sale_id, id, product_id, product_name, unit_price_cents, quantity FROM sale_items WHERE sale_id = ? ORDER BY position',
+      [saleId],
+    )
+    .map(toSaleItem);
+  return toSale(row, items);
+}
+
 export function loadSales(db: SourisDatabase): readonly Sale[] {
   const itemsBySale = new Map<string, SaleItem[]>();
   for (const row of db.getAllSync<SaleItemRow>(
     'SELECT sale_id, id, product_id, product_name, unit_price_cents, quantity FROM sale_items ORDER BY sale_id, position',
   )) {
     const items = itemsBySale.get(row.sale_id) ?? [];
-    items.push({
-      id: row.id,
-      productId: row.product_id,
-      productName: row.product_name,
-      unitPrice: fromSqlPriceCents(row.unit_price_cents),
-      quantity: row.quantity,
-    });
+    items.push(toSaleItem(row));
     itemsBySale.set(row.sale_id, items);
   }
 
@@ -121,20 +167,7 @@ export function loadSales(db: SourisDatabase): readonly Sale[] {
     .getAllSync<SaleRow>(
       'SELECT id, business_id, client_id, appointment_id, completed_at, paid_at, card_amount_cents, cash_amount_cents FROM sales ORDER BY rowid',
     )
-    .map((row) => {
-      const clientId = fromSqlOptional(row.client_id);
-      const appointmentId = fromSqlOptional(row.appointment_id);
-      const payment: SalePayment | undefined = fromSqlPaymentColumns(row);
-      return {
-        id: row.id,
-        businessId: row.business_id,
-        ...(clientId !== undefined ? { clientId } : {}),
-        ...(appointmentId !== undefined ? { appointmentId } : {}),
-        completedAt: fromSqlInstant(row.completed_at),
-        items: itemsBySale.get(row.id) ?? [],
-        ...(payment ? { payment } : {}),
-      };
-    });
+    .map((row) => toSale(row, itemsBySale.get(row.id) ?? []));
 }
 
 /**
@@ -231,6 +264,12 @@ export function deleteAppointmentProduct(
     );
     if (rows.length === 0) throw refuse('PRODUCT_NOT_SOLD');
     if (rows.some((row) => row.paid_at !== null)) throw refuse('SALE_HAS_PAYMENT');
+    if (isStoredAppointmentSettled(db, appointmentId)) throw refuse('APPOINTMENT_SETTLED');
+    const adjusted = db.getFirstSync(
+      `SELECT 1 AS found FROM sale_adjustments WHERE sale_id IN (${rows.map(() => '?').join(', ')})`,
+      rows.map((row) => row.sale_id),
+    );
+    if (adjusted) throw refuse('SALE_HAS_ADJUSTMENT');
 
     const quantity = rows.reduce((sum, row) => sum + row.quantity, 0);
     if (!Number.isInteger(quantity) || quantity < 1) {

@@ -8,7 +8,9 @@
 // « Avec le rendez-vous » for a Revente, « Non renseigné » for a historical
 // Sale without any record. Everything is read from the Sale snapshot and the
 // derived history entry; the current catalog is never consulted. Month mode
-// adds the day above the time. The whole row opens the Sale detail.
+// adds the day above the time. A Sale with corrections says so in accent
+// (« Remboursée », « Remboursement à effectuer »…). The whole row opens the
+// Sale detail.
 
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -42,10 +44,12 @@ interface SaleHistoryRowProps {
   readonly period: CashRegisterPeriod;
   /** Resolved display name, or undefined for a walk-in Sale. */
   readonly clientName: string | undefined;
+  /** What its corrections say (« Remboursée en partie »), when it has some. */
+  readonly adjustmentStatus?: string;
   readonly onPress: () => void;
 }
 
-export function SaleHistoryRow({ entry, period, clientName, onPress }: SaleHistoryRowProps) {
+export function SaleHistoryRow({ entry, period, clientName, adjustmentStatus, onPress }: SaleHistoryRowProps) {
   const { sale } = entry;
   const time = formatAppointmentTime(sale.completedAt);
   const day = period === 'month' ? formatCashRegisterEntryDay(sale.completedAt) : undefined;
@@ -54,7 +58,7 @@ export function SaleHistoryRow({ entry, period, clientName, onPress }: SaleHisto
   const amount = formatEuroCents(entry.totalCents);
   const paymentRecord = formatSalePaymentRecordShort(entry);
 
-  const accessibilityLabel = [day ? `${day} à ${time}` : time, name, source, amount, paymentRecord]
+  const accessibilityLabel = [day ? `${day} à ${time}` : time, name, source, amount, paymentRecord, adjustmentStatus]
     .filter(Boolean)
     .join(', ');
 
@@ -84,6 +88,11 @@ export function SaleHistoryRow({ entry, period, clientName, onPress }: SaleHisto
         <AppText variant="metadata" numberOfLines={1} style={styles.secondary}>
           {source}
         </AppText>
+        {adjustmentStatus && (
+          <AppText variant="metadata" numberOfLines={1} style={styles.status} testID={`sale-history-status-${sale.id}`}>
+            {adjustmentStatus}
+          </AppText>
+        )}
       </View>
       <View style={styles.money}>
         <AppText variant="control" style={styles.amount} testID={`sale-history-amount-${sale.id}`}>
@@ -123,6 +132,7 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 2, minWidth: 0 },
   name: { color: semanticColors.foreground },
   secondary: { color: foregroundSoft },
+  status: { color: semanticColors.accent },
   money: { alignItems: 'flex-end', flexShrink: 0, gap: 2, maxWidth: '40%' },
   amount: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   chevron: { alignItems: 'center', width: CHEVRON_COLUMN },

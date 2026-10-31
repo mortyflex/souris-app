@@ -39,6 +39,7 @@ import { readBoundBusinessId, type SyncAggregateRef, type SyncConflict } from '.
 import { findSyncOutboxEntry } from './outbox';
 import { nextPullSince, readSyncPullCursor, writeSyncPullCursor } from './pull-cursor';
 import { applyRemoteAggregate, applyRemoteTombstone } from './remote-apply';
+import { markSaleAdjustmentRemoteReady } from './sale-adjustment-sync';
 import {
   disarmServiceCatalogueRefresh,
   isServiceCatalogueRefreshArmed,
@@ -165,6 +166,8 @@ export async function pullRemoteChanges(options: {
     // The remote answered with the `service_categories` family: it stores the
     // catalogue fields, deferred writes may go (CLOUD_SYNC.md §27).
     if (snapshot.serviceCatalogue) markServiceCatalogueRemoteReady(db);
+    // Same proof for sale adjustments (CLOUD_SYNC.md §28).
+    if (snapshot.saleAdjustmentsSupported) markSaleAdjustmentRemoteReady(db);
     const refreshServices = isServiceCatalogueRefreshArmed(db);
 
     const entries = listSnapshotEntries(snapshot);

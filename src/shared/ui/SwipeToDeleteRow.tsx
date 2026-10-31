@@ -18,12 +18,13 @@
 // committed — when it was not (a persistence refusal) the row simply closes
 // again, so the UI follows the committed state.
 //
-// Discoverability: with `hint`, the row plays ONE « peek » once it is
-// mounted and the screen has settled — rest → ~28 pt reveal of the
-// destructive surface and trash → a brief hold while the trash is readable
-// → smooth return. No bounce, no loop, no overlay, no haptic. Skipped
-// entirely under reduced motion; cancelled by any touch before or while it
-// plays. Screens designate at most ONE row per instance (`useSwipeHintTarget`).
+// Discoverability: with `hint`, the row plays the shared BeautIzzy « peek »
+// (`useSwipeHintPeek`) once the screen has settled — rest → a ~52 pt reveal of
+// the destructive surface with the trash centred in it → a readable hold →
+// a slower, eased return. No bounce, no loop, no overlay, no haptic, and it
+// never deletes. Skipped entirely under reduced motion; cancelled by any
+// touch before or while it plays. Screens designate at most ONE row per
+// instance (`useSwipeHintTarget`).
 //
 // Swipe never taps: a row's content often has its own press — a header that
 // expands / collapses the card, steppers, buttons. Those are React Native
@@ -42,7 +43,7 @@
 // (accessibility label) and semantics stay with the caller.
 
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { useRef, useState, type PropsWithChildren } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -54,17 +55,11 @@ import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, {
-  cancelAnimation,
-  Easing,
   Extrapolation,
   interpolate,
   useAnimatedReaction,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
-  withDelay,
-  withSequence,
-  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -75,20 +70,14 @@ import {
   DELETE_ACTION_WIDTH,
   hasHorizontalSwipeIntent,
   isFullSwipe,
-  shouldPlaySwipeHint,
-  SWIPE_HINT_DELAY_MS,
-  SWIPE_HINT_HOLD_MS,
-  SWIPE_HINT_OFFSET,
-  SWIPE_HINT_RETURN_MS,
-  SWIPE_HINT_REVEAL_MS,
   SWIPE_ACTIVATION_DISTANCE,
-  SWIPE_HINT_TOTAL_MS,
+  SWIPE_HINT_OFFSET,
 } from './swipe-to-delete';
-import { duration, easing, rose, semanticColors, spacing } from './theme';
+import { rose, semanticColors } from './theme';
+import { useSwipeHintPeek } from './useSwipeHintPeek';
 
 /** SF Symbol on iOS, Material Symbol on Android; never emoji. */
 const trashIcon = { ios: 'trash.fill', android: 'delete' } as const;
-const HINT_EASING = Easing.bezier(...easing.out);
 
 interface SwipeToDeleteRowProps {
   /** Contextual wording, e.g. « Supprimer X des produits vendus » / « Retirer X du rendez-vous ». */
@@ -191,56 +180,15 @@ export function SwipeToDeleteRow({
   testID,
   deleteTestID,
 }: PropsWithChildren<SwipeToDeleteRowProps>) {
-  const reduceMotion = useReducedMotion();
   const swipeable = useRef<SwipeableMethods>(null);
   const rowWidth = useSharedValue(0);
   const armed = useSharedValue(false);
-  const peek = useSharedValue(0);
   // JS-side single-fire guard: a release past the threshold and a trash tap
   // can never delete the same row twice.
   const committed = useRef(false);
-  const hintPlayed = useRef(false);
-  const hintTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const [hintVisible, setHintVisible] = useState(false);
-
-  const clearHintTimers = () => {
-    hintTimers.current.forEach(clearTimeout);
-    hintTimers.current = [];
-  };
-
-  useEffect(() => {
-    if (!shouldPlaySwipeHint({ hint, reduceMotion, played: hintPlayed.current })) return;
-    hintPlayed.current = true;
-    const start = setTimeout(() => {
-      setHintVisible(true);
-      // reveal → hold (trash readable) → return; one pass, no bounce.
-      peek.set(
-        withSequence(
-          withTiming(SWIPE_HINT_OFFSET, { duration: SWIPE_HINT_REVEAL_MS, easing: HINT_EASING }),
-          withDelay(
-            SWIPE_HINT_HOLD_MS,
-            withTiming(0, { duration: SWIPE_HINT_RETURN_MS, easing: HINT_EASING }),
-          ),
-        ),
-      );
-      const end = setTimeout(() => setHintVisible(false), SWIPE_HINT_TOTAL_MS);
-      hintTimers.current.push(end);
-    }, SWIPE_HINT_DELAY_MS);
-    hintTimers.current.push(start);
-    return clearHintTimers;
-    // The hint is a one-shot per row instance; later prop changes never replay it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Any touch on the row takes over: a pending hint never fires and a
   // running one settles back to rest immediately.
-  const cancelHint = () => {
-    if (!hintPlayed.current) hintPlayed.current = true;
-    clearHintTimers();
-    cancelAnimation(peek);
-    peek.set(withTiming(0, { duration: duration.tap }));
-    setHintVisible(false);
-  };
+  const { hintVisible, peekStyle, cancelHint } = useSwipeHintPeek(hint);
 
   const commitDeletion = () => {
     if (committed.current) return;
@@ -272,8 +220,6 @@ export function SwipeToDeleteRow({
   const onRowLayout = (event: LayoutChangeEvent) => {
     rowWidth.set(event.nativeEvent.layout.width);
   };
-
-  const peekStyle = useAnimatedStyle(() => ({ transform: [{ translateX: peek.get() }] }));
 
   return (
     <View
@@ -323,15 +269,16 @@ export function SwipeToDeleteRow({
 
 const styles = StyleSheet.create({
   row: { overflow: 'hidden' },
+  // Exactly the revealed strip, trash centred in it.
   hintSurface: {
+    alignItems: 'center',
     backgroundColor: rose.rose600,
     bottom: 0,
     justifyContent: 'center',
     left: 0,
-    paddingLeft: spacing.xs,
     position: 'absolute',
     top: 0,
-    width: DELETE_ACTION_WIDTH,
+    width: SWIPE_HINT_OFFSET,
   },
   action: { width: DELETE_ACTION_WIDTH },
   actionSurface: {

@@ -54,8 +54,8 @@ describe('schema v16 migration on an existing v15 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(17);
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+    expect(readSchemaVersion(db)).toBe(18);
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
     expect(createSeed).not.toHaveBeenCalled();
     expect(
       db.getAllSync(
@@ -79,7 +79,7 @@ describe('schema v16 migration on an existing v15 database', () => {
   it('is idempotent and round-trips a recorded consent afterwards', () => {
     const db = openSchemaV15Database();
     bootstrapPersistence(db, createTestSeed);
-    expect(migrateDatabase(db)).toBe(17);
+    expect(migrateDatabase(db)).toBe(18);
 
     const lea = loadClients(db).find((client) => client.id === 'client-lea');
     updateClient(db, { ...lea!, smsMarketingConsent: CONSENT_RECORD });

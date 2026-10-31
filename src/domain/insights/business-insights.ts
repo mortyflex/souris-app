@@ -8,7 +8,8 @@
 //      cashCollected            THE Cash Register selection and arithmetic
 //                               (`getCashRegisterIntervalSummary`): final
 //                               checkouts, standalone Sale payments and ACTIVE
-//                               deposits, each on its own `paidAt`. A VOIDED
+//                               deposits, each on its own `paidAt`, NET of the
+//                               Sale refunds settled in the period. A VOIDED
 //                               deposit counts nowhere. A deposit kept on a
 //                               CANCELLED / NO_SHOW Appointment is still money
 //                               received.
@@ -34,6 +35,9 @@
 //                                   date (`getAppointmentClientSpendingCents`);
 //                                 · the client's PAID standalone Sales, on the
 //                                   Sale date (`getSaleClientSpendingCents`).
+//                                 · minus the money given back for the client's
+//                                   Sales, on the refund date
+//                                   (`getSaleAdjustmentClientSpendingCents`).
 //                               A Sale sold during an Appointment counts ONLY
 //                               through that Appointment, so never twice. A
 //                               Sale without a client belongs to nobody. No
@@ -67,8 +71,12 @@ import {
   type AppointmentDeposit,
 } from '../appointments';
 import { getCashRegisterIntervalSummary, type CashRegisterSummary } from '../cash-register';
-import { getAppointmentClientSpendingCents, getSaleClientSpendingCents } from '../clients/spending';
-import type { Sale } from '../sales';
+import {
+  getAppointmentClientSpendingCents,
+  getSaleAdjustmentClientSpendingCents,
+  getSaleClientSpendingCents,
+} from '../clients/spending';
+import { getSaleAdjustmentCashMovement, type Sale, type SaleAdjustment } from '../sales';
 import { isWithinInsightsPeriod, type InsightsPeriod } from './period';
 
 /** Rankings show at most this many rows. */
@@ -79,6 +87,8 @@ export interface BusinessInsightsSources {
   readonly sales: readonly Sale[];
   /** Every deposit; only ACTIVE ones are money. Absent = none. */
   readonly deposits?: readonly AppointmentDeposit[];
+  /** Corrections and refunds; only SETTLED money counts. Absent = none. */
+  readonly saleAdjustments?: readonly SaleAdjustment[];
 }
 
 export interface ServiceRankingRow {
@@ -172,7 +182,7 @@ export function getBusinessInsights(
 ): BusinessInsights {
   const deposits = sources.deposits ?? [];
   const cash = getCashRegisterIntervalSummary(
-    { appointments: sources.appointments, sales: sources.sales, deposits },
+    { appointments: sources.appointments, sales: sources.sales, deposits, saleAdjustments: sources.saleAdjustments },
     period,
   );
 
@@ -238,6 +248,18 @@ export function getBusinessInsights(
     const spendingCents = getSaleClientSpendingCents(sale);
     if (sale.clientId !== undefined && spendingCents > 0) {
       clientOf(sale.clientId).spendingCents += spendingCents;
+    }
+  }
+
+  // Money given back lowers the spending of the period it was given back in.
+  if (sources.saleAdjustments && sources.saleAdjustments.length > 0) {
+    const salesById = new Map(sources.sales.map((sale) => [sale.id, sale]));
+    for (const adjustment of sources.saleAdjustments) {
+      const movement = getSaleAdjustmentCashMovement(adjustment);
+      if (!movement || !isWithinInsightsPeriod(period, movement.at)) continue;
+      const sale = salesById.get(adjustment.saleId);
+      const cents = getSaleAdjustmentClientSpendingCents(adjustment, sale);
+      if (sale?.clientId !== undefined && cents !== 0) clientOf(sale.clientId).spendingCents += cents;
     }
   }
 

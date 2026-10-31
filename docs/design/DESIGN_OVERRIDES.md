@@ -2766,3 +2766,116 @@ The Caisse « Produits vendus » card and its « Vente » entries open two pushe
   « Voir le rendez-vous » (or « Rendez-vous introuvable sur cet appareil », read-only); for a
   historical Sale, one soft note — never a method. Not found: « Vente introuvable », the top bar stays.
 - **No** amount in a state tone, no chart, no action button of any kind.
+
+---
+
+## 48. Sale Corrections and Refunds — Flow, Records, Swipe Reveal
+
+- **Swipe reveal, not swipe action.** A sales history row of a Sale that can still be corrected is a
+  `SwipeActionRow` (`src/shared/ui`): swiped to the RIGHT it reveals ONE 104 pt action on
+  `surfaceLavenderStrong` — the accent `arrow.uturn.backward.circle` / `undo` glyph over « Rembourser » in
+  accent `chip`. No full-swipe commit, no threshold that does anything, no rose, no trash: a paid Sale is
+  never presented as removable. Tapping the action OPENS the correction flow; the review step asks for
+  the confirmation. Discoverability, PERSISTENT first: every swipeable row carries a 3 × 22 pt accent
+  grip at 35 % on its leading edge (5 pt in, vertically centred, moving with the row; decorative, hidden
+  from assistive technologies), and the list starts with ONE soft `metadata` legend drawn with the same
+  grip: « Glissez une vente vers la droite pour la rembourser ou la corriger. » (absent when no row of the
+  period can be swiped). Then the shared one-time peek (28 pt, the same timings as §21's
+  swipe-to-delete) on the FIRST adjustable row of a history instance, showing the lavender surface and
+  glyph; never under Reduce Motion, cancelled by any touch. VoiceOver / TalkBack: the row carries the
+  custom action « Rembourser »; the Sale detail always shows the buttons. Not adjustable (a Revente of an
+  unpaid Appointment, nothing left): a plain row.
+- **History rows.** Under the source line, one accent `metadata` status when the Sale has effective
+  corrections: « Remboursée », « Remboursée en partie », « Remboursement à effectuer », « Corrigée ».
+- **Sale detail.** The summary adds « Remboursé : 18,00 € » / « À rembourser : 18,00 € » in accent
+  `metadata`. A settled refund offers « Corriger ce remboursement… » (tertiary, never « Annuler »), which
+  pushes « Corriger un remboursement »: the refund in one soft line, « ÉTAPE 1 SUR 2 · QUE S’EST-IL
+  PASSÉ ? », three radio rows (« Je l’ai saisi par erreur : l’argent n’a jamais été rendu », « L’argent du
+  remboursement m’a été rendu depuis », « Le remboursement a bien eu lieu et reste acquis » — the last
+  only shows an info note, no action); « rendu » adds « Rendu comment ? » (Carte / Espèces / Carte et
+  espèces radio rows, NOTHING preselected, the two fields for the mix) and « Rendu le »; then the review
+  (Enregistré, Caisse, Stock) and « Confirmer la correction de saisie » / « Confirmer l’argent rendu ».
+  A compensated refund shows one accent line (« Saisie erronée, corrigée le … » / « Argent rendu le … »).
+  Then « Corriger ou rembourser »: « Rembourser » and « Corriger une erreur » (secondary
+  buttons), « Annuler la vente » (tertiary, only while nothing was corrected), or one soft sentence when
+  nothing is left / the Revente is not yet paid. Records follow, newest first, each a white
+  `radii.large` card with a hairline: status eyebrow (accent; soft when voided, at 75 % opacity with
+  the amount struck through), reason in `body`, the signed amount (`−18,00 €` / `+18,00 €`) in
+  `control`, lines (« Soin ×1 · remis en stock »), methods, « Remboursé le … », note, the history in
+  soft `metadata`, a rose refusal line when the server refused it, then its tertiary / secondary actions.
+  Every transition goes through the shared `ConfirmationDialog` (destructive tone only for « Annuler
+  cette saisie »); one `haptics.success()` after a committed write.
+- **Correction flow.** A pushed Gestion screen (the Caisse top bar), `screenTitle` = the intent, the
+  Sale context line, an accent eyebrow « ÉTAPE 1 SUR 2 · SAISIE » / « ÉTAPE 2 SUR 2 · VÉRIFICATION ».
+  Saisie: reasons as radio rows (22 pt ring, accent fill + check when chosen) in a `GroupedSurface`;
+  product lines with the Sale creation stepper (− n +, 44 × 36 pt) and, once units are chosen, a
+  « Remis en stock » switch; « Encore remboursable : … sur … »; ONE `TextField` « Montant remboursé »
+  (« € »), then « Mode de remboursement réellement utilisé » (`control`), one soft sentence on the original
+  payment, and Carte / Espèces / Carte et espèces radio rows — preselected only for a single reliable
+  original method — with the two fields for the mix; the « Déjà remboursé | À rembourser » `SegmentedControl`; « Remboursé le » row opening the
+  shared month calendar; the note. Issues in rose `metadata`, live region polite; « Vérifier » disabled
+  while any. Vérification: one `GroupedSurface` of `GroupedReadRow`s (Raison, Produits, Remboursement,
+  Caisse, Stock, Note), the info notes (13 pt `info.circle`, soft), then « Confirmer le remboursement de
+  18,00 € » (primary) and « Modifier » (secondary).
+- **Caisse.** A refund entry reads « Remboursement · products » (« Remboursement annulé » for a
+  compensation) with a signed amount and opens its Sale. The « Produits vendus » card gains, under an
+  inset hairline, « Remboursements produits » and « Net produits » in the « Ventes directes » row style,
+  plus one soft sentence for the share of products sold during an Appointment.
+- **Appointment Details, settled.** Product rows are buttons with the directory chevron (hint « Ouvre la
+  vente pour corriger ou rembourser ce produit ») and one soft note under the section; no swipe, no peek.
+
+### 48.1 One contextual actions drawer (UX refinement, October 2026)
+
+- **« Actions de la vente ».** The Sale detail no longer stacks buttons. Its top bar takes the Client
+  detail pattern: glass back on the left, « GESTION » centred, and the same glass « ••• »
+  (`glassIcons.more`, `GlassIconButton`, label « Actions de la vente ») on the right — shown only when
+  the Sale offers an action, a spacer otherwise. It opens the shared `DetailActionsSheet` titled
+  « Actions de la vente » (`SaleActionsSheet`): « Rembourser » (`arrow.uturn.backward.circle`),
+  « Corriger une erreur » (`pencil`), « Rembourser intégralement » (renamed in §48.2). The rows come from ONE selector (`getSaleActions`), the same for every entry point. A choice
+  opens the existing flow once the drawer is gone; dismissing changes nothing.
+- **History swipe.** The revealed control is « Actions » — the `ellipsis.circle` / `more_horiz` glyph
+  over the label in accent `chip`, 76 pt wide on `surfaceLavenderStrong`, full row height (no reflow,
+  no extra padding) — and opens the SAME drawer (one instance per list). The persistent grip and the
+  one-time peek stay; the legend was removed in §48.2. VoiceOver: the row's custom action « Actions
+  de la vente ».
+- **Corrections section.** « Corrections et remboursements » (count chip) lists the records only; it
+  is absent when nothing was recorded, except to explain an unpaid Revente.
+- **Encaissement.** One white `GroupedSurface`: « Total reçu » (`body`, soft) and the amount
+  (`summaryValue`, tabular) on one baseline, then ONE pill per method actually recorded — glyph and
+  exact amount only since §48.2, on `surfaceLavender` with a `borderLavender` hairline, `radii.pill`, 30 pt minimum; pills wrap
+  on narrow phones. « Encaissé le … » follows in soft `metadata` when the day differs. A Revente and a
+  historical Sale keep their notes — no pill is ever invented. Each pill speaks « Espèces, 23,00 € ».
+
+### 48.2 Quieter discovery, icon pills and full refunds (October 2026)
+
+- **Payment pills: glyph + amount.** Each « Encaissement » pill holds only the 14 pt
+  `paymentMethodIcons` glyph (`creditcard.fill` / `banknote.fill`, `lavender.lav700`) and the exact
+  amount in navy tabular `chip`, 8 pt apart; « Carte » / « Espèces » are no longer written. Same
+  `surfaceLavender` fill, `borderLavender` hairline, `radii.pill`, 30 pt minimum, wrapping on narrow
+  phones. The pill stays ONE accessible element spoken « Carte, 12,00 € » / « Espèces, 23,00 € »; the
+  glyph adds no name. Revente and historical notes unchanged; no split is ever invented.
+- **No swipe instruction.** The Sales History legend is gone, with its slot: the summary header is
+  followed directly by the list. The persistent 3 × 22 pt lavender grip on actionable rows stays, and
+  the peek demonstrates the gesture. No banner, tooltip or replacement sentence.
+- **One swipe peek for BeautIzzy (`useSwipeHintPeek`).** Every swipeable row — `SwipeToDeleteRow`
+  (Appointment Details « Produits vendus » and Services, Appointment editing Services, Service
+  categories) and `SwipeActionRow` (Sales History) — plays the SAME demonstration from one hook and one
+  set of tokens (`swipe-to-delete.ts`): 450 ms after mount, the first eligible row slides 52 pt in its
+  own swipe direction (rightward for all of today's rows) over 360 ms, decelerating (`easing.out`);
+  holds 450 ms with the action glyph centred in the 52 pt revealed strip (rose + white trash, or
+  lavender + accent glyph); returns over 700 ms with a soft ease-in-out (`cubic-bezier(.45, 0, .55,
+  1)`) — no spring, no bounce, no haptic. 52 pt stays below every action width (72 / 76 pt) and far
+  from a full swipe: it is a translation only, it never opens the row nor runs its action. One row per
+  screen instance, once; never under Reduce Motion; any touch cancels it and returns the row to rest,
+  so it never competes with a tap or a vertical scroll. Swipe directions, actions, confirmations and
+  accessibility actions are unchanged.
+- **« Rembourser intégralement ».** The drawer's third action (formerly « Annuler la vente », a
+  wording also used to abandon a new Sale) is a full refund: `arrow.uturn.backward.circle.fill`, rose,
+  offered only while nothing was corrected AND money remains refundable — a historical Sale without
+  payment offers « Corriger une erreur » only. It never deletes or edits the Sale. Its screen preselects
+  every remaining unit and the whole amount, but « Remis en stock » starts OFF on every line, as in
+  every correction flow: a refund is not a return (the product may have been kept, returned damaged
+  or never handed over). The professional switches it on per line, under « Activez « Remis en stock »
+  seulement pour les produits physiquement revenus en boutique et revendables. », and the review says
+  « Stock : Inchangé » or lists exactly the units put back before « Confirmer ».
+

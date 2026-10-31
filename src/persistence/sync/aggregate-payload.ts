@@ -8,7 +8,8 @@
 // instant, and the Business scope.
 //
 // Scope rule: a business-scoped row (services, appointments, products,
-// sales, calendar blocks, appointment deposits, service categories) is pushed ONLY when its `business_id` is the bound Business. A row
+// sales, calendar blocks, appointment deposits, service categories, sale
+// adjustments) is pushed ONLY when its `business_id` is the bound Business. A row
 // carrying another id is refused loudly — never pushed, never mistaken for a
 // deleted aggregate. `clients` has no `business_id` column; the single local
 // address book belongs to the bound Business (PERSISTENCE.md §4b).
@@ -26,6 +27,7 @@ import type {
   RemoteClientPayload,
   RemotePhasePayload,
   RemoteProductPayload,
+  RemoteSaleAdjustmentPayload,
   RemoteSaleItemPayload,
   RemoteSalePayload,
   RemoteServiceCategoryPayload,
@@ -395,6 +397,76 @@ function readAppointmentDeposit(
   };
 }
 
+function readSaleAdjustment(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+): RemoteSaleAdjustmentPayload | undefined {
+  const row = db.getFirstSync<{
+    readonly business_id: string;
+    readonly sale_id: string;
+    readonly kind: string;
+    readonly reverses_adjustment_id: string | null;
+    readonly reason: string;
+    readonly note: string | null;
+    readonly staff_member_id: string;
+    readonly refund_card_cents: number;
+    readonly refund_cash_cents: number;
+    readonly initial_status: string;
+    readonly status: string;
+    readonly refunded_at: string | null;
+    readonly settled_at: string | null;
+    readonly voided_at: string | null;
+    readonly recorded_at: string;
+  }>(
+    'SELECT business_id, sale_id, kind, reverses_adjustment_id, reason, note, staff_member_id, refund_card_cents, refund_cash_cents, initial_status, status, refunded_at, settled_at, voided_at, recorded_at FROM sale_adjustments WHERE id = ?',
+    [ref.aggregateId],
+  );
+  assertScoped(row, businessId, ref);
+  if (!row) return undefined;
+  const items = db
+    .getAllSync<{
+      readonly id: string;
+      readonly position: number;
+      readonly sale_item_id: string;
+      readonly product_id: string;
+      readonly product_name: string;
+      readonly unit_price_cents: number;
+      readonly quantity: number;
+      readonly restock: number;
+    }>(
+      'SELECT id, position, sale_item_id, product_id, product_name, unit_price_cents, quantity, restock FROM sale_adjustment_items WHERE adjustment_id = ? ORDER BY position',
+      [ref.aggregateId],
+    )
+    .map((item) => ({
+      id: item.id,
+      position: item.position,
+      sale_item_id: item.sale_item_id,
+      product_id: item.product_id,
+      product_name: item.product_name,
+      unit_price_cents: assertAmountCents(item.unit_price_cents, 'sale_adjustment_items.unit_price_cents'),
+      quantity: item.quantity,
+      restock: fromSqlBoolean(item.restock),
+    }));
+  return {
+    sale_id: row.sale_id,
+    kind: row.kind,
+    reverses_adjustment_id: row.reverses_adjustment_id,
+    reason: row.reason,
+    note: row.note,
+    staff_member_id: row.staff_member_id,
+    refund_card_cents: assertAmountCents(row.refund_card_cents, 'sale_adjustments.refund_card_cents'),
+    refund_cash_cents: assertAmountCents(row.refund_cash_cents, 'sale_adjustments.refund_cash_cents'),
+    initial_status: row.initial_status,
+    status: row.status,
+    refunded_at: toOptionalInstant(row.refunded_at),
+    settled_at: toOptionalInstant(row.settled_at),
+    voided_at: toOptionalInstant(row.voided_at),
+    recorded_at: toInstant(row.recorded_at),
+    items,
+  };
+}
+
 /**
  * The complete current aggregate (row + whole ordered child set), or
  * undefined when the row no longer exists locally. Throws
@@ -423,5 +495,7 @@ export function readAggregatePayload(
       return readAppointmentDeposit(db, businessId, ref);
     case 'SERVICE_CATEGORY':
       return readServiceCategory(db, businessId, ref);
+    case 'SALE_ADJUSTMENT':
+      return readSaleAdjustment(db, businessId, ref);
   }
 }

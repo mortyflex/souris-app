@@ -13,7 +13,7 @@ import type { CalendarBlock } from '@/domain/calendar-blocks';
 import type { Client } from '@/domain/clients';
 import type { Product } from '@/domain/products';
 import type { ServiceCategory } from '@/domain/services';
-import type { Sale } from '@/domain/sales';
+import type { Sale, SaleAdjustment } from '@/domain/sales';
 
 import type { SourisDatabase } from './database';
 import { migrateDatabase } from './migrations';
@@ -23,6 +23,7 @@ import { loadAppointments } from './stores/appointments';
 import { loadCalendarBlocks } from './stores/calendar-blocks';
 import { loadClients } from './stores/clients';
 import { loadProducts } from './stores/products';
+import { loadSaleAdjustments } from './stores/sale-adjustments';
 import { loadSales } from './stores/sales';
 import { loadServiceCategories } from './stores/service-categories';
 import { loadServices } from './stores/services';
@@ -39,6 +40,8 @@ export interface PersistedSnapshot {
   readonly calendarBlocks: readonly CalendarBlock[];
   /** Appointment deposits, ACTIVE and VOIDED. */
   readonly appointmentDeposits: readonly AppointmentDeposit[];
+  /** Corrections and refunds of completed Sales (schema v18). */
+  readonly saleAdjustments: readonly SaleAdjustment[];
 }
 
 export function loadSnapshot(db: SourisDatabase): PersistedSnapshot {
@@ -51,6 +54,7 @@ export function loadSnapshot(db: SourisDatabase): PersistedSnapshot {
     sales: loadSales(db),
     calendarBlocks: loadCalendarBlocks(db),
     appointmentDeposits: loadAppointmentDeposits(db),
+    saleAdjustments: loadSaleAdjustments(db),
   };
 }
 

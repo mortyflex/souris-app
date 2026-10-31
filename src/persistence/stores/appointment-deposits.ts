@@ -32,6 +32,7 @@ import {
   getAppointmentServicesTotal,
   getDepositPositionFromTotals,
   getSaleTotalCents,
+  isAppointmentSettled,
   validateAppointmentDepositAmount,
   type AppointmentDeposit,
   type AppointmentDepositPosition,
@@ -140,6 +141,28 @@ export function readAppointmentDepositPosition(
     status: row.status,
     ...getDepositPositionFromTotals(services.netCents + productsCents, activeDepositTotalCents),
   };
+}
+
+/**
+ * Whether the stored Appointment of a Revente received its money: a final
+ * payment, or completed and fully covered by its deposits (THE domain rule,
+ * `isAppointmentSettled`). False when the Appointment is not on this device.
+ */
+export function isStoredAppointmentSettled(db: SourisDatabase, appointmentId: string): boolean {
+  const row = db.getFirstSync<{ status: AppointmentStatus; paid_at: string | null }>(
+    'SELECT status, paid_at FROM appointments WHERE id = ?',
+    [appointmentId],
+  );
+  const position = readAppointmentDepositPosition(db, appointmentId);
+  if (!row || !position) return false;
+  return isAppointmentSettled(
+    {
+      status: row.status,
+      // Only the presence of a payment matters to the rule.
+      payment: row.paid_at === null ? undefined : { paidAt: fromSqlInstant(row.paid_at), cardAmountCents: 0, cashAmountCents: 0 },
+    },
+    getDepositPositionFromTotals(position.expectedTotalCents, position.activeDepositTotalCents),
+  );
 }
 
 /**

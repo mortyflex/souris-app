@@ -62,6 +62,7 @@ import { getAppTextStyle } from "@/shared/ui/AppText";
 import { AppointmentDetailsScreen } from "../AppointmentDetailsScreen";
 import { TestPersistenceProvider } from "@/providers/testing/TestPersistenceProvider";
 import { settleSheetTransition } from "@/shared/ui/testing/sheet-transitions";
+import { SWIPE_HINT_DELAY_MS, SWIPE_HINT_HOLD_MS, SWIPE_HINT_RETURN_MS, SWIPE_HINT_REVEAL_MS } from "@/shared/ui/swipe-to-delete";
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -1298,7 +1299,7 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.queryByTestId(`${masqueRow}-hint`)).toBeNull();
 
       await act(async () => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(SWIPE_HINT_DELAY_MS);
       });
       expect(view.getByTestId(`${masqueRow}-hint`)).toBeTruthy();
       expect(view.queryByTestId(`${concentrateRow}-hint`)).toBeNull();
@@ -1306,11 +1307,11 @@ describe("AppointmentDetailsScreen", () => {
 
       // Reveal + hold: the trash stays readable for a while before the return.
       await act(async () => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(SWIPE_HINT_REVEAL_MS + SWIPE_HINT_HOLD_MS);
       });
       expect(view.getByTestId(`${masqueRow}-hint`)).toBeTruthy();
       await act(async () => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(SWIPE_HINT_RETURN_MS);
       });
       expect(view.queryByTestId(`${masqueRow}-hint`)).toBeNull();
 
@@ -1434,7 +1435,7 @@ describe("AppointmentDetailsScreen", () => {
       expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(10700));
     });
 
-    it("keeps the recorded payment and the Cash Register untouched when a Product is deleted after checkout", async () => {
+    it("after checkout a sold Product is no longer removable: it opens its Sale for a traceable correction (SALES.md §15)", async () => {
       jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
       const view = await renderDetails();
       await press(view, "stock-products");
@@ -1445,34 +1446,25 @@ describe("AppointmentDetailsScreen", () => {
       await press(view, "confirm-checkout");
       await settleSheetTransition();
       expect(view.getByTestId("caisse-day-total").props.children).toBe(10700);
-      expect(view.queryByTestId("appointment-payment-difference")).toBeNull();
 
-      // Same direct gesture, no extra modal.
-      await press(view, `${concentrateRow}-swipe-full`);
+      // No swipe-to-delete any more: the row is a button with its hint, and a note says why.
+      expect(view.queryByTestId(`${concentrateRow}-swipe-full`)).toBeNull();
+      const row = view.getByTestId(concentrateRow);
+      expect(row.props.accessibilityRole).toBe("button");
+      expect(row.props.accessibilityHint).toBe("Ouvre la vente pour corriger ou rembourser ce produit");
+      expect(view.getByTestId("appointment-products-settled-note")).toBeTruthy();
+      await press(view, concentrateRow);
+      expect(mockPush).toHaveBeenCalledWith({ pathname: "/sales/[saleId]", params: { saleId: expect.any(String) } });
 
-      expect(view.queryByTestId("appointment-products")).toBeNull();
-      expect(view.getByTestId("stock-concentrate").props.children).toBe(3);
-      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(9500));
+      // Nothing changed: the product, the stock, the payment and the Caisse are exactly as recorded.
+      expect(view.getByTestId("appointment-products")).toBeTruthy();
+      expect(view.getByTestId("stock-concentrate").props.children).toBe(2);
+      expect(view.getByTestId("appointment-expected-total-value").props.children).toBe(formatEuroCents(10700));
       expect(view.getByTestId("appointment-payment-probe").props.children).toBe("10700/0");
-      expect(view.getByTestId("appointment-payment-total").props.children).toBe(formatEuroCents(10700));
-      expect(view.getByTestId("appointment-payment-difference").props.children).toEqual([
-        "Écart : ",
-        `+${formatEuroCents(1200)}`,
-      ]);
+      expect(view.queryByTestId("appointment-payment-difference")).toBeNull();
       expect(view.getByTestId("caisse-day-total").props.children).toBe(10700);
-      expect(view.getByTestId("appointment-status").props.children).toBe("COMPLETED");
-      expect(view.getByTestId("edit-payment")).toBeTruthy();
-
-      // The correction sheet consumes the same expectation as Details.
-      await press(view, "edit-payment");
-      expect(view.getByTestId("checkout-expected-total").props.children).toBe(formatEuroCents(9500));
-      expect(view.getByTestId("checkout-amount-card").props.value).toBe("107,00");
 
       // Permanent deletion stays blocked: the payment still anchors the Appointment.
-      await act(async () => {
-        fireEvent.press(view.getByLabelText("Annuler l’encaissement"));
-      });
-      await settleSheetTransition();
       await chooseAction(view, "open-permanent-deletion");
       expect(view.getByTestId("appointment-deletion-blocked")).toBeTruthy();
     });

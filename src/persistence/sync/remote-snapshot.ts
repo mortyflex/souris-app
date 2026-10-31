@@ -17,6 +17,7 @@
 //   sales             + items[]
 //   calendar_blocks   flat; the KEY is absent on a remote that predates them
 //   appointment_deposits  flat; the KEY is absent on a remote that predates them
+//   sale_adjustments  + items[]; the KEY is absent on a remote that predates them (§28)
 //
 // Rules enforced here mirror the remote CHECKs and the local schema: exact
 // non-negative integer cents, vocabularies, a payment is all three columns or
@@ -42,6 +43,8 @@ import type {
   RemotePhasePayload,
   RemoteProductPayload,
   RemotePulledAggregate,
+  RemoteSaleAdjustmentItemPayload,
+  RemoteSaleAdjustmentPayload,
   RemoteSaleItemPayload,
   RemoteSalePayload,
   RemoteServiceCategoryPayload,
@@ -63,6 +66,19 @@ const APPOINTMENT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETE
 const CANCELLATION_ACTORS = ['CLIENT', 'BUSINESS'];
 const PAYMENT_METHODS = ['CARD', 'CASH'];
 const DEPOSIT_STATUSES = ['ACTIVE', 'VOIDED'];
+const ADJUSTMENT_KINDS = ['REFUND', 'REVERSAL'];
+const ADJUSTMENT_STATUSES = ['PENDING', 'SETTLED', 'VOIDED'];
+const ADJUSTMENT_REASONS = [
+  'NOT_DELIVERED',
+  'WRONG_PRODUCT',
+  'WRONG_QUANTITY',
+  'RETURN',
+  'CUSTOMER_REFUND',
+  'SALE_CANCELLED',
+  'RECORDED_IN_ERROR',
+  'REFUND_RETURNED',
+  'OTHER',
+];
 
 function fail(field: string): never {
   throw new RemoteSnapshotInvalidError(field);
@@ -399,6 +415,60 @@ function parseAppointmentDeposit(row: Json, field: string): RemoteAppointmentDep
   };
 }
 
+function parseSaleAdjustmentItem(row: Json, field: string): RemoteSaleAdjustmentItemPayload {
+  return {
+    id: nonEmptyText(row, 'id', field),
+    position: integer(row, 'position', field, 0),
+    sale_item_id: nonEmptyText(row, 'sale_item_id', field),
+    product_id: text(row, 'product_id', field),
+    product_name: text(row, 'product_name', field),
+    unit_price_cents: integer(row, 'unit_price_cents', field, 0),
+    quantity: integer(row, 'quantity', field, 1),
+    restock: flag(row, 'restock', field),
+  };
+}
+
+/**
+ * A Sale adjustment: the remote CHECKs again — the vocabularies, exact cents,
+ * a REVERSAL naming its refund and carrying no line, `voided_at` exactly when
+ * VOIDED, `refunded_at` / `settled_at` once SETTLED and never while PENDING —
+ * so a row the local table would refuse never reaches it.
+ */
+function parseSaleAdjustment(row: Json, field: string): RemoteSaleAdjustmentPayload {
+  const kind = oneOf(row, 'kind', field, ADJUSTMENT_KINDS);
+  const reverses = optionalText(row, 'reverses_adjustment_id', field);
+  if ((kind === 'REVERSAL') !== (reverses !== null)) fail(`${field}.reverses_adjustment_id`);
+  const status = oneOf(row, 'status', field, ADJUSTMENT_STATUSES);
+  const refundedAt = optionalInstant(row, 'refunded_at', field);
+  const settledAt = optionalInstant(row, 'settled_at', field);
+  const voidedAt = optionalInstant(row, 'voided_at', field);
+  if ((status === 'VOIDED') !== (voidedAt !== null)) fail(`${field}.voided_at`);
+  if ((refundedAt === null) !== (settledAt === null)) fail(`${field}.settled_at`);
+  if (status === 'SETTLED' && refundedAt === null) fail(`${field}.refunded_at`);
+  if (status === 'PENDING' && refundedAt !== null) fail(`${field}.refunded_at`);
+  const items = children(row.items, `${field}.items`, (item) => item.position, parseSaleAdjustmentItem);
+  if (kind === 'REVERSAL' && items.length > 0) fail(`${field}.items`);
+  const compensation = row.reason === 'RECORDED_IN_ERROR' || row.reason === 'REFUND_RETURNED';
+  if ((kind === 'REVERSAL') !== compensation) fail(`${field}.reason`);
+  return {
+    sale_id: nonEmptyText(row, 'sale_id', field),
+    kind,
+    reverses_adjustment_id: reverses,
+    reason: oneOf(row, 'reason', field, ADJUSTMENT_REASONS),
+    note: optionalText(row, 'note', field),
+    staff_member_id: nonEmptyText(row, 'staff_member_id', field),
+    refund_card_cents: integer(row, 'refund_card_cents', field, 0),
+    refund_cash_cents: integer(row, 'refund_cash_cents', field, 0),
+    initial_status: oneOf(row, 'initial_status', field, ['PENDING', 'SETTLED']),
+    status,
+    refunded_at: refundedAt,
+    settled_at: settledAt,
+    voided_at: voidedAt,
+    recorded_at: instant(row, 'recorded_at', field),
+    items,
+  };
+}
+
 function parseFamily<Payload>(
   value: unknown,
   field: string,
@@ -440,6 +510,10 @@ export function parseRemoteBusinessSnapshot(data: unknown): RemoteBusinessSnapsh
     // category, never a failure — and the proof of readiness is missing (§27).
     serviceCategories: parseFamily(root.service_categories ?? [], 'service_categories', parseServiceCategory),
     serviceCatalogue: root.service_categories !== undefined && root.service_categories !== null,
+    // Absent on a remote whose functions predate sale adjustments: none, never
+    // a failure — and the proof of readiness is missing (§28).
+    saleAdjustments: parseFamily(root.sale_adjustments ?? [], 'sale_adjustments', parseSaleAdjustment),
+    saleAdjustmentsSupported: root.sale_adjustments !== undefined && root.sale_adjustments !== null,
   };
 }
 
@@ -468,6 +542,10 @@ export function assertSnapshotReferences(snapshot: RemoteBusinessSnapshot): void
   for (const { payload } of snapshot.appointmentDeposits) {
     if (payload && !appointments.has(payload.appointment_id)) fail('appointment_deposits[].appointment_id');
   }
+  const sales = live(snapshot.sales);
+  for (const { payload } of snapshot.saleAdjustments) {
+    if (payload && !sales.has(payload.sale_id)) fail('sale_adjustments[].sale_id');
+  }
 }
 
 export type RemotePulledEntry =
@@ -487,6 +565,10 @@ export type RemotePulledEntry =
   | {
       readonly aggregateType: 'APPOINTMENT_DEPOSIT';
       readonly aggregate: RemotePulledAggregate<RemoteAppointmentDepositPayload>;
+    }
+  | {
+      readonly aggregateType: 'SALE_ADJUSTMENT';
+      readonly aggregate: RemotePulledAggregate<RemoteSaleAdjustmentPayload>;
     };
 
 /**
@@ -512,5 +594,7 @@ export function listSnapshotEntries(snapshot: RemoteBusinessSnapshot): readonly 
     ...snapshot.sales.map(tag('SALE')),
     ...snapshot.calendarBlocks.map(tag('CALENDAR_BLOCK')),
     ...snapshot.appointmentDeposits.map(tag('APPOINTMENT_DEPOSIT')),
+    // After its Sale; its tombstone is therefore removed before the Sale's.
+    ...snapshot.saleAdjustments.map(tag('SALE_ADJUSTMENT')),
   ] as readonly RemotePulledEntry[];
 }

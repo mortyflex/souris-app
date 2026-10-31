@@ -21,6 +21,7 @@ import { FORM_SCROLL_REVEAL_MARGIN } from '@/shared/ui/FormScrollView';
 import { scrollToMock, settleFormScroll, stageFocusedInput } from '@/shared/ui/testing/form-scroll';
 import { captureKeyboardEvents } from '@/shared/ui/testing/sheet-keyboard';
 import { settleWheelOn, wheelRowKeys, wheelValue } from '@/shared/ui/testing/wheels';
+import { SWIPE_HINT_DELAY_MS, SWIPE_HINT_TOTAL_MS } from '@/shared/ui/swipe-to-delete';
 
 // Jest lays nothing out: the keyboard test states the geometry itself.
 jest.mock('@/shared/ui/form-scroll-geometry');
@@ -746,13 +747,13 @@ describe('AppointmentEditingScreen', () => {
       expect(view.queryByTestId('appointment-draft-dup-item-a-hint')).toBeNull();
 
       await act(async () => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(SWIPE_HINT_DELAY_MS);
       });
       expect(view.getByTestId('appointment-draft-dup-item-a-hint')).toBeTruthy();
       expect(view.queryByTestId('appointment-draft-dup-item-b-hint')).toBeNull();
 
       await act(async () => {
-        jest.advanceTimersByTime(1000);
+        jest.advanceTimersByTime(SWIPE_HINT_TOTAL_MS);
       });
       expect(view.queryByTestId('appointment-draft-dup-item-a-hint')).toBeNull();
 

@@ -1345,8 +1345,47 @@ and opened on the period the Caisse was showing (`docs/domain/SALES.md` §11b):
   (and « Encaissé le » when the day differs) for a direct Sale; « Le montant a été encaissé avec le
   rendez-vous… » and « Voir le rendez-vous » for a Revente (or that the Appointment is not on this
   device); « Aucun encaissement n’a été enregistré pour cette vente… » for a historical Sale;
-- strictly read-only: no edit, no refund, no deletion, no stock or payment change, no new storage.
-  The Caisse totals are exactly what they were.
+- the Sale itself is never edited or deleted. Under it, « Corriger ou rembourser » (below).
+
+**Corriger ou rembourser une vente.** From « Détail de la vente » (the « ••• » button, top right) or by
+swiping a row of the history to the right (it only REVEALS « Actions »): both open the SAME drawer
+« Actions de la vente », listing only the actions the Sale allows; a choice opens its flow:
+
+1. « Rembourser », « Corriger une erreur » or « Rembourser intégralement » (the last only while nothing
+   was corrected yet and money was received; every unit and the whole amount preselected, nothing
+   restocked by default) opens a two-step screen. Saisie: the reason (« Mauvais produit enregistré »,
+   « Produit facturé mais non remis », « Mauvaise quantité », « Retour du produit », « Geste
+   commercial / remboursement »…), the units per line (never more than remain), « Remis en stock »
+   per line (OFF by default whatever the reason; on only if the product is physically back and
+   sellable — never implied by a refund; impossible for a product no longer in the catalogue), « Montant remboursé » (suggested from the units, editable,
+   never above « Encore remboursable »), « Mode de remboursement réellement utilisé » (Carte, Espèces,
+   or Carte et espèces with both parts typed — preselected only when the original money reliably came
+   by one method, and said so; to be chosen otherwise, e.g. a Revente paid by a card deposit and cash), « Déjà remboursé » (with
+   « Remboursé le », today by default, never before the sale nor after today) or « À rembourser », and
+   an optional note.
+2. Vérification: reason, units, amount and methods, the Caisse consequence (« −18,00 € le 15 octobre
+   2026 », or nothing until refunded), the stock consequence, and the reminders « La vente d’origine
+   reste enregistrée telle quelle. » and « BeautIzzy enregistre le remboursement … Il n’effectue aucun
+   virement ni remboursement par carte ». Only « Confirmer » writes; a double tap records once.
+3. The Sale detail then lists the record with its status (« À rembourser », « Remboursé », « Saisie
+   annulée », « Remboursement annulé »), its lines, methods, « Remboursé le » and its history
+   (« Enregistré … », « Marqué comme remboursé … »). A pending one offers « Marquer comme remboursé »
+   (today, or « Remboursé un autre jour… ») and « Annuler cette saisie »; a settled one offers only
+   « Corriger ce remboursement… », which asks what really happened: saisi par erreur (a « Correction de
+   saisie » on the refund's own day), argent rendu depuis (a « Remboursement rendu » on that day, by the
+   method chosen), or bien eu lieu (nothing to do). A refund actually paid never disappears. A record the server refused
+   says « Refusé par le serveur … À vérifier. » and offers « Annuler cette saisie ».
+
+A historical Sale without any recorded payment accepts unit / stock corrections only. A product sold
+during an Appointment is corrected here once that Appointment is checked out (before, it is removed
+from the Appointment); the Appointment payment is never changed, the refund is its own movement.
+
+**Caisse.** A settled refund counts negatively on the day the money left, by its method: a
+« Remboursement · products » entry with a signed amount, opening its Sale; « Total encaissé » and the
+Carte / Espèces figures are net; the count of « Encaissements » and of clients never includes a
+refund. The « Produits vendus » card adds « Remboursements produits » and « Net produits » when the
+period refunded something (and names the share of products sold during an Appointment). The sale day
+keeps what was received.
 
 The Client `Total dépensé` metric is independent from the Cash Register: deposits never add to
 it (`100 €` paid as `30 €` + `70 €` counts `100 €`).

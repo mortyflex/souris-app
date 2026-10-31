@@ -65,8 +65,8 @@ describe('schema v10 migration on an existing v9 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(17);
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+    expect(readSchemaVersion(db)).toBe(18);
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
 
@@ -114,18 +114,19 @@ describe('schema v10 migration on an existing v9 database', () => {
   // `calendar_blocks` and rebuilds the two sync bookkeeping tables for the new
   // aggregate type (covered by calendar-blocks-migration.test.ts), and schema
   // v13 adds `clients.photo_path` (client-photo-migration.test.ts) and schema
-  // v14 `products.photo_path` (product-photo-migration.test.ts).
+  // v14 `products.photo_path` (product-photo-migration.test.ts), schema v18 the two
+  // sale adjustment tables (sale-adjustments-migration.test.ts).
   it('changes no other table definition', () => {
     const db = openSchemaV9Database();
     const tablesBefore = db.getAllSync<{ name: string; sql: string }>(
-      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'clients', 'products', 'services', 'service_categories') ORDER BY name",
+      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'clients', 'products', 'services', 'service_categories', 'sale_adjustments', 'sale_adjustment_items') ORDER BY name",
     );
 
     bootstrapPersistence(db, createTestSeed);
 
     expect(
       db.getAllSync<{ name: string; sql: string }>(
-        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'clients', 'products', 'services', 'service_categories') ORDER BY name",
+        "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('appointments', 'calendar_blocks', 'appointment_deposits', 'sync_outbox', 'sync_state', 'clients', 'products', 'services', 'service_categories', 'sale_adjustments', 'sale_adjustment_items') ORDER BY name",
       ),
     ).toEqual(tablesBefore);
   });
@@ -134,7 +135,7 @@ describe('schema v10 migration on an existing v9 database', () => {
     const db = openSchemaV9Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(17);
+    expect(migrateDatabase(db)).toBe(18);
     updateAppointmentDiscount(db, 'appointment-upcoming', { type: 'PERCENT', percent: 20 });
 
     const reloaded = loadSnapshot(db).appointments.find(

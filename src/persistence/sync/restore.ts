@@ -12,7 +12,8 @@
 //        re-verify the preconditions                bound to this Business, still empty,
 //                                                   no acknowledged state, approval present
 //        write every live aggregate                 CLIENT, SERVICE, PRODUCT, APPOINTMENT, SALE,
-//                                                   CALENDAR_BLOCK, APPOINTMENT_DEPOSIT
+//                                                   CALENDAR_BLOCK, APPOINTMENT_DEPOSIT,
+//                                                   SALE_ADJUSTMENT (rows only — never a stock move)
 //                                                   (children with their parent; tombstones skipped)
 //        sync_state ← each remote sync_version      tombstones included: they are known revisions
 //        sync_outbox emptied                        nothing restored is ever pushed back
@@ -43,6 +44,7 @@ import {
 import { disarmServiceCatalogueRefresh, markServiceCatalogueRemoteReady } from './service-catalogue-sync';
 import { writeSyncPullCursor } from './pull-cursor';
 import { applyRemoteAggregate } from './remote-apply';
+import { markSaleAdjustmentRemoteReady } from './sale-adjustment-sync';
 import { SyncRemoteError, type RemoteBusinessSnapshot, type SyncRemoteFailureCode, type SyncRemoteGateway } from './remote-gateway';
 import {
   assertSnapshotReferences,
@@ -71,6 +73,7 @@ export interface RestoreCounts {
   readonly calendarBlocks: number;
   readonly appointmentDeposits: number;
   readonly serviceCategories: number;
+  readonly saleAdjustments: number;
   /** Remote tombstones: acknowledged, never written as rows. */
   readonly tombstones: number;
 }
@@ -84,6 +87,7 @@ const COUNT_KEY = {
   CALENDAR_BLOCK: 'calendarBlocks',
   APPOINTMENT_DEPOSIT: 'appointmentDeposits',
   SERVICE_CATEGORY: 'serviceCategories',
+  SALE_ADJUSTMENT: 'saleAdjustments',
 } as const;
 
 /**
@@ -106,6 +110,7 @@ export function restoreBusinessSnapshot(
     calendarBlocks: 0,
     appointmentDeposits: 0,
     serviceCategories: 0,
+    saleAdjustments: 0,
     tombstones: 0,
   };
   runInTransaction(db, () => {
@@ -139,6 +144,7 @@ export function restoreBusinessSnapshot(
     // A restore reads the complete dataset: the remote is proven ready or not,
     // and nothing older is left to refresh (service-catalogue-sync.ts).
     if (snapshot.serviceCatalogue) markServiceCatalogueRemoteReady(db);
+    if (snapshot.saleAdjustmentsSupported) markSaleAdjustmentRemoteReady(db);
     disarmServiceCatalogueRefresh(db);
     writeSyncBootstrapRecord(db, { businessId, decision: 'ALREADY_SYNCED', decidedAt: now });
     clearInitialRestoreApproval(db);

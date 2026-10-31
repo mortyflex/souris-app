@@ -12,6 +12,7 @@
 //   CALENDAR_BLOCK  calendar_blocks               (CLOUD_SYNC.md §20)
 //   APPOINTMENT_DEPOSIT appointment_deposits      (CLOUD_SYNC.md §21)
 //   SERVICE_CATEGORY    service_categories        (CLOUD_SYNC.md §27)
+//   SALE_ADJUSTMENT     sale_adjustments + sale_adjustment_items (CLOUD_SYNC.md §28)
 
 import type { SourisDatabase } from '../database';
 
@@ -24,6 +25,7 @@ export const SYNC_AGGREGATE_TYPES = [
   'CALENDAR_BLOCK',
   'APPOINTMENT_DEPOSIT',
   'SERVICE_CATEGORY',
+  'SALE_ADJUSTMENT',
 ] as const;
 
 export type SyncAggregateType = (typeof SYNC_AGGREGATE_TYPES)[number];
@@ -61,6 +63,17 @@ export interface SyncFinancialConflict extends SyncAggregateRef {
   readonly appointmentId: string | undefined;
   readonly expectedTotalCents: number;
   readonly activeDepositTotalCents: number;
+}
+
+/**
+ * The remote refused a Sale adjustment: it would give back more money or
+ * units than the Sale allows, change a settled record, or reverse a refund
+ * twice (CLOUD_SYNC.md §28). Neither side was overwritten.
+ */
+export interface SyncAdjustmentConflict extends SyncAggregateRef {
+  readonly saleId: string | undefined;
+  /** Stable machine code from the remote (`CEILING`, `UNITS`, `IMMUTABLE`, `REVERSAL`…). */
+  readonly reason: string;
 }
 
 /**

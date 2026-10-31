@@ -51,8 +51,13 @@
 //                     answer of any other kind for a write of the Business ends it
 //          deferred → a SERVICE_CATEGORY entry, or a SERVICE upsert carrying a
 //                     category or description, while no pull proved the remote
-//                     knows those fields (CLOUD_SYNC.md §27): nothing is sent,
-//                     the entry stays pending with REMOTE_SCHEMA_PENDING
+//                     knows those fields (CLOUD_SYNC.md §27), and any
+//                     SALE_ADJUSTMENT entry while no pull proved the remote
+//                     stores adjustments (§28): nothing is sent, the entry
+//                     stays pending with REMOTE_SCHEMA_PENDING
+//          ADJUSTMENT_CONFLICT → the remote refused a Sale adjustment (refund
+//                     ceilings, immutability): nothing was written, the entry
+//                     stays pending, the record reads « Refusé par le serveur »
 //          failure  → the entry stays pending (attempt_count / last_error /
 //                     next_attempt_at); a rejection of this one aggregate moves
 //                     on to the next entry, anything else stops the run
@@ -72,6 +77,7 @@ import { runInTransaction, type SourisDatabase } from '../database';
 import {
   readBoundBusinessId,
   type SyncAggregateRef,
+  type SyncAdjustmentConflict,
   type SyncConflict,
   type SyncFinancialConflict,
   type SyncOperation,
@@ -115,6 +121,10 @@ import {
 } from './remote-gateway';
 import { restoreBusinessFromRemote, type RestoreCounts, type RestoreOutcome } from './restore';
 import {
+  ADJUSTMENT_CONFLICT_ERROR,
+  isSaleAdjustmentRemoteReady,
+} from './sale-adjustment-sync';
+import {
   isServiceCatalogueRemoteReady,
   REMOTE_SCHEMA_PENDING_ERROR,
   requiresServiceCatalogueRemote,
@@ -126,7 +136,7 @@ import {
   writeAcknowledgedRemoteVersion,
 } from './state';
 
-export type { SyncConflict, SyncFinancialConflict } from './aggregate';
+export type { SyncAdjustmentConflict, SyncConflict, SyncFinancialConflict } from './aggregate';
 export type { SyncPullSummary } from './pull-worker';
 
 export type SyncRunResult =
@@ -158,6 +168,12 @@ export type SyncRunResult =
        * there was none. Nothing was written on either side.
        */
       readonly financialConflicts?: readonly SyncFinancialConflict[];
+      /**
+       * Sale adjustments the remote refused (ceilings, immutability —
+       * CLOUD_SYNC.md §28). Absent when there was none. Nothing was written on
+       * the remote; each record stays pending on this device.
+       */
+      readonly adjustmentConflicts?: readonly SyncAdjustmentConflict[];
       /**
        * The server refuses the Business's writes for lack of a Plus entitlement
        * (CLOUD_SYNC.md §26): no write is sent before `until`. `refused` names
@@ -346,14 +362,21 @@ export function createSyncPushWorker({
     businessId: string,
     decision: SyncBootstrapDecision,
   ): Promise<
-    Pick<Extract<SyncRunResult, { status: 'PUSHED' }>, 'pushed' | 'failed' | 'conflicts' | 'stoppedBy' | 'entitlementHold'>
+    Pick<
+      Extract<SyncRunResult, { status: 'PUSHED' }>,
+      'pushed' | 'failed' | 'conflicts' | 'stoppedBy' | 'entitlementHold' | 'financialConflicts' | 'adjustmentConflicts'
+    >
   > {
     let pushed = 0;
     let failed = 0;
     const conflicts: SyncConflict[] = [];
     const financialConflicts: SyncFinancialConflict[] = [];
+    const adjustmentConflicts: SyncAdjustmentConflict[] = [];
     // Reported only when there is one, like `stoppedBy` and `pull`.
-    const summarize = () => (financialConflicts.length > 0 ? { financialConflicts } : {});
+    const summarize = () => ({
+      ...(financialConflicts.length > 0 ? { financialConflicts } : {}),
+      ...(adjustmentConflicts.length > 0 ? { adjustmentConflicts } : {}),
+    });
 
     // A hold still in force: not one write is sent (CLOUD_SYNC.md §26). The
     // entries stay as they are; the run goes on to the pull.
@@ -394,6 +417,12 @@ export function createSyncPushWorker({
       // that the remote knows the catalogue fields (CLOUD_SYNC.md §27): kept
       // pending, never sent, never acknowledged.
       if (!isServiceCatalogueRemoteReady(db) && requiresServiceCatalogueRemote(entry, operation, payload)) {
+        fail(entry, REMOTE_SCHEMA_PENDING_ERROR, nextSyncAttemptAt(now(), entry.attemptCount));
+        continue;
+      }
+      // Money is never sent to a remote that has not proven it stores sale
+      // adjustments and enforces their ceilings (CLOUD_SYNC.md §28).
+      if (entry.aggregateType === 'SALE_ADJUSTMENT' && !isSaleAdjustmentRemoteReady(db)) {
         fail(entry, REMOTE_SCHEMA_PENDING_ERROR, nextSyncAttemptAt(now(), entry.attemptCount));
         continue;
       }
@@ -466,6 +495,22 @@ export function createSyncPushWorker({
         });
         failed += 1;
         fail(entry, 'FINANCIAL_CONFLICT', nextSyncAttemptAt(now(), entry.attemptCount));
+        continue;
+      }
+
+      if (result.status === 'ADJUSTMENT_CONFLICT') {
+        // The remote refused a refund that would exceed what the Sale allows
+        // (another device refunded it first) or change a settled record.
+        // Nothing was written there; the record stays on this device, pending
+        // and shown as refused, until the professional resolves it.
+        adjustmentConflicts.push({
+          aggregateType: entry.aggregateType,
+          aggregateId: entry.aggregateId,
+          saleId: result.saleId,
+          reason: result.reason,
+        });
+        failed += 1;
+        fail(entry, ADJUSTMENT_CONFLICT_ERROR, nextSyncAttemptAt(now(), entry.attemptCount));
         continue;
       }
 

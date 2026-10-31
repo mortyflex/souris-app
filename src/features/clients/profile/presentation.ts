@@ -7,7 +7,7 @@
 // (never the current catalog).
 
 import { getClientTotalSpentCents } from '@/domain/clients';
-import type { Sale } from '@/domain/sales';
+import type { Sale, SaleAdjustment } from '@/domain/sales';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
 
 const STATUSES_EXCLUDED_FROM_UPCOMING = new Set([
@@ -108,6 +108,7 @@ export function getClientActivitySummary(
   sales: readonly Sale[],
   clientId: string,
   now: Date = new Date(),
+  saleAdjustments: readonly SaleAdjustment[] = [],
 ): ClientActivitySummary {
   const clientAppointments = getClientAppointments(appointments, clientId);
   const upcomingAppointments = getUpcomingClientAppointments(appointments, clientId, now);
@@ -137,7 +138,7 @@ export function getClientActivitySummary(
     noShowAppointmentCount,
     totalSpent:
       getClientTotalSpentCents(
-        { appointments: clientAppointments.map(({ appointment }) => appointment), sales },
+        { appointments: clientAppointments.map(({ appointment }) => appointment), sales, saleAdjustments },
         clientId,
       ) / 100,
     upcomingAppointments,

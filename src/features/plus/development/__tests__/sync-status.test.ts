@@ -139,7 +139,7 @@ describe('formatSyncRunResult', () => {
       ],
       [{ status: 'FAILED', reason: 'INVALID_REMOTE_DATA' }, 'FAILED · INVALID_REMOTE_DATA'],
       [
-        { status: 'RESTORED', restored: { clients: 120, services: 14, products: 9, appointments: 3, sales: 2, calendarBlocks: 4, appointmentDeposits: 5, serviceCategories: 6, tombstones: 1 } },
+        { status: 'RESTORED', restored: { clients: 120, services: 14, products: 9, appointments: 3, sales: 2, calendarBlocks: 4, appointmentDeposits: 5, serviceCategories: 6, saleAdjustments: 0, tombstones: 1 } },
         'RESTORED · clients 120 · services 14 · categories 6 · products 9 · appointments 3 · sales 2 · calendar blocks 4 · deposits 5 · tombstones 1',
       ],
       [

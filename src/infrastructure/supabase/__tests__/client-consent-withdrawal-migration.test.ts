@@ -36,8 +36,11 @@ describe('Phase 6.5C step 8 — client consent withdrawal migration', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
     const index = names.indexOf(MIGRATION_NAME);
     expect(names[index - 1]).toBe(STEP6_MIGRATION_NAME);
-    // Only later, unrelated phases follow it (multi-profession Step 3: service categories).
-    expect(names.slice(index + 1)).toEqual(['20261010120000_add_service_categories_and_descriptions.sql']);
+    // Only later, unrelated phases follow it (multi-profession Step 3: service categories; sale adjustments).
+    expect(names.slice(index + 1)).toEqual([
+      '20261010120000_add_service_categories_and_descriptions.sql',
+      '20261011120000_create_sale_adjustments.sql',
+    ]);
     expect(names.filter((name) => name.includes('consent_withdrawal'))).toEqual([MIGRATION_NAME]);
     expect(step4).not.toMatch(/sync_withdraw_client_sms_consent/);
   });

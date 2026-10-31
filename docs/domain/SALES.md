@@ -223,9 +223,13 @@ several ACTIVE matches   → explicit choice among active Products only
 
 ## 10. Immutability and Appointment-linked Product Deletion
 
-Completed Sales are never edited: there is no line editing, refund, return, or price correction.
-The session exposes `sales`, `getSaleById`, `completeSale`, and ONE explicit correction:
-`deleteAppointmentProduct(appointmentId, identity)`.
+Completed Sales are never edited: there is no line editing or price correction. Corrections and
+refunds are separate records (§15). Removing a product sold during an Appointment is allowed only
+while that Appointment has NOT received its money: `deleteAppointmentProduct(appointmentId, identity)`
+is refused once the stored Appointment is settled (`APPOINTMENT_SETTLED` — a final payment, or
+completed and fully covered by deposits) or when a matching Sale holds an adjustment
+(`SALE_HAS_ADJUSTMENT`). Appointment Details then shows the product rows as buttons that open their
+Sale (« Rendez-vous encaissé : touchez un produit pour le corriger ou le rembourser. »).
 
 From Appointment Details the professional removes a **displayed Product row** (§10b) — for
 example « Shampoo ×2 » — not a Sale. Deletion is a correction of an entry, not a refund flow:
@@ -357,9 +361,99 @@ never in the domain.
 
 ## 14. Non-Goals
 
-Not in this phase: pending orders, payment providers, card terminal, payment correction on
-a completed Sale, line-by-line Sale editing or deletion, deletion of a standalone (paid) Sale,
-refunds, returns, discounts, tax/VAT, receipts/invoices, accounting, revenue dashboard, loyalty,
-per-sale price editing, image snapshots. The read-only sale history exists (§11b); corrections
-and refunds follow the approved plan in `docs/product/SALE_ADJUSTMENTS_PLAN.md` and are not
-implemented yet.
+Not in this phase: pending orders, payment providers, card terminal, any automatic money transfer,
+line-by-line Sale editing or deletion, deletion of a standalone (paid) Sale, discounts, tax/VAT,
+receipts/invoices, credit notes, accounting closures, loyalty, per-sale price editing, image
+snapshots. Corrections and refunds exist as Sale adjustments (§15).
+
+---
+
+## 15. Corrections and Refunds (Sale Adjustments)
+
+Source: `src/domain/sales/adjustment.ts`; plan and decisions: `docs/product/SALE_ADJUSTMENTS_PLAN.md`.
+
+A completed Sale is NEVER rewritten or deleted. A correction or a refund is its own record, linked
+to the Sale, kept forever, synchronized as its own aggregate (`SALE_ADJUSTMENT`, CLOUD_SYNC.md §28):
+
+```text
+SaleAdjustment
+├── id                    UUID v4, created ONCE per presentation of the flow (a retry never duplicates)
+├── businessId, saleId
+├── kind                  REFUND | REVERSAL (a compensation of ONE settled refund)
+├── reversesAdjustmentId  REVERSAL only
+├── reason                REFUND: NOT_DELIVERED | WRONG_PRODUCT | WRONG_QUANTITY | RETURN
+│                         | CUSTOMER_REFUND | SALE_CANCELLED | OTHER
+│                         REVERSAL: RECORDED_IN_ERROR | REFUND_RETURNED (its meaning, mandatory)
+├── note?                 free text
+├── staffMemberId         the operator (features/appointments/current-staff-member.ts)
+├── items[]               saleItemId, productId, productName, unitPriceCents (COPIED from the line),
+│                         quantity >= 1, restock (the units physically went back to stock)
+├── refundCardCents, refundCashCents   integer cents >= 0, by the ACTUAL refund method(s)
+├── initialStatus         PENDING | SETTLED
+├── status                PENDING | SETTLED | VOIDED
+├── refundedAt?           when the money ACTUALLY left — its Cash Register day (present once SETTLED)
+├── settledAt?            when that was RECORDED in BeautIzzy (present once SETTLED)
+├── voidedAt?
+└── recordedAt            when the record was entered
+```
+
+**Lifecycle.** `PENDING → SETTLED` (final), `PENDING → VOIDED` (final). A SETTLED refund is never
+erased, edited or voided, and a refund that really happened never disappears economically. « Corriger
+ce remboursement… » asks what REALLY happened and records at most ONE `REVERSAL`:
+
+- « Je l’ai saisi par erreur : l’argent n’a jamais été rendu » → `RECORDED_IN_ERROR`: mirrors the
+  refund (same amounts, same methods) dated ON THE REFUND'S DAY (`refundedAt`), so that day's Caisse
+  reads what really happened; recorded now (`recordedAt`, `settledAt`); both records stay listed;
+- « L’argent du remboursement m’a été rendu depuis » → `REFUND_RETURNED`: a new receipt of the WHOLE
+  refunded amount on the day it came back (never before the refund, never in the future), by the
+  method(s) it actually came back with — chosen explicitly, never assumed from the refund;
+- « Le remboursement a bien eu lieu et reste acquis » → nothing is recorded.
+
+Either compensation takes the refund's restocked units back (the Sale counts them as sold again).
+The single exception to « never void » is a SETTLED record the REMOTE refused (an over-refund
+across two devices): it never became authoritative, and voiding it explicitly is how the conflict is
+resolved. The auditable history is derived from the instants: recorded (initial status) → settled →
+voided — at most one of each, so nothing is lost.
+
+**Money (integer cents, snapshots only).**
+
+- Refundable base: a direct Sale → the payment actually received (0 without one: a historical Sale
+  accepts unit / stock corrections, never money); a Sale sold during an Appointment → the exact
+  snapshot total of its lines, and only once that Appointment is SETTLED (before, it is removed from
+  the Appointment, §10).
+- Remaining = base − Σ effective refunds (PENDING and SETTLED, not VOIDED, not reversed). A new refund
+  never exceeds it. The method may differ from the original payment (paid by card, refunded in cash).
+- Refund method: NEVER deduced in silence. It is preselected only when the original money reliably
+  came by ONE method — the direct Sale's own payment; for a Revente, the Appointment's final payment
+  and its ACTIVE deposits — and the screen says so (« Payé à l’origine en espèces. Préselectionné :
+  vérifiez… »). Mixed or unknown origin: the professional must choose Carte, Espèces or Carte et
+  espèces (typing both parts) before the review. The original method never constrains the refund method.
+- Only a SETTLED record moves money, on `refundedAt`: a refund negatively, a reversal positively. A
+  PENDING refund moves nothing until it is marked as refunded. A record without money (units, stock)
+  is SETTLED at once and moves nothing.
+- BeautIzzy RECORDS refunds; it never transfers money, and every screen says so.
+
+**Units and stock.** Per Sale line, Σ units of the effective refunds ≤ sold quantity, so the same unit
+is never refunded or restocked twice. `restock` is a separate, explicit choice — a money refund never
+implies a return to stock. The correction screens start every line with `restock = false`, the full
+refund (« Rembourser intégralement », reason `SALE_CANCELLED`) included; only the professional's switch
+per line sets it. A restock gives the units back to the Product in the SAME transaction as
+the record; a Product no longer in the catalogue refuses a restock (`PRODUCT_MISSING`). Voiding a
+PENDING record or reversing a SETTLED one takes its restocked units back (refused, never clamped, when
+the stock no longer holds them; skipped for a Product deleted since).
+
+**Enforcement, layered.** Domain (`prepareSaleAdjustment`, `settleSaleAdjustment`, `voidSaleAdjustment`,
+`prepareSaleAdjustmentReversal`); the store re-reads the stored Sale, its adjustments and the
+Appointment settlement INSIDE its transaction and refuses a duplicate id; the remote enforces the same
+ceilings, the immutability and the reversal rule at its transaction boundary, serialised on the Sale
+row (CLOUD_SYNC.md §28). Remotely, a Sale that holds adjustments is FROZEN: any change or tombstone of it
+is answered `CONFLICT` — the refusal every app build, including those that predate adjustments,
+already understands.
+
+**Where it shows.** The Sale detail (« ••• » → « Actions de la vente », the list of records with their
+history), the sales history (a status per Sale, a swipe that reveals « Actions » — the same drawer;
+both read `getSaleActions`, which adds no rule of its own), the Cash Register
+(signed « Remboursement » entries on their day, « Remboursements produits » and « Net produits » in the
+Produits vendus card), the Client « Total dépensé » and Tops & tendances (settled money only, on its
+date — `docs/domain/CLIENTS.md`). A Sale sold during an Appointment keeps its Appointment payment
+untouched: the refund is the one separate movement.

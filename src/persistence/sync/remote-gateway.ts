@@ -165,6 +165,41 @@ export interface RemoteAppointmentDepositPayload {
   readonly recorded_at: string;
 }
 
+/** One affected line of a Sale adjustment, copied from the Sale snapshot. */
+export interface RemoteSaleAdjustmentItemPayload {
+  readonly id: string;
+  readonly position: number;
+  readonly sale_item_id: string;
+  readonly product_id: string;
+  readonly product_name: string;
+  readonly unit_price_cents: number;
+  readonly quantity: number;
+  readonly restock: boolean;
+}
+
+/**
+ * A correction or a refund of ONE Sale (CLOUD_SYNC.md §28): its own
+ * aggregate, never a child of the Sale. Integer cents; the status carries the
+ * lifecycle (never a tombstone).
+ */
+export interface RemoteSaleAdjustmentPayload {
+  readonly sale_id: string;
+  readonly kind: string;
+  readonly reverses_adjustment_id: string | null;
+  readonly reason: string;
+  readonly note: string | null;
+  readonly staff_member_id: string;
+  readonly refund_card_cents: number;
+  readonly refund_cash_cents: number;
+  readonly initial_status: string;
+  readonly status: string;
+  readonly refunded_at: string | null;
+  readonly settled_at: string | null;
+  readonly voided_at: string | null;
+  readonly recorded_at: string;
+  readonly items: readonly RemoteSaleAdjustmentItemPayload[];
+}
+
 export type RemoteAggregatePayload =
   | RemoteClientPayload
   | RemoteServicePayload
@@ -173,7 +208,8 @@ export type RemoteAggregatePayload =
   | RemoteSalePayload
   | RemoteCalendarBlockPayload
   | RemoteAppointmentDepositPayload
-  | RemoteServiceCategoryPayload;
+  | RemoteServiceCategoryPayload
+  | RemoteSaleAdjustmentPayload;
 
 /**
  * One aggregate as the remote holds it (V1D). `payload` is the same shape a
@@ -215,6 +251,13 @@ export interface RemoteBusinessSnapshot {
    * proof that it stores categories and the two Service fields (§27).
    */
   readonly serviceCatalogue: boolean;
+  /** Empty when the remote functions predate sale adjustments (no `sale_adjustments` key). */
+  readonly saleAdjustments: readonly RemotePulledAggregate<RemoteSaleAdjustmentPayload>[];
+  /**
+   * Whether the remote answered with the `sale_adjustments` family — the proof
+   * that it stores adjustments and enforces their ceilings (§28).
+   */
+  readonly saleAdjustmentsSupported: boolean;
 }
 
 export interface RemotePushRequest {
@@ -247,6 +290,13 @@ export type RemotePushResult =
       readonly expectedTotalCents: number;
       readonly activeDepositTotalCents: number;
     }
+  /**
+   * The write would break the refund ceilings or the immutability of a Sale
+   * adjustment (CLOUD_SYNC.md §28): more money or units than the Sale allows,
+   * a settled record changed, a second reversal. NOTHING was written. The
+   * device keeps its record, pending and shown as refused.
+   */
+  | { readonly status: 'ADJUSTMENT_CONFLICT'; readonly saleId: string | undefined; readonly reason: string }
   /**
    * The owner holds no verified Plus entitlement, so the server refused the
    * write (BeautIzzy Plus Phase 6.5C — a server behaviour to come; the client

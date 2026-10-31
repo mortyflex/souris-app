@@ -11,6 +11,16 @@
 // record, a Sale sold during an Appointment as paid with that Appointment, a
 // historical Sale without record as « Non renseigné ». Nothing is stored,
 // cached, recomputed from the catalog or edited here.
+//
+// Swipe (docs/design/DESIGN_OVERRIDES.md §48): a row of a Sale that offers
+// actions reveals « Actions » when swiped to the right — a reveal only:
+// tapping it opens the SAME « Actions de la vente » drawer as the Sale detail
+// « ••• » (one drawer for the whole list), whose choices open the existing
+// flows with their review and confirmation. No instruction sentence: the
+// persistent lavender grip on each such row and the shared one-time peek on
+// the first one (never under Reduce Motion) carry the gesture; VoiceOver users
+// get the same action on the row, and the Sale detail always shows it as the
+// « ••• » button.
 
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -19,7 +29,14 @@ import { FlatList, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getCashRegisterDayInterval, getCashRegisterMonthInterval } from '@/domain/cash-register';
-import { listSaleHistory, summarizeSaleHistory, type SaleHistoryEntry } from '@/domain/sales';
+import {
+  isEffectiveSaleRefund,
+  getSaleAdjustmentPosition,
+  getSaleAdjustments,
+  listSaleHistory,
+  summarizeSaleHistory,
+  type SaleHistoryEntry,
+} from '@/domain/sales';
 import {
   formatCashRegisterMonth,
   isSameLocalDay,
@@ -46,9 +63,12 @@ import {
 import { PushedScreenWatermark } from '@/shared/ui/ScreenWatermarkIcon';
 import { SectionCountChip, SectionHeader } from '@/shared/ui/SectionHeader';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
+import { SwipeActionRow, useSwipeActionHintTarget } from '@/shared/ui/SwipeActionRow';
 import { groupedListItemStyle } from '@/shared/ui/grouped-list';
 import { bottomClearance, foregroundSoft, gutter, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
+import { SaleActionsSheet } from '../adjustments/SaleActionsSheet';
+import { getSaleActions } from '../adjustments/sale-actions';
 import { useSaleSession } from '../session/SaleSessionProvider';
 import {
   SALE_HISTORY_EMPTY_COPY,
@@ -76,7 +96,7 @@ interface SalesHistoryScreenProps {
 
 export function SalesHistoryScreen({ initialPeriod = 'day', initialDate }: SalesHistoryScreenProps) {
   const router = useRouter();
-  const { sales } = useSaleSession();
+  const { sales, saleAdjustments, isAppointmentSettled } = useSaleSession();
   const { getClientById } = useClientSession();
   const [period, setPeriod] = useState<CashRegisterPeriod>(initialPeriod);
   const [selectedDay, setSelectedDay] = useState(() => startOfLocalDay(initialDate ?? new Date()));
@@ -97,6 +117,26 @@ export function SalesHistoryScreen({ initialPeriod = 'day', initialDate }: Sales
       : getResolvedClientDisplayName(getClientById(entry.sale.clientId));
   const openSale = (entry: SaleHistoryEntry) =>
     router.push({ pathname: '/sales/[saleId]', params: { saleId: entry.sale.id } });
+  // ONE drawer for the whole list: the Sale whose actions are shown.
+  const [actionsSale, setActionsSale] = useState<SaleHistoryEntry['sale']>();
+  const [actionsVisible, setActionsVisible] = useState(false);
+  const openActions = (entry: SaleHistoryEntry) => {
+    if (actionsVisible) return;
+    setActionsSale(entry.sale);
+    setActionsVisible(true);
+  };
+
+  // THE selection of the Sale detail « ••• »: a row is swipeable exactly when it offers actions.
+  const isAdjustable = (entry: SaleHistoryEntry) =>
+    getSaleActions({
+      sale: entry.sale,
+      adjustments: saleAdjustments,
+      appointmentSettled: entry.sale.appointmentId === undefined || isAppointmentSettled(entry.sale.appointmentId),
+    }).length > 0;
+  const statusOf = (entry: SaleHistoryEntry) => describeAdjustments(entry, saleAdjustments);
+  const adjustable = entries.filter(isAdjustable);
+  // ONE row per screen instance plays the peek: the first adjustable one present at mount.
+  const hintTarget = useSwipeActionHintTarget(adjustable[0]?.sale.id);
 
   const header = (
     <View style={styles.header}>
@@ -193,12 +233,34 @@ export function SalesHistoryScreen({ initialPeriod = 'day', initialDate }: Sales
         renderItem={({ item, index }) => (
           <View style={groupedListItemStyle(index, entries.length)}>
             {index > 0 && <GroupedSeparator inset={SALE_HISTORY_ROW_SEPARATOR_INSET} />}
-            <SaleHistoryRow
-              clientName={clientNameOf(item)}
-              entry={item}
-              onPress={() => openSale(item)}
-              period={period}
-            />
+            {adjustable.includes(item) ? (
+              <SwipeActionRow
+                actionIcon={{ ios: 'ellipsis.circle', android: 'more_horiz' }}
+                accessibilityActionLabel="Actions de la vente"
+                actionLabel="Actions"
+                actionTestID={`sale-history-actions-${item.sale.id}`}
+                hint={item.sale.id === hintTarget}
+                onAction={() => openActions(item)}
+                surfaceColor={semanticColors.surfaceElevated}
+                testID={`sale-history-swipe-${item.sale.id}`}
+              >
+                <SaleHistoryRow
+                  adjustmentStatus={statusOf(item)}
+                  clientName={clientNameOf(item)}
+                  entry={item}
+                  onPress={() => openSale(item)}
+                  period={period}
+                />
+              </SwipeActionRow>
+            ) : (
+              <SaleHistoryRow
+                adjustmentStatus={statusOf(item)}
+                clientName={clientNameOf(item)}
+                entry={item}
+                onPress={() => openSale(item)}
+                period={period}
+              />
+            )}
           </View>
         )}
         showsVerticalScrollIndicator={false}
@@ -216,8 +278,28 @@ export function SalesHistoryScreen({ initialPeriod = 'day', initialDate }: Sales
         today={startOfLocalDay(now)}
         visible={monthCalendarVisible}
       />
+
+      <SaleActionsSheet onClose={() => setActionsVisible(false)} sale={actionsSale} visible={actionsVisible} />
     </SafeAreaView>
   );
+}
+
+/** What the corrections of a Sale amount to, in a few words; undefined without any. */
+function describeAdjustments(
+  entry: SaleHistoryEntry,
+  allAdjustments: Parameters<typeof getSaleAdjustmentPosition>[1],
+): string | undefined {
+  const adjustments = getSaleAdjustments(allAdjustments, entry.sale.id).filter(
+    (adjustment) => adjustment.status !== 'VOIDED',
+  );
+  // Refunds neutralised by a reversal no longer count.
+  if (!adjustments.some((adjustment) => isEffectiveSaleRefund(adjustment, adjustments))) return undefined;
+  const position = getSaleAdjustmentPosition(entry.sale, allAdjustments);
+  if (position.pendingCents > 0) return 'Remboursement à effectuer';
+  if (position.settledCents > 0) {
+    return position.remainingCents === 0 ? 'Remboursée' : 'Remboursée en partie';
+  }
+  return 'Corrigée';
 }
 
 /** `Aucune unité` / `1 unité` / `12 unités` — spoken with the section header. */

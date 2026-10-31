@@ -267,7 +267,7 @@ describe('Cash Register derivation', () => {
 
       const entries = getCashRegisterDayEntries(sources, day);
 
-      expect(entries.map((entry) => (entry.kind === 'SALE' ? entry.sale.id : entry.appointment?.id))).toEqual([
+      expect(entries.map((entry) => (entry.kind === 'SALE' ? entry.sale.id : entry.kind === 'SALE_ADJUSTMENT' ? entry.adjustment.id : entry.appointment?.id))).toEqual([
         'morning',
         'late',
       ]);
@@ -501,7 +501,7 @@ describe('Cash Register — distinct paying clients', () => {
     };
 
     const entries = getCashRegisterDayEntries(sources, day);
-    const clientOf = (id: string) => getCashRegisterEntryClientId(entries.find((entry) => (entry.kind === 'SALE' ? entry.sale.id : entry.kind === 'DEPOSIT' ? entry.deposit.id : entry.appointment.id) === id)!);
+    const clientOf = (id: string) => getCashRegisterEntryClientId(entries.find((entry) => (entry.kind === 'SALE' ? entry.sale.id : entry.kind === 'DEPOSIT' ? entry.deposit.id : entry.kind === 'SALE_ADJUSTMENT' ? entry.adjustment.id : entry.appointment.id) === id)!);
 
     expect(clientOf('a')).toBe('client-a');
     expect(clientOf('s')).toBe('client-s');

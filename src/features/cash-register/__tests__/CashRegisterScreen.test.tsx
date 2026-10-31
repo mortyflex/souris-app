@@ -12,7 +12,7 @@ import {
 } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { haptics } from '@/shared/lib/haptics';
-import { formatEuroCents } from '@/shared/lib/money';
+import { formatEuroCents, formatSignedEuroCents } from '@/shared/lib/money';
 import { formatNavigatorDate } from '@/shared/ui/DateNavigator';
 import { glassIconButtonSize } from '@/shared/ui/GlassIconButton';
 import { statePillTones } from '@/shared/ui/StatePill';
@@ -58,7 +58,7 @@ function CheckoutProbe() {
   const { checkoutAppointment, recordAppointmentDeposit, updateAppointmentPayment, voidAppointmentDeposit } =
     useAppointmentSession();
   const { setProductStock } = useProductCatalog();
-  const { completeSale } = useSaleSession();
+  const { completeSale, recordSaleAdjustment } = useSaleSession();
   const sell = (id: string, appointmentId?: string, payment?: { cardAmountCents: number; cashAmountCents: number }) =>
     completeSale({
       id,
@@ -105,6 +105,20 @@ function CheckoutProbe() {
         }
       />
       <Pressable testID="sell-linked-sofia" onPress={() => sell('sale-linked-sofia', 'agenda-sofia')} />
+      <Pressable
+        testID="refund-standalone-card"
+        onPress={() =>
+          recordSaleAdjustment('sale-standalone-card', {
+            id: 'refund-1',
+            reason: 'WRONG_PRODUCT',
+            lines: [{ saleItemId: 'sale-standalone-card-1', quantity: 1, restock: true }],
+            refundCardCents: 0,
+            refundCashCents: 5000,
+            settlement: 'SETTLED',
+            refundedAt: new Date(),
+          })
+        }
+      />
       <Pressable testID="sell-linked-lea" onPress={() => sell('sale-linked-lea', 'agenda-lea')} />
       <Pressable
         testID="checkout-sofia"
@@ -1072,6 +1086,40 @@ describe('CashRegisterScreen', () => {
       });
       // The totals are exactly what they were: the history changes nothing here.
       expect(totals(view)).toMatchObject({ total: formatEuroCents(5000), count: '1 encaissement' });
+    });
+
+    it('a product refund counts NEGATIVELY on the day it happened, by its own method, opening its Sale — the sale day is unchanged', async () => {
+      const view = await renderCashRegister();
+      await press(view, 'stock-products');
+      // Sold yesterday by card (50 €), refunded today in cash.
+      jest.setSystemTime(new Date(2026, 7, 28, 11, 0));
+      await press(view, 'sell-standalone-card');
+      jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
+      await press(view, 'refund-standalone-card');
+
+      expect(totals(view)).toMatchObject({
+        total: formatEuroCents(-5000),
+        card: formatEuroCents(0),
+        cash: formatEuroCents(-5000),
+        count: 'Aucun encaissement',
+        clients: 'Aucun client',
+      });
+      const row = view.getByTestId('cash-register-entry-refund-1');
+      expect(within(row).getByText(/^Remboursement · /)).toBeTruthy();
+      expect(view.getByTestId('cash-register-entry-amount-refund-1').props.children).toBe(formatSignedEuroCents(-5000));
+      expect(within(row).getByText('Espèces')).toBeTruthy();
+      await press(view, 'cash-register-entry-refund-1');
+      expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/sales/[saleId]', params: { saleId: 'sale-standalone-card' } });
+      expect(view.getByTestId('cash-register-products-refunds-value').props.children).toBe(formatSignedEuroCents(-5000));
+
+      // Yesterday still reads the 50 € received.
+      await press(view, 'cash-register-previous');
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(5000), count: '1 encaissement' });
+      // The month nets to zero.
+      await act(async () => {
+        fireEvent.press(view.getByLabelText('Mois'));
+      });
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: '1 encaissement' });
     });
 
     it('Mois compares the month to date with the same elapsed span of the previous month, written and spoken', async () => {

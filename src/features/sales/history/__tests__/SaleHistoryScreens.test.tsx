@@ -1,6 +1,6 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { Pressable } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import type { Appointment } from '@/domain/appointments';
 import type { Product } from '@/domain/products';
@@ -40,6 +40,14 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+
+jest.mock('react-native-reanimated', () =>
+  jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'),
+);
+
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () =>
+  jest.requireActual('@/shared/ui/testing/mock-reanimated-swipeable'),
+);
 
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
@@ -217,8 +225,9 @@ describe('Sale history screens', () => {
 
       // The walk-in Sale names nobody.
       expect(within(view.getByTestId('sale-history-row-sale-walk-in')).getByText(WALK_IN_SALE_LABEL)).toBeTruthy();
-      // Nothing is editable here.
-      expect(view.queryByText(/Rembourser|Modifier|Supprimer/)).toBeNull();
+      // A Sale is never edited or deleted here; an adjustable one only reveals « Rembourser » on swipe.
+      expect(view.queryByText(/Modifier|Supprimer/)).toBeNull();
+      expect(view.getByTestId('sale-history-actions-sale-direct')).toBeTruthy();
     });
 
     it('navigates days and months with the Caisse controls, and says when a period sold nothing', async () => {
@@ -305,11 +314,23 @@ describe('Sale history screens', () => {
       expect(view.getByTestId('sale-detail-products-count').props.children).toBe(5);
 
       expect(within(view.getByTestId('sale-detail-payment-total')).getByText(formatEuroCents(3687))).toBeTruthy();
+      expect(view.getByTestId('sale-detail-payment-total').props.accessibilityLabel).toBe(`Total reçu, ${formatEuroCents(3687)}`);
+      // Mixed payment: TWO pills, card first — glyph + amount on screen, each spoken « method, amount ».
+      const pills = within(view.getByTestId('sale-detail-payment-methods'));
+      expect(pills.getByTestId('sale-detail-payment-card').props.accessibilityLabel).toBe(`Carte, ${formatEuroCents(1000)}`);
+      expect(pills.getByTestId('sale-detail-payment-cash').props.accessibilityLabel).toBe(`Espèces, ${formatEuroCents(2687)}`);
       expect(within(view.getByTestId('sale-detail-payment-card')).getByText(formatEuroCents(1000))).toBeTruthy();
       expect(within(view.getByTestId('sale-detail-payment-cash')).getByText(formatEuroCents(2687))).toBeTruthy();
+      // The method is never written, only drawn and spoken.
+      expect(view.queryByText(/^(Carte|Espèces)$/)).toBeNull();
+      // Glyph + amount only: the amount is the one text of each pill, and the pills wrap on a narrow phone.
+      expect(within(view.getByTestId('sale-detail-payment-card')).getAllByText(/./)).toHaveLength(1);
+      expect(StyleSheet.flatten(view.getByTestId('sale-detail-payment-methods').props.style)).toMatchObject({ flexWrap: 'wrap' });
       // Paid the day it was validated: no separate payment day.
       expect(view.queryByTestId('sale-detail-payment-day')).toBeNull();
-      expect(view.queryByText(/Rembourser|Modifier|Supprimer/)).toBeNull();
+      // The Sale itself is never edited or deleted; corrections are separate records.
+      expect(view.queryByText(/Modifier|Supprimer/)).toBeNull();
+      expect(view.getByTestId('open-sale-actions').props.accessibilityLabel).toBe('Actions de la vente');
 
       await press(view, 'sale-detail-client-row');
       expect(mockPush).toHaveBeenCalledWith({ pathname: '/clients/[clientId]', params: { clientId: client.id } });
@@ -345,6 +366,8 @@ describe('Sale history screens', () => {
       expect(view.getByTestId('sale-detail-channel').props.children).toBe('VENDUE PENDANT UN RENDEZ-VOUS');
       expect(view.getByText(SALE_PAID_WITH_APPOINTMENT_NOTE)).toBeTruthy();
       expect(view.queryByTestId('sale-detail-payment-total')).toBeNull();
+      // The money is the Appointment's: no pill is invented.
+      expect(view.queryByTestId('sale-detail-payment-methods')).toBeNull();
       expect(view.queryByText(/Carte|Espèces/)).toBeNull();
 
       await press(view, 'sale-detail-open-appointment');
@@ -370,6 +393,7 @@ describe('Sale history screens', () => {
         </>,
       );
       expect(view.getByText(SALE_PAYMENT_UNKNOWN_NOTE)).toBeTruthy();
+      expect(view.queryByTestId('sale-detail-payment-methods')).toBeNull();
       expect(view.queryByText(/Carte|Espèces/)).toBeNull();
       expect(view.getByTestId('sale-detail-total').props.children).toBe(formatEuroCents(1800));
     });
@@ -379,7 +403,10 @@ describe('Sale history screens', () => {
 
       expect(view.getByTestId('sale-detail-client-name').props.children).toBe(WALK_IN_SALE_LABEL);
       expect(view.getByTestId('sale-detail-client-row').props.accessibilityRole).toBeUndefined();
+      // Card only: ONE pill.
       expect(within(view.getByTestId('sale-detail-payment-card')).getByText(formatEuroCents(29))).toBeTruthy();
+      expect(view.getByTestId('sale-detail-payment-card').props.accessibilityLabel).toBe(`Carte, ${formatEuroCents(29)}`);
+      expect(view.queryByText('Carte')).toBeNull();
       expect(view.queryByTestId('sale-detail-payment-cash')).toBeNull();
     });
 

@@ -19,6 +19,8 @@ import {
   getAppointmentDeposits,
   getAppointmentExpectedTotal,
   getAppointmentProductLines,
+  isSameProductSnapshot,
+  toAppointmentProductIdentity,
   getOrderedItems,
   isAppointmentSettled,
   markAppointmentNoShow,
@@ -131,6 +133,8 @@ function getInitialSwipeHintTarget(
   if (canEditAppointment(appointment) && canRemoveAppointmentItem(items.length) && items[0]) {
     return `service:${items[0].id}`;
   }
+  // A product of a checked-out Appointment is opened, never swiped away.
+  if (appointment.payment !== undefined) return undefined;
   const firstLine = getAppointmentProductLines(sales, appointment.id)[0];
   return firstLine ? `product:${firstLine.key}` : undefined;
 }
@@ -473,6 +477,19 @@ export function AppointmentDetailsScreen({
     return persist(() => deleteAppointmentProduct(appointment.id, line));
   };
 
+  // Settled: the latest Sale holding this Product snapshot opens, where the
+  // professional corrects or refunds it traceably (docs/domain/SALES.md §15).
+  const openProductSale = (line: AppointmentProductLine) => {
+    const sale = [...sales]
+      .filter(
+        (candidate) =>
+          candidate.appointmentId === appointment.id &&
+          candidate.items.some((item) => isSameProductSnapshot(toAppointmentProductIdentity(item), line)),
+      )
+      .sort((a, b) => b.completedAt.getTime() - a.completedAt.getTime())[0];
+    if (sale) router.push({ pathname: "/sales/[saleId]", params: { saleId: sale.id } });
+  };
+
   // « Prendre un acompte »: ONE transaction re-verifies the stored
   // Appointment; one success haptic once it is committed.
   const recordDeposit = (submission: AppointmentDepositSubmission): boolean => {
@@ -657,6 +674,7 @@ export function AppointmentDetailsScreen({
           }
           lines={productLines}
           onDeleteLine={deleteProductLine}
+          onOpenLine={settled ? openProductSale : undefined}
         />
 
         <AppointmentDepositsSection

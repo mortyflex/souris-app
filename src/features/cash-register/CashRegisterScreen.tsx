@@ -63,6 +63,9 @@ import {
   getCashRegisterMonthEntries,
   getCashRegisterMonthInsights,
   getCashRegisterMonthSummary,
+  getCashRegisterDayInterval,
+  getCashRegisterMonthInterval,
+  getCashRegisterRefundSummary,
   type CashRegisterEntry,
   type CashRegisterSummary,
 } from "@/domain/cash-register";
@@ -159,7 +162,7 @@ const EMPTY_SUPPORTING_COPY = "Les paiements encaissés apparaîtront ici.";
 export function CashRegisterScreen() {
   const router = useRouter();
   const { appointments, deposits } = useAppointmentSession();
-  const { sales } = useSaleSession();
+  const { sales, saleAdjustments } = useSaleSession();
   const { getClientById } = useClientSession();
   const [period, setPeriod] = useState<CashRegisterPeriod>("day");
   const [selectedDay, setSelectedDay] = useState(() =>
@@ -207,8 +210,9 @@ export function CashRegisterScreen() {
       appointments: appointments.map(({ appointment }) => appointment),
       sales,
       deposits,
+      saleAdjustments,
     }),
-    [appointments, sales, deposits],
+    [appointments, sales, deposits, saleAdjustments],
   );
   // ONE pass over the counted payments per data change, never a query per day.
   const dailyTotals = useMemo(() => getCashRegisterDailyTotals(sources), [sources]);
@@ -245,6 +249,11 @@ export function CashRegisterScreen() {
   const products =
     monthInsights?.products ??
     getCashRegisterDayProductSummary(sources, selectedDay);
+  // Product refunds settled in the period, on their real refund day.
+  const refunds = getCashRegisterRefundSummary(
+    sources,
+    period === "day" ? getCashRegisterDayInterval(selectedDay) : getCashRegisterMonthInterval(selectedMonth),
+  );
   const cashTrend = monthInsights?.cashTrend;
   const cashYearTrend = monthInsights?.cashYearTrend;
   const cashTrendDisplay = useCashRegisterTrendDisplay("cents", [
@@ -282,9 +291,9 @@ export function CashRegisterScreen() {
   // An Appointment checkout and a deposit open their Appointment Details; a
   // standalone Sale opens its read-only detail.
   const openEntry = (entry: CashRegisterEntry) => {
-    if (entry.kind === "SALE") {
-      return () =>
-        router.push({ pathname: "/sales/[saleId]", params: { saleId: entry.sale.id } });
+    if (entry.kind === "SALE" || entry.kind === "SALE_ADJUSTMENT") {
+      const saleId = entry.kind === "SALE" ? entry.sale.id : entry.adjustment.saleId;
+      return () => router.push({ pathname: "/sales/[saleId]", params: { saleId } });
     }
     const appointmentId = entry.appointment?.id;
     return appointmentId === undefined
@@ -456,6 +465,7 @@ export function CashRegisterScreen() {
 
         <CashRegisterProductsCard
           onOpenSales={openSales}
+          refunds={refunds}
           summary={products}
           testID="cash-register-products"
           unitTrend={monthInsights?.productUnitTrend}

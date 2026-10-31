@@ -1186,6 +1186,48 @@ Staging validation (project `iteufklnrsmazzvmzqxa`) needs, in this order:
 Production activation remains FORBIDDEN until `docs/architecture/SUBSCRIPTIONS.md` §12 holds in
 full.
 
+## Sale adjustments (corrections and refunds) — NOT applied
+
+`20261011120000_create_sale_adjustments.sql` creates `public.sale_adjustments` (aggregate
+`SALE_ADJUSTMENT`) and `public.sale_adjustment_items`, three read-only helper functions
+(`sync_sale_adjustment_transition_allowed`, `sync_sale_refundable_base_cents`,
+`sync_sale_adjustment_breach`) and replaces the three sync RPCs in place (count, push, pull). The push
+keeps every stored adjustment immutable but for its forward status, serialises Sale / adjustment
+writes on the Sale row, and answers `ADJUSTMENT_CONFLICT` — nothing written — when a write would give
+back more money or units than a Sale allows, reverse a refund twice, or tombstone a Sale that holds an
+adjustment. Additive: no existing row is rewritten, no `sync_version` moves. Safe to re-run.
+Background: `docs/architecture/CLOUD_SYNC.md` §28, `docs/domain/SALES.md` §15.
+
+Verified against an in-process Postgres (PGlite 0.2.17, strict role stub, every migration in order,
+populated through the PREVIOUS functions, then applied twice): 49 checks — nothing existing rewritten,
+RLS / policies / grants (items select + insert only, no delete anywhere), the pull family, ceilings to
+the cent (direct payment, Revente snapshot total), units, immutability and forward transitions,
+reversal rules and the one-reversal index, a VOIDED resolution insert, the Sale guarded (payment
+lowered, tombstone, hard delete), a missing Sale (23503), ownership, RLS isolation, the entitlement
+switch, the count — 62 checks since the hardening: a Sale holding adjustments is FROZEN and every
+change or tombstone of it is answered `CONFLICT` (a status the Production build in daily use already
+parses: it keeps that entry pending and goes on), old-build pushes unaffected, and both compensation
+meanings with their date / method rules. NOT verifiable in PGlite (single connection): two truly
+parallel transactions on the Sale-row lock — Staging with two devices covers it.
+
+### Rollout order (Staging first, Production only after the Staging validation)
+
+```text
+ 1. Staging: apply 20261011120000_create_sale_adjustments.sql by hand, then:
+      select relrowsecurity from pg_class
+        where oid in ('public.sale_adjustments'::regclass, 'public.sale_adjustment_items'::regclass);  -- true, true
+      select tablename, cmd from pg_policies
+        where tablename in ('sale_adjustments', 'sale_adjustment_items') order by 1, 2;
+                      -- items: INSERT, SELECT · adjustments: INSERT, SELECT, UPDATE
+      select count(*) from public.sale_adjustments;                                                     -- 0
+ 2. Staging: the validation of docs/product/SALE_ADJUSTMENTS_PLAN.md §6 (two devices).
+ 3. Production: apply the same migration by hand, run the step 1 checks against Production.
+ 4. Only then ship the build to TestFlight / the App Store.
+```
+
+Shipping the build first loses nothing — adjustments wait on the device as `REMOTE_SCHEMA_PENDING` —
+but they reach neither the cloud nor another device until the migration. Never apply it automatically.
+
 ## Service categories and descriptions (multi-profession Step 3) — NOT applied
 
 `20261010120000_add_service_categories_and_descriptions.sql` adds two nullable columns to

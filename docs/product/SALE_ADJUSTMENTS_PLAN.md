@@ -1,6 +1,7 @@
 # BeautIzzy — Product Sale Corrections and Refunds: Implementation Plan
 
-Status: **approved architecture, milestone 1 implemented, milestones 2+ NOT implemented.**
+Status: **milestones 1 and 2 implemented in the app (October 2026); the Supabase migration is
+PREPARED, NOT APPLIED. Not Production-ready before the Staging validation (§6) and real-device checks.**
 
 Origin (October 2026, P0): a professional charged a customer for a wrong retail product on a PAID
 direct Sale. The Cash Register offered no way to inspect that Sale, no way to correct it and no way
@@ -123,16 +124,49 @@ an adjustment. `updateAppointmentPayment` keeps its bounds but records an append
 - **Rollback**: server — keep the previous RPC bodies; dropping the tables loses adjustments, so only
   before any entry. SQLite — forward-only, no down migration (project rule).
 
+### 3.1 As implemented (milestone 2) — deviations from the target above
+
+- **Transitions are derived, not stored as a child list.** The lifecycle allows at most ONE of each
+  transition (recorded → settled → voided), so the instants `recordedAt`, `settledAt`, `voidedAt` (plus
+  `initialStatus`) ARE the complete auditable history (`getSaleAdjustmentHistory`). No third table.
+- **Operator.** `staffMemberId` on the record (single professional today); not repeated per transition.
+- **One exception to « never void a SETTLED record »:** a record the REMOTE refused and never
+  acknowledged (an over-refund across two devices) may be voided explicitly — it never became
+  authoritative, and that void is how the conflict is resolved. Anything else settled is compensated.
+- **Compensations have an explicit meaning** (hardening, October 2026): « saisie erronée »
+  (`RECORDED_IN_ERROR`, mirrored on the refund's own day) or « argent rendu » (`REFUND_RETURNED`, the
+  whole amount on the day it came back, by the method chosen). « Annuler ce remboursement » no longer
+  exists; a refund actually paid never disappears.
+- **Refund method never deduced in silence**: preselected only from a single reliable original method
+  (direct payment; Appointment payment + ACTIVE deposits for a Revente), to be chosen otherwise.
+- **Older builds**: a Sale holding adjustments is FROZEN remotely and any change of it is answered
+  `CONFLICT`, a status every build parses; the Production build keeps that entry pending and goes on.
+- **Corrections without money** (units / stock only) are SETTLED at once and move no money.
+- **Historical direct Sales without a payment** accept unit / stock corrections, never money.
+- **Revente** is refundable once its Appointment is settled (final payment, or completed and fully
+  covered by deposits); before that it is removed from the Appointment as before. After that, removal is
+  refused (`APPOINTMENT_SETTLED`) and Details opens the Sale instead.
+- **Swipe.** A reveal-only `SwipeActionRow` on the sales history (never on a delete gesture); the
+  Appointment Details products of a settled Appointment are buttons, not swipeable.
+- **Server.** Ceilings, units, immutability and the reversal rule are enforced by `sync_push_aggregate`
+  under a Sale-row lock; refusals answer `ADJUSTMENT_CONFLICT`; the client defers every adjustment until
+  a pull proves the migration (`REMOTE_SCHEMA_PENDING`).
+
 ## 5. Milestones
 
 1. **Read-only sale history** (DONE, October 2026): « Produits vendus » card → history on the Caisse
    period; « Vente » entries → Sale detail; channel and payment record shown as stored; nothing
    financial changes. `docs/domain/SALES.md` §11b.
-2. **Domain + local store + Caisse**: `SaleAdjustment` rules and tests; SQLite v18; the refund sheet
+2. **DONE (app side), October 2026 — milestones 2 and 3 together** (`docs/domain/SALES.md` §15,
+   `CLOUD_SYNC.md` §28): domain, SQLite v18, store, session, correction flow, Sale detail records,
+   history swipe, Caisse, spending and Insights, the SALE_ADJUSTMENT sync with deferral and conflicts,
+   and the Supabase migration PREPARED and verified in PGlite (49 checks) — NOT applied anywhere.
+   Originally planned as: **Domain + local store + Caisse**: `SaleAdjustment` rules and tests; SQLite v18; the refund sheet
    from the Sale detail (line, quantity, restock, amount, method, « Remboursé maintenant » /
    « À rembourser »); PENDING → SETTLED and VOID actions with transitions; Caisse net totals, `REFUND`
    entries, card figures; spending and Insights. Feature-flagged OFF until milestone 3 is applied.
-3. **Sync**: Supabase migration + harness; aggregate payload, remote-apply, restore, pull family,
+3. **Remaining for release**: apply the migration on Staging by hand, run §6, real-device checks,
+   then Production by hand before shipping the build. Originally planned as **Sync**: Supabase migration + harness; aggregate payload, remote-apply, restore, pull family,
    push deferral, server-side ceiling; conflict surfaces. Staging validation (two devices, offline
    retries, restore). Then enable the sheet.
 4. **Appointment payment auditability**: append-only revision trace for « Modifier l’encaissement »;

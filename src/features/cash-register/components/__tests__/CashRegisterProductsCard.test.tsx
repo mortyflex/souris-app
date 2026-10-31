@@ -7,12 +7,15 @@ import {
   type CashRegisterProductSummary,
 } from '@/domain/cash-register';
 import { haptics } from '@/shared/lib/haptics';
-import { formatEuroCents } from '@/shared/lib/money';
+import { formatEuroCents, formatSignedEuroCents } from '@/shared/lib/money';
 import { statePillTones } from '@/shared/ui/StatePill';
 
 import {
   CashRegisterProductsCard,
+  describeAppointmentRefunds,
   DIRECT_SALES_LABEL,
+  NET_LABEL,
+  REFUNDS_LABEL,
   OPEN_SALES_HINT,
   OPEN_SALES_LABEL,
   REVENTE_NOTE,
@@ -240,5 +243,43 @@ describe('CashRegisterProductsCard « Voir les ventes »', () => {
     expect(onOpenSales).toHaveBeenCalledTimes(1);
 
     expect(view.queryByTestId('summary-only-open')).toBeNull();
+  });
+});
+
+describe('CashRegisterProductsCard refunds', () => {
+  it('says what was given back and the net, and names the Revente share apart', async () => {
+    const view = await render(
+      <CashRegisterProductsCard
+        refunds={{ refundCents: 4300, refundCardCents: 1800, refundCashCents: 2500, appointmentRefundCents: 2500, grossCents: 0, count: 2 }}
+        summary={summary}
+        testID="products"
+      />,
+    );
+    expect(view.getByText(REFUNDS_LABEL)).toBeTruthy();
+    expect(view.getByTestId('products-refunds-value').props.children).toBe(formatSignedEuroCents(-4300));
+    expect(view.getByTestId('products-net-value').props.children).toBe(formatEuroCents(12_600 - 4300));
+    expect(view.getByTestId('products-refunds-note').props.children).toBe(describeAppointmentRefunds(2500));
+    expect(view.getByTestId('products-refunds').props.accessibilityLabel).toContain(`${NET_LABEL} : ${formatEuroCents(8300)}`);
+  });
+
+  it('stays visible for a period that only refunded, and says nothing about refunds otherwise', async () => {
+    const empty = { unitCount: 0, standaloneUnitCount: 0, appointmentUnitCount: 0, standaloneCollectedCents: 0 };
+    const view = await render(
+      <>
+        <CashRegisterProductsCard
+          refunds={{ refundCents: 1800, refundCardCents: 1800, refundCashCents: 0, appointmentRefundCents: 0, grossCents: 0, count: 1 }}
+          summary={empty}
+          testID="refund-only"
+        />
+        <CashRegisterProductsCard
+          refunds={{ refundCents: 0, refundCardCents: 0, refundCashCents: 0, appointmentRefundCents: 0, grossCents: 0, count: 0 }}
+          summary={summary}
+          testID="no-refund"
+        />
+      </>,
+    );
+    expect(view.getByTestId('refund-only-refunds-value').props.children).toBe(formatSignedEuroCents(-1800));
+    expect(view.queryByTestId('refund-only-refunds-note')).toBeNull();
+    expect(view.queryByTestId('no-refund-refunds')).toBeNull();
   });
 });

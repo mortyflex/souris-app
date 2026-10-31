@@ -35,6 +35,7 @@ import { canDeleteClientPermanently } from '@/domain/clients';
 import type { SourisDatabase } from '../database';
 import { countAppointmentReferences } from '../stores/appointments';
 import { countClientReferences } from '../stores/clients';
+import { countSaleAdjustments } from '../stores/sale-adjustments';
 import { toSqlBoolean } from '../values';
 
 import type { SyncAggregateRef } from './aggregate';
@@ -46,6 +47,7 @@ import type {
   RemoteClientPayload,
   RemotePhasePayload,
   RemoteProductPayload,
+  RemoteSaleAdjustmentPayload,
   RemoteSalePayload,
   RemoteServiceCategoryPayload,
   RemoteServicePayload,
@@ -368,6 +370,70 @@ function applyAppointmentDeposit(
 }
 
 /**
+ * A Sale adjustment written by another device. Rows only: the stock it
+ * restored travels with that device's PRODUCT aggregate, so applying it here
+ * never moves stock — the same units are never restored twice.
+ */
+function applySaleAdjustment(
+  db: SourisDatabase,
+  businessId: string,
+  ref: SyncAggregateRef,
+  adjustment: RemoteSaleAdjustmentPayload,
+): void {
+  if (!exists(db, 'sales', adjustment.sale_id)) {
+    throw new RemoteReferenceMissingError(ref, 'sale_id');
+  }
+  const params = [
+    adjustment.sale_id,
+    adjustment.kind,
+    adjustment.reverses_adjustment_id,
+    adjustment.reason,
+    adjustment.note,
+    adjustment.staff_member_id,
+    adjustment.refund_card_cents,
+    adjustment.refund_cash_cents,
+    adjustment.initial_status,
+    adjustment.status,
+    adjustment.refunded_at,
+    adjustment.settled_at,
+    adjustment.voided_at,
+    adjustment.recorded_at,
+  ];
+  if (
+    !updateScoped(
+      db,
+      businessId,
+      ref,
+      'sale_adjustments',
+      'sale_id = ?, kind = ?, reverses_adjustment_id = ?, reason = ?, note = ?, staff_member_id = ?, refund_card_cents = ?, refund_cash_cents = ?, initial_status = ?, status = ?, refunded_at = ?, settled_at = ?, voided_at = ?, recorded_at = ?',
+      params,
+    )
+  ) {
+    db.runSync(
+      'INSERT INTO sale_adjustments (sale_id, kind, reverses_adjustment_id, reason, note, staff_member_id, refund_card_cents, refund_cash_cents, initial_status, status, refunded_at, settled_at, voided_at, recorded_at, id, business_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [...params, ref.aggregateId, businessId],
+    );
+  }
+  db.runSync('DELETE FROM sale_adjustment_items WHERE adjustment_id = ?', [ref.aggregateId]);
+  for (const item of adjustment.items) {
+    db.runSync(
+      'INSERT INTO sale_adjustment_items (adjustment_id, id, position, sale_item_id, product_id, product_name, unit_price_cents, quantity, restock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        ref.aggregateId,
+        item.id,
+        item.position,
+        item.sale_item_id,
+        item.product_id,
+        item.product_name,
+        item.unit_price_cents,
+        item.quantity,
+        toSqlBoolean(item.restock),
+      ],
+    );
+  }
+}
+
+/**
  * Writes one LIVE remote aggregate (row + complete child set). Call inside
  * the caller's transaction. Throws for a tombstone (no payload), a missing
  * reference, or a local row scoped to another Business — nothing is then
@@ -395,6 +461,8 @@ export function applyRemoteAggregate(db: SourisDatabase, businessId: string, ent
       return applyAppointmentDeposit(db, businessId, ref, entry.aggregate.payload);
     case 'SERVICE_CATEGORY':
       return applyServiceCategory(db, businessId, ref, entry.aggregate.payload);
+    case 'SALE_ADJUSTMENT':
+      return applySaleAdjustment(db, businessId, ref, entry.aggregate.payload);
   }
 }
 
@@ -417,6 +485,9 @@ const PARENT_TABLE = {
   // A removed category leaves its Services' references dangling — they read as
   // uncategorized; the deleting device pushes those Services detached anyway.
   SERVICE_CATEGORY: 'service_categories',
+  // Never tombstoned by BeautIzzy (a correction is a status or a new record);
+  // an administrator's tombstone removes the local row, its lines cascade.
+  SALE_ADJUSTMENT: 'sale_adjustments',
 } as const;
 
 /**
@@ -438,6 +509,10 @@ export function applyRemoteTombstone(db: SourisDatabase, ref: SyncAggregateRef):
     ref.aggregateType === 'APPOINTMENT' &&
     !canDeleteAppointmentPermanently(countAppointmentReferences(db, ref.aggregateId))
   ) {
+    return 'BLOCKED';
+  }
+  // A Sale corrected or refunded is financial history: never removed under its adjustments.
+  if (ref.aggregateType === 'SALE' && countSaleAdjustments(db, ref.aggregateId) > 0) {
     return 'BLOCKED';
   }
   db.runSync(`DELETE FROM ${table} WHERE id = ?`, [ref.aggregateId]);

@@ -18,6 +18,8 @@ import PlaygroundDemoCashRegisterRoute from '@/app/(auth)/(demo)/cash-register/i
 import PlaygroundDemoProductRoute from '@/app/(auth)/(demo)/products/[productId]';
 import PlaygroundDemoNewProductRoute from '@/app/(auth)/(demo)/products/new';
 import PlaygroundDemoSaleDetailRoute from '@/app/(auth)/(demo)/sales/[saleId]';
+import PlaygroundDemoSaleAdjustmentRoute from '@/app/(auth)/(demo)/sales/adjust/[saleId]';
+import PlaygroundDemoRefundCorrectionRoute from '@/app/(auth)/(demo)/sales/refund/[adjustmentId]';
 import PlaygroundDemoSalesHistoryRoute from '@/app/(auth)/(demo)/sales/index';
 import PlaygroundDemoSaleRoute from '@/app/(auth)/(demo)/sales/new';
 
@@ -69,6 +71,9 @@ jest.mock('@/shared/lib/image-pixel-size', () => ({ fitImageToPixelSize: jest.fn
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
 jest.mock('expo-media-library', () => ({ requestPermissionsAsync: jest.fn(), Asset: { create: jest.fn() } }));
 jest.mock('react-native-reanimated', () => jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'));
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () =>
+  jest.requireActual('@/shared/ui/testing/mock-reanimated-swipeable'),
+);
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
@@ -157,6 +162,10 @@ describe('Playground demo routes', () => {
     // The Caisse sale history and detail (read-only) follow the Caisse into the demo.
     expect(PlaygroundDemoSalesHistoryRoute.toString()).toContain('SalesHistoryScreen');
     expect(PlaygroundDemoSaleDetailRoute.toString()).toContain('SaleDetailScreen');
+    // The correction flows the shared « Actions de la vente » drawer opens exist in the demo too,
+    // on its in-memory database — never a real account.
+    expect(PlaygroundDemoSaleAdjustmentRoute.toString()).toContain('SaleAdjustmentScreen');
+    expect(PlaygroundDemoRefundCorrectionRoute.toString()).toContain('SaleRefundCorrectionScreen');
     expect(PlaygroundDemoAccueilRoute.toString()).toContain('HomeScreen');
     expect(PlaygroundDemoCashRegisterRoute.toString()).toContain('CashRegisterScreen');
   });

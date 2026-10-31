@@ -715,6 +715,136 @@ INSERT INTO souris_metadata (key, value) VALUES ('sync_service_catalogue_refresh
   ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 `;
 
+/**
+ * Schema v18 — Sale adjustments: corrections and refunds of completed Sales
+ * (docs/domain/SALES.md §15, docs/product/SALE_ADJUSTMENTS_PLAN.md).
+ *
+ * 1. `sale_adjustments` and `sale_adjustment_items` — two NEW tables, created
+ *    empty. A completed Sale is never rewritten: a correction or a refund is
+ *    its own record, linked to its Sale by `sale_id` (plain reference, NO
+ *    foreign key — the Sale store refuses to remove a Sale that holds one),
+ *    with its affected lines COPIED from the Sale snapshot. Integer cents
+ *    only. The CHECKs mirror the domain shape: the kind / status / reason
+ *    vocabularies, a REVERSAL names the refund it neutralises (at most one
+ *    reversal per refund), `voided_at` exactly when VOIDED, `refunded_at` and
+ *    `settled_at` present once SETTLED and absent while PENDING. A record is
+ *    never deleted by a user action: a correction is a new record or a status.
+ *
+ * 2. The `aggregate_type` vocabulary of `sync_outbox` and `sync_state` gains
+ *    `SALE_ADJUSTMENT` (its own aggregate, CLOUD_SYNC.md §28 — never a child
+ *    of SALE, whose child set an older build may replace). SQLite cannot alter
+ *    a CHECK, so both bookkeeping tables are rebuilt with the documented copy
+ *    procedure of schema v11 — every row copied unchanged, `id` (FIFO
+ *    position), revision and retry state kept, the AUTOINCREMENT sequence
+ *    carried over, every acknowledged remote version preserved.
+ *
+ * 3. The pull cursor is cleared, for the reason of schema v11: the next pull
+ *    reads the complete dataset once and stores the adjustments recorded on
+ *    another device meanwhile.
+ *
+ * No existing Client, Service, Appointment, Product, Sale, Calendar Block,
+ * deposit or category row is touched; no wipe, no reseed; the migration
+ * records nothing in the outbox.
+ */
+const SYNC_AGGREGATE_TYPE_CHECK_V18 =
+  "aggregate_type IN ('CLIENT', 'SERVICE', 'APPOINTMENT', 'PRODUCT', 'SALE', 'CALENDAR_BLOCK', 'APPOINTMENT_DEPOSIT', 'SERVICE_CATEGORY', 'SALE_ADJUSTMENT')";
+
+const SCHEMA_V18 = `
+CREATE TABLE IF NOT EXISTS sale_adjustments (
+  id TEXT PRIMARY KEY NOT NULL,
+  business_id TEXT NOT NULL,
+  sale_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('REFUND', 'REVERSAL')),
+  reverses_adjustment_id TEXT,
+  reason TEXT NOT NULL CHECK (
+    reason IN ('NOT_DELIVERED', 'WRONG_PRODUCT', 'WRONG_QUANTITY', 'RETURN', 'CUSTOMER_REFUND',
+               'SALE_CANCELLED', 'RECORDED_IN_ERROR', 'REFUND_RETURNED', 'OTHER')
+  ),
+  note TEXT,
+  staff_member_id TEXT NOT NULL,
+  refund_card_cents INTEGER NOT NULL CHECK (refund_card_cents >= 0),
+  refund_cash_cents INTEGER NOT NULL CHECK (refund_cash_cents >= 0),
+  initial_status TEXT NOT NULL CHECK (initial_status IN ('PENDING', 'SETTLED')),
+  status TEXT NOT NULL CHECK (status IN ('PENDING', 'SETTLED', 'VOIDED')),
+  refunded_at TEXT,
+  settled_at TEXT,
+  voided_at TEXT,
+  recorded_at TEXT NOT NULL,
+  CHECK ((kind = 'REVERSAL') = (reverses_adjustment_id IS NOT NULL)),
+  CHECK ((kind = 'REVERSAL') = (reason IN ('RECORDED_IN_ERROR', 'REFUND_RETURNED'))),
+  CHECK ((status = 'VOIDED') = (voided_at IS NOT NULL)),
+  CHECK (status <> 'SETTLED' OR (refunded_at IS NOT NULL AND settled_at IS NOT NULL)),
+  CHECK (status <> 'PENDING' OR (refunded_at IS NULL AND settled_at IS NULL)),
+  CHECK ((refunded_at IS NULL) = (settled_at IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sale_adjustments_sale_id ON sale_adjustments(sale_id);
+CREATE INDEX IF NOT EXISTS idx_sale_adjustments_refunded_at ON sale_adjustments(refunded_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sale_adjustments_reverses
+  ON sale_adjustments(reverses_adjustment_id) WHERE reverses_adjustment_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS sale_adjustment_items (
+  adjustment_id TEXT NOT NULL REFERENCES sale_adjustments(id) ON DELETE CASCADE,
+  id TEXT NOT NULL,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  sale_item_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  unit_price_cents INTEGER NOT NULL CHECK (unit_price_cents >= 0),
+  quantity INTEGER NOT NULL CHECK (quantity >= 1),
+  restock INTEGER NOT NULL CHECK (restock IN (0, 1)),
+  PRIMARY KEY (adjustment_id, id)
+);
+
+CREATE TABLE sync_outbox_v18 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (${SYNC_AGGREGATE_TYPE_CHECK_V18}),
+  aggregate_id TEXT NOT NULL,
+  operation TEXT NOT NULL CHECK (operation IN ('UPSERT', 'DELETE')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  last_error TEXT,
+  next_attempt_at TEXT,
+  UNIQUE (business_id, aggregate_type, aggregate_id)
+);
+
+INSERT INTO sync_outbox_v18
+  (id, business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at,
+   attempt_count, last_error, next_attempt_at)
+SELECT id, business_id, aggregate_type, aggregate_id, operation, revision, created_at, updated_at,
+       attempt_count, last_error, next_attempt_at
+FROM sync_outbox
+ORDER BY id;
+
+DELETE FROM sqlite_sequence WHERE name = 'sync_outbox_v18';
+INSERT INTO sqlite_sequence (name, seq)
+SELECT 'sync_outbox_v18', seq FROM sqlite_sequence WHERE name = 'sync_outbox';
+
+DROP TABLE sync_outbox;
+ALTER TABLE sync_outbox_v18 RENAME TO sync_outbox;
+
+CREATE TABLE sync_state_v18 (
+  business_id TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL CHECK (${SYNC_AGGREGATE_TYPE_CHECK_V18}),
+  aggregate_id TEXT NOT NULL,
+  remote_version INTEGER NOT NULL CHECK (remote_version >= 1),
+  last_synced_at TEXT NOT NULL,
+  PRIMARY KEY (business_id, aggregate_type, aggregate_id)
+);
+
+INSERT INTO sync_state_v18 (business_id, aggregate_type, aggregate_id, remote_version, last_synced_at)
+SELECT business_id, aggregate_type, aggregate_id, remote_version, last_synced_at
+FROM sync_state;
+
+DROP TABLE sync_state;
+ALTER TABLE sync_state_v18 RENAME TO sync_state;
+
+DELETE FROM souris_metadata WHERE key = 'sync_pull_cursor';
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, up: (db) => db.execSync(SCHEMA_V1) },
   { version: 2, up: (db) => db.execSync(SCHEMA_V2) },
@@ -733,6 +863,7 @@ export const migrations: readonly Migration[] = [
   { version: 15, up: (db) => db.execSync(SCHEMA_V15) },
   { version: 16, up: (db) => db.execSync(SCHEMA_V16) },
   { version: 17, up: (db) => db.execSync(SCHEMA_V17) },
+  { version: 18, up: (db) => db.execSync(SCHEMA_V18) },
 ];
 
 export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0;
@@ -743,6 +874,8 @@ export const CURRENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version
  * binding survives a development data reset.
  */
 export const SOURIS_TABLES = [
+  'sale_adjustment_items',
+  'sale_adjustments',
   'appointment_deposits',
   'calendar_blocks',
   'sale_items',
@@ -766,6 +899,7 @@ export const BUSINESS_SCOPED_TABLES = [
   'sales',
   'calendar_blocks',
   'appointment_deposits',
+  'sale_adjustments',
 ] as const;
 
 /**

@@ -173,7 +173,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     deleteClientPermanently,
   } = useClientSession();
   const { appointments } = useAppointmentSession();
-  const { sales } = useSaleSession();
+  const { sales, saleAdjustments } = useSaleSession();
   const [editVisible, setEditVisible] = useState(false);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [pendingAction, setPendingAction] = useState<ClientAdminAction>();
@@ -200,7 +200,7 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     );
   }
 
-  const activity = getClientActivitySummary(appointments, sales, client.id);
+  const activity = getClientActivitySummary(appointments, sales, client.id, new Date(), saleAdjustments);
   const noShowSeverity = getNoShowSeverity(activity.noShowAppointmentCount);
   const purchases = getClientSales(sales, client.id);
   // Phone and email live in the identity block; the rest stays below.

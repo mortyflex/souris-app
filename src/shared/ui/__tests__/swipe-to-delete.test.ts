@@ -5,10 +5,12 @@ import {
   isFullSwipe,
   MIN_FULL_SWIPE_DISTANCE,
   shouldPlaySwipeHint,
+  SWIPE_ACTION_WIDTH,
   SWIPE_ACTIVATION_DISTANCE,
   SWIPE_HINT_DELAY_MS,
   SWIPE_HINT_HOLD_MS,
   SWIPE_HINT_OFFSET,
+  SWIPE_HINT_RETURN_EASING,
   SWIPE_HINT_RETURN_MS,
   SWIPE_HINT_REVEAL_MS,
   SWIPE_HINT_TOTAL_MS,
@@ -36,21 +38,36 @@ describe('swipe-to-delete thresholds', () => {
 });
 
 describe('swipe hint decision', () => {
-  it('peeks clearly (well beyond the first 16 pt attempt) yet far from an open row', () => {
-    expect(SWIPE_HINT_OFFSET).toBeGreaterThan(16);
-    expect(SWIPE_HINT_OFFSET).toBeGreaterThanOrEqual(26);
-    expect(SWIPE_HINT_OFFSET).toBeLessThanOrEqual(30);
-    expect(SWIPE_HINT_OFFSET).toBeLessThan(DELETE_ACTION_WIDTH / 2);
+  it('peeks a recognisable part of the action, yet clearly short of an open row', () => {
+    // 45–65 pt: the glyph is readable, the row never looks swiped open or deleted.
+    expect(SWIPE_HINT_OFFSET).toBeGreaterThanOrEqual(45);
+    expect(SWIPE_HINT_OFFSET).toBeLessThanOrEqual(65);
+    expect(SWIPE_HINT_OFFSET).toBeLessThan(DELETE_ACTION_WIDTH);
+    expect(SWIPE_HINT_OFFSET).toBeLessThan(SWIPE_ACTION_WIDTH);
+    expect(SWIPE_HINT_OFFSET).toBeLessThan(MIN_FULL_SWIPE_DISTANCE);
   });
 
-  it('settles first, reveals, holds while the trash is readable, then returns — one pass', () => {
-    expect(SWIPE_HINT_DELAY_MS).toBeGreaterThanOrEqual(450);
-    expect(SWIPE_HINT_REVEAL_MS).toBeGreaterThanOrEqual(280);
-    expect(SWIPE_HINT_HOLD_MS).toBeGreaterThanOrEqual(250);
-    expect(SWIPE_HINT_HOLD_MS).toBeLessThanOrEqual(350);
-    expect(SWIPE_HINT_RETURN_MS).toBeGreaterThanOrEqual(300);
+  it('settles first, reveals, holds while readable, then returns noticeably slower — one pass', () => {
+    expect(SWIPE_HINT_DELAY_MS).toBeGreaterThanOrEqual(350);
+    expect(SWIPE_HINT_DELAY_MS).toBeLessThanOrEqual(500);
+    expect(SWIPE_HINT_REVEAL_MS).toBeGreaterThanOrEqual(300);
+    expect(SWIPE_HINT_REVEAL_MS).toBeLessThanOrEqual(400);
+    expect(SWIPE_HINT_HOLD_MS).toBeGreaterThanOrEqual(350);
+    expect(SWIPE_HINT_HOLD_MS).toBeLessThanOrEqual(500);
+    expect(SWIPE_HINT_RETURN_MS).toBeGreaterThanOrEqual(600);
+    expect(SWIPE_HINT_RETURN_MS).toBeLessThanOrEqual(800);
+    expect(SWIPE_HINT_RETURN_MS).toBeGreaterThan(SWIPE_HINT_REVEAL_MS);
     expect(SWIPE_HINT_TOTAL_MS).toBe(SWIPE_HINT_REVEAL_MS + SWIPE_HINT_HOLD_MS + SWIPE_HINT_RETURN_MS);
-    expect(SWIPE_HINT_TOTAL_MS).toBeLessThan(1200);
+  });
+
+  it('returns with a soft ease-in-out: no overshoot, so no bounce', () => {
+    const [x1, y1, x2, y2] = SWIPE_HINT_RETURN_EASING;
+    for (const value of [x1, y1, x2, y2]) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1);
+    }
+    expect(y1).toBeLessThan(x1); // eases in…
+    expect(y2).toBeGreaterThan(x2); // …and out
   });
 
   it('plays only for the designated row, once, and never under reduced motion', () => {

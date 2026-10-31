@@ -1025,7 +1025,13 @@ They are synced through the existing aggregate sync as their own aggregate type,
 
 Schema v17 rebuilds `sync_outbox` and `sync_state` with the same procedure as v11.
 
-v11, v12 and v17 are the only non-`ALTER` migrations of the project.
+Sale adjustments — corrections and refunds of completed Sales — are persisted locally (SQLite schema v18, `sale_adjustments` + `sale_adjustment_items`).
+
+They are synced through the existing aggregate sync as their own aggregate type, `SALE_ADJUSTMENT` (`docs/architecture/CLOUD_SYNC.md` §28). A completed Sale is never rewritten: see `docs/domain/SALES.md` §15.
+
+Schema v18 rebuilds `sync_outbox` and `sync_state` with the same procedure as v11.
+
+v11, v12, v17 and v18 are the only non-`ALTER` migrations of the project.
 
 Sync is per aggregate.
 

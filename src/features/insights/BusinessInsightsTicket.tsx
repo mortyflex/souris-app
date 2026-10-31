@@ -252,7 +252,7 @@ function BusinessInsightsPaper({
   readonly onShareCardChange: (card: InsightsShareCardModel | null) => void;
 }) {
   const { appointments, deposits } = useAppointmentSession();
-  const { sales } = useSaleSession();
+  const { sales, saleAdjustments } = useSaleSession();
   const { getClientById } = useClientSession();
   const [kind, setKind] = useState<InsightsPeriodKind>(initialBrowsing?.kind ?? 'MONTH');
   const [periodAnchor, setPeriodAnchor] = useState(
@@ -267,10 +267,10 @@ function BusinessInsightsPaper({
   const insights = useMemo(
     () =>
       getBusinessInsights(
-        { appointments: appointments.map((entry) => entry.appointment), sales, deposits },
+        { appointments: appointments.map((entry) => entry.appointment), sales, deposits, saleAdjustments },
         getInsightsPeriod(kind, periodAnchor),
       ),
-    [appointments, sales, deposits, kind, periodAnchor],
+    [appointments, sales, deposits, saleAdjustments, kind, periodAnchor],
   );
   const model = buildInsightsReceipt(insights, getClientById);
   const navigation = getInsightsNavigationLabels(kind);

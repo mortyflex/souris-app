@@ -133,8 +133,8 @@ describe('schema v12 migration on an existing v11 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(17);
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+    expect(readSchemaVersion(db)).toBe(18);
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     for (const table of OPERATIONAL_TABLES) expect(dump(db, table)).toEqual(before[table]);
@@ -222,7 +222,7 @@ describe('schema v12 migration on an existing v11 database', () => {
     const db = openSchemaV11Database();
     bootstrapPersistence(db, createTestSeed);
 
-    expect(migrateDatabase(db)).toBe(17);
+    expect(migrateDatabase(db)).toBe(18);
     insertAppointmentDeposit(db, {
       id: 'deposit-1',
       businessId: BUSINESS_ID,

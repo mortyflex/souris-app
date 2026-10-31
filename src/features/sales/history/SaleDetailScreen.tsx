@@ -12,27 +12,38 @@
 //                                  way to that Appointment
 //   a historical direct Sale without a payment record   said as such — no method is invented
 //
-// Nothing here edits, refunds or recomputes anything (docs/domain/SALES.md §11b).
+// The Sale itself is never edited. Its actions live behind « ••• » (the shared
+// « Actions de la vente » drawer, the same one the history swipe opens), and
+// the corrections already recorded are listed under it with their history
+// (docs/domain/SALES.md §15); the summary shows what was given back.
 
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
+import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getCashRegisterDayKey } from '@/domain/cash-register';
 import { getSaleTotalCents } from '@/domain/appointments';
-import { findSaleHistoryEntry, type SaleHistoryEntry, type SaleItem } from '@/domain/sales';
+import {
+  findSaleHistoryEntry,
+  getSaleAdjustmentPosition,
+  type SaleHistoryEntry,
+  type SaleItem,
+} from '@/domain/sales';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
-import { paymentMethodLabels } from '@/shared/icons/payment-method-icons';
+import { paymentMethodIcons, paymentMethodLabels } from '@/shared/icons/payment-method-icons';
 import { formatEuroCents, formatEuros } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
 import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
-import { GROUPED_READ_ROW_SEPARATOR_INSET, GroupedReadRow } from '@/shared/ui/GroupedReadRow';
 import { NavigationChevron } from '@/shared/ui/NavigationChevron';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
-import { bottomClearance, foregroundSoft, gutter, radii, semanticColors, spacing } from '@/shared/ui/theme';
+import { bottomClearance, foregroundSoft, gutter, lavender, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
+import { SaleActionsSheet, SALE_ACTIONS_TITLE, useSaleActions } from '../adjustments/SaleActionsSheet';
+import { SaleAdjustmentsSection } from '../adjustments/SaleAdjustmentsSection';
 import { useSaleSession } from '../session/SaleSessionProvider';
 import {
   SALE_CHANNEL_EYEBROWS,
@@ -61,10 +72,12 @@ interface SaleDetailScreenProps {
 
 export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
   const router = useRouter();
-  const { sales } = useSaleSession();
+  const { sales, saleAdjustments } = useSaleSession();
   const { getClientById } = useClientSession();
   const { getAppointmentById } = useAppointmentSession();
   const entry = findSaleHistoryEntry(sales, saleId);
+  const [actionsVisible, setActionsVisible] = useState(false);
+  const actions = useSaleActions(entry?.sale);
 
   if (!entry) {
     return (
@@ -87,10 +100,19 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
   const total = formatEuroCents(entry.totalCents);
   const when = formatSaleDateTime(sale.completedAt);
   const units = formatSaleUnitCount(entry.unitCount);
+  const position = getSaleAdjustmentPosition(sale, saleAdjustments);
+  const refunded =
+    position.settledCents > 0 ? `Remboursé : ${formatEuroCents(position.settledCents)}` : undefined;
+  const toRefund =
+    position.pendingCents > 0 ? `À rembourser : ${formatEuroCents(position.pendingCents)}` : undefined;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea} testID="sale-detail-screen">
-      <SaleHistoryTopBar />
+      <SaleHistoryTopBar
+        actionsLabel={SALE_ACTIONS_TITLE}
+        actionsTestID="open-sale-actions"
+        onOpenActions={actions.length > 0 ? () => setActionsVisible(true) : undefined}
+      />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <AppText accessibilityRole="header" variant="screenTitle">
           {SALE_DETAIL_TITLE}
@@ -98,7 +120,9 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
 
         <View
           accessible
-          accessibilityLabel={`${SALE_CHANNEL_EYEBROWS[entry.channel]}, ${total}, ${when}, ${units}`}
+          accessibilityLabel={[SALE_CHANNEL_EYEBROWS[entry.channel], total, when, units, refunded, toRefund]
+            .filter(Boolean)
+            .join(', ')}
           style={styles.summary}
           testID="sale-detail-summary"
         >
@@ -114,6 +138,16 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
           <AppText variant="metadata" style={styles.when} testID="sale-detail-units">
             {units}
           </AppText>
+          {refunded && (
+            <AppText variant="metadata" style={styles.refunded} testID="sale-detail-refunded">
+              {refunded}
+            </AppText>
+          )}
+          {toRefund && (
+            <AppText variant="metadata" style={styles.refunded} testID="sale-detail-to-refund">
+              {toRefund}
+            </AppText>
+          )}
         </View>
 
         <GroupedSurface testID="sale-detail-client">
@@ -155,7 +189,10 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
             }
           />
         </View>
+
+        <SaleAdjustmentsSection sale={sale} />
       </ScrollView>
+      <SaleActionsSheet onClose={() => setActionsVisible(false)} sale={sale} visible={actionsVisible} />
     </SafeAreaView>
   );
 }
@@ -226,6 +263,30 @@ interface PaymentSectionProps {
   readonly onOpenAppointment: (() => void) | undefined;
 }
 
+/**
+ * One recorded payment method: its 14 pt card / banknote glyph and its exact
+ * amount on the soft lavender pill fill (the BeautIzzy chip language). The
+ * method is never written — the glyph says it — but always spoken: the pill is
+ * ONE accessible element, « Espèces, 23,00 € », and the glyph adds no name.
+ */
+function PaymentMethodPill({ method, cents }: { readonly method: 'CARD' | 'CASH'; readonly cents: number }) {
+  const label = paymentMethodLabels[method];
+  const amount = formatEuroCents(cents);
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${label}, ${amount}`}
+      style={styles.pill}
+      testID={`sale-detail-payment-${method.toLowerCase()}`}
+    >
+      <SymbolView name={paymentMethodIcons[method]} size={14} tintColor={lavender.lav700} />
+      <AppText variant="chip" style={styles.pillAmount}>
+        {amount}
+      </AppText>
+    </View>
+  );
+}
+
 function PaymentSection({ entry, appointmentFound, onOpenAppointment }: PaymentSectionProps) {
   const { sale } = entry;
   if (entry.paymentRecord === 'SALE_PAYMENT' && sale.payment) {
@@ -236,29 +297,36 @@ function PaymentSection({ entry, appointmentFound, onOpenAppointment }: PaymentS
       { method: 'CASH' as const, cents: payment.cashAmountCents },
     ].filter(({ cents }) => cents > 0);
     const paidOnAnotherDay = getCashRegisterDayKey(payment.paidAt) !== getCashRegisterDayKey(sale.completedAt);
+    // « Total reçu » first, then ONE pill per method actually recorded — never a split the data does not hold.
     return (
       <GroupedSurface testID="sale-detail-payment">
-        <GroupedReadRow label="Total reçu" testID="sale-detail-payment-total" value={formatEuroCents(received)} />
-        {methods.map(({ method, cents }) => (
-          <View key={method}>
-            <GroupedSeparator inset={GROUPED_READ_ROW_SEPARATOR_INSET} />
-            <GroupedReadRow
-              label={paymentMethodLabels[method]}
-              testID={`sale-detail-payment-${method.toLowerCase()}`}
-              value={formatEuroCents(cents)}
-            />
+        <View style={styles.paymentBody}>
+          <View
+            accessible
+            accessibilityLabel={`Total reçu, ${formatEuroCents(received)}`}
+            style={styles.paymentTotal}
+            testID="sale-detail-payment-total"
+          >
+            <AppText variant="body" style={styles.paymentTotalLabel}>
+              Total reçu
+            </AppText>
+            <AppText selectable variant="summaryValue" style={styles.paymentTotalValue}>
+              {formatEuroCents(received)}
+            </AppText>
           </View>
-        ))}
-        {paidOnAnotherDay && (
-          <>
-            <GroupedSeparator inset={GROUPED_READ_ROW_SEPARATOR_INSET} />
-            <GroupedReadRow
-              label="Encaissé le"
-              testID="sale-detail-payment-day"
-              value={paymentDayFormatter.format(payment.paidAt)}
-            />
-          </>
-        )}
+          {methods.length > 0 && (
+            <View style={styles.pills} testID="sale-detail-payment-methods">
+              {methods.map(({ method, cents }) => (
+                <PaymentMethodPill cents={cents} key={method} method={method} />
+              ))}
+            </View>
+          )}
+          {paidOnAnotherDay && (
+            <AppText variant="metadata" style={styles.paymentDay} testID="sale-detail-payment-day">
+              {`Encaissé le ${paymentDayFormatter.format(payment.paidAt)}`}
+            </AppText>
+          )}
+        </View>
       </GroupedSurface>
     );
   }
@@ -327,6 +395,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: semanticColors.accent },
   total: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   when: { color: foregroundSoft },
+  refunded: { color: semanticColors.accent },
   section: { gap: spacing.md },
   row: {
     alignItems: 'center',
@@ -352,6 +421,26 @@ const styles = StyleSheet.create({
   lineName: { color: semanticColors.foreground },
   lineMeta: { color: foregroundSoft, fontVariant: ['tabular-nums'] },
   lineTotal: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  paymentBody: { gap: spacing.md, paddingHorizontal: spacing.base, paddingVertical: spacing.md },
+  paymentTotal: { alignItems: 'baseline', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'space-between' },
+  paymentTotalLabel: { color: foregroundSoft },
+  paymentTotalValue: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  // Pills wrap under each other on a narrow phone with large text.
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  pill: {
+    alignItems: 'center',
+    backgroundColor: semanticColors.surfaceLavender,
+    borderColor: semanticColors.borderLavender,
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 30,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  pillAmount: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
+  paymentDay: { color: foregroundSoft },
   note: { paddingHorizontal: spacing.base, paddingVertical: spacing.md },
   noteText: { color: foregroundSoft },
   notFound: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },

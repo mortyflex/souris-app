@@ -2408,3 +2408,74 @@ Verification: `service-catalogue-sync.test.ts` (fake remote, migrated and unmigr
 `service-categories-store.test.ts`, `service-catalogue-migration.test.ts`, the source guard
 `service-catalogue-migration.test.ts` (infrastructure) and a 48-check PGlite harness
 (`supabase/README.md` › Service categories and descriptions).
+
+## 28. Sale adjustments — a new aggregate type with server-side ceilings (schema v18)
+
+Corrections and refunds of completed Sales (`docs/domain/SALES.md` §15) are their OWN aggregate,
+`SALE_ADJUSTMENT`, of the same outbox → push → pull / restore pipeline. No second engine.
+
+```text
+supabase/migrations/20261011120000_create_sale_adjustments.sql
+
+sale_adjustments        (business_id, id) PK; composite FK to sales (RESTRICT) and to the refund a
+                        REVERSAL neutralises; kind / status / reason vocabularies; integer cents;
+                        voided_at exactly when VOIDED; refunded_at + settled_at together, present
+                        once SETTLED; at most ONE live reversal per refund (unique index)
+sale_adjustment_items   its lines, copied from the Sale snapshot; written once (select / insert only)
+helpers                 sync_sale_adjustment_transition_allowed, sync_sale_refundable_base_cents,
+                        sync_sale_adjustment_breach
+RPCs replaced in place  count (+ sale_adjustments), push (SALE_ADJUSTMENT, immutability, ceilings,
+                        Sale-row lock), pull (+ the sale_adjustments family, always present)
+```
+
+- **Why its own aggregate.** A SALE push replaces the Sale's whole child set; an adjustment placed
+  under `sale_items` would be erased by an older build pushing the Sale. As its own aggregate an
+  adjustment is never named by an older build, so it can never be overwritten or deleted by one.
+- **What travels.** `RemoteSaleAdjustmentPayload` (`sale_id`, `kind`, `reverses_adjustment_id`, `reason`,
+  `note`, `staff_member_id`, `refund_card_cents`, `refund_cash_cents`, `initial_status`, `status`,
+  `refunded_at`, `settled_at`, `voided_at`, `recorded_at`, `items[]`). Instants exact; cents exact.
+- **Push order.** After SALE and PRODUCT (rank 7): the Sale exists remotely first (FK), and the
+  restocked PRODUCT carries its own new quantity — applying a pulled adjustment NEVER moves stock,
+  so the same units are never restored twice.
+- **Immutability (server).** A stored adjustment never changes but for its status, forward only
+  (`PENDING → SETTLED | VOIDED`); an identical replay passes. Any other change, or an adjustment
+  tombstone, answers `{ status: 'ADJUSTMENT_CONFLICT', sale_id, reason: 'IMMUTABLE' }` — nothing written.
+- **A Sale that holds adjustments is FROZEN — answered `CONFLICT`.** Any SALE upsert that would change
+  its row or its lines, and any SALE tombstone, while a live adjustment names it, is undone and answered
+  `{ status: 'CONFLICT', sync_version }`; an identical replay still passes. `CONFLICT` — not
+  `ADJUSTMENT_CONFLICT` — on purpose: it is the refusal EVERY build understands, including the Production
+  build that predates adjustments (an unknown status would read as a run-level failure there: push stopped,
+  pull skipped). Such a build keeps that ONE entry pending with its bounded backoff and `last_error =
+  CONFLICT`, reports a conflict, pushes every other pending entry and still pulls; it is never told the
+  write was applied, and nothing remote is touched. Only builds that know adjustments ever push a
+  SALE_ADJUSTMENT, so only they ever receive `ADJUSTMENT_CONFLICT`. Typical trigger: an older build
+  removing a Revente line after checkout (allowed by its own rules) on a Sale another device refunded.
+- **Ceilings (server, concurrent devices).** Every SALE / SALE_ADJUSTMENT write locks the Sale row
+  (`FOR UPDATE`), then evaluates `sync_sale_adjustment_breach` INSIDE its savepoint on the state it would
+  leave: Σ effective refunds ≤ the refundable base (`CEILING`), Σ units per line ≤ sold (`UNITS`), a
+  compensation answers exactly one settled refund for its whole amount — `RECORDED_IN_ERROR` with the
+  same methods on the same day, `REFUND_RETURNED` on or after the refund day, any methods (`REVERSAL`).
+  Two devices refunding the same Sale offline are evaluated one after the other; the SECOND is refused
+  and nothing of it is written.
+- **Client behaviour.** `RemotePushResult` gained `ADJUSTMENT_CONFLICT`. The worker keeps the entry
+  pending (`last_error = ADJUSTMENT_CONFLICT`, bounded backoff), reports it (`adjustmentConflicts`), and
+  goes on. The record stays on the device and reads « Refusé par le serveur … À vérifier. » — it is
+  never presented as synchronized. Resolution is explicit: the professional voids the refused record (the
+  one case a SETTLED record may be voided, `isSaleAdjustmentServerRefused`: refused AND never
+  acknowledged); the VOIDED record then syncs as history. Nothing is merged, clamped or dropped.
+- **Rollout safety.** Until a pull answers with the `sale_adjustments` key (`sync_remote_sale_adjustments`,
+  `sale-adjustment-sync.ts`), the worker DEFERS every SALE_ADJUSTMENT entry (`REMOTE_SCHEMA_PENDING`):
+  money is never sent to — or "acknowledged" by — a remote that does not enforce the ceilings. Schema v18
+  clears the pull cursor. Older builds ignore the family; an older remote's pull parses as "none".
+- **Pull and restore.** Validated like every family (vocabularies, cents, status ↔ instants, a
+  reversal without lines); a complete dataset whose live adjustment names a Sale it does not hold is
+  refused; a pulled adjustment whose Sale is missing locally is fetched again (`RemoteReferenceMissingError`).
+  A pulled SALE tombstone is `BLOCKED` locally while the Sale holds an adjustment.
+
+Verified locally: `src/persistence/__tests__/sale-adjustments.test.ts` (fake remote, two devices,
+deferral, replay, restore, isolation, and the Production build's trim / removal of a frozen Sale) and an
+out-of-repo PGlite 0.2.17 harness with the strict role stub (62 checks, migration applied on a database
+populated through the previous functions, then re-applied; every answer to a SALE write stays in the
+vocabulary the Production build parses). PGlite is single-connection: the Sale-row lock is verified for its presence and effect on
+sequential writes, NOT under true parallel transactions — validate on Staging with two devices.
+

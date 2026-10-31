@@ -2,20 +2,33 @@ import { createContext, useContext, useRef, useState, type PropsWithChildren } f
 
 import type { AppointmentProductIdentity } from '@/domain/appointments';
 import {
+  prepareSaleAdjustment,
   prepareSaleCompletion,
   removeAppointmentProduct,
   type Sale,
+  type SaleAdjustment,
+  type SaleAdjustmentDraft,
+  type SaleAdjustmentStockChange,
   type SaleDraft,
 } from '@/domain/sales';
+import { currentStaffMemberId } from '@/features/appointments/current-staff-member';
 import { useBusinessWriteGuard } from '@/features/access/write-guard';
 import { useProductCatalog } from '@/features/products/session/ProductCatalogProvider';
+import { isStoredAppointmentSettled } from '@/persistence/stores/appointment-deposits';
+import {
+  recordSaleAdjustment as persistSaleAdjustment,
+  reverseStoredSaleAdjustment,
+  settleStoredSaleAdjustment,
+  voidStoredSaleAdjustment,
+} from '@/persistence/stores/sale-adjustments';
 import {
   completeSale as persistSaleCompletion,
   deleteAppointmentProduct as persistAppointmentProductDeletion,
 } from '@/persistence/stores/sales';
+import { readSaleAdjustmentSyncStates } from '@/persistence/sync/sale-adjustment-sync';
 import { usePersistence, useSnapshotRefresh } from '@/providers/PersistenceProvider';
 
-import type { SaleSessionValue } from './types';
+import type { SaleAdjustmentReversalRequest, SaleSessionValue } from './types';
 
 const SaleSessionContext = createContext<SaleSessionValue | null>(null);
 
@@ -40,7 +53,13 @@ const SaleSessionContext = createContext<SaleSessionValue | null>(null);
  *
  * A validation failure returns the issues and touches nothing. A database
  * failure rolls the transaction back and throws before any state changes.
- * Both operations pass the business write guard FIRST
+ *
+ * Corrections and refunds (docs/domain/SALES.md §15) never touch a Sale: each
+ * is a Sale adjustment, prepared against the session state, then re-verified
+ * and committed by the store in ONE transaction (record + restocked units +
+ * outbox), then reflected — the record in state, the stock in the catalog.
+ *
+ * Every operation passes the business write guard FIRST
  * (features/access/write-guard.ts): refused, they throw before the draft is
  * even validated — never a Sale without its stock decrements, or the reverse.
  */
@@ -56,8 +75,92 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
     committed.current = next;
     setSales(next);
   };
+  const [saleAdjustments, setSaleAdjustments] = useState<readonly SaleAdjustment[]>(snapshot.saleAdjustments);
+  const committedAdjustments = useRef(saleAdjustments);
+  const commitAdjustments = (next: readonly SaleAdjustment[]) => {
+    committedAdjustments.current = next;
+    setSaleAdjustments(next);
+  };
+  const replaceAdjustment = (adjustment: SaleAdjustment) =>
+    commitAdjustments(
+      committedAdjustments.current.some((candidate) => candidate.id === adjustment.id)
+        ? committedAdjustments.current.map((candidate) => (candidate.id === adjustment.id ? adjustment : candidate))
+        : [...committedAdjustments.current, adjustment],
+    );
   // Remote changes applied by the sync runner, adopted in place.
-  useSnapshotRefresh((fresh) => commit(fresh.sales));
+  useSnapshotRefresh((fresh) => {
+    commit(fresh.sales);
+    commitAdjustments(fresh.saleAdjustments);
+  });
+
+  // Units taken back from a Product the catalog no longer holds were skipped by the store.
+  const takeBackCommittedStock = (decrements: readonly SaleAdjustmentStockChange[]) => {
+    const known = decrements.filter((change) => products.some((product) => product.id === change.productId));
+    if (known.length > 0) applyCommittedStockDecrements(known);
+  };
+
+  const isAppointmentSettled = (appointmentId: string) => isStoredAppointmentSettled(database, appointmentId);
+
+  const recordSaleAdjustment = (saleId: string, draft: Omit<SaleAdjustmentDraft, 'businessId' | 'staffMemberId'>) => {
+    requireWriteAccess('sales.recordSaleAdjustment');
+    const sale = committed.current.find((candidate) => candidate.id === saleId);
+    if (!sale) throw new Error(`recordSaleAdjustment: Sale "${saleId}" does not exist`);
+    const full: SaleAdjustmentDraft = { ...draft, businessId: sale.businessId, staffMemberId: currentStaffMemberId };
+    const now = new Date();
+    const result = prepareSaleAdjustment(
+      {
+        sale,
+        adjustments: committedAdjustments.current,
+        appointmentSettled: sale.appointmentId === undefined || isAppointmentSettled(sale.appointmentId),
+        productExists: (productId) => products.some((product) => product.id === productId),
+        now,
+      },
+      full,
+    );
+    if (!result.ok) return result;
+    if (committedAdjustments.current.some((candidate) => candidate.id === full.id)) {
+      throw new Error(`A Sale adjustment with id "${full.id}" already exists`);
+    }
+    persistSaleAdjustment(database, full, result.adjustment, result.restorations, now);
+    if (result.restorations.length > 0) applyCommittedStockRestorations(result.restorations);
+    replaceAdjustment(result.adjustment);
+    return result;
+  };
+
+  const settleSaleAdjustment = (adjustmentId: string, refundedAt: Date) => {
+    requireWriteAccess('sales.settleSaleAdjustment');
+    replaceAdjustment(settleStoredSaleAdjustment(database, adjustmentId, refundedAt, new Date()));
+  };
+
+  const voidSaleAdjustment = (adjustmentId: string) => {
+    requireWriteAccess('sales.voidSaleAdjustment');
+    const outcome = voidStoredSaleAdjustment(database, adjustmentId, new Date());
+    takeBackCommittedStock(outcome.stockDecrements);
+    replaceAdjustment(outcome.adjustment);
+  };
+
+  const reverseSaleAdjustment = (adjustmentId: string, input: SaleAdjustmentReversalRequest) => {
+    requireWriteAccess('sales.reverseSaleAdjustment');
+    const base = { id: input.id, staffMemberId: currentStaffMemberId, note: input.note, now: new Date() };
+    const outcome = reverseStoredSaleAdjustment(
+      database,
+      adjustmentId,
+      input.reason === 'RECORDED_IN_ERROR'
+        ? { ...base, reason: 'RECORDED_IN_ERROR' }
+        : {
+            ...base,
+            reason: 'REFUND_RETURNED',
+            returnedAt: input.returnedAt,
+            cardCents: input.cardCents,
+            cashCents: input.cashCents,
+          },
+    );
+    takeBackCommittedStock(outcome.stockDecrements);
+    replaceAdjustment(outcome.adjustment);
+  };
+
+  // Read on demand (cheap, indexed): the sync runner updates the bookkeeping behind the session.
+  const getSaleAdjustmentSyncStates = () => readSaleAdjustmentSyncStates(database);
 
   const getSaleById = (saleId: string | undefined) => {
     if (!saleId) return undefined;
@@ -99,7 +202,19 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
 
   return (
     <SaleSessionContext.Provider
-      value={{ sales, getSaleById, completeSale, deleteAppointmentProduct }}
+      value={{
+        sales,
+        getSaleById,
+        completeSale,
+        deleteAppointmentProduct,
+        saleAdjustments,
+        isAppointmentSettled,
+        recordSaleAdjustment,
+        settleSaleAdjustment,
+        voidSaleAdjustment,
+        reverseSaleAdjustment,
+        getSaleAdjustmentSyncStates,
+      }}
     >
       {children}
     </SaleSessionContext.Provider>

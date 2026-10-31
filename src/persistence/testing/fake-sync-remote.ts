@@ -37,6 +37,17 @@
 // push is rejected (22023, unknown aggregate type), and the pull carries no
 // `service_categories` key and no SERVICE catalogue keys.
 //
+// …and the sale adjustment migration
+// (supabase/migrations/20261011120000_create_sale_adjustments.sql, CLOUD_SYNC.md
+// §28): a `sale_adjustments` family; a SALE_ADJUSTMENT push whose Sale the
+// remote does not hold is REJECTED (23503); a write that would give back more
+// money or units than the Sale allows, change an immutable field or a final
+// status, or reverse a refund twice answers ADJUSTMENT_CONFLICT and writes
+// NOTHING; any change or tombstone of a Sale that holds an adjustment answers
+// CONFLICT (the status every build knows) and writes nothing.
+// `saleAdjustments: false` (or `setSaleAdjustments(false)`) models a remote
+// that PREDATES it: the type is rejected (22023) and the pull has no key.
+//
 // The server clock is logical: it starts at `FAKE_REMOTE_EPOCH` and advances
 // one second per write and per read; `advanceClock` jumps it.
 //
@@ -86,6 +97,8 @@ export interface FakeSyncRemote extends SyncRemoteGateway {
   beforePull(hook: (() => void) | undefined): void;
   /** Migrates (true) or un-migrates (false) the modelled remote for the service catalogue fields. */
   setServiceCatalogue(enabled: boolean): void;
+  /** Migrates (true) or un-migrates (false) the modelled remote for sale adjustments. */
+  setSaleAdjustments(enabled: boolean): void;
   /** Moves the logical server clock forward. */
   advanceClock(ms: number): void;
   /** Forgets the push and pull logs (not the rows): lets a test start counting after its setup. */
@@ -113,6 +126,11 @@ function referenceError(
   request: RemotePushRequest,
 ): SyncRemoteError | undefined {
   const payload = request.payload as { client_id?: string | null; appointment_id?: string | null };
+  if (request.aggregateType === 'SALE_ADJUSTMENT') {
+    const saleId = (request.payload as { sale_id?: string }).sale_id;
+    const sale = saleId === undefined ? undefined : rows.get(`SALE/${saleId}`);
+    return sale && !sale.deleted ? undefined : new SyncRemoteError('REJECTED', '23503');
+  }
   if (request.aggregateType === 'APPOINTMENT_DEPOSIT') {
     return payload.appointment_id != null && rows.has(`APPOINTMENT/${payload.appointment_id}`)
       ? undefined
@@ -132,6 +150,124 @@ function referenceError(
   return undefined;
 }
 
+
+interface WireAdjustment {
+  readonly sale_id: string;
+  readonly kind: string;
+  readonly reason?: string;
+  readonly refunded_at?: string | null;
+  readonly reverses_adjustment_id: string | null;
+  readonly status: string;
+  readonly refund_card_cents: number;
+  readonly refund_cash_cents: number;
+  readonly items: readonly { readonly sale_item_id: string; readonly quantity: number }[];
+}
+
+/** The fields a stored adjustment may never change; only the status and its instants move. */
+const IMMUTABLE_ADJUSTMENT_KEYS = [
+  'sale_id',
+  'kind',
+  'reverses_adjustment_id',
+  'reason',
+  'note',
+  'staff_member_id',
+  'refund_card_cents',
+  'refund_cash_cents',
+  'initial_status',
+  'recorded_at',
+  'items',
+] as const;
+
+/** `sync_sale_adjustment_transition_allowed`: same, PENDING → SETTLED, PENDING → VOIDED. */
+function isAllowedAdjustmentTransition(from: string, to: string): boolean {
+  return from === to || (from === 'PENDING' && (to === 'SETTLED' || to === 'VOIDED'));
+}
+
+/**
+ * `sync_sale_adjustment_breach`: the reason the adjustments of ONE Sale break
+ * its ceilings on the state the remote holds, or undefined.
+ */
+function saleAdjustmentBreach(rows: Map<string, FakeRemoteAggregate>, saleId: string): string | undefined {
+  const saleRow = rows.get(`SALE/${saleId}`);
+  const adjustments: [string, WireAdjustment][] = [];
+  for (const [key, row] of rows) {
+    if (!key.startsWith('SALE_ADJUSTMENT/') || row.deleted) continue;
+    const adjustment = row.payload as unknown as WireAdjustment;
+    if (adjustment.sale_id === saleId) adjustments.push([key.slice('SALE_ADJUSTMENT/'.length), adjustment]);
+  }
+  if (adjustments.length === 0) return undefined;
+  if (!saleRow || saleRow.deleted) return 'SALE_HAS_ADJUSTMENTS';
+  const sale = saleRow.payload as unknown as {
+    readonly appointment_id: string | null;
+    readonly card_amount_cents: number | null;
+    readonly cash_amount_cents: number | null;
+    readonly items: readonly { readonly id: string; readonly unit_price_cents: number; readonly quantity: number }[];
+  };
+  const base =
+    sale.appointment_id !== null
+      ? sale.items.reduce((total, item) => total + item.unit_price_cents * item.quantity, 0)
+      : (sale.card_amount_cents ?? 0) + (sale.cash_amount_cents ?? 0);
+  const reversed = new Map<string, number>();
+  for (const [, adjustment] of adjustments) {
+    if (adjustment.kind !== 'REVERSAL' || adjustment.status === 'VOIDED' || !adjustment.reverses_adjustment_id) continue;
+    reversed.set(adjustment.reverses_adjustment_id, (reversed.get(adjustment.reverses_adjustment_id) ?? 0) + 1);
+  }
+  for (const [, adjustment] of adjustments) {
+    if (adjustment.kind !== 'REVERSAL' || !adjustment.reverses_adjustment_id) continue;
+    const target = adjustments.find(([id]) => id === adjustment.reverses_adjustment_id)?.[1];
+    if (!target || target.kind !== 'REFUND' || target.status !== 'SETTLED') return 'REVERSAL';
+    if ((reversed.get(adjustment.reverses_adjustment_id) ?? 0) > 1) return 'REVERSAL';
+    const total = (value: WireAdjustment) => value.refund_card_cents + value.refund_cash_cents;
+    if (total(target) !== total(adjustment)) return 'REVERSAL';
+    if (
+      adjustment.reason === 'RECORDED_IN_ERROR' &&
+      (target.refund_card_cents !== adjustment.refund_card_cents ||
+        target.refund_cash_cents !== adjustment.refund_cash_cents ||
+        target.refunded_at !== adjustment.refunded_at)
+    ) {
+      return 'REVERSAL';
+    }
+    if (adjustment.reason === 'REFUND_RETURNED' && Date.parse(adjustment.refunded_at ?? '') < Date.parse(target.refunded_at ?? '')) {
+      return 'REVERSAL';
+    }
+  }
+  let committed = 0;
+  const units = new Map<string, number>();
+  for (const [id, adjustment] of adjustments) {
+    if (adjustment.kind !== 'REFUND' || adjustment.status === 'VOIDED' || reversed.has(id)) continue;
+    committed += adjustment.refund_card_cents + adjustment.refund_cash_cents;
+    for (const item of adjustment.items) units.set(item.sale_item_id, (units.get(item.sale_item_id) ?? 0) + item.quantity);
+  }
+  if (committed > base) return 'CEILING';
+  for (const [saleItemId, quantity] of units) {
+    const line = sale.items.find((item) => item.id === saleItemId);
+    if (!line || quantity > line.quantity) return 'UNITS';
+  }
+  return undefined;
+}
+
+/** The ADJUSTMENT_CONFLICT answer a write of this aggregate would leave behind, or undefined. */
+/** Whether the remote holds a live adjustment of this Sale (the Sale is then frozen). */
+function hasLiveAdjustment(rows: Map<string, FakeRemoteAggregate>, saleId: string): boolean {
+  for (const [key, row] of rows) {
+    if (key.startsWith('SALE_ADJUSTMENT/') && !row.deleted && (row.payload as unknown as WireAdjustment).sale_id === saleId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function adjustmentConflict(
+  rows: Map<string, FakeRemoteAggregate>,
+  request: RemotePushRequest,
+  previous: FakeRemoteAggregate | undefined,
+): RemotePushResult | undefined {
+  if (request.aggregateType !== 'SALE_ADJUSTMENT') return undefined;
+  const saleId = ((request.payload ?? previous?.payload) as unknown as WireAdjustment | undefined)?.sale_id;
+  if (saleId === undefined) return undefined;
+  const reason = saleAdjustmentBreach(rows, saleId);
+  return reason === undefined ? undefined : { status: 'ADJUSTMENT_CONFLICT', saleId, reason };
+}
 
 /** The expected total of one Appointment as the remote holds it (items − discount + linked Sale lines). */
 function remoteExpectedTotalCents(rows: Map<string, FakeRemoteAggregate>, appointmentId: string): number {
@@ -209,9 +345,10 @@ const SERVICE_CATALOGUE_KEYS = ['category_id', 'description'] as const;
 
 export function createFakeSyncRemote(
   ownedBusinessIds: readonly string[],
-  options: { readonly serviceCatalogue?: boolean } = {},
+  options: { readonly serviceCatalogue?: boolean; readonly saleAdjustments?: boolean } = {},
 ): FakeSyncRemote {
   let serviceCatalogue = options.serviceCatalogue ?? true;
+  let saleAdjustments = options.saleAdjustments ?? true;
   const businesses = new Map<string, Map<string, FakeRemoteAggregate>>();
   const requests: RemotePushRequest[] = [];
   const failures: SyncRemoteError[] = [];
@@ -244,6 +381,8 @@ export function createFakeSyncRemote(
     'completed_at',
     'voided_at',
     'recorded_at',
+    'refunded_at',
+    'settled_at',
   ];
 
   function toWireAggregate(key: string, row: FakeRemoteAggregate): Record<string, unknown> {
@@ -320,6 +459,10 @@ export function createFakeSyncRemote(
       rowsOf(original.businessId); // the owner check comes first, as on the server
       throw new SyncRemoteError('REJECTED', '22023');
     }
+    if (original.aggregateType === 'SALE_ADJUSTMENT' && !saleAdjustments) {
+      rowsOf(original.businessId);
+      throw new SyncRemoteError('REJECTED', '22023');
+    }
     const rows = rowsOf(original.businessId);
     const key = `${original.aggregateType}/${original.aggregateId}`;
     const remote = rows.get(key);
@@ -333,6 +476,14 @@ export function createFakeSyncRemote(
       if (!remote) return { status: 'ABSENT' };
       if (remote.deleted) return { status: 'APPLIED', syncVersion: remote.syncVersion };
       if (!versionMatches) return { status: 'CONFLICT', remoteVersion: remote.syncVersion };
+      if (request.aggregateType === 'SALE_ADJUSTMENT') {
+        const saleId = (remote.payload as unknown as WireAdjustment).sale_id;
+        return { status: 'ADJUSTMENT_CONFLICT', saleId, reason: 'IMMUTABLE' };
+      }
+      // A Sale that holds adjustments is frozen: CONFLICT, the status every build knows.
+      if (request.aggregateType === 'SALE' && hasLiveAdjustment(rows, request.aggregateId)) {
+        return { status: 'CONFLICT', remoteVersion: remote.syncVersion };
+      }
       if (request.aggregateType === 'APPOINTMENT' && remoteActiveDepositCents(rows, request.aggregateId) > 0) {
         return {
           status: 'FINANCIAL_CONFLICT',
@@ -344,7 +495,7 @@ export function createFakeSyncRemote(
       const appointmentId = affectedAppointmentId(rows, request);
       const tombstone = { ...remote, deleted: true, syncVersion: remote.syncVersion + 1, updatedAt: tick() };
       rows.set(key, tombstone);
-      const breach = financialBreach(rows, appointmentId);
+      const breach = financialBreach(rows, appointmentId) ?? adjustmentConflict(rows, request, remote);
       if (breach) {
         rows.set(key, remote); // nothing is written
         return breach;
@@ -359,7 +510,8 @@ export function createFakeSyncRemote(
       if (rejected) throw rejected;
       const createdAt = tick();
       rows.set(key, { payload: clone(request.payload), syncVersion: 1, deleted: false, createdAt, updatedAt: createdAt });
-      const breach = financialBreach(rows, affectedAppointmentId(rows, request));
+      const breach =
+        financialBreach(rows, affectedAppointmentId(rows, request)) ?? adjustmentConflict(rows, request, undefined);
       if (breach) {
         rows.delete(key); // nothing is written
         return breach;
@@ -369,7 +521,22 @@ export function createFakeSyncRemote(
     const identical =
       !remote.deleted && JSON.stringify(remote.payload) === JSON.stringify(request.payload);
     if (identical) return { status: 'APPLIED', syncVersion: remote.syncVersion };
+    if (request.aggregateType === 'SALE_ADJUSTMENT' && !remote.deleted) {
+      // A stored record never changes what it says; only its status moves forward.
+      const stored = remote.payload as unknown as Record<string, unknown>;
+      const next = request.payload as unknown as Record<string, unknown>;
+      const changed = IMMUTABLE_ADJUSTMENT_KEYS.some(
+        (column) => JSON.stringify(stored[column] ?? null) !== JSON.stringify(next[column] ?? null),
+      );
+      if (changed || !isAllowedAdjustmentTransition(String(stored.status), String(next.status))) {
+        return { status: 'ADJUSTMENT_CONFLICT', saleId: String(stored.sale_id), reason: 'IMMUTABLE' };
+      }
+    }
     if (!versionMatches) return { status: 'CONFLICT', remoteVersion: remote.syncVersion };
+    // A Sale that holds adjustments is frozen: any change is CONFLICT, nothing written.
+    if (request.aggregateType === 'SALE' && !remote.deleted && hasLiveAdjustment(rows, request.aggregateId)) {
+      return { status: 'CONFLICT', remoteVersion: remote.syncVersion };
+    }
     const rejected = referenceError(rows, request);
     if (rejected) throw rejected;
     const next = {
@@ -380,7 +547,8 @@ export function createFakeSyncRemote(
       updatedAt: tick(),
     };
     rows.set(key, next);
-    const breach = financialBreach(rows, affectedAppointmentId(rows, request));
+    const breach =
+      financialBreach(rows, affectedAppointmentId(rows, request)) ?? adjustmentConflict(rows, request, remote);
     if (breach) {
       rows.set(key, remote); // nothing is written
       return breach;
@@ -456,6 +624,9 @@ export function createFakeSyncRemote(
     setServiceCatalogue(enabled) {
       serviceCatalogue = enabled;
     },
+    setSaleAdjustments(enabled) {
+      saleAdjustments = enabled;
+    },
 
     async countBusinessAggregates(businessId) {
       countCalls += 1;
@@ -488,6 +659,7 @@ export function createFakeSyncRemote(
           });
       return {
         ...(serviceCatalogue ? { service_categories: family('SERVICE_CATEGORY') } : {}),
+        ...(saleAdjustments ? { sale_adjustments: family('SALE_ADJUSTMENT') } : {}),
         pulled_at: toWireInstant(tick()),
         clients: family('CLIENT'),
         services: family('SERVICE'),

@@ -11,6 +11,13 @@
 //                                     the money was received, never the Appointment day.
 //                                     A VOIDED deposit is a corrected entry: it counts
 //                                     nowhere (V1 has no refund-date accounting)
+//   D. SETTLED Sale adjustments       money given back for a Sale (a refund: NEGATIVE)
+//                                     or a compensating reversal (POSITIVE), on its own
+//                                     `refundedAt` — the day it actually happened, never
+//                                     the Sale day (docs/domain/SALES.md §15). PENDING
+//                                     and VOIDED move nothing. Direct Sales and Reventes
+//                                     alike: the Revente money stays in its Appointment
+//                                     payment, the refund is the one separate movement
 //
 // A Sale sold during an Appointment (« Revente ») is never counted on its
 // own: the Appointment checkout already records the whole amount received,
@@ -28,8 +35,13 @@ import {
   type Appointment,
   type AppointmentDeposit,
 } from '../appointments';
-import type { Sale } from '../sales';
+import { getSaleAdjustmentCashMovement, type Sale, type SaleAdjustment } from '../sales';
 
+/**
+ * What one period collected, NET of the Sale refunds settled in it: every
+ * amount is the sum of receipts and of the signed adjustment movements, so a
+ * day with only a refund reads negative. `checkoutCount` counts receipts only.
+ */
 export interface CashRegisterSummary {
   readonly totalCents: number;
   readonly cardCents: number;
@@ -42,6 +54,8 @@ export interface CashRegisterSources {
   readonly sales: readonly Sale[];
   /** Every Appointment deposit; only ACTIVE ones are counted. Absent = none. */
   readonly deposits?: readonly AppointmentDeposit[];
+  /** Every Sale adjustment; only SETTLED ones move money. Absent = none. */
+  readonly saleAdjustments?: readonly SaleAdjustment[];
 }
 
 export const EMPTY_CASH_REGISTER_SUMMARY: CashRegisterSummary = {
@@ -91,6 +105,18 @@ export type CashRegisterEntry =
       readonly deposit: AppointmentDeposit;
       /** The Appointment the deposit was paid for (undefined only if it is not loaded). */
       readonly appointment: Appointment | undefined;
+    }
+  | {
+      /**
+       * A SETTLED refund (negative amounts) or reversal (positive amounts) of a
+       * Sale. Never an « encaissement »: it counts in the totals and the method
+       * breakdown, not in the count of payments or of paying clients.
+       */
+      readonly kind: 'SALE_ADJUSTMENT';
+      readonly payment: RecordedPayment;
+      readonly adjustment: SaleAdjustment;
+      /** The adjusted Sale (undefined only if it is not loaded). */
+      readonly sale: Sale | undefined;
     };
 
 /** A deposit as the money it is: its whole amount on its one method. */
@@ -128,7 +154,26 @@ export function getCashRegisterEntries(sources: CashRegisterSources): readonly C
       });
     }
   }
+  const adjustments = sources.saleAdjustments ?? [];
+  if (adjustments.length > 0) {
+    const salesById = new Map(sources.sales.map((sale) => [sale.id, sale]));
+    for (const adjustment of adjustments) {
+      const movement = getSaleAdjustmentCashMovement(adjustment);
+      if (!movement) continue;
+      entries.push({
+        kind: 'SALE_ADJUSTMENT',
+        payment: { paidAt: movement.at, cardAmountCents: movement.cardCents, cashAmountCents: movement.cashCents },
+        adjustment,
+        sale: salesById.get(adjustment.saleId),
+      });
+    }
+  }
   return entries;
+}
+
+/** Whether the entry is money received (an « encaissement »), not a refund or a reversal. */
+export function isCashRegisterReceipt(entry: CashRegisterEntry): boolean {
+  return entry.kind !== 'SALE_ADJUSTMENT';
 }
 
 /**
@@ -138,6 +183,7 @@ export function getCashRegisterEntries(sources: CashRegisterSources): readonly C
  * not loaded — such money is counted, but it identifies nobody.
  */
 export function getCashRegisterEntryClientId(entry: CashRegisterEntry): string | undefined {
+  if (entry.kind === 'SALE_ADJUSTMENT') return entry.sale?.clientId;
   return entry.kind === 'SALE' ? entry.sale.clientId : entry.appointment?.clientId;
 }
 
@@ -154,6 +200,8 @@ export function getCashRegisterEntryClientId(entry: CashRegisterEntry): string |
 export function countCashRegisterPayingClients(entries: readonly CashRegisterEntry[]): number {
   const clientIds = new Set<string>();
   for (const entry of entries) {
+    // A refund identifies a client but brings no money in.
+    if (!isCashRegisterReceipt(entry)) continue;
     const clientId = getCashRegisterEntryClientId(entry);
     if (clientId !== undefined) clientIds.add(clientId);
   }
@@ -199,11 +247,12 @@ function summarize(
   let cashCents = 0;
   let checkoutCount = 0;
 
-  for (const payment of getCashRegisterPayments(sources)) {
+  for (const entry of getCashRegisterEntries(sources)) {
+    const { payment } = entry;
     if (!includes(payment.paidAt)) continue;
     cardCents += payment.cardAmountCents;
     cashCents += payment.cashAmountCents;
-    checkoutCount += 1;
+    if (isCashRegisterReceipt(entry)) checkoutCount += 1;
   }
 
   return { totalCents: cardCents + cashCents, cardCents, cashCents, checkoutCount };
@@ -272,4 +321,53 @@ export function getCashRegisterDailyTotals(sources: CashRegisterSources): Readon
     totals.set(key, (totals.get(key) ?? 0) + payment.cardAmountCents + payment.cashAmountCents);
   }
   return totals;
+}
+
+/** The Sale refunds and reversals SETTLED in one period, apart from the receipts. */
+export interface CashRegisterRefundSummary {
+  /** Money given back, net of reversals: positive when money left. */
+  readonly refundCents: number;
+  readonly refundCardCents: number;
+  readonly refundCashCents: number;
+  /** Of `refundCents`: refunds of Sales sold during an Appointment. */
+  readonly appointmentRefundCents: number;
+  /** Receipts before refunds: `totalCents + refundCents`. */
+  readonly grossCents: number;
+  readonly count: number;
+}
+
+/** The refunds of `[start, end)` and the gross receipts they come off. */
+export function getCashRegisterRefundSummary(
+  sources: CashRegisterSources,
+  interval: CashRegisterInterval,
+): CashRegisterRefundSummary {
+  const start = interval.start.getTime();
+  const end = interval.end.getTime();
+  let refundCardCents = 0;
+  let refundCashCents = 0;
+  let appointmentRefundCents = 0;
+  let grossCents = 0;
+  let count = 0;
+  for (const entry of getCashRegisterEntries(sources)) {
+    const time = entry.payment.paidAt.getTime();
+    if (time < start || time >= end) continue;
+    if (entry.kind !== 'SALE_ADJUSTMENT') {
+      grossCents += entry.payment.cardAmountCents + entry.payment.cashAmountCents;
+      continue;
+    }
+    count += 1;
+    refundCardCents -= entry.payment.cardAmountCents;
+    refundCashCents -= entry.payment.cashAmountCents;
+    if (entry.sale?.appointmentId !== undefined) {
+      appointmentRefundCents -= entry.payment.cardAmountCents + entry.payment.cashAmountCents;
+    }
+  }
+  return {
+    refundCents: refundCardCents + refundCashCents,
+    refundCardCents,
+    refundCashCents,
+    appointmentRefundCents,
+    grossCents,
+    count,
+  };
 }

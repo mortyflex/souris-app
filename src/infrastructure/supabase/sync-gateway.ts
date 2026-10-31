@@ -87,6 +87,15 @@ export function toRemotePushResult(data: unknown): RemotePushResult {
         activeDepositTotalCents: active,
       };
     }
+    case 'ADJUSTMENT_CONFLICT': {
+      // The refund ceilings or the immutability of a Sale adjustment (CLOUD_SYNC.md §28).
+      const { sale_id: saleId, reason } = data as Record<string, unknown>;
+      return {
+        status: 'ADJUSTMENT_CONFLICT',
+        saleId: typeof saleId === 'string' ? saleId : undefined,
+        reason: typeof reason === 'string' && /^[A-Z_]{1,40}$/.test(reason) ? reason : 'UNKNOWN',
+      };
+    }
     case 'ENTITLEMENT_REQUIRED':
       // The server refused the write for lack of a Plus entitlement (CLOUD_SYNC.md §26): nothing else is read from it.
       return { status: 'ENTITLEMENT_REQUIRED' };

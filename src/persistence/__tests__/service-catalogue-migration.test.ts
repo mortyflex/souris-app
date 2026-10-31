@@ -69,8 +69,8 @@ describe('schema v17 migration on an existing v16 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(17);
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+    expect(readSchemaVersion(db)).toBe(18);
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
     expect(createSeed).not.toHaveBeenCalled();
     expect(rows(db, 'SELECT id, business_id, name, type, price_cents, active FROM services ORDER BY rowid')).toEqual(servicesBefore);
     expect(rows(db, 'SELECT category_id, description FROM services')).toEqual([
@@ -125,7 +125,7 @@ describe('schema v17 migration on an existing v16 database', () => {
   it('is idempotent and lets the migrated database store categories and the two Service fields', () => {
     const db = openSchemaV16Database();
     migrateDatabase(db);
-    expect(migrateDatabase(db)).toBe(17);
+    expect(migrateDatabase(db)).toBe(18);
 
     insertServiceCategory(db, { id: 'cat-color', businessId: BUSINESS_ID, name: 'Couleurs', position: 0 });
     const color = loadServices(db).find((service) => service.id === 'technique-color')!;

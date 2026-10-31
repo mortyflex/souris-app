@@ -1,8 +1,9 @@
 // BeautIzzy — top bar of the pushed sale screens
 //
 // The Caisse top bar, reused as is: the glass back button, the « GESTION »
-// eyebrow centred, and a spacer mirroring the back button. The screen title
-// follows in the scrolling content, like every pushed Gestion screen.
+// eyebrow centred, and — like the Client detail — an optional « ••• » glass
+// button on the right (`onOpenActions`), otherwise a spacer mirroring the back
+// button. The screen title follows in the scrolling content.
 
 import { useRouter } from 'expo-router';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -13,7 +14,14 @@ import { gutter, semanticColors, spacing } from '@/shared/ui/theme';
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 
-export function SaleHistoryTopBar() {
+interface SaleHistoryTopBarProps {
+  /** Shows the « ••• » button; absent, a spacer keeps the eyebrow centred. */
+  readonly onOpenActions?: () => void;
+  readonly actionsLabel?: string;
+  readonly actionsTestID?: string;
+}
+
+export function SaleHistoryTopBar({ onOpenActions, actionsLabel = 'Actions', actionsTestID }: SaleHistoryTopBarProps = {}) {
   const router = useRouter();
   return (
     <View style={styles.topBar}>
@@ -21,7 +29,16 @@ export function SaleHistoryTopBar() {
       <AppText variant="eyebrow" style={styles.eyebrow}>
         GESTION
       </AppText>
-      <View style={styles.spacer} />
+      {onOpenActions ? (
+        <GlassIconButton
+          accessibilityLabel={actionsLabel}
+          icon={glassIcons.more}
+          onPress={onOpenActions}
+          testID={actionsTestID}
+        />
+      ) : (
+        <View style={styles.spacer} />
+      )}
     </View>
   );
 }

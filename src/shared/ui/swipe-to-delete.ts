@@ -8,9 +8,10 @@
 //   full swipe     → past the full-swipe threshold the release commits the
 //                    deletion once;
 //   hint           → one automatic « peek » (rest → clearly visible partial
-//                    reveal → brief hold while the trash is readable → smooth
-//                    return) on ONE row per screen, skipped under reduced
-//                    motion and never repeated.
+//                    reveal → readable hold → slower, eased return) on ONE
+//                    row per screen, skipped under reduced motion and never
+//                    repeated. The same motion for every swipeable row
+//                    (`useSwipeHintPeek`), whatever its action.
 //
 //   press guard    → as soon as a touch shows horizontal intent it is a SWIPE,
 //                    never a tap: the row content loses the press (expand /
@@ -21,6 +22,9 @@
 // been measured yet.
 
 export const DELETE_ACTION_WIDTH = 72;
+
+/** SwipeActionRow's compact reveal: a short label under its glyph (« Actions »), still a comfortable target. */
+export const SWIPE_ACTION_WIDTH = 76;
 
 /** Horizontal travel (pt) after which the swipeable's own pan gesture activates. */
 export const SWIPE_ACTIVATION_DISTANCE = 12;
@@ -59,16 +63,26 @@ export function isFullSwipe(translation: number, rowWidth: number): boolean {
   return translation >= getFullSwipeThreshold(rowWidth);
 }
 
-/** How far the hint peeks (points): a clearly visible partial swipe, still far from open. */
-export const SWIPE_HINT_OFFSET = 28;
+/**
+ * How far the hint peeks (points): about two thirds of a revealed action
+ * (DELETE_ACTION_WIDTH 72, SWIPE_ACTION_WIDTH 76) — the glyph is plainly
+ * readable, yet the row clearly stops short of an open swipe, let alone a
+ * full-swipe commit. One value for every swipeable row of BeautIzzy.
+ */
+export const SWIPE_HINT_OFFSET = 52;
 
-/** Settle time before the hint starts, so the screen has finished presenting. */
-export const SWIPE_HINT_DELAY_MS = 500;
+/** Settle time before the hint starts, so the screen and its list have finished presenting. */
+export const SWIPE_HINT_DELAY_MS = 450;
 
-export const SWIPE_HINT_REVEAL_MS = 300;
-/** Pause at the revealed position so the trash is readable before the return. */
-export const SWIPE_HINT_HOLD_MS = 300;
-export const SWIPE_HINT_RETURN_MS = 320;
+/** Outward travel: decelerates into the revealed position (`easing.out`). */
+export const SWIPE_HINT_REVEAL_MS = 360;
+/** Pause at the revealed position so the action glyph is readable before the return. */
+export const SWIPE_HINT_HOLD_MS = 450;
+/** Return to rest: noticeably slower than the reveal, eased in and out, no bounce. */
+export const SWIPE_HINT_RETURN_MS = 700;
+
+/** cubic-bezier(.45, 0, .55, 1): a soft ease-in-out for the slow return. */
+export const SWIPE_HINT_RETURN_EASING: [number, number, number, number] = [0.45, 0, 0.55, 1];
 
 /** Reveal → hold → return: how long the hint surface stays visible once started. */
 export const SWIPE_HINT_TOTAL_MS = SWIPE_HINT_REVEAL_MS + SWIPE_HINT_HOLD_MS + SWIPE_HINT_RETURN_MS;

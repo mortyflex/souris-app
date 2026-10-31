@@ -228,6 +228,32 @@ edited. Nothing ever drops tables on mismatch.
 
 Schema version and seed version are different concepts (see §5).
 
+### Schema v18 — Sale adjustments (corrections and refunds)
+
+```text
+CREATE TABLE sale_adjustments (id PK, business_id, sale_id, kind REFUND|REVERSAL, reverses_adjustment_id,
+  reason, note, staff_member_id, refund_card_cents >= 0, refund_cash_cents >= 0,
+  initial_status PENDING|SETTLED, status PENDING|SETTLED|VOIDED, refunded_at, settled_at, voided_at,
+  recorded_at, + the status ↔ instants CHECKs);
+CREATE UNIQUE INDEX … ON sale_adjustments(reverses_adjustment_id) WHERE reverses_adjustment_id IS NOT NULL;
+CREATE TABLE sale_adjustment_items (adjustment_id → sale_adjustments ON DELETE CASCADE, id, position,
+  sale_item_id, product_id, product_name, unit_price_cents >= 0, quantity >= 1, restock 0|1);
+-- sync_outbox / sync_state rebuilt with SALE_ADJUSTMENT (the v11 copy procedure); pull cursor cleared
+```
+
+`docs/domain/SALES.md` §15, `CLOUD_SYNC.md` §28. Two new tables, created empty; `sale_id` is plain
+reference metadata (no foreign key, like `sales.appointment_id`): the Sale store refuses to remove a
+Sale that holds an adjustment, and a pulled Sale tombstone is BLOCKED. No existing row is touched.
+v11, v12, v17 and v18 are the only non-`ALTER` migrations.
+
+Store (`stores/sale-adjustments.ts`), ONE transaction per write, re-reading the stored facts:
+`recordSaleAdjustment` (duplicate id refused; the draft re-validated against the stored Sale, its
+adjustments and the stored Appointment settlement; restocked units added to their Product, a missing
+Product aborts everything; outbox SALE_ADJUSTMENT + PRODUCT), `settleStoredSaleAdjustment`,
+`voidStoredSaleAdjustment` (takes restocked units back, refused when the stock no longer holds them),
+`reverseStoredSaleAdjustment`. `deleteAppointmentProduct` is refused once the Appointment is settled
+(`APPOINTMENT_SETTLED`) or a matching Sale holds an adjustment (`SALE_HAS_ADJUSTMENT`).
+
 ### Schema v17 — Service categories and descriptions
 
 ```text

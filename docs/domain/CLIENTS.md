@@ -611,6 +611,11 @@ BeautIzzy never invents a payment for it, although it stays listed in `Produits 
 A deposit is a way of paying an Appointment and never adds to the total. Snapshots only —
 never current catalog prices.
 
+Money given back lowers it (`docs/domain/SALES.md` §15): a SETTLED refund of one of the Client's
+Sales subtracts its amount, a compensating reversal adds it back; a PENDING or VOIDED record, or a
+correction without money, changes nothing (`getSaleAdjustmentClientSpendingCents`). « Tops &
+tendances » applies it on the refund date.
+
 « Tops & tendances » ranks « Clients qui dépensent le plus » with the SAME rule
 (`getAppointmentClientSpendingCents`, `getSaleClientSpendingCents`), scoped to one
 civil period (`docs/domain/INSIGHTS.md` §3). The profile total is a lifetime amount, so

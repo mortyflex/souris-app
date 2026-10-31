@@ -87,6 +87,21 @@ describe('toRemotePushResult', () => {
   });
 });
 
+describe('toRemotePushResult — sale adjustments (CLOUD_SYNC.md §28)', () => {
+  it('reads ADJUSTMENT_CONFLICT with its Sale and a machine reason, never a free text', () => {
+    expect(toRemotePushResult({ status: 'ADJUSTMENT_CONFLICT', sale_id: 'sale-1', reason: 'CEILING' })).toEqual({
+      status: 'ADJUSTMENT_CONFLICT',
+      saleId: 'sale-1',
+      reason: 'CEILING',
+    });
+    expect(toRemotePushResult({ status: 'ADJUSTMENT_CONFLICT', reason: 'a message with a name' })).toEqual({
+      status: 'ADJUSTMENT_CONFLICT',
+      saleId: undefined,
+      reason: 'UNKNOWN',
+    });
+  });
+});
+
 describe('createSupabaseSyncGateway', () => {
   it('pushes through the ONE rpc with the Business id, the expected version and the payload', async () => {
     const { client, rpc } = createClient({ data: { status: 'APPLIED', sync_version: 4 }, error: null });

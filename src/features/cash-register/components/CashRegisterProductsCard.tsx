@@ -9,14 +9,23 @@
 // entries of the period. No product amount is ever derived from an
 // Appointment checkout: that checkout records services and products as ONE
 // received amount, and a sentence says so whenever Reventes are counted.
-// Absent when the period sold nothing and has no unit trend to report.
+// A last row, « Voir les ventes », opens the sale history of the SAME period
+// (docs/domain/SALES.md §11b). When product refunds were SETTLED in the period
+// (on their real refund day), two more lines say how much was given back and
+// the net — the refund of a product sold during an Appointment is named apart,
+// its sale being inside that Appointment's checkout (SALES.md §15). Absent
+// when the period sold nothing, refunded nothing and has no unit trend.
 
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import type { CashRegisterProductSummary, CashRegisterTrend } from '@/domain/cash-register';
+import type {
+  CashRegisterProductSummary,
+  CashRegisterRefundSummary,
+  CashRegisterTrend,
+} from '@/domain/cash-register';
 import { saleIcon } from '@/shared/icons/sale-icon';
-import { formatEuroCents } from '@/shared/lib/money';
+import { formatEuroCents, formatSignedEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
 import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { NavigationChevron } from '@/shared/ui/NavigationChevron';
@@ -33,6 +42,8 @@ import { CashRegisterTrendRow, CashRegisterTrendToggle } from './CashRegisterTre
 export const PRODUCTS_TITLE = 'Produits vendus';
 export const DIRECT_SALES_LABEL = 'Ventes directes encaissées';
 export const REVENTE_NOTE = 'Les produits vendus pendant un rendez-vous sont encaissés avec celui-ci.';
+export const REFUNDS_LABEL = 'Remboursements produits';
+export const NET_LABEL = 'Net produits';
 export const OPEN_SALES_LABEL = 'Voir les ventes';
 export const OPEN_SALES_HINT = 'Ouvre l’historique des ventes de produits de la période';
 
@@ -40,14 +51,23 @@ interface CashRegisterProductsCardProps {
   readonly summary: CashRegisterProductSummary;
   /** Month view only: units against the equivalent span of the previous month. */
   readonly unitTrend?: CashRegisterTrend;
+  /** Product refunds settled in the period; absent or zero, nothing is shown. */
+  readonly refunds?: CashRegisterRefundSummary;
   /** Opens the sale history of the period; absent, the card stays a summary. */
   readonly onOpenSales?: () => void;
   readonly testID: string;
 }
 
-export function CashRegisterProductsCard({ summary, unitTrend, onOpenSales, testID }: CashRegisterProductsCardProps) {
+export function CashRegisterProductsCard({
+  summary,
+  unitTrend,
+  refunds,
+  onOpenSales,
+  testID,
+}: CashRegisterProductsCardProps) {
   const trendDisplay = useCashRegisterTrendDisplay('units', [unitTrend]);
-  if (summary.unitCount === 0 && unitTrend === undefined) return null;
+  const refunded = refunds !== undefined && refunds.count > 0;
+  if (summary.unitCount === 0 && unitTrend === undefined && !refunded) return null;
 
   const units = formatProductUnitCount(summary.unitCount);
   const split = formatProductUnitSplit(summary);
@@ -117,6 +137,43 @@ export function CashRegisterProductsCard({ summary, unitTrend, onOpenSales, test
           </AppText>
         )}
       </View>
+      {refunded && refunds && (
+        <>
+          <GroupedSeparator inset={spacing.base} />
+          <View
+            accessible
+            accessibilityLabel={[
+              `${REFUNDS_LABEL} : ${formatSignedEuroCents(-refunds.refundCents)}`,
+              `${NET_LABEL} : ${formatEuroCents(summary.standaloneCollectedCents - refunds.refundCents)}`,
+              ...(refunds.appointmentRefundCents !== 0 ? [describeAppointmentRefunds(refunds.appointmentRefundCents)] : []),
+            ].join('. ')}
+            style={styles.direct}
+            testID={`${testID}-refunds`}
+          >
+            <View style={styles.directRow}>
+              <AppText style={styles.directLabel} variant="body">
+                {REFUNDS_LABEL}
+              </AppText>
+              <AppText selectable style={styles.directValue} testID={`${testID}-refunds-value`} variant="control">
+                {formatSignedEuroCents(-refunds.refundCents)}
+              </AppText>
+            </View>
+            <View style={styles.directRow}>
+              <AppText style={styles.directLabel} variant="body">
+                {NET_LABEL}
+              </AppText>
+              <AppText selectable style={styles.directValue} testID={`${testID}-net-value`} variant="control">
+                {formatEuroCents(summary.standaloneCollectedCents - refunds.refundCents)}
+              </AppText>
+            </View>
+            {refunds.appointmentRefundCents !== 0 && (
+              <AppText style={styles.note} testID={`${testID}-refunds-note`} variant="metadata">
+                {describeAppointmentRefunds(refunds.appointmentRefundCents)}
+              </AppText>
+            )}
+          </View>
+        </>
+      )}
       {onOpenSales && (
         <>
           <GroupedSeparator inset={spacing.base} />
@@ -137,6 +194,11 @@ export function CashRegisterProductsCard({ summary, unitTrend, onOpenSales, test
       )}
     </GroupedSurface>
   );
+}
+
+/** The share of the refunds that concerns products sold during an Appointment. */
+export function describeAppointmentRefunds(cents: number): string {
+  return `Dont ${formatSignedEuroCents(-cents)} sur des produits vendus pendant un rendez-vous, dont la vente est comptée avec celui-ci.`;
 }
 
 const styles = StyleSheet.create({

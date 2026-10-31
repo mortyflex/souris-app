@@ -69,8 +69,8 @@ describe('schema v2 migration on an existing v1 database', () => {
 
     const snapshot = bootstrapPersistence(db, createSeed);
 
-    expect(readSchemaVersion(db)).toBe(17);
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+    expect(readSchemaVersion(db)).toBe(18);
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
     expect(createSeed).not.toHaveBeenCalled();
     expect(readSeedVersion(db)).toBe(1);
     expect(countRows(db, 'clients')).toBe(2);
@@ -93,7 +93,7 @@ describe('schema v2 migration on an existing v1 database', () => {
     const db = openSchemaV1Database();
     migrateDatabase(db);
 
-    expect(migrateDatabase(db)).toBe(17);
+    expect(migrateDatabase(db)).toBe(18);
     expect(countRows(db, 'clients')).toBe(2);
     expect(
       db.getAllSync<{ name: string }>('PRAGMA table_info(clients)').filter(

@@ -1188,12 +1188,14 @@ Sale the expected total is simply the services total — it is always shown, nev
 immediately when a Revente is added or a sold Product row is deleted (`docs/domain/SALES.md` §10).
 
 **Expected vs. received.** `appointment.payment` is the amount actually received. A new checkout settles the
-exact due, so they match at checkout; they may still differ afterwards — a sold Product deleted after checkout,
-or a legacy payment recorded before exact settlement (a tip, an adjustment). Deleting a
-Product row never rewrites the payment: after `services 80 € + products 20 €` were checked out as `100 €`, removing
-the 20 € Product gives `Total attendu 80 €` while `Encaissement 100 €` stays recorded, and Details shows the restrained
-`Écart : +20,00 €` (received minus expected). `Modifier l’encaissement` remains the only way to change the recorded
-amount, and the Cash Register follows that payment alone.
+exact due, so they match at checkout; they may still differ afterwards — a Revente removed after checkout by a
+build that predates Sale adjustments (history kept as recorded), or a legacy payment recorded before exact
+settlement (a tip, an adjustment). Details then shows the restrained `Écart : ±…` line (received minus expected).
+Since Sale adjustments (`docs/domain/SALES.md` §15), a product sold during a SETTLED Appointment is no longer
+removed: it is corrected or refunded as its own record, the Appointment payment stays exactly as recorded, and
+the refund is its own negative movement in the Cash Register on the day it happened — never counted twice.
+`Modifier l’encaissement` still changes the recorded amount in place (an audit gap, `docs/product/SALE_ADJUSTMENTS_PLAN.md`
+milestone 4), and the Cash Register follows that payment.
 
 The **Cash Register** (`src/domain/cash-register`) derives ONLY from money explicitly recorded through
 BeautIzzy: every `appointment.payment`, `sale.payment` of STANDALONE Sales (no `appointmentId`,
