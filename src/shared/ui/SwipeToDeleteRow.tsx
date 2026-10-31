@@ -39,18 +39,19 @@
 // the reorder long-press and vertical scrolling are separate native gestures
 // and are untouched; a plain tap never moves sideways, so it still presses.
 //
+// Android: the trash is NOT rendered inside the swipeable. The primitive's
+// invisible right-actions container sits above its left actions and Android
+// hit-testing ignores opacity, so a trash drawn there never received a tap.
+// The swipeable renders the rose surface and a 72 pt placeholder; the trash
+// is drawn by `SwipeRevealedAction`, above the swipeable, clipped to the
+// uncovered strip (see SwipeRevealedAction.tsx).
+//
 // This component knows nothing about Products, Sales or Services: wording
 // (accessibility label) and semantics stay with the caller.
 
 import { SymbolView } from 'expo-symbols';
 import { useRef, useState, type PropsWithChildren } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  View,
-  type GestureResponderEvent,
-  type LayoutChangeEvent,
-} from 'react-native';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -68,11 +69,11 @@ import { haptics } from '@/shared/lib/haptics';
 
 import {
   DELETE_ACTION_WIDTH,
-  hasHorizontalSwipeIntent,
   isFullSwipe,
   SWIPE_ACTIVATION_DISTANCE,
   SWIPE_HINT_OFFSET,
 } from './swipe-to-delete';
+import { SwipeRevealedAction, SwipeRevealSpacer, useSwipeTapGuard } from './SwipeRevealedAction';
 import { rose, semanticColors } from './theme';
 import { useSwipeHintPeek } from './useSwipeHintPeek';
 
@@ -94,23 +95,15 @@ interface SwipeToDeleteRowProps {
   readonly deleteTestID: string;
 }
 
-interface DeleteActionProps {
+interface DeleteSurfaceProps {
   readonly translation: SharedValue<number>;
+  readonly revealed: SharedValue<number>;
   readonly rowWidth: SharedValue<number>;
   readonly armed: SharedValue<boolean>;
-  readonly accessibilityLabel: string;
-  readonly testID: string;
-  readonly onPress: () => void;
 }
 
-function DeleteAction({
-  translation,
-  rowWidth,
-  armed,
-  accessibilityLabel,
-  testID,
-  onPress,
-}: DeleteActionProps) {
+/** Rendered by the swipeable: the growing rose surface and the 72 pt placeholder of the trash. */
+function DeleteSurface({ translation, revealed, rowWidth, armed }: DeleteSurfaceProps) {
   // Arms / disarms the full-swipe commit as the finger crosses the threshold
   // in either direction; ONE selection tick per crossing into the armed state.
   useAnimatedReaction(
@@ -123,9 +116,27 @@ function DeleteAction({
   );
 
   const surface = useAnimatedStyle(() => ({ width: Math.max(translation.get(), 0) }));
+
+  return (
+    <View pointerEvents="none">
+      <Animated.View style={[styles.actionSurface, surface]} />
+      <SwipeRevealSpacer revealed={revealed} translation={translation} width={DELETE_ACTION_WIDTH} />
+    </View>
+  );
+}
+
+interface TrashButtonProps {
+  readonly revealed: SharedValue<number>;
+  readonly accessibilityLabel: string;
+  readonly testID: string;
+  readonly onPress: () => void;
+}
+
+/** The trash itself, drawn in the revealed layer: fades and scales in as the row uncovers it. */
+function TrashButton({ revealed, accessibilityLabel, testID, onPress }: TrashButtonProps) {
   const icon = useAnimatedStyle(() => ({
     opacity: interpolate(
-      translation.get(),
+      revealed.get(),
       [0, DELETE_ACTION_WIDTH * 0.4, DELETE_ACTION_WIDTH],
       [0, 0, 1],
       Extrapolation.CLAMP,
@@ -133,7 +144,7 @@ function DeleteAction({
     transform: [
       {
         scale: interpolate(
-          translation.get(),
+          revealed.get(),
           [DELETE_ACTION_WIDTH * 0.4, DELETE_ACTION_WIDTH],
           [0.7, 1],
           Extrapolation.CLAMP,
@@ -143,20 +154,17 @@ function DeleteAction({
   }));
 
   return (
-    <View style={styles.action}>
-      <Animated.View pointerEvents="none" style={[styles.actionSurface, surface]} />
-      <Pressable
-        accessibilityLabel={accessibilityLabel}
-        accessibilityRole="button"
-        onPress={onPress}
-        style={styles.trash}
-        testID={testID}
-      >
-        <Animated.View style={icon}>
-          <SymbolView name={trashIcon} size={22} tintColor={semanticColors.onAccent} />
-        </Animated.View>
-      </Pressable>
-    </View>
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.trash}
+      testID={testID}
+    >
+      <Animated.View style={icon}>
+        <SymbolView name={trashIcon} size={22} tintColor={semanticColors.onAccent} />
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -183,12 +191,16 @@ export function SwipeToDeleteRow({
   const swipeable = useRef<SwipeableMethods>(null);
   const rowWidth = useSharedValue(0);
   const armed = useSharedValue(false);
+  // The swipeable's live translation, mirrored for the revealed trash layer.
+  const revealed = useSharedValue(0);
   // JS-side single-fire guard: a release past the threshold and a trash tap
-  // can never delete the same row twice.
+  // (or two quick taps) can never delete the same row twice.
   const committed = useRef(false);
   // Any touch on the row takes over: a pending hint never fires and a
   // running one settles back to rest immediately.
   const { hintVisible, peekStyle, cancelHint } = useSwipeHintPeek(hint);
+  // Swipe never taps (see the header).
+  const swipeGuard = useSwipeTapGuard();
 
   const commitDeletion = () => {
     if (committed.current) return;
@@ -200,21 +212,6 @@ export function SwipeToDeleteRow({
 
   const onRelease = () => {
     if (armed.get()) commitDeletion();
-  };
-
-  // Swipe never taps (see the header): remember where the touch began, then
-  // take the JS responder away from the pressed content once it moves sideways.
-  const touchOrigin = useRef<{ readonly x: number; readonly y: number } | undefined>(undefined);
-  const rememberTouchOrigin = (event: GestureResponderEvent) => {
-    touchOrigin.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
-    return false;
-  };
-  const claimSwipe = (event: GestureResponderEvent) => {
-    const origin = touchOrigin.current;
-    return (
-      origin !== undefined &&
-      hasHorizontalSwipeIntent(event.nativeEvent.pageX - origin.x, event.nativeEvent.pageY - origin.y)
-    );
   };
 
   const onRowLayout = (event: LayoutChangeEvent) => {
@@ -242,27 +239,23 @@ export function SwipeToDeleteRow({
           overshootFriction={1}
           overshootLeft
           renderLeftActions={(_progress, translation) => (
-            <DeleteAction
-              accessibilityLabel={deleteAccessibilityLabel}
-              armed={armed}
-              onPress={commitDeletion}
-              rowWidth={rowWidth}
-              testID={deleteTestID}
-              translation={translation}
-            />
+            <DeleteSurface armed={armed} revealed={revealed} rowWidth={rowWidth} translation={translation} />
           )}
           testID={testID}
         >
-          <View
-            onMoveShouldSetResponderCapture={claimSwipe}
-            onResponderTerminationRequest={() => true}
-            onStartShouldSetResponderCapture={rememberTouchOrigin}
-            testID={`${testID}-content`}
-          >
+          <View {...swipeGuard} testID={`${testID}-content`}>
             {children}
           </View>
         </ReanimatedSwipeable>
       </Animated.View>
+      <SwipeRevealedAction revealed={revealed} testID={`${testID}-revealed`} width={DELETE_ACTION_WIDTH}>
+        <TrashButton
+          accessibilityLabel={deleteAccessibilityLabel}
+          onPress={commitDeletion}
+          revealed={revealed}
+          testID={deleteTestID}
+        />
+      </SwipeRevealedAction>
     </View>
   );
 }
@@ -280,7 +273,6 @@ const styles = StyleSheet.create({
     top: 0,
     width: SWIPE_HINT_OFFSET,
   },
-  action: { width: DELETE_ACTION_WIDTH },
   actionSurface: {
     backgroundColor: rose.rose600,
     bottom: 0,

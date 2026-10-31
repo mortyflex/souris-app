@@ -26,6 +26,9 @@ export const Easing = {
 };
 export const useReducedMotion = () => reducedMotion.enabled;
 export const useAnimatedStyle = (style: () => object) => style();
+// Reacts once per render with the current value, like the other suites' doubles.
+export const useAnimatedReaction = <T,>(prepare: () => T, react: (value: T, previous: T | null) => void) =>
+  react(prepare(), null);
 export const withTiming = (value: unknown) => value;
 export const withSpring = (value: unknown) => value;
 export const withDelay = (_delay: number, value: unknown) => value;

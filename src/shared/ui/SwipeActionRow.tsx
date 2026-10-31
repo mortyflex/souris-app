@@ -25,20 +25,24 @@
 // The row content keeps its own press (opening a detail): the content wrapper
 // takes the JS responder only once the touch shows horizontal intent, exactly
 // like SwipeToDeleteRow, so a swipe never taps.
+//
+// Android: the action is NOT rendered inside the swipeable — the primitive's
+// invisible right-actions container sits above its left actions and Android
+// hit-testing ignores opacity, so « Actions » never received a tap. The
+// swipeable renders a 76 pt placeholder (which also restores the documented
+// open distance: the action used to stretch to the whole row); the action is
+// drawn by `SwipeRevealedAction`, above the swipeable, clipped to the
+// uncovered strip. One tap per reveal: quick repeated taps open the flow once.
 
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useRef, useState, type PropsWithChildren } from 'react';
-import { Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import Animated from 'react-native-reanimated';
+import Animated, { useSharedValue } from 'react-native-reanimated';
 
 import { AppText } from './AppText';
-import {
-  hasHorizontalSwipeIntent,
-  SWIPE_ACTION_WIDTH,
-  SWIPE_ACTIVATION_DISTANCE,
-  SWIPE_HINT_OFFSET,
-} from './swipe-to-delete';
+import { SWIPE_ACTION_WIDTH, SWIPE_ACTIVATION_DISTANCE, SWIPE_HINT_OFFSET } from './swipe-to-delete';
+import { SwipeRevealedAction, SwipeRevealSpacer, useSwipeTapGuard } from './SwipeRevealedAction';
 import { semanticColors, spacing } from './theme';
 import { useSwipeHintPeek } from './useSwipeHintPeek';
 
@@ -85,22 +89,18 @@ export function SwipeActionRow({
   const swipeable = useRef<SwipeableMethods>(null);
   const { hintVisible, peekStyle, cancelHint } = useSwipeHintPeek(hint);
 
+  // The swipeable's live translation, mirrored for the revealed action layer.
+  const revealed = useSharedValue(0);
+  const swipeGuard = useSwipeTapGuard();
+  // One action per reveal: a second quick tap while the row closes is ignored;
+  // the next reveal (onSwipeableWillOpen) arms it again.
+  const actionTaken = useRef(false);
+
   const runAction = () => {
+    if (actionTaken.current) return;
+    actionTaken.current = true;
     swipeable.current?.close();
     onAction();
-  };
-
-  const touchOrigin = useRef<{ readonly x: number; readonly y: number } | undefined>(undefined);
-  const rememberTouchOrigin = (event: GestureResponderEvent) => {
-    touchOrigin.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
-    return false;
-  };
-  const claimSwipe = (event: GestureResponderEvent) => {
-    const origin = touchOrigin.current;
-    return (
-      origin !== undefined &&
-      hasHorizontalSwipeIntent(event.nativeEvent.pageX - origin.x, event.nativeEvent.pageY - origin.y)
-    );
   };
 
   return (
@@ -124,28 +124,16 @@ export function SwipeActionRow({
           childrenContainerStyle={{ backgroundColor: surfaceColor }}
           dragOffsetFromLeftEdge={SWIPE_ACTIVATION_DISTANCE}
           leftThreshold={SWIPE_ACTION_WIDTH / 2}
+          onSwipeableWillOpen={() => {
+            actionTaken.current = false;
+          }}
           overshootLeft={false}
-          renderLeftActions={() => (
-            <Pressable
-              accessibilityLabel={actionLabel}
-              accessibilityRole="button"
-              onPress={runAction}
-              style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
-              testID={actionTestID}
-            >
-              <SymbolView name={actionIcon} size={18} tintColor={semanticColors.accent} />
-              <AppText numberOfLines={1} style={styles.actionLabel} variant="chip">
-                {actionLabel}
-              </AppText>
-            </Pressable>
+          renderLeftActions={(_progress, translation) => (
+            <SwipeRevealSpacer revealed={revealed} translation={translation} width={SWIPE_ACTION_WIDTH} />
           )}
           testID={testID}
         >
-          <View
-            onMoveShouldSetResponderCapture={claimSwipe}
-            onResponderTerminationRequest={() => true}
-            onStartShouldSetResponderCapture={rememberTouchOrigin}
-          >
+          <View {...swipeGuard}>
             {children}
             <View
               accessibilityElementsHidden
@@ -157,6 +145,20 @@ export function SwipeActionRow({
           </View>
         </ReanimatedSwipeable>
       </Animated.View>
+      <SwipeRevealedAction revealed={revealed} testID={`${testID}-revealed`} width={SWIPE_ACTION_WIDTH}>
+        <Pressable
+          accessibilityLabel={actionLabel}
+          accessibilityRole="button"
+          onPress={runAction}
+          style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
+          testID={actionTestID}
+        >
+          <SymbolView name={actionIcon} size={18} tintColor={semanticColors.accent} />
+          <AppText numberOfLines={1} style={styles.actionLabel} variant="chip">
+            {actionLabel}
+          </AppText>
+        </Pressable>
+      </SwipeRevealedAction>
     </View>
   );
 }
