@@ -2460,9 +2460,11 @@ RPCs replaced in place  count (+ sale_adjustments), push (SALE_ADJUSTMENT, immut
 - **Client behaviour.** `RemotePushResult` gained `ADJUSTMENT_CONFLICT`. The worker keeps the entry
   pending (`last_error = ADJUSTMENT_CONFLICT`, bounded backoff), reports it (`adjustmentConflicts`), and
   goes on. The record stays on the device and reads « Refusé par le serveur … À vérifier. » — it is
-  never presented as synchronized. Resolution is explicit: the professional voids the refused record (the
-  one case a SETTLED record may be voided, `isSaleAdjustmentServerRefused`: refused AND never
-  acknowledged); the VOIDED record then syncs as history. Nothing is merged, clamped or dropped.
+  never presented as synchronized. Resolution is explicit and says what really happened (§28.1): money
+  not returned → the refused record is voided (the one case a SETTLED record may be voided,
+  `isSaleAdjustmentServerRefused`: refused AND never acknowledged) and the VOIDED record syncs as
+  history; money returned → it is voided AND an exceptional outflow records the money. Nothing is
+  merged, clamped or dropped.
 - **Rollout safety.** Until a pull answers with the `sale_adjustments` key (`sync_remote_sale_adjustments`,
   `sale-adjustment-sync.ts`), the worker DEFERS every SALE_ADJUSTMENT entry (`REMOTE_SCHEMA_PENDING`):
   money is never sent to — or "acknowledged" by — a remote that does not enforce the ceilings. Schema v18
@@ -2479,3 +2481,35 @@ populated through the previous functions, then re-applied; every answer to a SAL
 vocabulary the Production build parses). PGlite is single-connection: the Sale-row lock is verified for its presence and effect on
 sequential writes, NOT under true parallel transactions — validate on Staging with two devices.
 
+
+### 28.1 Exceptional outflows after a refusal (no schema change; remote 20261012120000)
+
+The resolution « l’argent a bien été rendu » of a refused refund (SALES.md §15.1) writes, in ONE local
+transaction, the refused record VOIDED and a NEW SALE_ADJUSTMENT whose id is `<refused id>-outflow`:
+kind REFUND, money only, SETTLED, same amounts / methods / refund day / reason / note / operator. Two
+ordinary SALE_ADJUSTMENT outbox entries; the voided record's entry is the older one, so it normally
+reaches the remote first. No SQLite migration, no new aggregate type, no new payload key: the link IS
+the identity, so a pull or a restore recovers it.
+
+- **Remote rule** (`supabase/migrations/20261012120000_add_sale_refund_outflows.sql`): ONE function
+  body replaced (`sync_sale_adjustment_breach`) and ONE immutable helper
+  (`sync_sale_refund_outflow_source`). An outflow is excluded from the money and unit ceilings; it must
+  be money only (no item), > 0, kind REFUND, SETTLED at once; when the remote holds its refused record,
+  that record must be the same refund (Sale, card and cash cents, refund day), settled when recorded,
+  and now VOIDED — so the same money never counts twice, whichever arrives first (an outflow before its
+  source is accepted; a LIVE source after its outflow is refused). Refusals answer
+  `ADJUSTMENT_CONFLICT` with reason `OUTFLOW` and write nothing. `sync_push_aggregate`, the pull, the
+  Sale-row lock and the immutability rule are unchanged (an identical replay passes; any other content
+  under the same id is `IMMUTABLE`).
+- **In front of a remote without 20261012120000** the outflow is answered `CEILING` like any
+  over-refund: kept pending, shown « Pas encore acceptée par le serveur (il doit être mis à jour) », never
+  voidable, still counted in the Caisse, sent once the migration is applied.
+- **Older builds.** The Production build (TestFlight 10, v17) never names SALE_ADJUSTMENT. A v18 build
+  without outflows never creates such an id; pulling one, it reads an ordinary settled refund (money
+  counted, its local « remaining » for that Sale floors at 0).
+
+Verified locally: `src/persistence/__tests__/sale-adjustments.test.ts` (both answers, two devices,
+idempotent replay with a lost acknowledgement, restock taken back, restore, an unmigrated remote, the
+modelled remote rule incl. order) and an out-of-repo PGlite 0.2.17 harness (59 checks for the new
+migration on a populated database, re-run; the 62 checks of 20261011120000 re-run with it applied on
+top). True parallel transactions remain a Staging check (§28).

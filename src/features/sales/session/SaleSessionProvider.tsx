@@ -17,6 +17,7 @@ import { useProductCatalog } from '@/features/products/session/ProductCatalogPro
 import { isStoredAppointmentSettled } from '@/persistence/stores/appointment-deposits';
 import {
   recordSaleAdjustment as persistSaleAdjustment,
+  recordStoredSaleRefundOutflow,
   reverseStoredSaleAdjustment,
   settleStoredSaleAdjustment,
   voidStoredSaleAdjustment,
@@ -139,6 +140,16 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
     replaceAdjustment(outcome.adjustment);
   };
 
+  // « L'argent a bien été rendu » after a server refusal: the refused record is voided and
+  // the real money movement is carried by ONE exceptional outflow (same transaction).
+  const recordSaleRefundOutflow = (adjustmentId: string) => {
+    requireWriteAccess('sales.recordSaleRefundOutflow');
+    const outcome = recordStoredSaleRefundOutflow(database, adjustmentId, new Date());
+    takeBackCommittedStock(outcome.stockDecrements);
+    replaceAdjustment(outcome.voided);
+    replaceAdjustment(outcome.outflow);
+  };
+
   const reverseSaleAdjustment = (adjustmentId: string, input: SaleAdjustmentReversalRequest) => {
     requireWriteAccess('sales.reverseSaleAdjustment');
     const base = { id: input.id, staffMemberId: currentStaffMemberId, note: input.note, now: new Date() };
@@ -212,6 +223,7 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
         recordSaleAdjustment,
         settleSaleAdjustment,
         voidSaleAdjustment,
+        recordSaleRefundOutflow,
         reverseSaleAdjustment,
         getSaleAdjustmentSyncStates,
       }}

@@ -71,6 +71,7 @@ import {
   SALE_ADJUSTMENT_NO_MONEY_NOTE,
   SALE_ADJUSTMENT_NO_TRANSFER_NOTE,
   SALE_ADJUSTMENT_ORIGINAL_KEPT_NOTE,
+  SALE_ADJUSTMENT_OTHER_DEVICE_NOTE,
   SALE_ADJUSTMENT_PENDING_NOTE,
   SALE_ADJUSTMENT_REASON_LABELS,
   SALE_ADJUSTMENT_REVENTE_NOTE,
@@ -493,6 +494,9 @@ export function SaleAdjustmentScreen({ saleId, intent }: SaleAdjustmentScreenPro
               <Note>{SALE_ADJUSTMENT_ORIGINAL_KEPT_NOTE}</Note>
               {sale.appointmentId !== undefined && amountCents > 0 && <Note>{SALE_ADJUSTMENT_REVENTE_NOTE}</Note>}
               {amountCents > 0 && <Note testID="sale-adjustment-no-transfer">{SALE_ADJUSTMENT_NO_TRANSFER_NOTE}</Note>}
+              {amountCents > 0 && (
+                <Note testID="sale-adjustment-other-device">{SALE_ADJUSTMENT_OTHER_DEVICE_NOTE}</Note>
+              )}
             </View>
 
             {storeError && (

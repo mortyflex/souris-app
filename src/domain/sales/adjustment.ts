@@ -48,6 +48,22 @@
 // A Sale sold during an Appointment keeps its Appointment payment untouched:
 // the refund is the one separate movement — nothing is counted twice.
 //
+// Server refusal (two devices refunding the same Sale offline). The remote
+// refuses the refund that would exceed the ceilings: it never becomes
+// authoritative, but the money it records may REALLY have left. The
+// professional says which, explicitly:
+//
+//   money NOT returned   the refused record is voided (VOIDED, kept, audited)
+//   money returned       the refused record is voided AND an EXCEPTIONAL
+//                        OUTFLOW records the real money movement: a money-only
+//                        REFUND (same amounts, methods, day, reason, operator)
+//                        whose identity derives from the refused record
+//                        (`<refused id>-outflow`) — the link, and ONE outflow per
+//                        refusal across retries and devices. It moves money like
+//                        any settled refund, never moves stock, and stands OUTSIDE
+//                        the Sale's refundable ceiling: it is the record of money
+//                        that left beyond it, never a normal refund.
+//
 // Nothing here applies anything: the store re-runs these rules on the
 // stored rows inside its transaction, and the remote enforces the same
 // ceilings at its transaction boundary (CLOUD_SYNC.md §28).
@@ -144,6 +160,39 @@ export function getSaleAdjustmentAmountCents(
   return adjustment.refundCardCents + adjustment.refundCashCents;
 }
 
+// ---------------------------------------------------------------------------
+// Exceptional outflow (money really returned beyond a server refusal)
+// ---------------------------------------------------------------------------
+
+/** The suffix of an exceptional outflow's identity; the remote derives the same link. */
+export const SALE_REFUND_OUTFLOW_ID_SUFFIX = '-outflow';
+
+/** The ONE identity the exceptional outflow of a refused record may have. */
+export function getSaleRefundOutflowId(refusedAdjustmentId: string): string {
+  return `${refusedAdjustmentId}${SALE_REFUND_OUTFLOW_ID_SUFFIX}`;
+}
+
+/** The refused record an exceptional outflow carries forward, or undefined for any other record. */
+export function getSaleRefundOutflowSourceId(adjustment: Pick<SaleAdjustment, 'id' | 'kind'>): string | undefined {
+  if (adjustment.kind !== 'REFUND') return undefined;
+  if (!adjustment.id.endsWith(SALE_REFUND_OUTFLOW_ID_SUFFIX)) return undefined;
+  const source = adjustment.id.slice(0, -SALE_REFUND_OUTFLOW_ID_SUFFIX.length);
+  return source.length > 0 ? source : undefined;
+}
+
+export function isSaleRefundOutflow(adjustment: Pick<SaleAdjustment, 'id' | 'kind'>): boolean {
+  return getSaleRefundOutflowSourceId(adjustment) !== undefined;
+}
+
+/** The exceptional outflow recorded for a refused record, if any. */
+export function findSaleRefundOutflow(
+  adjustments: readonly SaleAdjustment[],
+  refusedAdjustmentId: string,
+): SaleAdjustment | undefined {
+  const id = getSaleRefundOutflowId(refusedAdjustmentId);
+  return adjustments.find((candidate) => candidate.id === id && candidate.kind === 'REFUND');
+}
+
 /**
  * Validates the SHAPE of a record (ids, cents, vocabularies, the status ↔
  * instants rules) and returns an independent copy. Whether the Sale may
@@ -174,6 +223,14 @@ export function createSaleAdjustment(input: SaleAdjustment): SaleAdjustment {
     if (isSaleAdjustmentReversalReason(input.reason)) throw new SaleAdjustmentInvalidError('reason');
     if (input.items.length === 0 && getSaleAdjustmentAmountCents(input) === 0) {
       throw new SaleAdjustmentInvalidError('items');
+    }
+    // An exceptional outflow is money that really left: money only, settled at once, final.
+    if (isSaleRefundOutflow(input)) {
+      if (input.items.length > 0) throw new SaleAdjustmentInvalidError('items');
+      if (getSaleAdjustmentAmountCents(input) === 0) throw new SaleAdjustmentInvalidError('refundCardCents');
+      if (input.initialStatus !== 'SETTLED' || input.status !== 'SETTLED') {
+        throw new SaleAdjustmentInvalidError('status');
+      }
     }
   } else {
     throw new SaleAdjustmentInvalidError('kind');
@@ -312,11 +369,13 @@ export interface SaleAdjustmentLinePosition {
 
 export interface SaleAdjustmentPosition {
   readonly baseCents: number;
-  /** Σ effective refunds, PENDING and SETTLED. */
+  /** Σ effective refunds, PENDING and SETTLED — exceptional outflows excluded. */
   readonly committedCents: number;
   readonly settledCents: number;
   readonly pendingCents: number;
   readonly remainingCents: number;
+  /** Σ effective exceptional outflows: money really returned BEYOND the ceiling (never counted in it). */
+  readonly outflowCents: number;
   readonly lines: readonly SaleAdjustmentLinePosition[];
 }
 
@@ -328,10 +387,16 @@ export function getSaleAdjustmentPosition(
   const effective = adjustments.filter((adjustment) => isEffectiveSaleRefund(adjustment, adjustments));
   let settledCents = 0;
   let pendingCents = 0;
+  let outflowCents = 0;
   const adjustedByLine = new Map<string, number>();
   const restockedByLine = new Map<string, number>();
   for (const adjustment of effective) {
     const amount = getSaleAdjustmentAmountCents(adjustment);
+    // Outside the ceiling by definition: it never reduces what the Sale may still refund.
+    if (isSaleRefundOutflow(adjustment)) {
+      outflowCents += amount;
+      continue;
+    }
     if (adjustment.status === 'SETTLED') settledCents += amount;
     else pendingCents += amount;
     for (const item of adjustment.items) {
@@ -349,6 +414,7 @@ export function getSaleAdjustmentPosition(
     settledCents,
     pendingCents,
     remainingCents: Math.max(baseCents - committedCents, 0),
+    outflowCents,
     lines: sale.items.map((item) => {
       const adjustedQuantity = adjustedByLine.get(item.id) ?? 0;
       return {
@@ -634,14 +700,84 @@ export function voidSaleAdjustment(
   now: Date,
   options: { readonly serverRefused?: boolean } = {},
 ): SaleAdjustmentTransitionResult<{ readonly stockDecrements: readonly SaleAdjustmentStockChange[] }> {
+  // An exceptional outflow records money that really left: it is never voided,
+  // even while the remote has not accepted it yet (only compensated).
   const voidable =
     adjustment.status === 'PENDING' ||
-    (adjustment.status === 'SETTLED' && adjustment.kind === 'REFUND' && options.serverRefused === true);
+    (adjustment.status === 'SETTLED' &&
+      adjustment.kind === 'REFUND' &&
+      options.serverRefused === true &&
+      !isSaleRefundOutflow(adjustment));
   if (!voidable) return { ok: false, issue: 'NOT_PENDING' };
   return {
     ok: true,
     adjustment: createSaleAdjustment({ ...adjustment, status: 'VOIDED', voidedAt: new Date(now.getTime()) }),
     stockDecrements: sumByProduct(adjustment.items),
+  };
+}
+
+export type SaleRefundOutflowIssue =
+  | 'NOT_A_REFUND'
+  | 'NOT_SETTLED'
+  /** The record is itself an exceptional outflow. */
+  | 'ALREADY_OUTFLOW'
+  /** An outflow already carries this refusal forward. */
+  | 'ALREADY_RESOLVED'
+  | 'INVALID_AMOUNT';
+
+export type SaleRefundOutflowPreparation =
+  | {
+      readonly ok: true;
+      /** The refused record, VOIDED: it never became authoritative. */
+      readonly voided: SaleAdjustment;
+      /** The real money movement, outside the ceiling, linked by its identity. */
+      readonly outflow: SaleAdjustment;
+      /** The refused record's restocked units leave the stock again: the outflow never moves stock. */
+      readonly stockDecrements: readonly SaleAdjustmentStockChange[];
+    }
+  | { readonly ok: false; readonly issue: SaleRefundOutflowIssue };
+
+/**
+ * « L’argent a bien été rendu » for a SETTLED refund the REMOTE refused (the
+ * caller proves the refusal): the refused record is voided and the money it
+ * records is carried forward, unchanged — amounts, methods, the day it left,
+ * reason, note and operator — by ONE exceptional outflow. Recorded now; the
+ * original Sale is never touched.
+ */
+export function prepareSaleRefundOutflow(
+  refused: SaleAdjustment,
+  all: readonly SaleAdjustment[],
+  now: Date,
+): SaleRefundOutflowPreparation {
+  if (refused.kind !== 'REFUND') return { ok: false, issue: 'NOT_A_REFUND' };
+  if (isSaleRefundOutflow(refused)) return { ok: false, issue: 'ALREADY_OUTFLOW' };
+  if (findSaleRefundOutflow(all, refused.id)) return { ok: false, issue: 'ALREADY_RESOLVED' };
+  if (refused.status !== 'SETTLED' || !refused.refundedAt) return { ok: false, issue: 'NOT_SETTLED' };
+  if (getSaleAdjustmentAmountCents(refused) === 0) return { ok: false, issue: 'INVALID_AMOUNT' };
+  const voided = voidSaleAdjustment(refused, now, { serverRefused: true });
+  if (!voided.ok) return { ok: false, issue: 'NOT_SETTLED' };
+  const recordedAt = new Date(now.getTime());
+  return {
+    ok: true,
+    voided: voided.adjustment,
+    outflow: createSaleAdjustment({
+      id: getSaleRefundOutflowId(refused.id),
+      businessId: refused.businessId,
+      saleId: refused.saleId,
+      kind: 'REFUND',
+      reason: refused.reason,
+      note: refused.note,
+      staffMemberId: refused.staffMemberId,
+      items: [],
+      refundCardCents: refused.refundCardCents,
+      refundCashCents: refused.refundCashCents,
+      initialStatus: 'SETTLED',
+      status: 'SETTLED',
+      refundedAt: refused.refundedAt,
+      settledAt: recordedAt,
+      recordedAt,
+    }),
+    stockDecrements: voided.stockDecrements,
   };
 }
 

@@ -73,6 +73,7 @@ import { useAppointmentSession } from "@/features/appointments/session/Appointme
 import { getResolvedClientDisplayName } from "@/features/clients/presentation";
 import { useClientSession } from "@/features/clients/session/ClientSessionProvider";
 import { toSaleHistoryRouteParams } from "@/features/sales/history/route-params";
+import { describeSaleAdjustmentCashRegisterSync } from "@/features/sales/adjustments/presentation";
 import { useSaleSession } from "@/features/sales/session/SaleSessionProvider";
 import { usePersistence } from "@/providers/PersistenceProvider";
 import {
@@ -162,7 +163,9 @@ const EMPTY_SUPPORTING_COPY = "Les paiements encaissés apparaîtront ici.";
 export function CashRegisterScreen() {
   const router = useRouter();
   const { appointments, deposits } = useAppointmentSession();
-  const { sales, saleAdjustments } = useSaleSession();
+  const { sales, saleAdjustments, getSaleAdjustmentSyncStates } = useSaleSession();
+  // Read per render (cheap, indexed): the sync runner updates the bookkeeping behind the session.
+  const adjustmentSyncStates = getSaleAdjustmentSyncStates();
   const { getClientById } = useClientSession();
   const [period, setPeriod] = useState<CashRegisterPeriod>("day");
   const [selectedDay, setSelectedDay] = useState(() =>
@@ -532,6 +535,14 @@ export function CashRegisterScreen() {
                     entry={entry}
                     onPress={openEntry(entry)}
                     period={period}
+                    syncNote={
+                      entry.kind === "SALE_ADJUSTMENT"
+                        ? describeSaleAdjustmentCashRegisterSync(
+                            entry.adjustment,
+                            adjustmentSyncStates.get(entry.adjustment.id),
+                          )
+                        : undefined
+                    }
                   />
                 </View>
               ))}

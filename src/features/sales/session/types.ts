@@ -77,6 +77,12 @@ export interface SaleSessionValue {
   /** PENDING (or server-refused) → VOIDED; restocked units leave the stock again. Throws when refused. */
   readonly voidSaleAdjustment: (adjustmentId: string) => void;
   /**
+   * « L’argent a bien été rendu » for a SETTLED record the server refused: the
+   * refused record is voided and ONE exceptional outflow records the money that
+   * really left, outside the Sale's ceiling. Idempotent. Throws when refused.
+   */
+  readonly recordSaleRefundOutflow: (adjustmentId: string) => void;
+  /**
    * A compensating record of a SETTLED refund, with its explicit meaning
    * (`SaleAdjustmentReversalRequest`). Throws when refused.
    */

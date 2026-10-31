@@ -17,8 +17,11 @@
 //      NOTHING is written there. The device keeps its record, the entry stays
 //      pending with `last_error = ADJUSTMENT_CONFLICT`, and the record reads
 //      « Refusé par le serveur » — never as synchronized. It is resolved
-//      explicitly: the professional voids the refused record (the one case
-//      where a SETTLED record may be voided — it never became authoritative).
+//      explicitly, by what REALLY happened: money not returned → the refused
+//      record is voided (the one case where a SETTLED record may be voided — it
+//      never became authoritative); money returned → it is voided AND an
+//      exceptional outflow (`<id>-outflow`, outside the Sale's ceiling) records
+//      the money that left (stores/sale-adjustments.ts `recordStoredSaleRefundOutflow`).
 
 import type { SourisDatabase } from '../database';
 import { readMetadata, writeMetadata } from '../metadata';

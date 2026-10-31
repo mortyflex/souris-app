@@ -13,12 +13,16 @@
 // detail (the caller decides: without a handler no chevron is drawn); a
 // settled refund reads « Remboursement · products » with a signed amount
 // (« −32,00 € ») and opens its Sale; a reversal reads « Remboursement annulé ».
+// An exceptional outflow (money really returned beyond a server refusal) reads
+// « Sortie exceptionnelle ». A refund not yet synchronized, or refused by the
+// server, carries a short note under its source (`syncNote`).
 // Month mode adds the day above the time.
 
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { CashRegisterEntry } from '@/domain/cash-register';
+import { isSaleRefundOutflow } from '@/domain/sales';
 import {
   formatAppointmentServiceSummary,
   formatAppointmentTime,
@@ -26,7 +30,7 @@ import {
 import { formatSaleSummary } from '@/features/sales/presentation';
 import { formatEuroCents, formatSignedEuroCents } from '@/shared/lib/money';
 import { AppText } from '@/shared/ui/AppText';
-import { foregroundSoft, semanticColors, spacing } from '@/shared/ui/theme';
+import { foregroundSoft, rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
   formatCashRegisterEntryDay,
@@ -43,6 +47,8 @@ export const REFUND_SOURCE_LABEL = 'Remboursement';
 /** A mistaken refund neutralised on its own day, and money that came back. */
 export const RECORDED_IN_ERROR_SOURCE_LABEL = 'Correction de saisie';
 export const REFUND_RETURNED_SOURCE_LABEL = 'Remboursement rendu';
+/** Money really returned beyond a server refusal (outside the Sale's refundable ceiling). */
+export const REFUND_OUTFLOW_SOURCE_LABEL = 'Sortie exceptionnelle';
 /** A walk-in Sale has no Client to name; nothing is invented. */
 export const WALK_IN_SALE_LABEL = 'Vente sans client';
 
@@ -78,7 +84,9 @@ function formatEntrySource(entry: CashRegisterEntry): string {
     case 'SALE_ADJUSTMENT':
       return [
         entry.adjustment.kind === 'REFUND'
-          ? REFUND_SOURCE_LABEL
+          ? isSaleRefundOutflow(entry.adjustment)
+            ? REFUND_OUTFLOW_SOURCE_LABEL
+            : REFUND_SOURCE_LABEL
           : entry.adjustment.reason === 'REFUND_RETURNED'
             ? REFUND_RETURNED_SOURCE_LABEL
             : RECORDED_IN_ERROR_SOURCE_LABEL,
@@ -96,9 +104,15 @@ interface CashRegisterEntryRowProps {
   readonly clientName: string | undefined;
   /** Present only when the entry has an existing detail destination. */
   readonly onPress?: () => void;
+  /**
+   * A refund this device has not synchronized yet, or one the server refused:
+   * the money it records is counted (it left), the line says it is not settled
+   * with the server.
+   */
+  readonly syncNote?: { readonly text: string; readonly tone: 'neutral' | 'warning' };
 }
 
-export function CashRegisterEntryRow({ entry, period, clientName, onPress }: CashRegisterEntryRowProps) {
+export function CashRegisterEntryRow({ entry, period, clientName, onPress, syncNote }: CashRegisterEntryRowProps) {
   const { payment } = entry;
   const id =
     entry.kind === 'APPOINTMENT'
@@ -126,6 +140,7 @@ export function CashRegisterEntryRow({ entry, period, clientName, onPress }: Cas
     source,
     amount,
     methods,
+    syncNote?.text,
   ]
     .filter(Boolean)
     .join(', ');
@@ -149,6 +164,16 @@ export function CashRegisterEntryRow({ entry, period, clientName, onPress }: Cas
         {source.length > 0 && (
           <AppText variant="metadata" numberOfLines={1} style={styles.secondary}>
             {source}
+          </AppText>
+        )}
+        {syncNote && (
+          <AppText
+            variant="metadata"
+            numberOfLines={2}
+            style={syncNote.tone === 'warning' ? styles.warning : styles.secondary}
+            testID={`cash-register-entry-sync-${id}`}
+          >
+            {syncNote.text}
           </AppText>
         )}
       </View>
@@ -219,6 +244,7 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 2, minWidth: 0 },
   name: { color: semanticColors.foreground },
   secondary: { color: foregroundSoft },
+  warning: { color: rose.rose600 },
   money: { alignItems: 'flex-end', flexShrink: 0, gap: 2, maxWidth: '40%' },
   amount: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   chevron: { alignItems: 'center', width: CHEVRON_COLUMN },

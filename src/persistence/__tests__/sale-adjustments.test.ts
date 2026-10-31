@@ -21,6 +21,7 @@ import { findProduct } from '../stores/products';
 import {
   loadSaleAdjustments,
   recordSaleAdjustment,
+  recordStoredSaleRefundOutflow,
   reverseStoredSaleAdjustment,
   SaleAdjustmentConflictError,
   SaleAdjustmentDraftError,
@@ -756,3 +757,220 @@ function dbUnrelated(db: SourisDatabase) {
   db.runSync("INSERT INTO clients (id, first_name) VALUES ('client-unrelated', 'Inès')");
   markAggregateUpserted(db, 'CLIENT', 'client-unrelated');
 }
+
+describe('a refund the server refused, resolved by what really happened (SALES.md §15.1)', () => {
+  const RESOLVED_AT = new Date('2026-10-14T16:00:00.000Z');
+
+  /** Device A refunds 100 € (synchronized), device B refunds 100 € offline: B is refused (132 € received). */
+  async function refusedOnDeviceB(remote: FakeSyncRemote, lines: SaleAdjustmentDraft['lines'] = []) {
+    const first = await openSyncedDevice(remote);
+    const second = await openRestoredDevice(remote);
+    record(first.db, { lines: [], refundCardCents: 10000, refundCashCents: 0 });
+    const value = draft({ id: 'adj-b', lines, refundCardCents: 10000, refundCashCents: 0, note: 'Remboursé au comptoir' });
+    const prepared = prepareSaleAdjustment(
+      { sale: findSale(second.db, directSale.id)!, adjustments: loadSaleAdjustments(second.db), appointmentSettled: true, productExists: () => true, now: NOW },
+      value,
+    );
+    if (!prepared.ok) throw new Error('prepared');
+    recordSaleAdjustment(second.db, value, prepared.adjustment, prepared.restorations, NOW);
+    expect(await first.run()).toMatchObject({ failed: 0 });
+    expect(await second.run()).toMatchObject({ adjustmentConflicts: [{ aggregateId: 'adj-b', reason: 'CEILING' }] });
+    expect(readSaleAdjustmentSyncStates(second.db).get('adj-b')).toBe('REFUSED');
+    return { first, second };
+  }
+
+  const caisse = (database: SourisDatabase) =>
+    getCashRegisterDaySummary(
+      { appointments: [], sales: loadSales(database), saleAdjustments: loadSaleAdjustments(database) },
+      REFUNDED_AT,
+    );
+  const remoteAdjustments = (remote: FakeSyncRemote) =>
+    remote
+      .list(REMOTE_BUSINESS_ID)
+      .filter((row) => row.key.startsWith('SALE_ADJUSTMENT/'))
+      .map((row) => `${row.key.slice('SALE_ADJUSTMENT/'.length)}:${(row.payload as { status: string }).status}`)
+      .sort();
+
+  it('money WAS returned: the refusal is voided and ONE exceptional outflow carries the real money to every device', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { first, second } = await refusedOnDeviceB(remote);
+
+    const outcome = recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT);
+    expect(outcome).toMatchObject({ written: true, voided: { id: 'adj-b', status: 'VOIDED' }, outflow: { id: 'adj-b-outflow', status: 'SETTLED' } });
+    // Until it is sent, it says so — the refusal is no longer claimed, nothing is claimed synchronized.
+    expect(readSaleAdjustmentSyncStates(second.db).get('adj-b')).toBe('PENDING');
+    expect(readSaleAdjustmentSyncStates(second.db).get('adj-b-outflow')).toBe('PENDING');
+
+    const sent = await second.run();
+    expect(sent).toMatchObject({ failed: 0 });
+    expect((sent as { adjustmentConflicts?: unknown[] }).adjustmentConflicts ?? []).toEqual([]);
+    expect(remoteAdjustments(remote)).toEqual(['adj-1:SETTLED', 'adj-b-outflow:SETTLED', 'adj-b:VOIDED']);
+    expect(remote.find(REMOTE_BUSINESS_ID, 'SALE_ADJUSTMENT', 'adj-b-outflow')?.payload).toMatchObject({
+      kind: 'REFUND',
+      reason: 'WRONG_PRODUCT',
+      note: 'Remboursé au comptoir',
+      staff_member_id: 'staff-amelie',
+      refund_card_cents: 10000,
+      refund_cash_cents: 0,
+      refunded_at: REFUNDED_AT.toISOString(),
+      recorded_at: RESOLVED_AT.toISOString(),
+      items: [],
+    });
+    expect(readSaleAdjustmentSyncStates(second.db).get('adj-b-outflow')).toBe('SYNCED');
+    expect(loadSyncOutbox(second.db, REMOTE_BUSINESS_ID)).toEqual([]);
+
+    // Device A learns what really happened; both Caisses read the real outflow that day: −100 (A) − 100 (B).
+    await first.run();
+    expect(loadSaleAdjustments(first.db).map((adjustment) => adjustment.id).sort()).toEqual(['adj-1', 'adj-b', 'adj-b-outflow']);
+    expect(caisse(first.db)).toMatchObject({ cardCents: -20000, cashCents: 0 });
+    expect(caisse(second.db)).toEqual(caisse(first.db));
+
+    // A reinstall restores the whole history — the refusal, its resolution, the outflow — and the same totals.
+    const restored = await openRestoredDevice(remote);
+    expect(loadSaleAdjustments(restored.db).map((adjustment) => [adjustment.id, adjustment.status]).sort()).toEqual([
+      ['adj-1', 'SETTLED'],
+      ['adj-b', 'VOIDED'],
+      ['adj-b-outflow', 'SETTLED'],
+    ]);
+    expect(caisse(restored.db)).toEqual(caisse(first.db));
+  });
+
+  it('is idempotent: a replay (double tap, restart) writes nothing and the remote holds ONE outflow', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { second } = await refusedOnDeviceB(remote);
+    recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT);
+    expect(recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT).written).toBe(false);
+    remote.loseNextResponse();
+    await second.run();
+    await second.run();
+    await second.run();
+    expect(recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT).written).toBe(false);
+    expect(remoteAdjustments(remote)).toEqual(['adj-1:SETTLED', 'adj-b-outflow:SETTLED', 'adj-b:VOIDED']);
+    expect(loadSaleAdjustments(second.db)).toHaveLength(3);
+  });
+
+  it('money NOT returned: the refusal is voided and kept; nothing more is counted', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { first, second } = await refusedOnDeviceB(remote);
+    voidStoredSaleAdjustment(second.db, 'adj-b', RESOLVED_AT);
+    await second.run();
+    await first.run();
+    expect(remoteAdjustments(remote)).toEqual(['adj-1:SETTLED', 'adj-b:VOIDED']);
+    // Only A's refund moved money that day.
+    expect(caisse(second.db)).toMatchObject({ cardCents: -10000, cashCents: 0 });
+    expect(caisse(first.db)).toEqual(caisse(second.db));
+    // Once voided, the money-returned answer is no longer available: no outflow can follow a void.
+    expect(() => recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT)).toThrow(SaleAdjustmentConflictError);
+  });
+
+  it('takes back the units the refused record restocked; the outflow moves no stock', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { second } = await refusedOnDeviceB(remote, [{ saleItemId: 'sale-direct-item-1', quantity: 1, restock: true }]);
+    const before = findProduct(second.db, productSerum.id)!.stockQuantity;
+    expect(recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT).stockDecrements).toEqual([
+      { productId: productSerum.id, quantity: 1 },
+    ]);
+    expect(findProduct(second.db, productSerum.id)!.stockQuantity).toBe(before - 1);
+    await second.run();
+    expect(remote.find(REMOTE_BUSINESS_ID, 'SALE_ADJUSTMENT', 'adj-b-outflow')?.payload).toMatchObject({ items: [] });
+  });
+
+  it('is refused for a record the server never refused (a synchronized refund is corrected, not carried forward)', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { db, run } = await openSyncedDevice(remote);
+    record(db, { lines: [], refundCardCents: 1000, refundCashCents: 0 });
+    await run();
+    expect(() => recordStoredSaleRefundOutflow(db, 'adj-1', RESOLVED_AT)).toThrow(
+      expect.objectContaining({ reason: 'NOT_REFUSED' }),
+    );
+    expect(loadSaleAdjustments(db)).toHaveLength(1);
+  });
+
+  it('in front of a remote WITHOUT the outflow rule: kept pending (never voidable, still counted), sent once migrated', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID], { refundOutflows: false });
+    const { second } = await refusedOnDeviceB(remote);
+    recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT);
+    const result = await second.run();
+    expect(result).toMatchObject({ adjustmentConflicts: [{ aggregateId: 'adj-b-outflow', reason: 'CEILING' }] });
+    expect(remote.find(REMOTE_BUSINESS_ID, 'SALE_ADJUSTMENT', 'adj-b-outflow')).toBeUndefined();
+    expect(readSaleAdjustmentSyncStates(second.db).get('adj-b-outflow')).toBe('REFUSED');
+    // Money that left is never erased to get past a server that cannot record it yet.
+    expect(() => voidStoredSaleAdjustment(second.db, 'adj-b-outflow', RESOLVED_AT)).toThrow(SaleAdjustmentConflictError);
+    // A's refund and the outflow: both real.
+    expect(caisse(second.db)).toMatchObject({ cardCents: -20000 });
+
+    remote.setRefundOutflows(true);
+    const later = createSyncPushWorker({ database: second.db, gateway: remote, now: () => new Date(NOW.getTime() + 3_600_000) });
+    await later.run(REMOTE_BUSINESS_ID);
+    expect(remote.find(REMOTE_BUSINESS_ID, 'SALE_ADJUSTMENT', 'adj-b-outflow')).toBeDefined();
+    expect(readSaleAdjustmentSyncStates(second.db).get('adj-b-outflow')).toBe('SYNCED');
+  });
+});
+
+describe('the remote rule for exceptional outflows (20261012120000, modelled)', () => {
+  const settledRefund = (id: string, cents: number, extra: Record<string, unknown> = {}) => ({
+    sale_id: 'sale-direct',
+    kind: 'REFUND',
+    reverses_adjustment_id: null,
+    reason: 'CUSTOMER_REFUND',
+    note: null,
+    staff_member_id: 'staff-amelie',
+    refund_card_cents: cents,
+    refund_cash_cents: 0,
+    initial_status: 'SETTLED',
+    status: 'SETTLED',
+    refunded_at: REFUNDED_AT.toISOString(),
+    settled_at: NOW.toISOString(),
+    voided_at: null,
+    recorded_at: NOW.toISOString(),
+    items: [],
+    ...extra,
+    ...(id ? {} : {}),
+  });
+  const push = (remote: FakeSyncRemote, id: string, payload: object, expectedVersion?: number) =>
+    remote.pushAggregate({
+      businessId: REMOTE_BUSINESS_ID,
+      aggregateType: 'SALE_ADJUSTMENT',
+      aggregateId: id,
+      operation: 'UPSERT',
+      expectedVersion,
+      payload: payload as never,
+    });
+
+  it('accepts the outflow before its voided source arrives, then the voided source; refuses a live source', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { run } = await openSyncedDevice(remote);
+    await run();
+    expect(await push(remote, 'a', settledRefund('a', 10000))).toMatchObject({ status: 'APPLIED' });
+    // Beyond the 32 € left: accepted only as the outflow of a refusal.
+    expect(await push(remote, 'b-outflow', settledRefund('b-outflow', 10000))).toMatchObject({ status: 'APPLIED' });
+    // Its source may only ever be the same refund, VOIDED.
+    expect(await push(remote, 'b', settledRefund('b', 10000))).toEqual({ status: 'ADJUSTMENT_CONFLICT', saleId: 'sale-direct', reason: 'OUTFLOW' });
+    expect(
+      await push(remote, 'b', settledRefund('b', 10000, { status: 'VOIDED', voided_at: NOW.toISOString() })),
+    ).toMatchObject({ status: 'APPLIED' });
+    // The normal ceiling is untouched by the outflow: 32 € remain refundable, not a cent more.
+    expect(await push(remote, 'c', settledRefund('c', 3300))).toMatchObject({ status: 'ADJUSTMENT_CONFLICT', reason: 'CEILING' });
+    expect(await push(remote, 'c', settledRefund('c', 3200))).toMatchObject({ status: 'APPLIED' });
+  });
+
+  it('refuses an outflow that is not money only, settled at once, or that disagrees with its source', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { run } = await openSyncedDevice(remote);
+    await run();
+    await push(remote, 's', settledRefund('s', 5000, { status: 'VOIDED', voided_at: NOW.toISOString() }));
+    const item = { id: 'i', position: 0, sale_item_id: 'sale-direct-item-1', product_id: productSerum.id, product_name: 'Sérum', unit_price_cents: 3200, quantity: 1, restock: false };
+    for (const payload of [
+      settledRefund('x', 5000, { items: [item] }),
+      settledRefund('x', 5000, { initial_status: 'PENDING', status: 'PENDING', refunded_at: null, settled_at: null }),
+      settledRefund('x', 0),
+    ]) {
+      expect(await push(remote, 'x-outflow', payload)).toMatchObject({ status: 'ADJUSTMENT_CONFLICT', reason: 'OUTFLOW' });
+    }
+    expect(await push(remote, 's-outflow', settledRefund('s', 4000))).toMatchObject({ reason: 'OUTFLOW' });
+    expect(await push(remote, 's-outflow', settledRefund('s', 5000, { refunded_at: NOW.toISOString() }))).toMatchObject({ reason: 'OUTFLOW' });
+    expect(await push(remote, 's-outflow', settledRefund('s', 5000))).toMatchObject({ status: 'APPLIED' });
+    // ONE outflow per refusal: the same identity can never say anything else.
+    expect(await push(remote, 's-outflow', settledRefund('s', 6000), 1)).toMatchObject({ reason: 'IMMUTABLE' });
+  });
+});

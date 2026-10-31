@@ -17,6 +17,11 @@
 //   reverse   ONE compensating record for a SETTLED refund — « saisie
 //             erronée » (never paid) or « argent rendu » (paid, then returned);
 //             its restocked units leave the stock again
+//   outflow   « L’argent a bien été rendu » for a SETTLED record the remote
+//             refused: the refused record is voided (its restocked units leave
+//             the stock again) and ONE exceptional outflow records the money
+//             that really left, outside the Sale's ceiling — both in the SAME
+//             transaction; a replay finds the outflow and writes nothing
 //
 // Sync outbox, within the same transactions: SALE_ADJUSTMENT (UPSERT) and
 // every PRODUCT whose stock moved. Nothing here touches a Sale row, a Sale
@@ -24,7 +29,9 @@
 
 import {
   createSaleAdjustment,
+  findSaleRefundOutflow,
   prepareSaleAdjustmentReversal,
+  prepareSaleRefundOutflow,
   settleSaleAdjustment,
   validateSaleAdjustmentDraft,
   voidSaleAdjustment,
@@ -38,6 +45,7 @@ import {
   type SaleAdjustmentStatus,
   type SaleAdjustmentStockChange,
   type SaleAdjustmentTransitionIssue,
+  type SaleRefundOutflowIssue,
 } from '@/domain/sales';
 
 import { runInTransaction, type SourisDatabase } from '../database';
@@ -171,7 +179,10 @@ export type SaleAdjustmentStoreRefusal =
   | 'ADJUSTMENT_NOT_FOUND'
   | 'PRODUCT_MISSING'
   | 'STOCK_INSUFFICIENT'
-  | SaleAdjustmentTransitionIssue;
+  /** The remote has not refused this record (or acknowledged a revision of it). */
+  | 'NOT_REFUSED'
+  | SaleAdjustmentTransitionIssue
+  | SaleRefundOutflowIssue;
 
 /** The stored rows refuse this write; nothing was written. */
 export class SaleAdjustmentConflictError extends Error {
@@ -378,6 +389,62 @@ export function voidStoredSaleAdjustment(db: SourisDatabase, adjustmentId: strin
     outcome = { adjustment: result.adjustment, stockDecrements: result.stockDecrements };
   });
   if (!outcome) throw new Error('voidStoredSaleAdjustment: transaction produced no record');
+  return outcome;
+}
+
+export interface RecordedSaleRefundOutflow {
+  /** The refused record, VOIDED. */
+  readonly voided: SaleAdjustment;
+  /** The exceptional outflow carrying its money forward. */
+  readonly outflow: SaleAdjustment;
+  readonly stockDecrements: readonly SaleAdjustmentStockChange[];
+  /** False when this resolution had already been recorded (a replay): nothing was written. */
+  readonly written: boolean;
+}
+
+/**
+ * « L’argent a bien été rendu » for a record the remote refused, in ONE
+ * transaction (see the header). The refusal is read from the sync
+ * bookkeeping, never assumed. Idempotent: a second call (a double tap, a
+ * restart before the screen refreshed) returns the stored resolution.
+ */
+export function recordStoredSaleRefundOutflow(
+  db: SourisDatabase,
+  refusedId: string,
+  now: Date,
+): RecordedSaleRefundOutflow {
+  let outcome: RecordedSaleRefundOutflow | undefined;
+  runInTransaction(db, () => {
+    const stored = findAdjustment(db, refusedId);
+    if (!stored) throw new SaleAdjustmentConflictError(refusedId, 'ADJUSTMENT_NOT_FOUND');
+    const all = loadSaleAdjustmentsOfSale(db, stored.saleId);
+    const existing = findSaleRefundOutflow(all, refusedId);
+    if (existing) {
+      if (stored.status !== 'VOIDED') throw new SaleAdjustmentConflictError(refusedId, 'ALREADY_RESOLVED');
+      outcome = { voided: stored, outflow: existing, stockDecrements: [], written: false };
+      return;
+    }
+    if (!isSaleAdjustmentServerRefused(db, refusedId)) {
+      throw new SaleAdjustmentConflictError(refusedId, 'NOT_REFUSED');
+    }
+    const result = prepareSaleRefundOutflow(stored, all, now);
+    if (!result.ok) throw new SaleAdjustmentConflictError(refusedId, result.issue);
+    if (db.getFirstSync('SELECT 1 AS found FROM sale_adjustments WHERE id = ?', [result.outflow.id])) {
+      throw new SaleAdjustmentConflictError(result.outflow.id, 'DUPLICATE_ADJUSTMENT');
+    }
+    takeBackStock(db, refusedId, result.stockDecrements);
+    // The voided record first: its outbox entry is the older one, so the remote
+    // normally learns the refusal is settled before it sees the outflow.
+    updateStatus(db, result.voided, 'SETTLED');
+    insertAdjustment(db, result.outflow);
+    outcome = {
+      voided: result.voided,
+      outflow: result.outflow,
+      stockDecrements: result.stockDecrements,
+      written: true,
+    };
+  });
+  if (!outcome) throw new Error('recordStoredSaleRefundOutflow: transaction produced no record');
   return outcome;
 }
 

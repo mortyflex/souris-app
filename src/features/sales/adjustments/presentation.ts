@@ -6,6 +6,7 @@
 
 import {
   getSaleAdjustmentAmountCents,
+  isSaleRefundOutflow,
   type SaleAdjustment,
   type SaleAdjustmentIssue,
   type SaleAdjustmentReason,
@@ -65,6 +66,7 @@ export const SALE_ADJUSTMENT_REVENTE_NOTE =
   'Le paiement du rendez-vous reste inchangé : le remboursement apparaît à part dans la caisse, le jour où il a lieu.';
 
 export function formatSaleAdjustmentStatus(adjustment: SaleAdjustment): string {
+  if (isSaleRefundOutflow(adjustment)) return 'Sortie exceptionnelle';
   if (adjustment.kind === 'REVERSAL') {
     return adjustment.reason === 'REFUND_RETURNED' ? 'Remboursement rendu' : 'Correction de saisie';
   }
@@ -88,12 +90,82 @@ export const SALE_ADJUSTMENT_TRANSITION_LABELS: Readonly<Record<SaleAdjustmentTr
   VOIDED: 'Saisie annulée',
 };
 
-/** Only a refusal is ever said: nothing is ever claimed « synchronisé ». */
-export function formatSaleAdjustmentSyncState(state: SaleAdjustmentSyncState | undefined): string | undefined {
-  return state === 'REFUSED'
-    ? 'Refusé par le serveur : le total remboursé dépasserait la vente. À vérifier.'
-    : undefined;
+// --- Synchronization status, always said APART from the financial status ----
+//
+// « Remboursé » says the money left; whether the server has the record is a
+// second, separate line. A refusal is never worded as synchronized, and a
+// record this device has not sent yet says so.
+
+export interface SaleAdjustmentSyncLine {
+  readonly tone: 'neutral' | 'warning';
+  readonly text: string;
 }
+
+export const SALE_ADJUSTMENT_SYNC_PENDING_COPY = 'Pas encore synchronisé : enregistré sur cet appareil, en attente d’envoi.';
+export const SALE_ADJUSTMENT_SYNCED_COPY = 'Synchronisé';
+export const SALE_ADJUSTMENT_REFUSED_COPY =
+  'Refusé par le serveur : un autre appareil a déjà remboursé cette vente et le total dépasserait ce qu’elle a encaissé. Ce remboursement n’est pas synchronisé.';
+export const SALE_REFUND_OUTFLOW_REFUSED_COPY =
+  'Pas encore acceptée par le serveur (il doit être mis à jour) : la sortie reste enregistrée sur cet appareil et compte déjà dans la caisse.';
+
+export function describeSaleAdjustmentSync(
+  adjustment: Pick<SaleAdjustment, 'id' | 'kind'>,
+  state: SaleAdjustmentSyncState | undefined,
+): SaleAdjustmentSyncLine | undefined {
+  switch (state) {
+    case 'PENDING':
+      return { tone: 'neutral', text: SALE_ADJUSTMENT_SYNC_PENDING_COPY };
+    case 'SYNCED':
+      return { tone: 'neutral', text: SALE_ADJUSTMENT_SYNCED_COPY };
+    case 'REFUSED':
+      return {
+        tone: 'warning',
+        text: isSaleRefundOutflow(adjustment) ? SALE_REFUND_OUTFLOW_REFUSED_COPY : SALE_ADJUSTMENT_REFUSED_COPY,
+      };
+    default:
+      return undefined;
+  }
+}
+
+/** The short note of a Caisse line whose refund is not settled with the server. */
+export function describeSaleAdjustmentCashRegisterSync(
+  adjustment: Pick<SaleAdjustment, 'id' | 'kind'>,
+  state: SaleAdjustmentSyncState | undefined,
+): SaleAdjustmentSyncLine | undefined {
+  if (state === 'PENDING') return { tone: 'neutral', text: 'Pas encore synchronisé' };
+  if (state !== 'REFUSED') return undefined;
+  return isSaleRefundOutflow(adjustment)
+    ? { tone: 'warning', text: 'En attente du serveur' }
+    : { tone: 'warning', text: 'Refusé par le serveur : à vérifier' };
+}
+
+// --- Resolving a server refusal --------------------------------------------
+
+export const SALE_REFUND_REFUSAL_QUESTION = 'L’argent a-t-il réellement été rendu au client ?';
+export const SALE_REFUND_MONEY_RETURNED_ACTION = 'Oui, l’argent a été rendu';
+export const SALE_REFUND_MONEY_NOT_RETURNED_ACTION = 'Non, l’argent n’a pas été rendu';
+
+/** What became of a refused record, once resolved (VOIDED after being settled). */
+export function describeSaleRefundRefusalOutcome(
+  adjustment: SaleAdjustment,
+  outflow: SaleAdjustment | undefined,
+): string | undefined {
+  if (adjustment.kind !== 'REFUND' || adjustment.status !== 'VOIDED' || !adjustment.settledAt) return undefined;
+  // A settled refund is voided only after a server refusal (domain `voidSaleAdjustment`).
+  return outflow
+    ? `Refusé par le serveur · argent rendu : compté dans la sortie exceptionnelle du ${formatSaleAdjustmentInstant(outflow.recordedAt)}.`
+    : 'Refusé par le serveur · argent non rendu : saisie annulée, rien n’est compté.';
+}
+
+/** The explanation an exceptional outflow carries under its title. */
+export function describeSaleRefundOutflow(source: SaleAdjustment | undefined): string {
+  const link = source ? ` Liée à la saisie refusée du ${formatSaleAdjustmentInstant(source.recordedAt)}.` : '';
+  return `Argent réellement rendu malgré le refus du serveur, au-delà de ce que la vente pouvait encore rembourser. La vente reste inchangée.${link}`;
+}
+
+/** Shown on the review step of any refund that gives money back. */
+export const SALE_ADJUSTMENT_OTHER_DEVICE_NOTE =
+  'Si cette vente est aussi remboursée sur un autre appareil pas encore synchronisé, ce remboursement pourra être refusé par le serveur. BeautIzzy vous demandera alors si l’argent a réellement été rendu : rien ne sera effacé sans votre confirmation.';
 
 /** `Carte 10,00 € · Espèces 22,00 €`, only the methods used. */
 export function formatSaleAdjustmentMethods(adjustment: Pick<SaleAdjustment, 'refundCardCents' | 'refundCashCents'>): string {

@@ -99,6 +99,8 @@ export interface FakeSyncRemote extends SyncRemoteGateway {
   setServiceCatalogue(enabled: boolean): void;
   /** Migrates (true) or un-migrates (false) the modelled remote for sale adjustments. */
   setSaleAdjustments(enabled: boolean): void;
+  /** Applies (true) or removes (false) the exceptional-outflow rule of 20261012120000. */
+  setRefundOutflows(enabled: boolean): void;
   /** Moves the logical server clock forward. */
   advanceClock(ms: number): void;
   /** Forgets the push and pull logs (not the rows): lets a test start counting after its setup. */
@@ -151,9 +153,17 @@ function referenceError(
 }
 
 
+/** `sync_sale_refund_outflow_source`: the refused record an outflow id names, or undefined. */
+function outflowSourceId(id: string): string | undefined {
+  const suffix = '-outflow';
+  return id.endsWith(suffix) && id.length > suffix.length ? id.slice(0, -suffix.length) : undefined;
+}
+
 interface WireAdjustment {
   readonly sale_id: string;
   readonly kind: string;
+  readonly initial_status?: string;
+  readonly settled_at?: string | null;
   readonly reason?: string;
   readonly refunded_at?: string | null;
   readonly reverses_adjustment_id: string | null;
@@ -187,7 +197,11 @@ function isAllowedAdjustmentTransition(from: string, to: string): boolean {
  * `sync_sale_adjustment_breach`: the reason the adjustments of ONE Sale break
  * its ceilings on the state the remote holds, or undefined.
  */
-function saleAdjustmentBreach(rows: Map<string, FakeRemoteAggregate>, saleId: string): string | undefined {
+function saleAdjustmentBreach(
+  rows: Map<string, FakeRemoteAggregate>,
+  saleId: string,
+  refundOutflows: boolean,
+): string | undefined {
   const saleRow = rows.get(`SALE/${saleId}`);
   const adjustments: [string, WireAdjustment][] = [];
   for (const [key, row] of rows) {
@@ -231,10 +245,40 @@ function saleAdjustmentBreach(rows: Map<string, FakeRemoteAggregate>, saleId: st
       return 'REVERSAL';
     }
   }
+  // Exceptional outflows (`sync_sale_refund_outflow_source`, 20261012120000): money
+  // really returned beyond a refusal. Money only, SETTLED, and the record it
+  // carries forward — when the remote holds it — is the same refund, VOIDED.
+  for (const [id, adjustment] of adjustments) {
+    const sourceId = refundOutflows ? outflowSourceId(id) : undefined;
+    if (sourceId === undefined) continue;
+    const total = adjustment.refund_card_cents + adjustment.refund_cash_cents;
+    if (
+      adjustment.kind !== 'REFUND' ||
+      adjustment.initial_status !== 'SETTLED' ||
+      adjustment.status !== 'SETTLED' ||
+      total === 0 ||
+      adjustment.items.length > 0
+    ) {
+      return 'OUTFLOW';
+    }
+    const source = adjustments.find(([candidate]) => candidate === sourceId)?.[1];
+    if (
+      source &&
+      (source.kind !== 'REFUND' ||
+        !source.settled_at ||
+        source.status !== 'VOIDED' ||
+        source.refund_card_cents !== adjustment.refund_card_cents ||
+        source.refund_cash_cents !== adjustment.refund_cash_cents ||
+        source.refunded_at !== adjustment.refunded_at)
+    ) {
+      return 'OUTFLOW';
+    }
+  }
   let committed = 0;
   const units = new Map<string, number>();
   for (const [id, adjustment] of adjustments) {
     if (adjustment.kind !== 'REFUND' || adjustment.status === 'VOIDED' || reversed.has(id)) continue;
+    if (refundOutflows && outflowSourceId(id) !== undefined) continue;
     committed += adjustment.refund_card_cents + adjustment.refund_cash_cents;
     for (const item of adjustment.items) units.set(item.sale_item_id, (units.get(item.sale_item_id) ?? 0) + item.quantity);
   }
@@ -261,11 +305,12 @@ function adjustmentConflict(
   rows: Map<string, FakeRemoteAggregate>,
   request: RemotePushRequest,
   previous: FakeRemoteAggregate | undefined,
+  refundOutflows: boolean,
 ): RemotePushResult | undefined {
   if (request.aggregateType !== 'SALE_ADJUSTMENT') return undefined;
   const saleId = ((request.payload ?? previous?.payload) as unknown as WireAdjustment | undefined)?.sale_id;
   if (saleId === undefined) return undefined;
-  const reason = saleAdjustmentBreach(rows, saleId);
+  const reason = saleAdjustmentBreach(rows, saleId, refundOutflows);
   return reason === undefined ? undefined : { status: 'ADJUSTMENT_CONFLICT', saleId, reason };
 }
 
@@ -345,10 +390,16 @@ const SERVICE_CATALOGUE_KEYS = ['category_id', 'description'] as const;
 
 export function createFakeSyncRemote(
   ownedBusinessIds: readonly string[],
-  options: { readonly serviceCatalogue?: boolean; readonly saleAdjustments?: boolean } = {},
+  options: {
+    readonly serviceCatalogue?: boolean;
+    readonly saleAdjustments?: boolean;
+    /** false models a remote WITHOUT 20261012120000: an outflow is a plain refund under the ceiling. */
+    readonly refundOutflows?: boolean;
+  } = {},
 ): FakeSyncRemote {
   let serviceCatalogue = options.serviceCatalogue ?? true;
   let saleAdjustments = options.saleAdjustments ?? true;
+  let refundOutflows = options.refundOutflows ?? true;
   const businesses = new Map<string, Map<string, FakeRemoteAggregate>>();
   const requests: RemotePushRequest[] = [];
   const failures: SyncRemoteError[] = [];
@@ -495,7 +546,7 @@ export function createFakeSyncRemote(
       const appointmentId = affectedAppointmentId(rows, request);
       const tombstone = { ...remote, deleted: true, syncVersion: remote.syncVersion + 1, updatedAt: tick() };
       rows.set(key, tombstone);
-      const breach = financialBreach(rows, appointmentId) ?? adjustmentConflict(rows, request, remote);
+      const breach = financialBreach(rows, appointmentId) ?? adjustmentConflict(rows, request, remote, refundOutflows);
       if (breach) {
         rows.set(key, remote); // nothing is written
         return breach;
@@ -511,7 +562,7 @@ export function createFakeSyncRemote(
       const createdAt = tick();
       rows.set(key, { payload: clone(request.payload), syncVersion: 1, deleted: false, createdAt, updatedAt: createdAt });
       const breach =
-        financialBreach(rows, affectedAppointmentId(rows, request)) ?? adjustmentConflict(rows, request, undefined);
+        financialBreach(rows, affectedAppointmentId(rows, request)) ?? adjustmentConflict(rows, request, undefined, refundOutflows);
       if (breach) {
         rows.delete(key); // nothing is written
         return breach;
@@ -548,7 +599,7 @@ export function createFakeSyncRemote(
     };
     rows.set(key, next);
     const breach =
-      financialBreach(rows, affectedAppointmentId(rows, request)) ?? adjustmentConflict(rows, request, remote);
+      financialBreach(rows, affectedAppointmentId(rows, request)) ?? adjustmentConflict(rows, request, remote, refundOutflows);
     if (breach) {
       rows.set(key, remote); // nothing is written
       return breach;
@@ -626,6 +677,9 @@ export function createFakeSyncRemote(
     },
     setSaleAdjustments(enabled) {
       saleAdjustments = enabled;
+    },
+    setRefundOutflows(enabled) {
+      refundOutflows = enabled;
     },
 
     async countBusinessAggregates(businessId) {

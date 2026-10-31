@@ -411,8 +411,8 @@ ce remboursement… » asks what REALLY happened and records at most ONE `REVERS
 
 Either compensation takes the refund's restocked units back (the Sale counts them as sold again).
 The single exception to « never void » is a SETTLED record the REMOTE refused (an over-refund
-across two devices): it never became authoritative, and voiding it explicitly is how the conflict is
-resolved. The auditable history is derived from the instants: recorded (initial status) → settled →
+across two devices): it never became authoritative. It is resolved by what REALLY happened (§15.1):
+voided when its money was not returned, voided AND carried forward by an exceptional outflow when it was. The auditable history is derived from the instants: recorded (initial status) → settled →
 voided — at most one of each, so nothing is lost.
 
 **Money (integer cents, snapshots only).**
@@ -457,3 +457,48 @@ both read `getSaleActions`, which adds no rule of its own), the Cash Register
 Produits vendus card), the Client « Total dépensé » and Tops & tendances (settled money only, on its
 date — `docs/domain/CLIENTS.md`). A Sale sold during an Appointment keeps its Appointment payment
 untouched: the refund is the one separate movement.
+
+### 15.1 A refund the server refused (two devices offline)
+
+Two devices may each record a locally valid refund of the same Sale while offline. The remote
+evaluates them one after the other and REFUSES the one that would make the refunds exceed what the
+Sale received (`ADJUSTMENT_CONFLICT`, CLOUD_SYNC.md §28). That refusal protects the Sale's books —
+but the money of a refund marked « Déjà remboursé » may REALLY have been handed back. BeautIzzy never
+erases it in silence.
+
+**Financial status and synchronization are two separate facts.** « Remboursé » says the money left;
+a second line on every record says where it stands with the server: « Pas encore synchronisé »
+(waiting on this device), « Synchronisé », or « Refusé par le serveur … Ce remboursement n’est pas
+synchronisé. » A refusal is never worded as synchronized. The Caisse lines say it too (« Pas encore
+synchronisé », « Refusé par le serveur : à vérifier »). Until it is resolved, a refused SETTLED refund
+still counts in that device's Caisse: as far as BeautIzzy knows, that money left.
+
+**The question.** A refused SETTLED refund asks « L’argent a-t-il réellement été rendu au client ? »:
+
+- « Non, l’argent n’a pas été rendu » → the refused record is VOIDED (kept, audited, counted nowhere);
+- « Oui, l’argent a été rendu » → in ONE transaction, the refused record is VOIDED and an
+  **exceptional outflow** (« Sortie exceptionnelle ») records the real money movement.
+
+A refused PENDING refund (nothing handed back yet) can only be voided: it is not paid out against a
+server that will not take it.
+
+**The exceptional outflow** is a SaleAdjustment of kind REFUND, money only (no line: it never moves
+stock), SETTLED at once and final, whose identity derives from the refused record:
+`<refused id>-outflow` (`getSaleRefundOutflowId`). That identity is the link (traceability, restore)
+and makes it ONE per refusal across retries, restarts and devices (primary key, locally and remotely).
+It copies the refused record's amounts, methods, refund day (`refundedAt`), reason, note and operator;
+it is recorded at the resolution (`recordedAt`, `settledAt`). It moves money like any settled refund —
+Caisse by method on its real day, Client « Total dépensé », Tops & tendances — and stands OUTSIDE the
+Sale's refundable ceiling: it neither consumes nor frees the room left (`getSaleAdjustmentPosition`
+reports it apart, `outflowCents`). It is never voided; if the money later comes back, « Corriger ce
+remboursement… » compensates it like any settled refund. The original Sale is never touched, no normal
+refund is fabricated. The refused record's restocked units, if any, leave the stock again on either
+answer.
+
+Rules: `prepareSaleRefundOutflow` (domain), `recordStoredSaleRefundOutflow` (store: the refusal is read
+from the sync bookkeeping, a replay writes nothing), `sync_sale_adjustment_breach` +
+`sync_sale_refund_outflow_source` (remote, 20261012120000).
+
+**Before confirming a money refund**, the review says that another device not yet synchronized may
+refund the same Sale, that the server may then refuse this one, and that nothing will be erased
+without the professional's confirmation.

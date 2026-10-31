@@ -105,6 +105,9 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
     position.settledCents > 0 ? `Remboursé : ${formatEuroCents(position.settledCents)}` : undefined;
   const toRefund =
     position.pendingCents > 0 ? `À rembourser : ${formatEuroCents(position.pendingCents)}` : undefined;
+  // Money really returned beyond a server refusal: said apart, never mixed into « Remboursé ».
+  const outflow =
+    position.outflowCents > 0 ? `Sortie exceptionnelle : ${formatEuroCents(position.outflowCents)}` : undefined;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea} testID="sale-detail-screen">
@@ -120,7 +123,7 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
 
         <View
           accessible
-          accessibilityLabel={[SALE_CHANNEL_EYEBROWS[entry.channel], total, when, units, refunded, toRefund]
+          accessibilityLabel={[SALE_CHANNEL_EYEBROWS[entry.channel], total, when, units, refunded, toRefund, outflow]
             .filter(Boolean)
             .join(', ')}
           style={styles.summary}
@@ -146,6 +149,11 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
           {toRefund && (
             <AppText variant="metadata" style={styles.refunded} testID="sale-detail-to-refund">
               {toRefund}
+            </AppText>
+          )}
+          {outflow && (
+            <AppText variant="metadata" style={styles.refunded} testID="sale-detail-outflow">
+              {outflow}
             </AppText>
           )}
         </View>

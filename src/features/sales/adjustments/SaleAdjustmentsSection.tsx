@@ -14,9 +14,16 @@
 //                              screen asks what really happened (entered by
 //                              mistake / money returned / really paid) and
 //                              records the matching compensation, never an erasure
-//   refused by the server      « Annuler cette saisie » — the one way out of a
-//                              conflict between two devices
-// A record refused by the server says so; nothing is ever claimed synchronized.
+//   refused by the server      the explicit question « L’argent a-t-il réellement
+//   (SETTLED)                  été rendu au client ? »:
+//                                « Non » → the refused record is voided (kept, audited)
+//                                « Oui » → the refused record is voided AND ONE exceptional
+//                                outflow records the money that really left, outside
+//                                the Sale's ceiling (never a silent erasure)
+//   refused by the server      « Annuler cette saisie » only: nothing was given back yet,
+//   (PENDING)                  and the server will not take it
+// Every record says its synchronization APART from its financial status: not
+// yet sent, synchronized, or refused — a refusal is never worded as synchronized.
 
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -25,11 +32,14 @@ import { StyleSheet, View } from 'react-native';
 import {
   canReverseSaleAdjustment,
   findSaleAdjustmentReversal,
+  findSaleRefundOutflow,
   getSaleAdjustmentAmountCents,
   getSaleAdjustmentEligibility,
   getSaleAdjustmentHistory,
   getSaleAdjustmentPosition,
   getSaleAdjustments,
+  getSaleRefundOutflowSourceId,
+  isSaleRefundOutflow,
   type Sale,
   type SaleAdjustment,
 } from '@/domain/sales';
@@ -46,14 +56,20 @@ import { formatSaleQuantity } from '../presentation';
 import { useSaleSession } from '../session/SaleSessionProvider';
 import { getRefundInstant } from './form';
 import {
+  describeSaleAdjustmentSync,
+  describeSaleRefundOutflow,
+  describeSaleRefundRefusalOutcome,
   formatSaleAdjustmentDay,
   formatSaleAdjustmentInstant,
   formatSaleAdjustmentMethods,
   formatSaleAdjustmentStatus,
-  formatSaleAdjustmentSyncState,
   SALE_ADJUSTMENT_APPOINTMENT_NOT_SETTLED_NOTE,
   SALE_ADJUSTMENT_REASON_LABELS,
   SALE_ADJUSTMENT_TRANSITION_LABELS,
+  SALE_REFUND_MONEY_NOT_RETURNED_ACTION,
+  SALE_REFUND_MONEY_RETURNED_ACTION,
+  SALE_REFUND_REFUSAL_QUESTION,
+  type SaleAdjustmentSyncLine,
 } from './presentation';
 
 export const SALE_FULLY_ADJUSTED_NOTE = 'Toute la vente a déjà été remboursée ou corrigée.';
@@ -62,7 +78,11 @@ export const SALE_ADJUSTMENT_ACTION_ERROR =
 
 type PendingAction =
   | { readonly kind: 'SETTLE_TODAY'; readonly adjustment: SaleAdjustment }
-  | { readonly kind: 'VOID'; readonly adjustment: SaleAdjustment };
+  | { readonly kind: 'VOID'; readonly adjustment: SaleAdjustment }
+  /** A refused SETTLED record whose money was NOT returned: voided. */
+  | { readonly kind: 'MONEY_NOT_RETURNED'; readonly adjustment: SaleAdjustment }
+  /** A refused SETTLED record whose money WAS returned: voided + exceptional outflow. */
+  | { readonly kind: 'MONEY_RETURNED'; readonly adjustment: SaleAdjustment };
 
 function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -75,6 +95,7 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
     isAppointmentSettled,
     settleSaleAdjustment,
     voidSaleAdjustment,
+    recordSaleRefundOutflow,
     getSaleAdjustmentSyncStates,
   } = useSaleSession();
   const [pending, setPending] = useState<PendingAction>();
@@ -106,8 +127,18 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
     if (!pending) return;
     const { adjustment } = pending;
     setPending(undefined);
-    if (pending.kind === 'SETTLE_TODAY') run(() => settleSaleAdjustment(adjustment.id, new Date()));
-    else run(() => voidSaleAdjustment(adjustment.id));
+    switch (pending.kind) {
+      case 'SETTLE_TODAY':
+        run(() => settleSaleAdjustment(adjustment.id, new Date()));
+        break;
+      case 'MONEY_RETURNED':
+        run(() => recordSaleRefundOutflow(adjustment.id));
+        break;
+      case 'VOID':
+      case 'MONEY_NOT_RETURNED':
+        run(() => voidSaleAdjustment(adjustment.id));
+        break;
+    }
   };
 
   const dialog = pending ? describeDialog(pending, now) : undefined;
@@ -139,7 +170,12 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
       {adjustments.length > 0 && (
         <View style={styles.list} testID="sale-adjustments-history">
           {[...adjustments].reverse().map((adjustment) => {
-            const refused = syncStates.get(adjustment.id) === 'REFUSED';
+            const state = syncStates.get(adjustment.id);
+            const refused = state === 'REFUSED';
+            const outflow = isSaleRefundOutflow(adjustment);
+            // A refused SETTLED refund asks what really happened; never for an outflow (money that left).
+            const resolvable = refused && !outflow && adjustment.kind === 'REFUND' && adjustment.status === 'SETTLED';
+            const sourceId = getSaleRefundOutflowSourceId(adjustment);
             return (
               <AdjustmentCard
                 adjustment={adjustment}
@@ -151,16 +187,28 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
                         router.push({ pathname: '/sales/refund/[adjustmentId]', params: { adjustmentId: adjustment.id } })
                     : undefined
                 }
-                onSettleOtherDay={adjustment.status === 'PENDING' ? () => setSettlingOnDay(adjustment) : undefined}
-                onSettleToday={
-                  adjustment.status === 'PENDING' ? () => setPending({ kind: 'SETTLE_TODAY', adjustment }) : undefined
+                // A refused PENDING refund is never paid out: the server will not take it.
+                onSettleOtherDay={
+                  adjustment.status === 'PENDING' && !refused ? () => setSettlingOnDay(adjustment) : undefined
                 }
-                onVoid={
-                  adjustment.status === 'PENDING' || (refused && adjustment.status === 'SETTLED')
-                    ? () => setPending({ kind: 'VOID', adjustment })
+                onSettleToday={
+                  adjustment.status === 'PENDING' && !refused
+                    ? () => setPending({ kind: 'SETTLE_TODAY', adjustment })
                     : undefined
                 }
-                syncWarning={formatSaleAdjustmentSyncState(syncStates.get(adjustment.id))}
+                onVoid={adjustment.status === 'PENDING' ? () => setPending({ kind: 'VOID', adjustment }) : undefined}
+                onMoneyReturned={resolvable ? () => setPending({ kind: 'MONEY_RETURNED', adjustment }) : undefined}
+                onMoneyNotReturned={resolvable ? () => setPending({ kind: 'MONEY_NOT_RETURNED', adjustment }) : undefined}
+                outflowNote={
+                  sourceId !== undefined
+                    ? describeSaleRefundOutflow(adjustments.find((candidate) => candidate.id === sourceId))
+                    : undefined
+                }
+                refusalOutcome={describeSaleRefundRefusalOutcome(
+                  adjustment,
+                  findSaleRefundOutflow(adjustments, adjustment.id),
+                )}
+                syncLine={describeSaleAdjustmentSync(adjustment, state)}
               />
             );
           })}
@@ -176,7 +224,7 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
         onConfirm={confirmPending}
         testID="sale-adjustments-dialog"
         title={dialog?.title ?? ''}
-        tone={pending?.kind === 'VOID' ? 'destructive' : 'neutral'}
+        tone={pending?.kind === 'VOID' || pending?.kind === 'MONEY_NOT_RETURNED' ? 'destructive' : 'neutral'}
         visible={pending !== undefined}
       />
 
@@ -214,12 +262,34 @@ function describeDialog(action: PendingAction, now: Date) {
         body: 'Elle restera visible comme annulée et ne comptera nulle part. Les unités remises en stock par cette saisie en seront retirées.',
         confirm: 'Annuler la saisie',
       };
+    case 'MONEY_NOT_RETURNED':
+      return {
+        title: 'Aucun argent rendu ?',
+        body: `Confirmez seulement si les ${amount} n’ont jamais été rendus au client. La saisie refusée sera annulée : elle restera visible comme annulée et ne comptera nulle part.${restockSentence(action.adjustment)}`,
+        confirm: 'Rien n’a été rendu',
+      };
+    case 'MONEY_RETURNED': {
+      const day = action.adjustment.refundedAt ? formatSaleAdjustmentDay(action.adjustment.refundedAt) : '';
+      return {
+        title: 'Enregistrer l’argent rendu ?',
+        body: `BeautIzzy enregistre une sortie exceptionnelle de ${amount} (${formatSaleAdjustmentMethods(action.adjustment)}), le ${day}, liée à cette saisie refusée. Elle compte dans la caisse, pas dans le montant remboursable de la vente, qui reste inchangée. La saisie refusée reste visible comme annulée.${restockSentence(action.adjustment)}`,
+        confirm: 'Enregistrer la sortie',
+      };
+    }
   }
+}
+
+/** The refused record's restocked units leave the stock again on either answer; the outflow moves none. */
+function restockSentence(adjustment: SaleAdjustment): string {
+  return adjustment.items.some((item) => item.restock)
+    ? ' Les unités remises en stock par cette saisie en seront retirées.'
+    : '';
 }
 
 interface AdjustmentCardProps {
   readonly adjustment: SaleAdjustment;
-  readonly syncWarning: string | undefined;
+  /** Where the record stands with the server, said apart from its financial status. */
+  readonly syncLine: SaleAdjustmentSyncLine | undefined;
   readonly onSettleToday?: () => void;
   readonly onSettleOtherDay?: () => void;
   readonly onVoid?: () => void;
@@ -227,16 +297,27 @@ interface AdjustmentCardProps {
   readonly onCorrect?: () => void;
   /** The compensation recorded for this refund, if any. */
   readonly compensation?: SaleAdjustment;
+  /** A refused SETTLED refund: the two explicit answers. */
+  readonly onMoneyReturned?: () => void;
+  readonly onMoneyNotReturned?: () => void;
+  /** A resolved refusal: what really happened. */
+  readonly refusalOutcome?: string;
+  /** An exceptional outflow: what it is and the refusal it carries forward. */
+  readonly outflowNote?: string;
 }
 
 function AdjustmentCard({
   adjustment,
-  syncWarning,
+  syncLine,
   onSettleToday,
   onSettleOtherDay,
   onVoid,
   onCorrect,
   compensation,
+  onMoneyReturned,
+  onMoneyNotReturned,
+  refusalOutcome,
+  outflowNote,
 }: AdjustmentCardProps) {
   const amountCents = getSaleAdjustmentAmountCents(adjustment);
   const signed =
@@ -302,10 +383,44 @@ function AdjustmentCard({
             : `Saisie erronée, corrigée le ${formatSaleAdjustmentInstant(compensation.recordedAt)}`}
         </AppText>
       )}
-      {syncWarning && (
-        <AppText variant="metadata" style={styles.error} testID={`sale-adjustment-${adjustment.id}-refused`}>
-          {syncWarning}
+      {outflowNote && (
+        <AppText variant="metadata" style={styles.soft} testID={`sale-adjustment-${adjustment.id}-outflow`}>
+          {outflowNote}
         </AppText>
+      )}
+      {refusalOutcome && (
+        <AppText variant="metadata" style={styles.soft} testID={`sale-adjustment-${adjustment.id}-refusal-outcome`}>
+          {refusalOutcome}
+        </AppText>
+      )}
+      {syncLine && (
+        <AppText
+          accessibilityLiveRegion={syncLine.tone === 'warning' ? 'polite' : undefined}
+          variant="metadata"
+          style={syncLine.tone === 'warning' ? styles.error : styles.soft}
+          testID={`sale-adjustment-${adjustment.id}-${syncLine.tone === 'warning' ? 'refused' : 'sync'}`}
+        >
+          {syncLine.text}
+        </AppText>
+      )}
+      {onMoneyReturned && onMoneyNotReturned && (
+        <View style={styles.cardActions} testID={`sale-adjustment-${adjustment.id}-resolution`}>
+          <AppText accessibilityRole="header" variant="body">
+            {SALE_REFUND_REFUSAL_QUESTION}
+          </AppText>
+          <AppButton
+            onPress={onMoneyReturned}
+            testID={`sale-adjustment-${adjustment.id}-money-returned`}
+            title={SALE_REFUND_MONEY_RETURNED_ACTION}
+            variant="secondary"
+          />
+          <AppButton
+            onPress={onMoneyNotReturned}
+            testID={`sale-adjustment-${adjustment.id}-money-not-returned`}
+            title={SALE_REFUND_MONEY_NOT_RETURNED_ACTION}
+            variant="tertiary"
+          />
+        </View>
       )}
       {(onSettleToday || onVoid || onCorrect) && (
         <View style={styles.cardActions}>

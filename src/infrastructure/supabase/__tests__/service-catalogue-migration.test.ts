@@ -34,8 +34,11 @@ function withoutBranch(body: string, from: string, to: string): string {
 describe('multi-profession Step 3 — service categories and descriptions migration', () => {
   it('is ONE forward-only migration; only later, unrelated phases follow it', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    // The sale adjustments migration (CLOUD_SYNC.md §28) sorts after it.
-    expect(names.slice(names.indexOf(MIGRATION_NAME) + 1)).toEqual(['20261011120000_create_sale_adjustments.sql']);
+    // The sale adjustments migrations (CLOUD_SYNC.md §28, §28.1) sort after it.
+    expect(names.slice(names.indexOf(MIGRATION_NAME) + 1)).toEqual([
+      '20261011120000_create_sale_adjustments.sql',
+      '20261012120000_add_sale_refund_outflows.sql',
+    ]);
     expect(names.filter((name) => name.includes('service_categories'))).toEqual([MIGRATION_NAME]);
   });
 
