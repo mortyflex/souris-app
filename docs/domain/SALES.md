@@ -450,8 +450,9 @@ row (CLOUD_SYNC.md §28). Remotely, a Sale that holds adjustments is FROZEN: any
 is answered `CONFLICT` — the refusal every app build, including those that predate adjustments,
 already understands.
 
-**Where it shows.** The Sale detail (« ••• » → « Actions de la vente », the list of records with their
-history), the sales history (a status per Sale, a swipe that reveals « Actions » — the same drawer;
+**Where it shows.** The Sale detail (« ••• » → « Actions de la vente »; « Remboursements »: the real
+money movements, « Total remboursé », « Solde de la vente » and an over-refund warning; every record
+with its history in the collapsed « Historique des corrections » — DESIGN_OVERRIDES.md §48.3), the sales history (a status per Sale, a swipe that reveals « Actions » — the same drawer;
 both read `getSaleActions`, which adds no rule of its own), the Cash Register
 (signed « Remboursement » entries on their day, « Remboursements produits » and « Net produits » in the
 Produits vendus card), the Client « Total dépensé » and Tops & tendances (settled money only, on its
@@ -477,7 +478,7 @@ still counts in that device's Caisse: as far as BeautIzzy knows, that money left
 
 - « Non, l’argent n’a pas été rendu » → the refused record is VOIDED (kept, audited, counted nowhere);
 - « Oui, l’argent a été rendu » → in ONE transaction, the refused record is VOIDED and an
-  **exceptional outflow** (« Sortie exceptionnelle ») records the real money movement.
+  **exceptional outflow** — shown as « Remboursement supplémentaire » — records the real money movement.
 
 A refused PENDING refund (nothing handed back yet) can only be voided: it is not paid out against a
 server that will not take it.
@@ -490,8 +491,8 @@ It copies the refused record's amounts, methods, refund day (`refundedAt`), reas
 it is recorded at the resolution (`recordedAt`, `settledAt`). It moves money like any settled refund —
 Caisse by method on its real day, Client « Total dépensé », Tops & tendances — and stands OUTSIDE the
 Sale's refundable ceiling: it neither consumes nor frees the room left (`getSaleAdjustmentPosition`
-reports it apart, `outflowCents`). It is never voided; if the money later comes back, « Corriger ce
-remboursement… » compensates it like any settled refund. The original Sale is never touched, no normal
+reports it apart, `outflowCents`). It is never voided nor corrected as « saisi par erreur » (the screen does not offer it, the session
+refuses it); if the money later comes back, « Le client a rendu cet argent… » compensates it. The original Sale is never touched, no normal
 refund is fabricated. The refused record's restocked units, if any, leave the stock again on either
 answer.
 

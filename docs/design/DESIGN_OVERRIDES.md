@@ -2879,3 +2879,41 @@ The Caisse « Produits vendus » card and its « Vente » entries open two pushe
   seulement pour les produits physiquement revenus en boutique et revendables. », and the review says
   « Stock : Inchangé » or lists exactly the units put back before « Confirmer ».
 
+
+### 48.3 Sale detail — real money first, the journal apart (November 2026)
+
+Supersedes the « Corrections section » of §48.1 and the « Total reçu » wording of §47/§48.1.
+
+- **« Reçu à la vente ».** The « Encaissement » amount is the ORIGINAL payment, never the net after
+  refunds; its label says so (spoken « Reçu à la vente, 18,00 € »). Pills unchanged.
+- **Header.** The lavender summary carries ONE refund line: « Remboursé : 22,00 € » (settled refunds +
+  additional refunds), « Entièrement remboursé » when exactly the payment was given back, and
+  « À rembourser : … » for a refund still to pay. A voided entry never appears there.
+- **« Remboursements ».** One white `GroupedSurface` (`getSaleRefundSummary`): « Vente initiale »,
+  then ONE line per effective record, in the order the money moved — « Remboursement »,
+  « Remboursement supplémentaire » (money really returned after a server refusal), « À rembourser »
+  (soft amount, « Pas encore rendu · non compté »), « Correction » (no amount). Each line: `body` label,
+  soft `metadata` « 1 novembre 2026 · Carte 12,00 € », items and note when present, the amount in navy
+  tabular `control` (« −12,00 € »); one accessible element. A hairline, then « Total remboursé »
+  (`control`) and « Solde de la vente » (signed: « −4,00 € »).
+- **State.** Exactly the payment given back: a lavender pill « Entièrement remboursé » (accent check).
+  More than the payment: a `surfaceRose` note, rose triangle, « 4,00 € remboursés en trop » (`control`,
+  `rose700`) over « Le montant rendu dépasse le prix initial de la vente. » — spoken as one element
+  starting « Attention ». It waits while a refusal is unanswered.
+- **Needs a decision.** A refund the server refused leads the section in its own `surfaceRose` card
+  (`rose200` hairline): « Remboursement de 10,00 € du … · Carte 10,00 € », the refusal sentence, the
+  question as a header, « Oui, l’argent a été rendu » (secondary) and « Non, l’argent n’a pas été
+  rendu » (tertiary). Its summary line carries « Refusé par le serveur : à vérifier » in rose.
+- **Synchronization.** Said on a line only when it waits or needs a decision (« Pas encore
+  synchronisé », « En attente du serveur », « Refusé… »); a synchronized record says nothing there.
+- **Line actions** sit under their line, named by their effect: « Corriger ce remboursement… »,
+  « Le client a rendu cet argent… » (an additional refund: its correction screen never offers « saisi
+  par erreur »), « Revenir sur cette correction… »; a refund to pay keeps « Marquer comme remboursé »,
+  « Remboursé un autre jour… », « Annuler cette saisie ».
+- **« Historique des corrections ».** A 44 pt toggle row (title `control`, soft count, chevron),
+  collapsed by default, `expanded` state spoken. Open, it lists EVERY record newest first — the
+  previous record cards, quieter (85 % opacity, soft eyebrow, `metadata` text) — with status, methods,
+  dates, transitions, compensations, refusal outcomes and synchronization. Voided and compensated
+  records live only here, their amount struck through and spoken « non compté ».
+- **Caisse.** The additional refund line reads « Remboursement supplémentaire » (formerly « Sortie
+  exceptionnelle »).

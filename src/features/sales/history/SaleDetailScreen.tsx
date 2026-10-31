@@ -15,7 +15,9 @@
 // The Sale itself is never edited. Its actions live behind « ••• » (the shared
 // « Actions de la vente » drawer, the same one the history swipe opens), and
 // the corrections already recorded are listed under it with their history
-// (docs/domain/SALES.md §15); the summary shows what was given back.
+// (docs/domain/SALES.md §15): « Remboursements » shows the real money movements
+// and the balance, the voided / compensated records stay in a collapsed history.
+// « Reçu à la vente » is the ORIGINAL payment, never the net after refunds.
 
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -25,12 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getCashRegisterDayKey } from '@/domain/cash-register';
 import { getSaleTotalCents } from '@/domain/appointments';
-import {
-  findSaleHistoryEntry,
-  getSaleAdjustmentPosition,
-  type SaleHistoryEntry,
-  type SaleItem,
-} from '@/domain/sales';
+import { findSaleHistoryEntry, type SaleHistoryEntry, type SaleItem } from '@/domain/sales';
 import { useAppointmentSession } from '@/features/appointments/session/AppointmentSessionProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
@@ -44,6 +41,8 @@ import { bottomClearance, foregroundSoft, gutter, lavender, radii, semanticColor
 
 import { SaleActionsSheet, SALE_ACTIONS_TITLE, useSaleActions } from '../adjustments/SaleActionsSheet';
 import { SaleAdjustmentsSection } from '../adjustments/SaleAdjustmentsSection';
+import { SALE_REFUND_SUMMARY_FULL } from '../adjustments/presentation';
+import { getSaleRefundSummary } from '../adjustments/summary';
 import { useSaleSession } from '../session/SaleSessionProvider';
 import {
   SALE_CHANNEL_EYEBROWS,
@@ -63,6 +62,8 @@ export const SALE_NOT_FOUND_TITLE = 'Vente introuvable';
 export const SALE_NOT_FOUND_COPY = 'Cette vente n’existe plus sur cet appareil.';
 export const OPEN_APPOINTMENT_LABEL = 'Voir le rendez-vous';
 export const APPOINTMENT_MISSING_LABEL = 'Rendez-vous introuvable sur cet appareil';
+/** What the Sale received when it was sold — never the net after refunds (see « Remboursements »). */
+export const SALE_PAYMENT_RECEIVED_LABEL = 'Reçu à la vente';
 
 const paymentDayFormatter = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -100,14 +101,16 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
   const total = formatEuroCents(entry.totalCents);
   const when = formatSaleDateTime(sale.completedAt);
   const units = formatSaleUnitCount(entry.unitCount);
-  const position = getSaleAdjustmentPosition(sale, saleAdjustments);
+  // ONE line for what was given back: settled refunds and additional refunds together — never a voided entry.
+  const refundSummary = getSaleRefundSummary(sale, saleAdjustments);
   const refunded =
-    position.settledCents > 0 ? `Remboursé : ${formatEuroCents(position.settledCents)}` : undefined;
+    refundSummary.state === 'FULL'
+      ? SALE_REFUND_SUMMARY_FULL
+      : refundSummary.refundedCents > 0
+        ? `Remboursé : ${formatEuroCents(refundSummary.refundedCents)}`
+        : undefined;
   const toRefund =
-    position.pendingCents > 0 ? `À rembourser : ${formatEuroCents(position.pendingCents)}` : undefined;
-  // Money really returned beyond a server refusal: said apart, never mixed into « Remboursé ».
-  const outflow =
-    position.outflowCents > 0 ? `Sortie exceptionnelle : ${formatEuroCents(position.outflowCents)}` : undefined;
+    refundSummary.pendingCents > 0 ? `À rembourser : ${formatEuroCents(refundSummary.pendingCents)}` : undefined;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea} testID="sale-detail-screen">
@@ -123,7 +126,7 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
 
         <View
           accessible
-          accessibilityLabel={[SALE_CHANNEL_EYEBROWS[entry.channel], total, when, units, refunded, toRefund, outflow]
+          accessibilityLabel={[SALE_CHANNEL_EYEBROWS[entry.channel], total, when, units, refunded, toRefund]
             .filter(Boolean)
             .join(', ')}
           style={styles.summary}
@@ -149,11 +152,6 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
           {toRefund && (
             <AppText variant="metadata" style={styles.refunded} testID="sale-detail-to-refund">
               {toRefund}
-            </AppText>
-          )}
-          {outflow && (
-            <AppText variant="metadata" style={styles.refunded} testID="sale-detail-outflow">
-              {outflow}
             </AppText>
           )}
         </View>
@@ -305,18 +303,19 @@ function PaymentSection({ entry, appointmentFound, onOpenAppointment }: PaymentS
       { method: 'CASH' as const, cents: payment.cashAmountCents },
     ].filter(({ cents }) => cents > 0);
     const paidOnAnotherDay = getCashRegisterDayKey(payment.paidAt) !== getCashRegisterDayKey(sale.completedAt);
-    // « Total reçu » first, then ONE pill per method actually recorded — never a split the data does not hold.
+    // « Reçu à la vente » first, then ONE pill per method actually recorded — never a split the data does not hold.
+    // It stays the ORIGINAL payment: refunds and the net balance live in « Remboursements ».
     return (
       <GroupedSurface testID="sale-detail-payment">
         <View style={styles.paymentBody}>
           <View
             accessible
-            accessibilityLabel={`Total reçu, ${formatEuroCents(received)}`}
+            accessibilityLabel={`${SALE_PAYMENT_RECEIVED_LABEL}, ${formatEuroCents(received)}`}
             style={styles.paymentTotal}
             testID="sale-detail-payment-total"
           >
             <AppText variant="body" style={styles.paymentTotalLabel}>
-              Total reçu
+              {SALE_PAYMENT_RECEIVED_LABEL}
             </AppText>
             <AppText selectable variant="summaryValue" style={styles.paymentTotalValue}>
               {formatEuroCents(received)}

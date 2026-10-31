@@ -487,7 +487,9 @@ describe('Sale detail — corrections and their history', () => {
     );
     await press(view, 'record-pending');
     expect(view.getByTestId('sale-detail-to-refund').props.children).toBe(`À rembourser : ${formatEuroCents(1800)}`);
-    expect(view.getByTestId('sale-adjustment-pending-1-status').props.children).toBe('À REMBOURSER');
+    // In the summary: « À rembourser », never counted as refunded.
+    expect(view.getByTestId('sale-adjustment-pending-1-status').props.children).toBe('À rembourser');
+    expect(view.queryByTestId('sale-refund-summary-total')).toBeNull();
     // « Rembourser intégralement » is no longer offered once something was recorded.
     await press(view, 'open-sale-actions');
     await settleSheetTransition();
@@ -505,9 +507,19 @@ describe('Sale detail — corrections and their history', () => {
     await press(view, 'sale-adjustments-dialog-confirm');
 
     expect(adjustments(view)).toEqual([[true, 'SETTLED', 1800, 0]]);
+    // Partly given back: 56 € received, 18 € refunded, 38 € kept.
     expect(view.getByTestId('sale-detail-refunded').props.children).toBe(`Remboursé : ${formatEuroCents(1800)}`);
-    expect(view.getByTestId('sale-adjustment-pending-1-refunded').props.children).toBe('Remboursé le 16 octobre 2026');
-    const history = within(view.getByTestId('sale-adjustment-pending-1-history'));
+    expect(view.getByTestId('sale-refund-summary-original')).toHaveTextContent(/56,00\s€/);
+    expect(view.getByTestId('sale-refund-summary-total')).toHaveTextContent(/18,00\s€/);
+    expect(view.getByTestId('sale-refund-summary-net')).toHaveTextContent(/38,00\s€/);
+    expect(view.queryByTestId('sale-refund-summary-full')).toBeNull();
+    expect(view.queryByTestId('sale-refund-summary-over')).toBeNull();
+    expect(view.getByTestId('sale-adjustment-pending-1-status').props.children).toBe('Remboursement');
+    expect(view.getByTestId('sale-adjustment-pending-1-refunded')).toHaveTextContent(/^16 octobre 2026 · Carte 18,00\s€$/);
+    // The recording and the settlement stay in the collapsed journal.
+    expect(view.queryByTestId('sale-adjustment-history-pending-1')).toBeNull();
+    await press(view, 'sale-adjustments-history-toggle');
+    const history = within(view.getByTestId('sale-adjustment-history-pending-1-history'));
     expect(history.getByText('Enregistré, à rembourser le 15 octobre 2026 à 18:00')).toBeTruthy();
     expect(history.getByText('Marqué comme remboursé le 16 octobre 2026 à 09:30')).toBeTruthy();
     // A settled refund can no longer be settled or voided — only compensated.
@@ -528,7 +540,11 @@ describe('Sale detail — corrections and their history', () => {
     await press(view, 'sale-adjustment-pending-1-void');
     await press(view, 'sale-adjustments-dialog-confirm');
     expect(adjustments(view)).toEqual([[true, 'VOIDED', 1800, 0]]);
-    expect(view.getByTestId('sale-adjustment-pending-1-status').props.children).toBe('SAISIE ANNULÉE');
+    // Out of the summary; kept in the journal as « Saisie annulée ».
+    expect(view.queryByTestId('sale-adjustment-pending-1')).toBeNull();
+    expect(view.queryByTestId('sale-refund-summary')).toBeNull();
+    await press(view, 'sale-adjustments-history-toggle');
+    expect(view.getByTestId('sale-adjustment-history-pending-1-status').props.children).toBe('SAISIE ANNULÉE');
     expect(view.getByTestId('probe-stock-care').props.children).toBe('6');
   });
 

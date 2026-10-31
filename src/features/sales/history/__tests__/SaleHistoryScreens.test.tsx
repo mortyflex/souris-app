@@ -314,7 +314,7 @@ describe('Sale history screens', () => {
       expect(view.getByTestId('sale-detail-products-count').props.children).toBe(5);
 
       expect(within(view.getByTestId('sale-detail-payment-total')).getByText(formatEuroCents(3687))).toBeTruthy();
-      expect(view.getByTestId('sale-detail-payment-total').props.accessibilityLabel).toBe(`Total reçu, ${formatEuroCents(3687)}`);
+      expect(view.getByTestId('sale-detail-payment-total').props.accessibilityLabel).toBe(`Reçu à la vente, ${formatEuroCents(3687)}`);
       // Mixed payment: TWO pills, card first — glyph + amount on screen, each spoken « method, amount ».
       const pills = within(view.getByTestId('sale-detail-payment-methods'));
       expect(pills.getByTestId('sale-detail-payment-card').props.accessibilityLabel).toBe(`Carte, ${formatEuroCents(1000)}`);

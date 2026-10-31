@@ -14,7 +14,7 @@
 // settled refund reads « Remboursement · products » with a signed amount
 // (« −32,00 € ») and opens its Sale; a reversal reads « Remboursement annulé ».
 // An exceptional outflow (money really returned beyond a server refusal) reads
-// « Sortie exceptionnelle ». A refund not yet synchronized, or refused by the
+// « Remboursement supplémentaire ». A refund not yet synchronized, or refused by the
 // server, carries a short note under its source (`syncNote`).
 // Month mode adds the day above the time.
 
@@ -48,7 +48,7 @@ export const REFUND_SOURCE_LABEL = 'Remboursement';
 export const RECORDED_IN_ERROR_SOURCE_LABEL = 'Correction de saisie';
 export const REFUND_RETURNED_SOURCE_LABEL = 'Remboursement rendu';
 /** Money really returned beyond a server refusal (outside the Sale's refundable ceiling). */
-export const REFUND_OUTFLOW_SOURCE_LABEL = 'Sortie exceptionnelle';
+export const REFUND_OUTFLOW_SOURCE_LABEL = 'Remboursement supplémentaire';
 /** A walk-in Sale has no Client to name; nothing is invented. */
 export const WALK_IN_SALE_LABEL = 'Vente sans client';
 

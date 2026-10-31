@@ -361,7 +361,7 @@ describe('« Corriger un remboursement » — what really happened', () => {
 });
 
 describe('payment pills — cash only', () => {
-  it('a Sale paid entirely in cash shows ONE banknote pill under « Total reçu »: amount shown, method spoken', async () => {
+  it('a Sale paid entirely in cash shows ONE banknote pill under « Reçu à la vente »: amount shown, method spoken', async () => {
     const view = await renderSeeded(<SaleDetailScreen saleId="sale-direct" />, []);
     expect(view.getByTestId('sale-detail-payment-cash').props.accessibilityLabel).toBe(`Espèces, ${formatEuroCents(1800)}`);
     expect(within(view.getByTestId('sale-detail-payment-cash')).getByText(formatEuroCents(1800))).toBeTruthy();

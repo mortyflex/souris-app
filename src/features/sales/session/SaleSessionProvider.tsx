@@ -2,6 +2,7 @@ import { createContext, useContext, useRef, useState, type PropsWithChildren } f
 
 import type { AppointmentProductIdentity } from '@/domain/appointments';
 import {
+  isSaleRefundOutflow,
   prepareSaleAdjustment,
   prepareSaleCompletion,
   removeAppointmentProduct,
@@ -152,6 +153,11 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
 
   const reverseSaleAdjustment = (adjustmentId: string, input: SaleAdjustmentReversalRequest) => {
     requireWriteAccess('sales.reverseSaleAdjustment');
+    // An additional refund is money the professional confirmed really left: never « saisi par erreur ».
+    const target = committedAdjustments.current.find((adjustment) => adjustment.id === adjustmentId);
+    if (input.reason === 'RECORDED_IN_ERROR' && target !== undefined && isSaleRefundOutflow(target)) {
+      throw new Error('An additional refund cannot be reversed as recorded in error.');
+    }
     const base = { id: input.id, staffMemberId: currentStaffMemberId, note: input.note, now: new Date() };
     const outcome = reverseStoredSaleAdjustment(
       database,

@@ -16,6 +16,8 @@ import type { SaleAdjustmentSyncState } from '@/persistence/sync/sale-adjustment
 import { paymentMethodLabels } from '@/shared/icons/payment-method-icons';
 import { formatEuroCents } from '@/shared/lib/money';
 
+import type { SaleRefundSummaryLineKind } from './summary';
+
 /** Which flow the professional opened from the Sale detail. */
 export type SaleAdjustmentIntent = 'refund' | 'correct' | 'cancel';
 
@@ -66,7 +68,7 @@ export const SALE_ADJUSTMENT_REVENTE_NOTE =
   'Le paiement du rendez-vous reste inchangé : le remboursement apparaît à part dans la caisse, le jour où il a lieu.';
 
 export function formatSaleAdjustmentStatus(adjustment: SaleAdjustment): string {
-  if (isSaleRefundOutflow(adjustment)) return 'Sortie exceptionnelle';
+  if (isSaleRefundOutflow(adjustment)) return 'Remboursement supplémentaire';
   if (adjustment.kind === 'REVERSAL') {
     return adjustment.reason === 'REFUND_RETURNED' ? 'Remboursement rendu' : 'Correction de saisie';
   }
@@ -106,7 +108,7 @@ export const SALE_ADJUSTMENT_SYNCED_COPY = 'Synchronisé';
 export const SALE_ADJUSTMENT_REFUSED_COPY =
   'Refusé par le serveur : un autre appareil a déjà remboursé cette vente et le total dépasserait ce qu’elle a encaissé. Ce remboursement n’est pas synchronisé.';
 export const SALE_REFUND_OUTFLOW_REFUSED_COPY =
-  'Pas encore acceptée par le serveur (il doit être mis à jour) : la sortie reste enregistrée sur cet appareil et compte déjà dans la caisse.';
+  'Pas encore accepté par le serveur (il doit être mis à jour) : ce remboursement reste enregistré sur cet appareil et compte déjà dans la caisse.';
 
 export function describeSaleAdjustmentSync(
   adjustment: Pick<SaleAdjustment, 'id' | 'kind'>,
@@ -127,7 +129,11 @@ export function describeSaleAdjustmentSync(
   }
 }
 
-/** The short note of a Caisse line whose refund is not settled with the server. */
+/**
+ * The short note of a line whose refund is not settled with the server — a Caisse
+ * line, or a line of the Sale refund summary. A synchronized record says nothing:
+ * success never takes room; only what waits or needs a decision is said.
+ */
 export function describeSaleAdjustmentCashRegisterSync(
   adjustment: Pick<SaleAdjustment, 'id' | 'kind'>,
   state: SaleAdjustmentSyncState | undefined,
@@ -153,14 +159,41 @@ export function describeSaleRefundRefusalOutcome(
   if (adjustment.kind !== 'REFUND' || adjustment.status !== 'VOIDED' || !adjustment.settledAt) return undefined;
   // A settled refund is voided only after a server refusal (domain `voidSaleAdjustment`).
   return outflow
-    ? `Refusé par le serveur · argent rendu : compté dans la sortie exceptionnelle du ${formatSaleAdjustmentInstant(outflow.recordedAt)}.`
+    ? `Refusé par le serveur · argent rendu : enregistré comme remboursement supplémentaire le ${formatSaleAdjustmentInstant(outflow.recordedAt)}.`
     : 'Refusé par le serveur · argent non rendu : saisie annulée, rien n’est compté.';
 }
 
-/** The explanation an exceptional outflow carries under its title. */
-export function describeSaleRefundOutflow(source: SaleAdjustment | undefined): string {
-  const link = source ? ` Liée à la saisie refusée du ${formatSaleAdjustmentInstant(source.recordedAt)}.` : '';
-  return `Argent réellement rendu malgré le refus du serveur, au-delà de ce que la vente pouvait encore rembourser. La vente reste inchangée.${link}`;
+// --- The refund summary of the Sale detail ---------------------------------
+
+export const SALE_REFUND_SUMMARY_TITLE = 'Remboursements';
+export const SALE_REFUND_SUMMARY_ORIGINAL_LABEL = 'Vente initiale';
+export const SALE_REFUND_SUMMARY_TOTAL_LABEL = 'Total remboursé';
+export const SALE_REFUND_SUMMARY_NET_LABEL = 'Solde de la vente';
+export const SALE_REFUND_SUMMARY_FULL = 'Entièrement remboursé';
+export const SALE_REFUND_SUMMARY_OVER_NOTE = 'Le montant rendu dépasse le prix initial de la vente.';
+export const SALE_REFUND_SUMMARY_TO_REFUND_NOTE = 'Pas encore rendu · non compté';
+export const SALE_REFUND_HISTORY_TITLE = 'Historique des corrections';
+
+export const SALE_REFUND_LINE_LABELS: Readonly<Record<SaleRefundSummaryLineKind, string>> = {
+  REFUND: 'Remboursement',
+  ADDITIONAL_REFUND: 'Remboursement supplémentaire',
+  TO_REFUND: 'À rembourser',
+  CORRECTION: 'Correction',
+};
+
+/** `4,00 € remboursés en trop` */
+export function formatSaleOverRefund(overRefundCents: number): string {
+  return `${formatEuroCents(overRefundCents)} remboursés en trop`;
+}
+
+/** `−12,00 €`, `0,00 €` — a refund always reads as money going out. */
+export function formatSaleRefundAmount(cents: number): string {
+  return cents === 0 ? formatEuroCents(0) : `−${formatEuroCents(cents)}`;
+}
+
+/** The signed balance: `6,00 €`, or `−4,00 €` when more was given back. */
+export function formatSaleNetAmount(netCents: number): string {
+  return netCents < 0 ? `−${formatEuroCents(-netCents)}` : formatEuroCents(netCents);
 }
 
 /** Shown on the review step of any refund that gives money back. */

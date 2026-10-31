@@ -1,33 +1,39 @@
-// BeautIzzy — « Corrections et remboursements »: the adjustment history of ONE Sale
+// BeautIzzy — « Remboursements »: what ONE Sale gave back, as a professional reads it
 //
 // Under the Sale detail. The flows themselves are opened from the « ••• »
-// drawer « Actions de la vente » (SaleActionsSheet) — never from buttons here.
-// This section lists every record of the Sale, newest first, each with what it says and its auditable
-// history — when the money actually left (« Remboursé le ») apart from when it
-// was entered (« Enregistré le »). The original Sale above stays untouched.
+// drawer « Actions de la vente » (SaleActionsSheet). This section shows the
+// REAL money movements first — one record that moved money = one line — and
+// keeps the technical records apart (`getSaleRefundSummary`):
 //
-// Per record, only the transitions the domain allows, each behind an explicit
-// confirmation:
-//   PENDING                    « Marquer comme remboursé » (today, or another day)
-//                              « Annuler cette saisie »
-//   SETTLED refund             « Corriger ce remboursement… » — a dedicated
-//                              screen asks what really happened (entered by
-//                              mistake / money returned / really paid) and
-//                              records the matching compensation, never an erasure
-//   refused by the server      the explicit question « L’argent a-t-il réellement
-//   (SETTLED)                  été rendu au client ? »:
-//                                « Non » → the refused record is voided (kept, audited)
-//                                « Oui » → the refused record is voided AND ONE exceptional
-//                                outflow records the money that really left, outside
-//                                the Sale's ceiling (never a silent erasure)
-//   refused by the server      « Annuler cette saisie » only: nothing was given back yet,
-//   (PENDING)                  and the server will not take it
-// Every record says its synchronization APART from its financial status: not
-// yet sent, synchronized, or refused — a refusal is never worded as synchronized.
+//   needs a decision     a refund the server REFUSED (two devices refunding the
+//                        same Sale offline) asks « L’argent a-t-il réellement été
+//                        rendu au client ? » in its own highlighted card:
+//                          « Non » → the refused record is voided (kept, audited)
+//                          « Oui » → the refused record is voided AND ONE additional
+//                          refund records the money that really left
+//   the summary          « Vente initiale », every effective refund (a refund, an
+//                        additional refund, a refund still to pay, a correction),
+//                        « Total remboursé », « Solde de la vente », and the state:
+//                        « Entièrement remboursé » or « X remboursés en trop »
+//   Historique des       the whole journal: EVERY record with its status, dates
+//   corrections          and links, collapsed by default. Voided entries,
+//                        compensated refunds and their compensations appear only
+//                        there — kept, never counted
+//
+// Actions stay next to the line they act on, each behind an explicit
+// confirmation or a dedicated screen:
+//   À rembourser            « Marquer comme remboursé », « Remboursé un autre jour… »,
+//                           « Annuler cette saisie » (only « Annuler » once refused)
+//   Remboursement           « Corriger ce remboursement… » (what really happened)
+//   Remboursement           « Le client a rendu cet argent… » — it can never be
+//   supplémentaire          cancelled as an error: the money really left
+// Synchronization is said only when it waits or needs a decision; a
+// synchronized record says nothing in the summary (the history still says it).
 
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import {
   canReverseSaleAdjustment,
@@ -38,50 +44,70 @@ import {
   getSaleAdjustmentHistory,
   getSaleAdjustmentPosition,
   getSaleAdjustments,
-  getSaleRefundOutflowSourceId,
   isSaleRefundOutflow,
   type Sale,
   type SaleAdjustment,
 } from '@/domain/sales';
+import type { SaleAdjustmentSyncState } from '@/persistence/sync/sale-adjustment-sync';
+import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents } from '@/shared/lib/money';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { ConfirmationDialog } from '@/shared/ui/ConfirmationDialog';
+import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { MonthCalendarSheet } from '@/shared/ui/MonthCalendarSheet';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { foregroundSoft, radii, rose, semanticColors, spacing } from '@/shared/ui/theme';
-import { haptics } from '@/shared/lib/haptics';
 
 import { formatSaleQuantity } from '../presentation';
 import { useSaleSession } from '../session/SaleSessionProvider';
 import { getRefundInstant } from './form';
 import {
+  describeSaleAdjustmentCashRegisterSync,
   describeSaleAdjustmentSync,
-  describeSaleRefundOutflow,
   describeSaleRefundRefusalOutcome,
   formatSaleAdjustmentDay,
   formatSaleAdjustmentInstant,
   formatSaleAdjustmentMethods,
   formatSaleAdjustmentStatus,
+  formatSaleNetAmount,
+  formatSaleOverRefund,
+  formatSaleRefundAmount,
   SALE_ADJUSTMENT_APPOINTMENT_NOT_SETTLED_NOTE,
   SALE_ADJUSTMENT_REASON_LABELS,
+  SALE_ADJUSTMENT_REFUSED_COPY,
   SALE_ADJUSTMENT_TRANSITION_LABELS,
+  SALE_REFUND_HISTORY_TITLE,
+  SALE_REFUND_LINE_LABELS,
   SALE_REFUND_MONEY_NOT_RETURNED_ACTION,
   SALE_REFUND_MONEY_RETURNED_ACTION,
   SALE_REFUND_REFUSAL_QUESTION,
+  SALE_REFUND_SUMMARY_FULL,
+  SALE_REFUND_SUMMARY_NET_LABEL,
+  SALE_REFUND_SUMMARY_ORIGINAL_LABEL,
+  SALE_REFUND_SUMMARY_OVER_NOTE,
+  SALE_REFUND_SUMMARY_TITLE,
+  SALE_REFUND_SUMMARY_TO_REFUND_NOTE,
+  SALE_REFUND_SUMMARY_TOTAL_LABEL,
   type SaleAdjustmentSyncLine,
 } from './presentation';
+import { getSaleRefundSummary, type SaleRefundSummary, type SaleRefundSummaryLine } from './summary';
 
 export const SALE_FULLY_ADJUSTED_NOTE = 'Toute la vente a déjà été remboursée ou corrigée.';
 export const SALE_ADJUSTMENT_ACTION_ERROR =
   'Action impossible : la vente ou le stock a changé entre-temps. Vérifiez puis recommencez.';
+
+/** The action of each settled line, named by what it does. */
+export const SALE_REFUND_CORRECT_ACTION = 'Corriger ce remboursement…';
+export const SALE_ADDITIONAL_REFUND_RETURNED_ACTION = 'Le client a rendu cet argent…';
+export const SALE_CORRECTION_UNDO_ACTION = 'Revenir sur cette correction…';
 
 type PendingAction =
   | { readonly kind: 'SETTLE_TODAY'; readonly adjustment: SaleAdjustment }
   | { readonly kind: 'VOID'; readonly adjustment: SaleAdjustment }
   /** A refused SETTLED record whose money was NOT returned: voided. */
   | { readonly kind: 'MONEY_NOT_RETURNED'; readonly adjustment: SaleAdjustment }
-  /** A refused SETTLED record whose money WAS returned: voided + exceptional outflow. */
+  /** A refused SETTLED record whose money WAS returned: voided + additional refund. */
   | { readonly kind: 'MONEY_RETURNED'; readonly adjustment: SaleAdjustment };
 
 function startOfLocalDay(date: Date): Date {
@@ -101,8 +127,10 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
   const [pending, setPending] = useState<PendingAction>();
   const [settlingOnDay, setSettlingOnDay] = useState<SaleAdjustment>();
   const [error, setError] = useState<string>();
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const adjustments = getSaleAdjustments(saleAdjustments, sale.id);
+  const summary = getSaleRefundSummary(sale, saleAdjustments);
   const position = getSaleAdjustmentPosition(sale, saleAdjustments);
   const eligibility = getSaleAdjustmentEligibility(
     sale,
@@ -112,6 +140,17 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
   const unitsLeft = position.lines.some((line) => line.remainingQuantity > 0);
   const somethingLeft = position.remainingCents > 0 || unitsLeft;
   const now = new Date();
+
+  // A refused SETTLED refund asks what really happened; never an additional refund (money that left).
+  const toResolve = summary.lines
+    .map((line) => line.adjustment)
+    .filter(
+      (adjustment) =>
+        syncStates.get(adjustment.id) === 'REFUSED' &&
+        !isSaleRefundOutflow(adjustment) &&
+        adjustment.kind === 'REFUND' &&
+        adjustment.status === 'SETTLED',
+    );
 
   const run = (action: () => void) => {
     setError(undefined);
@@ -146,15 +185,18 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
   // Nothing recorded and nothing to explain: the section stays out of the way.
   if (eligibility.ok && adjustments.length === 0 && !error) return null;
 
+  const fullyGivenBack = summary.state === 'FULL' || summary.state === 'OVER';
+
   return (
     <View style={styles.section} testID="sale-adjustments">
-      <SectionHeader count={adjustments.length > 0 ? adjustments.length : undefined} title="Corrections et remboursements" />
+      <SectionHeader title={SALE_REFUND_SUMMARY_TITLE} />
       {!eligibility.ok ? (
         <AppText variant="metadata" style={styles.soft} testID="sale-adjustments-not-eligible">
           {SALE_ADJUSTMENT_APPOINTMENT_NOT_SETTLED_NOTE}
         </AppText>
       ) : (
-        !somethingLeft && (
+        !somethingLeft &&
+        !fullyGivenBack && (
           <AppText variant="metadata" style={styles.soft} testID="sale-adjustments-done">
             {SALE_FULLY_ADJUSTED_NOTE}
           </AppText>
@@ -167,51 +209,88 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
         </AppText>
       )}
 
-      {adjustments.length > 0 && (
-        <View style={styles.list} testID="sale-adjustments-history">
-          {[...adjustments].reverse().map((adjustment) => {
+      {toResolve.map((adjustment) => (
+        <RefusalCard
+          adjustment={adjustment}
+          key={adjustment.id}
+          onMoneyNotReturned={() => setPending({ kind: 'MONEY_NOT_RETURNED', adjustment })}
+          onMoneyReturned={() => setPending({ kind: 'MONEY_RETURNED', adjustment })}
+        />
+      ))}
+
+      {summary.lines.length > 0 && (
+        <SummaryCard
+          // An unanswered refusal still counts on this device: the « en trop » verdict waits for the answer.
+          awaitingAnswer={toResolve.length > 0}
+          renderActions={(line) => {
+            const { adjustment } = line;
             const state = syncStates.get(adjustment.id);
             const refused = state === 'REFUSED';
-            const outflow = isSaleRefundOutflow(adjustment);
-            // A refused SETTLED refund asks what really happened; never for an outflow (money that left).
-            const resolvable = refused && !outflow && adjustment.kind === 'REFUND' && adjustment.status === 'SETTLED';
-            const sourceId = getSaleRefundOutflowSourceId(adjustment);
+            if (adjustment.status === 'PENDING') {
+              return (
+                <PendingActions
+                  adjustment={adjustment}
+                  // A refused PENDING refund is never paid out: the server will not take it.
+                  onSettleOtherDay={refused ? undefined : () => setSettlingOnDay(adjustment)}
+                  onSettleToday={refused ? undefined : () => setPending({ kind: 'SETTLE_TODAY', adjustment })}
+                  onVoid={() => setPending({ kind: 'VOID', adjustment })}
+                />
+              );
+            }
+            if (refused || !canReverseSaleAdjustment(adjustment, adjustments)) return null;
             return (
-              <AdjustmentCard
-                adjustment={adjustment}
-                key={adjustment.id}
-                compensation={findSaleAdjustmentReversal(adjustments, adjustment.id)}
-                onCorrect={
-                  !refused && canReverseSaleAdjustment(adjustment, adjustments)
-                    ? () =>
-                        router.push({ pathname: '/sales/refund/[adjustmentId]', params: { adjustmentId: adjustment.id } })
-                    : undefined
+              <LineLink
+                accessibilityHint={correctHint(line)}
+                label={correctLabel(line)}
+                onPress={() =>
+                  router.push({ pathname: '/sales/refund/[adjustmentId]', params: { adjustmentId: adjustment.id } })
                 }
-                // A refused PENDING refund is never paid out: the server will not take it.
-                onSettleOtherDay={
-                  adjustment.status === 'PENDING' && !refused ? () => setSettlingOnDay(adjustment) : undefined
-                }
-                onSettleToday={
-                  adjustment.status === 'PENDING' && !refused
-                    ? () => setPending({ kind: 'SETTLE_TODAY', adjustment })
-                    : undefined
-                }
-                onVoid={adjustment.status === 'PENDING' ? () => setPending({ kind: 'VOID', adjustment }) : undefined}
-                onMoneyReturned={resolvable ? () => setPending({ kind: 'MONEY_RETURNED', adjustment }) : undefined}
-                onMoneyNotReturned={resolvable ? () => setPending({ kind: 'MONEY_NOT_RETURNED', adjustment }) : undefined}
-                outflowNote={
-                  sourceId !== undefined
-                    ? describeSaleRefundOutflow(adjustments.find((candidate) => candidate.id === sourceId))
-                    : undefined
-                }
-                refusalOutcome={describeSaleRefundRefusalOutcome(
-                  adjustment,
-                  findSaleRefundOutflow(adjustments, adjustment.id),
-                )}
-                syncLine={describeSaleAdjustmentSync(adjustment, state)}
+                testID={`sale-adjustment-${adjustment.id}-correct`}
               />
             );
-          })}
+          }}
+          summary={summary}
+          syncStates={syncStates}
+        />
+      )}
+
+      {summary.history.length > 0 && (
+        <View style={styles.history} testID="sale-adjustments-history">
+          <Pressable
+            accessibilityHint={historyOpen ? 'Masque le détail de chaque écriture' : 'Affiche chaque écriture, ses dates et son statut'}
+            accessibilityLabel={`${SALE_REFUND_HISTORY_TITLE}, ${summary.history.length} écriture${summary.history.length > 1 ? 's' : ''}`}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: historyOpen }}
+            hitSlop={4}
+            onPress={() => setHistoryOpen((open) => !open)}
+            style={({ pressed }) => [styles.historyToggle, pressed && styles.pressed]}
+            testID="sale-adjustments-history-toggle"
+          >
+            <AppText variant="control" style={styles.historyTitle}>
+              {SALE_REFUND_HISTORY_TITLE}
+            </AppText>
+            <AppText variant="metadata" style={styles.soft}>
+              {String(summary.history.length)}
+            </AppText>
+            <SymbolView
+              name={historyOpen ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
+              size={13}
+              tintColor={foregroundSoft}
+            />
+          </Pressable>
+          {historyOpen && (
+            <View style={styles.historyList} testID="sale-adjustments-history-list">
+              {summary.history.map((adjustment) => (
+                <HistoryCard
+                  adjustment={adjustment}
+                  compensation={findSaleAdjustmentReversal(adjustments, adjustment.id)}
+                  key={adjustment.id}
+                  refusalOutcome={describeSaleRefundRefusalOutcome(adjustment, findSaleRefundOutflow(adjustments, adjustment.id))}
+                  syncLine={describeSaleAdjustmentSync(adjustment, syncStates.get(adjustment.id))}
+                />
+              ))}
+            </View>
+          )}
         </View>
       )}
 
@@ -247,6 +326,18 @@ export function SaleAdjustmentsSection({ sale }: { readonly sale: Sale }) {
   );
 }
 
+function correctLabel(line: SaleRefundSummaryLine): string {
+  if (line.kind === 'ADDITIONAL_REFUND') return SALE_ADDITIONAL_REFUND_RETURNED_ACTION;
+  if (line.kind === 'CORRECTION') return SALE_CORRECTION_UNDO_ACTION;
+  return SALE_REFUND_CORRECT_ACTION;
+}
+
+function correctHint(line: SaleRefundSummaryLine): string {
+  if (line.kind === 'ADDITIONAL_REFUND') return 'Enregistrer que le client a rendu cet argent';
+  if (line.kind === 'CORRECTION') return 'Indiquer que cette correction a été saisie par erreur';
+  return 'Indiquer si ce remboursement a été saisi par erreur ou si l’argent a été rendu';
+}
+
 function describeDialog(action: PendingAction, now: Date) {
   const amount = formatEuroCents(getSaleAdjustmentAmountCents(action.adjustment));
   switch (action.kind) {
@@ -259,86 +350,347 @@ function describeDialog(action: PendingAction, now: Date) {
     case 'VOID':
       return {
         title: 'Annuler cette saisie ?',
-        body: 'Elle restera visible comme annulée et ne comptera nulle part. Les unités remises en stock par cette saisie en seront retirées.',
+        body: `Elle ne comptera nulle part et restera dans l’historique des corrections.${restockSentence(action.adjustment)}`,
         confirm: 'Annuler la saisie',
       };
     case 'MONEY_NOT_RETURNED':
       return {
         title: 'Aucun argent rendu ?',
-        body: `Confirmez seulement si les ${amount} n’ont jamais été rendus au client. La saisie refusée sera annulée : elle restera visible comme annulée et ne comptera nulle part.${restockSentence(action.adjustment)}`,
+        body: `Confirmez seulement si les ${amount} n’ont jamais été rendus au client. La saisie refusée sera annulée : elle ne comptera nulle part et restera dans l’historique des corrections.${restockSentence(action.adjustment)}`,
         confirm: 'Rien n’a été rendu',
       };
     case 'MONEY_RETURNED': {
       const day = action.adjustment.refundedAt ? formatSaleAdjustmentDay(action.adjustment.refundedAt) : '';
       return {
         title: 'Enregistrer l’argent rendu ?',
-        body: `BeautIzzy enregistre une sortie exceptionnelle de ${amount} (${formatSaleAdjustmentMethods(action.adjustment)}), le ${day}, liée à cette saisie refusée. Elle compte dans la caisse, pas dans le montant remboursable de la vente, qui reste inchangée. La saisie refusée reste visible comme annulée.${restockSentence(action.adjustment)}`,
-        confirm: 'Enregistrer la sortie',
+        body: `BeautIzzy enregistre un remboursement supplémentaire de ${amount} (${formatSaleAdjustmentMethods(action.adjustment)}), le ${day}. Il compte dans la caisse, même s’il dépasse le prix de la vente. La saisie refusée reste dans l’historique des corrections, annulée.${restockSentence(action.adjustment)}`,
+        confirm: 'Enregistrer le remboursement',
       };
     }
   }
 }
 
-/** The refused record's restocked units leave the stock again on either answer; the outflow moves none. */
+/** The refused record's restocked units leave the stock again on either answer; the additional refund moves none. */
 function restockSentence(adjustment: SaleAdjustment): string {
   return adjustment.items.some((item) => item.restock)
     ? ' Les unités remises en stock par cette saisie en seront retirées.'
     : '';
 }
 
-interface AdjustmentCardProps {
-  readonly adjustment: SaleAdjustment;
-  /** Where the record stands with the server, said apart from its financial status. */
-  readonly syncLine: SaleAdjustmentSyncLine | undefined;
-  readonly onSettleToday?: () => void;
-  readonly onSettleOtherDay?: () => void;
-  readonly onVoid?: () => void;
-  /** Opens « Corriger un remboursement » (a SETTLED refund). */
-  readonly onCorrect?: () => void;
-  /** The compensation recorded for this refund, if any. */
-  readonly compensation?: SaleAdjustment;
-  /** A refused SETTLED refund: the two explicit answers. */
-  readonly onMoneyReturned?: () => void;
-  readonly onMoneyNotReturned?: () => void;
-  /** A resolved refusal: what really happened. */
-  readonly refusalOutcome?: string;
-  /** An exceptional outflow: what it is and the refusal it carries forward. */
-  readonly outflowNote?: string;
+/** `1 novembre 2026 · Carte 12,00 €` — when the money left, and how. */
+function describeLineMeta(line: SaleRefundSummaryLine): string | undefined {
+  const { adjustment } = line;
+  if (line.kind === 'TO_REFUND') return SALE_REFUND_SUMMARY_TO_REFUND_NOTE;
+  if (line.kind === 'CORRECTION') return undefined;
+  return [adjustment.refundedAt ? formatSaleAdjustmentDay(adjustment.refundedAt) : undefined, formatSaleAdjustmentMethods(adjustment)]
+    .filter(Boolean)
+    .join(' · ');
 }
 
-function AdjustmentCard({
-  adjustment,
+function describeLineItems(adjustment: SaleAdjustment): string | undefined {
+  if (adjustment.items.length === 0) return undefined;
+  return adjustment.items
+    .map((item) => `${item.productName} ${formatSaleQuantity(item.quantity)} · ${item.restock ? 'remis en stock' : 'pas de retour en stock'}`)
+    .join('\n');
+}
+
+interface SummaryCardProps {
+  readonly summary: SaleRefundSummary;
+  readonly syncStates: ReadonlyMap<string, SaleAdjustmentSyncState>;
+  readonly awaitingAnswer: boolean;
+  readonly renderActions: (line: SaleRefundSummaryLine) => ReactNode;
+}
+
+function SummaryCard({ summary, syncStates, awaitingAnswer, renderActions }: SummaryCardProps) {
+  const hasMoney = summary.lines.some((line) => line.amountCents > 0);
+  const overRefund = summary.state === 'OVER' && !awaitingAnswer;
+  return (
+    <GroupedSurface testID="sale-refund-summary">
+      <View style={styles.summaryBody}>
+        {hasMoney && (
+          <AmountRow
+            label={SALE_REFUND_SUMMARY_ORIGINAL_LABEL}
+            testID="sale-refund-summary-original"
+            value={formatEuroCents(summary.originalCents)}
+          />
+        )}
+        {summary.lines.map((line) => (
+          <SummaryLine
+            actions={renderActions(line)}
+            key={line.adjustment.id}
+            line={line}
+            syncLine={describeSaleAdjustmentCashRegisterSync(line.adjustment, syncStates.get(line.adjustment.id))}
+          />
+        ))}
+        {hasMoney && summary.refundedCents > 0 && (
+          <>
+            <GroupedSeparator inset={0} />
+            <AmountRow
+              emphasized
+              label={SALE_REFUND_SUMMARY_TOTAL_LABEL}
+              testID="sale-refund-summary-total"
+              value={formatEuroCents(summary.refundedCents)}
+            />
+            <AmountRow
+              label={SALE_REFUND_SUMMARY_NET_LABEL}
+              testID="sale-refund-summary-net"
+              value={formatSaleNetAmount(summary.netCents)}
+            />
+          </>
+        )}
+        {summary.state === 'FULL' && (
+          <View accessible style={styles.stateBadge} testID="sale-refund-summary-full">
+            <SymbolView name={{ ios: 'checkmark.circle.fill', android: 'check_circle' }} size={14} tintColor={semanticColors.accent} />
+            <AppText variant="chip" style={styles.accent}>
+              {SALE_REFUND_SUMMARY_FULL}
+            </AppText>
+          </View>
+        )}
+        {overRefund && (
+          <View
+            accessible
+            accessibilityLabel={`Attention, ${formatSaleOverRefund(summary.overRefundCents)}. ${SALE_REFUND_SUMMARY_OVER_NOTE}`}
+            style={styles.warning}
+            testID="sale-refund-summary-over"
+          >
+            <SymbolView name={{ ios: 'exclamationmark.triangle.fill', android: 'warning' }} size={14} tintColor={rose.rose600} />
+            <View style={styles.warningCopy}>
+              <AppText variant="control" style={styles.warningTitle}>
+                {formatSaleOverRefund(summary.overRefundCents)}
+              </AppText>
+              <AppText variant="metadata" style={styles.warningText}>
+                {SALE_REFUND_SUMMARY_OVER_NOTE}
+              </AppText>
+            </View>
+          </View>
+        )}
+      </View>
+    </GroupedSurface>
+  );
+}
+
+function AmountRow({
+  label,
+  value,
+  testID,
+  emphasized = false,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly testID: string;
+  readonly emphasized?: boolean;
+}) {
+  return (
+    <View accessible accessibilityLabel={`${label}, ${value}`} style={styles.amountRow} testID={testID}>
+      <AppText variant={emphasized ? 'control' : 'body'} style={emphasized ? styles.strong : styles.soft}>
+        {label}
+      </AppText>
+      <AppText selectable variant="control" style={styles.amount}>
+        {value}
+      </AppText>
+    </View>
+  );
+}
+
+function SummaryLine({
+  line,
   syncLine,
+  actions,
+}: {
+  readonly line: SaleRefundSummaryLine;
+  readonly syncLine: SaleAdjustmentSyncLine | undefined;
+  readonly actions: ReactNode;
+}) {
+  const { adjustment } = line;
+  const label = SALE_REFUND_LINE_LABELS[line.kind];
+  const amount = line.kind === 'CORRECTION' ? undefined : formatSaleRefundAmount(line.amountCents);
+  const meta = describeLineMeta(line);
+  const items = describeLineItems(adjustment);
+  const muted = line.kind === 'TO_REFUND';
+  return (
+    <View style={styles.line} testID={`sale-adjustment-${adjustment.id}`}>
+      <View
+        accessible
+        accessibilityLabel={[label, amount, meta, items, adjustment.note ? `Note : ${adjustment.note}` : undefined, syncLine?.text]
+          .filter(Boolean)
+          .join(', ')}
+        style={styles.lineHeader}
+      >
+        <View style={styles.lineCopy}>
+          <AppText variant="body" style={styles.strong} testID={`sale-adjustment-${adjustment.id}-status`}>
+            {label}
+          </AppText>
+          {meta && (
+            <AppText variant="metadata" style={styles.soft} testID={`sale-adjustment-${adjustment.id}-refunded`}>
+              {meta}
+            </AppText>
+          )}
+          {items && (
+            <AppText variant="metadata" style={styles.soft}>
+              {items}
+            </AppText>
+          )}
+          {adjustment.note && (
+            <AppText variant="metadata" style={styles.soft}>
+              {`Note : ${adjustment.note}`}
+            </AppText>
+          )}
+          {syncLine && (
+            <AppText
+              accessibilityLiveRegion={syncLine.tone === 'warning' ? 'polite' : undefined}
+              variant="metadata"
+              style={syncLine.tone === 'warning' ? styles.error : styles.soft}
+              testID={`sale-adjustment-${adjustment.id}-${syncLine.tone === 'warning' ? 'refused' : 'sync'}`}
+            >
+              {syncLine.text}
+            </AppText>
+          )}
+        </View>
+        {amount && (
+          <AppText selectable variant="control" style={[styles.amount, muted && styles.soft]} testID={`sale-adjustment-${adjustment.id}-amount`}>
+            {amount}
+          </AppText>
+        )}
+      </View>
+      {actions}
+    </View>
+  );
+}
+
+function LineLink({
+  label,
+  onPress,
+  testID,
+  accessibilityHint,
+}: {
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly testID: string;
+  readonly accessibilityHint: string;
+}) {
+  return (
+    <Pressable
+      accessibilityHint={accessibilityHint}
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      hitSlop={6}
+      onPress={onPress}
+      style={({ pressed }) => [styles.lineLink, pressed && styles.pressed]}
+      testID={testID}
+    >
+      <AppText variant="metadata" style={styles.accent}>
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+
+function PendingActions({
+  adjustment,
   onSettleToday,
   onSettleOtherDay,
   onVoid,
-  onCorrect,
-  compensation,
+}: {
+  readonly adjustment: SaleAdjustment;
+  readonly onSettleToday: (() => void) | undefined;
+  readonly onSettleOtherDay: (() => void) | undefined;
+  readonly onVoid: () => void;
+}) {
+  return (
+    <View style={styles.lineActions}>
+      {onSettleToday && (
+        <AppButton onPress={onSettleToday} testID={`sale-adjustment-${adjustment.id}-settle`} title="Marquer comme remboursé" variant="secondary" />
+      )}
+      {onSettleOtherDay && (
+        <AppButton
+          onPress={onSettleOtherDay}
+          testID={`sale-adjustment-${adjustment.id}-settle-day`}
+          title="Remboursé un autre jour…"
+          variant="tertiary"
+        />
+      )}
+      <AppButton onPress={onVoid} testID={`sale-adjustment-${adjustment.id}-void`} title="Annuler cette saisie" variant="tertiary" />
+    </View>
+  );
+}
+
+/** A refund the server refused: highlighted, with the one question that resolves it. */
+function RefusalCard({
+  adjustment,
   onMoneyReturned,
   onMoneyNotReturned,
-  refusalOutcome,
-  outflowNote,
-}: AdjustmentCardProps) {
+}: {
+  readonly adjustment: SaleAdjustment;
+  readonly onMoneyReturned: () => void;
+  readonly onMoneyNotReturned: () => void;
+}) {
+  const amount = formatEuroCents(getSaleAdjustmentAmountCents(adjustment));
+  const day = adjustment.refundedAt ? formatSaleAdjustmentDay(adjustment.refundedAt) : undefined;
+  const context = [`Remboursement de ${amount}`, day ? `du ${day}` : undefined].filter(Boolean).join(' ');
+  return (
+    <View style={styles.refusal} testID={`sale-adjustment-${adjustment.id}-resolution`}>
+      <View accessible style={styles.refusalCopy}>
+        <AppText variant="control" style={styles.warningTitle}>
+          {`${context} · ${formatSaleAdjustmentMethods(adjustment)}`}
+        </AppText>
+        <AppText variant="metadata" style={styles.warningText} testID={`sale-adjustment-${adjustment.id}-refusal`}>
+          {SALE_ADJUSTMENT_REFUSED_COPY}
+        </AppText>
+      </View>
+      <AppText accessibilityRole="header" variant="body" style={styles.strong}>
+        {SALE_REFUND_REFUSAL_QUESTION}
+      </AppText>
+      <AppButton
+        onPress={onMoneyReturned}
+        testID={`sale-adjustment-${adjustment.id}-money-returned`}
+        title={SALE_REFUND_MONEY_RETURNED_ACTION}
+        variant="secondary"
+      />
+      <AppButton
+        onPress={onMoneyNotReturned}
+        testID={`sale-adjustment-${adjustment.id}-money-not-returned`}
+        title={SALE_REFUND_MONEY_NOT_RETURNED_ACTION}
+        variant="tertiary"
+      />
+    </View>
+  );
+}
+
+interface HistoryCardProps {
+  readonly adjustment: SaleAdjustment;
+  readonly syncLine: SaleAdjustmentSyncLine | undefined;
+  readonly compensation?: SaleAdjustment;
+  readonly refusalOutcome?: string;
+}
+
+/** One audit record: what it said, its status, its dates and links — never counted. */
+function HistoryCard({ adjustment, syncLine, compensation, refusalOutcome }: HistoryCardProps) {
   const amountCents = getSaleAdjustmentAmountCents(adjustment);
   const signed =
     amountCents === 0 ? '' : `${adjustment.kind === 'REVERSAL' ? '+' : '−'}${formatEuroCents(amountCents)}`;
   const status = formatSaleAdjustmentStatus(adjustment);
   const voided = adjustment.status === 'VOIDED';
+  // A compensated refund (and a voided one) no longer counts: its amount reads struck through.
+  const struck = voided || compensation !== undefined;
   return (
-    <View style={[styles.card, voided && styles.cardVoided]} testID={`sale-adjustment-${adjustment.id}`}>
+    <View style={styles.historyCard} testID={`sale-adjustment-history-${adjustment.id}`}>
       <View
         accessible
-        accessibilityLabel={[status, signed, SALE_ADJUSTMENT_REASON_LABELS[adjustment.reason]].filter(Boolean).join(', ')}
-        style={styles.cardHeader}
+        accessibilityLabel={[status, signed, SALE_ADJUSTMENT_REASON_LABELS[adjustment.reason], struck ? 'non compté' : undefined]
+          .filter(Boolean)
+          .join(', ')}
+        style={styles.lineHeader}
       >
-        <View style={styles.cardCopy}>
-          <AppText variant="eyebrow" style={voided ? styles.soft : styles.accent} testID={`sale-adjustment-${adjustment.id}-status`}>
+        <View style={styles.lineCopy}>
+          <AppText variant="eyebrow" style={styles.soft} testID={`sale-adjustment-history-${adjustment.id}-status`}>
             {status.toUpperCase()}
           </AppText>
-          <AppText variant="body">{SALE_ADJUSTMENT_REASON_LABELS[adjustment.reason]}</AppText>
+          <AppText variant="metadata" style={styles.strong}>
+            {SALE_ADJUSTMENT_REASON_LABELS[adjustment.reason]}
+          </AppText>
         </View>
         {signed.length > 0 && (
-          <AppText variant="control" style={[styles.amount, voided && styles.strike]} testID={`sale-adjustment-${adjustment.id}-amount`}>
+          <AppText variant="metadata" style={[styles.amount, struck && styles.strike]} testID={`sale-adjustment-history-${adjustment.id}-amount`}>
             {signed}
           </AppText>
         )}
@@ -354,7 +706,7 @@ function AdjustmentCard({
         </AppText>
       )}
       {adjustment.refundedAt && amountCents > 0 && (
-        <AppText variant="metadata" style={styles.soft} testID={`sale-adjustment-${adjustment.id}-refunded`}>
+        <AppText variant="metadata" style={styles.soft} testID={`sale-adjustment-history-${adjustment.id}-refunded`}>
           {`${
             adjustment.kind === 'REVERSAL'
               ? adjustment.reason === 'REFUND_RETURNED'
@@ -369,7 +721,7 @@ function AdjustmentCard({
           {`Note : ${adjustment.note}`}
         </AppText>
       )}
-      <View style={styles.history} testID={`sale-adjustment-${adjustment.id}-history`}>
+      <View style={styles.transitions} testID={`sale-adjustment-history-${adjustment.id}-history`}>
         {getSaleAdjustmentHistory(adjustment).map((step) => (
           <AppText key={step.kind} variant="metadata" style={styles.soft}>
             {`${SALE_ADJUSTMENT_TRANSITION_LABELS[step.kind]} le ${formatSaleAdjustmentInstant(step.at)}`}
@@ -377,77 +729,25 @@ function AdjustmentCard({
         ))}
       </View>
       {compensation && (
-        <AppText variant="metadata" style={styles.accent} testID={`sale-adjustment-${adjustment.id}-compensated`}>
+        <AppText variant="metadata" style={styles.accent} testID={`sale-adjustment-history-${adjustment.id}-compensated`}>
           {compensation.reason === 'REFUND_RETURNED'
             ? `Argent rendu le ${formatSaleAdjustmentDay(compensation.refundedAt ?? compensation.recordedAt)} (${formatSaleAdjustmentMethods(compensation)})`
             : `Saisie erronée, corrigée le ${formatSaleAdjustmentInstant(compensation.recordedAt)}`}
         </AppText>
       )}
-      {outflowNote && (
-        <AppText variant="metadata" style={styles.soft} testID={`sale-adjustment-${adjustment.id}-outflow`}>
-          {outflowNote}
-        </AppText>
-      )}
       {refusalOutcome && (
-        <AppText variant="metadata" style={styles.soft} testID={`sale-adjustment-${adjustment.id}-refusal-outcome`}>
+        <AppText variant="metadata" style={styles.soft} testID={`sale-adjustment-history-${adjustment.id}-refusal-outcome`}>
           {refusalOutcome}
         </AppText>
       )}
       {syncLine && (
         <AppText
-          accessibilityLiveRegion={syncLine.tone === 'warning' ? 'polite' : undefined}
           variant="metadata"
           style={syncLine.tone === 'warning' ? styles.error : styles.soft}
-          testID={`sale-adjustment-${adjustment.id}-${syncLine.tone === 'warning' ? 'refused' : 'sync'}`}
+          testID={`sale-adjustment-history-${adjustment.id}-${syncLine.tone === 'warning' ? 'refused' : 'sync'}`}
         >
           {syncLine.text}
         </AppText>
-      )}
-      {onMoneyReturned && onMoneyNotReturned && (
-        <View style={styles.cardActions} testID={`sale-adjustment-${adjustment.id}-resolution`}>
-          <AppText accessibilityRole="header" variant="body">
-            {SALE_REFUND_REFUSAL_QUESTION}
-          </AppText>
-          <AppButton
-            onPress={onMoneyReturned}
-            testID={`sale-adjustment-${adjustment.id}-money-returned`}
-            title={SALE_REFUND_MONEY_RETURNED_ACTION}
-            variant="secondary"
-          />
-          <AppButton
-            onPress={onMoneyNotReturned}
-            testID={`sale-adjustment-${adjustment.id}-money-not-returned`}
-            title={SALE_REFUND_MONEY_NOT_RETURNED_ACTION}
-            variant="tertiary"
-          />
-        </View>
-      )}
-      {(onSettleToday || onVoid || onCorrect) && (
-        <View style={styles.cardActions}>
-          {onSettleToday && (
-            <AppButton onPress={onSettleToday} testID={`sale-adjustment-${adjustment.id}-settle`} title="Marquer comme remboursé" variant="secondary" />
-          )}
-          {onSettleOtherDay && (
-            <AppButton
-              onPress={onSettleOtherDay}
-              testID={`sale-adjustment-${adjustment.id}-settle-day`}
-              title="Remboursé un autre jour…"
-              variant="tertiary"
-            />
-          )}
-          {onCorrect && (
-            <AppButton
-              accessibilityHint="Indiquer si ce remboursement a été saisi par erreur ou si l’argent a été rendu"
-              onPress={onCorrect}
-              testID={`sale-adjustment-${adjustment.id}-correct`}
-              title="Corriger ce remboursement…"
-              variant="tertiary"
-            />
-          )}
-          {onVoid && (
-            <AppButton onPress={onVoid} testID={`sale-adjustment-${adjustment.id}-void`} title="Annuler cette saisie" variant="tertiary" />
-          )}
-        </View>
       )}
     </View>
   );
@@ -456,23 +756,64 @@ function AdjustmentCard({
 const styles = StyleSheet.create({
   section: { gap: spacing.md },
   soft: { color: foregroundSoft },
+  strong: { color: semanticColors.foreground },
   accent: { color: semanticColors.accent },
   error: { color: rose.rose600 },
-  list: { gap: spacing.sm },
-  card: {
+  pressed: { opacity: 0.6 },
+  summaryBody: { gap: spacing.md, paddingHorizontal: spacing.base, paddingVertical: spacing.md },
+  amountRow: { alignItems: 'baseline', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
+  amount: { color: semanticColors.foreground, flexShrink: 0, fontVariant: ['tabular-nums'] },
+  line: { gap: spacing.xs },
+  lineHeader: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md },
+  lineCopy: { flex: 1, gap: 2, minWidth: 0 },
+  lineLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  lineActions: { gap: spacing.xs, marginTop: spacing.xs },
+  stateBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: semanticColors.surfaceLavender,
+    borderRadius: radii.pill,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  warning: {
+    alignItems: 'flex-start',
+    backgroundColor: semanticColors.surfaceRose,
+    borderCurve: 'continuous',
+    borderRadius: radii.medium,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  warningCopy: { flex: 1, gap: 2 },
+  warningTitle: { color: rose.rose700 },
+  warningText: { color: rose.rose700 },
+  refusal: {
+    backgroundColor: semanticColors.surfaceRose,
+    borderColor: rose.rose200,
+    borderCurve: 'continuous',
+    borderRadius: radii.large,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
+    padding: spacing.base,
+  },
+  refusalCopy: { gap: spacing.xs },
+  history: { gap: spacing.sm },
+  historyToggle: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, minHeight: 44 },
+  historyTitle: { color: semanticColors.foreground, flex: 1 },
+  historyList: { gap: spacing.sm },
+  historyCard: {
     backgroundColor: semanticColors.surfaceElevated,
     borderColor: semanticColors.borderSubtle,
     borderCurve: 'continuous',
     borderRadius: radii.large,
     borderWidth: StyleSheet.hairlineWidth,
     gap: spacing.xs,
+    opacity: 0.85,
     padding: spacing.base,
   },
-  cardVoided: { opacity: 0.75 },
-  cardHeader: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md },
-  cardCopy: { flex: 1, gap: 2, minWidth: 0 },
-  amount: { color: semanticColors.foreground, fontVariant: ['tabular-nums'] },
   strike: { color: foregroundSoft, textDecorationLine: 'line-through' },
-  history: { gap: 1, marginTop: spacing.xs },
-  cardActions: { gap: spacing.xs, marginTop: spacing.sm },
+  transitions: { gap: 1, marginTop: spacing.xs },
 });

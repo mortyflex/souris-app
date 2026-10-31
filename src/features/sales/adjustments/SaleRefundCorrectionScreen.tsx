@@ -14,6 +14,9 @@
 //   « Le remboursement a bien eu lieu et reste acquis »
 //        → nothing to record; the screen says so
 //
+// An ADDITIONAL refund (money really returned after a server refusal) never
+// offers « saisi par erreur »: the professional already confirmed the money left.
+//
 // Two steps (what happened, then the review of every consequence), one explicit
 // confirmation, one record id per presentation (a retry never duplicates).
 
@@ -23,7 +26,7 @@ import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { canReverseSaleAdjustment, getSaleAdjustmentAmountCents } from '@/domain/sales';
+import { canReverseSaleAdjustment, getSaleAdjustmentAmountCents, isSaleRefundOutflow } from '@/domain/sales';
 import { haptics } from '@/shared/lib/haptics';
 import { formatEuroCents, parseEuroInputToCents } from '@/shared/lib/money';
 import { createUuidV4 } from '@/shared/lib/uuid';
@@ -55,6 +58,12 @@ import {
 
 const horizontalGutter = Platform.OS === 'android' ? gutter.android : gutter.ios;
 const MEANINGS: readonly RefundCorrectionMeaning[] = ['RECORDED_IN_ERROR', 'REFUND_RETURNED', 'REALLY_PAID'];
+/**
+ * An additional refund (money really returned after a server refusal) is never
+ * « saisi par erreur »: the professional already confirmed the money left. Only
+ * the client giving it back can compensate it.
+ */
+const ADDITIONAL_REFUND_MEANINGS: readonly RefundCorrectionMeaning[] = ['REFUND_RETURNED', 'REALLY_PAID'];
 const METHODS: readonly RefundMethodChoice[] = ['CARD', 'CASH', 'MIXED'];
 
 export const REFUND_CORRECTION_TITLE = 'Corriger un remboursement';
@@ -101,6 +110,8 @@ export function SaleRefundCorrectionScreen({ adjustmentId }: { readonly adjustme
 
   const refundedAt = target.refundedAt;
   const total = getSaleAdjustmentAmountCents(target);
+  const additional = isSaleRefundOutflow(target);
+  const meanings = additional ? ADDITIONAL_REFUND_MEANINGS : MEANINGS;
   const amounts =
     method === 'CARD'
       ? { card: total, cash: 0 }
@@ -124,10 +135,12 @@ export function SaleRefundCorrectionScreen({ adjustmentId }: { readonly adjustme
           ? REFUND_SPLIT_MISMATCH
           : undefined
       : undefined;
-  const canReview = meaning === 'RECORDED_IN_ERROR' || (meaning === 'REFUND_RETURNED' && issue === undefined);
+  const canReview =
+    (meaning === 'RECORDED_IN_ERROR' && !additional) || (meaning === 'REFUND_RETURNED' && issue === undefined);
 
   const confirm = () => {
     if (submitting || !meaning || meaning === 'REALLY_PAID') return;
+    if (meaning === 'RECORDED_IN_ERROR' && additional) return;
     setSubmitting(true);
     setError(undefined);
     try {
@@ -169,7 +182,7 @@ export function SaleRefundCorrectionScreen({ adjustmentId }: { readonly adjustme
             {REFUND_CORRECTION_TITLE}
           </AppText>
           <AppText variant="metadata" style={styles.soft} testID="refund-correction-context">
-            {`Remboursement de ${formatEuroCents(total)} (${formatSaleAdjustmentMethods(target)}) le ${formatSaleAdjustmentDay(refundedAt)}`}
+            {`${additional ? 'Remboursement supplémentaire' : 'Remboursement'} de ${formatEuroCents(total)} (${formatSaleAdjustmentMethods(target)}) le ${formatSaleAdjustmentDay(refundedAt)}`}
           </AppText>
           {target.items.length > 0 && (
             <AppText variant="metadata" style={styles.soft}>
@@ -184,7 +197,7 @@ export function SaleRefundCorrectionScreen({ adjustmentId }: { readonly adjustme
         {step === 'edit' ? (
           <>
             <GroupedSurface testID="refund-correction-meanings">
-              {MEANINGS.map((option, index) => (
+              {meanings.map((option, index) => (
                 <View key={option}>
                   {index > 0 && <GroupedSeparator inset={spacing.base} />}
                   <RadioRow

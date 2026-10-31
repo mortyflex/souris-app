@@ -84,7 +84,8 @@ export interface SaleSessionValue {
   readonly recordSaleRefundOutflow: (adjustmentId: string) => void;
   /**
    * A compensating record of a SETTLED refund, with its explicit meaning
-   * (`SaleAdjustmentReversalRequest`). Throws when refused.
+   * (`SaleAdjustmentReversalRequest`). Throws when refused — and always for
+   * « saisi par erreur » on an additional refund (money confirmed as really returned).
    */
   readonly reverseSaleAdjustment: (adjustmentId: string, input: SaleAdjustmentReversalRequest) => void;
   /** Where each adjustment stands with the remote (never claimed synchronized when refused). */
