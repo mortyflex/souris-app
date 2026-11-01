@@ -5,6 +5,7 @@
 
 import { getCashRegisterDaySummary } from '@/domain/cash-register';
 import {
+  getSaleAdjustmentPosition,
   prepareSaleAdjustment,
   type Sale,
   type SaleAdjustmentDraft,
@@ -835,6 +836,37 @@ describe('a refund the server refused, resolved by what really happened (SALES.m
     expect(caisse(restored.db)).toEqual(caisse(first.db));
   });
 
+  it('a device that refunds offline before seeing the outflow is refused by the server, then asked like any refusal', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { first, second } = await refusedOnDeviceB(remote);
+    // A, not synchronized since: its own position still shows 32 € refundable.
+    record(first.db, { id: 'adj-c', lines: [], refundCardCents: 3200, refundCashCents: 0 });
+    recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT);
+    expect(await second.run()).toMatchObject({ failed: 0 });
+    // 100 € + 100 € really given back out of 132 €: the server refuses A's new 32 €.
+    expect(await first.run()).toMatchObject({ adjustmentConflicts: [{ aggregateId: 'adj-c', reason: 'CEILING' }] });
+    expect(readSaleAdjustmentSyncStates(first.db).get('adj-c')).toBe('REFUSED');
+    expect(remoteAdjustments(remote)).toEqual(['adj-1:SETTLED', 'adj-b-outflow:SETTLED', 'adj-b:VOIDED']);
+    // Once A has the outflow, its own position offers nothing more.
+    expect(getSaleAdjustmentPosition(findSale(first.db, directSale.id)!, loadSaleAdjustments(first.db)).remainingCents).toBe(0);
+    // The money A really gave is carried forward like any refusal: never erased, never a normal refund.
+    expect(recordStoredSaleRefundOutflow(first.db, 'adj-c', RESOLVED_AT)).toMatchObject({ written: true, outflow: { id: 'adj-c-outflow' } });
+    expect(await first.run()).toMatchObject({ failed: 0 });
+    expect(remoteAdjustments(remote)).toEqual(['adj-1:SETTLED', 'adj-b-outflow:SETTLED', 'adj-b:VOIDED', 'adj-c-outflow:SETTLED', 'adj-c:VOIDED']);
+  });
+
+  it('the device that holds the outflow refuses a new refund locally — the store re-checks its stored rows', async () => {
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    const { second } = await refusedOnDeviceB(remote);
+    recordStoredSaleRefundOutflow(second.db, 'adj-b', RESOLVED_AT);
+    const value = draft({ id: 'adj-d', lines: [], refundCardCents: 100, refundCashCents: 0 });
+    const prepared = prepareSaleAdjustment(
+      { sale: findSale(second.db, directSale.id)!, adjustments: loadSaleAdjustments(second.db), appointmentSettled: true, productExists: () => true, now: NOW },
+      value,
+    );
+    expect(prepared).toMatchObject({ ok: false, issues: [{ kind: 'AMOUNT_EXCEEDS_REMAINING', requested: 100, remaining: 0 }] });
+  });
+
   it('is idempotent: a replay (double tap, restart) writes nothing and the remote holds ONE outflow', async () => {
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
     const { second } = await refusedOnDeviceB(remote);
@@ -949,9 +981,72 @@ describe('the remote rule for exceptional outflows (20261012120000, modelled)', 
     expect(
       await push(remote, 'b', settledRefund('b', 10000, { status: 'VOIDED', voided_at: NOW.toISOString() })),
     ).toMatchObject({ status: 'APPLIED' });
-    // The normal ceiling is untouched by the outflow: 32 € remain refundable, not a cent more.
+    // 20261013120000: 200 € really given back out of 132 € — not a cent more by a NEW refund.
+    expect(await push(remote, 'c', settledRefund('c', 100))).toMatchObject({ status: 'ADJUSTMENT_CONFLICT', reason: 'CEILING' });
+    // A remote without that rule kept the outflow outside every ceiling: 32 € were still accepted.
+    remote.setRealRefundCeiling(false);
     expect(await push(remote, 'c', settledRefund('c', 3300))).toMatchObject({ status: 'ADJUSTMENT_CONFLICT', reason: 'CEILING' });
     expect(await push(remote, 'c', settledRefund('c', 3200))).toMatchObject({ status: 'APPLIED' });
+  });
+
+  describe('the real-money rule of NEW refunds (20261013120000, modelled)', () => {
+    /** 132 € received; 100 € refunded; a refused 100 € really returned (voided + outflow). */
+    async function overRefunded() {
+      const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+      const { run } = await openSyncedDevice(remote);
+      await run();
+      await push(remote, 'a', settledRefund('a', 10000));
+      await push(remote, 'b-outflow', settledRefund('b-outflow', 10000));
+      await push(remote, 'b', settledRefund('b', 10000, { status: 'VOIDED', voided_at: NOW.toISOString() }));
+      return remote;
+    }
+    const pending = (id: string, cents: number) =>
+      settledRefund(id, cents, { initial_status: 'PENDING', status: 'PENDING', refunded_at: null, settled_at: null });
+
+    it('refuses any new money refund, settled or pending, once refunds + outflows exceed the base', async () => {
+      const remote = await overRefunded();
+      expect(await push(remote, 'c', settledRefund('c', 1))).toMatchObject({ status: 'ADJUSTMENT_CONFLICT', reason: 'CEILING' });
+      expect(await push(remote, 'p', pending('p', 1))).toMatchObject({ status: 'ADJUSTMENT_CONFLICT', reason: 'CEILING' });
+    });
+
+    it('never refuses what was already accepted: replays, status moves, compensations, unit corrections, the outflow itself', async () => {
+      const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+      const { run } = await openSyncedDevice(remote);
+      await run();
+      await push(remote, 'p', pending('p', 3200));
+      await push(remote, 'a', settledRefund('a', 10000));
+      // The outflow takes the money given back to 232 € out of 132 €: accepted — it is the record of that money.
+      expect(await push(remote, 'b-outflow', settledRefund('b-outflow', 10000))).toMatchObject({ status: 'APPLIED' });
+      // A lost acknowledgement replayed, and a pending refund settled later: both still pass.
+      expect(await push(remote, 'a', settledRefund('a', 10000), 1)).toMatchObject({ status: 'APPLIED' });
+      expect(
+        await push(remote, 'p', settledRefund('p', 3200, { initial_status: 'PENDING', refunded_at: REFUNDED_AT.toISOString() }), 1),
+      ).toMatchObject({ status: 'APPLIED' });
+      // A compensation and a correction of units (no money) stay possible.
+      const item = { id: 'i', position: 0, sale_item_id: 'sale-direct-item-1', product_id: productSerum.id, product_name: 'Sérum', unit_price_cents: 3200, quantity: 1, restock: false };
+      expect(await push(remote, 'units', settledRefund('units', 0, { reason: 'WRONG_QUANTITY', items: [item] }))).toMatchObject({ status: 'APPLIED' });
+      expect(
+        await push(remote, 'back-a', settledRefund('back-a', 10000, { kind: 'REVERSAL', reverses_adjustment_id: 'a', reason: 'REFUND_RETURNED' })),
+      ).toMatchObject({ status: 'APPLIED' });
+    });
+
+    it('a compensation that gives a payout back frees exactly its amount', async () => {
+      const remote = await overRefunded();
+      await push(remote, 'back-a', settledRefund('back-a', 10000, { kind: 'REVERSAL', reverses_adjustment_id: 'a', reason: 'REFUND_RETURNED' }));
+      // 132 € − 100 € of the outflow = 32 €.
+      expect(await push(remote, 'c', settledRefund('c', 3300))).toMatchObject({ status: 'ADJUSTMENT_CONFLICT', reason: 'CEILING' });
+      expect(await push(remote, 'c', settledRefund('c', 3200))).toMatchObject({ status: 'APPLIED' });
+    });
+
+    it('below the base, a new refund fits the REAL balance only', async () => {
+      const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+      const { run } = await openSyncedDevice(remote);
+      await run();
+      await push(remote, 'b-outflow', settledRefund('b-outflow', 5000));
+      await push(remote, 'b', settledRefund('b', 5000, { status: 'VOIDED', voided_at: NOW.toISOString() }));
+      expect(await push(remote, 'c', settledRefund('c', 8300))).toMatchObject({ status: 'ADJUSTMENT_CONFLICT', reason: 'CEILING' });
+      expect(await push(remote, 'c', settledRefund('c', 8200))).toMatchObject({ status: 'APPLIED' });
+    });
   });
 
   it('refuses an outflow that is not money only, settled at once, or that disagrees with its source', async () => {

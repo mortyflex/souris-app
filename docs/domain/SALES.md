@@ -428,8 +428,11 @@ voided — at most one of each, so nothing is lost.
   accepts unit / stock corrections, never money); a Sale sold during an Appointment → the exact
   snapshot total of its lines, and only once that Appointment is SETTLED (before, it is removed from
   the Appointment, §10).
-- Remaining = base − Σ effective refunds (PENDING and SETTLED, not VOIDED, not reversed). A new refund
-  never exceeds it. The method may differ from the original payment (paid by card, refunded in cash).
+- Remaining = base − Σ effective refunds (PENDING and SETTLED, not VOIDED, not reversed) − Σ effective
+  exceptional outflows (§15.1), never below 0. A new refund never exceeds it: once the money given back
+  reaches what the Sale received, no new money refund can be recorded (« Rembourser » and « Rembourser
+  intégralement » are not offered; the refund screen and the session refuse it); units can still be
+  corrected and refunds compensated. A compensation that gives a payout back frees its amount. The method may differ from the original payment (paid by card, refunded in cash).
 - Refund method: NEVER deduced in silence. It is preselected only when the original money reliably
   came by ONE method — the direct Sale's own payment; for a Revente, the Appointment's final payment
   and its ACTIVE deposits — and the screen says so (« Payé à l’origine en espèces. Préselectionné :
@@ -497,8 +500,10 @@ and makes it ONE per refusal across retries, restarts and devices (primary key, 
 It copies the refused record's amounts, methods, refund day (`refundedAt`), reason, note and operator;
 it is recorded at the resolution (`recordedAt`, `settledAt`). It moves money like any settled refund —
 Caisse by method on its real day, Client « Total dépensé », Tops & tendances — and stands OUTSIDE the
-Sale's refundable ceiling: it neither consumes nor frees the room left (`getSaleAdjustmentPosition`
-reports it apart, `outflowCents`). It is never voided nor corrected as « saisi par erreur » (the screen does not offer it, the session
+ceiling of normal refunds: its own acceptance never depends on it (`getSaleAdjustmentPosition` reports
+it apart, `outflowCents`). Since November 2026 it does use up what a NEW refund may still give back
+(`remainingCents`): an 18 € Sale, 12 € refunded, 10 € really returned leaves nothing to refund — the
+remote enforces the same for new refunds (CLOUD_SYNC.md §28.2). It is never voided nor corrected as « saisi par erreur » (the screen does not offer it, the session
 refuses it); if the money later comes back, « Le client a rendu cet argent… » compensates it. The original Sale is never touched, no normal
 refund is fabricated. The refused record's restocked units, if any, leave the stock again on either
 answer.

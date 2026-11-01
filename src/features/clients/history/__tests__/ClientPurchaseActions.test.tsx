@@ -20,6 +20,7 @@ import { SaleSessionProvider, useSaleSession } from '@/features/sales/session/Sa
 import type { SourisDatabase } from '@/persistence/database';
 import { bindLocalDatabaseToBusiness } from '@/persistence/stores/business-profile';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
+import { usePersistence } from '@/providers/PersistenceProvider';
 import { TestPersistenceProvider, testBusiness } from '@/providers/testing/TestPersistenceProvider';
 import { settleSheetTransition } from '@/shared/ui/testing/sheet-transitions';
 
@@ -108,6 +109,7 @@ function Seed({ database }: { readonly database: SourisDatabase }) {
   const { addProduct } = useProductCatalog();
   const { completeSale, recordSaleAdjustment, recordSaleRefundOutflow, voidSaleAdjustment, saleAdjustments } =
     useSaleSession();
+  const { reloadSnapshot } = usePersistence();
   return (
     <>
       <Pressable
@@ -136,6 +138,20 @@ function Seed({ database }: { readonly database: SourisDatabase }) {
         }
       />
       <Pressable testID="seed-money-returned" onPress={() => recordSaleRefundOutflow('refund-b')} />
+      {/* A's 12 € refund as the pull writes it: the server accepted it before B's refusal. */}
+      <Pressable
+        testID="seed-remote-refund-a"
+        onPress={() => {
+          const at = new Date(2026, 9, 31, 15, 0).toISOString();
+          database.runSync(
+            `INSERT INTO sale_adjustments (id, business_id, sale_id, kind, reverses_adjustment_id, reason, note, staff_member_id,
+               refund_card_cents, refund_cash_cents, initial_status, status, refunded_at, settled_at, voided_at, recorded_at)
+             VALUES ('refund-a', ?, 'sale-s3', 'REFUND', NULL, 'CUSTOMER_REFUND', NULL, 'staff-a', 1200, 0, 'SETTLED', 'SETTLED', ?, ?, NULL, ?)`,
+            [testBusiness.id, at, at, at],
+          );
+          reloadSnapshot();
+        }}
+      />
       <Pressable testID="seed-money-not-returned" onPress={() => voidSaleAdjustment('refund-b')} />
       <Text testID="probe-adjustments">{saleAdjustments.map((adjustment) => `${adjustment.id}:${adjustment.status}`).join(',')}</Text>
     </>
@@ -308,10 +324,16 @@ describe('refund states of a purchase — the same summary as the Sale detail', 
     const view = await renderSeeded(<ClientPurchaseHistoryScreen clientId={client.id} />, [
       'seed-refund-b',
       'seed-refusal',
+      'seed-remote-refund-a',
       'seed-money-returned',
-      'seed-refund-a',
     ]);
     expect(status(view, 'sale-s3')).toBe('Remboursée');
+    // 22 € given back out of 18 €: no new refund is offered, only a correction of units.
+    await press(view, 'client-sale-actions-sale-s3');
+    await settleSheetTransition();
+    expect(view.queryByTestId('sale-action-refund')).toBeNull();
+    expect(view.queryByTestId('sale-action-cancel')).toBeNull();
+    expect(view.getByTestId('sale-action-correct')).toBeTruthy();
   });
 
   it('a voided refusal (money not returned) is never shown as a refund', async () => {

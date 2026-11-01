@@ -136,16 +136,67 @@ describe('« L’argent a bien été rendu » — the refused refund is carried 
     expect(getCashRegisterDaySummary(sources, saleAt)).toMatchObject({ totalCents: 600, cardCents: 600 });
   });
 
-  it('stands OUTSIDE the ceiling: the Sale may still refund exactly what it could before', () => {
+  // Product rule changed (November 2026, « Financial Safety »): money really given back beyond the
+  // ceiling still uses up what a NEW refund may give back — it was 600 cents before.
+  it('stands outside `committedCents`, but uses up what a NEW refund may give back: 22 € out of 18 € leaves nothing', () => {
     const { voided, outflow } = resolveReturned();
-    const position = getSaleAdjustmentPosition(sale, [refundA, voided, outflow]);
-    expect(position).toMatchObject({ baseCents: 1800, committedCents: 1200, settledCents: 1200, remainingCents: 600, outflowCents: 1000 });
+    const all = [refundA, voided, outflow];
+    const position = getSaleAdjustmentPosition(sale, all);
+    expect(position).toMatchObject({ baseCents: 1800, committedCents: 1200, settledCents: 1200, remainingCents: 0, outflowCents: 1000 });
+    const context = { sale, adjustments: all, appointmentSettled: true, productExists: () => true, now: resolvedAt };
+    expect(validateSaleAdjustmentDraft(context, draft({ id: 'refund-c', refundCardCents: 1, refundedAt: resolvedAt }))).toEqual([
+      { kind: 'AMOUNT_EXCEEDS_REMAINING', requested: 1, remaining: 0 },
+    ]);
+    // A correction of units only moves no money: still possible.
     expect(
-      validateSaleAdjustmentDraft(
-        { sale, adjustments: [refundA, voided, outflow], appointmentSettled: true, productExists: () => true, now: resolvedAt },
-        draft({ id: 'refund-c', refundCardCents: 600, refundedAt: resolvedAt }),
-      ),
+      validateSaleAdjustmentDraft(context, draft({ id: 'fix-c', reason: 'WRONG_QUANTITY', lines: [{ saleItemId: 'line-shampoo', quantity: 1, restock: true }] })),
     ).toEqual([]);
+  });
+
+  it('below the sale amount, a new refund is limited to the REAL balance: 18 € − 10 € really returned = 8 €', () => {
+    const { voided, outflow } = resolveReturned([refundB]);
+    const all = [voided, outflow];
+    expect(getSaleAdjustmentPosition(sale, all)).toMatchObject({ committedCents: 0, outflowCents: 1000, remainingCents: 800 });
+    const context = { sale, adjustments: all, appointmentSettled: true, productExists: () => true, now: resolvedAt };
+    expect(validateSaleAdjustmentDraft(context, draft({ id: 'r8', refundCardCents: 800, refundedAt: resolvedAt }))).toEqual([]);
+    expect(validateSaleAdjustmentDraft(context, draft({ id: 'r9', refundCardCents: 900, refundedAt: resolvedAt }))).toEqual([
+      { kind: 'AMOUNT_EXCEEDS_REMAINING', requested: 900, remaining: 800 },
+    ]);
+  });
+
+  it('a compensation that really reverses a payout frees its amount again', () => {
+    const { voided, outflow } = resolveReturned();
+    // The client gives back A's 12 €: only the 10 € really returned remain committed → 8 € refundable.
+    const backA = prepareSaleAdjustmentReversal(refundA, [refundA, voided, outflow], {
+      id: 'back-a',
+      staffMemberId: 'staff-amelie',
+      now: resolvedAt,
+      reason: 'REFUND_RETURNED',
+      returnedAt: resolvedAt,
+      cardCents: 1200,
+      cashCents: 0,
+    });
+    if (!backA.ok) throw new Error(backA.issue);
+    expect(getSaleAdjustmentPosition(sale, [refundA, voided, outflow, backA.adjustment]).remainingCents).toBe(800);
+    // The client gives back the 10 € of the outflow instead: 18 − 12 = 6 €.
+    const backOutflow = prepareSaleAdjustmentReversal(outflow, [refundA, voided, outflow], {
+      id: 'back-outflow',
+      staffMemberId: 'staff-amelie',
+      now: resolvedAt,
+      reason: 'REFUND_RETURNED',
+      returnedAt: resolvedAt,
+      cardCents: 1000,
+      cashCents: 0,
+    });
+    if (!backOutflow.ok) throw new Error(backOutflow.issue);
+    expect(getSaleAdjustmentPosition(sale, [refundA, voided, outflow, backOutflow.adjustment]).remainingCents).toBe(600);
+  });
+
+  it('a voided entry and a pending refund: the voided one frees nothing it never used, the pending one holds its room', () => {
+    const pending = record([], { id: 'p', refundCardCents: 500, settlement: 'PENDING' }, refundedA);
+    const voidedPending: SaleAdjustment = { ...pending, status: 'VOIDED', voidedAt: resolvedAt };
+    expect(getSaleAdjustmentPosition(sale, [pending]).remainingCents).toBe(1300);
+    expect(getSaleAdjustmentPosition(sale, [voidedPending]).remainingCents).toBe(1800);
   });
 
   it('takes back the units the refused record restocked; the outflow itself never moves stock', () => {

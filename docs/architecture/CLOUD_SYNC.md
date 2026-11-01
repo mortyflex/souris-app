@@ -2513,3 +2513,38 @@ idempotent replay with a lost acknowledgement, restock taken back, restore, an u
 modelled remote rule incl. order) and an out-of-repo PGlite 0.2.17 harness (59 checks for the new
 migration on a populated database, re-run; the 62 checks of 20261011120000 re-run with it applied on
 top). True parallel transactions remain a Staging check (§28).
+
+### 28.2 No new refund once refunds + outflows reach the base (no schema change; remote 20261013120000)
+
+Exceptional outflows stand outside the ceiling of normal refunds (§28.1), so the ceiling alone still
+accepted a NEW refund for the room it never used: an 18 € Sale, 12 € refunded, 10 € really returned
+after a refusal (22 € given back) still accepted 6 € more.
+
+- **Client.** `remainingCents` = base − effective refunds − effective outflows, floored at 0. It drives
+  every path: `getSaleActions` (no « Rembourser », no « Rembourser intégralement »), the refund screen
+  (« Encore remboursable », the default amount, validation), `prepareSaleAdjustment` in the session and
+  the store's in-transaction re-check. Unit corrections and compensations stay available.
+- **Remote (`sync_sale_adjustment_breach`, ONE function replaced in place).** A NEW money refund — a row
+  this very transaction inserted (`created_at` is server-owned: now(), never moved by
+  `sync_push_aggregate`'s ON CONFLICT), not an outflow, amount > 0, PENDING or SETTLED — is refused
+  (`ADJUSTMENT_CONFLICT`, reason `CEILING`, nothing written) when effective refunds + effective outflows
+  exceed the base. Not a state rule on purpose: the breach reads the whole Sale after every write, and a
+  state rule would refuse the outflow that records the over-refund and every later write of that Sale
+  (replays, a pending refund settled, compensations, unit corrections). The Sale-row lock serialises
+  the writes of one Sale.
+- **Concurrent devices.** A device that refunded offline before it pulled the outflow is refused like
+  any over-refund; the current build then asks whether that money really left (§28.1), so real money is
+  carried forward as another outflow, never erased.
+- **Compatibility.** TestFlight 10 (v17) never names SALE_ADJUSTMENT. Every answer is one adjustment
+  builds already know (`ADJUSTMENT_CONFLICT` / `CEILING`). A v18 build without outflows read a pulled
+  outflow as a normal refund, so its local remainder was already 0. Without this migration, the remote
+  keeps accepting such refunds from devices that have not pulled the outflow yet (the current build
+  refuses them locally once it has it).
+
+Verified locally: `src/domain/sales/__tests__/refund-outflow.test.ts`, `sale-actions.test.ts`,
+`SaleRefundRefusal.test.tsx` (route and session bypass), `ClientPurchaseActions.test.tsx`,
+`src/persistence/__tests__/sale-adjustments.test.ts` (modelled remote rule, an offline device refused
+then carried forward, the store re-check) and an out-of-repo PGlite 0.2.17 harness (52 checks: the gap
+before the migration, no row rewritten, new refunds refused settled or pending, replays / status moves /
+compensations / unit corrections / outflows accepted, compensations freeing room, partial balances, the
+plain ceiling and the outflow rule unchanged; the 59 + 62 checks of §28.1 / §28 re-run with it on top).

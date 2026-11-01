@@ -63,4 +63,34 @@ describe('the ONE selection of a Sale’s contextual actions', () => {
     expect(getSaleActions({ sale: revente, adjustments: [], appointmentSettled: false })).toEqual([]);
     expect(getSaleActions({ sale: revente, adjustments: [], appointmentSettled: true })).toEqual(['refund', 'correct', 'cancel']);
   });
+
+  describe('money really given back beyond the ceiling (exceptional outflows) uses up « Rembourser »', () => {
+    // 36 € received. A: 18 € refunded. B's refused 18 € really returned: voided + `-outflow`.
+    const a = refund({ id: 'a' });
+    const bVoided = refund({ id: 'b', status: 'VOIDED', voidedAt: at });
+    const bOutflow = refund({ id: 'b-outflow' });
+
+    it('36 € given back out of 36 €: neither « Rembourser » nor « Rembourser intégralement »; units can still be corrected', () => {
+      expect(getSaleActions({ sale: direct, adjustments: [a, bVoided, bOutflow], appointmentSettled: true })).toEqual(['correct']);
+    });
+
+    it('beyond the sale amount (40 € out of 36 €): the same', () => {
+      const bigOutflow = refund({ id: 'c-outflow', refundCardCents: 2200 });
+      expect(
+        getSaleActions({ sale: direct, adjustments: [a, refund({ id: 'c', status: 'VOIDED', voidedAt: at, refundCardCents: 2200 }), bigOutflow], appointmentSettled: true }),
+      ).toEqual(['correct']);
+    });
+
+    it('an outflow below the sale amount leaves « Rembourser » for the real balance', () => {
+      expect(getSaleActions({ sale: direct, adjustments: [bVoided, bOutflow], appointmentSettled: true })).toEqual(['refund', 'correct']);
+    });
+
+    it('a compensation that gives a payout back makes room again', () => {
+      const back = refund({ id: 'back-a', kind: 'REVERSAL', reason: 'REFUND_RETURNED', reversesAdjustmentId: 'a' });
+      expect(getSaleActions({ sale: direct, adjustments: [a, back, bVoided, bOutflow], appointmentSettled: true })).toEqual([
+        'refund',
+        'correct',
+      ]);
+    });
+  });
 });

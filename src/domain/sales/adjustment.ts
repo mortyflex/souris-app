@@ -62,7 +62,15 @@
 //                        refusal across retries and devices. It moves money like
 //                        any settled refund, never moves stock, and stands OUTSIDE
 //                        the Sale's refundable ceiling: it is the record of money
-//                        that left beyond it, never a normal refund.
+//                        that left beyond it, never a normal refund. Its own
+//                        acceptance never depends on that ceiling.
+//
+// What is still refundable (`remainingCents`) is what the Sale received minus
+// ALL the money really committed back: the effective refunds AND the effective
+// exceptional outflows, never below 0. Once the money given back reaches what
+// the Sale received (18 € sold, 12 € refunded, 10 € really returned after a
+// refusal), no NEW refund of money can be recorded; corrections of units and
+// compensations stay possible. A compensated payout frees its amount again.
 //
 // Nothing here applies anything: the store re-runs these rules on the
 // stored rows inside its transaction, and the remote enforces the same
@@ -373,8 +381,13 @@ export interface SaleAdjustmentPosition {
   readonly committedCents: number;
   readonly settledCents: number;
   readonly pendingCents: number;
+  /**
+   * What a NEW refund may still give back: `max(base − committed − outflows, 0)`.
+   * Money really returned beyond the ceiling (an exceptional outflow) uses up the
+   * room too — it is never refunded a second time.
+   */
   readonly remainingCents: number;
-  /** Σ effective exceptional outflows: money really returned BEYOND the ceiling (never counted in it). */
+  /** Σ effective exceptional outflows: money really returned BEYOND the ceiling (never counted in `committedCents`). */
   readonly outflowCents: number;
   readonly lines: readonly SaleAdjustmentLinePosition[];
 }
@@ -392,7 +405,7 @@ export function getSaleAdjustmentPosition(
   const restockedByLine = new Map<string, number>();
   for (const adjustment of effective) {
     const amount = getSaleAdjustmentAmountCents(adjustment);
-    // Outside the ceiling by definition: it never reduces what the Sale may still refund.
+    // Outside the ceiling of `committedCents` by definition — but real money: it uses up `remainingCents`.
     if (isSaleRefundOutflow(adjustment)) {
       outflowCents += amount;
       continue;
@@ -413,7 +426,7 @@ export function getSaleAdjustmentPosition(
     committedCents,
     settledCents,
     pendingCents,
-    remainingCents: Math.max(baseCents - committedCents, 0),
+    remainingCents: Math.max(baseCents - committedCents - outflowCents, 0),
     outflowCents,
     lines: sale.items.map((item) => {
       const adjustedQuantity = adjustedByLine.get(item.id) ?? 0;

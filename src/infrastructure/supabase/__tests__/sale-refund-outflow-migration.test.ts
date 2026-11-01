@@ -29,9 +29,9 @@ function functionBody(sql: string, name: string): string {
 const normalize = (sql: string) => sql.replace(/\s+/g, ' ').trim();
 
 describe('sale adjustments — exceptional outflows migration (20261012120000)', () => {
-  it('is ONE forward-only migration and sorts last', () => {
+  it('is ONE forward-only migration; only the real-money rule (20261013120000) follows it', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    expect(names.at(-1)).toBe(MIGRATION_NAME);
+    expect(names.slice(names.indexOf(MIGRATION_NAME) + 1)).toEqual(['20261013120000_prevent_refunds_after_over_refund.sql']);
     expect(names.filter((name) => name.includes('refund_outflows'))).toEqual([MIGRATION_NAME]);
   });
 

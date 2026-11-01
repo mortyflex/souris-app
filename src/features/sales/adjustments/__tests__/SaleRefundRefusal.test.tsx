@@ -99,6 +99,25 @@ function Seed({ database }: { readonly database: SourisDatabase }) {
         }
       />
       <Pressable testID="seed-money-returned" onPress={() => recordSaleRefundOutflow('refund-b')} />
+      {/* A direct session call — no screen involved — for 1 € more after the money ran out. */}
+      <Pressable
+        testID="seed-refund-c"
+        onPress={() => {
+          try {
+            recordSaleAdjustment('sale-s3', {
+              id: 'refund-c',
+              reason: 'CUSTOMER_REFUND',
+              lines: [],
+              refundCardCents: 100,
+              refundCashCents: 0,
+              settlement: 'SETTLED',
+              refundedAt: new Date(2026, 9, 31, 15, 5),
+            });
+          } catch {
+            // Refused by the stored rows: the probe shows nothing was written.
+          }
+        }}
+      />
       <Pressable
         testID="seed-full-refund"
         onPress={() =>
@@ -122,21 +141,6 @@ function Seed({ database }: { readonly database: SourisDatabase }) {
             // Refused: the probe below shows nothing was written.
           }
         }}
-      />
-      {/* A's 12 € card refund, recorded on this device once B's refusal no longer counts. */}
-      <Pressable
-        testID="seed-refund-a"
-        onPress={() =>
-          recordSaleAdjustment('sale-s3', {
-            id: 'refund-a',
-            reason: 'CUSTOMER_REFUND',
-            lines: [],
-            refundCardCents: 1200,
-            refundCashCents: 0,
-            settlement: 'SETTLED',
-            refundedAt: new Date(2026, 9, 31, 15, 0),
-          })
-        }
       />
       {/* A's 12 € refund as the pull writes it (the server accepted it first), before B's refusal is answered. */}
       <Pressable
@@ -302,8 +306,9 @@ describe('the example: an 18 € Sale, 12 € refunded, then 10 € really retur
     const { view } = await renderSeeded(<SaleDetailScreen saleId="sale-s3" />, [
       'seed-refund',
       'seed-refusal',
+      // A's 12 € reached the server first and was pulled; then B answered « Oui ».
+      'seed-remote-refund-a',
       'seed-money-returned',
-      'seed-refund-a',
     ]);
     const summary = within(view.getByTestId('sale-refund-summary'));
     expect(view.getByTestId('sale-refund-summary-original')).toHaveTextContent(/^Vente initiale18,00\s€$/);
@@ -340,8 +345,9 @@ describe('the example: an 18 € Sale, 12 € refunded, then 10 € really retur
     const { view } = await renderSeeded(<SaleDetailScreen saleId="sale-s3" />, [
       'seed-refund',
       'seed-refusal',
+      // A's 12 € reached the server first and was pulled; then B answered « Oui ».
+      'seed-remote-refund-a',
       'seed-money-returned',
-      'seed-refund-a',
     ]);
     expect(view.getByTestId('sale-adjustment-refund-b-outflow-correct')).toHaveTextContent('Le client a rendu cet argent…');
     expect(view.getByTestId('sale-adjustment-refund-a-correct')).toHaveTextContent('Corriger ce remboursement…');
@@ -354,6 +360,38 @@ describe('the example: an 18 € Sale, 12 € refunded, then 10 € really retur
     expect(view.getByTestId('sale-adjustment-refund-b-refused')).toHaveTextContent('Refusé par le serveur : à vérifier');
     expect(view.getByTestId('sale-refund-summary-total')).toHaveTextContent(/22,00\s€/);
     expect(view.queryByTestId('sale-refund-summary-over')).toBeNull();
+  });
+});
+
+describe('no new refund once the money given back reaches the sale amount', () => {
+  const overRefunded = ['seed-refund', 'seed-refusal', 'seed-remote-refund-a', 'seed-money-returned'];
+
+  it('the refund screen opened by its route shows nothing refundable and cannot review any money', async () => {
+    const { view } = await renderSeeded(<SaleAdjustmentScreen intent="refund" saleId="sale-s3" />, overRefunded);
+    expect(view.getByTestId('sale-adjustment-remaining')).toHaveTextContent(/^Encore remboursable : 0,00\s€ sur 18,00\s€$/);
+    await act(async () => {
+      fireEvent.changeText(view.getByTestId('sale-adjustment-amount'), '1,00');
+    });
+    expect(within(view.getByTestId('sale-adjustment-issues')).getByText(/Le remboursement ne peut pas dépasser 0,00\s€\./)).toBeTruthy();
+    expect(view.getByTestId('sale-adjustment-review').props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it('a session call that bypasses every screen writes nothing', async () => {
+    const { view, database } = await renderSeeded(<SaleDetailScreen saleId="sale-s3" />, [...overRefunded, 'seed-refund-c']);
+    expect(records(view)).toEqual(['refund-b:VOIDED', 'refund-a:SETTLED', 'refund-b-outflow:SETTLED']);
+    expect(database.getAllSync("SELECT id FROM sale_adjustments WHERE id = 'refund-c'")).toEqual([]);
+    // The 22 € history and the 4 € warning stay as they were.
+    expect(view.getByTestId('sale-refund-summary-total')).toHaveTextContent(/22,00\s€/);
+    expect(view.getByTestId('sale-refund-summary-over')).toHaveTextContent(/4,00\s€ remboursés en trop/);
+  });
+
+  it('below the sale amount, the real balance is offered: 18 € − 10 € really returned = 8 €', async () => {
+    const { view } = await renderSeeded(<SaleAdjustmentScreen intent="refund" saleId="sale-s3" />, [
+      'seed-refund',
+      'seed-refusal',
+      'seed-money-returned',
+    ]);
+    expect(view.getByTestId('sale-adjustment-remaining')).toHaveTextContent(/^Encore remboursable : 8,00\s€ sur 18,00\s€$/);
   });
 });
 

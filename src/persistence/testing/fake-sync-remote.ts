@@ -101,6 +101,8 @@ export interface FakeSyncRemote extends SyncRemoteGateway {
   setSaleAdjustments(enabled: boolean): void;
   /** Applies (true) or removes (false) the exceptional-outflow rule of 20261012120000. */
   setRefundOutflows(enabled: boolean): void;
+  /** Applies (true) or removes (false) the real-money rule of 20261013120000. */
+  setRealRefundCeiling(enabled: boolean): void;
   /** Moves the logical server clock forward. */
   advanceClock(ms: number): void;
   /** Forgets the push and pull logs (not the rows): lets a test start counting after its setup. */
@@ -201,6 +203,8 @@ function saleAdjustmentBreach(
   rows: Map<string, FakeRemoteAggregate>,
   saleId: string,
   refundOutflows: boolean,
+  /** The adjustment this push CREATES (never a replay or a status move), under the real-money rule. */
+  createdId: string | undefined,
 ): string | undefined {
   const saleRow = rows.get(`SALE/${saleId}`);
   const adjustments: [string, WireAdjustment][] = [];
@@ -283,6 +287,24 @@ function saleAdjustmentBreach(
     for (const item of adjustment.items) units.set(item.sale_item_id, (units.get(item.sale_item_id) ?? 0) + item.quantity);
   }
   if (committed > base) return 'CEILING';
+  // 20261013120000: a NEW money refund (not an outflow, not a replay, not a status move) may
+  // not take the money really given back — refunds AND outflows — beyond what the Sale received.
+  if (createdId !== undefined && refundOutflows && outflowSourceId(createdId) === undefined) {
+    const created = adjustments.find(([id]) => id === createdId)?.[1];
+    if (
+      created &&
+      created.kind === 'REFUND' &&
+      created.status !== 'VOIDED' &&
+      created.refund_card_cents + created.refund_cash_cents > 0
+    ) {
+      let outflows = 0;
+      for (const [id, adjustment] of adjustments) {
+        if (outflowSourceId(id) === undefined || adjustment.status === 'VOIDED' || reversed.has(id)) continue;
+        outflows += adjustment.refund_card_cents + adjustment.refund_cash_cents;
+      }
+      if (committed + outflows > base) return 'CEILING';
+    }
+  }
   for (const [saleItemId, quantity] of units) {
     const line = sale.items.find((item) => item.id === saleItemId);
     if (!line || quantity > line.quantity) return 'UNITS';
@@ -306,11 +328,13 @@ function adjustmentConflict(
   request: RemotePushRequest,
   previous: FakeRemoteAggregate | undefined,
   refundOutflows: boolean,
+  realRefundCeiling = false,
 ): RemotePushResult | undefined {
   if (request.aggregateType !== 'SALE_ADJUSTMENT') return undefined;
   const saleId = ((request.payload ?? previous?.payload) as unknown as WireAdjustment | undefined)?.sale_id;
   if (saleId === undefined) return undefined;
-  const reason = saleAdjustmentBreach(rows, saleId, refundOutflows);
+  const createdId = realRefundCeiling && previous === undefined ? request.aggregateId : undefined;
+  const reason = saleAdjustmentBreach(rows, saleId, refundOutflows, createdId);
   return reason === undefined ? undefined : { status: 'ADJUSTMENT_CONFLICT', saleId, reason };
 }
 
@@ -395,11 +419,14 @@ export function createFakeSyncRemote(
     readonly saleAdjustments?: boolean;
     /** false models a remote WITHOUT 20261012120000: an outflow is a plain refund under the ceiling. */
     readonly refundOutflows?: boolean;
+    /** false models a remote WITHOUT 20261013120000: a new refund ignores the money outflows gave back. */
+    readonly realRefundCeiling?: boolean;
   } = {},
 ): FakeSyncRemote {
   let serviceCatalogue = options.serviceCatalogue ?? true;
   let saleAdjustments = options.saleAdjustments ?? true;
   let refundOutflows = options.refundOutflows ?? true;
+  let realRefundCeiling = options.realRefundCeiling ?? true;
   const businesses = new Map<string, Map<string, FakeRemoteAggregate>>();
   const requests: RemotePushRequest[] = [];
   const failures: SyncRemoteError[] = [];
@@ -562,7 +589,8 @@ export function createFakeSyncRemote(
       const createdAt = tick();
       rows.set(key, { payload: clone(request.payload), syncVersion: 1, deleted: false, createdAt, updatedAt: createdAt });
       const breach =
-        financialBreach(rows, affectedAppointmentId(rows, request)) ?? adjustmentConflict(rows, request, undefined, refundOutflows);
+        financialBreach(rows, affectedAppointmentId(rows, request)) ??
+        adjustmentConflict(rows, request, undefined, refundOutflows, realRefundCeiling);
       if (breach) {
         rows.delete(key); // nothing is written
         return breach;
@@ -677,6 +705,9 @@ export function createFakeSyncRemote(
     },
     setSaleAdjustments(enabled) {
       saleAdjustments = enabled;
+    },
+    setRealRefundCeiling(enabled) {
+      realRefundCeiling = enabled;
     },
     setRefundOutflows(enabled) {
       refundOutflows = enabled;
