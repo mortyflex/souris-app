@@ -2551,6 +2551,51 @@ before the migration, no row rewritten, new refunds refused settled or pending, 
 compensations / unit corrections / outflows accepted, compensations freeing room, partial balances, the
 plain ceiling and the outflow rule unchanged; the 59 + 62 checks of §28.1 / §28 re-run with it on top).
 
+Superseded in one point by §28.3: « new » is no longer read from `created_at = now()`.
+
+### 28.3 The new refund is the row the write inserted (no schema change; remote 20261014120000)
+
+`now()` is the start instant of the whole TRANSACTION. Keyed on `created_at = now()`, the §28.2 rule
+read every refund a transaction had inserted as « new » to every later write of that transaction (and a
+refund committed by a transaction that started in the same microsecond as « new » too): a legitimate
+outflow, compensation, status move or replay written after it was refused `CEILING` (18 € Sale: refund
+12 € accepted, then — same transaction — the outflow of a refused 10 € refund refused). It never wrongly
+ACCEPTED: the write's own row always matched. The app sends one write per RPC transaction, so no device
+met it; the rule no longer rests on that.
+
+- **Remote.** `sync_push_aggregate` (replaced in place, otherwise identical to 20261011120000) passes its
+  own id as the inserted adjustment when, under the locks it already holds, the remote did not hold that
+  record (or held it tombstoned) — NULL for a replay or a status move. New overload
+  `sync_sale_adjustment_breach(uuid, text, text)`: the §28.2 body judging only that row. The former
+  `sync_sale_adjustment_breach(uuid, text)` is the state rules only (NULL inserted row); nothing calls it.
+- **Unchanged.** Every answer for one write per transaction, the Sale-row lock, immutability, the
+  savepoint, payloads, the pull, stored rows. TestFlight 10 (v17) never names `SALE_ADJUSTMENT`. The fake
+  remote (`realRefundCeiling`) already modelled « the id this write created ».
+
+**Adjustment identity under concurrency (same migration).** Two concurrent pushes of the SAME adjustment
+id naming DIFFERENT Sales locked different Sale rows; the second missed the first's uncommitted insert,
+skipped the immutability check and went through `ON CONFLICT DO UPDATE` — a SETTLED refund could become
+VOIDED and gain another Sale's line, and the device was told `APPLIED`. Now, for `SALE_ADJUSTMENT`:
+
+- a transaction-scoped advisory lock on (Business, adjustment id), taken after the entitlement check and
+  BEFORE any row lock — lock order is always advisory → Sale row → adjustment row; a `SALE` write takes
+  only the Sale row, so one write per transaction cannot close a cycle;
+- `sync_sale_adjustment_payload_differs` — the 20261011120000 immutability comparison as one function,
+  read by the pre-write check and by a post-write check;
+- `ON CONFLICT … DO UPDATE … WHERE` the forward status rule;
+- after the write, inside the savepoint: the stored record must equal the payload (identity, Sale, amounts
+  per method, lines, status, instants), otherwise everything is undone and the answer is `IMMUTABLE`.
+
+The lock alone and the post-write check alone each close the race (both verified).
+
+Verified locally: source guard `refund-write-scoped-newness-migration.test.ts`; a real local PostgreSQL 17
+cluster with genuine concurrent connections (same id / same or other Sale, other method, owners, concurrent
+refunds, status races, outflow vs stale refund, lock order, deadlock victim rolled back whole); out-of-repo PGlite 0.2.17
+matrix run on the chain without and with the migration (several writes per transaction, different Sales,
+replays, lost acknowledgements, pending → settled, voids, compensations, stale devices, a historical row
+stamped with the transaction instant). Concurrency between two connections cannot run in PGlite: it rests
+on the unchanged Sale-row lock, validated on Staging for §28.2.
+
 ---
 
 ## 29. Reactive synchronization and pull-to-refresh — the UI follows every run

@@ -39,6 +39,7 @@ describe('multi-profession Step 3 — service categories and descriptions migrat
       '20261011120000_create_sale_adjustments.sql',
       '20261012120000_add_sale_refund_outflows.sql',
       '20261013120000_prevent_refunds_after_over_refund.sql',
+      '20261014120000_identify_new_refund_by_write.sql',
     ]);
     expect(names.filter((name) => name.includes('service_categories'))).toEqual([MIGRATION_NAME]);
   });

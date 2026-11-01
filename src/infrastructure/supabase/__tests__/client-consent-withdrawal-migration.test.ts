@@ -43,6 +43,7 @@ describe('Phase 6.5C step 8 — client consent withdrawal migration', () => {
       '20261011120000_create_sale_adjustments.sql',
       '20261012120000_add_sale_refund_outflows.sql',
       '20261013120000_prevent_refunds_after_over_refund.sql',
+      '20261014120000_identify_new_refund_by_write.sql',
     ]);
     expect(names.filter((name) => name.includes('consent_withdrawal'))).toEqual([MIGRATION_NAME]);
     expect(step4).not.toMatch(/sync_withdraw_client_sms_consent/);
