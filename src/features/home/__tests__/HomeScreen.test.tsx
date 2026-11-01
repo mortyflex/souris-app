@@ -5,6 +5,8 @@ import { act, fireEvent, render, waitFor, within } from '@testing-library/react-
 import { Dimensions, StyleSheet } from 'react-native';
 
 import { getAppointmentDaySummary, getAppointmentPeriodSummary } from '@/domain/appointments';
+import { getCashRegisterDaySummary } from '@/domain/cash-register';
+import { prepareSaleAdjustment, type Sale } from '@/domain/sales';
 import { getWeekDays } from '@/features/agenda/calendar/week';
 import { AppointmentSessionProvider } from '@/features/appointments/session/AppointmentSessionProvider';
 import { CalendarBlockSessionProvider } from '@/features/calendar-blocks/session/CalendarBlockSessionProvider';
@@ -22,6 +24,8 @@ import {
   loadAppointments,
 } from '@/persistence/stores/appointments';
 import { loadClients } from '@/persistence/stores/clients';
+import { loadSaleAdjustments, recordSaleAdjustment } from '@/persistence/stores/sale-adjustments';
+import { completeSale, findSale, loadSales } from '@/persistence/stores/sales';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
 import { SUBSCRIPTION_ENFORCEMENT } from '@/features/access/enforcement';
 import { createFakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
@@ -33,6 +37,7 @@ import { fontFamilies, foregroundSoft, semanticColors } from '@/shared/ui/theme'
 
 import { HOME_HERO_ROW_MIN_WIDTH, HomeScreen } from '../HomeScreen';
 import { HOME_LOGO_SIZE } from '../components/HomeHeader';
+import { HOME_WEEK_COLLECTED_LABEL, HOME_WEEK_POTENTIAL_LABEL } from '../components/HomeWeekSummary';
 import { LABEL_OVERHANG } from '../components/HomeQuickAction';
 
 const mockPush = jest.fn();
@@ -508,6 +513,79 @@ describe('HomeScreen', () => {
     ).toBeTruthy();
   });
 
+  describe('« encaissé » is the Caisse total of today', () => {
+    /** The seed without its Appointments, plus a standalone Sale paid today (and one paid yesterday). */
+    function salesOnlyDatabase() {
+      const database = seededDatabase();
+      const businessId = loadAppointments(database)[0]!.businessId;
+      for (const appointment of loadAppointments(database)) deleteAppointment(database, appointment.id);
+      const sale = (id: string, at: Date, cents: number): Sale => ({
+        id,
+        businessId,
+        completedAt: at,
+        items: [{ id: `${id}-1`, productId: 'p-home', productName: 'Sérum', unitPrice: cents / 100, quantity: 1 }],
+        payment: { paidAt: at, cardAmountCents: cents, cashAmountCents: 0 },
+      });
+      completeSale(database, sale('home-sale-today', new Date(2026, 5, 1, 7, 30), 3000), []);
+      completeSale(database, sale('home-sale-yesterday', new Date(2026, 4, 31, 23, 59), 9900), []);
+      return { database, businessId };
+    }
+    function refundToday(database: SourisDatabase, businessId: string, id: string, cents: number, settlement: 'SETTLED' | 'PENDING') {
+      const at = new Date(2026, 5, 1, 7, 45);
+      const draft = {
+        id,
+        businessId,
+        staffMemberId: 'staff-amelie',
+        reason: 'CUSTOMER_REFUND' as const,
+        lines: [],
+        refundCardCents: cents,
+        refundCashCents: 0,
+        settlement,
+        refundedAt: settlement === 'SETTLED' ? at : undefined,
+      };
+      const prepared = prepareSaleAdjustment(
+        { sale: findSale(database, 'home-sale-today')!, adjustments: loadSaleAdjustments(database), appointmentSettled: true, productExists: () => true, now: at },
+        draft,
+      );
+      if (!prepared.ok) throw new Error(JSON.stringify(prepared.issues));
+      recordSaleAdjustment(database, draft, prepared.adjustment, prepared.restorations, at);
+    }
+    const caisseToday = (database: SourisDatabase) =>
+      getCashRegisterDaySummary(
+        { appointments: loadAppointments(database), sales: loadSales(database), deposits: loadAppointmentDeposits(database), saleAdjustments: loadSaleAdjustments(database) },
+        NOW,
+      ).totalCents;
+
+    it('counts a direct product sale paid today (it read 0 € before), never yesterday’s', async () => {
+      const { database } = salesOnlyDatabase();
+      const view = await renderHome(database);
+      expect(caisseToday(database)).toBe(3000);
+      expect(view.getByTestId('home-stat-collected').props.children).toBe(formatCompactEuroCents(3000));
+      // Nothing is owed by a Sale: « restant » follows today's Appointments only.
+      expect(view.getByTestId('home-stat-remaining').props.children).toBe(formatCompactEuroCents(0));
+    });
+
+    it('is net of a refund settled today; a refund still to pay changes nothing', async () => {
+      const { database, businessId } = salesOnlyDatabase();
+      refundToday(database, businessId, 'home-refund-pending', 500, 'PENDING');
+      refundToday(database, businessId, 'home-refund', 1200, 'SETTLED');
+      const view = await renderHome(database);
+      expect(caisseToday(database)).toBe(1800);
+      expect(view.getByTestId('home-stat-collected').props.children).toBe(formatCompactEuroCents(1800));
+      expect(view.getByTestId('home-collection-summary').props.accessibilityLabel).toBe(
+        `Encaissements du jour, encaissé aujourd’hui ${formatCompactEuroCents(1800)}, reste à encaisser sur les rendez-vous du jour ${formatCompactEuroCents(0)}`,
+      );
+    });
+
+    it('with today’s Appointments: the same figure as the Caisse, the remaining money from the Appointments', async () => {
+      const database = seededDatabase();
+      const summary = todaySummary(database);
+      const view = await renderHome(database);
+      expect(view.getByTestId('home-stat-collected').props.children).toBe(formatCompactEuroCents(caisseToday(database)));
+      expect(view.getByTestId('home-stat-remaining').props.children).toBe(formatCompactEuroCents(summary.remainingToCollectCents));
+    });
+  });
+
   it('demotes collected and remaining money to ONE compact secondary card', async () => {
     const database = seededDatabase();
     const summary = todaySummary(database);
@@ -527,9 +605,9 @@ describe('HomeScreen', () => {
     // ONE button: it speaks both amounts and says where it leads.
     expect(button.props.accessibilityRole).toBe('button');
     expect(button.props.accessibilityLabel).toBe(
-      `Encaissements du jour, déjà encaissé ${formatCompactEuroCents(
+      `Encaissements du jour, encaissé aujourd’hui ${formatCompactEuroCents(
         summary.collectedCents,
-      )}, reste à encaisser ${formatCompactEuroCents(summary.remainingToCollectCents)}`,
+      )}, reste à encaisser sur les rendez-vous du jour ${formatCompactEuroCents(summary.remainingToCollectCents)}`,
     );
     expect(button.props.accessibilityHint).toBe('Ouvre la Caisse');
     // The chevron belongs to the card, centred on its whole height at the right edge.
@@ -666,12 +744,14 @@ describe('HomeScreen', () => {
     );
     expect(countCard.getByText('rendez-vous')).toBeTruthy();
     expect(countCard.queryByText(/€/)).toBeNull();
-    // Card B: money only.
+    // Card B: money only — and only the week's APPOINTMENTS, said on the card.
+    expect(HOME_WEEK_COLLECTED_LABEL).toBe('Déjà encaissé sur\u00a0ces\u00a0RDV');
+    expect(HOME_WEEK_POTENTIAL_LABEL).toBe('CA potentiel des\u00a0RDV');
     const moneyCard = within(view.getByTestId('home-week-money-card'));
     expect(moneyCard.getAllByText(/./).map((node) => node.props.children)).toEqual([
-      'Déjà encaissé',
+      HOME_WEEK_COLLECTED_LABEL,
       formatCompactEuroCents(week.collectedCents),
-      'CA potentiel',
+      HOME_WEEK_POTENTIAL_LABEL,
       formatCompactEuroCents(week.potentialRevenueCents),
     ]);
     // Two plain white columns, the money one a little wider; compact, never a fixed height.
@@ -690,8 +770,8 @@ describe('HomeScreen', () => {
     expect(count.parent).toHaveStyle({ alignItems: 'baseline', flexDirection: 'row' });
     // Each amount faces its label on one row: stronger than it, never auto-shrunk.
     for (const [label, testID] of [
-      ['Déjà encaissé', 'home-week-collected'],
-      ['CA potentiel', 'home-week-potential'],
+      [HOME_WEEK_COLLECTED_LABEL, 'home-week-collected'],
+      [HOME_WEEK_POTENTIAL_LABEL, 'home-week-potential'],
     ]) {
       const amount = view.getByTestId(testID);
       expect(amount).toHaveStyle({ fontSize: 18, textAlign: 'right' });
@@ -702,11 +782,19 @@ describe('HomeScreen', () => {
     expect(
       view.getByLabelText(`1–7 juin, ${week.appointmentCount} rendez-vous cette semaine`),
     ).toBeTruthy();
+    // Spoken in full words: the appointment scope, never « RDV ».
     expect(
       view.getByLabelText(
-        `CA potentiel cette semaine, ${formatCompactEuroCents(week.potentialRevenueCents)}`,
+        `Déjà encaissé sur les rendez-vous de la semaine, ${formatCompactEuroCents(week.collectedCents)}`,
       ),
     ).toBeTruthy();
+    expect(
+      view.getByLabelText(
+        `CA potentiel des rendez-vous de la semaine, ${formatCompactEuroCents(week.potentialRevenueCents)}`,
+      ),
+    ).toBeTruthy();
+    // The labels give way onto a second line, never the amount.
+    expect(moneyCard.getByText(HOME_WEEK_COLLECTED_LABEL).props.numberOfLines).toBe(2);
   });
 
   it('keeps the week cards valid at zero', async () => {

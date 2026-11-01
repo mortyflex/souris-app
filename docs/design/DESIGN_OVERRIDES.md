@@ -2403,10 +2403,11 @@ two strong white figures, one lighter white summary, then shortcuts that are bar
     `control`, no glyph. The WHOLE card is one button that pushes the existing Caisse
     (`/cash-register`): an 18 pt accent chevron at the right edge, vertically centred on the WHOLE card (never
     inline with the title), no « Voir » button, no separate tap
-    targets. Spoken once: « Encaissements du jour, déjà encaissé …, reste à encaisser … »,
-    hint « Ouvre la Caisse ». Plus → Caisse is unchanged.
-  - All four figures are exactly the domain day summary of today, the figures of « Résumé du
-    jour ». This is NOT the Caisse total (money by the day it was received).
+    targets. Spoken once: « Encaissements du jour, encaissé aujourd’hui …, reste à encaisser sur
+    les rendez-vous du jour … », hint « Ouvre la Caisse ». Plus → Caisse is unchanged.
+  - « Rendez-vous », « CA potentiel » and « restant » are the domain day summary of today (the
+    figures of « Résumé du jour »). « encaissé » is, since §48.5, THE Caisse total of today
+    (`getCashRegisterDaySummary`) — the screen the card opens shows the same amount.
 - **Actions rapides** (`HomeQuickAction`). One row of four light shortcuts: a 56 pt white
   rounded square (`radii.large`) with the accent glyph, and a one-word navy `chip` label UNDER
   it, outside the surface — « Rendez-vous », « Client », « Produit », « Vente » — spoken in full
@@ -2937,3 +2938,21 @@ Supersedes the « Corrections section » of §48.1 and the « Total reçu » wor
   de la vente » on the row. The profile preview stays tap-only.
 - **Caisse status.** The Caisse sale history now reads the same refund summary: a Sale refunded
   only by an additional refund reads « Remboursée en partie » (it read « Corrigée »).
+
+### 48.5 Accueil and Caisse — one figure for the money of the day (November 2026)
+
+- **« Encaissements du jour · encaissé ».** The Accueil card reads the Caisse total of today
+  (`getCashRegisterDaySummary`): Appointment checkouts, standalone Sales, deposits received today,
+  net of the refunds, additional refunds and compensations settled today; never a pending or voided
+  record, never a Revente twice. It read the money of today's Appointments only (whatever the day it
+  came in), so a day of product sales read « 0 € ». « restant » stays what today's Appointments owe:
+  only an Appointment can be left to collect.
+- **« Opérations ».** The Caisse list header (formerly « Encaissements », counting receipts only)
+  counts EVERY listed row; a quiet `metadata` line under it — « 8 encaissements · 16 remboursements ·
+  2 remboursements annulés » — appears only when the list holds more than receipts. Spoken « Opérations,
+  26 opérations, 1 client, 8 encaissements · … ». The « Clients » pill and the empty states are
+  unchanged.
+- **`GroupedReadRow`.** The 112 pt label column is a minimum: a longer label (« Remboursement ») keeps
+  its natural width instead of breaking mid-word; when the label and a 140 pt value no longer fit on
+  one line (compact iPhone, larger text) the value wraps under the label (`flexWrap`). No screen width
+  is assumed.

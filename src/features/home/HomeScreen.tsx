@@ -14,6 +14,11 @@
 //   Aujourd’hui                       Résumé du jour ›
 //   [ 2  Rendez-vous ]   [ 100 €  CA potentiel ]          the two primary figures
 //   [ Encaissements du jour ›  0 € encaissé | 100 € restant ]   secondary → Caisse
+//     « encaissé » IS the Caisse total of today (`getCashRegisterDaySummary`:
+//     checkouts, standalone Sales, deposits received today, net of the refunds,
+//     additional refunds and compensations settled today) — the same figure the
+//     card opens; « restant » is what today's Appointments still owe (the day
+//     summary): only an Appointment can be left to collect
 //   Actions rapides
 //   ( Rendez-vous ) ( Client ) ( Produit ) ( Vente )      light shortcuts: they CREATE
 //   Cette semaine                Résumé de la semaine ›
@@ -45,6 +50,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
 import { getAppointmentDaySummary, getAppointmentPeriodSummary } from '@/domain/appointments';
+import { getCashRegisterDaySummary } from '@/domain/cash-register';
 import { getWeekDays } from '@/features/agenda/calendar/week';
 import { DaySummaryTicket } from '@/features/agenda/day-summary/DaySummaryTicket';
 import { WeekSummaryTicket } from '@/features/agenda/day-summary/WeekSummaryTicket';
@@ -119,7 +125,7 @@ const HOME_TOP_GAP = spacing.lg;
 export function HomeScreen() {
   const router = useRouter();
   const { appointments, deposits } = useAppointmentSession();
-  const { sales } = useSaleSession();
+  const { sales, saleAdjustments } = useSaleSession();
   const { getClientById } = useClientSession();
   const { width, fontScale } = useWindowDimensions();
   // The device clock, never frozen at mount: refreshed on focus, on return
@@ -151,6 +157,8 @@ export function HomeScreen() {
 
   const sources = { appointments: appointments.map((entry) => entry.appointment), sales, deposits };
   const summary = getAppointmentDaySummary(sources, now);
+  // « Encaissements du jour · encaissé » = THE Caisse total of today: one selection, the card and the Caisse agree.
+  const collectedToday = getCashRegisterDaySummary({ ...sources, saleAdjustments }, now).totalCents;
   // The Agenda week of today: the same seven days as « Résumé de la semaine ».
   const weekDays = getWeekDays(now);
   const weekSummary = getAppointmentPeriodSummary(sources, {
@@ -239,7 +247,7 @@ export function HomeScreen() {
                 />
               </View>
               <HomeCollectionSummary
-                collected={formatCompactEuroCents(summary.collectedCents)}
+                collected={formatCompactEuroCents(collectedToday)}
                 onPress={() => router.push('/cash-register')}
                 remaining={formatCompactEuroCents(summary.remainingToCollectCents)}
               />

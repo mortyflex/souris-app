@@ -1,9 +1,12 @@
 // BeautIzzy — Accueil « Encaissements du jour »
 //
-// The secondary money line of Accueil: what today's Appointments have already
-// brought in and what is still to collect, side by side in ONE compact card.
+// The secondary money line of Accueil, side by side in ONE compact card:
+// « encaissé » — the money actually received today, exactly the Caisse total of
+// the day it opens (Appointments, standalone Sales, deposits, net of the
+// refunds settled today) — and « restant » — what today's Appointments still
+// owe (only an Appointment can be left to collect).
 // Deliberately lighter than the two primary figures: no glyph, small values.
-// Both amounts are the domain day summary's, worded here. The WHOLE card is
+// Both amounts come from the domain (Caisse day summary, Appointment day summary). The WHOLE card is
 // one button — an accent chevron at its right edge, centred on the whole card,
 // says so — and only reports:
 // the caller opens the existing Caisse. One element for assistive technology,
@@ -27,7 +30,7 @@ export function HomeCollectionSummary({ collected, remaining, onPress }: HomeCol
   return (
     <Pressable
       accessibilityHint="Ouvre la Caisse"
-      accessibilityLabel={`Encaissements du jour, déjà encaissé ${collected}, reste à encaisser ${remaining}`}
+      accessibilityLabel={`Encaissements du jour, encaissé aujourd’hui ${collected}, reste à encaisser sur les rendez-vous du jour ${remaining}`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}

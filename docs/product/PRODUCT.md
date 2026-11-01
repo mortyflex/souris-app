@@ -1338,7 +1338,7 @@ and opened on the period the Caisse was showing (`docs/domain/SALES.md` §11b):
   « Carte », « Espèces », « Carte + Espèces », « Avec le rendez-vous », or « Non renseigné » for a
   historical Sale without any record. Nothing is ever invented;
 - an empty period says « Aucune vente aujourd’hui » (ce jour / ce mois-ci / ce mois);
-- every row — and every « Vente » entry of the Caisse « Encaissements » list — opens « Détail de la
+- every row — and every « Vente » entry of the Caisse « Opérations » list — opens « Détail de la
   vente »: « VENTE DIRECTE » or « VENDUE PENDANT UN RENDEZ-VOUS », the total, « Lundi 12 octobre 2026 à
   14:35 », the unit count, the client row (opens the profile), every line as sold (name, « ×2 ·
   18,00 € », line total), then « Encaissement »: the received total and its Carte / Espèces split
@@ -1382,8 +1382,8 @@ from the Appointment); the Appointment payment is never changed, the refund is i
 
 **Caisse.** A settled refund counts negatively on the day the money left, by its method: a
 « Remboursement · products » entry with a signed amount, opening its Sale; « Total encaissé » and the
-Carte / Espèces figures are net; the count of « Encaissements » and of clients never includes a
-refund. The « Produits vendus » card adds « Remboursements produits » and « Net produits » when the
+Carte / Espèces figures are net; the « Opérations » count is every listed row, with « N encaissements ·
+M remboursements » said apart when refunds are listed; the count of clients never includes a refund. The « Produits vendus » card adds « Remboursements produits » and « Net produits » when the
 period refunded something (and names the share of products sold during an Appointment). The sale day
 keeps what was received.
 

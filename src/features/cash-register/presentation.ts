@@ -7,6 +7,7 @@
 import type {
   CashRegisterComparison,
   CashRegisterComparisonOutcome,
+  CashRegisterEntry,
   CashRegisterTrend,
 } from '@/domain/cash-register';
 import { paymentMethodLabels } from '@/shared/icons/payment-method-icons';
@@ -66,6 +67,56 @@ export function formatCashRegisterCaption(period: CashRegisterPeriod, isCurrent:
 export function formatCheckoutCount(count: number): string {
   if (count === 0) return 'Aucun encaissement';
   return `${count} encaissement${count > 1 ? 's' : ''}`;
+}
+
+/**
+ * What the « Opérations » list of a period holds, by kind — the SAME entries the
+ * totals count (`getCashRegisterDayEntries` / `getCashRegisterMonthEntries`):
+ *   receipts   money received (checkouts, standalone Sales, deposits)
+ *   refunds    money given back (refunds, additional refunds): never a receipt
+ *   reversals  refunds cancelled by a compensation (money coming back)
+ */
+export interface CashRegisterOperationBreakdown {
+  readonly total: number;
+  readonly receipts: number;
+  readonly refunds: number;
+  readonly reversals: number;
+}
+
+export function getCashRegisterOperationBreakdown(
+  entries: readonly CashRegisterEntry[],
+): CashRegisterOperationBreakdown {
+  let receipts = 0;
+  let refunds = 0;
+  let reversals = 0;
+  for (const entry of entries) {
+    if (entry.kind !== 'SALE_ADJUSTMENT') receipts += 1;
+    else if (entry.adjustment.kind === 'REVERSAL') reversals += 1;
+    else refunds += 1;
+  }
+  return { total: entries.length, receipts, refunds, reversals };
+}
+
+/** `Aucune opération` / `1 opération` / `7 opérations` — every row of the list. */
+export function formatOperationCount(count: number): string {
+  if (count === 0) return 'Aucune opération';
+  return `${count} opération${count > 1 ? 's' : ''}`;
+}
+
+/**
+ * `5 encaissements · 2 remboursements` — said only when the list holds more than
+ * receipts, so a refund is never read as one more « encaissement ».
+ */
+export function formatOperationBreakdown(breakdown: CashRegisterOperationBreakdown): string | undefined {
+  if (breakdown.refunds === 0 && breakdown.reversals === 0) return undefined;
+  const parts = [
+    breakdown.receipts > 0 ? formatCheckoutCount(breakdown.receipts) : undefined,
+    breakdown.refunds > 0 ? `${breakdown.refunds} remboursement${breakdown.refunds > 1 ? 's' : ''}` : undefined,
+    breakdown.reversals > 0
+      ? `${breakdown.reversals} remboursement${breakdown.reversals > 1 ? 's' : ''} annulé${breakdown.reversals > 1 ? 's' : ''}`
+      : undefined,
+  ];
+  return parts.filter(Boolean).join(' · ');
 }
 
 /**

@@ -133,6 +133,7 @@ interface Probe {
   readonly appointments: readonly Appointment[];
   readonly deposits: readonly AppointmentDeposit[];
   readonly sales: readonly Sale[];
+  readonly saleAdjustments: ReturnType<typeof useSaleSession>['saleAdjustments'];
   readonly products: readonly Product[];
   readonly completeSale: ReturnType<typeof useSaleSession>['completeSale'];
   readonly recordAppointmentDeposit: ReturnType<typeof useAppointmentSession>['recordAppointmentDeposit'];
@@ -144,13 +145,14 @@ const auth: { current?: AuthState } = {};
 
 function DemoProbe() {
   const { appointments, deposits, recordAppointmentDeposit } = useAppointmentSession();
-  const { sales, completeSale } = useSaleSession();
+  const { sales, saleAdjustments, completeSale } = useSaleSession();
   const { products } = useProductCatalog();
   useEffect(() => {
     probe.current = {
       appointments: appointments.map((entry) => entry.appointment),
       deposits,
       sales,
+      saleAdjustments,
       products,
       completeSale,
       recordAppointmentDeposit,
@@ -254,7 +256,9 @@ describe('Playground Step B2 — the business screens on the demo data', () => {
     expect(expected.appointmentCount).toBe(5);
     expect(view.getByTestId('home-stat-appointments').props.children).toBe(String(expected.appointmentCount));
     expect(view.getByTestId('home-stat-potential').props.children).toBe(formatCompactEuroCents(expected.potentialRevenueCents));
-    expect(view.getByTestId('home-stat-collected').props.children).toBe(formatCompactEuroCents(expected.collectedCents));
+    // « encaissé » is THE Caisse total of today (standalone Sales included), not the Appointments' money.
+    const caisseBefore = getCashRegisterDaySummary({ ...sources(), saleAdjustments: probe.current!.saleAdjustments }, NOW).totalCents;
+    expect(view.getByTestId('home-stat-collected').props.children).toBe(formatCompactEuroCents(caisseBefore));
 
     // A deposit and a « Revente » on today's 11:00 appointment, through the real sessions.
     const appointmentId = `${scenario.business.id}-appointment-t3`;
@@ -280,7 +284,8 @@ describe('Playground Step B2 — the business screens on the demo data', () => {
     const after = getAppointmentDaySummary(sources(), NOW);
     expect(after.collectedCents).toBe(expected.collectedCents + 2000);
     expect(after.potentialRevenueCents).toBe(expected.potentialRevenueCents + 2100);
-    expect(view.getByTestId('home-stat-collected').props.children).toBe(formatCompactEuroCents(after.collectedCents));
+    // The deposit received today counts once; the Revente is money of its Appointment, not counted twice.
+    expect(view.getByTestId('home-stat-collected').props.children).toBe(formatCompactEuroCents(caisseBefore + 2000));
     expect(view.getByTestId('home-stat-potential').props.children).toBe(formatCompactEuroCents(after.potentialRevenueCents));
 
     // The shortcuts push the product's paths, which resolve inside the demo group.

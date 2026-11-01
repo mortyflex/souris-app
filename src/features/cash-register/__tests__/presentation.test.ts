@@ -17,7 +17,10 @@ import {
   formatCashRegisterMonth,
   formatCashRegisterTrendValue,
   formatCheckoutCount,
+  formatOperationBreakdown,
+  formatOperationCount,
   formatPayingClientCount,
+  getCashRegisterOperationBreakdown,
   formatProductUnitCount,
   formatProductUnitSplit,
   getDefaultCashRegisterTrendDisplay,
@@ -222,5 +225,36 @@ describe('Cash Register comparison presentation', () => {
       '0 en vente directe · 2 pendant des rendez-vous',
     );
     expect(formatProductUnitSplit({ standaloneUnitCount: 7, appointmentUnitCount: 0 })).toBeUndefined();
+  });
+});
+
+describe('the « Opérations » count of the Caisse list', () => {
+  type Entry = Parameters<typeof getCashRegisterOperationBreakdown>[0][number];
+  const receipt = { kind: 'SALE' } as Entry;
+  const deposit = { kind: 'DEPOSIT' } as Entry;
+  const refund = { kind: 'SALE_ADJUSTMENT', adjustment: { kind: 'REFUND' } } as Entry;
+  const reversal = { kind: 'SALE_ADJUSTMENT', adjustment: { kind: 'REVERSAL' } } as Entry;
+
+  it('counts EVERY listed row; a refund is never one more « encaissement »', () => {
+    // The observed case: two rows (a sale and its refund) read « Encaissements 1 ».
+    expect(getCashRegisterOperationBreakdown([receipt, refund])).toEqual({ total: 2, receipts: 1, refunds: 1, reversals: 0 });
+    // Seven rows: three receipts, three refunds, one compensation.
+    const seven = [receipt, deposit, receipt, refund, refund, refund, reversal];
+    expect(getCashRegisterOperationBreakdown(seven)).toEqual({ total: 7, receipts: 3, refunds: 3, reversals: 1 });
+  });
+
+  it('says the breakdown only when the list holds more than receipts', () => {
+    expect(formatOperationBreakdown(getCashRegisterOperationBreakdown([receipt, deposit]))).toBeUndefined();
+    expect(formatOperationBreakdown(getCashRegisterOperationBreakdown([receipt, refund]))).toBe('1 encaissement · 1 remboursement');
+    expect(formatOperationBreakdown(getCashRegisterOperationBreakdown([refund]))).toBe('1 remboursement');
+    expect(formatOperationBreakdown(getCashRegisterOperationBreakdown([receipt, receipt, refund, refund, reversal]))).toBe(
+      '2 encaissements · 2 remboursements · 1 remboursement annulé',
+    );
+  });
+
+  it('words the count', () => {
+    expect(formatOperationCount(0)).toBe('Aucune opération');
+    expect(formatOperationCount(1)).toBe('1 opération');
+    expect(formatOperationCount(7)).toBe('7 opérations');
   });
 });

@@ -4,7 +4,7 @@
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { useState, type ReactNode } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import type { Product } from '@/domain/products';
 import type { SaleDraft } from '@/domain/sales';
@@ -465,5 +465,10 @@ describe('the refund review', () => {
     await press(view, 'sale-adjustment-increment-sale-s3-1');
     await press(view, 'sale-adjustment-review');
     expect(view.getByTestId('sale-adjustment-other-device')).toHaveTextContent(SALE_ADJUSTMENT_OTHER_DEVICE_NOTE);
+    // « Remboursement » stays ONE word on a compact iPhone: the label column is a minimum, never a fixed width.
+    const label = StyleSheet.flatten(within(view.getByTestId('sale-adjustment-summary-amount')).getByText('Remboursement').props.style);
+    expect(label.width).toBeUndefined();
+    expect(label.minWidth).toBe(112);
+    expect(StyleSheet.flatten(view.getByTestId('sale-adjustment-summary-amount').props.style)).toMatchObject({ flexWrap: 'wrap' });
   });
 });

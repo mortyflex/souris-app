@@ -2,7 +2,8 @@
 //
 // In ONE glance: the money ACTUALLY received on the selected local day or
 // calendar month — « Total encaissé », its card / cash split, then the
-// « Encaissements » that make it up. Derived on every render from the
+// « Opérations » that make it up (receipts AND the refunds settled in the
+// period; the count is every listed row, broken down when refunds are present). Derived on every render from the
 // canonical sessions — explicit Appointment checkouts (`appointment.payment`,
 // the final checkout only), standalone Sale payments (`sale.payment`, Sales
 // without Appointment) and ACTIVE Appointment deposits, each on the day the
@@ -11,7 +12,7 @@
 // A Sale sold during an Appointment is never counted separately: the
 // Appointment checkout already recorded that money. Totals and list come
 // from the same domain selection, so a listed payment is always a counted
-// one. Next to the « Encaissements » count, a second pill counts the DISTINCT
+// one. Next to the « Opérations » count, a second pill counts the DISTINCT
 // identified clients behind those same entries (`countCashRegisterPayingClients`,
 // stable ids): a client who paid a service and bought products in the period
 // counts once; a walk-in Sale counts nobody. Nothing is stored, cached or
@@ -134,8 +135,10 @@ import {
   formatCashRegisterCaption,
   formatCashRegisterEmptyTitle,
   formatCashRegisterMonth,
-  formatCheckoutCount,
+  formatOperationBreakdown,
+  formatOperationCount,
   formatPayingClientCount,
+  getCashRegisterOperationBreakdown,
   isSameLocalDay,
   isSameLocalMonth,
   shiftLocalDay,
@@ -233,6 +236,9 @@ export function CashRegisterScreen() {
       : getCashRegisterMonthEntries(sources, selectedMonth);
   // Over the period's entries: exactly the payments the totals count.
   const payingClientCount = countCashRegisterPayingClients(entries);
+  // The count is every listed row; a refund is never counted as one more « encaissement ».
+  const operations = getCashRegisterOperationBreakdown(entries);
+  const operationBreakdown = formatOperationBreakdown(operations);
   const isCurrentPeriod =
     period === "day"
       ? isSameLocalDay(selectedDay, now)
@@ -477,14 +483,21 @@ export function CashRegisterScreen() {
         <View style={styles.entriesSection}>
           <View
             accessible
-            accessibilityLabel={`Encaissements, ${formatCheckoutCount(summary.checkoutCount)}, ${formatPayingClientCount(payingClientCount)}`}
+            accessibilityLabel={[
+              'Opérations',
+              formatOperationCount(operations.total),
+              formatPayingClientCount(payingClientCount),
+              operationBreakdown,
+            ]
+              .filter(Boolean)
+              .join(', ')}
             accessibilityRole="header"
             testID="cash-register-count"
           >
             <SectionHeader
-              count={summary.checkoutCount}
+              count={operations.total}
               style={styles.entriesHeader}
-              title="Encaissements"
+              title="Opérations"
             >
               <View style={styles.clientCounter} testID="cash-register-client-count">
                 <AppText variant="metadata" style={styles.clientCounterLabel}>
@@ -497,6 +510,15 @@ export function CashRegisterScreen() {
               </View>
             </SectionHeader>
           </View>
+          {operationBreakdown && (
+            <AppText
+              variant="metadata"
+              style={styles.operationBreakdown}
+              testID="cash-register-operation-breakdown"
+            >
+              {operationBreakdown}
+            </AppText>
+          )}
 
           {entries.length === 0 ? (
             <View
@@ -690,13 +712,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     justifyContent: "flex-start",
   },
-  // « Clients [n] »: a quiet label then the same chip as the Encaissements count.
+  // « Clients [n] »: a quiet label then the same chip as the Opérations count.
   clientCounter: {
     alignItems: "center",
     flexDirection: "row",
     gap: spacing.xs,
   },
   clientCounterLabel: { color: foregroundSoft },
+  // « 5 encaissements · 2 remboursements »: what the count above is made of.
+  operationBreakdown: { color: foregroundSoft, marginTop: -spacing.sm },
   // Quieter than the figures: a white card, a small lavender glyph, two lines.
   emptyState: {
     alignItems: "center",

@@ -318,7 +318,7 @@ sale history (`getSaleActions`). A row's refund state reads the Sale refund summ
 
 The Caisse « Produits vendus » card ends with « Voir les ventes », which opens the READ-ONLY sale
 history of the period the Caisse is showing (`/sales?period=day|month&date=YYYY-MM-DD`); a « Vente »
-entry of the Caisse « Encaissements » list opens the detail of that Sale (`/sales/[saleId]`). Both
+entry of the Caisse « Opérations » list opens the detail of that Sale (`/sales/[saleId]`). Both
 derive from the Sale session alone (`src/domain/sales/history.ts`):
 
 ```text

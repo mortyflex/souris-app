@@ -190,7 +190,7 @@ function totals(view: Awaited<ReturnType<typeof render>>) {
   // The period caption is spoken with the KPI: « Total encaissé aujourd’hui : 0,00 € » — the first
   // sentence; Mois may follow it with the comparison or its explanation.
   const totalLabel = (view.getByTestId('cash-register-total-card').props.accessibilityLabel as string).split('. ')[0]!;
-  // Spoken « Encaissements, 2 encaissements, 1 client ».
+  // Spoken « Opérations, 2 opérations, 1 client » (then the breakdown when refunds are listed).
   const [, count, clients] = (view.getByTestId('cash-register-count').props.accessibilityLabel as string).split(', ');
   return {
     total,
@@ -234,7 +234,7 @@ describe('CashRegisterScreen', () => {
       total: formatEuroCents(0),
       card: formatEuroCents(0),
       cash: formatEuroCents(0),
-      count: 'Aucun encaissement',
+      count: 'Aucune opération',
       clients: 'Aucun client',
       clientPill: 0,
       caption: 'encaissé aujourd’hui',
@@ -248,7 +248,7 @@ describe('CashRegisterScreen', () => {
     expect(view.queryByText(/TVA|Bénéfice|Dépenses|chiffre d’affaires/i)).toBeNull();
   });
 
-  it('answers « how much was collected » once, with an intentional empty Encaissements section', async () => {
+  it('answers « how much was collected » once, with an intentional empty Opérations section', async () => {
     const view = await renderCashRegister();
 
     expect(view.getByText('Total encaissé')).toBeTruthy();
@@ -264,9 +264,9 @@ describe('CashRegisterScreen', () => {
     expect(within(methods).getByTestId('cash-register-cash')).toBeTruthy();
     expect(view.getByLabelText(`Carte ${formatEuroCents(0)}`)).toBeTruthy();
 
-    expect(view.getByText('Encaissements')).toBeTruthy();
+    expect(view.getByText('Opérations')).toBeTruthy();
     expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
-      'Encaissements, Aucun encaissement, Aucun client',
+      'Opérations, Aucune opération, Aucun client',
     );
     expect(view.getByTestId('cash-register-client-count-value').props.children).toBe(0);
     const empty = view.getByTestId('cash-register-empty');
@@ -299,10 +299,10 @@ describe('CashRegisterScreen', () => {
     jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
 
     expect(view.queryByTestId('cash-register-empty')).toBeNull();
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(14500), count: '2 encaissements' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(14500), count: '2 opérations' });
     // Sofia paid the standalone Sale AND the checkout: one client behind two encaissements.
     expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
-      'Encaissements, 2 encaissements, 1 client',
+      'Opérations, 2 opérations, 1 client',
     );
 
     const rows = entryRows(view);
@@ -352,7 +352,7 @@ describe('CashRegisterScreen', () => {
       'cash-register-entry-agenda-sofia',
     ]);
     expect(within(view.getByTestId('cash-register-entry-agenda-elodie')).getByText('28 août')).toBeTruthy();
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(18700), count: '3 encaissements' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(18700), count: '3 opérations' });
   });
 
   it('sits on the app background with white total and empty cards (surface hierarchy)', async () => {
@@ -390,7 +390,7 @@ describe('CashRegisterScreen', () => {
     await act(async () => {
       fireEvent.press(view.getByTestId('checkout-sofia-with-product'));
     });
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(14500), count: '1 encaissement' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(14500), count: '1 opération' });
 
     await press(view, 'sell-standalone-card');
     await press(view, 'sell-standalone-mixed');
@@ -399,7 +399,7 @@ describe('CashRegisterScreen', () => {
       total: formatEuroCents(24500),
       card: formatEuroCents(20500),
       cash: formatEuroCents(4000),
-      count: '3 encaissements',
+      count: '3 opérations',
     });
   });
 
@@ -413,7 +413,7 @@ describe('CashRegisterScreen', () => {
       total: formatEuroCents(13700),
       card: formatEuroCents(11500),
       cash: formatEuroCents(2200),
-      count: '2 encaissements',
+      count: '2 opérations',
     });
 
     await press(view, 'edit-sofia');
@@ -422,7 +422,7 @@ describe('CashRegisterScreen', () => {
       total: formatEuroCents(13700),
       card: formatEuroCents(5000),
       cash: formatEuroCents(8700),
-      count: '2 encaissements',
+      count: '2 opérations',
     });
   });
 
@@ -441,7 +441,7 @@ describe('CashRegisterScreen', () => {
       total: formatEuroCents(4200),
       card: formatEuroCents(0),
       cash: formatEuroCents(4200),
-      count: '1 encaissement',
+      count: '1 opération',
       caption: 'encaissé ce jour',
       period: 'Vendredi 28 août',
     });
@@ -815,7 +815,7 @@ describe('CashRegisterScreen', () => {
       total: formatEuroCents(18700),
       card: formatEuroCents(14500),
       cash: formatEuroCents(4200),
-      count: '3 encaissements',
+      count: '3 opérations',
       caption: 'encaissé ce mois-ci',
       period: 'Août 2026',
     });
@@ -844,7 +844,7 @@ describe('CashRegisterScreen', () => {
     });
 
     // The development seed holds previous-day fixtures already COMPLETED by reconciliation.
-    expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: 'Aucun encaissement' });
+    expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: 'Aucune opération' });
   });
 
   it('navigates with the shared glass controls, labelled for the mode, one period per press', async () => {
@@ -893,7 +893,7 @@ describe('CashRegisterScreen', () => {
   });
 
   describe('distinct paying clients', () => {
-    it('shows a second compact counter « Clients » after the Encaissements count, zero included', async () => {
+    it('shows a second compact counter « Clients » after the Opérations count, zero included', async () => {
       const view = await renderCashRegister();
 
       const header = view.getByTestId('cash-register-count');
@@ -906,10 +906,10 @@ describe('CashRegisterScreen', () => {
         .map((figure) => StyleSheet.flatten(figure.parent!.props.style));
       expect(pills).toHaveLength(2);
       expect(pills[1]).toEqual(pills[0]);
-      expect(StyleSheet.flatten(within(header).getByText('Encaissements').parent!.props.style)).toMatchObject({
+      expect(StyleSheet.flatten(within(header).getByText('Opérations').parent!.props.style)).toMatchObject({
         flexWrap: 'wrap',
       });
-      expect(totals(view)).toMatchObject({ count: 'Aucun encaissement', clients: 'Aucun client', clientPill: 0 });
+      expect(totals(view)).toMatchObject({ count: 'Aucune opération', clients: 'Aucun client', clientPill: 0 });
     });
 
     it('counts a client once across a service checkout, a deposit and a product purchase', async () => {
@@ -921,7 +921,7 @@ describe('CashRegisterScreen', () => {
 
       expect(totals(view)).toMatchObject({
         total: formatEuroCents(14500),
-        count: '3 encaissements',
+        count: '3 opérations',
         clients: '1 client',
         clientPill: 1,
       });
@@ -938,12 +938,12 @@ describe('CashRegisterScreen', () => {
 
       expect(totals(view)).toMatchObject({
         total: formatEuroCents(9500 + 4200 + 4200 + 5000 + 1500),
-        count: '5 encaissements',
+        count: '5 opérations',
         clients: '3 clients',
         clientPill: 3,
       });
       expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
-        'Encaissements, 5 encaissements, 3 clients',
+        'Opérations, 5 opérations, 3 clients',
       );
     });
 
@@ -958,26 +958,26 @@ describe('CashRegisterScreen', () => {
       jest.setSystemTime(new Date(2026, 7, 29, 15, 0));
       await press(view, 'checkout-sofia');
 
-      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: '1 client', clientPill: 1 });
+      expect(totals(view)).toMatchObject({ count: '1 opération', clients: '1 client', clientPill: 1 });
       await press(view, 'cash-register-previous');
-      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: '1 client', clientPill: 1 });
+      expect(totals(view)).toMatchObject({ count: '1 opération', clients: '1 client', clientPill: 1 });
 
       await act(async () => {
         fireEvent.press(view.getByLabelText('Mois'));
       });
-      expect(totals(view)).toMatchObject({ count: '2 encaissements', clients: '2 clients', clientPill: 2 });
+      expect(totals(view)).toMatchObject({ count: '2 opérations', clients: '2 clients', clientPill: 2 });
       // July: Sofia alone again — the same person, counted in her own month.
       await press(view, 'cash-register-previous');
-      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: '1 client', clientPill: 1 });
+      expect(totals(view)).toMatchObject({ count: '1 opération', clients: '1 client', clientPill: 1 });
     });
 
     it('a VOIDED deposit identifies nobody, like the money it no longer counts', async () => {
       const view = await renderCashRegister();
       await press(view, 'deposit-sofia');
-      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: '1 client' });
+      expect(totals(view)).toMatchObject({ count: '1 opération', clients: '1 client' });
 
       await press(view, 'void-deposit-sofia');
-      expect(totals(view)).toMatchObject({ count: 'Aucun encaissement', clients: 'Aucun client', clientPill: 0 });
+      expect(totals(view)).toMatchObject({ count: 'Aucune opération', clients: 'Aucun client', clientPill: 0 });
     });
   });
 
@@ -991,7 +991,7 @@ describe('CashRegisterScreen', () => {
         total: formatEuroCents(3000),
         card: formatEuroCents(0),
         cash: formatEuroCents(3000),
-        count: '1 encaissement',
+        count: '1 opération',
       });
       const row = view.getByTestId('cash-register-entry-deposit-sofia');
       expect(within(row).getByText(/^Acompte · /)).toBeTruthy();
@@ -1016,7 +1016,7 @@ describe('CashRegisterScreen', () => {
         total: formatEuroCents(9500),
         card: formatEuroCents(6500),
         cash: formatEuroCents(3000),
-        count: '2 encaissements',
+        count: '2 opérations',
       });
       expect(entryRows(view)).toHaveLength(2);
     });
@@ -1027,7 +1027,7 @@ describe('CashRegisterScreen', () => {
       await press(view, 'deposit-sofia');
       await press(view, 'void-deposit-sofia');
 
-      expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: 'Aucun encaissement' });
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: 'Aucune opération' });
       expect(view.queryByTestId('cash-register-entry-deposit-sofia')).toBeNull();
     });
   });
@@ -1085,7 +1085,7 @@ describe('CashRegisterScreen', () => {
         params: { period: 'month', date: '2026-08-01' },
       });
       // The totals are exactly what they were: the history changes nothing here.
-      expect(totals(view)).toMatchObject({ total: formatEuroCents(5000), count: '1 encaissement' });
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(5000), count: '1 opération' });
     });
 
     it('a product refund counts NEGATIVELY on the day it happened, by its own method, opening its Sale — the sale day is unchanged', async () => {
@@ -1101,9 +1101,12 @@ describe('CashRegisterScreen', () => {
         total: formatEuroCents(-5000),
         card: formatEuroCents(0),
         cash: formatEuroCents(-5000),
-        count: 'Aucun encaissement',
+        // ONE row is listed: one operation, a refund — never « Aucun encaissement » over a visible row.
+        count: '1 opération',
         clients: 'Aucun client',
       });
+      expect(view.getByTestId('cash-register-operation-breakdown').props.children).toBe('1 remboursement');
+      expect(view.getAllByTestId(/^cash-register-entry-(?!amount|sync)/)).toHaveLength(1);
       const row = view.getByTestId('cash-register-entry-refund-1');
       expect(within(row).getByText(/^Remboursement · /)).toBeTruthy();
       expect(view.getByTestId('cash-register-entry-amount-refund-1').props.children).toBe(formatSignedEuroCents(-5000));
@@ -1114,12 +1117,17 @@ describe('CashRegisterScreen', () => {
 
       // Yesterday still reads the 50 € received.
       await press(view, 'cash-register-previous');
-      expect(totals(view)).toMatchObject({ total: formatEuroCents(5000), count: '1 encaissement' });
-      // The month nets to zero.
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(5000), count: '1 opération' });
+      expect(view.queryByTestId('cash-register-operation-breakdown')).toBeNull();
+      // The month nets to zero: two rows, one receipt and one refund.
       await act(async () => {
         fireEvent.press(view.getByLabelText('Mois'));
       });
-      expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: '1 encaissement' });
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(0), count: '2 opérations' });
+      expect(view.getByTestId('cash-register-operation-breakdown').props.children).toBe('1 encaissement · 1 remboursement');
+      expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
+        'Opérations, 2 opérations, 1 client, 1 encaissement · 1 remboursement',
+      );
     });
 
     it('Mois compares the month to date with the same elapsed span of the previous month, written and spoken', async () => {
@@ -1133,7 +1141,7 @@ describe('CashRegisterScreen', () => {
         fireEvent.press(view.getByLabelText('Mois'));
       });
 
-      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 encaissement' });
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 opération' });
       // (95 − 50) / 50: a rise, on the mint tone, glyph and figure written.
       expect(view.getByTestId('cash-register-trend-badge-value').props.children).toMatch(/^\+90,0\s%$/);
       expect(view.getByTestId('cash-register-trend-reference').props.children).toBe('vs 1er–29 juil.');
@@ -1147,7 +1155,7 @@ describe('CashRegisterScreen', () => {
       expect(view.queryByTestId('cash-register-trend-year')).toBeNull();
       // The existing figures are untouched.
       expect(view.getByTestId('cash-register-count').props.accessibilityLabel).toBe(
-        'Encaissements, 1 encaissement, 1 client',
+        'Opérations, 1 opération, 1 client',
       );
 
       // July, completed, against the whole of June: 50 € against 50 €.
@@ -1184,7 +1192,7 @@ describe('CashRegisterScreen', () => {
 
       // August against 1 → 29 July: the history begins on the 10th, after the span's first day, so
       // July's 50 € is not a known baseline. No invented growth: a quiet explanation, no badge.
-      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 encaissement' });
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 opération' });
       expect(view.queryByTestId('cash-register-trend')).toBeNull();
       expect(view.queryByTestId('cash-register-trend-year')).toBeNull();
       const note = view.getByTestId('cash-register-comparison-note');
@@ -1314,7 +1322,7 @@ describe('CashRegisterScreen', () => {
         `Ventes directes encaissées : ${formatEuroCents(1500)}`,
       );
       // A walk-in sale is money and a unit, but identifies nobody.
-      expect(totals(view)).toMatchObject({ count: '1 encaissement', clients: 'Aucun client' });
+      expect(totals(view)).toMatchObject({ count: '1 opération', clients: 'Aucun client' });
     });
 
     it('a zero reference shows the change itself, never a percentage', async () => {
@@ -1390,7 +1398,7 @@ describe('CashRegisterScreen', () => {
       expect(card().props.accessibilityHint).toBe('Touchez pour afficher la variation en pourcentage');
       expect(selection).toHaveBeenCalledTimes(1);
       // The total and its caption stay as they were.
-      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 encaissement' });
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(9500), count: '1 opération' });
 
       // VoiceOver / TalkBack activate the card: back to percent.
       await act(async () => {
@@ -1462,7 +1470,7 @@ describe('CashRegisterScreen', () => {
       await press(view, 'sell-standalone-card');
 
       // 145 € (95 € + the 50 € Masque) + 50 € direct: the Revente adds nothing of its own.
-      expect(totals(view)).toMatchObject({ total: formatEuroCents(19500), count: '2 encaissements', clients: '1 client' });
+      expect(totals(view)).toMatchObject({ total: formatEuroCents(19500), count: '2 opérations', clients: '1 client' });
       const products = view.getByTestId('cash-register-products');
       expect(within(products).getByTestId('cash-register-products-units').props.children).toBe('2 unités');
       expect(within(products).getByTestId('cash-register-products-split').props.children).toBe(
