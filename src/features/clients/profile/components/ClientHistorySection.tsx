@@ -1,11 +1,13 @@
 // BeautIzzy — Client Profile history switcher
 //
 // ONE content area for the two histories of a Client: a full-width
-// segmented control `Rendez-vous [n] | Produits achetés [n]` replaces only the
-// preview below it. Each preview shows at most CLIENT_HISTORY_PREVIEW_LIMIT
+// segmented control `Rendez-vous [n] | Achats [n]` replaces only the preview
+// below it. « Achats » counts TRANSACTIONS (Sales), not product units: a Sale of
+// three products is one purchase. Each preview shows at most CLIENT_HISTORY_PREVIEW_LIMIT
 // records in one grouped surface; « Voir les N … » pushes the complete
 // history screen — nothing ever expands inline, so the profile keeps the
 // same height with 3 or 300 records. The selected tab is plain local state.
+// A purchase opens the Sale detail — the same screen as the Caisse.
 
 import { Fragment, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -20,7 +22,7 @@ import { foregroundSoft, radii, semanticColors, spacing } from '@/shared/ui/them
 
 import { ClientAppointmentRow } from '../../history/ClientAppointmentRow';
 import { ClientSaleRow } from '../../history/ClientSaleRow';
-import { getClientHistoryPreview, hasMoreClientHistory } from '../presentation';
+import { CLIENT_PURCHASES_TAB_LABEL, getClientHistoryPreview, hasMoreClientHistory } from '../presentation';
 
 type ClientHistoryTab = 'appointments' | 'purchases';
 
@@ -32,6 +34,10 @@ interface ClientHistorySectionProps {
   readonly onOpenAppointment: (appointmentId: string) => void;
   readonly onOpenAppointmentHistory: () => void;
   readonly onOpenPurchaseHistory: () => void;
+  /** Opens the Sale detail of one purchase. */
+  readonly onOpenSale: (saleId: string) => void;
+  /** What the refunds of a purchase amount to, when it has some. */
+  readonly refundStatusOf: (sale: Sale) => string | undefined;
 }
 
 export function ClientHistorySection({
@@ -40,6 +46,8 @@ export function ClientHistorySection({
   onOpenAppointment,
   onOpenAppointmentHistory,
   onOpenPurchaseHistory,
+  onOpenSale,
+  refundStatusOf,
 }: ClientHistorySectionProps) {
   const [tab, setTab] = useState<ClientHistoryTab>('appointments');
   const options: readonly SegmentedControlOption<ClientHistoryTab>[] = [
@@ -51,7 +59,7 @@ export function ClientHistorySection({
     },
     {
       value: 'purchases',
-      label: 'Produits achetés',
+      label: CLIENT_PURCHASES_TAB_LABEL,
       count: purchases.length,
       testID: 'client-history-tab-purchases',
     },
@@ -96,7 +104,7 @@ export function ClientHistorySection({
           {getClientHistoryPreview(purchases).map((sale, index) => (
             <Fragment key={sale.id}>
               {index > 0 && <GroupedSeparator inset={spacing.base} />}
-              <ClientSaleRow sale={sale} />
+              <ClientSaleRow onPress={() => onOpenSale(sale.id)} refundStatus={refundStatusOf(sale)} sale={sale} />
             </Fragment>
           ))}
           {hasMoreClientHistory(purchases.length) && (

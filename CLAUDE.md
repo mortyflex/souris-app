@@ -886,11 +886,25 @@ The section stays visible at zero.
 
 None of these values is stored on the client.
 
-### Purchased products (derived)
+### Purchases (derived)
 
-The profile `Produits achetés` section lists the client's sales: `sale.clientId === client.id`.
+The profile `Achats` section (formerly `Produits achetés`) lists the client's sales: `sale.clientId === client.id`.
+
+Its counter counts purchases — Sales, one per transaction — never product units.
+
+A multi-product Sale stays ONE row.
 
 It reads sale item snapshots, so later product edits or deletion do not change it.
+
+Every purchase row — the profile preview and the complete history — opens the shared Sale Detail screen (`/sales/[saleId]`), the one the Cash Register opens.
+
+The complete purchase history offers the existing swipe-revealed « Actions » and the shared `SaleActionsSheet`, selected by `getSaleActions` exactly as in the Cash Register.
+
+Refunds and corrections reuse the existing Sales domain (`docs/domain/SALES.md` §15): no separate workflow, no separate records.
+
+A row's refund state reads the Sale refund summary (`describeSaleRefundStatus`); a voided entry never counts as a refund.
+
+Reference: `docs/design/DESIGN_OVERRIDES.md` §48.4.
 
 Nothing is stored on the client.
 

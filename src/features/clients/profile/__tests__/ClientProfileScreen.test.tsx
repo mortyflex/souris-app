@@ -208,11 +208,25 @@ function SessionProbe() {
   const { addAppointment, appointments } = useAppointmentSession();
   const { addProduct, deleteProduct, getProductById, setProductStock, updateProduct } =
     useProductCatalog();
-  const { completeSale, sales } = useSaleSession();
+  const { completeSale, sales, recordSaleAdjustment, voidSaleAdjustment } = useSaleSession();
   const lea = clients.find((client) => client.id === 'client-agenda-lea');
+  const refundLeaPaid = (id: string, cents: number, settlement: 'SETTLED' | 'PENDING') =>
+    recordSaleAdjustment('sale-lea-paid', {
+      id,
+      reason: 'CUSTOMER_REFUND',
+      lines: [],
+      refundCardCents: cents,
+      refundCashCents: 0,
+      settlement,
+      refundedAt: settlement === 'SETTLED' ? new Date(2026, 8, 12, 11) : undefined,
+    });
 
   return (
     <>
+      <Pressable testID="refund-lea-paid-10" onPress={() => refundLeaPaid('refund-lea-10', 1000, 'SETTLED')} />
+      <Pressable testID="refund-lea-paid-rest" onPress={() => refundLeaPaid('refund-lea-rest', 2600, 'SETTLED')} />
+      <Pressable testID="refund-lea-paid-pending" onPress={() => refundLeaPaid('refund-lea-pending', 500, 'PENDING')} />
+      <Pressable testID="void-lea-pending" onPress={() => voidSaleAdjustment('refund-lea-pending')} />
       <Text testID="session-lea-first-name">{lea?.firstName ?? ''}</Text>
       <Text testID="session-lea-id">{lea?.id ?? ''}</Text>
       <Text testID="session-client-count">{clients.length}</Text>
@@ -462,6 +476,11 @@ describe('ClientProfileScreen', () => {
     // clock at a fixed late-afternoon instant so the fixture day is always
     // in the past while the real-now-derived future appointment stays ahead.
     jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 7, 26, 18, 0));
+  });
+
+  afterEach(() => {
+    // A test may move the clock (refunds happen after their Sale): every test starts on the fixture day.
     jest.setSystemTime(new Date(2026, 7, 26, 18, 0));
   });
 
@@ -864,6 +883,64 @@ describe('ClientProfileScreen', () => {
     expect(view.getByTestId('metric-completed').props.children).toBe('0');
   });
 
+  it('opens the Sale detail — the one of the Caisse — from a purchase of the preview', async () => {
+    const view = await renderProfile('client-agenda-lea');
+    await seedSales(view);
+    await showPurchases(view);
+
+    // ONE row per Sale, whatever its number of products.
+    const row = view.getByTestId('client-sale-sale-lea-2');
+    expect(within(row).getByText('Shampooing + Soin')).toBeTruthy();
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(row.props.accessibilityHint).toBe('Ouvre le détail de la vente');
+    expect(row.props.accessibilityLabel).toMatch(/^Achat du 11 sept\. 2026, Shampooing \+ Soin, 3 produits, total /);
+    await act(async () => {
+      fireEvent.press(row);
+    });
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/sales/[saleId]', params: { saleId: 'sale-lea-2' } });
+    // « Achats » counts purchases (Sales), never product units.
+    expect(view.getByTestId('client-history-tab-purchases').props.accessibilityLabel).toBe('Achats, 2');
+  });
+
+  it('keeps Total dépensé and the purchase status current after refunds; a cancelled entry changes nothing', async () => {
+    // The paid fixture Sale is dated 12 September: its refunds happen after it.
+    jest.setSystemTime(new Date(2026, 8, 12, 18, 0));
+    const view = await renderProfile('client-agenda-lea');
+    await act(async () => {
+      fireEvent.press(view.getByTestId('seed-products'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('sell-lea-paid'));
+    });
+    await showPurchases(view);
+    expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(36));
+    expect(view.queryByTestId('client-sale-status-sale-lea-paid')).toBeNull();
+
+    // A refund to pay and then cancelled: never money, never a refund state.
+    for (const step of ['refund-lea-paid-pending', 'void-lea-pending']) {
+      await act(async () => {
+        fireEvent.press(view.getByTestId(step));
+      });
+    }
+    expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(36));
+    expect(view.queryByTestId('client-sale-status-sale-lea-paid')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('refund-lea-paid-10'));
+    });
+    expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(26));
+    expect(view.getByTestId('client-sale-status-sale-lea-paid').props.children).toBe('Remboursée en partie');
+    // The row keeps the Sale's own total as sold.
+    expect(within(view.getByTestId('client-sale-sale-lea-paid')).getByText(formatPrice(36))).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('refund-lea-paid-rest'));
+    });
+    expect(view.getByTestId('metric-spent').props.children).toBe(formatPrice(0));
+    expect(view.getByTestId('client-sale-status-sale-lea-paid').props.children).toBe('Remboursée');
+    expect(view.getByTestId('client-sale-sale-lea-paid').props.accessibilityLabel).toMatch(/, Remboursée$/);
+  });
+
   it('keeps purchase history unchanged after Product edits and deletion', async () => {
     const view = await renderProfile('client-agenda-lea');
 
@@ -1240,7 +1317,7 @@ describe('ClientProfileScreen', () => {
       expect(appointmentsTab.props.accessibilityState).toEqual({ selected: true });
       expect(appointmentsTab.props.accessibilityLabel).toBe('Rendez-vous, 5');
       expect(view.getByTestId('client-history-tab-purchases').props.accessibilityLabel).toBe(
-        'Produits achetés, 5',
+        'Achats, 5',
       );
       const preview = within(view.getByTestId('client-appointments-preview'));
       expect(preview.getByText('Brushing 5')).toBeTruthy();

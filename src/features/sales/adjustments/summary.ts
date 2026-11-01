@@ -107,3 +107,17 @@ export function getSaleRefundSummary(sale: Sale, allAdjustments: readonly SaleAd
     history: [...adjustments].reverse(),
   };
 }
+
+/**
+ * What the refunds of a Sale amount to, in a few words — the status a Sale row
+ * shows (Caisse « Produits vendus », the Client purchases), from the SAME summary
+ * as the Sale detail: an additional refund counts as money given back, a voided
+ * or compensated entry never does. Undefined when nothing effective was recorded.
+ */
+export function describeSaleRefundStatus(summary: SaleRefundSummary): string | undefined {
+  if (summary.lines.length === 0) return undefined;
+  if (summary.pendingCents > 0) return 'Remboursement à effectuer';
+  if (summary.state === 'FULL' || summary.state === 'OVER') return 'Remboursée';
+  if (summary.state === 'PARTIAL') return 'Remboursée en partie';
+  return 'Corrigée';
+}

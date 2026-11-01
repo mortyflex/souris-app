@@ -305,6 +305,13 @@ Sale adds to the Client `Total dépensé` (`docs/domain/CLIENTS.md` §6) exactly
 standalone Sale on its own, a Sale sold during an Appointment through that Appointment once it is
 COMPLETED. A standalone Sale without a recorded payment is listed here but adds nothing.
 
+Its UI title is « Achats » (November 2026): it counts purchases — Sales, one per transaction
+whatever its number of products — never product units. Every purchase, in the preview and in the
+complete history, opens the Sale detail (the screen of the Caisse, §15); the complete history
+offers the same swipe-revealed « Actions » and the same « Actions de la vente » drawer as the Caisse
+sale history (`getSaleActions`). A row's refund state reads the Sale refund summary
+(`describeSaleRefundStatus`): an additional refund counts as money given back, a voided entry never.
+
 ---
 
 ## 11b. Sale History (Caisse « Produits vendus »)

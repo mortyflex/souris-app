@@ -190,3 +190,6 @@ export function formatClientHistoryDate(date: Date, now: Date = new Date()): str
   }).format(date);
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
+
+/** The Client purchases title: it counts purchases (Sales), never product units. */
+export const CLIENT_PURCHASES_TAB_LABEL = 'Achats';

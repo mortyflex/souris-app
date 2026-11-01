@@ -5,7 +5,7 @@
 // the email) + a compact row of quick-action tiles (`Nouveau rendez-vous`,
 // `Vendre un produit`) + today's birthday reminder + next appointment + the
 // derived activity as four small stat cards + ONE switchable history preview
-// (Rendez-vous | Produits achetés, 3 records at most, the complete histories
+// (Rendez-vous | Achats, 3 records at most, the complete histories
 // on their own pushed screens) + the remaining information + notes. Nothing here is
 // stored on the Client — activity is derived from Appointment state (and,
 // for « Total dépensé », the client's paid Sales) and
@@ -66,6 +66,7 @@ import {
   formatPrice,
   getAppointmentEnd,
 } from '@/features/appointments/presentation';
+import { describeSaleRefundStatus, getSaleRefundSummary } from '@/features/sales/adjustments/summary';
 import { getClientSales } from '@/features/sales/presentation';
 import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { ClientDeleteConflictError } from '@/persistence/stores/clients';
@@ -290,6 +291,11 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
     router.push({ pathname: '/clients/purchases/[clientId]', params: { clientId: client.id } });
   };
 
+  // The Sale detail of the Caisse: back returns to this profile.
+  const openSaleDetail = (saleId: string) => {
+    router.push({ pathname: '/sales/[saleId]', params: { saleId } });
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={[styles.topBar, { paddingHorizontal: horizontalGutter }]}>
@@ -458,7 +464,9 @@ export function ClientProfileScreen({ clientId }: ClientProfileScreenProps) {
             onOpenAppointment={openAppointment}
             onOpenAppointmentHistory={openAppointmentHistory}
             onOpenPurchaseHistory={openPurchaseHistory}
+            onOpenSale={openSaleDetail}
             purchases={purchases}
+            refundStatusOf={(sale) => describeSaleRefundStatus(getSaleRefundSummary(sale, saleAdjustments))}
           />
         </View>
 

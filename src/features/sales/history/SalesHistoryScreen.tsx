@@ -30,9 +30,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getCashRegisterDayInterval, getCashRegisterMonthInterval } from '@/domain/cash-register';
 import {
-  isEffectiveSaleRefund,
-  getSaleAdjustmentPosition,
-  getSaleAdjustments,
   listSaleHistory,
   summarizeSaleHistory,
   type SaleHistoryEntry,
@@ -69,6 +66,7 @@ import { bottomClearance, foregroundSoft, gutter, radii, semanticColors, spacing
 
 import { SaleActionsSheet } from '../adjustments/SaleActionsSheet';
 import { getSaleActions } from '../adjustments/sale-actions';
+import { describeSaleRefundStatus, getSaleRefundSummary } from '../adjustments/summary';
 import { useSaleSession } from '../session/SaleSessionProvider';
 import {
   SALE_HISTORY_EMPTY_COPY,
@@ -133,7 +131,8 @@ export function SalesHistoryScreen({ initialPeriod = 'day', initialDate }: Sales
       adjustments: saleAdjustments,
       appointmentSettled: entry.sale.appointmentId === undefined || isAppointmentSettled(entry.sale.appointmentId),
     }).length > 0;
-  const statusOf = (entry: SaleHistoryEntry) => describeAdjustments(entry, saleAdjustments);
+  const statusOf = (entry: SaleHistoryEntry) =>
+    describeSaleRefundStatus(getSaleRefundSummary(entry.sale, saleAdjustments));
   const adjustable = entries.filter(isAdjustable);
   // ONE row per screen instance plays the peek: the first adjustable one present at mount.
   const hintTarget = useSwipeActionHintTarget(adjustable[0]?.sale.id);
@@ -282,24 +281,6 @@ export function SalesHistoryScreen({ initialPeriod = 'day', initialDate }: Sales
       <SaleActionsSheet onClose={() => setActionsVisible(false)} sale={actionsSale} visible={actionsVisible} />
     </SafeAreaView>
   );
-}
-
-/** What the corrections of a Sale amount to, in a few words; undefined without any. */
-function describeAdjustments(
-  entry: SaleHistoryEntry,
-  allAdjustments: Parameters<typeof getSaleAdjustmentPosition>[1],
-): string | undefined {
-  const adjustments = getSaleAdjustments(allAdjustments, entry.sale.id).filter(
-    (adjustment) => adjustment.status !== 'VOIDED',
-  );
-  // Refunds neutralised by a reversal no longer count.
-  if (!adjustments.some((adjustment) => isEffectiveSaleRefund(adjustment, adjustments))) return undefined;
-  const position = getSaleAdjustmentPosition(entry.sale, allAdjustments);
-  if (position.pendingCents > 0) return 'Remboursement à effectuer';
-  if (position.settledCents > 0) {
-    return position.remainingCents === 0 ? 'Remboursée' : 'Remboursée en partie';
-  }
-  return 'Corrigée';
 }
 
 /** `Aucune unité` / `1 unité` / `12 unités` — spoken with the section header. */

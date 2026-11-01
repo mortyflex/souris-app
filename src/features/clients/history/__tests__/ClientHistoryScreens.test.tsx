@@ -31,6 +31,12 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+jest.mock('react-native-reanimated', () =>
+  jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'),
+);
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () =>
+  jest.requireActual('@/shared/ui/testing/mock-reanimated-swipeable'),
+);
 
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
@@ -249,7 +255,7 @@ describe('Client history screens', () => {
     it('lists every Sale of the client newest first and spells out multi-product Sales', async () => {
       const view = await renderSeeded(<ClientPurchaseHistoryScreen clientId={client.id} />);
 
-      expect(view.getByText('Produits achetés')).toBeTruthy();
+      expect(view.getByText('Achats')).toBeTruthy();
       const newest = within(view.getByTestId('client-sale-sale-b'));
       expect(newest.getByText('Shampooing + Soin')).toBeTruthy();
       expect(newest.getByText('9 sept. 2026 · 3 produits')).toBeTruthy();
@@ -263,8 +269,13 @@ describe('Client history screens', () => {
       expect(oldest.getByText('2 sept. 2026 · ×1')).toBeTruthy();
       // A single-line Sale has no repeated line.
       expect(oldest.queryByText('Shampooing ×1')).toBeNull();
-      // No Sale detail exists: the rows stay read-only.
-      expect(view.getByTestId('client-sale-sale-a').props.accessibilityRole).toBeUndefined();
+      // ONE row per Sale: the multi-product Sale stays one transaction, and opens its Sale detail.
+      expect(view.getAllByTestId(/^client-sale-sale-[ab]$/)).toHaveLength(2);
+      expect(view.getByTestId('client-sale-sale-b').props.accessibilityRole).toBe('button');
+      await act(async () => {
+        fireEvent.press(view.getByTestId('client-sale-sale-b'));
+      });
+      expect(mockPush).toHaveBeenCalledWith({ pathname: '/sales/[saleId]', params: { saleId: 'sale-b' } });
     });
   });
 });

@@ -1537,7 +1537,7 @@ lifecycle are unchanged.
   surveiller » / « absences fréquentes »), so the pattern never depends on colour alone.
   Cancellations are never absences. Peach is never used here: it is processing time.
 - **History area.** Right under Activité, a full-width `SegmentedControl` « Rendez-vous [n] |
-  Produits achetés [n] » (default Rendez-vous, plain local state). Options may carry a count
+  Achats [n] » (« Produits achetés » before §48.4) (default Rendez-vous, plain local state). Options may carry a count
   pill: `surfaceLavenderStrong` + accent text, accent + white on the selected option, `999+`
   beyond 999, spoken « Rendez-vous, 20 ». The segment replaces ONLY the preview below it.
 - **Preview.** At most three rows (`CLIENT_HISTORY_PREVIEW_LIMIT`) in one `GroupedSurface`
@@ -1548,7 +1548,7 @@ lifecycle are unchanged.
 - **Rows.** Appointment: date (`Mar. 22 sept.`, year only outside the current one) over time,
   prestation summary (+ status in rose for cancellations / no-shows), amount, muted chevron;
   the whole row opens Appointment Details. Sale: product summary, `date · ×1` or
-  `date · 3 produits`, total; read-only here (the Caisse sale detail, §47, is reached from the Caisse).
+  `date · 3 produits`, total; opens the Sale detail since §48.4.
 - **Complete histories.** Pushed full screens (`clients/appointments/[clientId]`,
   `clients/purchases/[clientId]`): centred title with the client's name under it, a
   virtualized list whose rows carry the grouped surface slice by slice. Appointments filter
@@ -2917,3 +2917,23 @@ Supersedes the « Corrections section » of §48.1 and the « Total reçu » wor
   records live only here, their amount struck through and spoken « non compté ».
 - **Caisse.** The additional refund line reads « Remboursement supplémentaire » (formerly « Sortie
   exceptionnelle »).
+
+### 48.4 Client purchases — the same Sale detail and actions as the Caisse (November 2026)
+
+- **« Achats ».** The Client Profile segment and the complete history are titled « Achats »
+  (formerly « Produits achetés »): the count is a number of purchases (Sales), never of product
+  units. A multi-product Sale stays ONE row.
+- **Rows.** `ClientSaleRow` is one `Pressable` (64 pt minimum, `surfaceLavender` when pressed,
+  muted chevron on the right, as `SaleHistoryRow`): product summary, `date · N produits`, the Sale's
+  own total as sold, and — when it has refunds — an accent status from the Sale refund summary
+  (« Remboursée en partie », « Remboursée », « Remboursement à effectuer », « Corrigée »). The
+  complete history keeps the spelled-out lines of a multi-product Sale. Spoken « Achat du …,
+  summary, N produits, total …, status », hint « Ouvre le détail de la vente ».
+- **Navigation.** The preview and the complete history open THE Sale detail (`/sales/[saleId]`);
+  back returns to the Client.
+- **Actions.** In the complete history, a Sale that offers actions reveals « Actions » on swipe —
+  the same `SwipeActionRow` (glyph, 76 pt, grip, one peek per screen, never under Reduce Motion) and
+  the same single `SaleActionsSheet` as the Caisse sale history; VoiceOver / TalkBack get « Actions
+  de la vente » on the row. The profile preview stays tap-only.
+- **Caisse status.** The Caisse sale history now reads the same refund summary: a Sale refunded
+  only by an additional refund reads « Remboursée en partie » (it read « Corrigée »).
