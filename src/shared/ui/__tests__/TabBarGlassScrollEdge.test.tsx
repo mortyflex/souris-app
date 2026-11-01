@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { ScrollView } from 'react-native';
+import { Platform, ScrollView } from 'react-native';
 
 import { TabBarGlassScrollEdge } from '../TabBarGlassScrollEdge';
 
@@ -26,5 +26,21 @@ describe('TabBarGlassScrollEdge', () => {
     expect(marker.props.scrollEdgeEffects).toEqual({ bottom: 'hidden' });
     expect(marker.props.style).toMatchObject({ flex: 1 });
     expect(view.getByTestId('list')).toBeTruthy();
+  });
+
+  it('Android: renders the ScrollView alone — the native marker would refuse a pull-to-refresh wrapper', async () => {
+    const originalOS = Platform.OS;
+    Platform.OS = 'android';
+    try {
+      const view = await render(
+        <TabBarGlassScrollEdge>
+          <ScrollView testID="list" />
+        </TabBarGlassScrollEdge>,
+      );
+      expect(view.queryByTestId('scroll-view-marker')).toBeNull();
+      expect(view.getByTestId('list')).toBeTruthy();
+    } finally {
+      Platform.OS = originalOS;
+    }
   });
 });

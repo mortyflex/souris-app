@@ -19,6 +19,7 @@ import { useClientSession } from '@/features/clients/session/ClientSessionProvid
 import { AppText } from '@/shared/ui/AppText';
 import { GroupedSeparator } from '@/shared/ui/GroupedSurface';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import { bottomClearance, foregroundSoft, gutter, semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
@@ -90,6 +91,7 @@ export function ClientAppointmentHistoryScreen({ clientId }: ClientAppointmentHi
         contentContainerStyle={styles.content}
         initialNumToRender={20}
         keyExtractor={({ appointment }) => appointment.id}
+        refreshControl={<SyncRefreshControl />}
         ListEmptyComponent={
           <AppText variant="metadata" style={styles.empty}>
             {EMPTY_MESSAGES[filter]}

@@ -21,7 +21,7 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useCloudSyncControl } from '@/providers/CloudSyncRunner';
+import { useCloudSyncControl } from '@/providers/CloudSyncControl';
 import { usePersistence } from '@/providers/PersistenceProvider';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';

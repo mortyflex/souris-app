@@ -12,7 +12,7 @@
 // metrics. Stock is visible but restrained. This screen's header is the
 // reference composition of every main tab (docs/design/DESIGN_OVERRIDES.md §17).
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import {
@@ -28,6 +28,7 @@ import type { Product } from '@/domain/products';
 import { ProductImage } from '@/features/products/components/ProductImage';
 import { useProductImageUri } from '@/features/products/images/use-product-image-uri';
 import { formatServicePrice } from '@/features/services/presentation';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BarcodeScannerModal } from '@/shared/ui/BarcodeScannerModal';
@@ -181,19 +182,19 @@ export function ProductCatalogScreen() {
       )}
 
       {products.length === 0 ? (
-        <View style={directoryListStyles.emptyState}>
+        <EmptyCatalogScroll>
           <AppText variant="stateTitle">Aucun produit enregistré.</AppText>
           <AppText variant="metadata" style={directoryListStyles.emptyStateText}>
             Ajoutez votre premier produit pour préparer vos ventes.
           </AppText>
-        </View>
+        </EmptyCatalogScroll>
       ) : searching && shown.length === 0 ? (
-        <View style={directoryListStyles.emptyState}>
+        <EmptyCatalogScroll>
           <AppText variant="stateTitle">Aucun produit trouvé</AppText>
           <AppText variant="metadata" style={directoryListStyles.emptyStateText}>
             Essayez un autre nom, une marque, une catégorie ou un code-barres.
           </AppText>
-        </View>
+        </EmptyCatalogScroll>
       ) : (
         <SectionList
           sections={sections}
@@ -205,6 +206,7 @@ export function ProductCatalogScreen() {
           contentInsetAdjustmentBehavior="automatic"
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          refreshControl={<SyncRefreshControl />}
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
           contentContainerStyle={directoryListStyles.listContent}
@@ -321,6 +323,28 @@ export function ProductCatalogScreen() {
         )}
       </BottomSheet>
     </Screen>
+  );
+}
+
+/**
+ * An empty catalog (no product, no match) still answers the pull gesture:
+ * the empty state scrolls like the list it stands for, so a product created
+ * on another device can be fetched from here too.
+ */
+function EmptyCatalogScroll({ children }: { readonly children: ReactNode }) {
+  return (
+    <ScrollView
+      alwaysBounceVertical
+      contentContainerStyle={directoryListStyles.listContent}
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
+      refreshControl={<SyncRefreshControl />}
+      showsVerticalScrollIndicator={false}
+      testID="product-catalog-empty"
+    >
+      <View style={directoryListStyles.emptyState}>{children}</View>
+    </ScrollView>
   );
 }
 

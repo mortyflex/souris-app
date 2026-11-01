@@ -37,6 +37,7 @@ import { AppText } from '@/shared/ui/AppText';
 import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { NavigationChevron } from '@/shared/ui/NavigationChevron';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import { bottomClearance, foregroundSoft, gutter, lavender, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { SaleActionsSheet, SALE_ACTIONS_TITLE, useSaleActions } from '../adjustments/SaleActionsSheet';
@@ -119,7 +120,11 @@ export function SaleDetailScreen({ saleId }: SaleDetailScreenProps) {
         actionsTestID="open-sale-actions"
         onOpenActions={actions.length > 0 ? () => setActionsVisible(true) : undefined}
       />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<SyncRefreshControl />}
+        showsVerticalScrollIndicator={false}
+      >
         <AppText accessibilityRole="header" variant="screenTitle">
           {SALE_DETAIL_TITLE}
         </AppText>

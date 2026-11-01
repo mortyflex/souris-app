@@ -209,6 +209,30 @@ export function didSyncRunChangeLocalData(result: SyncRunResult): boolean {
   );
 }
 
+/**
+ * Whether the run wrote the local SYNC BOOKKEEPING — the outbox and the
+ * acknowledged revisions (`sync_outbox`, `sync_state`) — which the UI reads to
+ * say where a record stands with the remote (« Pas encore synchronisé »,
+ * « Synchronisé », « Refusé par le serveur »): an entry settled or enqueued,
+ * a failure, a conflict or a refusal recorded, an aggregate acknowledged by a
+ * pull. A push-only run that sent something is the typical case — it changes
+ * no operational row, so `didSyncRunChangeLocalData` is false, yet every
+ * label of what it sent must change. An idle run that exchanged nothing
+ * answers false: nothing to re-read, nothing to re-render.
+ */
+export function didSyncRunChangeSyncBookkeeping(result: SyncRunResult): boolean {
+  if (result.status === 'RESTORED') return true;
+  if (result.status !== 'PUSHED') return false;
+  return (
+    result.initialUploadEnqueued > 0 ||
+    result.pushed > 0 ||
+    result.failed > 0 ||
+    result.conflicts.length > 0 ||
+    result.entitlementHold?.refused !== undefined ||
+    (result.pull?.status === 'PULLED' && result.pull.applied + result.pull.deleted > 0)
+  );
+}
+
 export interface SyncPushWorker {
   /** Never rejects. A second call while one is in flight returns SKIPPED / ALREADY_RUNNING. */
   run(businessId: string): Promise<SyncRunResult>;

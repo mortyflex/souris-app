@@ -61,6 +61,7 @@ import { PushedScreenWatermark } from '@/shared/ui/ScreenWatermarkIcon';
 import { SectionCountChip, SectionHeader } from '@/shared/ui/SectionHeader';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { SwipeActionRow, useSwipeActionHintTarget } from '@/shared/ui/SwipeActionRow';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import { groupedListItemStyle } from '@/shared/ui/grouped-list';
 import { bottomClearance, foregroundSoft, gutter, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
@@ -210,6 +211,7 @@ export function SalesHistoryScreen({ initialPeriod = 'day', initialDate }: Sales
         data={entries}
         initialNumToRender={20}
         keyExtractor={(entry) => entry.sale.id}
+        refreshControl={<SyncRefreshControl />}
         ListEmptyComponent={
           <View
             accessible

@@ -88,16 +88,57 @@ describe('development sync control — production boundary', () => {
     expect(runner).toMatch(/case 'RECONCILIATION_REQUIRED':\s*return false;/);
   });
 
-  it('no product screen reads sync state: only the root navigator does, for the first-sync gate', () => {
-    expect(files.filter((file) => file.path.startsWith('features/sync/'))).toEqual([]);
+  it('no product screen reads sync state: the root navigator reads the first-sync gate, the pull gesture triggers a run', () => {
+    // The product's only entry points into the runner (Reactive synchronization, CLOUD_SYNC.md §29):
+    // the pull-to-refresh behaviour, which asks for a run and reads its outcome — never the gate,
+    // never an approval — and the native control that renders it.
+    expect(
+      files
+        .filter((file) => file.path.startsWith('features/sync/'))
+        .map((file) => file.path)
+        .sort(),
+    ).toEqual([
+      'features/sync/SyncRefreshControl.tsx',
+      'features/sync/SyncRefreshFeedback.tsx',
+      'features/sync/refresh-feedback.ts',
+      'features/sync/refresh-outcome.ts',
+      'features/sync/use-sync-refresh.ts',
+    ]);
     const controlReaders = files
       .filter((file) => /\buseCloudSyncControl\s*\(/.test(file.source))
       .map((file) => file.path);
     expect(controlReaders.sort()).toEqual([
       'features/plus/development/DevelopmentSyncSheet.tsx',
-      'providers/CloudSyncRunner.tsx', // the definition
+      'features/sync/use-sync-refresh.ts', // the pull gesture: `refreshNow` only
+      'providers/CloudSyncControl.tsx', // the definition
       'providers/RootNavigator.tsx', // the first-sync gate of an empty device
     ]);
+    const gateReaders = files
+      .filter((file) => /\bfirstSync\b/.test(file.source))
+      .map((file) => file.path);
+    expect(gateReaders.sort()).toEqual([
+      'providers/CloudSyncControl.tsx',
+      'providers/CloudSyncRunner.tsx',
+      'providers/RootNavigator.tsx',
+      'providers/root-route.ts',
+    ]);
+    for (const file of files.filter((candidate) => candidate.path.startsWith('features/sync/'))) {
+      expect({ path: file.path, source: file.source }).not.toMatchObject({ source: expect.stringMatching(/approve|firstSync|runNow/) });
+    }
+    // The sync revision is a counter a session provider subscribes to: never the runner itself.
+    const revisionReaders = files
+      .filter((file) => /\buseCloudSyncRevision\s*\(/.test(file.source))
+      .map((file) => file.path);
+    expect(revisionReaders.sort()).toEqual([
+      'features/sales/session/SaleSessionProvider.tsx',
+      'providers/CloudSyncRevision.tsx', // the definition
+    ]);
+    // No feature module names the runner: screens and sessions depend on the two small contracts only.
+    expect(
+      files
+        .filter((file) => file.path.startsWith('features/') && /providers\/CloudSyncRunner/.test(file.source))
+        .map((file) => file.path),
+    ).toEqual([]);
     // The state it shows is pure presentation: it knows nothing about the mechanism.
     const screen = files.find((file) => file.path === 'features/business/DataUnavailableScreen.tsx')!.source;
     expect(screen).not.toMatch(/persistence|providers\/|useCloudSyncControl/);

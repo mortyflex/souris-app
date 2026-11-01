@@ -61,6 +61,7 @@ import { Screen } from '@/shared/ui/Screen';
 import { SearchField } from '@/shared/ui/SearchField';
 import { SectionHeader } from '@/shared/ui/SectionHeader';
 import { SegmentedControl, type SegmentedControlOption } from '@/shared/ui/SegmentedControl';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import { foregroundSoft, listThumbnail, semanticColors, spacing } from '@/shared/ui/theme';
 
 export function ClientDirectoryScreen() {
@@ -140,6 +141,7 @@ export function ClientDirectoryScreen() {
       <SectionList
         sections={sections}
         keyExtractor={(client) => client.id}
+        refreshControl={<SyncRefreshControl />}
         // The native tab bar overlays the page: the system bottom inset keeps
         // the last row scrollable above it (bottomClearance then clears the
         // floating +).

@@ -102,6 +102,7 @@ import {
 import { PushedScreenWatermark } from "@/shared/ui/ScreenWatermarkIcon";
 import { SectionCountChip, SectionHeader } from "@/shared/ui/SectionHeader";
 import { SegmentedControl } from "@/shared/ui/SegmentedControl";
+import { SyncRefreshControl } from "@/features/sync/SyncRefreshControl";
 import {
   foregroundSoft,
   gutter,
@@ -341,6 +342,7 @@ export function CashRegisterScreen() {
 
       <ScrollView
         contentContainerStyle={styles.content}
+        refreshControl={<SyncRefreshControl />}
         showsVerticalScrollIndicator={false}
       >
         <AppText accessibilityRole="header" variant="screenTitle">

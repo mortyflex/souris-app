@@ -129,7 +129,7 @@ function ClientNamesProbe({
 }
 
 async function renderApp(database: SourisDatabase, remote: SyncRemoteGateway) {
-  let control: CloudSyncControl = { runNow: undefined, firstSync: { status: 'ready', retrying: false } };
+  let control: CloudSyncControl = { runner: false, runNow: undefined, refreshNow: undefined, firstSync: { status: 'ready', retrying: false } };
   let mountCount = 0;
   const onControl = (next: CloudSyncControl) => {
     control = next;

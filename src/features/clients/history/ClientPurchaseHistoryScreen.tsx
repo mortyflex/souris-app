@@ -30,6 +30,7 @@ import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
 import { AppText } from '@/shared/ui/AppText';
 import { GroupedSeparator } from '@/shared/ui/GroupedSurface';
 import { SwipeActionRow, useSwipeActionHintTarget } from '@/shared/ui/SwipeActionRow';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import { bottomClearance, foregroundSoft, gutter, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { CLIENT_PURCHASES_TAB_LABEL } from '../profile/presentation';
@@ -82,6 +83,7 @@ export function ClientPurchaseHistoryScreen({ clientId }: ClientPurchaseHistoryS
         data={purchases}
         initialNumToRender={20}
         keyExtractor={(sale) => sale.id}
+        refreshControl={<SyncRefreshControl />}
         ListEmptyComponent={
           <AppText variant="metadata" style={styles.empty}>
             Aucun achat enregistré.

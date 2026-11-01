@@ -60,6 +60,7 @@ import { ClientFormSheet } from '@/features/clients/creation/ClientFormSheet';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { BusinessInsightsTicket } from '@/features/insights/BusinessInsightsTicket';
 import { useSaleSession } from '@/features/sales/session/SaleSessionProvider';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import { estimationIcon } from '@/shared/icons/estimation-icon';
 import { insightsIcon } from '@/shared/icons/insights-icon';
 import type { PlatformSymbolName } from '@/shared/icons/payment-method-icons';
@@ -180,6 +181,7 @@ export function HomeScreen() {
         // the last row scrollable above it.
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.scrollContent}
+        refreshControl={<SyncRefreshControl />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>

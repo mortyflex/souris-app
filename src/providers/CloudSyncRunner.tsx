@@ -60,7 +60,7 @@
 // FIRST-SYNC GATE (§17.3). An EMPTY device must not become operational before
 // a run established what its remote Business holds: a first record created
 // while a restore is still pending would make both sides populated, which
-// nothing resolves automatically. `useCloudSyncControl().firstSync` tells the
+// nothing resolves automatically. the control's `firstSync` (CloudSyncControl.tsx) tells the
 // root navigator — its only reader — what to show:
 //
 //   ready        the app. ALWAYS for a device that holds data (offline-first is
@@ -82,11 +82,33 @@
 //
 // Once open, the gate stays open for the rest of the session.
 //
-// `useCloudSyncControl().runNow` hands the SAME orchestration to that retry
+// the control's `runNow` hands the SAME orchestration to that retry
 // and to the development sync control on Plus (`__DEV__`). It is one more
 // trigger under the same conditions (undefined while a run is not allowed),
-// not a second worker and not a new behavior. No product screen reads any
-// sync state.
+// not a second worker and not a new behavior.
+//
+// MANUAL REFRESH (pull-to-refresh, CLOUD_SYNC.md §29). `refreshNow` is the
+// same orchestration again, for the gesture of a product screen: it JOINS a
+// run already in flight (a tick, a foreground return, another screen's pull)
+// instead of answering ALREADY_RUNNING, so the native indicator lasts for the
+// real exchange and ten quick pulls make ONE request. Undefined under the
+// same conditions as `runNow` (no gateway, offline session, signed out): the
+// gesture then has nothing to run and says so (features/sync).
+//
+// SYNC REVISION. The sync bookkeeping — the outbox and the acknowledged
+// revisions — is what the UI reads to say where a record stands with the
+// remote (« Pas encore synchronisé », « Synchronisé », « Refusé par le
+// serveur »). A push-only run rewrites it without touching one operational
+// row, so `reloadSnapshot()` is not involved and nothing would re-render:
+// the label of a refund just sent stayed stale until the user left the
+// screen. The runner provides `CloudSyncRevision` — the counter that advances
+// after every run that changed that bookkeeping
+// (`didSyncRunChangeSyncBookkeeping`); the session providers that read it
+// re-read SQLite on that change and nowhere else. An idle run that exchanged
+// nothing advances nothing and re-renders nothing. It is its own context and
+// its own module, apart from the control: the root navigator and the Plus
+// control never re-render for it, and a session provider never depends on
+// this runner.
 //
 // PLUS BACK (BeautIzzy Plus Phase 6.5C, step 3). When the server refuses the
 // Business's writes for lack of a Plus entitlement, the worker puts the push
@@ -100,7 +122,7 @@
 // turns, so nothing here ever fires; without an access provider above
 // (tests of the runner alone) the same.
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
+import { useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 
 import { useOptionalBusinessAccess } from '@/features/access/session/BusinessAccessProvider';
@@ -116,37 +138,27 @@ import { liftSyncEntitlementHold } from '@/persistence/sync/entitlement-hold';
 import {
   createSyncPushWorker,
   didSyncRunChangeLocalData,
+  didSyncRunChangeSyncBookkeeping,
   isForegroundSyncTickDue,
   type SyncRunResult,
 } from '@/persistence/sync/push-worker';
 import type { SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
 import { hasAcknowledgedRemoteState } from '@/persistence/sync/state';
+import {
+  CloudSyncControlProvider,
+  type CloudSyncControl,
+  type FirstSyncGate,
+} from '@/providers/CloudSyncControl';
+import { CloudSyncRevisionProvider } from '@/providers/CloudSyncRevision';
 import { usePersistence } from '@/providers/PersistenceProvider';
+
+import { createSyncOrchestration, createSyncOrchestrationLock } from './cloud-sync-orchestration';
 
 /** Foreground tick between two local "is a run due?" checks. */
 export const SYNC_FOREGROUND_TICK_MS = 2 * 60_000;
 
-/** What the root navigator shows for the bound Business (the first-sync gate, see the header). */
-export interface FirstSyncGate {
-  readonly status: 'ready' | 'resolving' | 'unavailable';
-  /** An attempt is in flight while `unavailable` is shown (a retry, automatic or not). */
-  readonly retrying: boolean;
-}
-
-export interface CloudSyncControl {
-  /** Runs the runner's own single-flight orchestration now; undefined while a run is not allowed. */
-  readonly runNow: (() => Promise<SyncRunResult>) | undefined;
-  readonly firstSync: FirstSyncGate;
-}
-
-const OPEN_GATE: FirstSyncGate = { status: 'ready', retrying: false };
-
-const CloudSyncControlContext = createContext<CloudSyncControl>({ runNow: undefined, firstSync: OPEN_GATE });
-
-/** Outside a runner (tests) `runNow` is simply undefined and the gate is open. */
-export function useCloudSyncControl(): CloudSyncControl {
-  return useContext(CloudSyncControlContext);
-}
+/** The control contract and its hook live in CloudSyncControl.tsx; re-exported for the readers that name the runner. */
+export { useCloudSyncControl, type CloudSyncControl, type FirstSyncGate } from '@/providers/CloudSyncControl';
 
 interface CloudSyncRunnerProps {
   /** Undefined when Supabase is not configured: sync never runs. */
@@ -224,6 +236,7 @@ export function CloudSyncRunner({ gateway, children }: PropsWithChildren<CloudSy
   // The Business became ready (or changed) while mounted: decide its gate before rendering anything for it.
   if (gate.businessId !== gatedBusinessId) setGate(initialGate(database, gatedBusinessId));
   const [running, setRunning] = useState(false);
+  const [revision, setRevision] = useState(0);
   const gateOpen = gate.businessId === gatedBusinessId ? gate.open : false;
   // Read by the tick: a closed gate is always worth a retry, even when nothing else is due
   // (an empty device with a stored EMPTY has no pending work, yet it is waiting for this check).
@@ -241,15 +254,17 @@ export function CloudSyncRunner({ gateway, children }: PropsWithChildren<CloudSy
   // the session may end meanwhile: nothing is approved for a Business whose
   // run conditions no longer hold.
   const allowedBusinessId = useRef<string | undefined>(undefined);
-  /** The orchestration below is single-flight, like the worker it drives. */
-  const orchestrating = useRef(false);
+  /** The orchestration below is single-flight, like the worker it drives; the lock lives as long as the runner. */
+  const [lock] = useState(createSyncOrchestrationLock);
 
-  /** One bounded orchestration of the single-flight worker, then the UI re-hydration it may require. */
-  const runOnce = useMemo(() => {
+  /**
+   * One bounded orchestration of the single-flight worker, then the UI
+   * re-hydration it may require. `runOnce` for the automatic triggers,
+   * `refreshNow` for the pull gesture (cloud-sync-orchestration.ts).
+   */
+  const orchestration = useMemo(() => {
     if (!worker || businessId === undefined) return undefined;
-    return async (): Promise<SyncRunResult> => {
-      if (orchestrating.current) return { status: 'SKIPPED', reason: 'ALREADY_RUNNING' };
-      orchestrating.current = true;
+    return createSyncOrchestration(lock, async (): Promise<SyncRunResult> => {
       setRunning(true);
       try {
         let result = await worker.run(businessId);
@@ -268,13 +283,15 @@ export function CloudSyncRunner({ gateway, children }: PropsWithChildren<CloudSy
             : previous,
         );
         if (didSyncRunChangeLocalData(result)) reloadSnapshot();
+        if (didSyncRunChangeSyncBookkeeping(result)) setRevision((current) => current + 1);
         return result;
       } finally {
-        orchestrating.current = false;
         setRunning(false);
       }
-    };
-  }, [worker, database, businessId, reloadSnapshot]);
+    });
+  }, [worker, database, businessId, reloadSnapshot, lock]);
+  const runOnce = orchestration?.runOnce;
+  const refreshNow = orchestration?.refreshNow;
 
   useEffect(() => {
     if (!runOnce || businessId === undefined) return;
@@ -335,11 +352,13 @@ export function CloudSyncRunner({ gateway, children }: PropsWithChildren<CloudSy
   // periodic run of an open app must not hand the tree a new context value.
   const retrying = gateStatus === 'unavailable' && running;
   const control = useMemo<CloudSyncControl>(
-    () => ({ runNow: runOnce, firstSync: { status: gateStatus, retrying } }),
-    [runOnce, gateStatus, retrying],
+    () => ({ runner: true, runNow: runOnce, refreshNow, firstSync: { status: gateStatus, retrying } }),
+    [runOnce, refreshNow, gateStatus, retrying],
   );
 
   return (
-    <CloudSyncControlContext.Provider value={control}>{children}</CloudSyncControlContext.Provider>
+    <CloudSyncControlProvider value={control}>
+      <CloudSyncRevisionProvider value={revision}>{children}</CloudSyncRevisionProvider>
+    </CloudSyncControlProvider>
   );
 }

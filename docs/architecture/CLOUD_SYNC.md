@@ -24,6 +24,8 @@ V1D.1  Seamless Bootstrap                   done — automatic initial upload an
        Appointment reminder flag            done — one additive nullable column carried by the APPOINTMENT aggregate (§25)
        Client SMS consent                   done — three additive CLIENT columns travelling together (SMS pivot Phase 2;
                                             COMMUNICATIONS.md §34): consent + audit pair, missing-key rule, no backfill
+       Reactive sync + pull-to-refresh      done — the sync revision (push-only runs re-render what they settled) and the
+                                            native pull gesture of the product lists, joining the run in flight (§29)
 V1E    Conflict / Retry Hardening
 V1F    Product Image Sync                   superseded by Product photos (§23): one shared photo, no legacy upload
 ```
@@ -2548,3 +2550,90 @@ then carried forward, the store re-check) and an out-of-repo PGlite 0.2.17 harne
 before the migration, no row rewritten, new refunds refused settled or pending, replays / status moves /
 compensations / unit corrections / outflows accepted, compensations freeing room, partial balances, the
 plain ceiling and the outflow rule unchanged; the 59 + 62 checks of §28.1 / §28 re-run with it on top).
+
+---
+
+## 29. Reactive synchronization and pull-to-refresh — the UI follows every run
+
+Before: a pull that applied rows re-read the snapshot in place (§24), but a run that only PUSHED
+rewrote the sync bookkeeping — `sync_outbox` settled or refused, `sync_state` acknowledged — without
+touching one operational row, so nothing re-rendered. The status a refund shows (« Pas encore
+synchronisé », « Synchronisé », « Refusé par le serveur ») is read from that bookkeeping, and stayed
+stale on the open Sale detail and in the Caisse until the user left the screen. And no product
+screen could ask for an exchange: the next tick was the only way.
+
+Now — the same runner, the same worker, no second mechanism, no timer added:
+
+```text
+run result
+  changed operational rows (restore, applied / deleted pull)   → reloadSnapshot()          (§24, unchanged)
+  changed the sync bookkeeping (didSyncRunChangeSyncBookkeeping:
+    an entry enqueued, sent, failed, in conflict, refused;
+    an aggregate acknowledged by a pull)                       → CloudSyncRevision + 1
+  exchanged nothing (idle tick)                                → nothing: no re-read, no re-render
+
+CloudSyncRevision (providers/CloudSyncRevision.tsx)
+  a counter the runner provides; its own context and module, apart from the control
+  SaleSessionProvider subscribes: its sync-state getter follows the revision, its consumers
+  re-render and read the fresh states — the refund status changes on the screen that is open,
+  within the run that sent it
+
+pull-to-refresh (features/sync)
+  SyncRefreshControl   the platform RefreshControl in the brand accent, one per list / summary
+  useSyncRefresh       the ONE behaviour: refreshNow() of the control, the indicator for the
+                       real duration of the run, one request for any number of pulls
+  refresh-outcome      SYNCED | FAILED | UNAVAILABLE, read from the run result alone
+```
+
+- **`refreshNow` joins.** The runner's orchestration lives in `cloud-sync-orchestration.ts`: `runOnce`
+  (the automatic triggers) answers `SKIPPED / ALREADY_RUNNING` during a run, as before; `refreshNow`
+  returns the promise of the run in flight — a tick, a foreground return, another screen's pull —
+  or starts one. Ten quick pulls therefore make ONE request, and the native indicator lasts until
+  that run ends. The lock outlives the orchestration (one per runner), so a run started under the
+  previous conditions is still in flight for the next.
+- **A real exchange.** The gesture runs the ordinary run: pending local writes go up first, then
+  what changed elsewhere comes down under the conservative contract (§9). Local-first is untouched:
+  nothing is lost, nothing is replaced, conflicts and refusals are the ones §15–§16 and §28 report,
+  and they are shown by the record they concern — never by the gesture. A device whose first sync
+  is EMPTY (both sides empty) does not poll (§17.2); the pull is how it discovers a first record
+  created elsewhere (the run counts the remote again → RESTORE_REQUIRED → restored).
+- **Nothing implied.** `OFFLINE` (the remote could not be reached), `FAILED` (a transport or server
+  failure, invalid remote data) and `UNAVAILABLE` (no live session, no gateway, a first sync waiting
+  for a reconciliation): the indicator retracts, the local data stays, and ONE line is said three
+  ways at once — a warning haptic, a screen-reader announcement, and a small floating glass capsule
+  (`SyncRefreshFeedback`, mounted once in the `(app)` layout, the material of the receipt printer's
+  action notice) that leaves after 2.6 s and takes no touch. « Actualisation impossible. Vérifiez
+  votre connexion. » / « … Réessayez. » / « … pour le moment. ». The capsule is hidden from assistive
+  tech (the announcement already says it); a newer line replaces the current one, so pulls that
+  joined one run never stack. `SYNCED` says nothing: the data speaks. Nothing advertises the gesture
+  when idle — no hint text, no arrow, no header button, no tutorial. Where NO runner is mounted at
+  all (`CloudSyncControl.runner` false: the Playground demo, a tree without a runner) the gesture
+  retracts and says nothing — a demo has no remote, so it cannot fail to reach one. The host is
+  mounted after the Stack with an Android elevation: Android orders elevated siblings by elevation
+  first, and the native screen stack is one.
+- **Android.** A ScrollView given a `refreshControl` is wrapped in a SwipeRefreshLayout there, which
+  the react-native-screens `ScrollViewMarker` refuses as a child (a native crash of the Agenda tab,
+  found on the emulator). `TabBarGlassScrollEdge` therefore mounts the marker on iOS only — Android
+  has no scroll-edge effect to hide anyway.
+- **Where.** Accueil, Agenda (Day timeline, Week view), Caisse, Ventes, the Sale detail, Produits
+  (list and empty states), Clientes (directory, empty state included), the client appointment and
+  purchase histories.
+- **Rendering.** The revision context re-renders its subscribers only; the control context is
+  unchanged for a run (the root navigator and the Plus control never re-render for it). An idle run
+  advances nothing. The product never reads the first-sync gate or an approval: the production
+  boundary test enumerates the readers.
+- **Not changed.** The triggers (launch, foreground, the 2-minute tick, Plus back), their guards,
+  the worker, the conflict contract, the financial rules, the remote schema. A local write still
+  leaves the device with its next tick or its next pull: a change made on one device reaches another
+  open device within two ticks at most, or at once through the gesture on both sides.
+
+Coverage: `cloud-sync-orchestration.test.ts`, `CloudSyncRefresh.test.tsx` (revision after a push-only
+run, none after an idle one; a real exchange on refresh; three pulls → one request; offline refresh
+keeps the pending write), `features/sync/__tests__` (indicator for the run, outcomes, the capsule:
+offline / failed / unavailable lines, none on success, one for joined pulls, gone after its hold),
+`HomeRemoteRefresh.test.tsx` (the gesture on Accueil, the tick without a gesture, nothing advertised),
+`SaleRefundSyncStatus.test.tsx` (pending → sent, offline stays pending, server refusal appears on the
+open detail), `CashRegisterRemoteRefresh.test.tsx`, `ProductCatalogRemoteRefresh.test.tsx`,
+`ClientDirectoryRemoteRefresh.test.tsx`, `SalesHistoryRemoteRefresh.test.tsx`,
+`AgendaRemoteRefresh.test.tsx` — all through `providers/testing/cloud-sync-harness.tsx`: device A
+uploads, this device restores under the real stack, the tick and the gesture are the app's own.

@@ -920,7 +920,8 @@ describe('HomeScreen', () => {
     expect(within(status).getByText('Votre activité est en lecture seule.')).toBeTruthy();
     expect(within(status).getByText('Votre abonnement BeautIzzy Plus n’est plus actif.')).toBeTruthy();
     // Under the hero row, before « Aujourd’hui »: the page keeps reading top-down.
-    const tree = JSON.stringify(view.toJSON());
+    // The scroll view's `refreshControl` is a React element (the pull gesture): not part of the reading order.
+    const tree = JSON.stringify(view.toJSON(), (key, value: unknown) => (key === 'refreshControl' ? undefined : value));
     const order = ['home-hero', 'read-only-status', 'home-stat-appointments'].map((id) =>
       tree.indexOf(`"testID":"${id}"`),
     );

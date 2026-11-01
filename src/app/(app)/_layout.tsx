@@ -21,6 +21,7 @@ import { CurrentBusinessProvider } from '@/features/business/session/CurrentBusi
 import { ClientSessionProvider } from '@/features/clients/session/ClientSessionProvider';
 import { ProductCatalogProvider } from '@/features/products/session/ProductCatalogProvider';
 import { SaleSessionProvider } from '@/features/sales/session/SaleSessionProvider';
+import { SyncRefreshFeedback } from '@/features/sync/SyncRefreshFeedback';
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
 import { contentSheet, editorSheet, workflowSheet } from '@/providers/sheet-route-options';
 import { semanticColors } from '@/shared/ui/theme';
@@ -76,6 +77,8 @@ export default function AppLayout() {
                       <Stack.Screen name="sales/adjust/[saleId]" options={pushedScreen} />
                       <Stack.Screen name="sales/refund/[adjustmentId]" options={pushedScreen} />
                     </Stack>
+                    {/* After the Stack: drawn above the screens on both platforms (Android paints siblings in order). */}
+                    <SyncRefreshFeedback />
                   </CommunicationPreferencesProvider>
                 </CalendarBlockSessionProvider>
               </AppointmentSessionProvider>

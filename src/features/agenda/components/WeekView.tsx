@@ -8,6 +8,7 @@ import {
 } from '@/shared/ui/PeriodNavigator';
 import { TabBarGlassScrollEdge } from '@/shared/ui/TabBarGlassScrollEdge';
 import type { AppointmentSessionEntry } from '@/features/appointments/session/types';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import {
   bottomClearance,
   gutter,
@@ -91,6 +92,7 @@ export function WeekView({
         <ScrollView
           // Native tab bar overlay: system bottom inset, see DayTimeline.
           contentInsetAdjustmentBehavior="automatic"
+          refreshControl={<SyncRefreshControl />}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,

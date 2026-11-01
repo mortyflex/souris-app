@@ -18,6 +18,7 @@ import type { AppointmentSessionEntry } from '@/features/appointments/session/ty
 import { useClientPhotoUri } from '@/features/clients/photo/use-client-photo-uri';
 import { useClientSession } from '@/features/clients/session/ClientSessionProvider';
 import { getResolvedClientDisplayName } from '@/features/clients/presentation';
+import { SyncRefreshControl } from '@/features/sync/SyncRefreshControl';
 import { agenda, bottomClearance, gutter, rose, semanticColors } from '@/shared/ui/theme';
 
 import { resolveAgendaAppointmentPalettes } from '../appointment-palette';
@@ -152,6 +153,7 @@ export function DayTimeline({ day, appointments, calendarBlocks = [] }: DayTimel
         // the last hour scrollable above it (bottomClearance then clears
         // the floating +).
         contentInsetAdjustmentBehavior="automatic"
+        refreshControl={<SyncRefreshControl />}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.canvas, { height: timelineHeight, width }]} testID="agenda-day-canvas">

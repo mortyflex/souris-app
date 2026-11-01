@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState, type PropsWithChildren } from 'react';
+import { createContext, useContext, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 
 import type { AppointmentProductIdentity } from '@/domain/appointments';
 import {
@@ -28,6 +28,7 @@ import {
   deleteAppointmentProduct as persistAppointmentProductDeletion,
 } from '@/persistence/stores/sales';
 import { readSaleAdjustmentSyncStates } from '@/persistence/sync/sale-adjustment-sync';
+import { useCloudSyncRevision } from '@/providers/CloudSyncRevision';
 import { usePersistence, useSnapshotRefresh } from '@/providers/PersistenceProvider';
 
 import type { SaleAdjustmentReversalRequest, SaleSessionValue } from './types';
@@ -176,8 +177,19 @@ export function SaleSessionProvider({ children }: PropsWithChildren) {
     replaceAdjustment(outcome.adjustment);
   };
 
-  // Read on demand (cheap, indexed): the sync runner updates the bookkeeping behind the session.
-  const getSaleAdjustmentSyncStates = () => readSaleAdjustmentSyncStates(database);
+  // Where each adjustment stands with the remote: read on demand (cheap,
+  // indexed) — the sync runner updates the bookkeeping behind the session.
+  // The session subscribes to the sync revision so that a run which settled,
+  // refused or acknowledged something re-renders its consumers, which then
+  // read the fresh states: a refund's status changes on the screen that is
+  // open, within the run that sent it. The getter's identity follows the
+  // revision, so a consumer may key a memo on it.
+  const syncRevision = useCloudSyncRevision();
+  const getSaleAdjustmentSyncStates = useMemo(
+    () => () => readSaleAdjustmentSyncStates(database),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncRevision invalidates the getter: a new identity per sync run that changed the bookkeeping
+    [database, syncRevision],
+  );
 
   const getSaleById = (saleId: string | undefined) => {
     if (!saleId) return undefined;

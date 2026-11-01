@@ -11,12 +11,16 @@
 // bar; the glass material itself stays entirely the system's. The system still
 // keeps the bar's icons and labels legible over whatever scrolls beneath.
 //
-// No-op on iOS 18 and earlier and on Android. The native marker comes from
-// `react-native-screens/experimental`; this file is the single place that
-// depends on it.
+// No-op on iOS 18 and earlier. On Android the marker is NOT mounted at all:
+// the native side insists on a ScrollView as its direct child and throws
+// otherwise — and a ScrollView given a `refreshControl` (pull-to-refresh) is
+// wrapped in a SwipeRefreshLayout there, which crashed the Agenda tab. Android
+// has no scroll-edge effect to hide anyway, so the children render as they are.
+// The native marker comes from `react-native-screens/experimental`; this file
+// is the single place that depends on it.
 
 import type { ReactElement } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { ScrollViewMarker } from 'react-native-screens/experimental';
 
 interface TabBarGlassScrollEdgeProps {
@@ -27,6 +31,7 @@ interface TabBarGlassScrollEdgeProps {
 const scrollEdgeEffects = { bottom: 'hidden' } as const;
 
 export function TabBarGlassScrollEdge({ children }: TabBarGlassScrollEdgeProps) {
+  if (Platform.OS === 'android') return children;
   return (
     <ScrollViewMarker scrollEdgeEffects={scrollEdgeEffects} style={styles.fill}>
       {children}

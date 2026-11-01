@@ -21,7 +21,7 @@ import { useBusinessSession } from '@/features/business/session/BusinessSessionP
 import { BrandMark } from '@/shared/ui/BrandMark';
 import { colors, semanticColors } from '@/shared/ui/theme';
 
-import { useCloudSyncControl } from './CloudSyncRunner';
+import { useCloudSyncControl } from './CloudSyncControl';
 import { resolveRootRoute } from './root-route';
 
 export function RootNavigator() {
