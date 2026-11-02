@@ -3,15 +3,20 @@
 // Opened by sourisapp://reset-password. Three moments, one screen:
 //
 //   verifying   the link's one-time code is exchanged for a recovery session
-//               (once per screen, only while signed out);
+//               (each code once, only while signed out);
 //   failed      the link expired, was already used, belongs to another
 //               installation, or could not be checked → ask for a new one;
 //   choose      the new password, typed twice. Saving it enters the app like a
 //               sign-in; « Annuler » signs this device's recovery session out.
 //               Killed before saving, the app never restores that session.
 //
-// The code is never shown, stored or logged: it is handed to the AuthProvider
-// and forgotten. Local data is never touched by any of these steps.
+// The code is never shown, stored or logged: it is handed to the AuthProvider,
+// which only remembers in memory that it was spent. Expo Router may bring this
+// screen back with a code already spent (its stack rebuilt from the last opened
+// URL, after the account-conflict or loading surfaces), or hand a NEW link to
+// an instance still in the stack: each code is judged on its own, a spent one
+// is never exchanged again and leads to « Se connecter ». Local data is never
+// touched by any of these steps.
 
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -41,24 +46,40 @@ interface ResetPasswordScreenProps {
 
 export function ResetPasswordScreen({ link }: ResetPasswordScreenProps) {
   const router = useRouter();
-  const { state, startPasswordRecovery, completePasswordRecovery, cancelPasswordRecovery } = useAuth();
-  const [exchangeFailure, setExchangeFailure] = useState<AuthFailureCode | null>(null);
-  const started = useRef(false);
+  const { state, startPasswordRecovery, isRecoveryCodeUsed, completePasswordRecovery, cancelPasswordRecovery } =
+    useAuth();
+  // The refusal belongs to the code that was refused: a newer link is judged afresh.
+  const [exchangeFailure, setExchangeFailure] = useState<{
+    readonly code: string;
+    readonly failure: AuthFailureCode;
+  } | null>(null);
+  const handledCode = useRef<string | null>(null);
   // A link that arrived with an error is never exchanged.
-  const linkFailure = link.kind === 'failed' ? link.failure.code : exchangeFailure;
+  const linkFailure =
+    link.kind === 'failed'
+      ? link.failure.code
+      : exchangeFailure?.code === link.code
+        ? exchangeFailure.failure
+        : null;
 
-  // The code is exchanged once, and only while signed out: a recovery session
-  // already open (this screen re-rendering) is never exchanged again.
+  // Each code is exchanged once, and only while signed out: a recovery session
+  // already open (this screen re-rendering) is never exchanged again, and a
+  // code spent earlier in this run (a replayed link) never reaches the network.
   useEffect(() => {
-    if (started.current || link.kind !== 'code' || state.status !== 'unauthenticated') return;
-    started.current = true;
-    void startPasswordRecovery(link.code).then((outcome) => {
+    if (link.kind !== 'code' || state.status !== 'unauthenticated' || handledCode.current === link.code) return;
+    const { code } = link;
+    handledCode.current = code;
+    if (isRecoveryCodeUsed(code)) {
+      router.replace('/sign-in');
+      return;
+    }
+    void startPasswordRecovery(code).then((outcome) => {
       if (outcome.kind === 'failed') {
         haptics.warning();
-        setExchangeFailure(outcome.failure.code);
+        setExchangeFailure({ code, failure: outcome.failure.code });
       }
     });
-  }, [link, startPasswordRecovery, state.status]);
+  }, [isRecoveryCodeUsed, link, router, startPasswordRecovery, state.status]);
 
   if (state.status === 'recovering-password') {
     return (

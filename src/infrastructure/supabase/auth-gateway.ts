@@ -10,6 +10,7 @@ import {
   isAuthWeakPasswordError,
   type User,
 } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 
 import type {
   AuthCredentials,
@@ -40,13 +41,30 @@ export type SupabaseAuthApi = Pick<
   | 'onAuthStateChange'
 >;
 
+/** The scheme of the release app (app.json). Never changes: links already sent use it. */
+export const RELEASE_APP_SCHEME = 'sourisapp';
+
+/**
+ * Pure: the URL scheme the running build registered, read from its Expo config.
+ * The development build (`APP_VARIANT=development`, app.config.js) declares its
+ * own, `sourisapp-dev`, so a link sent to it can never open the release app
+ * installed on the same phone, and the reverse. Anything unreadable is the
+ * release scheme.
+ */
+export function resolveAppScheme(scheme: unknown): string {
+  const first: unknown = Array.isArray(scheme) ? scheme[0] : scheme;
+  return typeof first === 'string' && /^[a-z][a-z0-9+.-]*$/.test(first) ? first : RELEASE_APP_SCHEME;
+}
+
+const APP_SCHEME = resolveAppScheme(Constants.expoConfig?.scheme);
+
 /**
  * Where the confirmation email link lands once Supabase verified the address:
- * the BeautIzzy app itself (app.json `scheme`), on the sign-in screen. Without it
+ * the BeautIzzy app itself (the build's own scheme), on the sign-in screen. Without it
  * Supabase falls back to the project Site URL (localhost by default). The URL
  * must be allow-listed in Supabase › Authentication › URL Configuration.
  */
-export const EMAIL_CONFIRMATION_REDIRECT_URL = 'sourisapp://sign-in';
+export const EMAIL_CONFIRMATION_REDIRECT_URL = `${APP_SCHEME}://sign-in`;
 
 /**
  * Where the password recovery link lands once Supabase verified it: the
@@ -55,7 +73,7 @@ export const EMAIL_CONFIRMATION_REDIRECT_URL = 'sourisapp://sign-in';
  * kept by the installation that asked. Must be allow-listed in Supabase ›
  * Authentication › URL Configuration, like the confirmation URL.
  */
-export const PASSWORD_RECOVERY_REDIRECT_URL = 'sourisapp://reset-password';
+export const PASSWORD_RECOVERY_REDIRECT_URL = `${APP_SCHEME}://reset-password`;
 
 function toAuthUser(user: Pick<User, 'id' | 'email'>): AuthUser {
   return user.email ? { id: user.id, email: user.email } : { id: user.id };

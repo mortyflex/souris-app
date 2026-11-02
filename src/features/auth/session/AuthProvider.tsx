@@ -21,6 +21,9 @@
 // ignored. A signed-in session is never replaced by a recovery link. The
 // gateway persists that rule across restarts: an unfinished recovery is never
 // restored as a session (auth-gateway.ts, the pending-recovery marker).
+// A recovery code is single-use: the provider remembers, in memory only, the
+// codes already handed to the exchange, so a link the router replays (its
+// stack rebuilt from the last opened URL) is never exchanged twice.
 //
 // Business resolution is a separate provider (BusinessSessionProvider). No
 // raw provider error, token, or session payload ever reaches the UI: the
@@ -73,6 +76,8 @@ export interface AuthSessionValue {
   readonly requestPasswordReset: (email: string) => Promise<PasswordResetRequestOutcome>;
   /** Opens the recovery session of a recovery link's code; refused while signed in. */
   readonly startPasswordRecovery: (code: string) => Promise<PasswordRecoveryOutcome>;
+  /** True when this code was already handed to the exchange since the app started (memory only). */
+  readonly isRecoveryCodeUsed: (code: string) => boolean;
   /** Saves the new password, then enters like a sign-in. */
   readonly completePasswordRecovery: (password: string) => Promise<PasswordUpdateOutcome>;
   /** Abandons the recovery: the recovery session is signed out, nothing else changes. */
@@ -108,6 +113,8 @@ export function AuthProvider({
   }, [state]);
   /** True from the start of a recovery exchange until the password is saved or the recovery abandoned. */
   const recovering = useRef(false);
+  /** The recovery codes already handed to the exchange: in memory, never persisted or logged. */
+  const usedRecoveryCodes = useRef(new Set<string>());
   const resolveLocalOwnerRef = useRef(resolveLocalOwner);
   const restoreGeneration = useRef(0);
   useEffect(() => {
@@ -229,6 +236,8 @@ export function AuthProvider({
       if (stateRef.current.status === 'authenticated') {
         return { kind: 'failed', failure: { code: 'RECOVERY_LINK_INVALID' } };
       }
+      // Spent from now on, whatever the outcome: the exchange consumes it.
+      usedRecoveryCodes.current.add(code);
       recovering.current = true;
       let outcome: PasswordRecoveryOutcome;
       try {
@@ -246,6 +255,8 @@ export function AuthProvider({
     },
     [gateway],
   );
+
+  const isRecoveryCodeUsed = useCallback((code: string) => usedRecoveryCodes.current.has(code), []);
 
   const completePasswordRecovery = useCallback(
     async (password: string): Promise<PasswordUpdateOutcome> => {
@@ -290,6 +301,7 @@ export function AuthProvider({
         resendSignUpConfirmation,
         requestPasswordReset,
         startPasswordRecovery,
+        isRecoveryCodeUsed,
         completePasswordRecovery,
         cancelPasswordRecovery,
         retry,

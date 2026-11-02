@@ -209,10 +209,35 @@ ready; another owner on a bound device → `DEVICE_ACCOUNT_CONFLICT`, reached on
 is saved). Supabase may sign the account's other sessions out after a password change — they sign
 back in with the new password; their local data is untouched.
 
-Supabase Dashboard (manual, Staging then Production): `sourisapp://reset-password` in
+Five-minute window (Supabase Auth, not configurable on hosted projects). The PKCE flow state of a
+recovery expires `FlowStateExpiryDuration` (300 s) after the REQUEST — `FlowState.IsExpired`
+counts from `CreatedAt` for every method except magic links — whatever the email link's own
+validity (`mailer_otp_exp`, one hour). A link opened later is still consumed by `/verify`, then
+the exchange answers `flow_state_expired` → « Ce lien a expiré ». Observed on Staging,
+2 November 2026: links opened 6 and 11 minutes after the request both failed that way.
+
+Each code is judged on its own. Expo Router can bring `reset-password` back with a code already
+spent (the root stack rebuilt from the last opened URL after the conflict, error or loading
+surfaces of §7, e.g. signing out of `DEVICE_ACCOUNT_CONFLICT`), or hand a NEW link to the
+instance still in the stack (iOS). The screen exchanges each distinct code once, a refusal belongs
+to the code refused, and the AuthProvider remembers in memory only (never persisted or logged) the
+codes already handed to the exchange: a spent code never reaches the network again and leads to
+« Se connecter ». Observed on Staging, 2 November 2026, before the fix: « Lien inutilisable »
+after signing out (Android), and a fresh valid link answered with an earlier refusal (iOS).
+
+One scheme per build. The redirect URLs are built from the scheme of the running build
+(`resolveAppScheme(Constants.expoConfig.scheme)`): the release and Apple Sandbox builds declare
+`sourisapp` (unchanged), the development build (`APP_VARIANT=development`, app.config.js)
+declares `sourisapp-dev`. iOS does not define which app opens a scheme two installed apps
+declare, and Android asks: with a shared scheme, a link asked by one build could open the other,
+which holds no PKCE verifier. The development build is started from Metro with the same variant
+(`npm run dev`); its native project must be rebuilt after a scheme change.
+
+Supabase Dashboard (manual, Staging then Production): the build's `<scheme>://reset-password` in
 Authentication › URL Configuration › Redirect URLs — otherwise the link falls back to the Site
-URL (`sourisapp://sign-in`) and the code is ignored. Templates, SMTP and the sending domain:
-`docs/release/AUTH_EMAILS.md`.
+URL and the code is ignored. Production: `sourisapp://sign-in` and `sourisapp://reset-password`;
+Staging (development build): `sourisapp-dev://sign-in` and `sourisapp-dev://reset-password`.
+Templates, SMTP and the sending domain: `docs/release/AUTH_EMAILS.md`.
 
 ---
 

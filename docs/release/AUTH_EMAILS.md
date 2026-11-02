@@ -36,8 +36,18 @@ Dashboards read (read-only, 1 November 2026):
 | Custom SMTP | none (built-in mailer, 2 emails / hour) | none (built-in mailer, 2 emails / hour) |
 | Recovery template | Supabase default, English (« Reset your password ») | Supabase default, English |
 
-Neither project can complete a real recovery today: the link would fall back to the Site URL
-(`localhost` on Staging, « Se connecter » on Production) instead of `sourisapp://reset-password`.
+Neither project could complete a real recovery on that date: the link would fall back to the
+Site URL (`localhost` on Staging, « Se connecter » on Production) instead of
+`sourisapp://reset-password`.
+
+Staging change (2 November 2026, Management API, Redirect URLs only): `sourisapp-dev://sign-in`,
+`sourisapp-dev://reset-password` — the development build's own scheme (`docs/architecture/AUTH.md`
+§4a). Site URL, mailer, templates, rate limits and providers unchanged. With the built-in mailer,
+only the organization's team address receives Staging emails, two per hour.
+
+Recovery links must be opened within five minutes of the request: Supabase expires the PKCE flow
+state 300 s after it (`AUTH.md` §4a), not configurable on hosted projects. The French template
+does not promise a longer validity.
 
 ---
 
@@ -120,7 +130,8 @@ Invite user, Reauthentication) are not used by the app; leave them untouched.
 
 1. Authentication › URL Configuration
    - Site URL: `sourisapp://sign-in` (unchanged);
-   - Redirect URLs: `sourisapp://sign-in` **and** `sourisapp://reset-password`. A redirect that is
+   - Redirect URLs: `sourisapp://sign-in` **and** `sourisapp://reset-password` (Staging, for the
+     development build: `sourisapp-dev://sign-in` and `sourisapp-dev://reset-password`). A redirect that is
      not allow-listed silently falls back to the Site URL: the recovery link would then open
      « Se connecter » with nothing to do.
 2. Authentication › Emails › SMTP Settings → Enable custom SMTP:
@@ -152,7 +163,7 @@ Never on the pilot hairdresser's account or phone.
 - [ ] sign-up with a non-team address → the French confirmation email arrives from
       `BeautIzzy <compte@beautizzy.fr>`, not in spam; SPF / DKIM / DMARC pass;
 - [ ] the confirmation link opens BeautIzzy on « Se connecter » (app running, and app killed);
-- [ ] « Mot de passe oublié ? » → the French recovery email arrives;
+- [ ] « Mot de passe oublié ? » → the French recovery email arrives; open it within five minutes;
 - [ ] the link opened on the same iPhone opens « Nouveau mot de passe » (app running, and app
       killed); a new password is saved; the app opens on the account's Business with its data;
 - [ ] the old password is refused, the new one works after a sign-out;

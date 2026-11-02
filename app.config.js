@@ -19,6 +19,14 @@
 // both, so the `.dev` identifier can never carry it. The variant is meant for
 // `npx expo run:ios`; no eas.json profile sets it.
 //
+// The development variant also declares its own URL scheme, `sourisapp-dev`.
+// iOS gives no guarantee about which app opens a scheme two installed apps
+// declare, and Android asks: with the release app (`sourisapp`) on the same
+// phone, an Auth email link sent by the development build could open the
+// release app — which holds no PKCE verifier — and the reverse. The Auth
+// redirect URLs are built from this scheme (src/infrastructure/supabase/
+// auth-gateway.ts). The release and Apple Sandbox schemes stay `sourisapp`.
+//
 // The App Store bundle identifier itself stays in app.json.
 
 const APP_VARIANT = process.env.APP_VARIANT;
@@ -28,6 +36,7 @@ const IS_APPLE_SANDBOX = APP_VARIANT === "apple-sandbox";
 export default ({ config }) => ({
   ...config,
   name: IS_DEV ? "BeautIzzy Dev" : IS_APPLE_SANDBOX ? "BeautIzzy Sandbox" : config.name,
+  scheme: IS_DEV ? "sourisapp-dev" : config.scheme,
   ios: {
     ...config.ios,
     bundleIdentifier: IS_DEV

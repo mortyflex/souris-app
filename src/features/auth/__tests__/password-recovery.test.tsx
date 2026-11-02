@@ -280,6 +280,61 @@ describe('ResetPasswordScreen', () => {
     expect(authState?.status).toBe('unauthenticated');
   });
 
+  it('a newer link reaching a screen that still shows a refusal is exchanged, not answered with the old refusal', async () => {
+    // iOS: the router hands a new link to the reset-password screen still in the stack.
+    const OLD = '00000000-0000-4000-8000-000000000000';
+    const gateway = createFakeAuthGateway({
+      startPasswordRecovery: async (code) =>
+        code === OLD ? { kind: 'failed', failure: { code: 'RECOVERY_LINK_INVALID' } } : { kind: 'recovering', user: fakeUser },
+    });
+    const view = await renderWithAuth(gateway, <ResetPasswordScreen link={{ kind: 'code', code: OLD }} />);
+    expect(view.getByRole('header', { name: 'Lien inutilisable' })).toBeTruthy();
+
+    await act(async () => {
+      view.rerender(
+        <AuthProvider gateway={gateway}>
+          <ResetPasswordScreen link={LINK} />
+          <StateProbe />
+        </AuthProvider>,
+      );
+    });
+
+    expect(gateway.calls.startPasswordRecovery).toEqual([OLD, CODE]);
+    expect(view.getByRole('header', { name: 'Nouveau mot de passe' })).toBeTruthy();
+    expect(authState?.status).toBe('recovering-password');
+  });
+
+  it('a spent code brought back by the router is never exchanged again and leads to « Se connecter »', async () => {
+    // Android: the account-conflict surface tears the stack down; signing out
+    // rebuilds it from the last opened URL, the recovery link already used.
+    const gateway = createFakeAuthGateway();
+    function Stack({ mounted }: { readonly mounted: boolean }) {
+      return (
+        <AuthProvider gateway={gateway}>
+          {mounted && <ResetPasswordScreen link={LINK} />}
+          <StateProbe />
+        </AuthProvider>
+      );
+    }
+    const view = await render(<Stack mounted />);
+    await act(async () => {});
+    await press(view.getByTestId('cancel-recovery'));
+    expect(authState?.status).toBe('unauthenticated');
+    mockReplace.mockClear();
+
+    await act(async () => {
+      view.rerender(<Stack mounted={false} />);
+    });
+    await act(async () => {
+      view.rerender(<Stack mounted />);
+    });
+
+    expect(gateway.calls.startPasswordRecovery).toEqual([CODE]);
+    expect(mockReplace).toHaveBeenCalledWith('/sign-in');
+    expect(view.queryByRole('header', { name: 'Lien inutilisable' })).toBeNull();
+    expect(authState?.status).toBe('unauthenticated');
+  });
+
   it('both new-password fields are hidden by default and can be shown one at a time', async () => {
     const view = await renderWithAuth(createFakeAuthGateway(), <ResetPasswordScreen link={LINK} />);
 
