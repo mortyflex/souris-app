@@ -198,6 +198,20 @@ describe('createSupabaseAuthGateway', () => {
       }),
     );
     expect(await limited.requestPasswordReset('a@b.fr')).toEqual({ kind: 'failed', failure: { code: 'RATE_LIMITED' } });
+
+    // The default Supabase sender only reaches the project team: a real address is refused until custom SMTP exists.
+    const unauthorized = gatewayFor(
+      createAuthApi({
+        resetPasswordForEmail: async () => ({
+          data: null,
+          error: new AuthApiError('Email address "a@b.fr" cannot be used as it is not authorized', 400, 'email_address_not_authorized'),
+        }),
+      }),
+    );
+    expect(await unauthorized.requestPasswordReset('a@b.fr')).toEqual({
+      kind: 'failed',
+      failure: { code: 'EMAIL_DELIVERY_UNAVAILABLE' },
+    });
   });
 
   it('opens a recovery session from the link code, and names every way a link can fail', async () => {

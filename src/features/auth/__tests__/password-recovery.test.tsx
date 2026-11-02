@@ -4,6 +4,8 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { useEffect } from 'react';
 import { Text } from 'react-native';
 
+import ResetPasswordRoute from '@/app/(auth)/reset-password';
+
 import { ForgotPasswordScreen } from '../ForgotPasswordScreen';
 import type { RecoveryLink } from '../recovery-link';
 import { ResetPasswordScreen } from '../ResetPasswordScreen';
@@ -15,8 +17,11 @@ const mockReplace = jest.fn();
 const mockBack = jest.fn();
 const mockCanGoBack = jest.fn(() => true);
 
+let mockSearchParams: Record<string, string> = {};
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace, back: mockBack, canGoBack: mockCanGoBack }),
+  useLocalSearchParams: () => mockSearchParams,
 }));
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
@@ -124,6 +129,40 @@ describe('ForgotPasswordScreen', () => {
     expect(view.getByTestId('email-input').props.value).toBe('lea@example.com');
     expect(view.queryByTestId('forgot-password-sent')).toBeNull();
   });
+
+  it('says plainly when email cannot be sent yet, without claiming a link left', async () => {
+    const gateway = createFakeAuthGateway({
+      requestPasswordReset: async () => ({ kind: 'failed', failure: { code: 'EMAIL_DELIVERY_UNAVAILABLE' } }),
+    });
+    const view = await renderWithAuth(gateway, <ForgotPasswordScreen initialEmail="lea@example.com" />);
+
+    await press(view.getByTestId('submit-forgot-password'));
+    expect(view.getByText('L’envoi de l’email est momentanément indisponible. Réessayez plus tard.')).toBeTruthy();
+    expect(view.queryByTestId('forgot-password-sent')).toBeNull();
+    expect(authState?.status).toBe('unauthenticated');
+  });
+});
+
+describe('the recovery link route (sourisapp://reset-password)', () => {
+  it.each([
+    [{ code: CODE }, 'reset-password-screen'],
+    [{ error: 'access_denied', error_code: 'otp_expired' }, 'reset-password-link-failed'],
+    [{ code: 'not a code!' }, 'reset-password-link-failed'],
+    [{}, 'reset-password-link-failed'],
+  ] as const)('routes %j to the matching moment, exchanging only a well-formed code', async (params, screen) => {
+    mockSearchParams = params;
+    const gateway = createFakeAuthGateway();
+    const view = await renderWithAuth(gateway, <ResetPasswordRoute />);
+
+    expect(view.getByTestId(screen)).toBeTruthy();
+    expect(gateway.calls.startPasswordRecovery).toEqual('code' in params && params.code === CODE ? [CODE] : []);
+  });
+
+  it('names an expired link as expired', async () => {
+    mockSearchParams = { error: 'access_denied', error_code: 'otp_expired' };
+    const view = await renderWithAuth(createFakeAuthGateway(), <ResetPasswordRoute />);
+    expect(view.getByRole('header', { name: 'Ce lien a expiré' })).toBeTruthy();
+  });
 });
 
 describe('ResetPasswordScreen', () => {
@@ -217,6 +256,38 @@ describe('ResetPasswordScreen', () => {
     expect(view.getByRole('header', { name: 'Ce lien a expiré' })).toBeTruthy();
     await press(view.getByRole('button', { name: 'Retour à la connexion' }));
     expect(mockReplace).toHaveBeenCalledWith('/sign-in');
+  });
+
+  it('leaves an open session alone: a link opened while signed in is never exchanged', async () => {
+    const gateway = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
+    await renderWithAuth(gateway, <ResetPasswordScreen link={LINK} />);
+
+    expect(gateway.calls.startPasswordRecovery).toEqual([]);
+    expect(gateway.calls.signOut).toBe(0);
+    expect(gateway.calls.discardPasswordRecovery).toBe(0);
+    expect(authState?.status).toBe('authenticated');
+  });
+
+  it('a wrong code from Supabase stays signed out and offers a new link', async () => {
+    const gateway = createFakeAuthGateway({
+      startPasswordRecovery: async () => ({ kind: 'failed', failure: { code: 'RECOVERY_LINK_INVALID' } }),
+    });
+    const view = await renderWithAuth(gateway, <ResetPasswordScreen link={{ kind: 'code', code: '00000000-0000-4000-8000-000000000000' }} />);
+
+    expect(gateway.calls.startPasswordRecovery).toEqual(['00000000-0000-4000-8000-000000000000']);
+    expect(view.getByRole('header', { name: 'Lien inutilisable' })).toBeTruthy();
+    expect(view.queryByTestId('new-password-input')).toBeNull();
+    expect(authState?.status).toBe('unauthenticated');
+  });
+
+  it('both new-password fields are hidden by default and can be shown one at a time', async () => {
+    const view = await renderWithAuth(createFakeAuthGateway(), <ResetPasswordScreen link={LINK} />);
+
+    expect(view.getByTestId('new-password-input').props.secureTextEntry).toBe(true);
+    expect(view.getByTestId('confirm-password-input').props.secureTextEntry).toBe(true);
+    await press(view.getByTestId('confirm-password-input-visibility'));
+    expect(view.getByTestId('confirm-password-input').props.secureTextEntry).toBe(false);
+    expect(view.getByTestId('new-password-input').props.secureTextEntry).toBe(true);
   });
 
   it('never logs the link code or the new password', async () => {

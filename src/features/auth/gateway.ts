@@ -23,6 +23,8 @@ export type AuthFailureCode =
   | 'RECOVERY_LINK_INVALID'
   /** Password recovery: the new password is the current one. */
   | 'SAME_PASSWORD'
+  /** The account service cannot send email to this address yet (its default sender only reaches the project team). */
+  | 'EMAIL_DELIVERY_UNAVAILABLE'
   | 'NETWORK'
   | 'NOT_CONFIGURED'
   | 'UNKNOWN';

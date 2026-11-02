@@ -41,6 +41,8 @@ interface TextFieldProps {
   readonly secureTextEntry?: boolean;
   readonly returnKeyType?: ReturnKeyTypeOptions;
   readonly onSubmitEditing?: () => void;
+  /** Called after the field took focus (its own focus styling still applies). */
+  readonly onFocus?: () => void;
   /** `submit` keeps the keyboard up so the next field can take focus. */
   readonly submitBehavior?: TextInputProps['submitBehavior'];
   readonly editable?: boolean;
@@ -74,6 +76,7 @@ export function TextField({
   secureTextEntry = false,
   returnKeyType,
   onSubmitEditing,
+  onFocus,
   submitBehavior,
   editable = true,
   multiline = false,
@@ -115,6 +118,7 @@ export function TextField({
           onFocus={() => {
             setFocused(true);
             formScroll?.revealFocusedInput();
+            onFocus?.();
           }}
           onSubmitEditing={onSubmitEditing}
           placeholder={placeholder}

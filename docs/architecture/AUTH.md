@@ -107,8 +107,18 @@ Operations: `signUp`, `signIn`, `signOut`, `resendSignUpConfirmation`, `requestP
 `startPasswordRecovery`, `completePasswordRecovery`, `cancelPasswordRecovery`, `retry`. Outcomes
 carry stable codes (`INVALID_CREDENTIALS`, `EMAIL_NOT_CONFIRMED`, `EMAIL_ALREADY_REGISTERED`,
 `WEAK_PASSWORD`, `INVALID_EMAIL`, `RATE_LIMITED`, `RECOVERY_LINK_EXPIRED`, `RECOVERY_LINK_INVALID`,
-`SAME_PASSWORD`, `NETWORK`, `NOT_CONFIGURED`, `UNKNOWN`) mapped to one French sentence each in
-`src/features/auth/messages.ts`.
+`SAME_PASSWORD`, `EMAIL_DELIVERY_UNAVAILABLE`, `NETWORK`, `NOT_CONFIGURED`, `UNKNOWN`) mapped to one
+French sentence each in `src/features/auth/messages.ts`. `EMAIL_DELIVERY_UNAVAILABLE` is Supabase's
+`email_address_not_authorized`: the default sender only reaches the project team, so a real address is
+refused until custom SMTP exists (`docs/release/AUTH_EMAILS.md`). It is independent of whether an
+account exists, so it reveals nothing.
+
+Every password input is `PasswordField`: hidden by default, a trailing eye (« Afficher / Masquer le
+mot de passe », 32 pt + 8 pt hit slop) that changes only `secureTextEntry` — the value, the focus and
+the autofill hints (`password` / `new-password`) are untouched. iOS empties a secure field on the first
+keystroke after it is hidden again or refocused (reported as `""`, then the keystroke); the field reads
+that first change through `readSecureEntryChange` (`src/features/auth/secure-entry.ts`) so nothing typed
+is lost. Android never empties the field and is never watched.
 
 The session listener is registered once per gateway and removed on unmount. `INITIAL_SESSION` is
 ignored (restoreSession already covers it), and so is `PASSWORD_RECOVERY` (`startPasswordRecovery`

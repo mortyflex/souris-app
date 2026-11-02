@@ -16,6 +16,7 @@ const messages: Record<AuthFailureCode, string> = {
   RECOVERY_LINK_INVALID:
     'Ce lien ne peut pas être utilisé ici. Ouvrez le dernier email reçu sur le téléphone où vous avez fait la demande, ou demandez un nouveau lien.',
   SAME_PASSWORD: 'Choisissez un mot de passe différent de l’ancien.',
+  EMAIL_DELIVERY_UNAVAILABLE: 'L’envoi de l’email est momentanément indisponible. Réessayez plus tard.',
   NETWORK: 'Connexion impossible. Vérifiez votre réseau et réessayez.',
   NOT_CONFIGURED: 'BeautIzzy n’est pas encore relié à son service de compte.',
   UNKNOWN: 'Une erreur est survenue. Réessayez.',

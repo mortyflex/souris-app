@@ -98,6 +98,8 @@ export function mapSupabaseAuthError(error: unknown): AuthFailure {
       case 'over_request_rate_limit':
       case 'over_email_send_rate_limit':
         return { code: 'RATE_LIMITED' };
+      case 'email_address_not_authorized':
+        return { code: 'EMAIL_DELIVERY_UNAVAILABLE' };
       default:
         return { code: 'UNKNOWN' };
     }

@@ -23,7 +23,21 @@ in the real dashboards.
 The built-in mailer is for development: Supabase restricts it (low hourly rate limit, and recent
 projects only deliver to the addresses of the organization's team members — check the notice in
 Authentication › Emails). **A pilot's own address may therefore never receive a confirmation or a
-recovery email until custom SMTP is configured.** This is the first external blocker of M2.
+recovery email until custom SMTP is configured.** This is the first external blocker of M2. The
+app reports that refusal (`email_address_not_authorized`) as « L’envoi de l’email est momentanément
+indisponible. Réessayez plus tard. », never as a sent link.
+
+Dashboards read (read-only, 1 November 2026):
+
+| Setting | Staging `iteufklnrsmazzvmzqxa` | Production `oxfqcgbtihczubisjyek` |
+|---|---|---|
+| Site URL | `http://localhost:3000` | `sourisapp://sign-in` |
+| Redirect URLs | none | `sourisapp://sign-in` only |
+| Custom SMTP | none (built-in mailer, 2 emails / hour) | none (built-in mailer, 2 emails / hour) |
+| Recovery template | Supabase default, English (« Reset your password ») | Supabase default, English |
+
+Neither project can complete a real recovery today: the link would fall back to the Site URL
+(`localhost` on Staging, « Se connecter » on Production) instead of `sourisapp://reset-password`.
 
 ---
 

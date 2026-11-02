@@ -1,11 +1,23 @@
 // BeautIzzy — password field with a native visibility toggle
+//
+// Hidden by default; the trailing eye shows or hides it without touching the
+// value, the focus or the autofill hints. On iOS a secure field empties itself
+// on the first keystroke after it is hidden again or refocused: that first
+// change is read through `readSecureEntryChange`, so nothing typed is lost.
 
 import { SymbolView } from 'expo-symbols';
-import { useState, type Ref } from 'react';
-import { Pressable, StyleSheet, type TextInput } from 'react-native';
+import { useRef, useState, type Ref } from 'react';
+import { Platform, Pressable, StyleSheet, type TextInput } from 'react-native';
 
 import { TextField } from '@/shared/ui/TextField';
 import { radii, semanticColors, spacing } from '@/shared/ui/theme';
+
+import {
+  ARMED_SECURE_ENTRY_WATCH,
+  IDLE_SECURE_ENTRY_WATCH,
+  readSecureEntryChange,
+  type SecureEntryWatch,
+} from '../secure-entry';
 
 interface PasswordFieldProps {
   readonly value: string;
@@ -33,6 +45,32 @@ export function PasswordField({
   testID = 'password-input',
 }: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
+  // Watches for iOS emptying the masked field (secure-entry.ts). Never armed on Android.
+  const watch = useRef<SecureEntryWatch>(IDLE_SECURE_ENTRY_WATCH);
+  const arm = () => {
+    watch.current = Platform.OS === 'ios' ? ARMED_SECURE_ENTRY_WATCH : IDLE_SECURE_ENTRY_WATCH;
+  };
+
+  const toggleVisibility = () => {
+    if (visible) arm();
+    else watch.current = IDLE_SECURE_ENTRY_WATCH;
+    setVisible(!visible);
+  };
+
+  const handleFocus = () => {
+    if (!visible) arm();
+  };
+
+  const handleChangeText = (text: string) => {
+    if (visible) {
+      watch.current = IDLE_SECURE_ENTRY_WATCH;
+      onChangeText(text);
+      return;
+    }
+    const reading = readSecureEntryChange(watch.current, value, text);
+    watch.current = reading.watch;
+    onChangeText(reading.value);
+  };
 
   return (
     <TextField
@@ -44,7 +82,8 @@ export function PasswordField({
       error={error}
       inputRef={inputRef}
       label={label}
-      onChangeText={onChangeText}
+      onChangeText={handleChangeText}
+      onFocus={handleFocus}
       onSubmitEditing={onSubmitEditing}
       placeholder={intent === 'new' ? '8 caractères minimum' : 'Votre mot de passe'}
       returnKeyType="done"
@@ -56,7 +95,8 @@ export function PasswordField({
           accessibilityLabel={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
           accessibilityRole="button"
           hitSlop={spacing.sm}
-          onPress={() => setVisible((current) => !current)}
+          onPress={toggleVisibility}
+          testID={`${testID}-visibility`}
           style={({ pressed }) => [styles.toggle, pressed && styles.togglePressed]}
         >
           <SymbolView
