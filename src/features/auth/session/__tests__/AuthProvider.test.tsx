@@ -1,6 +1,9 @@
+import { AuthRetryableFetchError } from '@supabase/supabase-js';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { useEffect } from 'react';
 import { Text } from 'react-native';
+
+import { createSupabaseAuthGateway, type SupabaseAuthApi } from '@/infrastructure/supabase/auth-gateway';
 
 import type { AuthGateway, AuthUser } from '../../gateway';
 import { createFakeAuthGateway, fakeUser } from '../../testing/fake-auth-gateway';
@@ -220,6 +223,66 @@ describe('AuthProvider', () => {
       expect(gateway.calls.signOut).toBe(2);
       // What a restart would restore: the last session, never the signed-out one.
       expect(await gateway.restoreSession()).toEqual({ kind: 'authenticated', user: other });
+    });
+
+    it('offline with an expired token: the refresh once the network is back never opens the app, and ends the kept session', async () => {
+      // supabase-js as the device sees it: offline, the expired session can neither refresh nor be removed.
+      const device = { online: false, stored: true };
+      const listeners: ((event: string, session: unknown) => void)[] = [];
+      const signOut = jest.fn(async () => {
+        if (!device.online) return { error: new AuthRetryableFetchError('offline', 0) };
+        device.stored = false;
+        listeners.forEach((listener) => listener('SIGNED_OUT', null));
+        return { error: null };
+      });
+      const api = {
+        getSession: async () =>
+          device.online || !device.stored
+            ? { data: { session: device.stored ? { user: { id: fakeUser.id } } : null }, error: null }
+            : { data: { session: null }, error: new AuthRetryableFetchError('offline', 0) },
+        signOut,
+        onAuthStateChange: (listener: (event: string, session: unknown) => void) => {
+          listeners.push(listener);
+          return { data: { subscription: { unsubscribe: () => undefined } } };
+        },
+      } as unknown as SupabaseAuthApi;
+      const items = new Map<string, string>();
+      const gateway = createSupabaseAuthGateway(api, {
+        getItem: (key) => items.get(key) ?? null,
+        setItem: (key, value) => {
+          items.set(key, value);
+        },
+        removeItem: (key) => {
+          items.delete(key);
+        },
+      });
+      // The bound owner: offline, `unavailable` would open the app from the local binding.
+      const view = await renderAuth(gateway, () => fakeUser);
+      expect(stateOf(view)).toBe('authenticated:user-lea:offline');
+
+      await act(async () => {
+        await latest?.signOut();
+      });
+      expect(stateOf(view)).toBe('unauthenticated');
+      expect(device.stored).toBe(true);
+
+      // Network back: supabase-js refreshes the kept session by itself.
+      const states: unknown[] = [];
+      device.online = true;
+      await act(async () => {
+        listeners.forEach((listener) => listener('TOKEN_REFRESHED', { user: { id: fakeUser.id } }));
+        states.push(stateOf(view));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        states.push(stateOf(view));
+      });
+      await act(async () => {});
+      states.push(stateOf(view));
+
+      // Never authenticated in between, so nothing signed in (sync, screens) ever ran.
+      expect(states.every((state) => state === 'unauthenticated')).toBe(true);
+      expect(device.stored).toBe(false);
+      expect(items.size).toBe(0);
+      expect(signOut.mock.calls).toEqual([[{ scope: 'local' }], [{ scope: 'local' }]]);
     });
 
     it('a session ended elsewhere (refresh refused) signs this device out without asking for another sign-out', async () => {

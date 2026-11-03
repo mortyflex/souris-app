@@ -585,6 +585,156 @@ describe('createSupabaseAuthGateway', () => {
       expect(seen).toEqual([null]);
     });
 
+    describe('completing the pending sign-out without a restart', () => {
+      /** Lets the deferred retry (setTimeout 0) and its awaits run. */
+      const settle = async () => {
+        for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+      };
+      const emitter = (api: SupabaseAuthApi) =>
+        (api as unknown as { __emit: (event: string, value: unknown) => void }).__emit;
+
+      it('network back: the refresh of the kept session is never a sign-in, and ends that session at once', async () => {
+        const storage = createMemoryStorage();
+        const { api, device } = deviceApi('offline-expired-token');
+        const gateway = gatewayFor(api, storage);
+        const seen: unknown[] = [];
+        gateway.onSessionChange((user) => seen.push(user));
+        await gateway.signOut();
+        expect(device.stored).not.toBeNull();
+
+        device.network = 'online';
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        expect(seen).toEqual([]);
+        await settle();
+
+        expect(device.stored).toBeNull();
+        expect(storage.items.size).toBe(0);
+        expect((api.signOut as jest.Mock).mock.calls).toEqual([[{ scope: 'local' }], [{ scope: 'local' }]]);
+        // supabase-js then reports the removal: a sign-out, which the app already shows.
+        emitter(api)('SIGNED_OUT', null);
+        expect(seen).toEqual([null]);
+        // Nothing left to complete: the next launch reads the (empty) session normally.
+        expect(await gatewayFor(api, storage).restoreSession()).toEqual({ kind: 'unauthenticated' });
+        expect(api.getSession).toHaveBeenCalledTimes(1);
+      });
+
+      it('a failed retry keeps it pending with no loop; the next refresh retries, never two sign-outs at once', async () => {
+        const storage = createMemoryStorage();
+        const { api, device } = deviceApi('offline-expired-token');
+        const gateway = gatewayFor(api, storage);
+        gateway.onSessionChange(() => undefined);
+        await gateway.signOut();
+
+        // The refresh landed, then the network dropped before the retry ran.
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        await settle();
+        expect(api.signOut).toHaveBeenCalledTimes(2);
+        expect(storage.items.get(SIGN_OUT_PENDING_KEY)).toBe('1');
+        await settle();
+        expect(api.signOut).toHaveBeenCalledTimes(2);
+
+        device.network = 'online';
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        await settle();
+        expect(api.signOut).toHaveBeenCalledTimes(3);
+        expect(device.stored).toBeNull();
+        expect(storage.items.size).toBe(0);
+      });
+
+      it('a launch and a refresh at the same time share one sign-out', async () => {
+        const storage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
+        let finish: (() => void) | undefined;
+        const signOut = jest.fn(
+          () =>
+            new Promise<{ error: null }>((resolve) => {
+              finish = () => resolve({ error: null });
+            }),
+        );
+        const api = createAuthApi({ signOut });
+        const gateway = gatewayFor(api, storage);
+        gateway.onSessionChange(() => undefined);
+
+        const launch = gateway.restoreSession();
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        await settle();
+        expect(signOut).toHaveBeenCalledTimes(1);
+        finish?.();
+        expect(await launch).toEqual({ kind: 'unauthenticated' });
+        expect(storage.items.size).toBe(0);
+      });
+
+      it('an explicit sign-in right after the refresh is never undone by the retry', async () => {
+        const storage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
+        const holder: { api?: SupabaseAuthApi } = {};
+        const signInWithPassword = jest.fn(async () => {
+          // supabase-js reports the new session before signInWithPassword returns.
+          emitter(holder.api as SupabaseAuthApi)('SIGNED_IN', session('u1', 'a@b.fr'));
+          return { data: { session: session('u1', 'a@b.fr') }, error: null };
+        });
+        const { api } = deviceApi('online', { signInWithPassword });
+        holder.api = api;
+        const gateway = gatewayFor(api, storage);
+        const seen: unknown[] = [];
+        gateway.onSessionChange((user) => seen.push(user));
+
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        expect((await gateway.signIn({ email: 'a@b.fr', password: 'x' })).kind).toBe('authenticated');
+        await settle();
+
+        expect(api.signOut).not.toHaveBeenCalled();
+        expect(storage.items.size).toBe(0);
+        // The sign-in reported itself; the leftover-session events were never forwarded.
+        expect(seen).toEqual([]);
+        // From now on the session is a real one: its refreshes are forwarded again.
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        expect(seen).toEqual([{ id: 'u1', email: 'a@b.fr' }]);
+      });
+
+      it('a sign-in waits for an in-flight sign-out, so the new session is never the one removed', async () => {
+        const storage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
+        const order: string[] = [];
+        let finish: (() => void) | undefined;
+        const signOut = jest.fn(
+          () =>
+            new Promise<{ error: null }>((resolve) => {
+              order.push('sign-out started');
+              finish = () => {
+                order.push('sign-out ended');
+                resolve({ error: null });
+              };
+            }),
+        );
+        const signInWithPassword = jest.fn(async () => {
+          order.push('sign-in');
+          return { data: { session: session('u1', 'a@b.fr') }, error: null };
+        });
+        const api = createAuthApi({ signOut, signInWithPassword });
+        const gateway = gatewayFor(api, storage);
+        gateway.onSessionChange(() => undefined);
+
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        await settle();
+        const signingIn = gateway.signIn({ email: 'a@b.fr', password: 'x' });
+        await settle();
+        expect(signInWithPassword).not.toHaveBeenCalled();
+        finish?.();
+        expect((await signingIn).kind).toBe('authenticated');
+        expect(order).toEqual(['sign-out started', 'sign-out ended', 'sign-in']);
+        expect(storage.items.size).toBe(0);
+      });
+
+      it('an unfinished password recovery is never ended by its own refresh', async () => {
+        const storage = createMemoryStorage({ [PASSWORD_RECOVERY_PENDING_KEY]: '1' });
+        const { api } = deviceApi('online');
+        gatewayFor(api, storage).onSessionChange(() => undefined);
+        emitter(api)('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+        await settle();
+        expect(api.signOut).not.toHaveBeenCalled();
+        expect([...storage.items.keys()]).toEqual([PASSWORD_RECOVERY_PENDING_KEY]);
+      });
+    });
+
     it('a password sign-in replaces the leftover session; a failed one leaves the sign-out pending', async () => {
       const storage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
       const signInWithPassword = jest

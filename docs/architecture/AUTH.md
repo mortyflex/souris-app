@@ -371,7 +371,14 @@ while set
   restoreSession()   signs out again (scope `local`) and reports `unauthenticated` — before the
                      session, so the offline fallback cannot reopen the bound Business
   onSessionChange    forwards no event carrying a session (the first token refresh once the
-                     network is back cannot sign the device in again) — only a sign-out
+                     network is back cannot sign the device in again) — only a sign-out.
+                     Such an event means the kept session is usable again: it retries the
+                     local sign-out at once (deferred out of the supabase-js callback),
+                     without waiting for the next launch
+  single flight      a launch, a refresh and the button share one sign-out; a failure leaves the
+                     marker for the next refresh or launch — never a timer, so no loop
+  explicit sign-in   password sign-in, sign-up and the recovery exchange wait for an in-flight
+                     sign-out, and no event seen while they run is taken for the leftover session
 ```
 
 Local SQLite data is untouched. Wording: "Les données restent enregistrées sur cet appareil." —

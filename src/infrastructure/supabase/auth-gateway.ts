@@ -169,6 +169,11 @@ export const PASSWORD_RECOVERY_PENDING_KEY = 'beautizzy.auth.password-recovery-p
  *   set     before the sign-out request
  *   cleared once the stored session is really gone, or a new session replaced
  *           it (password sign-in, sign-up with a session, recovery exchange)
+ *
+ * The sign-out is completed as soon as it can be, without waiting for a
+ * restart: once the network is back supabase-js refreshes the kept session
+ * (TOKEN_REFRESHED); that event is never forwarded, it retries the local
+ * sign-out with the usable session (see `onSessionChange`).
  */
 export const SIGN_OUT_PENDING_KEY = 'beautizzy.auth.sign-out-pending';
 
@@ -211,6 +216,51 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
     if (!error) signOutPending.clear();
   };
 
+  /**
+   * Single flight: a launch, a token refresh and the button never run two
+   * sign-outs at once. A rejection is swallowed (the marker stays, a later
+   * refresh or launch tries again); every retry is driven by a session event
+   * or a launch, never by a timer, so a failing network cannot loop.
+   */
+  let signOutInFlight: Promise<void> | null = null;
+  const completePendingSignOut = (): Promise<void> => {
+    signOutInFlight ??= endLocalSession()
+      .catch(() => undefined)
+      .finally(() => {
+        signOutInFlight = null;
+      });
+    return signOutInFlight;
+  };
+
+  /**
+   * Password sign-in, sign-up and the recovery exchange each create a NEW
+   * session; supabase-js reports it (SIGNED_IN…) before they return and clear
+   * the marker. While one runs, a session event is never taken for the
+   * leftover session, and none starts before an in-flight sign-out ended.
+   */
+  let sessionsBeingCreated = 0;
+  const creatingSession = async <T>(create: () => Promise<T>): Promise<T> => {
+    sessionsBeingCreated += 1;
+    try {
+      await signOutInFlight;
+      return await create();
+    } finally {
+      sessionsBeingCreated -= 1;
+    }
+  };
+
+  /**
+   * Deferred out of the supabase-js callback (which runs while it notifies,
+   * inside its own refresh), and re-checked when it runs: a sign-in may have
+   * replaced the session in between.
+   */
+  const retryPendingSignOutSoon = (): void => {
+    if (sessionsBeingCreated > 0) return;
+    setTimeout(() => {
+      if (sessionsBeingCreated === 0 && signOutPending.isPending()) void completePendingSignOut();
+    }, 0);
+  };
+
   return {
     async restoreSession(): Promise<RestoredSession> {
       // Checked BEFORE the session, so neither a stored session nor the
@@ -222,7 +272,7 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
       // A sign-out this device asked for is never undone by a restart, even
       // when supabase-js could not remove the stored session yet.
       if (signOutPending.isPending()) {
-        await endLocalSession();
+        await completePendingSignOut();
         return { kind: 'unauthenticated' };
       }
       const { data, error } = await auth.getSession();
@@ -237,11 +287,13 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
     },
 
     async signUp({ email, password }: AuthCredentials): Promise<SignUpOutcome> {
-      const { data, error } = await auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL },
-      });
+      const { data, error } = await creatingSession(() =>
+        auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL },
+        }),
+      );
       if (error) return { kind: 'failed', failure: mapSupabaseAuthError(error) };
       if (data.session) {
         recovery.clear();
@@ -264,7 +316,7 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
     },
 
     async signIn({ email, password }: AuthCredentials): Promise<SignInOutcome> {
-      const { data, error } = await auth.signInWithPassword({ email, password });
+      const { data, error } = await creatingSession(() => auth.signInWithPassword({ email, password }));
       if (error) return { kind: 'failed', failure: mapSupabaseAuthError(error) };
       if (data.session) {
         // A password sign-in replaced any recovery session, or any session a
@@ -280,7 +332,7 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
       // Set first: an interruption mid-request is covered like a failure.
       signOutPending.markPending();
       recovery.clear();
-      await endLocalSession();
+      await completePendingSignOut();
     },
 
     async resendSignUpConfirmation(email: string): Promise<ResendOutcome> {
@@ -299,7 +351,7 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
 
     async startPasswordRecovery(code: string): Promise<PasswordRecoveryOutcome> {
       recovery.markPending();
-      const { data, error } = await auth.exchangeCodeForSession(code);
+      const { data, error } = await creatingSession(() => auth.exchangeCodeForSession(code));
       if (error) {
         // A failed exchange saves no session.
         recovery.clear();
@@ -343,7 +395,12 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
         if (session && recovery.isPending()) return;
         // Same after a sign-out supabase-js could not complete offline: the
         // first refresh once the network is back must not sign the device in.
-        if (session && signOutPending.isPending()) return;
+        // That refresh made the kept session usable again: end it now, not at
+        // the next launch.
+        if (session && signOutPending.isPending()) {
+          retryPendingSignOutSoon();
+          return;
+        }
         listener(session ? toAuthUser(session.user) : null);
       });
       return () => data.subscription.unsubscribe();
