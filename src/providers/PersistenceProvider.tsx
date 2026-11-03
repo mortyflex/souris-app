@@ -29,6 +29,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { getClientPhotoCacheDirectoryUri } from '@/features/clients/photo/client-photo-storage';
 import { getProductImagesDirectoryUri } from '@/features/products/images/product-image-storage';
+import { DeviceHandoverRefusedError, releaseDeviceFromAccount } from '@/persistence/account-handover';
 import { bootstrapPersistence, loadSnapshot, type PersistedSnapshot } from '@/persistence/bootstrap';
 import type { SourisDatabase } from '@/persistence/database';
 import { clearPersistedDataForDevelopment } from '@/persistence/development-reset';
@@ -68,6 +69,18 @@ export interface PersistenceValue {
    * mount right after hydrate from a snapshot that knows them.
    */
   readonly reloadSnapshot: () => void;
+  /**
+   * Hands the device over to another account (AUTH.md §6): releases the
+   * local database from the Business it is bound to — refused, with nothing
+   * changed, unless everything that account holds here was acknowledged by
+   * the remote (`persistence/account-handover.ts`) —, removes the owned
+   * image directories, and remounts the feature tree on the now EMPTY,
+   * UNBOUND database. The signed-in account then binds and restores exactly
+   * as on a fresh install. Throws `DeviceHandoverRefusedError` when the
+   * release is refused. Its only caller is the account conflict screen,
+   * after an explicit confirmation.
+   */
+  readonly prepareForAnotherAccount: (businessId: string) => void;
 }
 
 type BootstrapState =
@@ -191,6 +204,29 @@ export function PersistenceProvider({
     );
   }, [bootstrap, files]);
 
+  const prepareForAnotherAccount = useCallback(
+    (businessId: string) => {
+      const database = databaseRef.current;
+      if (!database) throw new DeviceHandoverRefusedError('NOT_BOUND');
+      // ONE transaction, refused with nothing changed while anything is unsent.
+      releaseDeviceFromAccount(database, businessId);
+      // Owned local copies only, once the rows that referenced them are gone:
+      // the remote objects belong to the released Business. Best effort — a
+      // leftover file is referenced by nothing and must not fail the hand-over.
+      for (const directory of [getProductImagesDirectoryUri(files), getClientPhotoCacheDirectoryUri(files)]) {
+        try {
+          files.deleteDirectory(directory);
+        } catch {
+          // Nothing references these files any more.
+        }
+      }
+      // The PRODUCTION seed, never the development one — and the marker is
+      // already written, so nothing is seeded: the device starts empty.
+      bootstrap(() => createSeedRef.current(), { freshConnection: false });
+    },
+    [bootstrap, files],
+  );
+
   if (state.status === 'initializing') {
     return null;
   }
@@ -208,6 +244,7 @@ export function PersistenceProvider({
         snapshot: state.snapshot,
         resetForDevelopment,
         reloadSnapshot,
+        prepareForAnotherAccount,
       }}
     >
       {children}

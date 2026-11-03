@@ -37,7 +37,7 @@ function Probe({ onControl }: { readonly onControl: (control: CloudSyncControl) 
 }
 
 async function renderProbe() {
-  let control: CloudSyncControl = { runner: false, runNow: undefined, refreshNow: undefined, firstSync: { status: 'ready', retrying: false } };
+  let control: CloudSyncControl = { runner: false, runNow: undefined, refreshNow: undefined, firstSync: { status: 'ready', retrying: false }, whenIdle: () => Promise.resolve() };
   const scenario = await renderTwoDevices(
     () => createTestSeed({ services: [], products: [], appointments: [] }),
     () => (

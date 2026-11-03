@@ -739,7 +739,9 @@ approveInitialRestore(db, businessId, now?)   // src/persistence/sync/bootstrap.
 - **Cleared by the development reset** with the rest of the sync bookkeeping.
 
 The restore itself is §16.4. A device already bound to another account keeps the
-DEVICE_ACCOUNT_CONFLICT behavior (AUTH.md §6).
+DEVICE_ACCOUNT_CONFLICT behavior (AUTH.md §6): nothing is restored for the new account until the
+professional explicitly releases the device, which empties and unbinds it — the restore then follows
+this very path.
 
 ---
 

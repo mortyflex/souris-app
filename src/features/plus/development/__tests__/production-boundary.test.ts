@@ -108,6 +108,7 @@ describe('development sync control — production boundary', () => {
       .filter((file) => /\buseCloudSyncControl\s*\(/.test(file.source))
       .map((file) => file.path);
     expect(controlReaders.sort()).toEqual([
+      'features/business/AccountConflictScreen.tsx', // the account hand-over: `whenIdle` only (AUTH.md §6)
       'features/plus/development/DevelopmentSyncSheet.tsx',
       'features/sync/use-sync-refresh.ts', // the pull gesture: `refreshNow` only
       'providers/CloudSyncControl.tsx', // the definition

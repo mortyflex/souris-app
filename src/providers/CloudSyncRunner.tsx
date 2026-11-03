@@ -122,7 +122,7 @@
 // turns, so nothing here ever fires; without an access provider above
 // (tests of the runner alone) the same.
 
-import { useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 
 import { useOptionalBusinessAccess } from '@/features/access/session/BusinessAccessProvider';
@@ -351,9 +351,14 @@ export function CloudSyncRunner({ gateway, children }: PropsWithChildren<CloudSy
   // `running` matters to readers only while the gate is unavailable: an idle
   // periodic run of an open app must not hand the tree a new context value.
   const retrying = gateStatus === 'unavailable' && running;
+  // The run in flight, whatever session started it: the lock outlives the orchestration.
+  const whenIdle = useCallback(
+    (): Promise<void> => (lock.inFlight ?? Promise.resolve()).then(() => undefined),
+    [lock],
+  );
   const control = useMemo<CloudSyncControl>(
-    () => ({ runner: true, runNow: runOnce, refreshNow, firstSync: { status: gateStatus, retrying } }),
-    [runOnce, refreshNow, gateStatus, retrying],
+    () => ({ runner: true, runNow: runOnce, refreshNow, firstSync: { status: gateStatus, retrying }, whenIdle }),
+    [runOnce, refreshNow, gateStatus, retrying, whenIdle],
   );
 
   return (

@@ -1,11 +1,14 @@
 // BeautIzzy — the cloud sync control (what the UI may ask of the cloud sync runner)
 //
-// The runner (CloudSyncRunner.tsx) provides it; three readers exist:
+// The runner (CloudSyncRunner.tsx) provides it; four readers exist:
 //
 //   the root navigator        `firstSync` — the first-sync gate of an empty device
 //                             (and `runNow` for its « Réessayer »)
 //   the pull-to-refresh       `refreshNow` — a run on demand, joining the one in
 //   (features/sync)           flight (CLOUD_SYNC.md §29)
+//   the account conflict      `whenIdle` — before handing the device over to
+//                             another account, the run still in flight for the
+//                             released account is awaited (AUTH.md §6)
 //   the development control   `runNow`, under __DEV__ only
 //
 // Its own module, apart from the runner, so a product screen that offers the
@@ -43,6 +46,14 @@ export interface CloudSyncControl {
    */
   readonly refreshNow: (() => Promise<SyncRunResult>) | undefined;
   readonly firstSync: FirstSyncGate;
+  /**
+   * Resolves once no run of the worker is in flight any more — at once when
+   * none is. A run started under a session that has since ended still
+   * finishes (and writes its bookkeeping) on its own; whoever is about to
+   * release the local database waits for it here, so nothing of the released
+   * account lands after the release. Never rejects.
+   */
+  readonly whenIdle: () => Promise<void>;
 }
 
 export const OPEN_FIRST_SYNC_GATE: FirstSyncGate = { status: 'ready', retrying: false };
@@ -52,6 +63,7 @@ const CloudSyncControlContext = createContext<CloudSyncControl>({
   runNow: undefined,
   refreshNow: undefined,
   firstSync: OPEN_FIRST_SYNC_GATE,
+  whenIdle: () => Promise.resolve(),
 });
 
 /** Provided by the cloud sync runner only. */

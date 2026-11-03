@@ -285,16 +285,69 @@ whose owner is not the signed-in user is refused (`OWNER_MISMATCH`).
 
 ---
 
-## 6. DEVICE_ACCOUNT_CONFLICT (V1 limitation)
+## 6. DEVICE_ACCOUNT_CONFLICT and the account hand-over
 
-The SQLite database is single-business. When it is bound to owner A and owner B signs in:
+The SQLite database is single-business. When it is bound to owner A and owner B signs in, the
+conflict is detected LOCALLY, before any remote call and before any business data is loaded
+(`resolveBusinessSession`: local binding present, other owner): the `(app)` group is never mounted,
+nothing from Business A is displayed, nothing is rebound, nothing is uploaded, and no sync run can
+start (the runner needs a `ready` Business). A dedicated screen, `AccountConflictScreen`, then
+offers ONE of two situations, decided from the local state only (November 2026 — before that the
+screen offered "Se déconnecter" alone and the device needed a reinstall to change hands):
 
-- nothing from Business A is displayed;
-- nothing is rebound;
-- nothing is wiped;
-- a dedicated explanatory screen offers "Se déconnecter".
+```text
+assessLocalAccountData(db, A)                        src/persistence/account-handover.ts — reads only
+  pendingOutboxEntries      an intent the worker has not settled (change, deletion, refused or held write)
+  unacknowledgedAggregates  a row with NO server-returned revision in sync_state for A
+                            (never uploaded, created before any upload, stamped with another id)
+  localOnlyProductImages    a legacy products.image_uri without a shared photo: nothing can send it
 
-Arbitrary multi-account switching and device restoration become safe only once Cloud Sync exists.
+anything > 0   « Certaines d’entre elles n’existent pour l’instant que sur cet appareil… »
+               NO hand-over is offered. The only way out is A signing in again on this device, which
+               sends what is pending (§9); then B may try again. « Se déconnecter » only
+everything 0   « Elles ont toutes été envoyées : vous pouvez préparer cet appareil pour votre compte. »
+               « Utiliser cet appareil avec mon compte » → ConfirmationDialog (destructive tone,
+               « Préparer cet appareil ? » / « Préparer cet appareil ») → the hand-over
+unreadable     the original wording, « Se déconnecter » only
+```
+
+The hand-over, `PersistenceValue.prepareForAnotherAccount(A)`:
+
+1. `whenIdle()` of the cloud sync control: a run started under A's session and still in flight
+   (its pull may apply rows) finishes first — no run can start meanwhile, since no Business is
+   `ready`;
+2. `releaseDeviceFromAccount(db, A)` — ONE SQLite transaction that re-reads the binding and the
+   assessment INSIDE it, then deletes every operational row, `sync_outbox`, `sync_state`,
+   `business_profile` and every `souris_metadata` entry (A's first-sync decision, pull cursor,
+   entitlement evidence, preference cache…), and writes `seed_version` back: the device is EMPTY,
+   UNBOUND and will never be seeded. Refused — `DeviceHandoverRefusedError`, nothing changed — on
+   `NOT_BOUND`, `BUSINESS_MISMATCH` or `UNSENT_LOCAL_DATA`; a SQLite failure rolls everything back;
+3. the owned image directories (`products/`, `client-photos/`) are deleted, best effort, AFTER the
+   commit — a legacy image is never lost to a release that did not happen;
+4. the persistence bootstrap runs again on the same connection (the PRODUCTION seed, which finds
+   the marker and seeds nothing) and the tree below `PersistenceProvider` REMOUNTS: Auth restores
+   B's stored session, Business resolution finds no binding → remote lookup → bind B (or Business
+   setup when B has none), and the cloud sync runner finds an empty bound device → `RESTORE_REQUIRED`
+   → automatic restore (CLOUD_SYNC.md §17) behind the first-sync gate — exactly a fresh install.
+
+Interruptions are covered by the shape of the transition, not by a repair state: killed before the
+commit → still A's device, the conflict screen again; killed after it → an empty unbound device, the
+next launch binds and restores B; the restore failing or the device being offline → the recoverable
+`data-unavailable` / `business-error` states with « Réessayer », nothing creatable meanwhile. B's
+sign-in itself already needed the network.
+
+Invariants (tested in `account-handover.test.ts` and `account-switch.test.tsx`): no outbox entry
+is ever deleted (the release is refused while one exists); A's and B's records never share a
+database (the release empties it entirely); nothing of A is ever pushed under B (no run exists in
+the conflict state, and the released database holds nothing to push); nothing server-side is
+touched (A's other devices restore everything afterwards); nothing is removed automatically or
+before the confirmation; local-only data is never assumed recoverable (it blocks the hand-over);
+the pending-recovery and sign-out markers live in Supabase's own storage and are untouched.
+
+Limitations: a device holding something A can only send by signing in again cannot change hands
+until A does so (there is no override); a legacy device-only Product image blocks it until the
+Product receives a shared photo; a cached photo whose download was in flight at the release may
+survive as an unreferenced file. Simultaneous multi-account use is out of scope.
 
 ---
 

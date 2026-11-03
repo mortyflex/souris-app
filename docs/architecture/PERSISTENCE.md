@@ -620,6 +620,31 @@ database unchanged (rollback test with a failing `UPDATE sales`). Re-binding the
 Business only refreshes the cached profile. `readBusinessProfile(db)` restores the binding on every
 launch. The development reset keeps the row (it is not in `SOURIS_TABLES`).
 
+### 4c. Releasing the binding — account hand-over
+
+`src/persistence/account-handover.ts` — the ONLY path that removes the binding (AUTH.md §6):
+
+```text
+assessLocalAccountData(db, businessId)       reads only: pending outbox entries (any Business id),
+                                             aggregate rows without a sync_state revision for the
+                                             Business, legacy image_uri without photo_path
+releaseDeviceFromAccount(db, businessId)     BEGIN
+                                               business_profile absent              ⇒ NOT_BOUND, ROLLBACK
+                                               bound to another Business            ⇒ BUSINESS_MISMATCH, ROLLBACK
+                                               assessment finds anything            ⇒ UNSENT_LOCAL_DATA, ROLLBACK
+                                               DELETE every SOURIS_TABLES + SYNC_TABLES row
+                                               DELETE business_profile, DELETE souris_metadata
+                                               seed_version ← CURRENT_SEED_VERSION   (never seeded again)
+                                             COMMIT
+```
+
+The schema and its version are kept. `PersistenceProvider.prepareForAnotherAccount` wraps it: the
+release, then the owned image directories (best effort, after the commit), then a bootstrap on the
+same connection with the production seed — which finds the marker and seeds nothing — and a
+remount of the feature tree, exactly like the development reset but on an EMPTY, UNBOUND device.
+The next account binds and restores through the ordinary first sync (CLOUD_SYNC.md §17). The remote
+is never consulted or written: the released Business keeps everything.
+
 ### Schema v2 — Client lifecycle
 
 ```text
