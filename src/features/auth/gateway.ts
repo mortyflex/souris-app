@@ -91,7 +91,11 @@ export interface AuthGateway {
   restoreSession(): Promise<RestoredSession>;
   signUp(credentials: AuthCredentials): Promise<SignUpOutcome>;
   signIn(credentials: AuthCredentials): Promise<SignInOutcome>;
-  /** Clears the persisted session; never touches BeautIzzy local data. */
+  /**
+   * Ends THIS device's session only: the account's other devices stay signed
+   * in. Never undone by a restart or a later token refresh, even offline.
+   * Never touches BeautIzzy local data.
+   */
   signOut(): Promise<void>;
   resendSignUpConfirmation(email: string): Promise<ResendOutcome>;
   /** Emails a recovery link that returns to the app (sourisapp://reset-password). */

@@ -13,6 +13,7 @@ import {
   EMAIL_CONFIRMATION_REDIRECT_URL,
   mapSupabaseAuthError,
   PASSWORD_RECOVERY_REDIRECT_URL,
+  SIGN_OUT_PENDING_KEY,
   type SupabaseAuthApi,
 } from '../auth-gateway';
 
@@ -179,6 +180,7 @@ describe('createSupabaseAuthGateway', () => {
 
     await gateway.signOut();
     expect(api.signOut).toHaveBeenCalledTimes(1);
+    expect(api.signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 
   it('sends the recovery link back to the BeautIzzy reset screen, never to the Supabase Site URL', async () => {
@@ -463,12 +465,178 @@ describe('createSupabaseAuthGateway', () => {
       expect(storage.items.size).toBe(0);
     });
 
-    it('a normal sign-out keeps the global scope and leaves nothing pending', async () => {
+    it('a normal sign-out ends this device only and leaves nothing pending', async () => {
       const storage = createMemoryStorage({ [PASSWORD_RECOVERY_PENDING_KEY]: '1' });
       const api = recoveringApi();
       await gatewayFor(api, storage).signOut();
-      expect(api.signOut).toHaveBeenCalledWith();
+      expect(api.signOut).toHaveBeenCalledWith({ scope: 'local' });
       expect(storage.items.size).toBe(0);
+    });
+  });
+
+  describe('sign-out of this device only', () => {
+    type Network = 'online' | 'offline-valid-token' | 'offline-expired-token';
+
+    /**
+     * The three outcomes of supabase-js `signOut` (auth-js 2.116 `_signOut`):
+     * online it removes the stored session; offline with a VALID access token
+     * it removes it and reports the failed server call; offline with an
+     * EXPIRED one it cannot refresh, reports that error and KEEPS it.
+     */
+    function deviceApi(initial: Network, overrides: Partial<Record<keyof SupabaseAuthApi, unknown>> = {}) {
+      const device = {
+        network: initial,
+        stored: session('u1', 'a@b.fr') as ReturnType<typeof session> | null,
+      };
+      const api = createAuthApi({
+        getSession: jest.fn(async () =>
+          device.network === 'offline-expired-token'
+            ? { data: { session: null }, error: new AuthRetryableFetchError('offline', 0) }
+            : { data: { session: device.stored }, error: null },
+        ),
+        signOut: jest.fn(async () => {
+          if (device.network === 'offline-expired-token' && device.stored) {
+            return { error: new AuthRetryableFetchError('offline', 0) };
+          }
+          const hadSession = device.stored !== null;
+          device.stored = null;
+          return device.network === 'offline-valid-token' && hadSession
+            ? { error: new AuthRetryableFetchError('offline', 0) }
+            : { error: null };
+        }),
+        ...overrides,
+      });
+      return { api, device };
+    }
+
+    it('online: asks for the local scope — never the global default — and leaves nothing pending', async () => {
+      const storage = createMemoryStorage();
+      const { api, device } = deviceApi('online');
+      await gatewayFor(api, storage).signOut();
+
+      expect(api.signOut).toHaveBeenCalledTimes(1);
+      expect(api.signOut).toHaveBeenCalledWith({ scope: 'local' });
+      expect(device.stored).toBeNull();
+      expect(storage.items.size).toBe(0);
+    });
+
+    it('never calls signOut without an explicit local scope, whatever the path', async () => {
+      const storage = createMemoryStorage({ [PASSWORD_RECOVERY_PENDING_KEY]: '1' });
+      const { api } = deviceApi('offline-expired-token');
+      const gateway = gatewayFor(api, storage);
+      await gateway.restoreSession();
+      await gateway.discardPasswordRecovery();
+      await gateway.signOut();
+      await gateway.restoreSession();
+
+      const calls = (api.signOut as jest.Mock).mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) expect(call).toEqual([{ scope: 'local' }]);
+    });
+
+    it('offline with a valid token: the session is gone, the next launch confirms it without asking the server for it', async () => {
+      const storage = createMemoryStorage();
+      const { api, device } = deviceApi('offline-valid-token');
+      await gatewayFor(api, storage).signOut();
+      expect(device.stored).toBeNull();
+      expect(storage.items.get(SIGN_OUT_PENDING_KEY)).toBe('1');
+
+      const relaunched = gatewayFor(api, storage);
+      expect(await relaunched.restoreSession()).toEqual({ kind: 'unauthenticated' });
+      expect(api.getSession).not.toHaveBeenCalled();
+      expect(storage.items.size).toBe(0);
+    });
+
+    it('offline with an expired token: the stored session is never restored, even through the offline fallback', async () => {
+      const storage = createMemoryStorage();
+      const { api, device } = deviceApi('offline-expired-token');
+      await gatewayFor(api, storage).signOut();
+      // supabase-js kept it: without the marker the relaunch would answer `unavailable` (bound owner → app).
+      expect(device.stored).not.toBeNull();
+
+      const stillOffline = gatewayFor(api, storage);
+      expect(await stillOffline.restoreSession()).toEqual({ kind: 'unauthenticated' });
+      expect(api.getSession).not.toHaveBeenCalled();
+      expect(storage.items.get(SIGN_OUT_PENDING_KEY)).toBe('1');
+
+      device.network = 'online';
+      const backOnline = gatewayFor(api, storage);
+      expect(await backOnline.restoreSession()).toEqual({ kind: 'unauthenticated' });
+      expect(device.stored).toBeNull();
+      expect(storage.items.size).toBe(0);
+      // The sign-out is complete: an ordinary launch reads the (empty) session again.
+      expect(await backOnline.restoreSession()).toEqual({ kind: 'unauthenticated' });
+      expect(api.getSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('a token refresh of the session a sign-out could not remove never signs the device in again', async () => {
+      const storage = createMemoryStorage();
+      const { api } = deviceApi('offline-expired-token');
+      const gateway = gatewayFor(api, storage);
+      const seen: unknown[] = [];
+      gateway.onSessionChange((user) => seen.push(user));
+      await gateway.signOut();
+
+      const emit = (api as unknown as { __emit: (event: string, value: unknown) => void }).__emit;
+      emit('TOKEN_REFRESHED', session('u1', 'a@b.fr'));
+      emit('SIGNED_IN', session('u1', 'a@b.fr'));
+      emit('USER_UPDATED', session('u1', 'a@b.fr'));
+      emit('SIGNED_OUT', null);
+      expect(seen).toEqual([null]);
+    });
+
+    it('a password sign-in replaces the leftover session; a failed one leaves the sign-out pending', async () => {
+      const storage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
+      const signInWithPassword = jest
+        .fn()
+        .mockResolvedValueOnce({ data: { session: null }, error: new AuthRetryableFetchError('offline', 0) })
+        .mockResolvedValueOnce({ data: { session: session('u2', 'b@b.fr') }, error: null });
+      const { api } = deviceApi('online', { signInWithPassword });
+      const gateway = gatewayFor(api, storage);
+
+      expect((await gateway.signIn({ email: 'b@b.fr', password: 'x' })).kind).toBe('failed');
+      expect(storage.items.get(SIGN_OUT_PENDING_KEY)).toBe('1');
+      expect(await gateway.signIn({ email: 'b@b.fr', password: 'x' })).toEqual({
+        kind: 'authenticated',
+        user: { id: 'u2', email: 'b@b.fr' },
+      });
+      expect(storage.items.size).toBe(0);
+    });
+
+    it('a sign-up with a session, or a recovery exchange, also replaces the leftover session', async () => {
+      const signUpStorage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
+      const signUp = deviceApi('online', {
+        signUp: async () => ({ data: { user: { id: 'u3' }, session: session('u3', 'c@b.fr') }, error: null }),
+      });
+      expect((await gatewayFor(signUp.api, signUpStorage).signUp({ email: 'c@b.fr', password: 'password123' })).kind).toBe(
+        'authenticated',
+      );
+      expect(signUpStorage.items.size).toBe(0);
+
+      const recoveryStorage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
+      const recovery = deviceApi('online', {
+        exchangeCodeForSession: async () => ({
+          data: { session: session('u1', 'a@b.fr'), user: { id: 'u1' }, redirectType: 'recovery' },
+          error: null,
+        }),
+      });
+      expect((await gatewayFor(recovery.api, recoveryStorage).startPasswordRecovery('code-1234')).kind).toBe('recovering');
+      // The recovery marker alone now governs the stored session.
+      expect([...recoveryStorage.items.keys()]).toEqual([PASSWORD_RECOVERY_PENDING_KEY]);
+    });
+
+    it('a failed recovery exchange leaves the sign-out pending', async () => {
+      const storage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
+      const { api } = deviceApi('offline-expired-token', {
+        exchangeCodeForSession: async () => ({
+          data: { session: null, user: null },
+          error: new AuthApiError('expired', 403, 'flow_state_expired'),
+        }),
+      });
+      const gateway = gatewayFor(api, storage);
+      expect((await gateway.startPasswordRecovery('code-1234')).kind).toBe('failed');
+      expect([...storage.items.keys()]).toEqual([SIGN_OUT_PENDING_KEY]);
+      expect(await gateway.restoreSession()).toEqual({ kind: 'unauthenticated' });
     });
   });
 });

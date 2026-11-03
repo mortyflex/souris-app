@@ -154,16 +154,35 @@ export const PASSWORD_RECOVERY_PENDING_KEY = 'beautizzy.auth.password-recovery-p
  * new link or signs in with her password), and no session event is forwarded
  * as a sign-in (a later token refresh cannot open the app either).
  */
-function createRecoveryMarker(storage: RecoveryMarkerStorage) {
+/**
+ * Exported for tests. Holds no token, no email, no user id — only « this
+ * device asked to sign out and the stored session may still be there ».
+ *
+ * supabase-js removes the stored session on sign-out EXCEPT when it cannot
+ * read it first: offline with an expired access token, the refresh fails and
+ * `signOut` returns that error with the session still stored. Without this
+ * marker the next launch would restore it offline (bound owner), and the
+ * first token refresh once the network is back would sign the device in
+ * again. While it is set the stored session is not a sign-in, exactly like a
+ * pending recovery:
+ *
+ *   set     before the sign-out request
+ *   cleared once the stored session is really gone, or a new session replaced
+ *           it (password sign-in, sign-up with a session, recovery exchange)
+ */
+export const SIGN_OUT_PENDING_KEY = 'beautizzy.auth.sign-out-pending';
+
+function createMarker(storage: RecoveryMarkerStorage, key: string) {
   return {
-    isPending: () => storage.getItem(PASSWORD_RECOVERY_PENDING_KEY) !== null,
-    markPending: () => storage.setItem(PASSWORD_RECOVERY_PENDING_KEY, '1'),
-    clear: () => storage.removeItem(PASSWORD_RECOVERY_PENDING_KEY),
+    isPending: () => storage.getItem(key) !== null,
+    markPending: () => storage.setItem(key, '1'),
+    clear: () => storage.removeItem(key),
   };
 }
 
 export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: RecoveryMarkerStorage): AuthGateway {
-  const recovery = createRecoveryMarker(markerStorage);
+  const recovery = createMarker(markerStorage, PASSWORD_RECOVERY_PENDING_KEY);
+  const signOutPending = createMarker(markerStorage, SIGN_OUT_PENDING_KEY);
 
   /**
    * Ends ONLY this device's recovery session (scope `local`: the account's
@@ -176,12 +195,34 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
     if (!error) recovery.clear();
   };
 
+  /**
+   * Ends ONLY this device's session. Scope `local` is explicit: the
+   * supabase-js default is `global`, which revokes every refresh token of the
+   * account — the professional's other phones and tablets would be signed out
+   * at their next refresh. No BeautIzzy path ever asks for a global sign-out.
+   *
+   * An `error` does not always mean the session is still stored (offline with
+   * a valid access token, supabase-js removes it and reports the failed server
+   * call), but it may (offline with an expired one): the marker stays until a
+   * later attempt succeeds or a new session replaces it.
+   */
+  const endLocalSession = async (): Promise<void> => {
+    const { error } = await auth.signOut({ scope: 'local' });
+    if (!error) signOutPending.clear();
+  };
+
   return {
     async restoreSession(): Promise<RestoredSession> {
       // Checked BEFORE the session, so neither a stored session nor the
       // offline fallback (`unavailable` + local binding) can open the app.
       if (recovery.isPending()) {
         await discardRecoverySession();
+        return { kind: 'unauthenticated' };
+      }
+      // A sign-out this device asked for is never undone by a restart, even
+      // when supabase-js could not remove the stored session yet.
+      if (signOutPending.isPending()) {
+        await endLocalSession();
         return { kind: 'unauthenticated' };
       }
       const { data, error } = await auth.getSession();
@@ -204,6 +245,7 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
       if (error) return { kind: 'failed', failure: mapSupabaseAuthError(error) };
       if (data.session) {
         recovery.clear();
+        signOutPending.clear();
         return { kind: 'authenticated', user: toAuthUser(data.session.user) };
       }
       if (data.user) {
@@ -225,18 +267,20 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
       const { data, error } = await auth.signInWithPassword({ email, password });
       if (error) return { kind: 'failed', failure: mapSupabaseAuthError(error) };
       if (data.session) {
-        // A password sign-in replaced any recovery session: it is a real one.
+        // A password sign-in replaced any recovery session, or any session a
+        // sign-out could not remove: it is a real one.
         recovery.clear();
+        signOutPending.clear();
         return { kind: 'authenticated', user: toAuthUser(data.session.user) };
       }
       return { kind: 'failed', failure: { code: 'UNKNOWN' } };
     },
 
     async signOut(): Promise<void> {
-      // supabase-js clears the persisted session even when the server call
-      // fails (offline); the returned error is therefore not a blocker.
-      await auth.signOut();
+      // Set first: an interruption mid-request is covered like a failure.
+      signOutPending.markPending();
       recovery.clear();
+      await endLocalSession();
     },
 
     async resendSignUpConfirmation(email: string): Promise<ResendOutcome> {
@@ -272,6 +316,9 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
         await discardRecoverySession();
         return { kind: 'failed', failure: { code: 'RECOVERY_LINK_INVALID' } };
       }
+      // The recovery session replaced whatever a sign-out left stored; from
+      // now on the recovery marker alone decides what that session is.
+      signOutPending.clear();
       return { kind: 'recovering', user: toAuthUser(data.session.user) };
     },
 
@@ -294,6 +341,9 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
         // recovery session, its password update) — only a sign-out passes.
         if (event === 'INITIAL_SESSION' || event === 'PASSWORD_RECOVERY') return;
         if (session && recovery.isPending()) return;
+        // Same after a sign-out supabase-js could not complete offline: the
+        // first refresh once the network is back must not sign the device in.
+        if (session && signOutPending.isPending()) return;
         listener(session ? toAuthUser(session.user) : null);
       });
       return () => data.subscription.unsubscribe();

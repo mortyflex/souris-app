@@ -27,7 +27,7 @@ import {
   readSyncBootstrapRecord,
   writeSyncBootstrapRecord,
 } from '@/persistence/sync/bootstrap';
-import { countSyncOutboxRows } from '@/persistence/sync/outbox';
+import { countSyncOutboxRows, loadSyncOutbox } from '@/persistence/sync/outbox';
 import { createSyncPushWorker } from '@/persistence/sync/push-worker';
 import { SyncRemoteError, type SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
 import { createFakeSyncRemote } from '@/persistence/testing/fake-sync-remote';
@@ -383,6 +383,78 @@ describe('CloudSyncRunner', () => {
     const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
     await renderRunner({ database: openDatabase({ bound: true }), restore: { kind: 'unauthenticated' }, sync: remote });
     expect(remote.countCalls).toBe(0);
+  });
+
+  it('a sign-out during a push: the rest is refused, nothing is settled or lost, nothing runs signed out, and the same owner sends it later', async () => {
+    const triggers = captureTriggers();
+    const remote = createFakeSyncRemote([REMOTE_BUSINESS_ID]);
+    // The remote as the server functions behave: without the owner's session every call is 42501.
+    let ownerSession = true;
+    let holdPush: Promise<void> | undefined;
+    const sessionBound: SyncRemoteGateway = {
+      countBusinessAggregates: async (businessId) => {
+        if (!ownerSession) throw new SyncRemoteError('FORBIDDEN', '42501');
+        return remote.countBusinessAggregates(businessId);
+      },
+      pushAggregate: async (request) => {
+        if (holdPush) await holdPush;
+        if (!ownerSession) throw new SyncRemoteError('FORBIDDEN', '42501');
+        return remote.pushAggregate(request);
+      },
+      pullBusinessAggregates: async (businessId, since) => {
+        if (!ownerSession) throw new SyncRemoteError('FORBIDDEN', '42501');
+        return remote.pullBusinessAggregates(businessId, since);
+      },
+    };
+    const database = openDatabase({ bound: true });
+    const auth = createFakeAuthGateway({ restore: async () => live });
+    await render(
+      <TestPersistenceProvider createSeed={createTestSeed} database={database}>
+        <AuthProvider gateway={auth}>
+          <BusinessSessionProvider gateway={createFakeBusinessGateway([createRemoteBusiness()])}>
+            <CloudSyncRunner gateway={sessionBound} />
+          </BusinessSessionProvider>
+        </AuthProvider>
+      </TestPersistenceProvider>,
+    );
+    await act(async () => {});
+    // The launch run uploaded the Business: the device synchronizes.
+    await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    const remoteBefore = JSON.stringify(remote.list(REMOTE_BUSINESS_ID));
+
+    updateClient(database, { ...clientLea, phone: '07 11 22 33 44' });
+    let release: () => void = () => {};
+    holdPush = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await act(async () => triggers.appState?.('active'));
+
+    // Signed out while the push waits on the network.
+    ownerSession = false;
+    await act(async () => auth.emitSession(null));
+    await act(async () => release());
+    await act(async () => {});
+
+    const [entry, ...others] = loadSyncOutbox(database, REMOTE_BUSINESS_ID);
+    expect(others).toEqual([]);
+    expect(entry).toMatchObject({ aggregateId: clientLea.id, operation: 'UPSERT' });
+    expect(entry?.lastError).toBe('FORBIDDEN:42501');
+    // Not settled, not rejected, no backoff: eligible again at the next run of its owner.
+    expect(entry?.nextAttemptAt).toBeUndefined();
+    expect(JSON.stringify(remote.list(REMOTE_BUSINESS_ID))).toBe(remoteBefore);
+
+    // Signed out: no trigger runs anything.
+    holdPush = undefined;
+    const requestsSignedOut = remote.requests.length;
+    await act(async () => triggers.appState?.('active'));
+    await act(async () => triggers.tick?.());
+    expect(remote.requests.length).toBe(requestsSignedOut);
+
+    // The same owner signs back in: the change leaves, once.
+    ownerSession = true;
+    await act(async () => auth.emitSession(fakeUser));
+    await waitFor(() => expect(countSyncOutboxRows(database)).toBe(0));
+    expect(remote.requests.filter((request) => request.aggregateId === clientLea.id)).toHaveLength(2);
   });
 
   it('renders nothing and does nothing without a sync gateway', async () => {

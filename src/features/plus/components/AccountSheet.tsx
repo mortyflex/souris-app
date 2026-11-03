@@ -4,9 +4,16 @@
 // sheet is the canonical BeautIzzy drawer reference (docs/design/
 // DESIGN_OVERRIDES.md §16): shared shell, header and close transition.
 // Signing out is consequential but not destructive, so its confirmation is
-// the neutral variant of the shared dialog. Wording rule: local data stays on
-// the device and is NOT described as backed up or synchronized — operational
-// cloud sync does not exist yet.
+// the neutral variant of the shared dialog. It ends THIS device's session
+// only (the account's other devices stay signed in) and never touches local
+// data. Wording rule: local data stays on the device and is NOT described as
+// backed up — sign-out neither uploads nor removes anything.
+//
+// Unsent changes: the outbox is read once, when the professional asks to
+// sign out. When it holds entries, the dialog says so — they stay on this
+// device and leave at the next connection of the SAME account here (another
+// account meets DEVICE_ACCOUNT_CONFLICT and never receives them). Nothing is
+// blocked, sent or discarded by this read.
 
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -14,6 +21,9 @@ import { StyleSheet, View } from 'react-native';
 import { useAuth } from '@/features/auth/session/AuthProvider';
 import { formatBusinessActivityType, formatBusinessOwnerName } from '@/features/business/presentation';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
+import type { SourisDatabase } from '@/persistence/database';
+import { hasPendingSyncOutbox } from '@/persistence/sync/outbox';
+import { usePersistence } from '@/providers/PersistenceProvider';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
 import { BottomSheet } from '@/shared/ui/BottomSheet';
@@ -26,14 +36,33 @@ interface AccountSheetProps {
   readonly onClose: () => void;
 }
 
+export const SIGN_OUT_MESSAGE =
+  'Vous devrez vous reconnecter pour accéder à BeautIzzy. Les données restent enregistrées sur cet appareil.';
+
+export const SIGN_OUT_WITH_UNSENT_CHANGES_MESSAGE =
+  'Certaines modifications n’ont pas encore été envoyées. Elles restent enregistrées sur cet appareil et seront envoyées à votre prochaine connexion avec ce compte.';
+
+/** A failed read says nothing special: the dialog then keeps its ordinary wording. */
+function hasUnsentChanges(database: SourisDatabase, businessId: string): boolean {
+  try {
+    return hasPendingSyncOutbox(database, businessId);
+  } catch {
+    return false;
+  }
+}
+
 export function AccountSheet({ visible, onClose }: AccountSheetProps) {
   const business = useCurrentBusiness();
+  const { database } = usePersistence();
   const { state, signOut } = useAuth();
-  const [signOutRequested, setSignOutRequested] = useState(false);
+  /** `unsentChanges`: what the outbox held when the confirmation was asked for (kept while it closes). */
+  const [signOutDialog, setSignOutDialog] = useState({ visible: false, unsentChanges: false });
   const email = state.status === 'authenticated' ? state.user.email : undefined;
 
+  const requestSignOut = () => setSignOutDialog({ visible: true, unsentChanges: hasUnsentChanges(database, business.id) });
+
   const confirmSignOut = () => {
-    setSignOutRequested(false);
+    setSignOutDialog((current) => ({ ...current, visible: false }));
     void signOut();
   };
 
@@ -56,7 +85,7 @@ export function AccountSheet({ visible, onClose }: AccountSheetProps) {
 
       <View style={styles.footer}>
         <AppButton
-          onPress={() => setSignOutRequested(true)}
+          onPress={requestSignOut}
           testID="sign-out"
           title="Se déconnecter"
           variant="dangerSoft"
@@ -64,18 +93,18 @@ export function AccountSheet({ visible, onClose }: AccountSheetProps) {
       </View>
 
       <ConfirmationDialog
-        body="Vous devrez vous reconnecter pour accéder à BeautIzzy. Les données restent enregistrées sur cet appareil."
+        body={signOutDialog.unsentChanges ? SIGN_OUT_WITH_UNSENT_CHANGES_MESSAGE : SIGN_OUT_MESSAGE}
         cancelLabel="Annuler"
         cancelTestID="cancel-sign-out"
         confirmLabel="Se déconnecter"
         confirmTestID="confirm-sign-out"
         eyebrow="COMPTE"
-        onCancel={() => setSignOutRequested(false)}
+        onCancel={() => setSignOutDialog((current) => ({ ...current, visible: false }))}
         onConfirm={confirmSignOut}
         testID="sign-out-dialog"
         title="Se déconnecter ?"
         tone="neutral"
-        visible={signOutRequested}
+        visible={signOutDialog.visible}
       />
     </BottomSheet>
   );

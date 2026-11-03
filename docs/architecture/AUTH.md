@@ -350,12 +350,43 @@ network never destroys local access. When the network returns, supabase-js refre
 
 ## 9. Sign-out
 
-Signing out clears the Supabase session (supabase-js clears the local session even when the
-server call fails offline). Local SQLite data is untouched. Wording: "Les données restent
-enregistrées sur cet appareil." — which is exactly what happens, whether or not the Business was
-synchronized (sign-out neither uploads nor removes anything). After sign-out the
-root gate returns to Discovery (the signed-out entry); the same owner signing back in reconnects immediately to the local
-binding; a different owner gets DEVICE_ACCOUNT_CONFLICT.
+Signing out ends THIS device's session only: `signOut({ scope: 'local' })`. The supabase-js
+default is `global`, which revokes every refresh token of the account — the professional's other
+phones and tablets would be signed out at their next refresh. No BeautIzzy path ever asks for a
+global (or `others`) sign-out; a source-level test enforces it
+(`src/infrastructure/supabase/__tests__/sign-out-scope-boundary.test.ts`). Every sign-out
+button (Compte sheet, conflict screen, unavailable screen, first-sync data screen) goes through
+the same `AuthProvider.signOut` → `AuthGateway.signOut`.
+
+Offline, supabase-js removes the stored session when the access token is still valid, but KEEPS
+it when the token has expired (it must refresh before signing out, and cannot). The
+sign-out-pending marker, `beautizzy.auth.sign-out-pending` (same storage, no token, no id),
+covers that case exactly like the pending-recovery marker:
+
+```text
+set      before the sign-out request
+cleared  the stored session is really gone (a sign-out without error) · a new session replaced it
+         (password sign-in, sign-up with a session, recovery exchange)
+while set
+  restoreSession()   signs out again (scope `local`) and reports `unauthenticated` — before the
+                     session, so the offline fallback cannot reopen the bound Business
+  onSessionChange    forwards no event carrying a session (the first token refresh once the
+                     network is back cannot sign the device in again) — only a sign-out
+```
+
+Local SQLite data is untouched. Wording: "Les données restent enregistrées sur cet appareil." —
+which is exactly what happens (sign-out neither uploads nor removes anything). When the outbox
+holds unsent changes at the moment the professional asks to sign out, the Compte confirmation
+says so: they stay on this device and leave at the next connection of the same account here.
+A run in flight when the session ends cannot settle or reject anything: without the owner's
+session the sync functions answer 42501 (`FORBIDDEN`), which leaves the entry pending with no
+backoff, and no run starts while signed out. After sign-out the root gate returns to Discovery
+(the signed-out entry); the same owner signing back in reconnects immediately to the local
+binding and sends what was pending; a different owner gets DEVICE_ACCOUNT_CONFLICT.
+
+A password change is a separate, server-side matter: Supabase Auth may end the account's other
+sessions when the password is updated (a recovery). That is the intended security effect of a
+recovery, not a sign-out.
 
 ---
 

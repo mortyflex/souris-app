@@ -172,6 +172,104 @@ describe('AuthProvider', () => {
     expect(stateOf(view)).toBe('unauthenticated');
   });
 
+  describe('sign-out of this device', () => {
+    it('a failing gateway sign-out still signs this device out and never rejects to the screen', async () => {
+      const gateway = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
+      gateway.signOut = jest.fn(() => Promise.reject(new Error('offline')));
+      const view = await renderAuth(gateway);
+
+      await act(async () => {
+        await expect(latest?.signOut()).resolves.toBeUndefined();
+      });
+      expect(stateOf(view)).toBe('unauthenticated');
+    });
+
+    it('signs out then straight back in — same owner or another — and a restart restores what the gateway holds', async () => {
+      let stored: AuthUser | undefined = fakeUser;
+      const other: AuthUser = { id: 'user-zoe', email: 'zoe@example.com' };
+      const gateway = createFakeAuthGateway({
+        restore: async () => (stored ? { kind: 'authenticated', user: stored } : { kind: 'unauthenticated' }),
+        signIn: async ({ email }) => {
+          stored = email === other.email ? other : fakeUser;
+          return { kind: 'authenticated', user: stored };
+        },
+      });
+      const signOut = gateway.signOut;
+      gateway.signOut = () => {
+        stored = undefined;
+        return signOut();
+      };
+      const view = await renderAuth(gateway);
+      expect(stateOf(view)).toBe('authenticated:user-lea:live');
+
+      await act(async () => {
+        await latest?.signOut();
+      });
+      await act(async () => {
+        await latest?.signIn({ email: 'lea@example.com', password: 'x' });
+      });
+      expect(stateOf(view)).toBe('authenticated:user-lea:live');
+
+      await act(async () => {
+        await latest?.signOut();
+      });
+      await act(async () => {
+        await latest?.signIn({ email: other.email ?? '', password: 'x' });
+      });
+      expect(stateOf(view)).toBe('authenticated:user-zoe:live');
+      expect(gateway.calls.signOut).toBe(2);
+      // What a restart would restore: the last session, never the signed-out one.
+      expect(await gateway.restoreSession()).toEqual({ kind: 'authenticated', user: other });
+    });
+
+    it('a session ended elsewhere (refresh refused) signs this device out without asking for another sign-out', async () => {
+      const gateway = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
+      const view = await renderAuth(gateway);
+
+      await act(async () => gateway.emitSession(null));
+      expect(stateOf(view)).toBe('unauthenticated');
+      expect(gateway.calls.signOut).toBe(0);
+    });
+
+    it('a refresh that cannot reach the network is not a sign-out: the bound owner keeps offline access', async () => {
+      const gateway = createFakeAuthGateway({ restore: async () => ({ kind: 'unavailable' }) });
+      const view = await renderAuth(gateway, () => fakeUser);
+      expect(stateOf(view)).toBe('authenticated:user-lea:offline');
+      expect(gateway.calls.signOut).toBe(0);
+    });
+
+    it('after a sign-out, a recovery code already exchanged is never replayed; a fresh one opens the recovery', async () => {
+      const gateway = createFakeAuthGateway({
+        restore: async () => ({ kind: 'unauthenticated' }),
+        startPasswordRecovery: async (code) =>
+          code === 'code-spent'
+            ? { kind: 'failed', failure: { code: 'RECOVERY_LINK_EXPIRED' } }
+            : { kind: 'recovering', user: fakeUser },
+      });
+      const view = await renderAuth(gateway);
+
+      await act(async () => {
+        await latest?.startPasswordRecovery('code-spent');
+      });
+      await act(async () => {
+        await latest?.signIn({ email: 'lea@example.com', password: 'x' });
+      });
+      await act(async () => {
+        await latest?.signOut();
+      });
+      expect(stateOf(view)).toBe('unauthenticated');
+      // The router may hand the last opened URL back after the sign-out: the screen asks first.
+      expect(latest?.isRecoveryCodeUsed('code-spent')).toBe(true);
+      expect(latest?.isRecoveryCodeUsed('code-fresh')).toBe(false);
+
+      await act(async () => {
+        await latest?.startPasswordRecovery('code-fresh');
+      });
+      expect(stateOf(view)).toBe('recovering:user-lea');
+      expect(gateway.calls.startPasswordRecovery).toEqual(['code-spent', 'code-fresh']);
+    });
+  });
+
   it('reports a not-configured gateway as a recoverable error and retries', async () => {
     let attempts = 0;
     const gateway = createFakeAuthGateway({

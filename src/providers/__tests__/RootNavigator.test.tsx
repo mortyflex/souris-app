@@ -1,6 +1,6 @@
 // BeautIzzy — root gate: protected content never mounts before the session resolved
 
-import { act, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
 import { SUBSCRIPTION_ENFORCEMENT } from '@/features/access/enforcement';
@@ -10,7 +10,8 @@ import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser, type FakeAuthGateway } from '@/features/auth/testing/fake-auth-gateway';
 import { BusinessSessionProvider } from '@/features/business/session/BusinessSessionProvider';
 import { createFakeBusinessGateway, createRemoteBusiness, type FakeBusinessGateway } from '@/features/business/testing/fake-business-gateway';
-import { bindLocalDatabaseToBusiness } from '@/persistence/stores/business-profile';
+import { bindLocalDatabaseToBusiness, readBusinessProfile } from '@/persistence/stores/business-profile';
+import { loadSyncOutbox, markAggregateUpserted } from '@/persistence/sync/outbox';
 import { loadServices } from '@/persistence/stores/services';
 import { migrateDatabase } from '@/persistence/migrations';
 import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
@@ -169,6 +170,30 @@ describe('RootNavigator', () => {
     await waitFor(() => expect(unavailable.getByTestId('account-unavailable-screen')).toBeTruthy());
     expect(unavailable.getByText('Réessayer')).toBeTruthy();
     expect(unavailable.queryByTestId('route-(app)')).toBeNull();
+  });
+
+  it('conflict: signing out the other account ends its session only — the bound data, its owner and its unsent changes stay', async () => {
+    const database = openTestDatabase();
+    migrateDatabase(database);
+    const owner = createRemoteBusiness();
+    bindLocalDatabaseToBusiness(database, owner);
+    markAggregateUpserted(database, 'CLIENT', '11111111-1111-4111-8111-111111111111');
+    const auth = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: { id: 'user-b' } }) });
+    const view = await renderGate({ auth, database, business: createFakeBusinessGateway([owner]) });
+    await waitFor(() => expect(view.getByTestId('account-conflict-screen')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Se déconnecter'));
+    });
+    expect(auth.calls.signOut).toBe(1);
+    expect(view.getByTestId('route-(auth)')).toBeTruthy();
+    expect(readBusinessProfile(database)?.id).toBe(owner.id);
+    expect(loadSyncOutbox(database, owner.id)).toHaveLength(1);
+
+    // The original owner signs in again on this device: straight back to her Business.
+    await act(async () => auth.emitSession(fakeUser));
+    await waitFor(() => expect(view.getByTestId('route-(app)')).toBeTruthy());
+    expect(loadSyncOutbox(database, owner.id)).toHaveLength(1);
   });
 
   it('routes exactly as before whatever the subscription source answers (enforcement disabled)', async () => {

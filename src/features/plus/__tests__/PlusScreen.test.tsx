@@ -4,11 +4,15 @@ import { Alert, StyleSheet } from 'react-native';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { createFakeAuthGateway, fakeUser } from '@/features/auth/testing/fake-auth-gateway';
 import { ServiceCatalogProvider } from '@/features/services/session/ServiceCatalogProvider';
-import { TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
+import { bindLocalDatabaseToBusiness } from '@/persistence/stores/business-profile';
+import { loadSyncOutbox, markAggregateUpserted } from '@/persistence/sync/outbox';
+import { openTestDatabase } from '@/persistence/testing/node-sqlite-database';
+import { TestPersistenceProvider, testBusiness } from '@/providers/testing/TestPersistenceProvider';
 
 import type { SubscriptionVerification } from '@/domain/access';
 import { createFakeSubscriptionSource } from '@/features/access/testing/fake-subscription-source';
 
+import { SIGN_OUT_MESSAGE, SIGN_OUT_WITH_UNSENT_CHANGES_MESSAGE } from '../components/AccountSheet';
 import { formatAppVersion, PlusScreen } from '../PlusScreen';
 
 const mockPush = jest.fn();
@@ -114,6 +118,41 @@ describe('PlusScreen', () => {
     });
     expect(auth.calls.signOut).toBe(1);
     alertSpy.mockRestore();
+  });
+
+  it('says when changes are not sent yet, keeps them on the device, and still signs out', async () => {
+    const database = openTestDatabase();
+    const auth = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
+    const view = await render(
+      <TestPersistenceProvider database={database}>
+        <AuthProvider gateway={auth}>
+          <ServiceCatalogProvider>
+            <PlusScreen />
+          </ServiceCatalogProvider>
+        </AuthProvider>
+      </TestPersistenceProvider>,
+    );
+    await act(async () => {});
+    bindLocalDatabaseToBusiness(database, testBusiness);
+    markAggregateUpserted(database, 'CLIENT', '11111111-1111-4111-8111-111111111111');
+    expect(loadSyncOutbox(database, testBusiness.id)).toHaveLength(1);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('plus-account'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('sign-out'));
+    });
+    expect(view.getByText(SIGN_OUT_WITH_UNSENT_CHANGES_MESSAGE)).toBeTruthy();
+    expect(view.queryByText(SIGN_OUT_MESSAGE)).toBeNull();
+    expect(SIGN_OUT_WITH_UNSENT_CHANGES_MESSAGE).not.toMatch(/sauvegard|cloud/i);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('confirm-sign-out'));
+    });
+    expect(auth.calls.signOut).toBe(1);
+    // Signing out sends nothing and removes nothing.
+    expect(loadSyncOutbox(database, testBusiness.id)).toHaveLength(1);
   });
 
   it('development builds: the Développement section opens the Cloud Sync test control', async () => {

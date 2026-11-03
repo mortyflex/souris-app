@@ -199,9 +199,13 @@ export function AuthProvider({
 
   const signOut = useCallback(async () => {
     try {
+      // THIS device only: the account's other devices stay signed in.
       await gateway.signOut();
+    } catch {
+      // Never surfaced: every caller fires and forgets. The gateway keeps a
+      // sign-out it could not complete pending, so no restart undoes it.
     } finally {
-      // The persisted session is gone either way; local business data stays.
+      // Signed out on this device either way; local business data stays.
       restoreGeneration.current += 1;
       recovering.current = false;
       setState({ status: 'unauthenticated' });
