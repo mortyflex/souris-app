@@ -7,9 +7,15 @@
 // on this installation (PKCE), which the copy says plainly. Drawn in the same
 // first-run frame as sign-in; the sent state reuses the lavender notice of
 // the email confirmation.
+//
+// After a sent link (or a rate-limit refusal) the address waits a minute
+// before another request: the action shows the live countdown and stays
+// disabled. The wait is read from the expiry instant the AuthProvider keeps
+// (password-reset-cooldown.ts), so leaving the screen, the background or a
+// restart never shortens it.
 
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
@@ -21,8 +27,10 @@ import { rose, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { EmailSentNotice } from './components/EmailSentNotice';
 import { isPlausibleEmail, normalizeEmail } from './form';
+import type { AuthFailureCode } from './gateway';
 import { formatAuthFailure } from './messages';
 import { useAuth } from './session/AuthProvider';
+import { useCooldownSeconds } from './use-cooldown-seconds';
 
 interface ForgotPasswordScreenProps {
   /** The email already typed on sign-in, if any. */
@@ -33,47 +41,75 @@ type Notice = { readonly text: string; readonly tone: 'info' | 'error' };
 
 export function ForgotPasswordScreen({ initialEmail = '' }: ForgotPasswordScreenProps) {
   const router = useRouter();
-  const { requestPasswordReset } = useAuth();
+  const { requestPasswordReset, passwordResetCooldownEndsAt } = useAuth();
   const [email, setEmail] = useState(initialEmail);
   const [attempted, setAttempted] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  /** The cooldown of the address in play (typed, then sent to): survives a remount through the provider. */
+  const [cooldownEndsAt, setCooldownEndsAt] = useState(() =>
+    passwordResetCooldownEndsAt(normalizeEmail(initialEmail)),
+  );
+  const waitSeconds = useCooldownSeconds(cooldownEndsAt);
+  const waiting = waitSeconds > 0;
+  /** Synchronous: a second tap in the same frame sees it, before React re-renders. */
+  const inFlight = useRef(false);
 
   const emailError = attempted ? validateEmail(email) : undefined;
   const backToSignIn = () => router.replace('/sign-in');
 
+  const changeEmail = (value: string) => {
+    setEmail(value);
+    setCooldownEndsAt(passwordResetCooldownEndsAt(normalizeEmail(value)));
+  };
+
+  /** Undefined when a request is already on its way or the address is still waiting. */
   const send = async (target: string) => {
+    if (inFlight.current || passwordResetCooldownEndsAt(target) !== undefined) return undefined;
+    inFlight.current = true;
     setSending(true);
     setNotice(null);
-    const outcome = await requestPasswordReset(target);
-    setSending(false);
-    return outcome;
+    try {
+      return await requestPasswordReset(target);
+    } finally {
+      inFlight.current = false;
+      setSending(false);
+      setCooldownEndsAt(passwordResetCooldownEndsAt(target));
+    }
   };
 
   const submit = async () => {
-    if (sending) return;
+    if (inFlight.current) return;
     setAttempted(true);
     if (validateEmail(email) !== undefined) return;
 
     const target = normalizeEmail(email);
+    // The keyboard's « Envoyer » bypasses the disabled button: same answer, no request.
+    if (passwordResetCooldownEndsAt(target) !== undefined) {
+      setCooldownEndsAt(passwordResetCooldownEndsAt(target));
+      setNotice({ text: formatResetFailure('RATE_LIMITED'), tone: 'error' });
+      return;
+    }
     const outcome = await send(target);
+    if (outcome === undefined) return;
     if (outcome.kind === 'sent') {
       haptics.success();
       setSentTo(target);
       return;
     }
     haptics.warning();
-    setNotice({ text: formatAuthFailure(outcome.failure.code), tone: 'error' });
+    setNotice({ text: formatResetFailure(outcome.failure.code), tone: 'error' });
   };
 
   const resend = async () => {
-    if (sending || sentTo === null) return;
+    if (sentTo === null) return;
     const outcome = await send(sentTo);
+    if (outcome === undefined) return;
     setNotice(
       outcome.kind === 'sent'
         ? { text: 'Lien renvoyé.', tone: 'info' }
-        : { text: formatAuthFailure(outcome.failure.code), tone: 'error' },
+        : { text: formatResetFailure(outcome.failure.code), tone: 'error' },
     );
   };
 
@@ -97,10 +133,11 @@ export function ForgotPasswordScreen({ initialEmail = '' }: ForgotPasswordScreen
           <>
             <AppButton onPress={backToSignIn} testID="back-to-sign-in" title="Retour à la connexion" />
             <AppButton
-              disabled={sending}
+              accessibilityLabel={waiting ? `Renvoyer le lien, disponible dans ${describeWait(waitSeconds)}` : undefined}
+              disabled={sending || waiting}
               onPress={() => void resend()}
               testID="resend-reset-link"
-              title={sending ? 'Envoi…' : 'Renvoyer le lien'}
+              title={sending ? 'Envoi…' : withCountdown('Renvoyer le lien', waitSeconds)}
               variant="tertiary"
             />
           </>
@@ -128,10 +165,11 @@ export function ForgotPasswordScreen({ initialEmail = '' }: ForgotPasswordScreen
       footer={
         <>
           <AppButton
-            disabled={sending}
+            accessibilityLabel={waiting ? `Recevoir le lien, disponible dans ${describeWait(waitSeconds)}` : undefined}
+            disabled={sending || waiting}
             onPress={() => void submit()}
             testID="submit-forgot-password"
-            title={sending ? 'Envoi…' : 'Recevoir le lien'}
+            title={sending ? 'Envoi…' : withCountdown('Recevoir le lien', waitSeconds)}
           />
           <AppButton disabled={sending} onPress={backToSignIn} title="Retour à la connexion" variant="tertiary" />
         </>
@@ -150,7 +188,7 @@ export function ForgotPasswordScreen({ initialEmail = '' }: ForgotPasswordScreen
         error={emailError}
         keyboardType="email-address"
         label="Email"
-        onChangeText={setEmail}
+        onChangeText={changeEmail}
         onSubmitEditing={() => void submit()}
         placeholder="vous@exemple.fr"
         returnKeyType="send"
@@ -161,6 +199,31 @@ export function ForgotPasswordScreen({ initialEmail = '' }: ForgotPasswordScreen
       {noticeText}
     </OnboardingStepLayout>
   );
+}
+
+/** « Renvoyer le lien (42 s) » while the address waits, the plain action otherwise. */
+function withCountdown(action: string, seconds: number): string {
+  return seconds > 0 ? `${action} (${seconds} s)` : action;
+}
+
+function describeWait(seconds: number): string {
+  return seconds === 1 ? '1 seconde' : `${seconds} secondes`;
+}
+
+/**
+ * The request's own wording for a throttled or failed send; every other
+ * refusal keeps the shared Auth sentence. Never says whether an account exists.
+ */
+function formatResetFailure(code: AuthFailureCode): string {
+  switch (code) {
+    case 'RATE_LIMITED':
+      return 'Veuillez patienter avant de demander un nouveau lien.';
+    case 'NETWORK':
+    case 'UNKNOWN':
+      return 'Impossible d’envoyer le lien pour le moment. Vérifiez votre connexion et réessayez.';
+    default:
+      return formatAuthFailure(code);
+  }
 }
 
 function validateEmail(value: string): string | undefined {

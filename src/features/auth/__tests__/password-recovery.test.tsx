@@ -108,9 +108,11 @@ describe('ForgotPasswordScreen', () => {
     ).toBeTruthy();
     expect(view.getByText('Ouvrez-le sur ce téléphone pour choisir un nouveau mot de passe. Pensez à regarder dans les courriers indésirables.')).toBeTruthy();
 
+    // The resend waits out Supabase's one-minute interval (password-reset-cooldown.test.tsx).
+    expect(view.getByTestId('resend-reset-link').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(view.getByText('Renvoyer le lien (60 s)')).toBeTruthy();
     await press(view.getByTestId('resend-reset-link'));
-    expect(gateway.calls.requestPasswordReset).toEqual(['lea@example.com', 'lea@example.com']);
-    expect(view.getByText('Lien renvoyé.')).toBeTruthy();
+    expect(gateway.calls.requestPasswordReset).toEqual(['lea@example.com']);
 
     await press(view.getByTestId('back-to-sign-in'));
     expect(mockReplace).toHaveBeenCalledWith('/sign-in');
@@ -125,7 +127,7 @@ describe('ForgotPasswordScreen', () => {
     const view = await renderWithAuth(gateway, <ForgotPasswordScreen initialEmail="lea@example.com" />);
 
     await press(view.getByTestId('submit-forgot-password'));
-    expect(view.getByText('Trop de tentatives. Patientez un instant avant de réessayer.')).toBeTruthy();
+    expect(view.getByText('Veuillez patienter avant de demander un nouveau lien.')).toBeTruthy();
     expect(view.getByTestId('email-input').props.value).toBe('lea@example.com');
     expect(view.queryByTestId('forgot-password-sent')).toBeNull();
   });

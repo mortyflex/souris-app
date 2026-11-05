@@ -25,6 +25,11 @@
 // codes already handed to the exchange, so a link the router replays (its
 // stack rebuilt from the last opened URL) is never exchanged twice.
 //
+// Password recovery emails go out one request at a time, and never during
+// the cooldown that follows a sent link or a rate-limit refusal
+// (password-reset-cooldown.ts): the waiting request is refused here, before
+// any network call, whatever the screen shows.
+//
 // Business resolution is a separate provider (BusinessSessionProvider). No
 // raw provider error, token, or session payload ever reaches the UI: the
 // gateway returns outcomes with stable codes. The session listener is
@@ -53,6 +58,7 @@ import {
   type SignInOutcome,
   type SignUpOutcome,
 } from '../gateway';
+import { createPasswordResetCooldown, type PasswordResetCooldown } from '../password-reset-cooldown';
 
 export type AuthState =
   | { readonly status: 'initializing' }
@@ -73,7 +79,13 @@ export interface AuthSessionValue {
   readonly signIn: (credentials: AuthCredentials) => Promise<SignInOutcome>;
   readonly signOut: () => Promise<void>;
   readonly resendSignUpConfirmation: (email: string) => Promise<ResendOutcome>;
+  /**
+   * Single flight per address; refused locally (RATE_LIMITED, no request)
+   * while its cooldown runs. A sent link or a rate-limit refusal (re)starts it.
+   */
   readonly requestPasswordReset: (email: string) => Promise<PasswordResetRequestOutcome>;
+  /** The expiry instant (ms) of this normalized address's resend cooldown, undefined when none runs. */
+  readonly passwordResetCooldownEndsAt: (email: string) => number | undefined;
   /** Opens the recovery session of a recovery link's code; refused while signed in. */
   readonly startPasswordRecovery: (code: string) => Promise<PasswordRecoveryOutcome>;
   /** True when this code was already handed to the exchange since the app started (memory only). */
@@ -95,7 +107,11 @@ interface AuthProviderProps {
    * stored session cannot be validated offline. Undefined = unbound device.
    */
   readonly resolveLocalOwner?: () => AuthUser | undefined;
+  /** Where the resend cooldown lives; in memory (survives navigation, not a restart) when omitted. */
+  readonly passwordResetCooldown?: PasswordResetCooldown;
 }
+
+const RATE_LIMITED: PasswordResetRequestOutcome = { kind: 'failed', failure: { code: 'RATE_LIMITED' } };
 
 function toFailure(error: unknown): AuthFailure {
   return error instanceof AuthGatewayError ? { code: error.code } : { code: 'UNKNOWN' };
@@ -104,9 +120,13 @@ function toFailure(error: unknown): AuthFailure {
 export function AuthProvider({
   gateway,
   resolveLocalOwner,
+  passwordResetCooldown,
   children,
 }: PropsWithChildren<AuthProviderProps>) {
   const [state, setState] = useState<AuthState>({ status: 'initializing' });
+  const [cooldown] = useState(() => passwordResetCooldown ?? createPasswordResetCooldown({ scope: 'memory' }));
+  /** The password reset request on its way, if any: a synchronous guard, never React state. */
+  const resetInFlight = useRef<{ readonly email: string; outcome: Promise<PasswordResetRequestOutcome> } | null>(null);
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
@@ -224,14 +244,41 @@ export function AuthProvider({
   );
 
   const requestPasswordReset = useCallback(
-    async (email: string): Promise<PasswordResetRequestOutcome> => {
-      try {
-        return await gateway.requestPasswordReset(email);
-      } catch (error) {
-        return { kind: 'failed', failure: toFailure(error) };
-      }
+    (email: string): Promise<PasswordResetRequestOutcome> => {
+      const pending = resetInFlight.current;
+      // A second tap joins the request on its way; it never starts another.
+      if (pending) return pending.email === email ? pending.outcome : Promise.resolve(RATE_LIMITED);
+      if (cooldown.endsAt(email, Date.now()) !== undefined) return Promise.resolve(RATE_LIMITED);
+
+      // Registered before the gateway is called: even a synchronous throw
+      // cannot leave a stale guard behind.
+      const flight: { readonly email: string; outcome: Promise<PasswordResetRequestOutcome> } = {
+        email,
+        outcome: Promise.resolve(RATE_LIMITED),
+      };
+      resetInFlight.current = flight;
+      flight.outcome = (async (): Promise<PasswordResetRequestOutcome> => {
+        let result: PasswordResetRequestOutcome;
+        try {
+          result = await gateway.requestPasswordReset(email);
+        } catch (error) {
+          result = { kind: 'failed', failure: toFailure(error) };
+        }
+        // Supabase refuses another email to this address for a minute after
+        // one left, and exposes no reliable retry delay: the same wait after
+        // a rate-limit refusal. An ordinary failure (network…) starts none.
+        if (result.kind === 'sent' || result.failure.code === 'RATE_LIMITED') cooldown.start(email, Date.now());
+        if (resetInFlight.current === flight) resetInFlight.current = null;
+        return result;
+      })();
+      return flight.outcome;
     },
-    [gateway],
+    [gateway, cooldown],
+  );
+
+  const passwordResetCooldownEndsAt = useCallback(
+    (email: string) => cooldown.endsAt(email, Date.now()),
+    [cooldown],
   );
 
   const startPasswordRecovery = useCallback(
@@ -304,6 +351,7 @@ export function AuthProvider({
         signOut,
         resendSignUpConfirmation,
         requestPasswordReset,
+        passwordResetCooldownEndsAt,
         startPasswordRecovery,
         isRecoveryCodeUsed,
         completePasswordRecovery,

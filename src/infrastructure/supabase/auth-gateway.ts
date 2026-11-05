@@ -119,7 +119,8 @@ export function mapSupabaseAuthError(error: unknown): AuthFailure {
       case 'email_address_not_authorized':
         return { code: 'EMAIL_DELIVERY_UNAVAILABLE' };
       default:
-        return { code: 'UNKNOWN' };
+        // A throttled request whose code this build does not know yet.
+        return error.status === 429 ? { code: 'RATE_LIMITED' } : { code: 'UNKNOWN' };
     }
   }
   if (looksLikeNetworkFailure(error)) return { code: 'NETWORK' };

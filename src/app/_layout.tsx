@@ -127,7 +127,11 @@ function AccountSession({
   const evidenceStore = useMemo(() => createEntitlementEvidenceStore(database), [database]);
 
   return (
-    <AuthProvider gateway={gateways.auth} resolveLocalOwner={resolveLocalOwner}>
+    <AuthProvider
+      gateway={gateways.auth}
+      passwordResetCooldown={gateways.passwordResetCooldown}
+      resolveLocalOwner={resolveLocalOwner}
+    >
       <BusinessSessionProvider gateway={gateways.business}>
         <BusinessAccessProvider enforcement={SUBSCRIPTION_ENFORCEMENT} source={subscriptionSource} evidenceStore={evidenceStore}>
           {/* Renders nothing of its own; pushes local data only once the live session is bound to its Business. */}

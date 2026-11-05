@@ -5,6 +5,7 @@
 // controlled outcome instead of crashing the root render.
 
 import { AuthGatewayError, type AuthGateway } from '@/features/auth/gateway';
+import { createPasswordResetCooldown, type PasswordResetCooldown } from '@/features/auth/password-reset-cooldown';
 import { BusinessGatewayError, type BusinessGateway } from '@/features/business/gateway';
 import type { CommunicationsGateway } from '@/features/communications/gateway';
 import type { BusinessMediaRemote } from '@/persistence/media/business-media';
@@ -15,7 +16,7 @@ import { createSupabaseBusinessGateway } from './business-gateway';
 import { createSupabaseBusinessMediaGateway } from './business-media-gateway';
 import { createSupabaseCommunicationsGateway } from './communications-gateway';
 import { getSupabaseClient } from './client';
-import { SupabaseConfigurationError } from './config';
+import { readSupabaseConfig, SupabaseConfigurationError } from './config';
 import { expoPhotoFileIO } from './photo-file-io';
 import { createSupabaseSyncGateway } from './sync-gateway';
 
@@ -28,6 +29,12 @@ export interface AccountGateways {
   readonly media: BusinessMediaRemote | undefined;
   /** Undefined when Supabase is not configured: reminder settings then read as disabled. */
   readonly communications: CommunicationsGateway | undefined;
+  /**
+   * The password recovery resend cooldown: in the session's storage, scoped
+   * to the Supabase project so Staging and Production never share it. In
+   * memory when Supabase is not configured.
+   */
+  readonly passwordResetCooldown: PasswordResetCooldown;
 }
 
 function createUnconfiguredGateways(): AccountGateways {
@@ -52,6 +59,7 @@ function createUnconfiguredGateways(): AccountGateways {
     sync: undefined,
     media: undefined,
     communications: undefined,
+    passwordResetCooldown: createPasswordResetCooldown({ scope: 'unconfigured' }),
   };
 }
 
@@ -65,6 +73,7 @@ export function createAccountGateways(): AccountGateways {
       sync: createSupabaseSyncGateway(client),
       media: createSupabaseBusinessMediaGateway(client, expoPhotoFileIO),
       communications: createSupabaseCommunicationsGateway(client),
+      passwordResetCooldown: createPasswordResetCooldown({ scope: readSupabaseConfig().url, storage: localStorage }),
     };
   } catch (error) {
     if (error instanceof SupabaseConfigurationError) {

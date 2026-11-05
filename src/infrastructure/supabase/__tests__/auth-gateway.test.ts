@@ -77,6 +77,12 @@ describe('mapSupabaseAuthError', () => {
       code: 'RATE_LIMITED',
     });
     expect(mapSupabaseAuthError(new AuthApiError('???', 500, 'unexpected_failure'))).toEqual({ code: 'UNKNOWN' });
+    // The email quota and the per-user interval, and any throttled answer whose code is unknown here.
+    expect(mapSupabaseAuthError(new AuthApiError('quota', 429, 'over_email_send_rate_limit'))).toEqual({
+      code: 'RATE_LIMITED',
+    });
+    expect(mapSupabaseAuthError(new AuthApiError('later', 429, 'some_future_limit'))).toEqual({ code: 'RATE_LIMITED' });
+    expect(mapSupabaseAuthError(new AuthApiError('later', 429, undefined))).toEqual({ code: 'RATE_LIMITED' });
     expect(mapSupabaseAuthError(new TypeError('Network request failed'))).toEqual({ code: 'NETWORK' });
     expect(mapSupabaseAuthError('boom')).toEqual({ code: 'UNKNOWN' });
   });
