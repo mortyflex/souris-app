@@ -21,6 +21,19 @@
 //                confirms a save: « Image enregistrée dans Photos » and one
 //                success haptic, once the library has the image.
 //
+// Client spending — ONE choice, the eye of « Clients qui dépensent le plus »,
+// owned here and applied to BOTH the paper and the exported card: open eye,
+// amounts written on screen AND in the image; crossed eye, masked on screen
+// AND in the image. Every opening starts HIDDEN; the choice survives a client
+// profile visit (the ticket steps aside, it does not close) and is forgotten
+// on close. It is never persisted, so it can neither outlive the app nor
+// reach another account. Masking happens in the models, so a hidden number
+// is never rendered anywhere — not even off screen. An export is refused
+// while the mounted card does not match the choice on screen (the card
+// follows the paper one render later), and the eye ignores taps while an
+// export is working, so a capture never sees a half-changed card. Business
+// turnover stays frosted on the card whatever the choice (§35).
+//
 // One action at a time: every press is ignored while one is working. A failure
 // shows one retryable line; nothing closes the ticket, and the browsed period
 // and category never move.
@@ -65,6 +78,7 @@ import {
   buildInsightsReceipt,
   formatInsightsPeriod,
   getInsightsNavigationLabels,
+  type ClientSpendingVisibility,
   type InsightsRankingKey,
 } from './insights-receipt';
 import { buildInsightsShareCard, type InsightsShareCardModel } from './insights-share-card';
@@ -100,6 +114,7 @@ export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessIns
   const [notice, setNotice] = useState<string | null>(null);
   const exportFrame = useRef<View>(null);
   const busy = useRef(false);
+  const [clientSpending, setClientSpending] = useState<ClientSpendingVisibility>('hidden');
 
   // Stepping aside for a client profile: the printer closes while `aside`, and
   // the paper reopens from `resumeFrom` when the screen regains focus.
@@ -114,6 +129,15 @@ export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessIns
   // So does the browsing: a close requested by the screen starts over next time.
   if (!visible && aside) setAside(false);
   if (!visible && resumeFrom !== null) setResumeFrom(null);
+  // And so does the client-spending choice: every opening starts hidden.
+  if (!visible && clientSpending !== 'hidden') setClientSpending('hidden');
+
+  const toggleClientSpending = () => {
+    // Never while an export works: the card it captures must not change under it.
+    if (busy.current) return;
+    haptics.selection();
+    setClientSpending((current) => (current === 'visible' ? 'hidden' : 'visible'));
+  };
 
   const openClient = (clientId: string) => {
     if (busy.current || pendingClientId.current !== null) return;
@@ -153,6 +177,9 @@ export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessIns
 
   const run = async (action: ExportAction) => {
     if (busy.current || shareCard === null) return;
+    // The card follows the paper one render later: never capture one worded
+    // with another client-spending choice than the one on screen.
+    if (shareCard.clientSpending !== clientSpending) return;
     busy.current = true;
     setWorking(action);
     setNotice(null);
@@ -218,9 +245,11 @@ export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessIns
       renderReceipt={(frame) => (
         <BusinessInsightsPaper
           anchor={anchor}
+          clientSpending={clientSpending}
           frame={frame}
           initialBrowsing={resumeFrom ?? undefined}
           onBrowsingChange={rememberBrowsing}
+          onClientSpendingToggle={toggleClientSpending}
           onOpenClient={openClient}
           onShareCardChange={setShareCard}
         />
@@ -238,16 +267,20 @@ export function BusinessInsightsTicket({ visible, anchor, onClose }: BusinessIns
  */
 function BusinessInsightsPaper({
   anchor,
+  clientSpending,
   frame,
   initialBrowsing,
   onBrowsingChange,
+  onClientSpendingToggle,
   onOpenClient,
   onShareCardChange,
 }: {
   readonly anchor: Date;
+  readonly clientSpending: ClientSpendingVisibility;
   readonly frame: ReceiptPaperFrame;
   readonly initialBrowsing?: InsightsBrowsing;
   readonly onBrowsingChange: (browsing: InsightsBrowsing) => void;
+  readonly onClientSpendingToggle: () => void;
   readonly onOpenClient: (clientId: string) => void;
   readonly onShareCardChange: (card: InsightsShareCardModel | null) => void;
 }) {
@@ -272,14 +305,14 @@ function BusinessInsightsPaper({
       ),
     [appointments, sales, deposits, saleAdjustments, kind, periodAnchor],
   );
-  const model = buildInsightsReceipt(insights, getClientById);
+  const model = buildInsightsReceipt(insights, getClientById, clientSpending);
   const navigation = getInsightsNavigationLabels(kind);
   const periodLabel = formatInsightsPeriod(period);
 
   // The share card follows what is on screen; it goes away with the paper.
   const shareCard = useMemo(
-    () => buildInsightsShareCard(insights, periodLabel, category, getClientById),
-    [insights, periodLabel, category, getClientById],
+    () => buildInsightsShareCard(insights, periodLabel, category, getClientById, clientSpending),
+    [insights, periodLabel, category, getClientById, clientSpending],
   );
   useEffect(() => {
     onShareCardChange(shareCard);
@@ -288,11 +321,13 @@ function BusinessInsightsPaper({
 
   return (
     <BusinessInsightsReceipt
+      clientSpending={clientSpending}
       initialCategory={initialBrowsing?.category}
       model={model}
       nextLabel={navigation.next}
       onCategoryChange={setCategory}
       onClientPress={onOpenClient}
+      onClientSpendingToggle={onClientSpendingToggle}
       onNext={() => setPeriodAnchor((current) => shiftInsightsAnchor(kind, current, 1))}
       onPeriodKindChange={setKind}
       onPrevious={() => setPeriodAnchor((current) => shiftInsightsAnchor(kind, current, -1))}

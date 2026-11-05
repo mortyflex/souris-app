@@ -28,6 +28,13 @@
 // screen. The ticket may ask the paper to open on a given category
 // (`initialCategory`) when it comes back from a client profile.
 //
+// Client spending: the « Clients qui dépensent le plus » page carries ONE eye
+// beside its title (`onClientSpendingToggle`). Open eye: the amounts are
+// written, here and on the exported image; crossed eye: they are masked,
+// here and on the exported image. The model is already worded for the choice
+// (`buildInsightsReceipt`); the eye only reports a tap. It changes nothing
+// else: same places, same order, same size — the mask takes one line too.
+//
 // Client places are the only interactive places: the receipt passes
 // `onClientPress` to every podium, and the podium turns the places that carry
 // a client id into buttons (`InsightsPodium`).
@@ -54,6 +61,7 @@ import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { useReduceMotion } from '@/shared/ui/useReduceMotion';
 import {
   foregroundSoft,
+  interaction,
   lavender,
   radii,
   semanticColors,
@@ -61,7 +69,14 @@ import {
 } from '@/shared/ui/theme';
 
 import { InsightsPodium } from './components/InsightsPodium';
-import type { InsightsRankingKey, InsightsReceiptModel } from './insights-receipt';
+import type {
+  ClientSpendingVisibility,
+  InsightsRankingKey,
+  InsightsReceiptModel,
+} from './insights-receipt';
+
+export const INSIGHTS_HIDE_CLIENT_SPENDING_LABEL = 'Masquer les montants des clients';
+export const INSIGHTS_SHOW_CLIENT_SPENDING_LABEL = 'Afficher les montants des clients';
 
 // « Sem. » keeps the four options readable in the paper width; it is spoken
 // in full.
@@ -96,6 +111,10 @@ interface BusinessInsightsReceiptProps {
   readonly initialCategory?: InsightsRankingKey;
   /** Opens a client's profile from their podium place. Absent, no place is interactive. */
   readonly onClientPress?: (clientId: string) => void;
+  /** What the model was worded with: decides the eye's glyph and spoken label. */
+  readonly clientSpending?: ClientSpendingVisibility;
+  /** Shows / hides client amounts. Absent, the spending page has no eye. */
+  readonly onClientSpendingToggle?: () => void;
 }
 
 export function BusinessInsightsReceipt({
@@ -111,6 +130,8 @@ export function BusinessInsightsReceipt({
   onCategoryChange,
   initialCategory,
   onClientPress,
+  clientSpending = 'visible',
+  onClientSpendingToggle,
 }: BusinessInsightsReceiptProps) {
   const reduceMotion = useReduceMotion();
   const carousel = useRef<ScrollView>(null);
@@ -260,6 +281,11 @@ export function BusinessInsightsReceipt({
                 onClientPress={onClientPress}
                 section={section}
                 testID={`business-insights-podium-${section.key}`}
+                titleAccessory={
+                  section.key === 'spendingClients' && onClientSpendingToggle !== undefined ? (
+                    <ClientSpendingToggle onPress={onClientSpendingToggle} visibility={clientSpending} />
+                  ) : undefined
+                }
               />
             </View>
           );
@@ -294,7 +320,40 @@ export function BusinessInsightsReceipt({
   );
 }
 
+/** The eye of the spending page: open while amounts are written, crossed while they are masked. */
+function ClientSpendingToggle({
+  visibility,
+  onPress,
+}: {
+  readonly visibility: ClientSpendingVisibility;
+  readonly onPress: () => void;
+}) {
+  const visible = visibility === 'visible';
+  return (
+    <Pressable
+      accessibilityLabel={visible ? INSIGHTS_HIDE_CLIENT_SPENDING_LABEL : INSIGHTS_SHOW_CLIENT_SPENDING_LABEL}
+      accessibilityRole="button"
+      hitSlop={spacing.md}
+      onPress={onPress}
+      style={({ pressed }) => [styles.eye, pressed && styles.eyePressed]}
+      testID="business-insights-client-spending-toggle"
+    >
+      <SymbolView
+        name={visible ? { ios: 'eye', android: 'visibility' } : { ios: 'eye.slash', android: 'visibility_off' }}
+        size={EYE_SIZE}
+        tintColor={semanticColors.accent}
+      />
+    </Pressable>
+  );
+}
+
+/** The eye glyph (pt): the eyebrow's own size, so the title line keeps its height. */
+const EYE_SIZE = 16;
+
 const styles = StyleSheet.create({
+  // A fixed box: the two glyphs never change the title line.
+  eye: { alignItems: 'center', height: EYE_SIZE, justifyContent: 'center', width: EYE_SIZE + 4 },
+  eyePressed: { opacity: interaction.pressedOpacity },
   header: { alignItems: 'center', gap: 2 },
   badge: {
     alignItems: 'center',

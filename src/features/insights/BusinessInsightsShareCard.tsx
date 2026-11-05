@@ -38,15 +38,10 @@ import {
   getShareImagePixelSize,
 } from '@/shared/ui/ShareCardCanvas';
 import { ShareHighlightPanel } from '@/shared/ui/ShareHighlightPanel';
-import {
-  foregroundSoft,
-  lavender,
-  radii,
-  semanticColors,
-  spacing,
-} from '@/shared/ui/theme';
+import { foregroundSoft, lavender, semanticColors, spacing } from '@/shared/ui/theme';
 
 import { InsightsPodium } from './components/InsightsPodium';
+import { PrivateAmount } from './components/PrivateAmount';
 import type { InsightsShareCardModel, InsightsShareHighlight } from './insights-share-card';
 
 /** Logical layout of the card (dp): the shared 9:16 share canvas. */
@@ -103,7 +98,7 @@ export function BusinessInsightsShareCard({ model, testID }: BusinessInsightsSha
       <ReceiptTearLine />
 
       <View style={styles.highlight} testID={testID ? `${testID}-highlight` : undefined}>
-        <Highlight highlight={model.highlight} />
+        <Highlight highlight={model.highlight} testID={testID ? `${testID}-podium` : undefined} />
       </View>
 
       <CreatedWithBeautIzzy {...FIXED} testID={testID ? `${testID}-footer` : undefined} />
@@ -111,33 +106,16 @@ export function BusinessInsightsShareCard({ model, testID }: BusinessInsightsSha
   );
 }
 
-/**
- * A private amount: a frosted lilac capsule holding soft digit-shaped marks
- * and a readable `€`. The shape never depends on the value — no number is
- * ever rendered, so nothing can be read back from the image.
- */
-function PrivateAmount({ size, testID }: { readonly size: 'large' | 'small'; readonly testID?: string }) {
-  const large = size === 'large';
-  const marks = large ? [18, 18, 18, 18] : [9, 9, 9];
-  return (
-    <View style={[styles.private, large ? styles.privateLarge : styles.privateSmall]} testID={testID}>
-      {marks.map((width, index) => (
-        <View
-          key={index}
-          style={[styles.privateMark, large ? styles.privateMarkLarge : styles.privateMarkSmall, { width }]}
-        />
-      ))}
-      <AppText {...FIXED} style={styles.privateCurrency} variant={large ? 'sectionTitle' : 'metadata'}>
-        €
-      </AppText>
-    </View>
-  );
-}
-
-function Highlight({ highlight }: { readonly highlight: InsightsShareHighlight }) {
+function Highlight({
+  highlight,
+  testID,
+}: {
+  readonly highlight: InsightsShareHighlight;
+  readonly testID?: string;
+}) {
   switch (highlight.kind) {
     case 'ranking':
-      return <InsightsPodium allowFontScaling={false} layout="story" section={highlight.section} />;
+      return <InsightsPodium allowFontScaling={false} layout="story" section={highlight.section} testID={testID} />;
     case 'calm':
       return (
         <AppText {...FIXED} style={styles.calm} variant="sectionTitle">
@@ -153,20 +131,6 @@ const styles = StyleSheet.create({
   period: { color: lavender.lav700, marginTop: 2, textAlign: 'center' },
   summary: { marginTop: spacing.lg },
   totalLabel: { color: semanticColors.accent },
-  // Frosted private amount: soft lilac, no border, no gradient.
-  private: {
-    alignItems: 'center',
-    backgroundColor: lavender.lav100,
-    borderCurve: 'continuous',
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-  },
-  privateLarge: { gap: 6, height: 40, marginTop: spacing.xs, paddingHorizontal: spacing.base },
-  privateSmall: { gap: 3, height: 20, paddingHorizontal: spacing.sm },
-  privateMark: { backgroundColor: lavender.lav200, borderRadius: radii.pill },
-  privateMarkLarge: { height: 14 },
-  privateMarkSmall: { height: 7 },
-  privateCurrency: { color: semanticColors.accent, marginLeft: 2, opacity: 0.8 },
   metrics: {
     alignItems: 'center',
     alignSelf: 'stretch',

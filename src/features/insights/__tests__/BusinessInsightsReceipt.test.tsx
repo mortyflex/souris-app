@@ -6,7 +6,7 @@ import { haptics } from '@/shared/lib/haptics';
 import { brandAssets } from '@/shared/ui/BrandMark';
 import { RECEIPT_SIGNATURE_SIZE } from '@/shared/ui/ReceiptPaper';
 
-import { BusinessInsightsReceipt } from '../BusinessInsightsReceipt';
+import { BusinessInsightsReceipt, INSIGHTS_SHOW_CLIENT_SPENDING_LABEL } from '../BusinessInsightsReceipt';
 import { INSIGHTS_CLIENT_PLACE_HINT, InsightsPodium } from '../components/InsightsPodium';
 import { buildInsightsReceipt, type InsightsRankingSection } from '../insights-receipt';
 
@@ -312,6 +312,48 @@ describe('BusinessInsightsReceipt — ranking carousel', () => {
       view.getByTestId('business-insights-podium-services-place-1', { includeHiddenElements: true }).props
         .accessibilityRole,
     ).toBeUndefined();
+  });
+
+  it('puts ONE eye on the spending page only, reporting taps without opening a client', async () => {
+    const onToggle = jest.fn();
+    const onClientPress = jest.fn();
+    const view = await render(
+      <BusinessInsightsReceipt
+        clientSpending="hidden"
+        initialCategory="spendingClients"
+        model={model}
+        nextLabel="Mois suivant"
+        onClientPress={onClientPress}
+        onClientSpendingToggle={onToggle}
+        onNext={jest.fn()}
+        onPeriodKindChange={jest.fn()}
+        onPrevious={jest.fn()}
+        periodKind="MONTH"
+        periodLabel="Septembre 2026"
+        previousLabel="Mois précédent"
+        width={WIDTH}
+      />,
+    );
+
+    const eyes = view.getAllByTestId('business-insights-client-spending-toggle', { includeHiddenElements: true });
+    expect(eyes).toHaveLength(1);
+    // It lives on the spending page, beside its title.
+    expect(
+      within(view.getByTestId('business-insights-page-spendingClients')).getByTestId(
+        'business-insights-client-spending-toggle',
+      ),
+    ).toBeTruthy();
+    const eye = view.getByRole('button', { name: INSIGHTS_SHOW_CLIENT_SPENDING_LABEL });
+    await act(async () => fireEvent.press(eye));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onClientPress).not.toHaveBeenCalled();
+  });
+
+  it('has no eye when the screen offers no toggle', async () => {
+    const view = await renderReceipt();
+    expect(
+      view.queryByTestId('business-insights-client-spending-toggle', { includeHiddenElements: true }),
+    ).toBeNull();
   });
 
   it('moves between categories from the page indicator and the adjustable actions', async () => {

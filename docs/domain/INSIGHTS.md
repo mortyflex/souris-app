@@ -164,7 +164,7 @@ insights, with the SAME rankings:
 | --- | --- | --- |
 | Model | `buildInsightsReceipt` | `buildInsightsShareCard` (`insights-share-card.ts`) |
 | Rankings | `buildInsightsRankingSections` | the same `buildInsightsRankingSections`, category on screen |
-| Clients | `Amel B.`, `195,00 €`, `3 rdv` | `Amel B.`, `195 €`, `3 rdv` |
+| Clients | `Amel B.`, `195,00 €` (or `•••• €`), `3 rdv` | `Amel B.`, `195 €` (or `•••• €`), `3 rdv` |
 | Encaissé · Panier moyen | amounts | frosted: label readable, NO amount in the model or the image |
 | Conflicts | one informational sentence | never mentioned |
 | Shown | in app | exported PNG, native share sheet |
@@ -181,6 +181,21 @@ compact amount (`195 €`, `123,45 €` — cents only when there are some, neve
 `3 rdv`. Same places, same people, same order as the ticket: only the presentation differs
 (`buildInsightsRankingSections(…, 'public')`).
 
+**Client spending visibility (ticket AND card).** ONE eye beside « Clients qui dépensent le plus »
+decides whether client spending amounts are written — on the ticket AND on the saved / shared image,
+together. Open eye: written (`195,00 €` / `195 €`). Crossed eye: masked on both by the SAME fixed
+`•••• €` in the model (spoken « montant masqué »), whatever the value, drawn as a small frosted
+private capsule (`row.masked`, DESIGN_OVERRIDES.md §34). The choice is applied in the models
+(`ClientSpendingVisibility`, passed to `buildInsightsReceipt` and `buildInsightsShareCard`), so a
+hidden number never reaches a rendered tree, an accessibility label or an exported pixel. Places,
+people, order and every other figure are unchanged: presentation only, never the data. Every
+opening of the ticket starts HIDDEN; the choice survives period changes, category swipes and a
+client-profile visit, and is forgotten on close. It is never persisted (no device storage, no
+backend), so it can reach neither another launch nor another account. The ticket refuses to
+capture a card worded with another choice than the one on screen, and the eye ignores taps while
+an export works. It never touches « Encaissé » / « Panier moyen » (below), and visit counts are
+not amounts.
+
 **Turnover privacy (public card).** « Encaissé » and « Panier moyen » stay in the ticket. The public
 model carries neither amount, so no exported image can reveal them; the card shows each label over
 a frosted placeholder (DESIGN_OVERRIDES.md §35). The completed count (« 28 rendez-vous ») stays readable.
@@ -194,7 +209,7 @@ figure printed is the receipt's completed count from the same `BusinessInsights`
 | --- | --- |
 | Top prestations | the podium: service snapshot names, ranks, `N prestations` |
 | Top produits | the podium: product snapshot names, ranks, `1 unité` / `N unités` |
-| Clients qui dépensent le plus | the podium: `Prénom N.`, ranks, spending (`195 €`) |
+| Clients qui dépensent le plus | the podium: `Prénom N.`, ranks, spending (`195 €`, or `•••• €` when hidden) |
 | Clients les plus fidèles | the podium: `Prénom N.`, ranks, visits (`3 rdv`) |
 
 Every podium has the ticket's places, metrics and order; services and products are identical to it. An empty category

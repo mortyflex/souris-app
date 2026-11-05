@@ -2,7 +2,13 @@ import type { Client } from '@/domain/clients';
 import { getInsightsPeriod, type BusinessInsights } from '@/domain/insights';
 import { formatCompactEuroCents, formatEuroCents } from '@/shared/lib/money';
 
-import { buildInsightsReceipt, type InsightsRankingKey } from '../insights-receipt';
+import {
+  buildInsightsReceipt,
+  INSIGHTS_MASKED_AMOUNT,
+  INSIGHTS_MASKED_AMOUNT_SPOKEN,
+  type InsightsRankingKey,
+  type InsightsRankingRow,
+} from '../insights-receipt';
 import { buildInsightsShareCard, INSIGHTS_SHARE_CALM_MESSAGE } from '../insights-share-card';
 
 function insights(overrides: Partial<BusinessInsights> = {}): BusinessInsights {
@@ -138,7 +144,8 @@ describe('buildInsightsShareCard', () => {
     const serialized = JSON.stringify(card);
     expect(serialized).not.toContain(receipt.cashCollected);
     expect(serialized).not.toContain(receipt.averageAppointmentValue);
-    expect(Object.keys(card).sort()).toEqual(['completedAppointments', 'highlight', 'periodLabel']);
+    // `clientSpending` is the visibility choice the card was worded with — never an amount.
+    expect(Object.keys(card).sort()).toEqual(['clientSpending', 'completedAppointments', 'highlight', 'periodLabel']);
     expect(
       buildInsightsShareCard(insights({ completedAppointmentCount: 1 }), '2026', 'services', getClient)
         .completedAppointments,
@@ -172,3 +179,65 @@ describe('buildInsightsShareCard', () => {
   });
 });
 
+
+describe('client spending visibility', () => {
+  // The wording of the amount: its text, its spoken label and its masked flag.
+  const strip = ({ value: _value, accessibilityLabel: _label, masked: _masked, ...rest }: InsightsRankingRow) => rest;
+
+  it('masks every client amount, on the ticket and on the card, without touching the number anywhere', () => {
+    const source = insights();
+    const ticket = buildInsightsReceipt(source, getClient, 'hidden');
+    const card = buildInsightsShareCard(source, 'Septembre 2026', 'spendingClients', getClient, 'hidden');
+    if (card.highlight.kind !== 'ranking') throw new Error('expected a ranking');
+    const ticketRows = ticket.sections.find((section) => section.key === 'spendingClients')!.rows;
+
+    for (const rows of [ticketRows, card.highlight.section.rows]) {
+      expect(rows.map((row) => row.value)).toEqual([INSIGHTS_MASKED_AMOUNT, INSIGHTS_MASKED_AMOUNT, INSIGHTS_MASKED_AMOUNT]);
+      expect(rows.map((row) => row.masked)).toEqual([true, true, true]);
+      expect(rows.map((row) => row.accessibilityLabel)).toEqual([
+        `Première place, Amel B., ${INSIGHTS_MASKED_AMOUNT_SPOKEN}`,
+        `Deuxième place, Nadia F., ${INSIGHTS_MASKED_AMOUNT_SPOKEN}`,
+        `Troisième place, Sara, ${INSIGHTS_MASKED_AMOUNT_SPOKEN}`,
+      ]);
+    }
+    // Not one written spending amount survives in either model, compact or full.
+    const serialized = JSON.stringify([ticket, card]);
+    for (const cents of [19500, 12345, 9900]) {
+      expect(serialized).not.toContain(formatEuroCents(cents));
+      expect(serialized).not.toContain(formatCompactEuroCents(cents));
+    }
+    expect(card.clientSpending).toBe('hidden');
+  });
+
+  it('changes only the wording of client amounts: places, people, order and every other figure stay', () => {
+    const source = insights();
+    const shown = buildInsightsReceipt(source, getClient, 'visible');
+    const hidden = buildInsightsReceipt(source, getClient, 'hidden');
+
+    expect({ ...hidden, sections: undefined }).toEqual({ ...shown, sections: undefined });
+    for (const [index, section] of shown.sections.entries()) {
+      const masked = hidden.sections[index]!;
+      if (section.key === 'spendingClients') {
+        expect(masked.rows.map(strip)).toEqual(section.rows.map(strip));
+        expect(section.rows.map((row) => row.value)).toEqual([19500, 12345, 9900].map(formatEuroCents));
+      } else {
+        expect(masked).toEqual(section);
+      }
+    }
+    // The default is the written amount: the pure builders never decide to hide.
+    expect(buildInsightsReceipt(source, getClient)).toEqual(shown);
+    expect(buildInsightsShareCard(source, '2026', 'spendingClients', getClient).clientSpending).toBe('visible');
+  });
+
+  it('writes the mask independently of the value: a large and a small amount look the same', () => {
+    const source = insights({
+      topSpendingClients: [
+        { clientId: 'client-amel', spendingCents: 1_234_500, completedAppointmentCount: 9 },
+        { clientId: 'client-nadia', spendingCents: 500, completedAppointmentCount: 1 },
+      ],
+    });
+    const card = buildInsightsShareCard(source, '2026', 'spendingClients', getClient, 'hidden');
+    if (card.highlight.kind !== 'ranking') throw new Error('expected a ranking');
+    expect(new Set(card.highlight.section.rows.map((row) => row.value))).toEqual(new Set([INSIGHTS_MASKED_AMOUNT]));
+  });
+});

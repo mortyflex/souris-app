@@ -249,3 +249,26 @@ describe('BusinessInsightsShareCard', () => {
     expect(domain.getBusinessInsights).not.toHaveBeenCalled();
   });
 });
+
+describe('BusinessInsightsShareCard — hidden client spending', () => {
+  it('draws each hidden client amount as a smaller frosted capsule, the revenue capsules unchanged', async () => {
+    const card = buildInsightsShareCard(insights(), 'Septembre 2026', 'spendingClients', getClient, 'hidden');
+    const view = await render(<BusinessInsightsShareCard model={card} testID="card" />);
+
+    const revenue = StyleSheet.flatten(view.getByTestId('card-cash').props.style);
+    expect(revenue).toMatchObject({ backgroundColor: lavender.lav100, borderRadius: radii.pill, height: 40 });
+    expect(StyleSheet.flatten(view.getByTestId('card-average').props.style).height).toBe(20);
+
+    for (const rank of [1, 2]) {
+      const capsule = view.getByTestId(`card-podium-place-${rank}-private-amount`, HIDDEN);
+      const style = StyleSheet.flatten(capsule.props.style);
+      // The same frosted language as « Encaissé », only smaller.
+      expect(style).toMatchObject({ backgroundColor: lavender.lav100, borderRadius: radii.pill, flexDirection: 'row' });
+      expect(style.height).toBeLessThan(20);
+      expect(within(capsule).getByText('€', HIDDEN)).toBeTruthy();
+      expect(within(capsule).queryByText(/\d/, HIDDEN)).toBeNull();
+    }
+    expect(view.getAllByText(/^(Amel B\.|Nadia F\.)$/, HIDDEN)).toHaveLength(2);
+    expect(view.queryByText(/\d[\d\s ]*(,\d{2})?\s?€/, HIDDEN)).toBeNull();
+  });
+});

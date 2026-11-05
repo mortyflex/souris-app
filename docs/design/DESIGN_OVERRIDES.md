@@ -1839,6 +1839,18 @@ torn edges and dashed tear lines. There is no second printer. Figures: `docs/dom
   screen forgets the browsing. A place whose client no longer exists (« Client inconnu ») keeps its
   rank and metric and is not interactive. Service and product places are never interactive, and the
   share card's podium never is.
+- **Client spending eye.** The « Clients qui dépensent le plus » page carries ONE small eye beside
+  its eyebrow title, on the same centred line: `eye` / `visibility` while amounts are written,
+  `eye.slash` / `visibility_off` while they are masked, 16 pt, accent, in a fixed box (the title
+  line keeps its height), `spacing.md` hit slop, pressed at `interaction.pressedOpacity`, ONE
+  selection haptic per tap. Spoken « Masquer les montants des clients » / « Afficher les montants
+  des clients ». A masked amount is the frosted private capsule of §35, smaller (`PrivateAmount`,
+  `features/insights/components`): #1 an 18 pt pill, three 8 × 6 pt marks; #2 / #3 a 16 pt pill,
+  three 7 × 5 pt marks; `lav100` pill, `lav200` marks, accent `€` (11 pt) at 80 % opacity, fixed
+  size. It is centred over an invisible copy of the `•••• €` mask in the metric's own style, so
+  the line keeps the height of a written amount and the podium never moves. The SAME choice governs the exported card (§35). Every opening starts
+  masked; the choice survives browsing and a profile visit, is forgotten on close, never stored.
+  The eye is never part of a place, so it never opens a profile. Turnover is not affected.
 - **Not here.** There is no reward, discount or offer action, and there is no « dépensent le moins »
   ranking. The podium receives already-worded data, so the share card reuses it without the carousel
   or a capture of this private receipt.
@@ -1881,7 +1893,8 @@ Data: `docs/domain/INSIGHTS.md` §7.
   - Every category — Top prestations, Top produits, Clients qui dépensent le plus, Clients les
     plus fidèles — the SAME `InsightsPodium` and the same places, metrics and order as the receipt.
     Clients read `Prénom N.` (never a full last name) in the podium's own name style; metrics stay
-    clear: `195 €`, `3 rdv`. Medals, gold /
+    clear: `195 €`, `3 rdv` — except client spending masked by the ticket's eye (§34), drawn on the
+    card as the same small frosted capsule as on the ticket. Medals, gold /
     silver / bronze, lilac plinths, #1 centred, names on 2 lines then ellipsis, never shrunk — in
     its `story` layout: #1 on 40 % of the width, #2 / #3 on 30 % (the plinths still touch), and
     each metric uses its whole column. Measured in Plus Jakarta Sans, `312 prestations` fits #1 and

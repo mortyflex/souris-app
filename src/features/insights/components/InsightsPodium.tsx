@@ -38,9 +38,18 @@
 // client who no longer exists) stays exactly as it is, and the share card
 // never passes a handler, so an exported podium is never interactive.
 //
+// A hidden client amount (`row.masked`) is the frosted private capsule of the
+// share card's turnover (`PrivateAmount`), smaller, centred over an INVISIBLE
+// copy of the mask text in the metric's own style: the line keeps exactly the
+// height of a written amount, so revealing or hiding never moves the podium.
+//
+// `titleAccessory` sits beside the category eyebrow, on the same centred line
+// (the ticket's client-spending eye). The share card never passes one.
+//
 // Share-card options: `allowFontScaling={false}` keeps an exported bitmap independent from the
 // device text size; `layout="story"` widens #1 on the narrower card (below).
 
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
@@ -57,6 +66,7 @@ import {
 } from '@/shared/ui/theme';
 
 import type { InsightsRankingRow, InsightsRankingSection } from '../insights-receipt';
+import { PrivateAmount } from './PrivateAmount';
 
 /**
  * `receipt` — #1 36 %, #2 / #3 32 % of the page (the in-app ticket).
@@ -71,6 +81,8 @@ interface InsightsPodiumProps {
   readonly allowFontScaling?: boolean;
   /** Opens a client's profile from their place. Absent, no place is interactive. */
   readonly onClientPress?: (clientId: string) => void;
+  /** A small control beside the category title, on the same line. */
+  readonly titleAccessory?: ReactNode;
   readonly testID?: string;
 }
 
@@ -90,6 +102,7 @@ export function InsightsPodium({
   layout = 'receipt',
   allowFontScaling = true,
   onClientPress,
+  titleAccessory,
   testID,
 }: InsightsPodiumProps) {
   const [first, second, third] = section.rows;
@@ -98,14 +111,17 @@ export function InsightsPodium({
 
   return (
     <View style={styles.root} testID={testID}>
-      <AppText
-        accessibilityRole="header"
-        allowFontScaling={allowFontScaling}
-        style={styles.title}
-        variant="eyebrow"
-      >
-        {section.title}
-      </AppText>
+      <View style={styles.titleRow}>
+        <AppText
+          accessibilityRole="header"
+          allowFontScaling={allowFontScaling}
+          style={styles.title}
+          variant="eyebrow"
+        >
+          {section.title}
+        </AppText>
+        {titleAccessory}
+      </View>
 
       {first === undefined ? (
         <View accessible style={styles.empty} testID={testID ? `${testID}-empty` : undefined}>
@@ -161,14 +177,33 @@ function PodiumSlot({
       >
         {row.label}
       </AppText>
-      <AppText
-        allowFontScaling={allowFontScaling}
-        numberOfLines={2}
-        style={[styles.value, winner && styles.valueWinner]}
-        variant={winner ? 'control' : 'metadata'}
-      >
-        {row.value}
-      </AppText>
+      {row.masked ? (
+        <View style={styles.masked}>
+          <AppText
+            allowFontScaling={allowFontScaling}
+            numberOfLines={1}
+            style={[styles.value, winner && styles.valueWinner, styles.maskSpacer]}
+            variant={winner ? 'control' : 'metadata'}
+          >
+            {row.value}
+          </AppText>
+          <View pointerEvents="none" style={styles.maskCapsule}>
+            <PrivateAmount
+              size={winner ? 'podiumFirst' : 'podium'}
+              testID={placeTestID ? `${placeTestID}-private-amount` : undefined}
+            />
+          </View>
+        </View>
+      ) : (
+        <AppText
+          allowFontScaling={allowFontScaling}
+          numberOfLines={2}
+          style={[styles.value, winner && styles.valueWinner]}
+          variant={winner ? 'control' : 'metadata'}
+        >
+          {row.value}
+        </AppText>
+      )}
       <View
         style={[
           styles.plinth,
@@ -277,7 +312,8 @@ function Medal({
 
 const styles = StyleSheet.create({
   root: { gap: spacing.md },
-  title: { color: semanticColors.accent, textAlign: 'center' },
+  titleRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs, justifyContent: 'center' },
+  title: { color: semanticColors.accent, flexShrink: 1, textAlign: 'center' },
   empty: { alignItems: 'center', justifyContent: 'center', minHeight: 176, paddingHorizontal: spacing.lg },
   emptyText: { textAlign: 'center' },
   // One floor: #1 in the flow (always the tallest unit, it gives the stage
@@ -301,6 +337,10 @@ const styles = StyleSheet.create({
   labelWinner: { fontFamily: fontFamilies['700'] },
   value: { fontVariant: ['tabular-nums'], textAlign: 'center' },
   valueWinner: { color: lavender.lav700 },
+  // The mask keeps the line of a written amount: invisible text, capsule centred on it.
+  masked: { alignItems: 'center', alignSelf: 'stretch', justifyContent: 'center' },
+  maskSpacer: { opacity: 0 },
+  maskCapsule: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   plinth: {
     alignItems: 'center',
     alignSelf: 'stretch',

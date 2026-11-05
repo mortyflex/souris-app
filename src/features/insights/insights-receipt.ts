@@ -17,6 +17,14 @@
 //           initial only (never a full last name), compact amounts, rows keyed
 //           by place so not even a client id reaches the public model
 //
+// Client spending can be HIDDEN (`ClientSpendingVisibility`), by the
+// professional's own choice in the ticket: a hidden amount is replaced HERE,
+// in the model, by `INSIGHTS_MASKED_AMOUNT` (spoken « montant masqué ») — the
+// same fixed mask whatever the value, on the ticket and on the shared image
+// alike. The number never reaches a rendered tree, an accessibility label or
+// an exported pixel. Ranking, order and every other figure are unchanged:
+// only the wording of the amount differs.
+//
 // Visit counts read `3 rdv` on both (spoken « 3 rendez-vous »): never a
 // truncated « rendez-v… ». The share card is its own composition, never a
 // capture of the receipt.
@@ -40,6 +48,11 @@ export interface InsightsRankingRow {
    * a service, a product or an unknown client.
    */
   readonly clientId?: string;
+  /**
+   * A hidden client amount: `value` is the fixed `INSIGHTS_MASKED_AMOUNT`,
+   * drawn as the frosted private capsule (`PrivateAmount`). Never the number.
+   */
+  readonly masked?: true;
 }
 
 export type InsightsRankingKey = 'services' | 'products' | 'spendingClients' | 'loyalClients';
@@ -128,6 +141,14 @@ export function formatInsightsClientName(client: Pick<Client, 'firstName' | 'las
 /** Where the rankings are shown: the in-app ticket, or the public shared image. */
 export type InsightsRankingAudience = 'ticket' | 'public';
 
+/** Whether the amounts of « Clients qui dépensent le plus » are written or masked. */
+export type ClientSpendingVisibility = 'visible' | 'hidden';
+
+/** A hidden client amount: fixed, never derived from the value. */
+export const INSIGHTS_MASKED_AMOUNT = '•••• €';
+/** How a hidden client amount is spoken. */
+export const INSIGHTS_MASKED_AMOUNT_SPOKEN = 'montant masqué';
+
 export function plural(count: number, singular: string, pluralForm: string): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
@@ -147,6 +168,7 @@ function row(
   value: string,
   spokenValue = value,
   clientId?: string,
+  masked = false,
 ): InsightsRankingRow {
   return {
     key,
@@ -155,6 +177,7 @@ function row(
     value,
     accessibilityLabel: `${PLACES[index] ?? `${index + 1}e place`}, ${label}, ${spokenValue}`,
     ...(clientId !== undefined ? { clientId } : {}),
+    ...(masked ? { masked: true as const } : {}),
   };
 }
 
@@ -163,10 +186,13 @@ export function buildInsightsRankingSections(
   insights: BusinessInsights,
   getClient: (clientId: string) => Client | undefined,
   audience: InsightsRankingAudience = 'ticket',
+  clientSpending: ClientSpendingVisibility = 'visible',
 ): readonly InsightsRankingSection[] {
   const isPublic = audience === 'public';
+  const hidden = clientSpending === 'hidden';
   const clientName = (clientId: string) => formatInsightsClientName(getClient(clientId));
-  const spending = isPublic ? formatCompactEuroCents : formatEuroCents;
+  const formatSpending = isPublic ? formatCompactEuroCents : formatEuroCents;
+  const spending = (cents: number) => (hidden ? INSIGHTS_MASKED_AMOUNT : formatSpending(cents));
   // A public row is keyed by its place: not even the client id reaches a public card.
   const clientKey = (clientId: string, index: number) => (isPublic ? `place-${index + 1}` : clientId);
   // The ticket opens a place only for a client who still exists; a public row never opens anything.
@@ -199,8 +225,9 @@ export function buildInsightsRankingSections(
           index,
           clientName(client.clientId),
           spending(client.spendingCents),
-          undefined,
+          hidden ? INSIGHTS_MASKED_AMOUNT_SPOKEN : undefined,
           openableClientId(client.clientId),
+          hidden,
         ),
       ),
       emptyMessage: 'Aucune dépense sur cette période',
@@ -226,8 +253,9 @@ export function buildInsightsRankingSections(
 export function buildInsightsReceipt(
   insights: BusinessInsights,
   getClient: (clientId: string) => Client | undefined,
+  clientSpending: ClientSpendingVisibility = 'visible',
 ): InsightsReceiptModel {
-  const sections = buildInsightsRankingSections(insights, getClient);
+  const sections = buildInsightsRankingSections(insights, getClient, 'ticket', clientSpending);
   const conflicts = insights.financialConflictCount;
   return {
     isEmpty: insights.isEmpty,
