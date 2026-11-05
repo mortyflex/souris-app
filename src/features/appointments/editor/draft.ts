@@ -22,6 +22,12 @@ export type EditablePhase = ServicePhase | AppointmentPhase;
 export interface SelectedServiceDraft {
   /** Existing AppointmentItem identity; absent until the creation boundary assigns it. */
   readonly appointmentItemId?: string;
+  /**
+   * Creation-only UI identity of ONE occurrence, so the same Service selected
+   * twice (« Coupe ×2 ») gives two distinct drafts. Never persisted: the
+   * creation boundary assigns the real AppointmentItem ids.
+   */
+  readonly localKey?: string;
   readonly serviceId: string;
   readonly serviceOptionId?: string;
   readonly order: number;
@@ -34,8 +40,12 @@ export interface SelectedServiceDraft {
   readonly phaseDurationOverrides: Readonly<Record<string, number>>;
 }
 
-export function createSelectedServiceDraft(service: Service): SelectedServiceDraft {
+export function createSelectedServiceDraft(
+  service: Service,
+  localKey?: string,
+): SelectedServiceDraft {
   return {
+    ...(localKey !== undefined ? { localKey } : {}),
     serviceId: service.id,
     order: 0,
     serviceName: service.name,
@@ -61,7 +71,32 @@ export function toServiceSnapshotSource(
 
 /** Returns the stable UI identity for a selected draft. */
 export function getSelectedServiceDraftKey(draft: SelectedServiceDraft): string {
-  return draft.appointmentItemId ?? draft.serviceId;
+  return draft.appointmentItemId ?? draft.localKey ?? draft.serviceId;
+}
+
+/**
+ * How many times each Service occurs in the selection — the quantity a
+ * catalogue card shows. Every occurrence stays its own AppointmentItem.
+ */
+export function countServiceOccurrences(
+  drafts: readonly Pick<SelectedServiceDraft, 'serviceId'>[],
+  serviceId: string,
+): number {
+  return drafts.filter((draft) => draft.serviceId === serviceId).length;
+}
+
+/**
+ * Removes ONE occurrence of a Service — the last one in the selection order,
+ * so the earlier occurrences (and their edited prices or durations) stay
+ * untouched. Unchanged when the Service is not selected.
+ */
+export function removeLastServiceOccurrence<Draft extends Pick<SelectedServiceDraft, 'serviceId'>>(
+  drafts: readonly Draft[],
+  serviceId: string,
+): readonly Draft[] {
+  const index = drafts.map((draft) => draft.serviceId).lastIndexOf(serviceId);
+  if (index === -1) return drafts;
+  return [...drafts.slice(0, index), ...drafts.slice(index + 1)];
 }
 
 /** Hydrates edit drafts from Appointment snapshots, never from the catalog. */

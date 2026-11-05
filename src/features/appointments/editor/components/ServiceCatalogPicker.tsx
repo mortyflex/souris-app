@@ -6,8 +6,12 @@
 // (`ServiceSelectionCard`) for the active catalog Services of the chosen type
 // (DESIGN_OVERRIDES.md §27). Both categories render through the same card:
 // only the data and the category colours (`serviceCategoryColors`, keyed by
-// the domain ServiceType) change. What a tap does belongs to the caller —
-// creation toggles, editing adds.
+// the domain ServiceType) change. What a tap does belongs to the caller.
+//
+// Quantity mode (appointment creation and editing pass `onDecrementService`):
+// `selectedServiceIds` lists every occurrence, so « Coupe » twice reads ×2 on
+// its card; a tap or [+] adds one, [−] removes one. Without it (estimations)
+// a selected card keeps its check and the caller toggles.
 //
 // The category is never colour alone: the segment says which grid is shown,
 // and a selected card states it with a check badge plus its accessibility
@@ -72,8 +76,13 @@ const emptyCategoryTitles: Readonly<Record<ServiceType, string>> = {
 interface ServiceCatalogPickerProps {
   /** Selectable catalog (active Services supplied by the parent use case). */
   readonly services: readonly Service[];
+  /** One entry per selected occurrence: a Service selected twice appears twice. */
   readonly selectedServiceIds: readonly string[];
   readonly onSelectService: (service: Service) => void;
+  /** Quantity mode: removes one occurrence of a selected Service ([−]). */
+  readonly onDecrementService?: (service: Service) => void;
+  /** [−] unavailable on every card (e.g. the last prestation of an Appointment). */
+  readonly decrementDisabled?: boolean;
   /** Spoken on an already selected card: what a tap on it does here. */
   readonly selectedHint?: string;
   /** How the profession's catalogue is organised; the Services / Techniques segment by default. */
@@ -86,6 +95,8 @@ export function ServiceCatalogPicker({
   services,
   selectedServiceIds,
   onSelectService,
+  onDecrementService,
+  decrementDisabled = false,
   selectedHint = 'Déjà dans le rendez-vous',
   organization = 'SERVICE_TYPES',
   categories = [],
@@ -99,6 +110,8 @@ export function ServiceCatalogPicker({
   const grid: GridOptions = {
     organization,
     onSelectService,
+    onDecrementService,
+    decrementDisabled,
     onShowDescription: showDescription,
     selectedHint,
     selectedServiceIds,
@@ -126,13 +139,23 @@ interface GridOptions {
   readonly organization: CatalogueOrganization;
   readonly selectedServiceIds: readonly string[];
   readonly onSelectService: (service: Service) => void;
+  readonly onDecrementService?: (service: Service) => void;
+  readonly decrementDisabled: boolean;
   readonly onShowDescription: (service: Service) => void;
   readonly selectedHint: string;
 }
 
 function ServiceGrid({
   services,
-  grid: { organization, selectedServiceIds, onSelectService, onShowDescription, selectedHint },
+  grid: {
+    organization,
+    selectedServiceIds,
+    onSelectService,
+    onDecrementService,
+    decrementDisabled,
+    onShowDescription,
+    selectedHint,
+  },
   testID,
 }: {
   readonly services: readonly Service[];
@@ -143,23 +166,24 @@ function ServiceGrid({
     <View style={styles.grid} testID={testID}>
       {toServiceGridRows(services).map(([first, second]) => (
         <View key={first.id} style={styles.gridRow}>
-          {[first, second].map((service, index) =>
-            service ? (
+          {[first, second].map((service, index) => {
+            if (!service) return <View key={`spacer-${index}`} style={styles.gridSpacer} />;
+            const quantity = selectedServiceIds.filter((id) => id === service.id).length;
+            return (
               <ServiceSelectionCard
                 key={service.id}
-                accessibilityHint={
-                  selectedServiceIds.includes(service.id) ? selectedHint : 'Ajouter au rendez-vous'
-                }
+                accessibilityHint={quantity > 0 ? selectedHint : 'Ajouter au rendez-vous'}
+                decrementDisabled={decrementDisabled}
+                onDecrement={onDecrementService ? () => onDecrementService(service) : undefined}
                 onPress={() => onSelectService(service)}
                 onShowDescription={() => onShowDescription(service)}
                 organization={organization}
-                selected={selectedServiceIds.includes(service.id)}
+                quantity={quantity}
+                selected={quantity > 0}
                 service={service}
               />
-            ) : (
-              <View key={`spacer-${index}`} style={styles.gridSpacer} />
-            ),
-          )}
+            );
+          })}
         </View>
       ))}
     </View>

@@ -1142,6 +1142,8 @@ gestures, sheet sizing and card geometry are unchanged.
     `lav700` name, `foregroundSoft` duration.
   - **Selected** stays inside the family: stronger surface (`mint100` / `lav100`), stronger border
     (`mint600` / `accent`), check badge in that same strong tone. Green never means « selected ».
+    *(In Appointment creation and editing the check is now the « ×N » quantity badge with the
+    [−] [+] controls of §27 « Quantité d’une prestation »; estimations keep the check.)*
   - The `mint` scale mirrors the lavender OKLCH lightness steps at hue 160; its 600 / 700 sit on
     the approved mint planning-card accent / title (§19). Price stays navy and « dont X de pose »
     stays peach on both families. The 1.5 pt border lives inside the card box and the padding
@@ -1150,7 +1152,10 @@ gestures, sheet sizing and card geometry are unchanged.
     language: they do not compare types side by side.
 - **Selection footer names the services.** Completes §7: under the violet count line of the
   creation footer, ONE quiet `metadata` line in `foregroundSoft` lists the selected Service names
-  in selection order — « Balayage 3 · Coupe brushing · Reprise ». Names only (no duration, no
+  in selection order — « Balayage 3 · Coupe brushing · Reprise ». A Service selected several
+  times is named once, at its first position, with its quantity: « Coupe femme ×2 · Brushing »
+  (spoken « Coupe femme ×2, Brushing »). The count counts occurrences: that selection reads
+  « 3 prestations sélectionnées ». Names only (no duration, no
   price, no type colour), two lines at most with an ellipsis beyond, hidden while nothing is
   selected; the count always stays whole. Appointment Editing needs no such line: its selected
   Services are the named stack above the grid.
@@ -1473,7 +1478,35 @@ Appointment Creation keeps §22 for now.
   Services / Techniques `SegmentedControl`, then ONE dense list of the chosen type — the same row for both categories: category dot, name
   (two lines max), duration · « dont X de pose », price, and a selection ring (empty) or filled
   check. Search filters inside the chosen category; when only the other one matches, the empty
-  state offers « Voir N résultats dans Techniques ». Tapping a selected row still adds nothing.
+  state offers « Voir N résultats dans Techniques ». *(« Tapping a selected row still adds
+  nothing » no longer applies: a tap on a selected card adds one more occurrence — see
+  « Quantité d’une prestation » below.)*
+- **Quantité d’une prestation** — shared by Appointment creation (Prestations step) and editing
+  (Ajouter des prestations); never by estimations, which keep the check and tap-to-toggle. The
+  same Service may be booked several times, directly inside its existing card:
+  - **Idle card** unchanged; a tap selects it with quantity 1.
+  - **Selected card** keeps the category `tint` and 1.5 pt `accent` border; the check badge
+    becomes a compact `accent` pill « ×1 », « ×2 »… (white, tabular figures) at the same top-right
+    spot, with a short pulse on each change (none with Reduce Motion). Two small round [−] [+]
+    controls (28 pt white discs, category `strong` glyphs, 8 pt apart, no text label) sit in the
+    lower-right corner beside the price, after the « i » when there is one.
+  - **Taps.** The card itself or [+] adds one occurrence; [−] removes the LAST occurrence (earlier
+    ones keep their edited price and durations); at 0 the card is idle again. One selection haptic
+    per change. A press on [−] / [+] never reaches the card.
+  - **Touch areas.** 44 × 44 pt each through `hitSlop` alone, so the layout never grows: 8 pt above
+    and below, 4 pt toward each other (the two areas meet, never overlap), 12 pt outward — [+] stops
+    at the card's inner border, [−] where the « i » area ends.
+  - **Disabled [−]** (editing: the Appointment's last prestation, the swipe-to-remove rule) is
+    dimmed, spoken disabled, and still absorbs the tap: nothing is removed and the card adds
+    nothing.
+  - **No layout jump.** The controls' room is reserved on idle cards too; on a narrow card with a
+    wide price they wrap under it, right-aligned. The name keeps clear of the widest badge.
+  - **Spoken.** The card adds « quantité 2 » to its label and offers « Ajouter une fois de plus » /
+    « Retirer une fois » as accessibility actions; the controls are labelled « Ajouter une fois de
+    plus Coupe femme » / « Retirer une fois Coupe femme ».
+  - **Data.** Each occurrence is its own AppointmentItem (own snapshot, price, phases, order): the
+    quantity is never a stored field. Totals, durations, the timeline, the Calendar Block rule and
+    the saved Appointment read the same items.
 - **Category colours** (`serviceCategoryColors`, keyed by `ServiceType`) — taxonomy, never state:
   SERVICE = BeautIzzy violet (`colors.accent`); TECHNIQUE = azure (`azure600 #4F8EDC` for dots and
   checks; `azure700 #2F6DB8` fills the active segment, 5.3:1 with white). Selected rows take a
@@ -1497,12 +1530,15 @@ The creation sheet speaks the §27 language. Flow, steps, rules and data are unc
   opens the start-time wheels inline). No « Changer l'horaire », no Client row — the Client is
   chosen in the search + list of the Client step, whose rows are separated by hairlines.
 - **Shared prestation catalogue.** `ServiceCatalogPicker` + `ServiceSelectionCard` serve BOTH
-  creation (Prestations step: a tap toggles) and editing (Ajouter des prestations: a tap adds).
+  creation (Prestations step) and editing (Ajouter des prestations) with the same quantity
+  behaviour: a tap adds one occurrence, [−] removes one (§27 « Quantité d’une prestation »).
+  Creation no longer toggles; only estimations keep tap-to-toggle.
   Search, full-width Services / Techniques segment (`serviceCategoryColors[type].strong` fill),
   then a two-column grid of cards of the chosen type; search filters inside it and offers the
   other category when only that one matches. Card: name (two lines max), duration or « 1 h ·
   dont 30 min de pose », price. Idle: white surface, the category `border` hairline. Selected:
-  the category `tint`, a 1.5 pt `accent` border and an `accent` check badge. Violet for Services,
+  the category `tint`, a 1.5 pt `accent` border and an `accent` « ×N » quantity badge with the
+  [−] [+] controls (an `accent` check badge in estimations). Violet for Services,
   azure for Techniques; never mint. Spoken « Balayage 1, 1 h dont 30 min de pose, 45,00 €,
   Technique » with the selected state.
 - **Footers.** Creation keeps the count + names line above « Précédent | Continuer »; editing

@@ -129,6 +129,7 @@ import { SummaryStep } from './components/SummaryStep';
 import {
   createSelectedServiceDraft,
   getSelectedServiceDraftKey,
+  removeLastServiceOccurrence,
   reorderDrafts,
   toServiceSnapshotSource,
   updateDraftPhaseDuration,
@@ -305,28 +306,26 @@ export function AppointmentCreationScreen({
     [activeClients, clientQuery],
   );
 
+  // One more occurrence of a Service (card tap or [+]): each occurrence is its
+  // own draft — and later its own AppointmentItem — under a fresh local key.
+  const nextOccurrenceKey = useRef(0);
   const addService = (service: Service) => {
-    if (selectedDrafts.some((draft) => draft.serviceId === service.id)) return;
+    nextOccurrenceKey.current += 1;
+    const localKey = `${service.id}#${nextOccurrenceKey.current}`;
     haptics.selection();
-    setSelectedDrafts((current) => [...current, createSelectedServiceDraft(service)]);
+    setSelectedDrafts((current) => [...current, createSelectedServiceDraft(service, localKey)]);
   };
 
-  const toggleService = (service: Service) => {
-    const existing = selectedDrafts.find((draft) => draft.serviceId === service.id);
-    if (existing) {
-      removeDraft(getSelectedServiceDraftKey(existing));
-      return;
-    }
-    addService(service);
-  };
-
-  const removeDraft = (draftKey: string) => {
-    if (!selectedDrafts.some((draft) => getSelectedServiceDraftKey(draft) === draftKey)) return;
+  // One occurrence less ([−]): the last one, so earlier ones keep their edits.
+  const removeServiceOccurrence = (service: Service) => {
+    const remaining = removeLastServiceOccurrence(selectedDrafts, service.id);
+    if (remaining === selectedDrafts) return;
+    const removedKeys = selectedDrafts
+      .filter((draft) => !remaining.includes(draft))
+      .map(getSelectedServiceDraftKey);
     haptics.selection();
-    setSelectedDrafts((current) =>
-      current.filter((draft) => getSelectedServiceDraftKey(draft) !== draftKey),
-    );
-    setExpandedDraftId((current) => (current === draftKey ? null : current));
+    setSelectedDrafts(remaining);
+    setExpandedDraftId((current) => (current !== null && removedKeys.includes(current) ? null : current));
   };
 
   const reorderSelectedDrafts = useCallback(
@@ -534,8 +533,9 @@ export function AppointmentCreationScreen({
             organization={catalogueView.presentation.organization}
             services={activeServices}
             selectedServiceIds={selectedDrafts.map((draft) => draft.serviceId)}
-            onSelectService={toggleService}
-            selectedHint="Retirer du rendez-vous"
+            onSelectService={addService}
+            onDecrementService={removeServiceOccurrence}
+            selectedHint="Ajouter une fois de plus"
           />
         </ScrollView>
       )}
@@ -609,7 +609,7 @@ export function AppointmentCreationScreen({
                   selection never pushes the actions away; the count stays whole. */}
               {selectedDrafts.length > 0 && (
                 <AppText
-                  accessibilityLabel={selectedDrafts.map((draft) => draft.serviceName).join(', ')}
+                  accessibilityLabel={formatSelectedServiceNames(selectedDrafts, ', ')}
                   numberOfLines={2}
                   style={styles.selectionFooterNames}
                   testID="selection-names"

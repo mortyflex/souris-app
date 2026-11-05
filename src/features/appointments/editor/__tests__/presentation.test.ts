@@ -1,4 +1,8 @@
-import { formatSelectedServiceNames, formatSelectionCountLabel } from '../presentation';
+import {
+  formatSelectedServiceNames,
+  formatSelectionCountLabel,
+  formatServiceQuantity,
+} from '../presentation';
 
 describe('selection footer wording', () => {
   it('pluralizes the count', () => {
@@ -17,5 +21,32 @@ describe('selection footer wording', () => {
         { serviceName: 'Reprise' },
       ]),
     ).toBe('Balayage 3 · Coupe brushing · Reprise');
+  });
+
+  it('names a repeated Service once, at its first position, with its quantity', () => {
+    expect(
+      formatSelectedServiceNames([
+        { serviceId: 'cut', serviceName: 'Coupe femme' },
+        { serviceId: 'blow', serviceName: 'Brushing' },
+        { serviceId: 'cut', serviceName: 'Coupe femme' },
+      ]),
+    ).toBe('Coupe femme ×2 · Brushing');
+  });
+
+  it('accepts another separator for assistive technologies', () => {
+    expect(
+      formatSelectedServiceNames(
+        [
+          { serviceId: 'cut', serviceName: 'Coupe femme' },
+          { serviceId: 'blow', serviceName: 'Brushing' },
+        ],
+        ', ',
+      ),
+    ).toBe('Coupe femme, Brushing');
+  });
+
+  it('formats a quantity', () => {
+    expect(formatServiceQuantity(1)).toBe('×1');
+    expect(formatServiceQuantity(12)).toBe('×12');
   });
 });

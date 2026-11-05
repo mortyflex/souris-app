@@ -38,6 +38,11 @@ jest.mock('expo-symbols', () => {
       React.createElement(View, { testID: `symbol-${typeof name === 'string' ? name : name.ios}` }),
   };
 });
+// The appointment service card (quantity badge) imports Reanimated, which cannot load under Jest.
+jest.mock('react-native-reanimated', () =>
+  jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'),
+);
+
 jest.mock('react-native-safe-area-context', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');

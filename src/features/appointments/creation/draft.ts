@@ -2,6 +2,7 @@
 // actual service draft model is shared with existing Appointment editing.
 export {
   areDraftsEqual,
+  countServiceOccurrences,
   createSelectedServiceDraft,
   formatPriceInput,
   getDraftDurationMinutes,
@@ -12,6 +13,7 @@ export {
   isValidPhaseDuration,
   isValidPrice,
   parsePriceInput,
+  removeLastServiceOccurrence,
   reorderDrafts,
   toAppointmentItemEditDraft,
   toServiceSnapshotSource,

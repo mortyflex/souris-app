@@ -431,7 +431,7 @@ describe('AppointmentEditingScreen', () => {
     expect(sessionItems).toContain('agenda-sofia-item-new-');
   });
 
-  it('adds several services immediately, without scroll jumps or duplicates', async () => {
+  it('adds several services immediately, and the same Service again as its own item', async () => {
     const view = await renderEditor();
 
     await act(async () => {
@@ -449,11 +449,74 @@ describe('AppointmentEditingScreen', () => {
     expect(view.getByLabelText('Développer Coupe Femme / Homme')).toBeTruthy();
     expect(view.getAllByLabelText(/^Déplacer /)).toHaveLength(3);
 
-    // A second tap on an already-added catalog Service creates no duplicate.
+    // A second tap on an already-added catalog Service adds a second occurrence:
+    // its own draft (and later its own AppointmentItem), the card reads ×2.
     await act(async () => {
-      fireEvent.press(view.getByLabelText(/^Coupe Brushing 1, 50 min, .*, Service$/));
+      fireEvent.press(view.getByLabelText(/^Coupe Brushing 1, 50 min, .*, Service, quantité 1$/));
+    });
+    expect(view.getAllByLabelText(/^Développer Coupe Brushing 1$/)).toHaveLength(2);
+    expect(view.getAllByLabelText(/^Déplacer /)).toHaveLength(4);
+    expect(view.getByText('×2')).toBeTruthy();
+
+    // [−] removes one occurrence; it never also triggers the card (no re-add).
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Retirer une fois Coupe Brushing 1'));
     });
     expect(view.getAllByLabelText(/^Développer Coupe Brushing 1$/)).toHaveLength(1);
+    expect(view.getByLabelText(/^Coupe Brushing 1, .*, quantité 1$/)).toBeTruthy();
+  });
+
+  it('saves two occurrences of one Service as two AppointmentItems, totals included', async () => {
+    const view = await renderEditor();
+
+    await act(async () => {
+      fireEvent.changeText(view.getByPlaceholderText('Rechercher une prestation'), 'coupe brushing 1');
+    });
+    await act(async () => {
+      fireEvent.press(view.getByText('Coupe Brushing 1'));
+    });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Ajouter une fois de plus Coupe Brushing 1'));
+    });
+    expect(view.getByTestId('appointment-edit-summary-label').props.children).toMatch(/^3 prestations · /);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('save-appointment-edit'));
+    });
+    const sessionItems = view.getByTestId('session-items').props.children as string;
+    expect(sessionItems.match(/:Coupe Brushing 1:40:/g)).toHaveLength(2);
+  });
+
+  it('never lets [−] remove the last prestation of the Appointment', async () => {
+    const view = await renderEditor();
+
+    // An Appointment whose ONLY item is the catalog Service Brushing 1.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('add-catalog-backed-appointment'));
+    });
+    await act(async () => {
+      view.rerender(editorTree('catalog-edit-appointment'));
+    });
+
+    const decrement = view.getByLabelText('Retirer une fois Brushing 1');
+    expect(decrement.props.accessibilityState).toMatchObject({ disabled: true });
+    // The disabled [−] swallows the tap: nothing removed, and the card
+    // underneath never receives it (no occurrence added either).
+    await act(async () => {
+      fireEvent.press(decrement);
+    });
+    expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(1);
+
+    // With a second occurrence, [−] is available again — and removes the NEW one.
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Ajouter une fois de plus Brushing 1'));
+    });
+    expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(2);
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Retirer une fois Brushing 1'));
+    });
+    expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(1);
+    expect(within(view.getByTestId('appointment-selected-services')).getByText('81,00 €')).toBeTruthy();
   });
 
   it('makes a catalog Service available again after removing its Appointment item', async () => {
@@ -1319,7 +1382,7 @@ describe('AppointmentEditingScreen', () => {
       expect(view.queryByText('Brushing 1')).toBeNull();
     });
 
-    it('selects a Technique with the azure check and a Service with the violet one', async () => {
+    it('selects a Technique with the azure quantity badge and a Service with the violet one', async () => {
       const view = await renderEditor();
 
       // The catalogue is the shared card grid, not the former option rows.
@@ -1330,7 +1393,8 @@ describe('AppointmentEditingScreen', () => {
       await act(async () => {
         fireEvent.press(view.getByText('Brushing 1'));
       });
-      const brushingCheck = view.getByTestId('service-card-service-brushing-brushing-1-check');
+      // Quantity mode: the check becomes the « ×1 » badge, in the same accent.
+      const brushingCheck = view.getByTestId('service-card-service-brushing-brushing-1-quantity');
       expect(backgroundOf(brushingCheck)).toBe(serviceCategoryColors.SERVICE.accent);
       const selectedBrushing = view.getByTestId('service-card-service-brushing-brushing-1');
       expect(selectedBrushing.props.accessibilityState).toEqual({ selected: true });
@@ -1352,7 +1416,7 @@ describe('AppointmentEditingScreen', () => {
       const [techniqueCheck] = view.container.queryAll(
         (node) =>
           typeof node.props.testID === 'string' &&
-          /^service-card-.*balayage-2-check$/.test(node.props.testID),
+          /^service-card-.*balayage-2-quantity$/.test(node.props.testID),
       );
       expect(backgroundOf(techniqueCheck)).toBe(serviceCategoryColors.TECHNIQUE.accent);
       expect(borderOf(view.getByLabelText(/^Balayage 2, /))).toBe(

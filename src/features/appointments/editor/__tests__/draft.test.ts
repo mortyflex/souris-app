@@ -2,8 +2,10 @@ import type { Appointment, Service } from '@/domain/appointments';
 
 import {
   areDraftsEqual,
+  countServiceOccurrences,
   createSelectedServiceDraft,
   getSelectedServiceDraftKey,
+  removeLastServiceOccurrence,
   hydrateAppointmentDrafts,
   updateDraftPhaseDuration,
 } from '../draft';
@@ -131,5 +133,46 @@ describe('shared appointment service editor drafts', () => {
         price: 90,
       },
     ])).toBe(false);
+  });
+});
+
+describe('repeated occurrences of one Service (quantity)', () => {
+  it('gives each creation occurrence its own key, never the shared serviceId', () => {
+    const first = createSelectedServiceDraft(currentCoupe, 'service-coupe#1');
+    const second = createSelectedServiceDraft(currentCoupe, 'service-coupe#2');
+
+    expect(getSelectedServiceDraftKey(first)).toBe('service-coupe#1');
+    expect(getSelectedServiceDraftKey(second)).toBe('service-coupe#2');
+    // Without a local key the former identity is unchanged.
+    expect(getSelectedServiceDraftKey(createSelectedServiceDraft(currentCoupe))).toBe('service-coupe');
+  });
+
+  it('counts the occurrences of a Service', () => {
+    const drafts = [
+      createSelectedServiceDraft(currentCoupe, 'a'),
+      createSelectedServiceDraft(currentBalayage, 'b'),
+      createSelectedServiceDraft(currentCoupe, 'c'),
+    ];
+
+    expect(countServiceOccurrences(drafts, 'service-coupe')).toBe(2);
+    expect(countServiceOccurrences(drafts, 'service-balayage')).toBe(1);
+    expect(countServiceOccurrences(drafts, 'unknown')).toBe(0);
+  });
+
+  it('removes only the LAST occurrence, keeping the earlier ones and their edits', () => {
+    const editedFirst = { ...createSelectedServiceDraft(currentCoupe, 'a'), price: 99 };
+    const balayage = createSelectedServiceDraft(currentBalayage, 'b');
+    const second = createSelectedServiceDraft(currentCoupe, 'c');
+
+    const remaining = removeLastServiceOccurrence([editedFirst, balayage, second], 'service-coupe');
+
+    expect(remaining).toEqual([editedFirst, balayage]);
+    expect(removeLastServiceOccurrence(remaining, 'service-coupe')).toEqual([balayage]);
+  });
+
+  it('returns the same selection when the Service is not selected', () => {
+    const drafts = [createSelectedServiceDraft(currentBalayage, 'b')];
+
+    expect(removeLastServiceOccurrence(drafts, 'service-coupe')).toBe(drafts);
   });
 });

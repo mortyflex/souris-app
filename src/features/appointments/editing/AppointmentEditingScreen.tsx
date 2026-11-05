@@ -92,6 +92,7 @@ import {
   createSelectedServiceDraft,
   getDraftDurationMinutes,
   getSelectedServiceDraftKey,
+  removeLastServiceOccurrence,
   hydrateAppointmentDrafts,
   reorderDrafts,
   toAppointmentItemEditDraft,
@@ -264,9 +265,9 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
     );
   };
 
+  // One more occurrence (card tap or [+]): a NEW AppointmentItem of its own,
+  // even when the Service is already in the Appointment (« Coupe ×2 »).
   const addServiceImmediately = (service: Service) => {
-    // No duplicate copies of a Service already present in the draft.
-    if (drafts.some((draft) => draft.serviceId === service.id)) return;
     haptics.selection();
     setDrafts((current) => [
       ...current,
@@ -276,6 +277,20 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
         order: current.length,
       },
     ]);
+  };
+
+  // One occurrence less ([−]): the last one, so earlier ones keep their edits.
+  // Never the last prestation of the Appointment (same rule as the swipe).
+  const removeServiceOccurrence = (service: Service) => {
+    if (!canRemoveAppointmentItem(drafts.length)) return;
+    const remaining = removeLastServiceOccurrence(drafts, service.id);
+    if (remaining === drafts) return;
+    const removedKeys = drafts
+      .filter((draft) => !remaining.includes(draft))
+      .map(getSelectedServiceDraftKey);
+    haptics.selection();
+    setDrafts(remaining);
+    setExpandedDraftId((current) => (current !== null && removedKeys.includes(current) ? null : current));
   };
 
   const save = () => {
@@ -410,6 +425,9 @@ export function AppointmentEditingScreen({ appointmentId }: AppointmentEditingSc
             services={activeServices}
             selectedServiceIds={drafts.map((draft) => draft.serviceId)}
             onSelectService={addServiceImmediately}
+            onDecrementService={removeServiceOccurrence}
+            decrementDisabled={!canRemoveAppointmentItem(drafts.length)}
+            selectedHint="Ajouter une fois de plus"
           />
         </View>
       </FormScrollView>

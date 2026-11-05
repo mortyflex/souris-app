@@ -82,6 +82,7 @@ jest.mock('react-native-reanimated', () => {
     useReducedMotion: () => mockReducedMotion,
     useEvent: () => () => undefined,
     withTiming: (value: unknown) => value,
+    withSequence: (...values: unknown[]) => values[values.length - 1],
     FadeIn: createAnimationBuilder(),
     FadeOut: createAnimationBuilder(),
     LinearTransition: createAnimationBuilder(),
@@ -454,6 +455,20 @@ async function selectService(view: Rendered, name: string) {
   });
 }
 
+/** [−] inside a selected card: one occurrence less. */
+async function decrementService(view: Rendered, name: string) {
+  const label = `Retirer une fois ${name}`;
+  for (const tab of ['catalog-category-SERVICE', 'catalog-category-TECHNIQUE']) {
+    if (view.queryByLabelText(label)) break;
+    await act(async () => {
+      fireEvent.press(view.getByTestId(tab));
+    });
+  }
+  await act(async () => {
+    fireEvent.press(view.getByLabelText(label));
+  });
+}
+
 async function continueToSummary(view: Rendered) {
   await act(async () => {
     fireEvent.press(view.getByText('Continuer'));
@@ -621,13 +636,63 @@ describe('AppointmentCreationScreen', () => {
     expect(names.props.children).not.toMatch(/\d+\s?(min|h\b)|€/);
     expect(names.props.numberOfLines).toBe(2);
 
-    // Deselecting removes the name immediately: no stale label.
-    await selectService(view, 'Balayage 1');
-    expect(view.getByTestId('selection-count').props.children).toBe('1 prestation sélectionnée');
-    expect(view.getByTestId('selection-names').props.children).toBe('Brushing 1');
+    // A second tap adds one more occurrence: named once, with its quantity.
+    await selectService(view, 'Brushing 1');
+    expect(view.getByTestId('selection-count').props.children).toBe('3 prestations sélectionnées');
+    expect(view.getByTestId('selection-names').props.children).toBe('Balayage 1 · Brushing 1 ×2');
+    expect(view.getByTestId('selection-names').props.accessibilityLabel).toBe('Balayage 1, Brushing 1 ×2');
+
+    // [−] down to 0 removes the name immediately: no stale label.
+    await decrementService(view, 'Balayage 1');
+    expect(view.getByTestId('selection-count').props.children).toBe('2 prestations sélectionnées');
+    expect(view.getByTestId('selection-names').props.children).toBe('Brushing 1 ×2');
+
+    await decrementService(view, 'Brushing 1');
+    await decrementService(view, 'Brushing 1');
+    expect(view.queryByTestId('selection-names')).toBeNull();
+    expect(view.getByTestId('selection-count').props.children).toBe('0 prestation sélectionnée');
+  });
+
+  it('books the same Service twice as two items: quantity, totals and the saved Appointment agree', async () => {
+    const view = await renderCreation();
+    await selectClientBeyond60(view);
+    await searchService(view, 'brushing 1');
 
     await selectService(view, 'Brushing 1');
-    expect(view.queryByTestId('selection-names')).toBeNull();
+    const card = () => view.getByRole('button', { name: /^Brushing 1, / });
+    expect(card().props.accessibilityLabel).toMatch(/, quantité 1$/);
+    expect(view.getByTestId('service-card-service-brushing-brushing-1-quantity')).toBeTruthy();
+    expect(view.queryByTestId('service-card-service-brushing-brushing-1-check')).toBeNull();
+
+    // [+] adds exactly one: the card underneath never also receives the tap.
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Ajouter une fois de plus Brushing 1'));
+    });
+    expect(card().props.accessibilityLabel).toMatch(/, quantité 2$/);
+    expect(view.getByText('×2')).toBeTruthy();
+    expect(view.getByTestId('selection-count').props.children).toBe('2 prestations sélectionnées');
+
+    // The VoiceOver actions do the same as the buttons.
+    await act(async () => {
+      fireEvent(card(), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    });
+    expect(card().props.accessibilityLabel).toMatch(/, quantité 3$/);
+    await act(async () => {
+      fireEvent(card(), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+    });
+    expect(card().props.accessibilityLabel).toMatch(/, quantité 2$/);
+
+    await continueToSummary(view);
+    // Two independent occurrences, priced and timed twice.
+    expect(view.getAllByLabelText(/^Développer Brushing 1$/)).toHaveLength(2);
+    expect(view.getByTestId('creation-total').props.children).toBe(formatEuros(40));
+    expect(view.getByTestId('creation-final-summary').props.accessibilityLabel).toMatch(/^Durée totale 1 h,/);
+
+    await act(async () => {
+      fireEvent.press(view.getByText('Créer le rendez-vous'));
+    });
+    const appointments = view.getByTestId('appointments-probe').props.children as string;
+    expect(appointments.match(/Brushing 1:20:30/g)).toHaveLength(2);
   });
 
   it('searches inside the chosen category, offers the other one, and preserves selections', async () => {
@@ -656,14 +721,14 @@ describe('AppointmentCreationScreen', () => {
       selected: true,
     });
     expect(
-      StyleSheet.flatten(view.getByTestId('service-card-technique-balayage-balayage-1-check').props.style)
+      StyleSheet.flatten(view.getByTestId('service-card-technique-balayage-balayage-1-quantity').props.style)
         .backgroundColor,
     ).toBe(serviceCategoryColors.TECHNIQUE.accent);
     await act(async () => {
       fireEvent.press(view.getByTestId('catalog-category-SERVICE'));
     });
     expect(
-      StyleSheet.flatten(view.getByTestId('service-card-service-brushing-brushing-1-check').props.style)
+      StyleSheet.flatten(view.getByTestId('service-card-service-brushing-brushing-1-quantity').props.style)
         .backgroundColor,
     ).toBe(serviceCategoryColors.SERVICE.accent);
   });
@@ -865,11 +930,11 @@ describe('AppointmentCreationScreen', () => {
       fireEvent.changeText(view.getByLabelText('Prix de Balayage 1'), '110');
     });
 
-    // Back to selection and deselect the modified service.
+    // Back to selection and deselect the modified service ([−] down to 0).
     await act(async () => {
       fireEvent.press(view.getByTestId('edit-services'));
     });
-    await selectService(view, 'Balayage 1');
+    await decrementService(view, 'Balayage 1');
     expect(view.getByText('0 prestation sélectionnée')).toBeTruthy();
 
     await searchService(view, 'coupe brushing 1');

@@ -8,6 +8,10 @@ import { formatCreationPrice } from '../../presentation';
 import { ServiceCatalogPicker } from '../ServiceCatalogPicker';
 
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
+// The quantity badge pulses with Reanimated, which cannot load under Jest.
+jest.mock('react-native-reanimated', () =>
+  jest.requireActual('@/features/clients/birthday/testing/mock-reanimated'),
+);
 
 const cut: Service = {
   id: 'cut',
@@ -145,5 +149,174 @@ describe('ServiceCatalogPicker — shared card catalogue', () => {
     await act(async () => fireEvent.press(view.getByTestId('service-card-cut')));
 
     expect(onSelectService).toHaveBeenCalledWith(cut);
+  });
+});
+
+describe('ServiceCatalogPicker — quantity mode (appointment creation and editing)', () => {
+  async function renderQuantityPicker(
+    selectedServiceIds: readonly string[],
+    { decrementDisabled = false }: { readonly decrementDisabled?: boolean } = {},
+  ) {
+    const onSelectService = jest.fn();
+    const onDecrementService = jest.fn();
+    const view = await render(
+      <ServiceCatalogPicker
+        decrementDisabled={decrementDisabled}
+        onDecrementService={onDecrementService}
+        onSelectService={onSelectService}
+        selectedServiceIds={selectedServiceIds}
+        services={[cut, blowDry, color]}
+      />,
+    );
+    return { view, onSelectService, onDecrementService };
+  }
+
+  it('keeps an idle card idle: no badge, no controls, a tap selects', async () => {
+    const { view, onSelectService } = await renderQuantityPicker([]);
+
+    expect(view.queryByTestId('service-card-cut-quantity')).toBeNull();
+    expect(view.queryByTestId('service-card-cut-check')).toBeNull();
+    expect(view.queryByTestId('service-card-cut-increment')).toBeNull();
+    expect(view.queryByTestId('service-card-cut-decrement')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('service-card-cut'));
+    });
+    expect(onSelectService).toHaveBeenCalledWith(cut);
+  });
+
+  it('counts every occurrence: the check becomes a « ×2 » badge in the category accent', async () => {
+    const { view } = await renderQuantityPicker(['cut', 'blow-dry', 'cut']);
+
+    expect(view.queryByTestId('service-card-cut-check')).toBeNull();
+    expect(styleOf(view, 'service-card-cut-quantity')).toMatchObject({
+      backgroundColor: serviceCategoryColors.SERVICE.accent,
+    });
+    expect(view.getByText('×2')).toBeTruthy();
+    expect(view.getByText('×1')).toBeTruthy();
+    expect(styleOf(view, 'service-card-cut')).toMatchObject({
+      backgroundColor: serviceCategoryColors.SERVICE.tint,
+      borderColor: serviceCategoryColors.SERVICE.accent,
+    });
+    expect(view.getByTestId('service-card-cut').props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByTestId('service-card-cut').props.accessibilityLabel).toMatch(/, quantité 2$/);
+  });
+
+  it('[+] and [−] act once each and never reach the card underneath', async () => {
+    const { view, onSelectService, onDecrementService } = await renderQuantityPicker(['cut']);
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('service-card-cut-increment'));
+    });
+    expect(onSelectService).toHaveBeenCalledTimes(1);
+    expect(onDecrementService).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('service-card-cut-decrement'));
+    });
+    expect(onDecrementService).toHaveBeenCalledTimes(1);
+    expect(onDecrementService).toHaveBeenCalledWith(cut);
+    expect(onSelectService).toHaveBeenCalledTimes(1);
+
+    // The card itself still adds one more.
+    await act(async () => {
+      fireEvent.press(view.getByTestId('service-card-cut'));
+    });
+    expect(onSelectService).toHaveBeenCalledTimes(2);
+  });
+
+  it('labels the icon-only controls for screen readers and offers them as card actions', async () => {
+    const { view, onSelectService, onDecrementService } = await renderQuantityPicker(['cut']);
+
+    expect(view.getByLabelText('Retirer une fois Coupe')).toBeTruthy();
+    expect(view.getByLabelText('Ajouter une fois de plus Coupe')).toBeTruthy();
+    const card = view.getByTestId('service-card-cut');
+    expect(card.props.accessibilityActions).toEqual([
+      { name: 'increment', label: 'Ajouter une fois de plus' },
+      { name: 'decrement', label: 'Retirer une fois' },
+    ]);
+
+    await act(async () => {
+      fireEvent(card, 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+    });
+    expect(onDecrementService).toHaveBeenCalledWith(cut);
+    await act(async () => {
+      fireEvent(card, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    });
+    expect(onSelectService).toHaveBeenCalledWith(cut);
+  });
+
+  it('a disabled [−] swallows the tap: nothing removed, nothing added', async () => {
+    const { view, onSelectService, onDecrementService } = await renderQuantityPicker(['cut'], {
+      decrementDisabled: true,
+    });
+
+    const decrement = view.getByTestId('service-card-cut-decrement');
+    expect(decrement.props.accessibilityState).toMatchObject({ disabled: true });
+    await act(async () => {
+      fireEvent.press(decrement);
+    });
+    expect(onDecrementService).not.toHaveBeenCalled();
+    expect(onSelectService).not.toHaveBeenCalled();
+    expect(
+      view.getByTestId('service-card-cut').props.accessibilityActions.map(
+        (action: { name: string }) => action.name,
+      ),
+    ).toEqual(['increment']);
+  });
+
+  it('gives [−] and [+] 44 × 44 pt touch areas that meet without overlapping, inside the card', async () => {
+    const described: Service = { ...cut, description: 'Shampoing compris.' };
+    const view = await render(
+      <ServiceCatalogPicker
+        onDecrementService={jest.fn()}
+        onSelectService={jest.fn()}
+        selectedServiceIds={['cut']}
+        services={[described, blowDry]}
+      />,
+    );
+    const decrement = view.getByTestId('service-card-cut-decrement');
+    const increment = view.getByTestId('service-card-cut-increment');
+    const box = (element: typeof decrement) => StyleSheet.flatten(element.props.style);
+    const slop = (element: typeof decrement) =>
+      element.props.hitSlop as { top: number; bottom: number; left: number; right: number };
+
+    // The visual size is unchanged: two 28 pt discs.
+    for (const button of [decrement, increment]) {
+      expect(box(button)).toMatchObject({ width: 28, height: 28 });
+      const { top, bottom, left, right } = slop(button);
+      expect(box(button).width + left + right).toBeGreaterThanOrEqual(44);
+      expect(box(button).height + top + bottom).toBeGreaterThanOrEqual(44);
+    }
+
+    // Between the two discs, the areas meet exactly: never an overlap.
+    const stepper = StyleSheet.flatten(view.getByTestId('service-card-cut-decrement').parent?.props.style);
+    const between = (stepper as { gap: number }).gap;
+    expect(slop(decrement).right + slop(increment).left).toBeLessThanOrEqual(between);
+
+    // [+] reaches at most the card's inner border: content padding + the
+    // stepper's inset from the content edge.
+    const card = StyleSheet.flatten(view.getByTestId('service-card-cut').props.style);
+    const cardPadding = (card as { padding: number }).padding;
+    const inset = (stepper as { marginRight: number }).marginRight;
+    expect(slop(increment).right).toBeLessThanOrEqual(cardPadding + inset);
+    // Vertically inside the card's padding too.
+    expect(slop(increment).bottom).toBeLessThanOrEqual(cardPadding);
+
+    // [−] never reaches into the « i » button's area.
+    const info = view.getByTestId('service-card-cut-description', { includeHiddenElements: true });
+    const infoRight = (info.props.hitSlop as { right: number }).right;
+    const trailingGap = 4;
+    const afterInfo = (stepper as { marginLeft?: number }).marginLeft ?? 0;
+    expect(infoRight + slop(decrement).left).toBeLessThanOrEqual(trailingGap + afterInfo);
+  });
+
+  it('keeps the check badge and no controls without quantity mode (estimations)', async () => {
+    const { view } = await renderPicker(['cut']);
+
+    expect(view.getByTestId('service-card-cut-check')).toBeTruthy();
+    expect(view.queryByTestId('service-card-cut-quantity')).toBeNull();
+    expect(view.queryByTestId('service-card-cut-increment')).toBeNull();
+    expect(view.getByTestId('service-card-cut').props.accessibilityLabel).not.toMatch(/quantité/);
   });
 });
