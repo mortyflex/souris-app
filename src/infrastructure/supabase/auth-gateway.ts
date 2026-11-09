@@ -24,7 +24,10 @@ import type {
   RestoredSession,
   SignInOutcome,
   SignUpOutcome,
+  SocialProvider,
+  SocialSignInOutcome,
 } from '@/features/auth/gateway';
+import { readOAuthCallbackUrl } from '@/features/auth/oauth-callback';
 
 import type { SourisSupabaseClient } from './client';
 
@@ -39,7 +42,39 @@ export type SupabaseAuthApi = Pick<
   | 'exchangeCodeForSession'
   | 'updateUser'
   | 'onAuthStateChange'
+  | 'signInWithOAuth'
+  | 'signInWithIdToken'
 >;
+
+/** What the system browser returned: the redirect it was told to stop at, or nothing (closed). */
+export type BrowserAuthResult = { readonly kind: 'redirect'; readonly url: string } | { readonly kind: 'closed' };
+
+export type AppleCredentialResult =
+  | {
+      readonly kind: 'credential';
+      readonly identityToken: string | null;
+      /** Apple sends the name on the first authorization only; later ones have none. */
+      readonly givenName?: string;
+      readonly familyName?: string;
+    }
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'failed' };
+
+/**
+ * The device side of social sign-in (src/infrastructure/social-auth): the
+ * system browser, the native Apple sheet and the nonce. Injected so the
+ * gateway never imports a native module and tests drive every answer.
+ */
+export interface SocialAuthPlatform {
+  openAuthSession(url: string, redirectUrl: string): Promise<BrowserAuthResult>;
+  isAppleSignInAvailable(): Promise<boolean>;
+  /** Presents the Apple sheet; Apple embeds `hashedNonce` in the identity token. */
+  requestAppleCredential(hashedNonce: string): Promise<AppleCredentialResult>;
+  /** A fresh, unpredictable one-time value. */
+  createNonce(): string;
+  /** Lowercase hex SHA-256, the form Supabase compares the token's nonce with. */
+  sha256(value: string): Promise<string>;
+}
 
 /** The scheme of the release app (app.json). Never changes: links already sent use it. */
 export const RELEASE_APP_SCHEME = 'sourisapp';
@@ -75,8 +110,45 @@ export const EMAIL_CONFIRMATION_REDIRECT_URL = `${APP_SCHEME}://sign-in`;
  */
 export const PASSWORD_RECOVERY_REDIRECT_URL = `${APP_SCHEME}://reset-password`;
 
-function toAuthUser(user: Pick<User, 'id' | 'email'>): AuthUser {
-  return user.email ? { id: user.id, email: user.email } : { id: user.id };
+/**
+ * Where the Google sign-in returns once Supabase verified Google's answer:
+ * `<scheme>://auth-callback?code=…` (PKCE, the client's `flowType`). Its own
+ * route, distinct from `sign-in` (the email confirmation landing, which never
+ * exchanges anything) and `reset-password`. Must be allow-listed in Supabase ›
+ * Authentication › URL Configuration, like the two others.
+ */
+export const OAUTH_REDIRECT_URL = `${APP_SCHEME}://auth-callback`;
+
+const SOCIAL_PROVIDERS: ReadonlySet<string> = new Set<SocialProvider>(['google', 'apple']);
+const GIVEN_NAME_MAX_LENGTH = 60;
+
+function readString(record: unknown, key: string): string | undefined {
+  if (typeof record !== 'object' || record === null) return undefined;
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+/** Google gives `full_name` / `name`; Apple's first authorization is saved as `given_name` (see signInWithApple). */
+function readGivenName(metadata: unknown): string | undefined {
+  const given = readString(metadata, 'given_name') ?? readString(metadata, 'full_name')?.split(/\s+/)[0] ?? readString(metadata, 'name')?.split(/\s+/)[0];
+  return given !== undefined && given.length <= GIVEN_NAME_MAX_LENGTH ? given : undefined;
+}
+
+type SessionUser = Pick<User, 'id' | 'email'> & {
+  readonly app_metadata?: unknown;
+  readonly user_metadata?: unknown;
+};
+
+function toAuthUser(user: SessionUser): AuthUser {
+  const provider = readString(user.app_metadata, 'provider');
+  const createdWith = provider !== undefined && SOCIAL_PROVIDERS.has(provider) ? (provider as SocialProvider) : undefined;
+  const givenName = readGivenName(user.user_metadata);
+  return {
+    id: user.id,
+    ...(user.email ? { email: user.email } : {}),
+    ...(createdWith !== undefined ? { createdWith } : {}),
+    ...(givenName !== undefined ? { givenName } : {}),
+  };
 }
 
 function looksLikeNetworkFailure(error: unknown): boolean {
@@ -125,6 +197,20 @@ export function mapSupabaseAuthError(error: unknown): AuthFailure {
   }
   if (looksLikeNetworkFailure(error)) return { code: 'NETWORK' };
   return { code: 'UNKNOWN' };
+}
+
+/**
+ * Exported for tests: a Google / Apple failure. The network and throttling
+ * read as usual; a provider this project has not enabled is said so; every
+ * other refusal (a token, a nonce or a code Supabase could not verify) is ONE
+ * calm sentence — never a password or email wording that would not apply.
+ */
+export function mapSocialSignInError(error: unknown): AuthFailure {
+  if (isAuthApiError(error) && (error.code === 'provider_disabled' || /provider is not enabled|unsupported provider/i.test(error.message))) {
+    return { code: 'PROVIDER_UNAVAILABLE' };
+  }
+  const mapped = mapSupabaseAuthError(error);
+  return mapped.code === 'NETWORK' || mapped.code === 'RATE_LIMITED' ? mapped : { code: 'SOCIAL_SIGN_IN_FAILED' };
 }
 
 /**
@@ -186,7 +272,15 @@ function createMarker(storage: RecoveryMarkerStorage, key: string) {
   };
 }
 
-export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: RecoveryMarkerStorage): AuthGateway {
+const SOCIAL_FAILED: SocialSignInOutcome = { kind: 'failed', failure: { code: 'SOCIAL_SIGN_IN_FAILED' } };
+const SOCIAL_NOT_CONFIGURED: SocialSignInOutcome = { kind: 'failed', failure: { code: 'NOT_CONFIGURED' } };
+
+export function createSupabaseAuthGateway(
+  auth: SupabaseAuthApi,
+  markerStorage: RecoveryMarkerStorage,
+  /** Undefined (tests of the email flows, an unconfigured platform): Google and Apple are never offered. */
+  social?: SocialAuthPlatform,
+): AuthGateway {
   const recovery = createMarker(markerStorage, PASSWORD_RECOVERY_PENDING_KEY);
   const signOutPending = createMarker(markerStorage, SIGN_OUT_PENDING_KEY);
 
@@ -260,6 +354,81 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
     setTimeout(() => {
       if (sessionsBeingCreated === 0 && signOutPending.isPending()) void completePendingSignOut();
     }, 0);
+  };
+
+  /**
+   * A Google or Apple session is a real sign-in: it replaced any recovery
+   * session, or any session a sign-out could not remove — exactly like a
+   * password sign-in.
+   */
+  const adoptSocialSession = (user: SessionUser): SocialSignInOutcome => {
+    recovery.clear();
+    signOutPending.clear();
+    return { kind: 'authenticated', user: toAuthUser(user) };
+  };
+
+  /**
+   * Each callback code is exchanged ONCE per run: the browser flow and the
+   * `auth-callback` route (Android delivers the redirect to both; the router
+   * may replay it) join the same exchange. Supabase consumes the code and the
+   * PKCE verifier on the first try, whatever its outcome, so a retry could
+   * only fail. In memory only — never persisted or logged.
+   */
+  const oauthExchanges = new Map<string, { readonly outcome: Promise<SocialSignInOutcome>; settled: boolean }>();
+  const exchangeOAuthCode = (code: string): Promise<SocialSignInOutcome> => {
+    const existing = oauthExchanges.get(code);
+    // Still running: join it. Already settled (a route the router replays,
+    // e.g. after a sign-out): nothing to do — never a second sign-in.
+    if (existing) return existing.settled ? Promise.resolve({ kind: 'cancelled' }) : existing.outcome;
+    const entry: { outcome: Promise<SocialSignInOutcome>; settled: boolean } = {
+      outcome: Promise.resolve({ kind: 'cancelled' }),
+      settled: false,
+    };
+    oauthExchanges.set(code, entry);
+    entry.outcome = (async (): Promise<SocialSignInOutcome> => {
+      try {
+        const { data, error } = await creatingSession(() => auth.exchangeCodeForSession(code));
+        if (error) return { kind: 'failed', failure: mapSocialSignInError(error) };
+        if (!data.session) return SOCIAL_FAILED;
+        // Only an OAuth code signs in here. A password recovery code (a
+        // recovery link's code pasted on this route) has just opened a
+        // recovery session: it is discarded at once, never kept as a sign-in.
+        if ((data as { readonly redirectType?: string | null }).redirectType === 'recovery') {
+          await auth.signOut({ scope: 'local' });
+          return SOCIAL_FAILED;
+        }
+        return adoptSocialSession(data.session.user);
+      } catch (error) {
+        return { kind: 'failed', failure: mapSocialSignInError(error) };
+      } finally {
+        entry.settled = true;
+      }
+    })();
+    return entry.outcome;
+  };
+
+  /**
+   * Apple sends the name on the first authorization only. It is kept in the
+   * account's metadata, for a later first-name suggestion — only the keys the
+   * account does not have yet: an existing name is never replaced, and an
+   * empty one is never written. Best effort: a failure changes nothing else.
+   */
+  const keepAppleName = async (user: SessionUser, givenName?: string, familyName?: string): Promise<SessionUser> => {
+    if (givenName === undefined && familyName === undefined) return user;
+    const known = (key: string) => readString(user.user_metadata, key) !== undefined;
+    const fullName = [givenName, familyName].filter((part) => part !== undefined).join(' ');
+    const missing: Record<string, string> = {};
+    if (givenName !== undefined && !known('given_name')) missing.given_name = givenName;
+    if (familyName !== undefined && !known('family_name')) missing.family_name = familyName;
+    if (fullName.length > 0 && !known('full_name')) missing.full_name = fullName;
+    if (Object.keys(missing).length === 0) return user;
+    try {
+      const { data, error } = await auth.updateUser({ data: missing });
+      if (!error && data.user) return data.user;
+    } catch {
+      // Best effort: the sign-in itself succeeded.
+    }
+    return user;
   };
 
   return {
@@ -385,6 +554,77 @@ export function createSupabaseAuthGateway(auth: SupabaseAuthApi, markerStorage: 
     },
 
     discardPasswordRecovery: discardRecoverySession,
+
+    async signInWithGoogle(): Promise<SocialSignInOutcome> {
+      if (!social) return SOCIAL_NOT_CONFIGURED;
+      let url: string;
+      try {
+        // Built locally (no request): Supabase stores the PKCE verifier on THIS
+        // installation and returns the provider URL to open.
+        const { data, error } = await auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: OAUTH_REDIRECT_URL,
+            skipBrowserRedirect: true,
+            // Always the account chooser: a phone shared with another Google
+            // account never signs the wrong one in silently.
+            queryParams: { prompt: 'select_account' },
+          },
+        });
+        if (error || !data.url) return { kind: 'failed', failure: error ? mapSocialSignInError(error) : { code: 'UNKNOWN' } };
+        url = data.url;
+      } catch (error) {
+        return { kind: 'failed', failure: mapSocialSignInError(error) };
+      }
+      let result: BrowserAuthResult;
+      try {
+        result = await social.openAuthSession(url, OAUTH_REDIRECT_URL);
+      } catch {
+        return { kind: 'failed', failure: { code: 'UNKNOWN' } };
+      }
+      if (result.kind === 'closed') return { kind: 'cancelled' };
+      const callback = readOAuthCallbackUrl(result.url, OAUTH_REDIRECT_URL);
+      if (callback.kind !== 'code') return callback;
+      return exchangeOAuthCode(callback.code);
+    },
+
+    completeOAuthCallback(code: string): Promise<SocialSignInOutcome> {
+      return exchangeOAuthCode(code);
+    },
+
+    async isAppleSignInAvailable(): Promise<boolean> {
+      return social ? social.isAppleSignInAvailable() : false;
+    },
+
+    async signInWithApple(): Promise<SocialSignInOutcome> {
+      if (!social) return SOCIAL_NOT_CONFIGURED;
+      // One nonce per attempt: Apple signs its hash into the identity token,
+      // Supabase hashes the raw value and refuses a token that does not carry
+      // it — a token captured elsewhere cannot be replayed here.
+      let rawNonce: string;
+      let credential: AppleCredentialResult;
+      try {
+        rawNonce = social.createNonce();
+        credential = await social.requestAppleCredential(await social.sha256(rawNonce));
+      } catch {
+        return SOCIAL_FAILED;
+      }
+      if (credential.kind === 'cancelled') return { kind: 'cancelled' };
+      if (credential.kind === 'failed' || !credential.identityToken) return SOCIAL_FAILED;
+      const token = credential.identityToken;
+      try {
+        const { data, error } = await creatingSession(() =>
+          auth.signInWithIdToken({ provider: 'apple', token, nonce: rawNonce }),
+        );
+        if (error) return { kind: 'failed', failure: mapSocialSignInError(error) };
+        if (!data.session) return SOCIAL_FAILED;
+        const outcome = adoptSocialSession(data.session.user);
+        const user = await keepAppleName(data.session.user, credential.givenName, credential.familyName);
+        return user === data.session.user ? outcome : adoptSocialSession(user);
+      } catch (error) {
+        return { kind: 'failed', failure: mapSocialSignInError(error) };
+      }
+    },
 
     onSessionChange(listener) {
       const { data } = auth.onAuthStateChange((event, session) => {

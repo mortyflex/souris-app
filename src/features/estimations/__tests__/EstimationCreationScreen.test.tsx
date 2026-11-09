@@ -520,6 +520,132 @@ describe('EstimationCreationScreen', () => {
     });
   });
 
+  describe('several occurrences of a Service — the appointment quantity controls', () => {
+    const card = (view: View, id: string) => view.getByTestId(`service-card-${id}`);
+    const badge = (view: View, id: string) =>
+      within(view.getByTestId(`service-card-${id}-quantity`)).getByText(/^×\d+$/).props.children as string;
+
+    it('adds with a tap or [+], removes the last with [−], and goes idle again at zero', async () => {
+      const selection = jest.spyOn(haptics, 'selection');
+      const view = await renderEstimation(database);
+      const brushing = price(view, 'catalog-brushing');
+
+      // Idle: unchanged — no badge, no controls, the « add » hint of an estimation.
+      expect(view.queryByTestId(`service-card-${BRUSHING}-quantity`)).toBeNull();
+      expect(view.queryByTestId(`service-card-${BRUSHING}-check`)).toBeNull();
+      expect(view.queryByTestId(`service-card-${BRUSHING}-increment`)).toBeNull();
+      expect(card(view, BRUSHING).props.accessibilityHint).toBe('Ajouter à l’estimation');
+
+      // First tap: quantity 1, the controls appear inside the card.
+      await press(view, `service-card-${BRUSHING}`);
+      expect(badge(view, BRUSHING)).toBe('×1');
+      expect(view.getByTestId(`service-card-${BRUSHING}-decrement`)).toBeTruthy();
+      expect(view.getByTestId(`service-card-${BRUSHING}-increment`)).toBeTruthy();
+      expect(view.getByTestId('estimation-selection-count').props.children).toBe('1 prestation sélectionnée');
+      expect(view.getByTestId('estimation-selection-names').props.children).toBe('Brushing 1');
+
+      // The card itself, then [+]: one more each time.
+      await press(view, `service-card-${BRUSHING}`);
+      expect(badge(view, BRUSHING)).toBe('×2');
+      await press(view, `service-card-${BRUSHING}-increment`);
+      expect(badge(view, BRUSHING)).toBe('×3');
+      expect(view.getByTestId('estimation-selection-count').props.children).toBe('3 prestations sélectionnées');
+      expect(view.getByTestId('estimation-selection-names').props.children).toBe('Brushing 1 ×3');
+      expect(view.getByTestId('estimation-selection-names').props.accessibilityLabel).toBe('Brushing 1 ×3');
+      expect(card(view, BRUSHING).props.accessibilityLabel).toMatch(/, quantité 3$/);
+      expect(card(view, BRUSHING).props.accessibilityHint).toBe('Ajouter une fois de plus');
+
+      // [−]: one occurrence less.
+      await press(view, `service-card-${BRUSHING}-decrement`);
+      expect(badge(view, BRUSHING)).toBe('×2');
+      await continueStep(view);
+      const summary = within(view.getByTestId('estimation-summary'));
+      const two = formatCompactEuroCents(eurosToCents(brushing) * 2);
+      expect(summary.getByLabelText(`Brushing 1, quantité 2, ${two}`)).toBeTruthy();
+      expect(summary.getByText('Brushing 1 ×2')).toBeTruthy();
+      expect(view.getByTestId('estimation-summary-total').props.accessibilityLabel).toBe(`Total estimé, ${two}`);
+
+      // Back to the catalogue: every occurrence kept.
+      await press(view, 'estimation-edit-services');
+      expect(badge(view, BRUSHING)).toBe('×2');
+      await press(view, `service-card-${BRUSHING}-decrement`);
+      await press(view, `service-card-${BRUSHING}-decrement`);
+
+      // Zero: the card is idle again, and nothing is left to estimate.
+      expect(view.queryByTestId(`service-card-${BRUSHING}-quantity`)).toBeNull();
+      expect(view.queryByTestId(`service-card-${BRUSHING}-decrement`)).toBeNull();
+      expect(card(view, BRUSHING).props.accessibilityState).toMatchObject({ selected: false });
+      expect(view.queryByTestId('estimation-selection-names')).toBeNull();
+      expect(view.getByTestId('estimation-primary').props.accessibilityState).toMatchObject({ disabled: true });
+      // One light selection haptic per change: 3 additions, 3 removals.
+      expect(selection).toHaveBeenCalledTimes(6);
+      selection.mockRestore();
+    });
+
+    it('offers the same VoiceOver actions as Appointment creation', async () => {
+      const view = await renderEstimation(database);
+      await press(view, `service-card-${BRUSHING}`);
+      expect(card(view, BRUSHING).props.accessibilityActions).toEqual([
+        { name: 'increment', label: 'Ajouter une fois de plus' },
+        { name: 'decrement', label: 'Retirer une fois' },
+      ]);
+      expect(view.getByTestId(`service-card-${BRUSHING}-increment`).props.accessibilityLabel).toBe(
+        'Ajouter une fois de plus Brushing 1',
+      );
+      expect(view.getByTestId(`service-card-${BRUSHING}-decrement`).props.accessibilityLabel).toBe(
+        'Retirer une fois Brushing 1',
+      );
+
+      await act(async () => {
+        fireEvent(card(view, BRUSHING), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+      });
+      expect(badge(view, BRUSHING)).toBe('×2');
+      await act(async () => {
+        fireEvent(card(view, BRUSHING), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+      });
+      await act(async () => {
+        fireEvent(card(view, BRUSHING), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+      });
+      expect(view.queryByTestId(`service-card-${BRUSHING}-quantity`)).toBeNull();
+      expect(card(view, BRUSHING).props.accessibilityActions).toBeUndefined();
+    });
+
+    it('generates the estimation with its quantities and exact totals, still writing nothing', async () => {
+      const view = await renderEstimation(database);
+      const seeded = dumpDatabase(database);
+      const brushing = price(view, 'catalog-brushing');
+      const balayage = price(view, 'catalog-balayage');
+
+      await toggleService(view, 'Brushing 1');
+      await toggleService(view, 'Brushing 1'); // the card, once more
+      await press(view, `service-card-${BRUSHING}-increment`);
+      await toggleService(view, 'Balayage 1'); // opens Techniques
+      await press(view, `service-card-${BALAYAGE}-increment`);
+      expect(view.getByTestId('estimation-selection-names').props.children).toBe('Brushing 1 ×3 · Balayage 1 ×2');
+      await continueStep(view);
+      // The header counts occurrences, like the footer.
+      expect(within(view.getByTestId('estimation-summary')).getByText('5')).toBeTruthy();
+      await generate(view);
+
+      const paper = within(view.getByTestId('estimation-document-paper'));
+      const brushingLine = formatCompactEuroCents(eurosToCents(brushing) * 3);
+      const balayageLine = formatCompactEuroCents(eurosToCents(balayage) * 2);
+      expect(paper.getByTestId('estimation-document-line-0').props.accessibilityLabel).toBe(
+        `Brushing 1, quantité 3, ${brushingLine}`,
+      );
+      expect(paper.getByTestId('estimation-document-line-1').props.accessibilityLabel).toBe(
+        `Balayage 1, quantité 2, ${balayageLine}`,
+      );
+      expect(paper.queryByTestId('estimation-document-line-2')).toBeNull();
+      expect(paper.getByTestId('estimation-document-total').props.accessibilityLabel).toBe(
+        `Total estimé, ${formatCompactEuroCents(eurosToCents(brushing) * 3 + eurosToCents(balayage) * 2)}`,
+      );
+      // The shared export copy reads the same model.
+      expect(within(view.getByTestId('estimation-export-frame', HIDDEN)).getByText('Brushing 1 ×3', HIDDEN)).toBeTruthy();
+      expect(dumpDatabase(database)).toBe(seeded);
+    });
+  });
+
   it('cancels from any step without writing anything', async () => {
     const view = await renderEstimation(database);
     const seeded = dumpDatabase(database);

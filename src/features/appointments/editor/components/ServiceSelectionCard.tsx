@@ -20,8 +20,8 @@
 // price (and the matching VoiceOver action): it opens the description, the
 // card tap still selects. Without a description the card is unchanged.
 //
-// Quantity mode (appointment creation and editing, `onDecrement` given): the
-// same Service may be booked several times. A selected card then trades its
+// Quantity mode (appointment creation and editing, and estimations —
+// `onDecrement` given): the same Service may be selected several times. A selected card then trades its
 // check for a « ×2 » badge and shows two compact [−] [+] controls in its
 // lower-right corner; the card tap adds one more, [−] removes one, and at 0
 // the card is idle again. The controls' room is reserved on idle cards too,

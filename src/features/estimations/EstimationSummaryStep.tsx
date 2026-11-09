@@ -4,7 +4,9 @@
 // in the grouped-row family of the Appointment creation Résumé
 // (DESIGN_OVERRIDES.md §27):
 //   1. Date         → the generation date, read-only (document metadata only)
-//   2. Prestations  → one « name — current catalog price » row per Service,
+//   2. Prestations  → one « name — current catalog price » row per Service
+//                     (« Coupe femme ×3 — 75 € » when selected several times;
+//                     the header counts every occurrence, like the footer),
 //                     « Modifier » returns to the catalog step
 //   3. Total estimé → the lavender final summary
 //
@@ -64,7 +66,10 @@ export function EstimationSummaryStep({
       </View>
 
       <View style={styles.section}>
-        <SectionHeader count={model.lines.length} title="Prestations sélectionnées">
+        <SectionHeader
+          count={model.lines.reduce((count, line) => count + line.quantity, 0)}
+          title="Prestations sélectionnées"
+        >
           <Pressable
             accessibilityLabel="Modifier les prestations"
             accessibilityRole="button"

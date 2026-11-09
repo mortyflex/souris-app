@@ -5,14 +5,26 @@
 // words the same summary for a week with the same figures (`buildSummaryMetrics`). Every amount, duration and count comes from the
 // domain; this file only words them. No React: the receipt component renders
 // the model as is and computes nothing.
+//
+// Two readings of money, kept apart and never mixed into one figure:
+//
+//   CA potentiel + breakdown   the APPOINTMENTS of the period, whatever the day
+//                              their money came in (`AppointmentDaySummary`)
+//   Encaissements              the Caisse of the period: the money RECEIVED in it,
+//                              by origin — Appointments, product sales (with
+//                              their unit count), refunds — and « Total encaissé »,
+//                              THE Caisse total of the same days
+//                              (`getCashRegisterPeriodBreakdown`)
 
 import type { AppointmentDaySummary } from '@/domain/appointments';
+import type { CashRegisterPeriodBreakdown } from '@/domain/cash-register';
 import {
   formatAppointmentServiceSummary,
   formatAppointmentTime,
   formatDurationMinutes,
 } from '@/features/appointments/presentation';
-import { formatEuroCents } from '@/shared/lib/money';
+import { REVENTE_NOTE } from '@/features/cash-register/presentation';
+import { formatEuroCents, formatSignedEuroCents } from '@/shared/lib/money';
 
 export interface DaySummaryReceiptRow {
   readonly key: string;
@@ -28,6 +40,25 @@ export interface DaySummaryReceiptMetric {
   readonly key: 'collected' | 'remaining' | 'duration' | 'averageBasket';
   readonly label: string;
   readonly value: string;
+}
+
+/** One line of the « Encaissements » block: `Ventes de produits (3 articles)  45,00 €`. */
+export interface DaySummaryReceiptEncashmentLine {
+  readonly key: 'appointments' | 'productSales' | 'refunds' | 'total';
+  readonly label: string;
+  /** Product sales only, inline after the label: `(3 articles)`; absent at zero. */
+  readonly count?: string;
+  readonly value: string;
+  readonly accessibilityLabel: string;
+}
+
+/** The Caisse of the period, by origin (see the header). */
+export interface DaySummaryReceiptEncashment {
+  /** `Encaissements du jour` / `Encaissements de la semaine` */
+  readonly title: string;
+  readonly lines: readonly DaySummaryReceiptEncashmentLine[];
+  /** Said when products were sold during an Appointment: their money is in its checkout. */
+  readonly note?: string;
 }
 
 /** One outcome line of « Résumé de la semaine »: `Réalisés  14`. */
@@ -51,6 +82,8 @@ export interface DaySummaryReceiptModel {
   readonly activity?: readonly DaySummaryReceiptActivity[];
   readonly potentialRevenue: string;
   readonly metrics: readonly DaySummaryReceiptMetric[];
+  /** The money received in the period, by origin — the Caisse of the same days. */
+  readonly encashment: DaySummaryReceiptEncashment;
 }
 
 /** `Lundi 21 septembre` — the full civil date, never abbreviated on the receipt. */
@@ -81,10 +114,66 @@ export function buildSummaryMetrics(summary: AppointmentDaySummary): readonly Da
   ];
 }
 
+export const ENCASHMENT_APPOINTMENTS_LABEL = 'Rendez-vous';
+export const ENCASHMENT_PRODUCT_SALES_LABEL = 'Ventes de produits';
+export const ENCASHMENT_REFUNDS_LABEL = 'Remboursements';
+export const ENCASHMENT_TOTAL_LABEL = 'Total encaissé';
+
+/** `1 article` / `6 articles` — physical units, never distinct products. */
+export function formatArticleCount(units: number): string {
+  return `${units} article${units > 1 ? 's' : ''}`;
+}
+
+/**
+ * « Encaissements » — the same lines for a day and for a week:
+ *
+ *   Rendez-vous          checkouts + deposits received
+ *   Ventes de produits   standalone Sale payments, `(N articles)` inline — the
+ *                        units of those Sales; no counter at zero, no product name
+ *   Remboursements       only when the period settled one (signed, as in the Caisse)
+ *   Total encaissé       THE Caisse total of the period
+ */
+export function buildSummaryEncashment(
+  breakdown: CashRegisterPeriodBreakdown,
+  title: string,
+): DaySummaryReceiptEncashment {
+  const line = (
+    key: DaySummaryReceiptEncashmentLine['key'],
+    label: string,
+    value: string,
+    units?: number,
+  ): DaySummaryReceiptEncashmentLine => ({
+    key,
+    label,
+    ...(units !== undefined && units > 0 ? { count: `(${formatArticleCount(units)})` } : {}),
+    value,
+    // « Ventes de produits, 3 articles, 45,00 € »: the counter is spoken without its brackets.
+    accessibilityLabel: [label, ...(units !== undefined && units > 0 ? [formatArticleCount(units)] : []), value].join(', '),
+  });
+  return {
+    title,
+    lines: [
+      line('appointments', ENCASHMENT_APPOINTMENTS_LABEL, formatEuroCents(breakdown.appointmentCents)),
+      line(
+        'productSales',
+        ENCASHMENT_PRODUCT_SALES_LABEL,
+        formatEuroCents(breakdown.productSaleCents),
+        breakdown.productUnitCount,
+      ),
+      ...(breakdown.refundCount > 0
+        ? [line('refunds', ENCASHMENT_REFUNDS_LABEL, formatSignedEuroCents(-breakdown.refundCents))]
+        : []),
+      line('total', ENCASHMENT_TOTAL_LABEL, formatEuroCents(breakdown.totalCents)),
+    ],
+    ...(breakdown.reventeUnitCount > 0 ? { note: REVENTE_NOTE } : {}),
+  };
+}
+
 export function buildDaySummaryReceipt(
   summary: AppointmentDaySummary,
   day: Date,
   getClientLabel: (clientId: string) => string,
+  encashment: CashRegisterPeriodBreakdown,
 ): DaySummaryReceiptModel {
   const rows = summary.rows.map(({ appointment, expectedTotalCents, collected }) => {
     const time = formatAppointmentTime(appointment.startAt);
@@ -112,5 +201,6 @@ export function buildDaySummaryReceipt(
     rows,
     potentialRevenue: formatEuroCents(summary.potentialRevenueCents),
     metrics: buildSummaryMetrics(summary),
+    encashment: buildSummaryEncashment(encashment, 'Encaissements du jour'),
   };
 }

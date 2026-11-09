@@ -152,7 +152,7 @@ describe('ServiceCatalogPicker — shared card catalogue', () => {
   });
 });
 
-describe('ServiceCatalogPicker — quantity mode (appointment creation and editing)', () => {
+describe('ServiceCatalogPicker — quantity mode (appointment creation and editing, estimations)', () => {
   async function renderQuantityPicker(
     selectedServiceIds: readonly string[],
     { decrementDisabled = false }: { readonly decrementDisabled?: boolean } = {},
@@ -311,7 +311,7 @@ describe('ServiceCatalogPicker — quantity mode (appointment creation and editi
     expect(infoRight + slop(decrement).left).toBeLessThanOrEqual(trailingGap + afterInfo);
   });
 
-  it('keeps the check badge and no controls without quantity mode (estimations)', async () => {
+  it('keeps the check badge and no controls without quantity mode', async () => {
     const { view } = await renderPicker(['cut']);
 
     expect(view.getByTestId('service-card-cut-check')).toBeTruthy();

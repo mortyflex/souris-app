@@ -92,6 +92,8 @@ Authentication › URL Configuration:
 Site URL         sourisapp://sign-in        (replaces http://localhost:3000)
 Redirect URLs    sourisapp://sign-in        (add; remove any localhost entry)
                  sourisapp://reset-password (password recovery, M2 — docs/architecture/AUTH.md §4a)
+                 sourisapp://auth-callback  (Google sign-in — AUTH.md §4b; only once Google is enabled
+                                             on Production, by a separate decision)
 ```
 
 The app sends `emailRedirectTo = sourisapp://sign-in` on sign-up and on "Renvoyer l'email"

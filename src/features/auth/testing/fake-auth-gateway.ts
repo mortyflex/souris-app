@@ -11,6 +11,7 @@ import type {
   RestoredSession,
   SignInOutcome,
   SignUpOutcome,
+  SocialSignInOutcome,
 } from '../gateway';
 
 export interface FakeAuthGateway extends AuthGateway {
@@ -27,6 +28,9 @@ export interface FakeAuthGateway extends AuthGateway {
     startPasswordRecovery: string[];
     updatePassword: string[];
     discardPasswordRecovery: number;
+    signInWithGoogle: number;
+    completeOAuthCallback: string[];
+    signInWithApple: number;
   };
 }
 
@@ -38,6 +42,11 @@ interface FakeAuthGatewayOptions {
   readonly requestPasswordReset?: (email: string) => Promise<PasswordResetRequestOutcome>;
   readonly startPasswordRecovery?: (code: string) => Promise<PasswordRecoveryOutcome>;
   readonly updatePassword?: (password: string) => Promise<PasswordUpdateOutcome>;
+  readonly signInWithGoogle?: () => Promise<SocialSignInOutcome>;
+  readonly completeOAuthCallback?: (code: string) => Promise<SocialSignInOutcome>;
+  readonly signInWithApple?: () => Promise<SocialSignInOutcome>;
+  /** Defaults to false (Android, or an unconfigured build). */
+  readonly appleAvailable?: boolean;
 }
 
 export const fakeUser: AuthUser = { id: 'user-lea', email: 'lea@example.com' };
@@ -54,6 +63,9 @@ export function createFakeAuthGateway(options: FakeAuthGatewayOptions = {}): Fak
     startPasswordRecovery: [],
     updatePassword: [],
     discardPasswordRecovery: 0,
+    signInWithGoogle: 0,
+    completeOAuthCallback: [],
+    signInWithApple: 0,
   };
 
   return {
@@ -103,6 +115,21 @@ export function createFakeAuthGateway(options: FakeAuthGatewayOptions = {}): Fak
     discardPasswordRecovery: () => {
       calls.discardPasswordRecovery += 1;
       return Promise.resolve();
+    },
+    signInWithGoogle: () => {
+      calls.signInWithGoogle += 1;
+      return options.signInWithGoogle ? options.signInWithGoogle() : Promise.resolve({ kind: 'authenticated', user: fakeUser });
+    },
+    completeOAuthCallback: (code) => {
+      calls.completeOAuthCallback.push(code);
+      return options.completeOAuthCallback
+        ? options.completeOAuthCallback(code)
+        : Promise.resolve({ kind: 'authenticated', user: fakeUser });
+    },
+    isAppleSignInAvailable: () => Promise.resolve(options.appleAvailable ?? false),
+    signInWithApple: () => {
+      calls.signInWithApple += 1;
+      return options.signInWithApple ? options.signInWithApple() : Promise.resolve({ kind: 'authenticated', user: fakeUser });
     },
     onSessionChange: (listener) => {
       listeners.add(listener);

@@ -11,6 +11,8 @@ import type { CommunicationsGateway } from '@/features/communications/gateway';
 import type { BusinessMediaRemote } from '@/persistence/media/business-media';
 import type { SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
 
+import { expoSocialAuthPlatform } from '../social-auth/expo-social-auth-platform';
+
 import { createSupabaseAuthGateway } from './auth-gateway';
 import { createSupabaseBusinessGateway } from './business-gateway';
 import { createSupabaseBusinessMediaGateway } from './business-media-gateway';
@@ -50,6 +52,10 @@ function createUnconfiguredGateways(): AccountGateways {
       startPasswordRecovery: fail,
       updatePassword: fail,
       discardPasswordRecovery: () => Promise.resolve(),
+      signInWithGoogle: fail,
+      completeOAuthCallback: fail,
+      isAppleSignInAvailable: () => Promise.resolve(false),
+      signInWithApple: fail,
       onSessionChange: () => () => {},
     },
     business: {
@@ -68,7 +74,8 @@ export function createAccountGateways(): AccountGateways {
     const client = getSupabaseClient();
     return {
       // The recovery marker shares the session's storage (client.ts installs it).
-      auth: createSupabaseAuthGateway(client.auth, localStorage),
+      // Google (system browser) and Apple (native sheet, iOS) through the device adapter.
+      auth: createSupabaseAuthGateway(client.auth, localStorage, expoSocialAuthPlatform),
       business: createSupabaseBusinessGateway(client),
       sync: createSupabaseSyncGateway(client),
       media: createSupabaseBusinessMediaGateway(client, expoPhotoFileIO),

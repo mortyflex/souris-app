@@ -158,6 +158,19 @@ export function getCashRegisterDayInterval(day: Date): CashRegisterInterval {
   };
 }
 
+/**
+ * `[local midnight of firstDay, local midnight after lastDay)`: a range of
+ * local civil days, both included — a week of the Agenda is Monday → Sunday.
+ * Built from local calendar fields, so a DST change inside the range never
+ * moves a bound.
+ */
+export function getCashRegisterDaysInterval(firstDay: Date, lastDay: Date): CashRegisterInterval {
+  return {
+    start: startOfLocalDay(firstDay),
+    end: localDate(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1),
+  };
+}
+
 /** `[local midnight of the 1st, local midnight of the next month's 1st)`. */
 export function getCashRegisterMonthInterval(month: Date): CashRegisterInterval {
   return {

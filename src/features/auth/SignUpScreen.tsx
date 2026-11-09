@@ -17,6 +17,7 @@ import { TextField } from '@/shared/ui/TextField';
 import { rose, spacing } from '@/shared/ui/theme';
 
 import { PasswordField } from './components/PasswordField';
+import { SocialSignInButtons } from './components/SocialSignInButtons';
 import {
   EMPTY_CREDENTIALS,
   hasCredentialErrors,
@@ -34,13 +35,16 @@ export function SignUpScreen() {
   const [values, setValues] = useState<CredentialFormValues>(EMPTY_CREDENTIALS);
   const [attempted, setAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // A Google / Apple attempt on its way: the email form waits.
+  const [socialPending, setSocialPending] = useState(false);
+  const busy = submitting || socialPending;
   const [failure, setFailure] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
 
   const errors = attempted ? validateCredentials(values, 'sign-up') : {};
 
   const submit = async () => {
-    if (submitting) return;
+    if (busy) return;
     setAttempted(true);
     setFailure(null);
     const nextErrors = validateCredentials(values, 'sign-up');
@@ -71,13 +75,13 @@ export function SignUpScreen() {
       footer={
         <>
           <AppButton
-            disabled={submitting}
+            disabled={busy}
             onPress={() => void submit()}
             testID="submit-sign-up"
             title={submitting ? 'Création du compte…' : 'Créer mon compte'}
           />
           <AppButton
-            disabled={submitting}
+            disabled={busy}
             onPress={() => router.replace('/sign-in')}
             title="J’ai déjà un compte"
             variant="tertiary"
@@ -90,12 +94,13 @@ export function SignUpScreen() {
       title="Créons votre compte"
       topBarBrand
     >
+      <SocialSignInButtons disabled={submitting} onPendingChange={setSocialPending} />
       <TextField
         accessibilityLabel="Email"
         placement="page"
         autoCapitalize="none"
         autoComplete="email"
-        editable={!submitting}
+        editable={!busy}
         error={errors.email}
         keyboardType="email-address"
         label="Email"
@@ -109,7 +114,7 @@ export function SignUpScreen() {
         value={values.email}
       />
       <PasswordField
-        editable={!submitting}
+        editable={!busy}
         error={errors.password}
         inputRef={passwordRef}
         intent="new"

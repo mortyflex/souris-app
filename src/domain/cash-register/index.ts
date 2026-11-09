@@ -4,6 +4,9 @@
 //                   interval summaries, entries, paying clients, daily totals)
 //   comparison.ts   period comparisons over that same selection (trend of the
 //                   collected total, product units and direct product sales)
+//   breakdown.ts    what one period's total is made of (appointments, direct
+//                   product sales and their units, refunds) — the
+//                   « Encaissements » block of the day and week summaries
 
 export type {
   CashRegisterEntry,
@@ -42,6 +45,7 @@ export {
   compareCashRegisterValues,
   getCashRegisterDayInterval,
   getCashRegisterDayProductSummary,
+  getCashRegisterDaysInterval,
   getCashRegisterHistoryStart,
   getCashRegisterMonthComparison,
   getCashRegisterMonthInterval,
@@ -49,3 +53,5 @@ export {
   getCashRegisterProductSummary,
   isCashRegisterIntervalCovered,
 } from './comparison';
+export type { CashRegisterPeriodBreakdown } from './breakdown';
+export { getCashRegisterPeriodBreakdown } from './breakdown';

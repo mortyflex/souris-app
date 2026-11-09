@@ -32,6 +32,7 @@ import { NavigationChevron } from '@/shared/ui/NavigationChevron';
 import { foregroundSoft, radii, semanticColors, spacing } from '@/shared/ui/theme';
 
 import {
+  REVENTE_NOTE,
   describeCashRegisterTrend,
   formatProductUnitCount,
   formatProductUnitSplit,
@@ -41,7 +42,8 @@ import { CashRegisterTrendRow, CashRegisterTrendToggle } from './CashRegisterTre
 
 export const PRODUCTS_TITLE = 'Produits vendus';
 export const DIRECT_SALES_LABEL = 'Ventes directes encaissées';
-export const REVENTE_NOTE = 'Les produits vendus pendant un rendez-vous sont encaissés avec celui-ci.';
+// Shared with the « Encaissements » of the day and week summaries.
+export { REVENTE_NOTE };
 export const REFUNDS_LABEL = 'Remboursements produits';
 export const NET_LABEL = 'Net produits';
 export const OPEN_SALES_LABEL = 'Voir les ventes';

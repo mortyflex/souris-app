@@ -237,7 +237,97 @@ Supabase Dashboard (manual, Staging then Production): the build's `<scheme>://re
 Authentication › URL Configuration › Redirect URLs — otherwise the link falls back to the Site
 URL and the code is ignored. Production: `sourisapp://sign-in` and `sourisapp://reset-password`;
 Staging (development build): `sourisapp-dev://sign-in` and `sourisapp-dev://reset-password`.
+Google sign-in adds `<scheme>://auth-callback` (§4b).
 Templates, SMTP and the sending domain: `docs/release/AUTH_EMAILS.md`.
+
+### 4b. Google and Apple sign-in (build 12)
+
+```text
+Se connecter / Créer un compte
+  [ Continuer avec Apple ]   iOS only, when AppleAuthentication.isAvailableAsync() — the system button
+  [ G  Continuer avec Google ]
+  ── ou continuer avec votre e-mail ──
+  email + password form, unchanged
+```
+
+`src/features/auth/components/SocialSignInButtons.tsx`, the same group on both screens. While an
+attempt runs, both buttons and the email form are disabled (spinner on the pressed one); the
+AuthProvider runs ONE social attempt at a time (a second tap joins it) and refuses any while signed
+in. A closed browser or Apple sheet is `cancelled`: no message, no haptic. Failures are one French
+sentence: `PROVIDER_UNAVAILABLE` (the provider is not enabled on this Supabase project),
+`SOCIAL_SIGN_IN_FAILED` (a callback, token or nonce Supabase could not verify), `NETWORK`,
+`RATE_LIMITED`.
+
+Google — Supabase OAuth in the system browser, PKCE, no Google SDK:
+
+```text
+signInWithOAuth({ provider: 'google', redirectTo: <scheme>://auth-callback, skipBrowserRedirect,
+                  queryParams: { prompt: 'select_account' } })      verifier stored on THIS install
+  → expo-web-browser openAuthSessionAsync(url, redirect)            ASWebAuthenticationSession / Custom Tab
+  → Google → Supabase /callback → <scheme>://auth-callback?code=…   or ?error=access_denied (cancelled)
+  → readOAuthCallbackUrl: exact redirect only, code shape checked    src/features/auth/oauth-callback.ts
+  → exchangeCodeForSession(code), ONCE per code per run
+```
+
+The redirect reaches the app twice on Android (the browser session's result AND a deep link the
+router opens on `(auth)/auth-callback`), and only as a deep link on a cold start (the app was killed
+while the browser was open; the verifier is in the session storage). Both entries hand the code to
+the same gateway exchange: a running exchange is joined, a settled one answers `cancelled` (nothing
+to do — a router replay after a sign-out never signs in again). A recovery code on that route
+opens a recovery session, which is signed out at once (scope `local`) and refused. The `sign-in`
+route still reads no parameter and still never exchanges anything (§4). One PKCE verifier slot
+exists per installation: starting Google sign-in after asking for a password recovery link makes
+that link unusable on this phone (ask for a new one).
+
+Apple — native, iOS only (`expo-apple-authentication`, `ios.usesAppleSignIn`):
+
+```text
+rawNonce = 32 random bytes (expo-crypto) → Apple receives sha256(rawNonce)
+  → identityToken → signInWithIdToken({ provider: 'apple', token, nonce: rawNonce })
+```
+
+Supabase hashes the raw nonce and refuses a token that does not carry it. Apple sends the name on
+the first authorization only: when present it is saved with `updateUser({ data })` — only the keys
+the account does not have yet (`given_name`, `family_name`, `full_name`), never an empty one, best
+effort. No Apple web flow and no Apple button on Android in this phase.
+
+Accounts and Businesses — the rules of §5 / §6 apply unchanged, because they read the user ID:
+
+- a Google identity whose verified email matches an existing account is linked BY SUPABASE
+  (automatic identity linking) and signs into the SAME user id → its Business, its binding, its
+  outbox, exactly as after a password sign-in. Supabase never links to an unverified email;
+- any other identity (an Apple private relay address, another Google address, an unlinked
+  identity with the same email string) is ANOTHER user id: on a device bound to someone else →
+  `DEVICE_ACCOUNT_CONFLICT` (§6, hand-over refused while anything is unsent); on an empty device →
+  Business setup. Nothing is ever associated by email, and nothing is merged in the app;
+- an account CREATED with Google or Apple (`app_metadata.provider`, exposed as
+  `AuthUser.createdWith`) sees, on step 1 of the setup only, which account is signed in and
+  « Changer de compte » (a normal local sign-out) — before any Business exists;
+- the provider's first name (`AuthUser.givenName`) pre-fills the setup's first-name field until the
+  professional types in it; an existing Business profile is never written;
+- an Apple private relay address is never proposed as the reminders Reply-To
+  (`src/features/auth/account-email.ts`): Apple forwards to it only from registered senders.
+
+Manual identity linking (`linkIdentity`) is not offered in this phase.
+
+Configuration (manual; Staging first, Production only by a separate decision):
+
+```text
+Supabase › Authentication › URL Configuration › Redirect URLs
+  Staging     sourisapp-dev://auth-callback
+  Production  sourisapp://auth-callback
+Supabase › Authentication › Providers › Google
+  enabled · Client ID = the Google Cloud « Web application » client · its secret
+  Google Cloud authorized redirect URI: https://<project-ref>.supabase.co/auth/v1/callback
+Supabase › Authentication › Providers › Apple
+  enabled · Client IDs: com.mortyflex.sourisapp.dev (Staging) / com.mortyflex.sourisapp
+  native only: no Services ID, no .p8 secret, no 6-month rotation
+Apple Developer › Identifiers › each App ID: « Sign in with Apple » capability
+```
+
+Native: `expo-apple-authentication` and the entitlement need a new iOS build; Google needs none
+(expo-web-browser and the scheme already ship), so it can be tried on an existing development
+build through Metro once Supabase is configured.
 
 ---
 

@@ -11,8 +11,10 @@
     "ios": {
       "bundleIdentifier": "com.mortyflex.sourisapp",
       "icon": "./assets/brand/app-icon/BeautIzzy.icon",
+      "usesAppleSignIn": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
       }
     },
     "android": {
@@ -63,6 +65,7 @@
         }
       ],
       "expo-sqlite",
+      "expo-apple-authentication",
       [
         "expo-media-library",
         {

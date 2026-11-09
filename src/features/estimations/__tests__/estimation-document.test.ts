@@ -62,14 +62,50 @@ describe('buildEstimationDocument', () => {
     expect(model.lines[1]?.accessibilityLabel).toBe(`Balayage 1, ${formatCompactEuroCents(7000)}`);
   });
 
-  it('keeps a Service selected twice as two lines with distinct keys', () => {
+  it('names a Service selected several times ONCE, at its first position, with its quantity and line price', () => {
+    const [coupe, balayage, soin] = services as [typeof services[0], typeof services[0], typeof services[0]];
     const model = buildEstimationDocument({
       businessName: 'Maison Léa',
-      services: [services[0]!, services[0]!],
+      // Coupe ×3, interleaved with the others: grouped at the first position.
+      services: [coupe, balayage, coupe, soin, coupe],
       date: new Date(2026, 8, 24),
     });
-    expect(model.lines).toHaveLength(2);
-    expect(new Set(model.lines.map((line) => line.key)).size).toBe(2);
+    expect(model.lines.map((line) => [line.label, line.quantity, line.price])).toEqual([
+      ['Coupe brushing ×3', 3, formatCompactEuroCents(13500)],
+      ['Balayage 1', 1, formatCompactEuroCents(7000)],
+      ['Soin profond', 1, formatCompactEuroCents(1250)],
+    ]);
+    expect(new Set(model.lines.map((line) => line.key)).size).toBe(3);
+    // Spoken as the catalogue card says it: « quantité 3 ».
+    expect(model.lines[0]?.accessibilityLabel).toBe(`Coupe brushing, quantité 3, ${formatCompactEuroCents(13500)}`);
+    expect(model.lines[1]?.accessibilityLabel).toBe(`Balayage 1, ${formatCompactEuroCents(7000)}`);
+    // Every occurrence counts in the total; the lines add up to it exactly.
+    expect(model.totalCents).toBe(3 * 4500 + 7000 + 1250);
+    expect(model.total).toBe(formatCompactEuroCents(21750));
+  });
+
+  it('prices repeated occurrences in exact cents, never by multiplying euros', () => {
+    const model = buildEstimationDocument({
+      businessName: 'Maison Léa',
+      services: [
+        { id: 'pose', name: 'Pose capsules', price: 0.1 },
+        { id: 'pose', name: 'Pose capsules', price: 0.1 },
+        { id: 'pose', name: 'Pose capsules', price: 0.1 },
+      ],
+      date: new Date(2026, 8, 24),
+    });
+    expect(model.lines).toHaveLength(1);
+    expect(model.lines[0]?.price).toBe(formatCompactEuroCents(30));
+    expect(model.totalCents).toBe(30);
+  });
+
+  it('removing occurrences down to one reads the plain name again', () => {
+    const model = buildEstimationDocument({
+      businessName: 'Maison Léa',
+      services: [services[0]!],
+      date: new Date(2026, 8, 24),
+    });
+    expect(model.lines[0]).toMatchObject({ label: 'Coupe brushing', quantity: 1 });
   });
 
   it('totals the exact catalog prices as « Total estimé »', () => {

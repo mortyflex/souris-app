@@ -9,6 +9,12 @@
 //              week: the outcome lines (Réalisés · Prévus · Annulés · Absences)
 //   total      « CA potentiel » — THE strongest value of the paper
 //   breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen
+//              (the period's APPOINTMENTS, whatever day their money came in)
+//   encashment « Encaissements du jour / de la semaine »: Rendez-vous · Ventes de
+//              produits « (3 articles) » inline · Remboursements (only when
+//              some were settled) · Total encaissé — the Caisse of the period,
+//              money by the day it was received. One line each, whatever the
+//              number of products sold: the paper never grows with them
 //
 //   footer     the BeautIzzy symbol, the closing signature, inside the paper
 //
@@ -18,7 +24,7 @@
 // tokens throughout — no texture, no grain, no serif.
 
 import { SymbolView } from 'expo-symbols';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { daySummaryIcon } from '@/shared/icons/day-summary-icon';
 import { AppText } from '@/shared/ui/AppText';
@@ -35,6 +41,7 @@ import {
 
 import type {
   DaySummaryReceiptActivity,
+  DaySummaryReceiptEncashment,
   DaySummaryReceiptModel,
   DaySummaryReceiptRow,
 } from './day-summary-receipt';
@@ -135,8 +142,81 @@ export function DaySummaryReceipt({
         ))}
       </View>
 
+      <ReceiptTearLine />
+
+      <Encashment encashment={model.encashment} testID={`${testID}-encashment`} />
+
       <BrandMark decorative size={RECEIPT_SIGNATURE_SIZE} style={styles.brand} variant="symbol" />
     </ReceiptPaper>
+  );
+}
+
+/**
+ * At the default text size a line never wraps: on a narrow paper (iPhone SE)
+ * the label and its counter shrink a little — never below this scale — while
+ * the amount keeps its size. With enlarged text the label wraps instead, so
+ * nothing is ever cut.
+ */
+export const ENCASHMENT_LABEL_MIN_SCALE = 0.8;
+
+/** The Caisse of the period, by origin: each line ONE spoken element. */
+function Encashment({
+  encashment,
+  testID,
+}: {
+  readonly encashment: DaySummaryReceiptEncashment;
+  readonly testID: string;
+}) {
+  const { fontScale } = useWindowDimensions();
+  const oneLine = fontScale <= 1;
+  return (
+    <View style={styles.encashment} testID={testID}>
+      <AppText accessibilityRole="header" variant="eyebrow" style={styles.encashmentTitle}>
+        {encashment.title}
+      </AppText>
+      {encashment.lines.map((line) => {
+        const total = line.key === 'total';
+        return (
+          <View
+            accessible
+            accessibilityLabel={line.accessibilityLabel}
+            key={line.key}
+            style={[styles.metric, styles.encashmentLine, total && styles.encashmentTotal]}
+            testID={`${testID}-${line.key}`}
+          >
+            <AppText
+              {...(oneLine
+                ? { adjustsFontSizeToFit: true, minimumFontScale: ENCASHMENT_LABEL_MIN_SCALE, numberOfLines: 1 }
+                : {})}
+              style={[total ? styles.encashmentTotalLabel : styles.metricLabel, styles.encashmentLabel]}
+              testID={`${testID}-${line.key}-label`}
+              variant="body"
+            >
+              {line.label}
+              {line.count !== undefined && (
+                // Quieter than the label: the secondary metadata style, inline.
+                <AppText style={styles.encashmentCount} testID={`${testID}-${line.key}-count`} variant="metadata">
+                  {` ${line.count}`}
+                </AppText>
+              )}
+            </AppText>
+            <AppText
+              numberOfLines={1}
+              style={[styles.metricValue, styles.encashmentValue, total && styles.collectedValue]}
+              testID={`${testID}-${line.key}-value`}
+              variant="control"
+            >
+              {line.value}
+            </AppText>
+          </View>
+        );
+      })}
+      {encashment.note !== undefined && (
+        <AppText variant="metadata" style={styles.encashmentNote} testID={`${testID}-note`}>
+          {encashment.note}
+        </AppText>
+      )}
+    </View>
   );
 }
 
@@ -231,5 +311,16 @@ const styles = StyleSheet.create({
   metricLabel: { color: foregroundSoft },
   metricValue: { fontVariant: ['tabular-nums'] },
   collectedValue: { color: mint.mint700 },
+  encashment: { gap: spacing.sm },
+  encashmentTitle: { color: semanticColors.accent, marginBottom: 2 },
+  // The label (and its counter) gives way; the amount never does.
+  encashmentLine: { gap: spacing.sm },
+  encashmentLabel: { flexShrink: 1 },
+  encashmentCount: { color: foregroundSoft },
+  encashmentValue: { flexShrink: 0 },
+  encashmentNote: { color: foregroundSoft },
+  // The Caisse total of the period closes the block, its label in full colour.
+  encashmentTotal: { marginTop: spacing.xs },
+  encashmentTotalLabel: { color: semanticColors.foreground },
   brand: { alignSelf: 'center', marginTop: spacing.md, opacity: 0.85 },
 });

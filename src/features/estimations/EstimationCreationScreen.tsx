@@ -10,14 +10,22 @@
 //   Prestations → Résumé
 // reusing only its generic pieces — the shared editing header, the creation
 // stepper (given its two labels) and its step rules, the shared prestation
-// catalogue (Services / Techniques cards, a tap toggles), the selection
+// catalogue in its quantity mode (DESIGN_OVERRIDES.md §27 « Quantité d’une
+// prestation », exactly as in Appointment creation: a tap or [+] adds one
+// occurrence, [−] removes the last one, « ×N » on the card), the selection
 // footer, and the grouped-row Résumé family. The eyebrow stays
 // « ESTIMATION » throughout: never a person's name.
 //
 // What the estimate is made of: the selected catalog Services, in selection
-// order, at their CURRENT catalog price. A Technique stays one commercial
-// line; its phases are scheduling details and never shown. No appointment
-// schedule, deposit, discount, product, payment, validity or tax wording.
+// order, every occurrence at its CURRENT catalog price; a Service selected
+// several times reads « Coupe femme ×3 » on one line. A Technique stays one
+// commercial line; its phases are scheduling details and never shown. No
+// appointment schedule, duration, deposit, discount, product, payment,
+// validity or tax wording.
+//
+// The selection lives in this sheet only: « Précédent », the stepper and
+// « Modifier » return to the catalogue with every occurrence kept. There is
+// no estimation record, so nothing is reopened once the sheet is left.
 //
 // « Générer l’estimation » prints the document through the shared receipt
 // printer (EstimationTicket). NOTHING is written: no Client, Appointment,
@@ -33,6 +41,7 @@ import type { Service } from '@/domain/appointments';
 import { CreationStepper } from '@/features/appointments/creation/components/CreationStepper';
 import { canNavigateTo, type CreationStep } from '@/features/appointments/creation/steps';
 import { ServiceCatalogPicker } from '@/features/appointments/editor/components/ServiceCatalogPicker';
+import { removeLastServiceOccurrence } from '@/features/appointments/editor/draft';
 import { useCatalogueView } from '@/features/services/use-catalogue-view';
 import {
   formatSelectedServiceNames,
@@ -56,6 +65,11 @@ export const ESTIMATION_SHEET_TITLE = 'Estimation';
 export const ESTIMATION_GENERATE_LABEL = 'Générer l’estimation';
 export const ESTIMATION_STEP_LABELS = ['Prestations', 'Résumé'] as const;
 
+/** ONE selected occurrence of a catalog Service (the shape the shared quantity helpers read). */
+interface EstimationOccurrence {
+  readonly serviceId: string;
+}
+
 /** 0 = Prestations, 1 = Résumé: the first two positions of the shared step rules. */
 type EstimationStep = Extract<CreationStep, 0 | 1>;
 const SUMMARY_STEP: EstimationStep = 1;
@@ -68,7 +82,12 @@ export function EstimationCreationScreen() {
   const business = useCurrentBusiness();
   const { activeServices } = useServiceCatalog();
   const [step, setStep] = useState<EstimationStep>(0);
-  const [selectedServiceIds, setSelectedServiceIds] = useState<readonly string[]>([]);
+  // One entry per selected occurrence, in selection order: « Coupe » twice is two entries.
+  const [occurrences, setOccurrences] = useState<readonly EstimationOccurrence[]>([]);
+  const selectedServiceIds = useMemo(
+    () => occurrences.map((occurrence) => occurrence.serviceId),
+    [occurrences],
+  );
   // The document as it was generated: the printed paper never moves under it.
   const [generated, setGenerated] = useState<EstimationDocumentModel>();
   const [ticketVisible, setTicketVisible] = useState(false);
@@ -97,14 +116,24 @@ export function EstimationCreationScreen() {
 
   const canContinue = selectedServices.length > 0;
 
-  const toggleService = (service: Service) => {
+  // One more occurrence (card tap or [+]).
+  const addService = (service: Service) => {
     haptics.selection();
-    setSelectedServiceIds((current) =>
-      current.includes(service.id)
-        ? current.filter((id) => id !== service.id)
-        : [...current, service.id],
-    );
+    setOccurrences((current) => [...current, { serviceId: service.id }]);
   };
+
+  // One occurrence less ([−]): the last one; at 0 the card is idle again.
+  const removeServiceOccurrence = (service: Service) => {
+    const remaining = removeLastServiceOccurrence(occurrences, service.id);
+    if (remaining === occurrences) return;
+    haptics.selection();
+    setOccurrences(remaining);
+  };
+
+  const selectedNames = selectedServices.map((service) => ({
+    serviceId: service.id,
+    serviceName: service.name,
+  }));
 
   const navigateToStep = (target: number) => {
     if (canNavigateTo(step, target)) setStep(target as EstimationStep);
@@ -169,9 +198,11 @@ export function EstimationCreationScreen() {
           </AppText>
           <ServiceCatalogPicker
             categories={catalogueView.categories}
+            idleHint="Ajouter à l’estimation"
             organization={catalogueView.presentation.organization}
-            onSelectService={toggleService}
-            selectedHint="Retirer de l’estimation"
+            onDecrementService={removeServiceOccurrence}
+            onSelectService={addService}
+            selectedHint="Ajouter une fois de plus"
             selectedServiceIds={selectedServiceIds}
             services={activeServices}
           />
@@ -189,15 +220,13 @@ export function EstimationCreationScreen() {
             </AppText>
             {selectedServices.length > 0 && (
               <AppText
-                accessibilityLabel={selectedServices.map((service) => service.name).join(', ')}
+                accessibilityLabel={formatSelectedServiceNames(selectedNames, ', ')}
                 numberOfLines={2}
                 style={styles.selectionFooterNames}
                 testID="estimation-selection-names"
                 variant="metadata"
               >
-                {formatSelectedServiceNames(
-                  selectedServices.map((service) => ({ serviceName: service.name })),
-                )}
+                {formatSelectedServiceNames(selectedNames)}
               </AppText>
             )}
           </View>

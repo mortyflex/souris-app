@@ -30,6 +30,13 @@
 // (password-reset-cooldown.ts): the waiting request is refused here, before
 // any network call, whatever the screen shows.
 //
+// Google and Apple (docs/architecture/AUTH.md §4b) run one at a time: a
+// second tap joins the attempt on its way. Their session enters like a
+// password sign-in, once per user — the browser flow and the `auth-callback`
+// route delivering the same Google answer never produce two entries. Whether
+// the account is new (Business setup) or existing (its Business) is decided
+// downstream by the authenticated user id, never by the email.
+//
 // Business resolution is a separate provider (BusinessSessionProvider). No
 // raw provider error, token, or session payload ever reaches the UI: the
 // gateway returns outcomes with stable codes. The session listener is
@@ -57,6 +64,7 @@ import {
   type ResendOutcome,
   type SignInOutcome,
   type SignUpOutcome,
+  type SocialSignInOutcome,
 } from '../gateway';
 import { createPasswordResetCooldown, type PasswordResetCooldown } from '../password-reset-cooldown';
 
@@ -94,6 +102,14 @@ export interface AuthSessionValue {
   readonly completePasswordRecovery: (password: string) => Promise<PasswordUpdateOutcome>;
   /** Abandons the recovery: the recovery session is signed out, nothing else changes. */
   readonly cancelPasswordRecovery: () => Promise<void>;
+  /** Google through the system browser. Single flight with Apple; refused while signed in. */
+  readonly signInWithGoogle: () => Promise<SocialSignInOutcome>;
+  /** Native Sign in with Apple (iOS). Single flight with Google; refused while signed in. */
+  readonly signInWithApple: () => Promise<SocialSignInOutcome>;
+  /** Whether Sign in with Apple can be offered on this device. */
+  readonly isAppleSignInAvailable: () => Promise<boolean>;
+  /** The `auth-callback` route: completes a Google answer delivered by deep link (cold start, Android). */
+  readonly completeOAuthCallback: (code: string) => Promise<SocialSignInOutcome>;
   /** Re-runs session restoration after an error. */
   readonly retry: () => void;
 }
@@ -110,6 +126,8 @@ interface AuthProviderProps {
   /** Where the resend cooldown lives; in memory (survives navigation, not a restart) when omitted. */
   readonly passwordResetCooldown?: PasswordResetCooldown;
 }
+
+const NOTHING_TO_DO: SocialSignInOutcome = { kind: 'cancelled' };
 
 const RATE_LIMITED: PasswordResetRequestOutcome = { kind: 'failed', failure: { code: 'RATE_LIMITED' } };
 
@@ -337,6 +355,72 @@ export function AuthProvider({
     }
   }, [gateway]);
 
+  /** The social attempt on its way, if any: a synchronous guard, never React state. */
+  const socialInFlight = useRef<Promise<SocialSignInOutcome> | null>(null);
+
+  /**
+   * Enters a Google / Apple session like a password sign-in — once per user:
+   * the same user arriving again (the callback route joining the browser
+   * flow, the supabase-js SIGNED_IN event) keeps the state as it is.
+   */
+  const enterSocialSession = useCallback((user: AuthUser) => {
+    restoreGeneration.current += 1;
+    recovering.current = false;
+    setState((current) =>
+      current.status === 'authenticated' && current.session === 'live' && current.user.id === user.id
+        ? current
+        : { status: 'authenticated', user, session: 'live' },
+    );
+  }, []);
+
+  const settleSocial = useCallback(
+    async (attempt: () => Promise<SocialSignInOutcome>): Promise<SocialSignInOutcome> => {
+      let outcome: SocialSignInOutcome;
+      try {
+        outcome = await attempt();
+      } catch (error) {
+        outcome = { kind: 'failed', failure: toFailure(error) };
+      }
+      if (outcome.kind === 'authenticated') enterSocialSession(outcome.user);
+      return outcome;
+    },
+    [enterSocialSession],
+  );
+
+  const runSocialSignIn = useCallback(
+    (attempt: () => Promise<SocialSignInOutcome>): Promise<SocialSignInOutcome> => {
+      // A second tap — on either button — joins the attempt on its way.
+      if (socialInFlight.current) return socialInFlight.current;
+      if (stateRef.current.status === 'authenticated') return Promise.resolve(NOTHING_TO_DO);
+      const flight = settleSocial(attempt).finally(() => {
+        if (socialInFlight.current === flight) socialInFlight.current = null;
+      });
+      socialInFlight.current = flight;
+      return flight;
+    },
+    [settleSocial],
+  );
+
+  const signInWithGoogle = useCallback(() => runSocialSignIn(() => gateway.signInWithGoogle()), [gateway, runSocialSignIn]);
+  const signInWithApple = useCallback(() => runSocialSignIn(() => gateway.signInWithApple()), [gateway, runSocialSignIn]);
+  const isAppleSignInAvailable = useCallback(async () => {
+    try {
+      return await gateway.isAppleSignInAvailable();
+    } catch {
+      return false;
+    }
+  }, [gateway]);
+
+  const completeOAuthCallback = useCallback(
+    (code: string): Promise<SocialSignInOutcome> => {
+      // A signed-in session is never replaced by a callback link.
+      if (stateRef.current.status === 'authenticated') return Promise.resolve(NOTHING_TO_DO);
+      // The gateway joins the browser flow's exchange of the same code.
+      return settleSocial(() => gateway.completeOAuthCallback(code));
+    },
+    [gateway, settleSocial],
+  );
+
   const retry = useCallback(() => {
     setState({ status: 'initializing' });
     void restore();
@@ -356,6 +440,10 @@ export function AuthProvider({
         isRecoveryCodeUsed,
         completePasswordRecovery,
         cancelPasswordRecovery,
+        signInWithGoogle,
+        signInWithApple,
+        isAppleSignInAvailable,
+        completeOAuthCallback,
         retry,
       }}
     >

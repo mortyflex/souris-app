@@ -1142,8 +1142,9 @@ gestures, sheet sizing and card geometry are unchanged.
     `lav700` name, `foregroundSoft` duration.
   - **Selected** stays inside the family: stronger surface (`mint100` / `lav100`), stronger border
     (`mint600` / `accent`), check badge in that same strong tone. Green never means « selected ».
-    *(In Appointment creation and editing the check is now the « ×N » quantity badge with the
-    [−] [+] controls of §27 « Quantité d’une prestation »; estimations keep the check.)*
+    *(In Appointment creation and editing — and, since November 2026, in estimations — the check
+    is now the « ×N » quantity badge with the [−] [+] controls of §27 « Quantité d’une
+    prestation ».)*
   - The `mint` scale mirrors the lavender OKLCH lightness steps at hue 160; its 600 / 700 sit on
     the approved mint planning-card accent / title (§19). Price stays navy and « dont X de pose »
     stays peach on both families. The 1.5 pt border lives inside the card box and the padding
@@ -1361,6 +1362,11 @@ cartoonish, and never a wait. Figures: `docs/domain/APPOINTMENTS.md` §25c.
              the amount in `display` 34 / 700, lav700, tabular — THE strongest value
   breakdown  Déjà encaissé (value mint700) · Reste à encaisser · Temps total · Panier moyen
              body label, foregroundSoft ↔ control value, tabular
+  encashment after a tear line, « Encaissements du jour » eyebrow, accent (a header) ·
+             Rendez-vous · Ventes de produits « (6 articles) » — the counter inline, metadata,
+             foregroundSoft · Remboursements (only when the day settled one, signed) · Total
+             encaissé (label navy, value mint700) · the Revente sentence when products were
+             sold during an Appointment (§25b)
   footer     the BeautIzzy SYMBOL alone (`BrandMark` symbol, `RECEIPT_SIGNATURE_SIZE` 24 pt wide,
              85 % opacity), decorative — the closing signature of every receipt; the wordmark
              is not repeated on a paper that is already BeautIzzy's
@@ -1402,6 +1408,7 @@ activity   Réalisés · Prévus · Annulés · Absences — body label ↔ cont
            each ONE spoken element (« 14 rendez-vous réalisés »)          in place of the list
 total      « CA POTENTIEL », exactly as §25
 breakdown  Déjà encaissé · Reste à encaisser · Temps total · Panier moyen, exactly as §25
+encashment « Encaissements de la semaine », exactly as §25b, over the seven days
 footer     the BeautIzzy symbol, exactly as §25
 ```
 
@@ -1410,6 +1417,37 @@ footer     the BeautIzzy symbol, exactly as §25
 - **Compact.** No Appointment list, no seven daily sections, no chart. An empty week is the same
   paper: « Aucun rendez-vous », every line at zero.
 - **Large text.** As §25: the whole paper scrolls in the printer; nothing scrolls inside it.
+
+### 25b. « Encaissements » on the day and week summaries (November 2026)
+
+A product sale changed nothing on « Résumé du jour »: every figure of the paper followed the
+Appointments of the day, and a standalone Sale is not an Appointment. The paper now also prints
+the Caisse of the same days — the money RECEIVED in them, by origin — without touching the
+Appointment figures above it. Figures: `docs/domain/APPOINTMENTS.md` §25c « Encaissements ».
+
+- **Two readings, never mixed.** « CA potentiel » and its breakdown keep their meaning (the
+  Appointments of the period, whatever day their money came in). « Encaissements du jour / de la
+  semaine » is the Caisse of the period: its « Total encaissé » IS the Caisse total of those days
+  and the Accueil « Encaissements du jour · encaissé » figure.
+- **Lines.** « Rendez-vous » (checkouts + deposits received), « Ventes de produits » (standalone
+  Sale payments), « Remboursements » only when the period settled one (signed: −10,00 €, a
+  reversal +), « Total encaissé ». Zero lines stay printed: an empty day reads 0,00 € everywhere,
+  never an error.
+- **Articles, not products** (simplified November 2026 — it first named every product under the
+  line, which made the paper grow with the catalogue). « Ventes de produits (1 article) » /
+  « (6 articles) »: the PHYSICAL units of the paid standalone Sales (Shampooing ×3 + Masque ×2 +
+  Huile ×1 = 6), inline after the label in the quieter `metadata` style (`foregroundSoft`), the
+  amount right-aligned; no counter at zero, no product name, ONE line whatever the number of
+  different products. A refund never lowers it; a product sold during an Appointment never counts
+  in it (one sentence says it is collected with the Appointment).
+- **One line, never cut.** At the default text size the line never wraps: on the narrowest paper
+  (iPhone SE, 283 pt of text) the label and its counter shrink a little — never below 80 % — while
+  the amount keeps its size. With enlarged text the label wraps under itself instead: nothing is
+  ever truncated.
+- **Spoken.** Each line is ONE element: « Ventes de produits, 6 articles, 75,00 € ». The block
+  title is a header.
+- Accueil « Cette semaine » is unchanged: its « Déjà encaissé sur ces RDV » stays the week's
+  Appointments, as its label says (§48.5).
 
 ---
 
@@ -1482,7 +1520,7 @@ Appointment Creation keeps §22 for now.
   nothing » no longer applies: a tap on a selected card adds one more occurrence — see
   « Quantité d’une prestation » below.)*
 - **Quantité d’une prestation** — shared by Appointment creation (Prestations step) and editing
-  (Ajouter des prestations); never by estimations, which keep the check and tap-to-toggle. The
+  (Ajouter des prestations), and by the estimation sheet (§37, November 2026). The
   same Service may be booked several times, directly inside its existing card:
   - **Idle card** unchanged; a tap selects it with quantity 1.
   - **Selected card** keeps the category `tint` and 1.5 pt `accent` border; the check badge
@@ -1532,13 +1570,13 @@ The creation sheet speaks the §27 language. Flow, steps, rules and data are unc
 - **Shared prestation catalogue.** `ServiceCatalogPicker` + `ServiceSelectionCard` serve BOTH
   creation (Prestations step) and editing (Ajouter des prestations) with the same quantity
   behaviour: a tap adds one occurrence, [−] removes one (§27 « Quantité d’une prestation »).
-  Creation no longer toggles; only estimations keep tap-to-toggle.
+  Creation no longer toggles, and neither do estimations (§37): no caller toggles any more.
   Search, full-width Services / Techniques segment (`serviceCategoryColors[type].strong` fill),
   then a two-column grid of cards of the chosen type; search filters inside it and offers the
   other category when only that one matches. Card: name (two lines max), duration or « 1 h ·
   dont 30 min de pose », price. Idle: white surface, the category `border` hairline. Selected:
   the category `tint`, a 1.5 pt `accent` border and an `accent` « ×N » quantity badge with the
-  [−] [+] controls (an `accent` check badge in estimations). Violet for Services,
+  [−] [+] controls (estimations included). Violet for Services,
   azure for Techniques; never mint. Spoken « Balayage 1, 1 h dont 30 min de pose, 45,00 €,
   Technique » with the selected state.
 - **Footers.** Creation keeps the count + names line above « Précédent | Continuer »; editing
@@ -2044,15 +2082,21 @@ Product: `docs/product/PRODUCT.md` §5 « Estimation tarifaire ».
 
 **Sheet.** The workflow sheet of « Nouveau rendez-vous » (§27), unchanged in language: the shared
 editing header (« Annuler » · « Estimation »), the shared `CreationStepper` given two labels
-(Prestations → Résumé, « Étape 1 sur 2 »), the shared `ServiceCatalogPicker` as the FIRST step (a
-tap toggles; a selected card says « Retirer de l’estimation »), the selection footer (count +
-names), « Précédent » / « Continuer ». The eyebrow above the catalogue always reads « ESTIMATION »
+(Prestations → Résumé, « Étape 1 sur 2 »), the shared `ServiceCatalogPicker` as the FIRST step, in
+the quantity mode of Appointment creation (§27 « Quantité d’une prestation », November 2026: the
+same « ×N » badge, [−] [+] controls, 44 × 44 pt areas, selection haptic, badge pulse and VoiceOver
+actions; an idle card is spoken « Ajouter à l’estimation », a selected one « Ajouter une fois de
+plus »), the selection footer (count of occurrences + names, « Coupe femme ×3 · Brushing »),
+« Précédent » / « Continuer ». Going back to Prestations (« Précédent », the stepper, « Modifier »)
+keeps every occurrence; nothing is kept once the sheet is left (there is no estimation record). The eyebrow above the catalogue always reads « ESTIMATION »
 — never a person's name. No Client picker, no Date / Heure group: the estimation has no recipient
 and nothing is scheduled.
 
 **Résumé.** Grouped rows: Date (the generation date, read-only) ; « Prestations
-sélectionnées » with « Modifier », one « name — price » row each ; the lavender final summary
-« Total estimé ». Primary action « Générer l’estimation ».
+sélectionnées » (its count = occurrences) with « Modifier », one « name — price » row per Service —
+selected several times it reads « Coupe femme ×3 — 75 € » (quantity × catalog price, exact cents),
+spoken « Coupe femme, quantité 3, 75 € » ; the lavender final summary « Total estimé ». The paper
+prints the same lines. Primary action « Générer l’estimation ».
 
 **Presentation.** The receipt printer of §25 — capsule, feed, one print haptic, reduced-motion
 fade — with Fermer · Enregistrer l’image · Partager as in §34. Fermer lets the paper leave, then

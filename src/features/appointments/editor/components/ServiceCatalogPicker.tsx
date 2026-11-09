@@ -8,10 +8,10 @@
 // only the data and the category colours (`serviceCategoryColors`, keyed by
 // the domain ServiceType) change. What a tap does belongs to the caller.
 //
-// Quantity mode (appointment creation and editing pass `onDecrementService`):
-// `selectedServiceIds` lists every occurrence, so « Coupe » twice reads ×2 on
-// its card; a tap or [+] adds one, [−] removes one. Without it (estimations)
-// a selected card keeps its check and the caller toggles.
+// Quantity mode (appointment creation and editing, and estimations, pass
+// `onDecrementService`): `selectedServiceIds` lists every occurrence, so
+// « Coupe » twice reads ×2 on its card; a tap or [+] adds one, [−] removes
+// one. Without it a selected card keeps its check and the caller toggles.
 //
 // The category is never colour alone: the segment says which grid is shown,
 // and a selected card states it with a check badge plus its accessibility
@@ -85,6 +85,8 @@ interface ServiceCatalogPickerProps {
   readonly decrementDisabled?: boolean;
   /** Spoken on an already selected card: what a tap on it does here. */
   readonly selectedHint?: string;
+  /** Spoken on a card not selected yet: what a tap on it does here. */
+  readonly idleHint?: string;
   /** How the profession's catalogue is organised; the Services / Techniques segment by default. */
   readonly organization?: CatalogueOrganization;
   /** The professional's categories (unified organisation only). */
@@ -98,6 +100,7 @@ export function ServiceCatalogPicker({
   onDecrementService,
   decrementDisabled = false,
   selectedHint = 'Déjà dans le rendez-vous',
+  idleHint = 'Ajouter au rendez-vous',
   organization = 'SERVICE_TYPES',
   categories = [],
 }: ServiceCatalogPickerProps) {
@@ -114,6 +117,7 @@ export function ServiceCatalogPicker({
     decrementDisabled,
     onShowDescription: showDescription,
     selectedHint,
+    idleHint,
     selectedServiceIds,
   };
 
@@ -143,6 +147,7 @@ interface GridOptions {
   readonly decrementDisabled: boolean;
   readonly onShowDescription: (service: Service) => void;
   readonly selectedHint: string;
+  readonly idleHint: string;
 }
 
 function ServiceGrid({
@@ -155,6 +160,7 @@ function ServiceGrid({
     decrementDisabled,
     onShowDescription,
     selectedHint,
+    idleHint,
   },
   testID,
 }: {
@@ -172,7 +178,7 @@ function ServiceGrid({
             return (
               <ServiceSelectionCard
                 key={service.id}
-                accessibilityHint={quantity > 0 ? selectedHint : 'Ajouter au rendez-vous'}
+                accessibilityHint={quantity > 0 ? selectedHint : idleHint}
                 decrementDisabled={decrementDisabled}
                 onDecrement={onDecrementService ? () => onDecrementService(service) : undefined}
                 onPress={() => onSelectService(service)}

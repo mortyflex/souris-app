@@ -197,11 +197,14 @@ Estimation
 - **Flow.** Two steps in the appointment-creation sheet and stepper language — Prestations →
   Résumé — opening straight on the shared Services / Techniques catalogue. The heading stays
   « ESTIMATION » throughout. There is no Client step, search, list or « Ajouter un client ».
+- **Quantities.** A prestation may be selected several times, exactly as in Appointment creation:
+  a tap or [+] adds one, [−] removes the last one, the card reads « ×3 ». Going back from the
+  Résumé keeps every occurrence.
 - **Prices.** The CURRENT catalog price of each selected Service (Prestations & tarifs), nothing
   copied. A Technique is one commercial line: its phases never appear. « Total estimé » is the sum
-  of the selected prices, in exact cents.
-- **Résumé.** Generation date, one line per prestation with its price, « Total estimé ». Then
-  « Générer l’estimation ».
+  of the selected prices, every occurrence counted, in exact cents.
+- **Résumé.** Generation date, one line per prestation with its price — « Coupe femme ×3 — 75 € »
+  when selected several times — and « Total estimé ». Then « Générer l’estimation ».
 - **Document.** Printed by the BeautIzzy receipt printer as an « ESTIMATION TARIFAIRE » share
   document, in the « Tops & tendances » share-card family: Business name, the generation date (the local day, no time — document metadata only, never an
   appointment, booking or validity date), the lines, « Total estimé », the line « Estimation

@@ -19,6 +19,7 @@ import { TextField } from '@/shared/ui/TextField';
 import { rose, spacing } from '@/shared/ui/theme';
 
 import { PasswordField } from './components/PasswordField';
+import { SocialSignInButtons } from './components/SocialSignInButtons';
 import {
   EMPTY_CREDENTIALS,
   hasCredentialErrors,
@@ -35,6 +36,9 @@ export function SignInScreen() {
   const [values, setValues] = useState<CredentialFormValues>(EMPTY_CREDENTIALS);
   const [attempted, setAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // A Google / Apple attempt on its way: the email form waits.
+  const [socialPending, setSocialPending] = useState(false);
+  const busy = submitting || socialPending;
   const [failure, setFailure] = useState<string | null>(null);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
@@ -42,7 +46,7 @@ export function SignInScreen() {
   const errors = attempted ? validateCredentials(values, 'sign-in') : {};
 
   const submit = async () => {
-    if (submitting) return;
+    if (busy) return;
     setAttempted(true);
     setFailure(null);
     setUnconfirmedEmail(null);
@@ -71,13 +75,13 @@ export function SignInScreen() {
       footer={
         <>
           <AppButton
-            disabled={submitting}
+            disabled={busy}
             onPress={() => void submit()}
             testID="submit-sign-in"
             title={submitting ? 'Connexion…' : 'Se connecter'}
           />
           <AppButton
-            disabled={submitting}
+            disabled={busy}
             onPress={() => router.replace('/sign-up')}
             title="Créer un compte"
             variant="tertiary"
@@ -89,12 +93,13 @@ export function SignInScreen() {
       testID="sign-in-screen"
       title="Se connecter"
     >
+      <SocialSignInButtons disabled={submitting} onPendingChange={setSocialPending} />
       <TextField
         accessibilityLabel="Email"
         placement="page"
         autoCapitalize="none"
         autoComplete="email"
-        editable={!submitting}
+        editable={!busy}
         error={errors.email}
         keyboardType="email-address"
         label="Email"
@@ -108,7 +113,7 @@ export function SignInScreen() {
         value={values.email}
       />
       <PasswordField
-        editable={!submitting}
+        editable={!busy}
         error={errors.password}
         inputRef={passwordRef}
         intent="current"
@@ -117,7 +122,7 @@ export function SignInScreen() {
         value={values.password}
       />
       <AppButton
-        disabled={submitting}
+        disabled={busy}
         onPress={() =>
           router.push({ pathname: '/forgot-password', params: { email: normalizeEmail(values.email) } })
         }

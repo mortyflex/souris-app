@@ -326,6 +326,12 @@ export function describeCashRegisterComparisonUnavailability(
   }
 }
 
+/**
+ * Products sold during an Appointment have no amount of their own: the
+ * Appointment checkout received them with the services, as ONE amount.
+ */
+export const REVENTE_NOTE = 'Les produits vendus pendant un rendez-vous sont encaissés avec celui-ci.';
+
 /** `Aucune unité` / `1 unité` / `12 unités` */
 export function formatProductUnitCount(count: number): string {
   if (count === 0) return 'Aucune unité';

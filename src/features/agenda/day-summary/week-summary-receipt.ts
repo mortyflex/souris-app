@@ -2,14 +2,18 @@
 //
 // The week's big picture on the SAME paper as « Résumé du jour »: the header
 // names the week, the outcome lines replace the Appointment list, and the
-// total + breakdown are worded by the day builder (`buildSummaryMetrics`).
-// Every figure comes from the domain (`getAppointmentPeriodSummary`,
-// `getAppointmentPeriodActivity`); this file only words them.
+// total + breakdown are worded by the day builder (`buildSummaryMetrics`), and
+// so is the week's « Encaissements » (`buildSummaryEncashment`). Every figure
+// comes from the domain (`getAppointmentPeriodSummary`,
+// `getAppointmentPeriodActivity`, `getCashRegisterPeriodBreakdown`); this file
+// only words them.
 
 import type { AppointmentDaySummary, AppointmentPeriodActivity } from '@/domain/appointments';
+import type { CashRegisterPeriodBreakdown } from '@/domain/cash-register';
 import { formatEuroCents } from '@/shared/lib/money';
 
 import {
+  buildSummaryEncashment,
   buildSummaryMetrics,
   formatDaySummaryCount,
   type DaySummaryReceiptActivity,
@@ -53,6 +57,7 @@ export function buildWeekSummaryReceipt(
   summary: AppointmentDaySummary,
   activity: AppointmentPeriodActivity,
   firstDay: Date,
+  encashment: CashRegisterPeriodBreakdown,
 ): DaySummaryReceiptModel {
   return {
     title: 'Résumé de la semaine',
@@ -76,5 +81,6 @@ export function buildWeekSummaryReceipt(
     ],
     potentialRevenue: formatEuroCents(summary.potentialRevenueCents),
     metrics: buildSummaryMetrics(summary),
+    encashment: buildSummaryEncashment(encashment, 'Encaissements de la semaine'),
   };
 }

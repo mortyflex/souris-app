@@ -1245,6 +1245,29 @@ This is NOT the Cash Register. The Caisse groups money by the day it was RECEIVE
 standalone Sales; the day summary follows the Appointments of a day, whenever their money came in. The two
 legitimately differ.
 
+### Encaissements (the Caisse of the summary's days)
+
+Since November 2026 both papers also print the money RECEIVED during their days, so a product sale, a
+deposit for a later Appointment or a refund is no longer invisible on them. It is NOT a second calculation:
+`getCashRegisterPeriodBreakdown(sources, interval)` (`src/domain/cash-register/breakdown.ts`) walks THE Cash
+Register selection (`getCashRegisterEntries`) over `[start, end)` — the local day
+(`getCashRegisterDayInterval`) or the Agenda week, Monday 00:00 → next Monday 00:00
+(`getCashRegisterDaysInterval`, built from local calendar fields, DST-safe):
+
+| Line | Derivation |
+| --- | --- |
+| « Rendez-vous » `appointmentCents` | final Appointment checkouts + ACTIVE deposits received in the window. A checkout records services AND its Reventes as ONE amount: no product amount is split out of it |
+| « Ventes de produits » `productSaleCents` | payments of STANDALONE Sales received in the window (the Caisse « Vente » entries). An unpaid historical Sale and a Revente never count here |
+| `productUnitCount` — « (N articles) » | Σ `SaleItem.quantity` of those same paid standalone Sales: physical units, never distinct products (Shampooing ×3 + Masque ×2 + Huile ×1 = 6). A Revente or an unpaid Sale adds none; a refund is money and never removes a unit |
+| « Remboursements » `refundCents` | SETTLED Sale adjustments of the window, net, on their refund day (refunds and exceptional outflows out, reversals back in). PENDING / VOIDED move nothing. Printed only when the window settled one |
+| « Total encaissé » `totalCents` | `appointmentCents + productSaleCents − refundCents` = `getCashRegisterIntervalSummary(...).totalCents` for the same window |
+
+Worked example: Appointments paid `150 €` and 3 articles sold for `45 €` on the day → `Rendez-vous 150 €`,
+`Ventes de produits (3 articles) 45 €`, `Total encaissé 195 €`. A `10 €` refund of that product settled the same day →
+`Remboursements −10 €`, `Total encaissé 185 €`; settled the next day → the sale day keeps `195 €`, the next
+day reads `Remboursements −10 €`, and the week nets `185 €`. « CA potentiel », « Déjà encaissé » and the other
+Appointment figures are unchanged by any of this.
+
 ### Week summary (« Résumé de la semaine »)
 
 `getAppointmentPeriodSummary(sources, { firstDay, lastDay })` applies EXACTLY the rules above to a range of

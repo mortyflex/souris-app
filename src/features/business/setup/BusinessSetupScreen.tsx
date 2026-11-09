@@ -57,6 +57,8 @@ import { SymbolView } from 'expo-symbols';
 
 import type { BusinessActivityType, BusinessProfile, BusinessSetupInput } from '@/domain/business';
 import { isUsableCommunicationEmail } from '@/domain/communications';
+import { contactEmailOf, isApplePrivateRelayEmail } from '@/features/auth/account-email';
+import type { SocialProvider } from '@/features/auth/gateway';
 import { useAuth } from '@/features/auth/session/AuthProvider';
 import type { UpdateCommunicationPreferencesResult } from '@/features/communications/gateway';
 import { useCommunicationsGateway } from '@/features/communications/session/CommunicationsGatewayProvider';
@@ -115,8 +117,23 @@ const CLIENT_IMPORT_CARD_BODY =
  * which: it calls them at the same moments, in the same order.
  */
 export interface BusinessSetupActions {
-  /** The signed-in account's email: the prefilled, editable reminders Reply-To. */
+  /**
+   * The signed-in account's email: the prefilled, editable reminders Reply-To.
+   * Never an Apple private relay address (it would not receive client replies).
+   */
   readonly accountEmail?: string;
+  /** The first name the identity provider gave (Google, Apple): an editable suggestion only. */
+  readonly accountGivenName?: string;
+  /**
+   * Set only for an account just created through Google or Apple: step 1 names
+   * it and offers to change accounts, so a professional who already has
+   * BeautIzzy under another address never builds a second Business by mistake.
+   */
+  readonly newSocialAccount?: {
+    readonly provider: SocialProvider;
+    readonly email?: string;
+    readonly switchAccount: () => void;
+  };
   /** Step 3: creates the Business ONCE (deferred entry). The outcome is the session's. */
   readonly createBusiness: (input: BusinessSetupInput) => Promise<CreateBusinessOutcome>;
   /**
@@ -143,14 +160,23 @@ export interface BusinessSetupActions {
 /** The real effects: the Business session, the communications gateway, the Service store, the account. */
 function useBusinessSetupActions(): BusinessSetupActions {
   const { createBusiness, enterCreatedBusiness } = useBusinessSession();
-  const { state: auth } = useAuth();
+  const { state: auth, signOut } = useAuth();
   const { database, reloadSnapshot } = usePersistence();
   const communications = useCommunicationsGateway();
-  const accountEmail = auth.status === 'authenticated' ? auth.user.email : undefined;
+  const user = auth.status === 'authenticated' ? auth.user : undefined;
+  const accountEmail = contactEmailOf(user?.email);
+  const accountGivenName = user?.givenName;
+  const createdWith = user?.createdWith;
+  const signInEmail = user?.email;
 
   return useMemo<BusinessSetupActions>(
     () => ({
       accountEmail,
+      accountGivenName,
+      newSocialAccount:
+        createdWith !== undefined
+          ? { provider: createdWith, email: signInEmail, switchAccount: () => void signOut() }
+          : undefined,
       createBusiness: (input) => createBusiness(input, { deferEntry: true }),
       activateReminders: communications
         ? (businessId, replyToEmail) =>
@@ -180,7 +206,18 @@ function useBusinessSetupActions(): BusinessSetupActions {
         enterCreatedBusiness(business);
       },
     }),
-    [accountEmail, communications, createBusiness, database, enterCreatedBusiness, reloadSnapshot],
+    [
+      accountEmail,
+      accountGivenName,
+      createdWith,
+      signInEmail,
+      signOut,
+      communications,
+      createBusiness,
+      database,
+      enterCreatedBusiness,
+      reloadSnapshot,
+    ],
   );
 }
 
@@ -219,7 +256,7 @@ export function BusinessSetupFlow({
   const previewing = activityAcceptance === 'every-profession';
 
   const [step, setStep] = useState<OnboardingStep>('activity');
-  const [values, setValues] = useState<BusinessFormValues>(() => ({
+  const [draft, setDraft] = useState<BusinessFormValues>(() => ({
     ...EMPTY_BUSINESS_FORM,
     activityType: initialActivityType ?? null,
   }));
@@ -251,6 +288,13 @@ export function BusinessSetupFlow({
   // The app is entered once: a second press of either last action does nothing.
   const entered = useRef(false);
 
+  // The first name Google / Apple gave is a suggestion until the professional
+  // types in the field (even to clear it). Derived, not copied: Apple's name
+  // may reach the session just after this screen appeared.
+  const values: BusinessFormValues =
+    edited.ownerFirstName || actions.accountGivenName === undefined
+      ? draft
+      : { ...draft, ownerFirstName: actions.accountGivenName };
   const replyToValue = replyToDraft ?? actions.accountEmail ?? '';
   const errors = validateBusinessForm(values, activityAcceptance);
   const progress = getOnboardingProgress(step);
@@ -259,7 +303,7 @@ export function BusinessSetupFlow({
     [createdBusiness],
   );
   const updateField = <Key extends keyof BusinessFormValues>(key: Key, value: BusinessFormValues[Key]) => {
-    setValues((current) => ({ ...current, [key]: value }));
+    setDraft((current) => ({ ...current, [key]: value }));
     if (key === 'ownerFirstName' || key === 'name') setEdited((current) => ({ ...current, [key]: true }));
   };
 
@@ -446,6 +490,7 @@ export function BusinessSetupFlow({
             }}
             value={values.activityType}
           />
+          {actions.newSocialAccount && <NewSocialAccountNotice account={actions.newSocialAccount} />}
         </OnboardingStepLayout>
       );
 
@@ -934,4 +979,46 @@ const styles = StyleSheet.create({
   noticeBody: { color: semanticColors.foregroundSoft },
   // Text on the app background: rose600 falls to ~4.3:1 there.
   failure: { color: rose.rose700 },
+});
+
+const SOCIAL_PROVIDER_NAMES: Record<SocialProvider, string> = { google: 'Google', apple: 'Apple' };
+
+/**
+ * Step 1 of an account just created with Google or Apple: which account is
+ * signed in, and the way out BEFORE any Business exists. An Apple private
+ * relay address is not named (it means nothing to the professional).
+ */
+function NewSocialAccountNotice({ account }: { readonly account: NonNullable<BusinessSetupActions['newSocialAccount']> }) {
+  const provider = SOCIAL_PROVIDER_NAMES[account.provider];
+  const shownEmail = account.email !== undefined && !isApplePrivateRelayEmail(account.email) ? account.email : undefined;
+  return (
+    <View style={noticeStyles.card} testID="onboarding-new-social-account">
+      <AppText variant="metadata" style={noticeStyles.text}>
+        {shownEmail
+          ? `Nouveau compte créé avec ${provider} (${shownEmail}).`
+          : `Nouveau compte créé avec ${provider}.`}{' '}
+        Vous utilisez déjà BeautIzzy avec une autre adresse ? Changez de compte pour retrouver votre activité.
+      </AppText>
+      <AppButton
+        onPress={account.switchAccount}
+        style={noticeStyles.action}
+        testID="onboarding-switch-account"
+        title="Changer de compte"
+        variant="tertiary"
+      />
+    </View>
+  );
+}
+
+const noticeStyles = StyleSheet.create({
+  card: {
+    backgroundColor: semanticColors.surfaceLavender,
+    borderCurve: 'continuous',
+    borderRadius: radii.medium,
+    gap: spacing.xs,
+    marginTop: spacing.base,
+    padding: spacing.base,
+  },
+  text: { color: semanticColors.foregroundSoft },
+  action: { alignSelf: 'flex-start', marginHorizontal: -spacing.base, minHeight: 36 },
 });
