@@ -53,7 +53,6 @@ function createUnconfiguredGateways(): AccountGateways {
       updatePassword: fail,
       discardPasswordRecovery: () => Promise.resolve(),
       signInWithGoogle: fail,
-      completeOAuthCallback: fail,
       isAppleSignInAvailable: () => Promise.resolve(false),
       signInWithApple: fail,
       onSessionChange: () => () => {},
@@ -74,7 +73,7 @@ export function createAccountGateways(): AccountGateways {
     const client = getSupabaseClient();
     return {
       // The recovery marker shares the session's storage (client.ts installs it).
-      // Google (system browser) and Apple (native sheet, iOS) through the device adapter.
+      // Google (native SDK) and Apple (native sheet, iOS) through the device adapter.
       auth: createSupabaseAuthGateway(client.auth, localStorage, expoSocialAuthPlatform),
       business: createSupabaseBusinessGateway(client),
       sync: createSupabaseSyncGateway(client),

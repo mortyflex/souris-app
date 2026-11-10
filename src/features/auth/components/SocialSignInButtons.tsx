@@ -7,11 +7,12 @@
 //           artwork, wording and localisation — iOS only, and only when the
 //           device offers it. Listed first, as Apple's guidelines ask.
 //   Google  white, the official « G », the neutral outline of Google's
-//           branding guidelines; the BeautIzzy type, radius and height.
+//           branding guidelines; the BeautIzzy type, radius and height. It
+//           opens the native Google Sign-In (Google's own account chooser).
 //
 // While an attempt runs both buttons are disabled (the pressed one shows a
 // spinner) and the parent disables its email form (`onPendingChange`). A
-// closed browser or Apple sheet is NOT a failure: no message, no haptic.
+// closed Google chooser or Apple sheet is NOT a failure: no message, no haptic.
 // Every failure is one French sentence (messages.ts), never a provider text.
 
 import * as AppleAuthentication from 'expo-apple-authentication';

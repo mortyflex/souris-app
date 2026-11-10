@@ -28,13 +28,42 @@
 // auth-gateway.ts). The release and Apple Sandbox schemes stay `sourisapp`.
 //
 // The App Store bundle identifier itself stays in app.json.
+//
+// Native Google Sign-In (docs/architecture/AUTH.md §4b): the iOS SDK returns
+// to the reversed iOS client ID (`com.googleusercontent.apps.<id>`), which
+// must be a URL scheme of the binary — without it, starting sign-in is a
+// native exception (a crash in a release build). The scheme is derived here
+// from EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID, the variable the JavaScript reads
+// (src/infrastructure/social-auth/google-sign-in-config.ts, same rule), so a
+// build prebuilt and bundled with the same variables (EAS) has both or
+// neither. Metro re-reads the variable at every bundling, the native project
+// only at prebuild: after setting or changing it locally, prebuild and rebuild
+// (AUTH.md §4b). That client ID must be the iOS client of THIS
+// build's bundle identifier. Without it the plugin is not applied and the app
+// never starts Google sign-in on iOS. Android needs no plugin option.
 
 const APP_VARIANT = process.env.APP_VARIANT;
 const IS_DEV = APP_VARIANT === "development";
 const IS_APPLE_SANDBOX = APP_VARIANT === "apple-sandbox";
 
+const GOOGLE_CLIENT_ID_PATTERN = /^([0-9]+-[a-z0-9]+)\.apps\.googleusercontent\.com$/;
+
+/** The reversed iOS client ID, or undefined when the variable is missing or malformed. */
+function googleIosUrlScheme(iosClientId) {
+  const match = GOOGLE_CLIENT_ID_PATTERN.exec((iosClientId ?? "").trim());
+  return match ? `com.googleusercontent.apps.${match[1]}` : undefined;
+}
+
+const GOOGLE_IOS_URL_SCHEME = googleIosUrlScheme(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
+
 export default ({ config }) => ({
   ...config,
+  plugins: [
+    ...(config.plugins ?? []),
+    ...(GOOGLE_IOS_URL_SCHEME
+      ? [["@react-native-google-signin/google-signin", { iosUrlScheme: GOOGLE_IOS_URL_SCHEME }]]
+      : []),
+  ],
   name: IS_DEV ? "BeautIzzy Dev" : IS_APPLE_SANDBOX ? "BeautIzzy Sandbox" : config.name,
   scheme: IS_DEV ? "sourisapp-dev" : config.scheme,
   ios: {

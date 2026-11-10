@@ -40,7 +40,11 @@ export type AuthFailureCode =
   | 'SAME_PASSWORD'
   /** The account service cannot send email to this address yet (its default sender only reaches the project team). */
   | 'EMAIL_DELIVERY_UNAVAILABLE'
-  /** Google / Apple: the provider is not enabled for this BeautIzzy environment yet. */
+  /**
+   * Google / Apple: the provider is not enabled for this BeautIzzy environment
+   * yet, this build carries no Google configuration, or the device lacks Google
+   * Play services.
+   */
   | 'PROVIDER_UNAVAILABLE'
   /** Google / Apple: the provider answer could not be verified (invalid callback, token or nonce). */
   | 'SOCIAL_SIGN_IN_FAILED'
@@ -85,7 +89,7 @@ export type SignInOutcome =
  */
 export type SocialSignInOutcome =
   | { readonly kind: 'authenticated'; readonly user: AuthUser }
-  /** The professional closed the browser or the Apple sheet: nothing happened, no message. */
+  /** The professional closed Google's chooser or the Apple sheet: nothing happened, no message. */
   | { readonly kind: 'cancelled' }
   | { readonly kind: 'failed'; readonly failure: AuthFailure };
 
@@ -143,19 +147,11 @@ export interface AuthGateway {
    */
   discardPasswordRecovery(): Promise<void>;
   /**
-   * Google, through the system browser (ASWebAuthenticationSession / Custom
-   * Tab) and Supabase OAuth with PKCE: the browser returns
-   * `<scheme>://auth-callback?code=…`, exchanged once for a session.
+   * Native Google Sign-In (iOS SDK / Google Play services): Google's account
+   * chooser returns an ID token, which Supabase verifies (`signInWithIdToken`).
+   * No browser, no redirect, no Supabase domain on screen.
    */
   signInWithGoogle(): Promise<SocialSignInOutcome>;
-  /**
-   * The `auth-callback` route's half of the Google flow: exchanges a callback
-   * code. Joins the exchange already started for the same code (the browser
-   * flow and the deep link may both deliver it), never exchanges a code twice
-   * (one already settled in this run answers `cancelled`: nothing to do), and
-   * only succeeds on the installation that started the flow (PKCE).
-   */
-  completeOAuthCallback(code: string): Promise<SocialSignInOutcome>;
   /** Whether native Sign in with Apple can be offered on this device (iOS only). */
   isAppleSignInAvailable(): Promise<boolean>;
   /** Native Sign in with Apple (iOS): the identity token is verified by Supabase with a one-time nonce. */

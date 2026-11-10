@@ -1,20 +1,19 @@
 // BeautIzzy — Google and Apple sign-in through the Supabase auth gateway
 //
-// Supabase Auth and the device (system browser, Apple sheet, nonce) are both
-// hand-rolled fakes: nothing here reaches Google, Apple or Supabase. These
-// tests prove the app-side contract only; the real providers are validated on
-// Staging (docs/architecture/AUTH.md §4b).
+// Supabase Auth and the device (native Google SDK, Apple sheet, nonce) are
+// both hand-rolled fakes: nothing here reaches Google, Apple or Supabase.
+// These tests prove the app-side contract only; the real providers are
+// validated on a device against Staging (docs/architecture/AUTH.md §4b).
 
 import { AuthApiError, AuthRetryableFetchError } from '@supabase/supabase-js';
 
 import {
   createSupabaseAuthGateway,
   mapSocialSignInError,
-  OAUTH_REDIRECT_URL,
   PASSWORD_RECOVERY_PENDING_KEY,
   SIGN_OUT_PENDING_KEY,
   type AppleCredentialResult,
-  type BrowserAuthResult,
+  type GoogleCredentialResult,
   type RecoveryMarkerStorage,
   type SocialAuthPlatform,
   type SupabaseAuthApi,
@@ -64,7 +63,7 @@ function createMemoryStorage(initial: Record<string, string> = {}) {
   return storage;
 }
 
-const GOOGLE_URL = 'https://iteufklnrsmazzvmzqxa.supabase.co/auth/v1/authorize?provider=google&code_challenge=abc';
+const GOOGLE_ID_TOKEN = 'google.id.token';
 
 function createAuthApi(overrides: Partial<Record<keyof SupabaseAuthApi, unknown>> = {}) {
   const api = {
@@ -74,32 +73,25 @@ function createAuthApi(overrides: Partial<Record<keyof SupabaseAuthApi, unknown>
     signOut: jest.fn(async () => ({ error: null })),
     resend: jest.fn(),
     resetPasswordForEmail: jest.fn(),
-    exchangeCodeForSession: jest.fn(async (_code: string) => ({
-      data: { session: { user: NEW_GOOGLE_USER }, user: NEW_GOOGLE_USER, redirectType: null },
-      error: null,
-    })),
+    exchangeCodeForSession: jest.fn(),
     updateUser: jest.fn(async ({ data }: { data: Record<string, string> }) => ({
       data: { user: { ...RELAY_APPLE_USER, user_metadata: { ...RELAY_APPLE_USER.user_metadata, ...data } } },
       error: null,
     })),
     onAuthStateChange: jest.fn(() => ({ data: { subscription: { unsubscribe: jest.fn() } } })),
-    signInWithOAuth: jest.fn(async () => ({ data: { provider: 'google', url: GOOGLE_URL }, error: null })),
-    signInWithIdToken: jest.fn(async () => ({
-      data: { session: { user: RELAY_APPLE_USER }, user: RELAY_APPLE_USER },
-      error: null,
-    })),
+    // The provider decides the account, as Supabase would: Google here is a new account, Apple a relay one.
+    signInWithIdToken: jest.fn(async ({ provider }: { readonly provider: string }) => {
+      const user = provider === 'google' ? NEW_GOOGLE_USER : RELAY_APPLE_USER;
+      return { data: { session: { user }, user }, error: null };
+    }),
     ...overrides,
   };
   return api;
 }
 
-const callbackUrl = (query: string) => `${OAUTH_REDIRECT_URL}${query}`;
-
 function createPlatform(overrides: Partial<SocialAuthPlatform> = {}) {
   const platform = {
-    openAuthSession: jest.fn(
-      async (): Promise<BrowserAuthResult> => ({ kind: 'redirect', url: callbackUrl('?code=0b6c4f5e-1111-4a5b-9c9d-123456789abc') }),
-    ),
+    requestGoogleIdToken: jest.fn(async (): Promise<GoogleCredentialResult> => ({ kind: 'credential', idToken: GOOGLE_ID_TOKEN })),
     isAppleSignInAvailable: jest.fn(async () => true),
     requestAppleCredential: jest.fn(
       async (_hashedNonce: string): Promise<AppleCredentialResult> => ({ kind: 'credential', identityToken: 'apple.id.token' }),
@@ -118,20 +110,19 @@ function setup(apiOverrides: Partial<Record<keyof SupabaseAuthApi, unknown>> = {
   return { api, platform, gateway, storage };
 }
 
-const VALID_CODE = '0b6c4f5e-1111-4a5b-9c9d-123456789abc';
+const googleSignedIn = (user: FakeUser) =>
+  jest.fn(async () => ({ data: { session: { user }, user }, error: null }));
+const googleRefused = (error: Error) => jest.fn(async () => ({ data: { session: null, user: null }, error }));
 
-describe('Continuer avec Google', () => {
-  it('opens Supabase OAuth in the system browser, returning to the dedicated callback route with PKCE', async () => {
+describe('Continuer avec Google (native)', () => {
+  it('sends the ID token of the native Google SDK to Supabase — no browser, no redirect, no code exchange', async () => {
     const { api, platform, gateway } = setup();
     await gateway.signInWithGoogle();
 
-    expect(OAUTH_REDIRECT_URL).toBe('sourisapp://auth-callback');
-    expect(api.signInWithOAuth).toHaveBeenCalledWith({
-      provider: 'google',
-      options: { redirectTo: OAUTH_REDIRECT_URL, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
-    });
-    expect(platform.openAuthSession).toHaveBeenCalledWith(GOOGLE_URL, OAUTH_REDIRECT_URL);
-    expect(api.exchangeCodeForSession).toHaveBeenCalledWith(VALID_CODE);
+    expect(platform.requestGoogleIdToken).toHaveBeenCalledTimes(1);
+    // The free Google API takes no nonce: none is invented (AUTH.md §4b).
+    expect(api.signInWithIdToken).toHaveBeenCalledWith({ provider: 'google', token: GOOGLE_ID_TOKEN });
+    expect(api.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
   it('a new professional: authenticated with a NEW user id, marked as created with Google, first name suggested', async () => {
@@ -143,130 +134,124 @@ describe('Continuer avec Google', () => {
   });
 
   it('an existing professional whose verified email Supabase linked: the SAME user id, never marked as a new social account', async () => {
-    const { gateway } = setup({
-      exchangeCodeForSession: jest.fn(async () => ({
-        data: { session: { user: EXISTING_EMAIL_OWNER }, user: EXISTING_EMAIL_OWNER, redirectType: null },
-        error: null,
-      })),
+    const { gateway } = setup({ signInWithIdToken: googleSignedIn(EXISTING_EMAIL_OWNER) });
+    await expect(gateway.signInWithGoogle()).resolves.toEqual({
+      kind: 'authenticated',
+      user: { id: 'user-lea', email: 'lea@example.com', givenName: 'Léa' },
     });
-    const outcome = await gateway.signInWithGoogle();
-    expect(outcome).toEqual({ kind: 'authenticated', user: { id: 'user-lea', email: 'lea@example.com', givenName: 'Léa' } });
   });
 
-  it('a closed browser is a cancellation: no exchange, no failure', async () => {
-    const { api, gateway } = setup({}, { openAuthSession: jest.fn(async () => ({ kind: 'closed' }) as const) });
+  it('a closed Google chooser is a cancellation: Supabase is never called', async () => {
+    const { api, gateway } = setup({}, { requestGoogleIdToken: jest.fn(async () => ({ kind: 'cancelled' }) as const) });
     await expect(gateway.signInWithGoogle()).resolves.toEqual({ kind: 'cancelled' });
-    expect(api.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(api.signInWithIdToken).not.toHaveBeenCalled();
   });
 
-  it('a refused consent (access_denied) is a cancellation too', async () => {
-    const { api, gateway } = setup(
-      {},
-      { openAuthSession: jest.fn(async () => ({ kind: 'redirect', url: callbackUrl('?error=access_denied&error_description=denied') }) as const) },
-    );
-    await expect(gateway.signInWithGoogle()).resolves.toEqual({ kind: 'cancelled' });
-    expect(api.exchangeCodeForSession).not.toHaveBeenCalled();
-  });
-
-  it('a network failure during the exchange reads as the network, in one calm code', async () => {
-    const { gateway } = setup({
-      exchangeCodeForSession: jest.fn(async () => ({ data: { session: null, user: null }, error: new AuthRetryableFetchError('offline', 0) })),
-    });
-    await expect(gateway.signInWithGoogle()).resolves.toEqual({ kind: 'failed', failure: { code: 'NETWORK' } });
-  });
-
-  it.each([
-    ['another scheme', 'evil://auth-callback?code=0b6c4f5e-1111-4a5b-9c9d-123456789abc'],
-    ['another path', 'sourisapp://auth-callbackX?code=0b6c4f5e-1111-4a5b-9c9d-123456789abc'],
-    ['no code', callbackUrl('')],
-    ['a malformed code', callbackUrl('?code=%3Cscript%3E')],
-    ['a provider error', callbackUrl('?error=server_error&error_code=unexpected_failure')],
-  ])('an invalid callback (%s) is refused before any exchange', async (_case, url) => {
-    const { api, gateway } = setup({}, { openAuthSession: jest.fn(async () => ({ kind: 'redirect', url }) as const) });
-    await expect(gateway.signInWithGoogle()).resolves.toEqual({ kind: 'failed', failure: { code: 'SOCIAL_SIGN_IN_FAILED' } });
-    expect(api.exchangeCodeForSession).not.toHaveBeenCalled();
-  });
-
-  it('a provider not enabled on this Supabase project says so', async () => {
-    const { gateway } = setup(
-      {},
-      { openAuthSession: jest.fn(async () => ({ kind: 'redirect', url: callbackUrl('?error=invalid_request&error_code=provider_disabled') }) as const) },
-    );
+  it.each<[string, GoogleCredentialResult]>([
+    ['a build without Google client configuration', { kind: 'not-configured' }],
+    ['an Android phone without Google Play services', { kind: 'unavailable' }],
+  ])('%s: « not available », never a browser fallback, never Supabase', async (_case, answer) => {
+    const { api, gateway } = setup({}, { requestGoogleIdToken: jest.fn(async () => answer) });
     await expect(gateway.signInWithGoogle()).resolves.toEqual({ kind: 'failed', failure: { code: 'PROVIDER_UNAVAILABLE' } });
+    expect(api.signInWithIdToken).not.toHaveBeenCalled();
+    expect(api.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
-  it('the callback received twice (browser result + Android deep link) runs ONE exchange; both get its outcome', async () => {
-    let finishExchange: (() => void) | undefined;
-    const exchange = jest.fn(
-      () =>
-        new Promise((resolve) => {
-          finishExchange = () =>
-            resolve({ data: { session: { user: NEW_GOOGLE_USER }, user: NEW_GOOGLE_USER, redirectType: null }, error: null });
-        }),
+  it.each<[string, () => Promise<GoogleCredentialResult>]>([
+    ['a native SDK failure', async () => ({ kind: 'failed' })],
+    ['a credential without ID token', async () => ({ kind: 'credential', idToken: null })],
+    ['a native module that throws', () => Promise.reject(new Error('RNGoogleSignin missing'))],
+  ])('%s is one calm failure, refused before Supabase', async (_case, requestGoogleIdToken) => {
+    const { api, gateway } = setup({}, { requestGoogleIdToken: jest.fn(requestGoogleIdToken) });
+    await expect(gateway.signInWithGoogle()).resolves.toEqual({ kind: 'failed', failure: { code: 'SOCIAL_SIGN_IN_FAILED' } });
+    expect(api.signInWithIdToken).not.toHaveBeenCalled();
+  });
+
+  describe('a token Supabase refuses', () => {
+    let warn: jest.SpyInstance;
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    it.each([
+      ['an invalid token', new AuthApiError('Bad ID token', 400, 'bad_jwt')],
+      ['an audience missing from the provider Client IDs', new AuthApiError('Unacceptable audience in id_token', 400, 'validation_failed')],
+      ['a nonce the token carries but the request does not', new AuthApiError('Passed nonce and nonce in id_token should either both exist or not.', 400, 'validation_failed')],
+    ])('%s: one calm failure, no session, the token never logged', async (_case, error) => {
+      const storage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1' });
+      const { gateway } = setup({ signInWithIdToken: googleRefused(error) }, {}, storage);
+      await expect(gateway.signInWithGoogle()).resolves.toEqual({ kind: 'failed', failure: { code: 'SOCIAL_SIGN_IN_FAILED' } });
+      // A refused token replaced nothing: a pending sign-out stays pending.
+      expect(storage.items.has(SIGN_OUT_PENDING_KEY)).toBe(true);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(GOOGLE_ID_TOKEN);
+    });
+
+    it('the network and a disabled provider keep their own wording', async () => {
+      const offline = setup({ signInWithIdToken: googleRefused(new AuthRetryableFetchError('offline', 0)) });
+      await expect(offline.gateway.signInWithGoogle()).resolves.toEqual({ kind: 'failed', failure: { code: 'NETWORK' } });
+      const disabled = setup({ signInWithIdToken: googleRefused(new AuthApiError('Provider (issuer "https://accounts.google.com") is not enabled', 400, 'provider_disabled')) });
+      await expect(disabled.gateway.signInWithGoogle()).resolves.toEqual({ kind: 'failed', failure: { code: 'PROVIDER_UNAVAILABLE' } });
+    });
+  });
+
+  it('a Google session replaces a session a sign-out could not remove, and any unfinished recovery', async () => {
+    const storage = createMemoryStorage({ [SIGN_OUT_PENDING_KEY]: '1', [PASSWORD_RECOVERY_PENDING_KEY]: '1' });
+    const { gateway } = setup({}, {}, storage);
+    expect((await gateway.signInWithGoogle()).kind).toBe('authenticated');
+    expect(storage.items.has(SIGN_OUT_PENDING_KEY)).toBe(false);
+    expect(storage.items.has(PASSWORD_RECOVERY_PENDING_KEY)).toBe(false);
+  });
+
+  it('session restoration: the next launch restores the Google session Supabase stored, same user', async () => {
+    const storage = createMemoryStorage();
+    const { gateway } = setup(
+      { getSession: jest.fn(async () => ({ data: { session: { user: NEW_GOOGLE_USER } }, error: null })) },
+      {},
+      storage,
     );
-    const { gateway } = setup({ exchangeCodeForSession: exchange });
+    await gateway.signInWithGoogle();
 
-    const browserFlow = gateway.signInWithGoogle();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    const deepLink = gateway.completeOAuthCallback(VALID_CODE);
-    finishExchange?.();
-
-    const [fromBrowser, fromRoute] = await Promise.all([browserFlow, deepLink]);
-    expect(exchange).toHaveBeenCalledTimes(1);
-    expect(fromBrowser.kind).toBe('authenticated');
-    expect(fromRoute).toEqual(fromBrowser);
+    // A new launch: a new gateway over the same device storage.
+    const relaunched = createSupabaseAuthGateway(
+      createAuthApi({ getSession: jest.fn(async () => ({ data: { session: { user: NEW_GOOGLE_USER } }, error: null })) }) as unknown as SupabaseAuthApi,
+      storage,
+      createPlatform(),
+    );
+    await expect(relaunched.restoreSession()).resolves.toEqual({
+      kind: 'authenticated',
+      user: { id: 'user-google-new', email: 'nina@gmail.com', createdWith: 'google', givenName: 'Nina' },
+    });
   });
 
-  it('a code already settled (the router replaying it, e.g. after a sign-out) is nothing to do — never a second sign-in', async () => {
-    const { api, gateway } = setup();
+  it('a sign-out after Google is never undone by a restart: no session restored, no Google request', async () => {
+    const storage = createMemoryStorage();
+    const { gateway, platform } = setup({ signOut: jest.fn(async () => ({ error: new AuthRetryableFetchError('offline', 0) })) }, {}, storage);
     await gateway.signInWithGoogle();
     await gateway.signOut();
 
-    await expect(gateway.completeOAuthCallback(VALID_CODE)).resolves.toEqual({ kind: 'cancelled' });
-    expect(api.exchangeCodeForSession).toHaveBeenCalledTimes(1);
-  });
-
-  it('cold start: the callback route exchanges the code alone, with the verifier this installation stored', async () => {
-    const { api, gateway, platform } = setup();
-    await expect(gateway.completeOAuthCallback(VALID_CODE)).resolves.toMatchObject({
-      kind: 'authenticated',
-      user: { id: 'user-google-new' },
-    });
-    expect(platform.openAuthSession).not.toHaveBeenCalled();
-    expect(api.exchangeCodeForSession).toHaveBeenCalledWith(VALID_CODE);
-  });
-
-  it('a password recovery code pasted on the callback route is never a sign-in: its session is ended locally', async () => {
-    const { api, gateway } = setup({
-      exchangeCodeForSession: jest.fn(async () => ({
-        data: { session: { user: EXISTING_EMAIL_OWNER }, user: EXISTING_EMAIL_OWNER, redirectType: 'recovery' },
-        error: null,
-      })),
-    });
-    await expect(gateway.completeOAuthCallback(VALID_CODE)).resolves.toEqual({
-      kind: 'failed',
-      failure: { code: 'SOCIAL_SIGN_IN_FAILED' },
-    });
-    expect(api.signOut).toHaveBeenCalledWith({ scope: 'local' });
-  });
-
-  it('logout then login again: a new browser flow and a new code, and no leftover sign-out or recovery marker', async () => {
-    const storage = createMemoryStorage({ [PASSWORD_RECOVERY_PENDING_KEY]: '1' });
-    const codes = ['0b6c4f5e-1111-4a5b-9c9d-123456789abc', '9a9a9a9a-2222-4b4b-8c8c-abcdefabcdef'];
-    const { api, gateway } = setup(
-      {},
-      { openAuthSession: jest.fn(async () => ({ kind: 'redirect', url: callbackUrl(`?code=${codes.shift()}`) }) as const) },
+    const relaunched = createSupabaseAuthGateway(
+      createAuthApi({ getSession: jest.fn(async () => ({ data: { session: { user: NEW_GOOGLE_USER } }, error: null })) }) as unknown as SupabaseAuthApi,
       storage,
+      createPlatform(),
     );
+    await expect(relaunched.restoreSession()).resolves.toEqual({ kind: 'unauthenticated' });
+    expect(platform.requestGoogleIdToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('logout then login again: a NEW native request each time (the account chooser), no leftover marker', async () => {
+    const storage = createMemoryStorage();
+    const { api, platform, gateway } = setup({}, {}, storage);
 
     expect((await gateway.signInWithGoogle()).kind).toBe('authenticated');
-    expect(storage.items.has(PASSWORD_RECOVERY_PENDING_KEY)).toBe(false);
     await gateway.signOut();
     expect((await gateway.signInWithGoogle()).kind).toBe('authenticated');
 
-    expect(api.exchangeCodeForSession).toHaveBeenCalledTimes(2);
+    expect(platform.requestGoogleIdToken).toHaveBeenCalledTimes(2);
+    expect(api.signInWithIdToken).toHaveBeenCalledTimes(2);
+    expect(api.signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(storage.items.has(SIGN_OUT_PENDING_KEY)).toBe(false);
   });
 
@@ -275,7 +260,7 @@ describe('Continuer avec Google', () => {
     const gateway = createSupabaseAuthGateway(api as unknown as SupabaseAuthApi, createMemoryStorage());
     await expect(gateway.signInWithGoogle()).resolves.toEqual({ kind: 'failed', failure: { code: 'NOT_CONFIGURED' } });
     await expect(gateway.isAppleSignInAvailable()).resolves.toBe(false);
-    expect(api.signInWithOAuth).not.toHaveBeenCalled();
+    expect(api.signInWithIdToken).not.toHaveBeenCalled();
   });
 });
 

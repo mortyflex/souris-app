@@ -99,36 +99,32 @@ describe('AuthProvider — Google and Apple', () => {
     expect(gateway.calls.signInWithGoogle).toBe(2);
   });
 
-  it('the callback route joining the browser flow never enters twice: the same user keeps the same state', async () => {
+  it('Supabase reporting the session (SIGNED_IN) before the Google outcome returns: ONE entry, the same user', async () => {
+    // supabase-js notifies its listeners before signInWithIdToken resolves.
     const gateway = createFakeAuthGateway({
-      signInWithGoogle: async () => ({ kind: 'authenticated', user: fakeUser }),
-      completeOAuthCallback: async () => ({ kind: 'authenticated', user: fakeUser }),
+      signInWithGoogle: async () => {
+        gateway.emitSession(fakeUser);
+        return { kind: 'authenticated', user: fakeUser };
+      },
     });
     const view = await renderAuth(gateway);
+    const rendersBefore = renders;
     await act(async () => {
-      await Promise.all([latest!.signInWithGoogle(), latest!.completeOAuthCallback('0b6c4f5e-1111-4a5b-9c9d-123456789abc')]);
+      await latest?.signInWithGoogle();
     });
-    const rendersAfterEntry = renders;
     expect(stateOf(view)).toBe('authenticated:user-lea:live');
-
-    // The supabase-js SIGNED_IN of the same user changes nothing either.
-    await act(async () => {
-      await latest?.completeOAuthCallback('another-code-123456');
-    });
-    expect(renders).toBe(rendersAfterEntry);
+    expect(renders).toBe(rendersBefore + 1);
   });
 
-  it('never replaces a signed-in session: neither a button nor a callback link reaches the provider', async () => {
+  it('never replaces a signed-in session: no button reaches the provider', async () => {
     const gateway = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
     const view = await renderAuth(gateway);
     await act(async () => {
       await expect(latest?.signInWithGoogle()).resolves.toEqual({ kind: 'cancelled' });
       await expect(latest?.signInWithApple()).resolves.toEqual({ kind: 'cancelled' });
-      await expect(latest?.completeOAuthCallback('0b6c4f5e-1111-4a5b-9c9d-123456789abc')).resolves.toEqual({ kind: 'cancelled' });
     });
     expect(gateway.calls.signInWithGoogle).toBe(0);
     expect(gateway.calls.signInWithApple).toBe(0);
-    expect(gateway.calls.completeOAuthCallback).toEqual([]);
     expect(stateOf(view)).toBe('authenticated:user-lea:live');
   });
 

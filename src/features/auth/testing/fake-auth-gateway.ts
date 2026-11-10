@@ -29,7 +29,6 @@ export interface FakeAuthGateway extends AuthGateway {
     updatePassword: string[];
     discardPasswordRecovery: number;
     signInWithGoogle: number;
-    completeOAuthCallback: string[];
     signInWithApple: number;
   };
 }
@@ -43,7 +42,6 @@ interface FakeAuthGatewayOptions {
   readonly startPasswordRecovery?: (code: string) => Promise<PasswordRecoveryOutcome>;
   readonly updatePassword?: (password: string) => Promise<PasswordUpdateOutcome>;
   readonly signInWithGoogle?: () => Promise<SocialSignInOutcome>;
-  readonly completeOAuthCallback?: (code: string) => Promise<SocialSignInOutcome>;
   readonly signInWithApple?: () => Promise<SocialSignInOutcome>;
   /** Defaults to false (Android, or an unconfigured build). */
   readonly appleAvailable?: boolean;
@@ -64,7 +62,6 @@ export function createFakeAuthGateway(options: FakeAuthGatewayOptions = {}): Fak
     updatePassword: [],
     discardPasswordRecovery: 0,
     signInWithGoogle: 0,
-    completeOAuthCallback: [],
     signInWithApple: 0,
   };
 
@@ -119,12 +116,6 @@ export function createFakeAuthGateway(options: FakeAuthGatewayOptions = {}): Fak
     signInWithGoogle: () => {
       calls.signInWithGoogle += 1;
       return options.signInWithGoogle ? options.signInWithGoogle() : Promise.resolve({ kind: 'authenticated', user: fakeUser });
-    },
-    completeOAuthCallback: (code) => {
-      calls.completeOAuthCallback.push(code);
-      return options.completeOAuthCallback
-        ? options.completeOAuthCallback(code)
-        : Promise.resolve({ kind: 'authenticated', user: fakeUser });
     },
     isAppleSignInAvailable: () => Promise.resolve(options.appleAvailable ?? false),
     signInWithApple: () => {

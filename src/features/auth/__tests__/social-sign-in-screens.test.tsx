@@ -1,15 +1,13 @@
-// BeautIzzy — « Continuer avec Google / Apple » on the account screens, and
-// the Google callback landing (behavioral; providers are fakes).
+// BeautIzzy — « Continuer avec Google / Apple » on the account screens
+// (behavioral; providers are fakes).
 
 import { act, fireEvent, render } from '@testing-library/react-native';
 
-import { AuthCallbackScreen } from '../AuthCallbackScreen';
 import type { SocialSignInOutcome } from '../gateway';
-import type { OAuthCallback } from '../oauth-callback';
 import { AuthProvider } from '../session/AuthProvider';
 import { SignInScreen } from '../SignInScreen';
 import { SignUpScreen } from '../SignUpScreen';
-import { createFakeAuthGateway, fakeUser, type FakeAuthGateway } from '../testing/fake-auth-gateway';
+import { createFakeAuthGateway, type FakeAuthGateway } from '../testing/fake-auth-gateway';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -156,70 +154,5 @@ describe('SignInScreen — email + password regression', () => {
     expect(gateway.calls.signIn).toEqual([{ email: 'lea@example.com', password: 'password123' }]);
     expect(gateway.calls.signInWithGoogle).toBe(0);
     expect(gateway.calls.signInWithApple).toBe(0);
-  });
-});
-
-describe('AuthCallbackScreen', () => {
-  const CODE = '0b6c4f5e-1111-4a5b-9c9d-123456789abc';
-  const codeCallback: OAuthCallback = { kind: 'code', code: CODE };
-
-  it('cold start: waits for the restoration, then exchanges the code ONCE', async () => {
-    const restore = deferred<{ kind: 'unauthenticated' }>();
-    const gateway = createFakeAuthGateway({ restore: () => restore.promise });
-    const view = await renderWithAuth(gateway, <AuthCallbackScreen callback={codeCallback} />);
-
-    expect(view.getByTestId('auth-callback-verifying')).toBeTruthy();
-    expect(gateway.calls.completeOAuthCallback).toEqual([]);
-    await act(async () => restore.resolve({ kind: 'unauthenticated' }));
-    expect(gateway.calls.completeOAuthCallback).toEqual([CODE]);
-
-    await act(async () => {
-      view.rerender(
-        <AuthProvider gateway={gateway}>
-          <AuthCallbackScreen callback={codeCallback} />
-        </AuthProvider>,
-      );
-    });
-    expect(gateway.calls.completeOAuthCallback).toEqual([CODE]);
-  });
-
-  it('a failed exchange explains and leads back to « Se connecter »', async () => {
-    const gateway = createFakeAuthGateway({
-      completeOAuthCallback: async () => ({ kind: 'failed', failure: { code: 'NETWORK' } }),
-    });
-    const view = await renderWithAuth(gateway, <AuthCallbackScreen callback={codeCallback} />);
-    expect(view.getByTestId('auth-callback-failed')).toBeTruthy();
-    expect(view.getByText('Connexion impossible. Vérifiez votre réseau et réessayez.')).toBeTruthy();
-    await press(view.getByTestId('auth-callback-back'));
-    expect(mockReplace).toHaveBeenCalledWith('/sign-in');
-  });
-
-  it('a code already handled (nothing to do) returns to « Se connecter » silently', async () => {
-    const gateway = createFakeAuthGateway({ completeOAuthCallback: async () => ({ kind: 'cancelled' }) });
-    await renderWithAuth(gateway, <AuthCallbackScreen callback={codeCallback} />);
-    expect(mockReplace).toHaveBeenCalledWith('/sign-in');
-  });
-
-  it('a refused consent never exchanges anything and returns to « Se connecter »', async () => {
-    const gateway = createFakeAuthGateway();
-    await renderWithAuth(gateway, <AuthCallbackScreen callback={{ kind: 'cancelled' }} />);
-    expect(mockReplace).toHaveBeenCalledWith('/sign-in');
-    expect(gateway.calls.completeOAuthCallback).toEqual([]);
-  });
-
-  it('an invalid callback explains, without any exchange', async () => {
-    const gateway = createFakeAuthGateway();
-    const invalid = await renderWithAuth(
-      gateway,
-      <AuthCallbackScreen callback={{ kind: 'failed', failure: { code: 'SOCIAL_SIGN_IN_FAILED' } }} />,
-    );
-    expect(invalid.getByTestId('auth-callback-failed')).toBeTruthy();
-    expect(gateway.calls.completeOAuthCallback).toEqual([]);
-  });
-
-  it('signed in already: the callback is never exchanged', async () => {
-    const gateway = createFakeAuthGateway({ restore: async () => ({ kind: 'authenticated', user: fakeUser }) });
-    await renderWithAuth(gateway, <AuthCallbackScreen callback={codeCallback} />);
-    expect(gateway.calls.completeOAuthCallback).toEqual([]);
   });
 });

@@ -27,7 +27,6 @@ import type {
   SocialProvider,
   SocialSignInOutcome,
 } from '@/features/auth/gateway';
-import { readOAuthCallbackUrl } from '@/features/auth/oauth-callback';
 
 import type { SourisSupabaseClient } from './client';
 
@@ -42,12 +41,20 @@ export type SupabaseAuthApi = Pick<
   | 'exchangeCodeForSession'
   | 'updateUser'
   | 'onAuthStateChange'
-  | 'signInWithOAuth'
   | 'signInWithIdToken'
 >;
 
-/** What the system browser returned: the redirect it was told to stop at, or nothing (closed). */
-export type BrowserAuthResult = { readonly kind: 'redirect'; readonly url: string } | { readonly kind: 'closed' };
+/** What the native Google Sign-In SDK answered. */
+export type GoogleCredentialResult =
+  /** `idToken` null: the SDK signed in without returning a token (a client ID missing from the request). */
+  | { readonly kind: 'credential'; readonly idToken: string | null }
+  /** The professional closed Google's chooser, or another native attempt is already open. */
+  | { readonly kind: 'cancelled' }
+  /** This build carries no Google client configuration for this platform: the SDK is never started. */
+  | { readonly kind: 'not-configured' }
+  /** Android without (up-to-date) Google Play services. */
+  | { readonly kind: 'unavailable' }
+  | { readonly kind: 'failed' };
 
 export type AppleCredentialResult =
   | {
@@ -62,11 +69,12 @@ export type AppleCredentialResult =
 
 /**
  * The device side of social sign-in (src/infrastructure/social-auth): the
- * system browser, the native Apple sheet and the nonce. Injected so the
+ * native Google SDK, the native Apple sheet and the nonce. Injected so the
  * gateway never imports a native module and tests drive every answer.
  */
 export interface SocialAuthPlatform {
-  openAuthSession(url: string, redirectUrl: string): Promise<BrowserAuthResult>;
+  /** Presents Google's account chooser (native SDK) and returns its ID token. */
+  requestGoogleIdToken(): Promise<GoogleCredentialResult>;
   isAppleSignInAvailable(): Promise<boolean>;
   /** Presents the Apple sheet; Apple embeds `hashedNonce` in the identity token. */
   requestAppleCredential(hashedNonce: string): Promise<AppleCredentialResult>;
@@ -109,15 +117,6 @@ export const EMAIL_CONFIRMATION_REDIRECT_URL = `${APP_SCHEME}://sign-in`;
  * Authentication › URL Configuration, like the confirmation URL.
  */
 export const PASSWORD_RECOVERY_REDIRECT_URL = `${APP_SCHEME}://reset-password`;
-
-/**
- * Where the Google sign-in returns once Supabase verified Google's answer:
- * `<scheme>://auth-callback?code=…` (PKCE, the client's `flowType`). Its own
- * route, distinct from `sign-in` (the email confirmation landing, which never
- * exchanges anything) and `reset-password`. Must be allow-listed in Supabase ›
- * Authentication › URL Configuration, like the two others.
- */
-export const OAUTH_REDIRECT_URL = `${APP_SCHEME}://auth-callback`;
 
 const SOCIAL_PROVIDERS: ReadonlySet<string> = new Set<SocialProvider>(['google', 'apple']);
 const GIVEN_NAME_MAX_LENGTH = 60;
@@ -274,6 +273,19 @@ function createMarker(storage: RecoveryMarkerStorage, key: string) {
 
 const SOCIAL_FAILED: SocialSignInOutcome = { kind: 'failed', failure: { code: 'SOCIAL_SIGN_IN_FAILED' } };
 const SOCIAL_NOT_CONFIGURED: SocialSignInOutcome = { kind: 'failed', failure: { code: 'NOT_CONFIGURED' } };
+const SOCIAL_PROVIDER_UNAVAILABLE: SocialSignInOutcome = { kind: 'failed', failure: { code: 'PROVIDER_UNAVAILABLE' } };
+
+/**
+ * Development builds only: why Supabase refused a Google ID token — its error
+ * code and message (« audience », « nonce »…), never the token. Release
+ * builds stay silent; the professional reads one French sentence either way.
+ */
+function warnGoogleTokenRefused(error: unknown): void {
+  if (!__DEV__) return;
+  const code = (error as { readonly code?: unknown } | null)?.code;
+  const message = error instanceof Error ? error.message : '';
+  console.warn(`[BeautIzzy] Supabase refused the Google ID token: ${typeof code === 'string' ? code : 'no code'} — ${message}`);
+}
 
 export function createSupabaseAuthGateway(
   auth: SupabaseAuthApi,
@@ -365,46 +377,6 @@ export function createSupabaseAuthGateway(
     recovery.clear();
     signOutPending.clear();
     return { kind: 'authenticated', user: toAuthUser(user) };
-  };
-
-  /**
-   * Each callback code is exchanged ONCE per run: the browser flow and the
-   * `auth-callback` route (Android delivers the redirect to both; the router
-   * may replay it) join the same exchange. Supabase consumes the code and the
-   * PKCE verifier on the first try, whatever its outcome, so a retry could
-   * only fail. In memory only — never persisted or logged.
-   */
-  const oauthExchanges = new Map<string, { readonly outcome: Promise<SocialSignInOutcome>; settled: boolean }>();
-  const exchangeOAuthCode = (code: string): Promise<SocialSignInOutcome> => {
-    const existing = oauthExchanges.get(code);
-    // Still running: join it. Already settled (a route the router replays,
-    // e.g. after a sign-out): nothing to do — never a second sign-in.
-    if (existing) return existing.settled ? Promise.resolve({ kind: 'cancelled' }) : existing.outcome;
-    const entry: { outcome: Promise<SocialSignInOutcome>; settled: boolean } = {
-      outcome: Promise.resolve({ kind: 'cancelled' }),
-      settled: false,
-    };
-    oauthExchanges.set(code, entry);
-    entry.outcome = (async (): Promise<SocialSignInOutcome> => {
-      try {
-        const { data, error } = await creatingSession(() => auth.exchangeCodeForSession(code));
-        if (error) return { kind: 'failed', failure: mapSocialSignInError(error) };
-        if (!data.session) return SOCIAL_FAILED;
-        // Only an OAuth code signs in here. A password recovery code (a
-        // recovery link's code pasted on this route) has just opened a
-        // recovery session: it is discarded at once, never kept as a sign-in.
-        if ((data as { readonly redirectType?: string | null }).redirectType === 'recovery') {
-          await auth.signOut({ scope: 'local' });
-          return SOCIAL_FAILED;
-        }
-        return adoptSocialSession(data.session.user);
-      } catch (error) {
-        return { kind: 'failed', failure: mapSocialSignInError(error) };
-      } finally {
-        entry.settled = true;
-      }
-    })();
-    return entry.outcome;
   };
 
   /**
@@ -557,39 +529,32 @@ export function createSupabaseAuthGateway(
 
     async signInWithGoogle(): Promise<SocialSignInOutcome> {
       if (!social) return SOCIAL_NOT_CONFIGURED;
-      let url: string;
+      // Native only. A build without Google configuration, or a device without
+      // Google Play services, says so: nothing ever falls back to a browser.
+      let credential: GoogleCredentialResult;
       try {
-        // Built locally (no request): Supabase stores the PKCE verifier on THIS
-        // installation and returns the provider URL to open.
-        const { data, error } = await auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: OAUTH_REDIRECT_URL,
-            skipBrowserRedirect: true,
-            // Always the account chooser: a phone shared with another Google
-            // account never signs the wrong one in silently.
-            queryParams: { prompt: 'select_account' },
-          },
-        });
-        if (error || !data.url) return { kind: 'failed', failure: error ? mapSocialSignInError(error) : { code: 'UNKNOWN' } };
-        url = data.url;
+        credential = await social.requestGoogleIdToken();
+      } catch {
+        return SOCIAL_FAILED;
+      }
+      if (credential.kind === 'cancelled') return { kind: 'cancelled' };
+      if (credential.kind === 'not-configured' || credential.kind === 'unavailable') return SOCIAL_PROVIDER_UNAVAILABLE;
+      if (credential.kind === 'failed' || !credential.idToken) return SOCIAL_FAILED;
+      const token = credential.idToken;
+      try {
+        // Supabase verifies the token's signature, issuer, expiry and audience
+        // (one of the Client IDs of its Google provider). The free Google API
+        // takes no nonce: none is sent (docs/architecture/AUTH.md §4b).
+        const { data, error } = await creatingSession(() => auth.signInWithIdToken({ provider: 'google', token }));
+        if (error) {
+          warnGoogleTokenRefused(error);
+          return { kind: 'failed', failure: mapSocialSignInError(error) };
+        }
+        if (!data.session) return SOCIAL_FAILED;
+        return adoptSocialSession(data.session.user);
       } catch (error) {
         return { kind: 'failed', failure: mapSocialSignInError(error) };
       }
-      let result: BrowserAuthResult;
-      try {
-        result = await social.openAuthSession(url, OAUTH_REDIRECT_URL);
-      } catch {
-        return { kind: 'failed', failure: { code: 'UNKNOWN' } };
-      }
-      if (result.kind === 'closed') return { kind: 'cancelled' };
-      const callback = readOAuthCallbackUrl(result.url, OAUTH_REDIRECT_URL);
-      if (callback.kind !== 'code') return callback;
-      return exchangeOAuthCode(callback.code);
-    },
-
-    completeOAuthCallback(code: string): Promise<SocialSignInOutcome> {
-      return exchangeOAuthCode(code);
     },
 
     async isAppleSignInAvailable(): Promise<boolean> {

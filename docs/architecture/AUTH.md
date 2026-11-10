@@ -240,7 +240,7 @@ Staging (development build): `sourisapp-dev://sign-in` and `sourisapp-dev://rese
 Google sign-in adds `<scheme>://auth-callback` (§4b).
 Templates, SMTP and the sending domain: `docs/release/AUTH_EMAILS.md`.
 
-### 4b. Google and Apple sign-in (build 12)
+### 4b. Google and Apple sign-in (build 12; Google native since build 13)
 
 ```text
 Se connecter / Créer un compte
@@ -253,31 +253,39 @@ Se connecter / Créer un compte
 `src/features/auth/components/SocialSignInButtons.tsx`, the same group on both screens. While an
 attempt runs, both buttons and the email form are disabled (spinner on the pressed one); the
 AuthProvider runs ONE social attempt at a time (a second tap joins it) and refuses any while signed
-in. A closed browser or Apple sheet is `cancelled`: no message, no haptic. Failures are one French
-sentence: `PROVIDER_UNAVAILABLE` (the provider is not enabled on this Supabase project),
+in. A closed Google chooser or Apple sheet is `cancelled`: no message, no haptic. Failures are one
+French sentence: `PROVIDER_UNAVAILABLE` (the provider is not enabled on this Supabase project, the
+build carries no Google configuration, or the Android phone lacks Google Play services),
 `SOCIAL_SIGN_IN_FAILED` (a callback, token or nonce Supabase could not verify), `NETWORK`,
 `RATE_LIMITED`.
 
-Google — Supabase OAuth in the system browser, PKCE, no Google SDK:
+Google — native (`@react-native-google-signin/google-signin`, free « Original » API):
 
 ```text
-signInWithOAuth({ provider: 'google', redirectTo: <scheme>://auth-callback, skipBrowserRedirect,
-                  queryParams: { prompt: 'select_account' } })      verifier stored on THIS install
-  → expo-web-browser openAuthSessionAsync(url, redirect)            ASWebAuthenticationSession / Custom Tab
-  → Google → Supabase /callback → <scheme>://auth-callback?code=…   or ?error=access_denied (cancelled)
-  → readOAuthCallbackUrl: exact redirect only, code shape checked    src/features/auth/oauth-callback.ts
-  → exchangeCodeForSession(code), ONCE per code per run
+GoogleSignin.configure({ webClientId, iosClientId (iOS), offlineAccess: false })   once per run
+  → Android: hasPlayServices (Google's update dialog)                               else PROVIDER_UNAVAILABLE
+  → GoogleSignin.signOut() — the SDK forgets the previous account: the chooser ALWAYS shows
+  → GoogleSignin.signIn() → Google's own account chooser → ID token                 closed → cancelled
+  → signInWithIdToken({ provider: 'google', token })                                no nonce (below)
 ```
 
-The redirect reaches the app twice on Android (the browser session's result AND a deep link the
-router opens on `(auth)/auth-callback`), and only as a deep link on a cold start (the app was killed
-while the browser was open; the verifier is in the session storage). Both entries hand the code to
-the same gateway exchange: a running exchange is joined, a settled one answers `cancelled` (nothing
-to do — a router replay after a sign-out never signs in again). A recovery code on that route
-opens a recovery session, which is signed out at once (scope `local`) and refused. The `sign-in`
-route still reads no parameter and still never exchanges anything (§4). One PKCE verifier slot
-exists per installation: starting Google sign-in after asking for a password recovery link makes
-that link unusable on this phone (ask for a new one).
+No browser redirect, no `auth-callback` route, no PKCE verifier: the Supabase project domain never
+appears. iOS still presents Google's own page (google.com) in the system sheet; Android shows the
+Google Play services chooser. The token's audience is the Web client (`webClientId`, on both
+platforms); Supabase verifies its signature, issuer, expiry and that audience against the Google
+provider's Client IDs. Nothing falls back to the browser: a build without the client IDs
+(`src/infrastructure/social-auth/google-sign-in-config.ts`) never starts the SDK and answers
+`PROVIDER_UNAVAILABLE` — on iOS starting it without the reversed-client-ID URL scheme is a native
+exception (a crash in a release build); `app.config.js` writes that scheme from the same variable.
+
+Nonce: the free API takes none (custom nonces are in the paid « Universal Sign In »), so none is
+sent. The Google iOS SDK (AppAuth) may put its OWN random nonce in the token, which the app never
+sees; Supabase then refuses the token (« Passed nonce and nonce in id_token should either both
+exist or not ») unless its Google provider has « Skip nonce check » enabled. That switch is a
+security decision, not made by the code: with it — and on Android anyway, whose tokens carry no
+nonce — Supabase cannot bind a token to this request, so a still-valid Google ID token issued to a
+BeautIzzy client and captured elsewhere could be replayed for a session (signature, audience and
+the ~1 h expiry still apply). Apple keeps its nonce check (separate provider).
 
 Apple — native, iOS only (`expo-apple-authentication`, `ios.usesAppleSignIn`):
 
@@ -313,21 +321,32 @@ Manual identity linking (`linkIdentity`) is not offered in this phase.
 Configuration (manual; Staging first, Production only by a separate decision):
 
 ```text
-Supabase › Authentication › URL Configuration › Redirect URLs
-  Staging     sourisapp-dev://auth-callback
-  Production  sourisapp://auth-callback
+Google Cloud › the project of the Web client below › OAuth clients
+  iOS       bundle com.mortyflex.sourisapp.dev (Staging) / com.mortyflex.sourisapp (Production)
+  Android   package com.mortyflex.sourisapp.dev / com.mortyflex.sourisapp, one client per signing SHA-1
+App build variables (public, never a client secret)
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID   the Web client of the build's Supabase project
+  EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID   the iOS client of the build's bundle identifier
 Supabase › Authentication › Providers › Google
-  enabled · Client ID = the Google Cloud « Web application » client · its secret
-  Google Cloud authorized redirect URI: https://<project-ref>.supabase.co/auth/v1/callback
+  enabled · Client IDs = Web client FIRST, then the iOS client(s), comma-separated
+  the Web client's secret stays (Supabase side only) · « Skip nonce check »: see Nonce above
 Supabase › Authentication › Providers › Apple
   enabled · Client IDs: com.mortyflex.sourisapp.dev (Staging) / com.mortyflex.sourisapp
   native only: no Services ID, no .p8 secret, no 6-month rotation
 Apple Developer › Identifiers › each App ID: « Sign in with Apple » capability
 ```
 
-Native: `expo-apple-authentication` and the entitlement need a new iOS build; Google needs none
-(expo-web-browser and the scheme already ship), so it can be tried on an existing development
-build through Metro once Supabase is configured.
+Native: `expo-apple-authentication` and the entitlement need a new iOS build; so does native
+Google (the SDK, and the URL scheme written at prebuild — `npx expo prebuild --clean` after
+setting the iOS client ID). The two sides read the variable at different moments: Metro inlines it
+into the JavaScript at every bundling, the binary only at prebuild. A development build generated
+before the variable was set (or with another iOS client ID) receives the IDs from Metro but lacks
+the scheme: Google sign-in then fails before any chooser with `SIGN_IN_ERROR` « Your app is missing
+support for the following URL schemes » (a crash outside debug builds). Fix: regenerate `ios/`
+with the variable loaded (`APP_VARIANT=development npx expo prebuild -p ios`, then `pod install`
+if it was skipped) and rebuild; EAS builds prebuild and bundle in the same run, with the same
+variables. The `<scheme>://auth-callback` redirect URLs of build 12 are no longer
+used; leaving them allow-listed is harmless.
 
 ---
 
@@ -554,11 +573,14 @@ no delete flow, `owner_user_id UNIQUE`, and a `before update` trigger that pins 
 ```text
 EXPO_PUBLIC_SUPABASE_URL              https://<project-ref>.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY  sb_publishable_…
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID      <n>-<id>.apps.googleusercontent.com   (§4b; optional)
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID      <n>-<id>.apps.googleusercontent.com   (§4b; optional)
 ```
 
-Both come from the Supabase project Connect / API configuration and are public client
-configuration. `.env.example` is versioned; `.env` and every other `.env.*` file are ignored. The
-secret key, `service_role`, and the database password never enter the application.
+The Supabase pair comes from the Supabase project Connect / API configuration; the Google pair
+from Google Cloud › OAuth clients. All four are public client configuration. `.env.example` is
+versioned; `.env` and every other `.env.*` file are ignored. The secret key, `service_role`, the
+database password and any Google client secret never enter the application.
 
-EAS Build never receives `.env` (gitignored): store builds read the same two variables from the
+EAS Build never receives `.env` (gitignored): store builds read the same variables from the
 EAS "production" environment (docs/release/TESTFLIGHT.md §2).

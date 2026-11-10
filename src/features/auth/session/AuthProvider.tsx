@@ -30,12 +30,12 @@
 // (password-reset-cooldown.ts): the waiting request is refused here, before
 // any network call, whatever the screen shows.
 //
-// Google and Apple (docs/architecture/AUTH.md §4b) run one at a time: a
-// second tap joins the attempt on its way. Their session enters like a
-// password sign-in, once per user — the browser flow and the `auth-callback`
-// route delivering the same Google answer never produce two entries. Whether
-// the account is new (Business setup) or existing (its Business) is decided
-// downstream by the authenticated user id, never by the email.
+// Google and Apple (docs/architecture/AUTH.md §4b), both native, run one at a
+// time: a second tap joins the attempt on its way. Their session enters like
+// a password sign-in, once per user — the supabase-js SIGNED_IN event of the
+// same user never produces a second entry. Whether the account is new
+// (Business setup) or existing (its Business) is decided downstream by the
+// authenticated user id, never by the email.
 //
 // Business resolution is a separate provider (BusinessSessionProvider). No
 // raw provider error, token, or session payload ever reaches the UI: the
@@ -102,14 +102,12 @@ export interface AuthSessionValue {
   readonly completePasswordRecovery: (password: string) => Promise<PasswordUpdateOutcome>;
   /** Abandons the recovery: the recovery session is signed out, nothing else changes. */
   readonly cancelPasswordRecovery: () => Promise<void>;
-  /** Google through the system browser. Single flight with Apple; refused while signed in. */
+  /** Native Google Sign-In. Single flight with Apple; refused while signed in. */
   readonly signInWithGoogle: () => Promise<SocialSignInOutcome>;
   /** Native Sign in with Apple (iOS). Single flight with Google; refused while signed in. */
   readonly signInWithApple: () => Promise<SocialSignInOutcome>;
   /** Whether Sign in with Apple can be offered on this device. */
   readonly isAppleSignInAvailable: () => Promise<boolean>;
-  /** The `auth-callback` route: completes a Google answer delivered by deep link (cold start, Android). */
-  readonly completeOAuthCallback: (code: string) => Promise<SocialSignInOutcome>;
   /** Re-runs session restoration after an error. */
   readonly retry: () => void;
 }
@@ -360,8 +358,8 @@ export function AuthProvider({
 
   /**
    * Enters a Google / Apple session like a password sign-in — once per user:
-   * the same user arriving again (the callback route joining the browser
-   * flow, the supabase-js SIGNED_IN event) keeps the state as it is.
+   * the same user arriving again (the supabase-js SIGNED_IN event) keeps the
+   * state as it is.
    */
   const enterSocialSession = useCallback((user: AuthUser) => {
     restoreGeneration.current += 1;
@@ -411,16 +409,6 @@ export function AuthProvider({
     }
   }, [gateway]);
 
-  const completeOAuthCallback = useCallback(
-    (code: string): Promise<SocialSignInOutcome> => {
-      // A signed-in session is never replaced by a callback link.
-      if (stateRef.current.status === 'authenticated') return Promise.resolve(NOTHING_TO_DO);
-      // The gateway joins the browser flow's exchange of the same code.
-      return settleSocial(() => gateway.completeOAuthCallback(code));
-    },
-    [gateway, settleSocial],
-  );
-
   const retry = useCallback(() => {
     setState({ status: 'initializing' });
     void restore();
@@ -443,7 +431,6 @@ export function AuthProvider({
         signInWithGoogle,
         signInWithApple,
         isAppleSignInAvailable,
-        completeOAuthCallback,
         retry,
       }}
     >

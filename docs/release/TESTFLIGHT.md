@@ -58,6 +58,11 @@ npx eas-cli@latest env:list production
 Only `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`)
 belong there. Never the secret key, `service_role`, or the database password.
 
+Since build 13, native Google sign-in also reads `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` and
+`EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` (the iOS client of `com.mortyflex.sourisapp`) — public client
+IDs, never a Google client secret (docs/architecture/AUTH.md §4b). A build without them offers
+« Continuer avec Google » but answers that it is not available.
+
 Since Phase 6.1, `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` (the Apple PUBLIC SDK key, `appl_…`) belongs
 there too: a release build without it boots normally but cannot verify the subscription
 (`unavailable`; nothing is restricted while enforcement is disabled). The Test Store key
@@ -92,8 +97,8 @@ Authentication › URL Configuration:
 Site URL         sourisapp://sign-in        (replaces http://localhost:3000)
 Redirect URLs    sourisapp://sign-in        (add; remove any localhost entry)
                  sourisapp://reset-password (password recovery, M2 — docs/architecture/AUTH.md §4a)
-                 sourisapp://auth-callback  (Google sign-in — AUTH.md §4b; only once Google is enabled
-                                             on Production, by a separate decision)
+                 sourisapp://auth-callback  (build 12's browser Google flow only; unused since build 13,
+                                             whose Google sign-in is native — AUTH.md §4b)
 ```
 
 The app sends `emailRedirectTo = sourisapp://sign-in` on sign-up and on "Renvoyer l'email"
