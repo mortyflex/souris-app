@@ -255,6 +255,16 @@ Do not introduce now:
 
 unless a dedicated phase requests them.
 
+Online booking is an approved direction (`CLAUDE.md` §5, §17).
+
+Its public pages live in the standalone Next.js application under `web/`.
+
+Expo remains the mobile application; Next.js is permitted only inside `web/`.
+
+`web/` has independent dependencies and commands: run them from `web/` (`web/README.md`), never from the repository root.
+
+Production database changes are prohibited without the user's explicit authorization.
+
 ---
 
 # 12. Client Import Rule
@@ -392,6 +402,10 @@ diagnose
 ```
 
 Continue until green or until a genuine blocker is identified.
+
+The root `npm run check` validates the mobile application only.
+
+A change under `web/` is validated from `web/` with its own `npm run check`.
 
 ---
 

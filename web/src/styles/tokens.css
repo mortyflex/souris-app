@@ -1,0 +1,85 @@
+/*
+ * BeautIzzy web design tokens.
+ *
+ * Every value below is copied from the mobile design system, which stays the
+ * source of truth: ../../../src/shared/ui/theme/ (colors.ts, radii.ts,
+ * shadows.ts, typography.ts). The comment next to each variable names the
+ * original token. Only the tokens the web interface uses are mirrored here:
+ * add one when a screen needs it, never invent a value.
+ *
+ * Instrument Serif is the one approved web-only extension (editorial
+ * headings); it has no mobile counterpart.
+ */
+
+:root {
+  /* colors.ts — canonical brand palette */
+  --bz-background: #ffffff; /* colors.background */
+  --bz-foreground: #19163f; /* colors.foreground (navy) */
+  --bz-accent: #7354c7; /* colors.accent (violet) */
+  --bz-surface: #f6f6f7; /* colors.surface */
+  --bz-muted: #9896a9; /* colors.muted — decorative only: 3:1 on white */
+  --bz-border: #dfdee4; /* colors.border */
+
+  /* colors.ts — lavender scale */
+  --bz-lavender-25: #fbf9fe; /* lavender.lav025 */
+  --bz-lavender-50: #f7f4fe; /* lavender.lav050 */
+  --bz-lavender-100: #efe9fd; /* lavender.lav100 */
+  --bz-lavender-200: #e1d6f9; /* lavender.lav200 */
+  --bz-lavender-700: #654199; /* lavender.lav700 — hover of the accent, text on lavender */
+
+  /* colors.ts — semantic families */
+  --bz-rose-50: #fff2f4; /* rose.rose050 — error background */
+  --bz-rose-600: #cf3869; /* rose.rose600 — error text, destructive */
+  --bz-peach-50: #fff4eb; /* peach.peach050 — processing time, lightest */
+  --bz-peach-100: #ffe8d4; /* peach.peach100 — processing time fill */
+  --bz-peach-700: #955816; /* peach.peach700 — processing time text */
+  --bz-mint-50: #eafbf1; /* mint.mint050 */
+  --bz-mint-700: #0c5c3c; /* mint.mint700 */
+
+  /* radii.ts */
+  --bz-radius-small: 8px; /* radii.small */
+  --bz-radius-medium: 12px; /* radii.medium */
+  --bz-radius-large: 16px; /* radii.large */
+
+  /* shadows.ts — navy-tinted, never generic black */
+  --bz-shadow-card: 0 1px 3px rgba(31, 28, 61, 0.1); /* nativeShadows.card */
+  --bz-shadow-raised: 0 4px 14px rgba(31, 28, 61, 0.1); /* nativeShadows.raised */
+  --bz-shadow-lifted: 0 8px 20px rgba(31, 28, 61, 0.16); /* nativeShadows.lifted */
+}
+
+@theme inline {
+  --color-background: var(--bz-background);
+  --color-foreground: var(--bz-foreground);
+  --color-accent: var(--bz-accent);
+  --color-accent-strong: var(--bz-lavender-700);
+  --color-surface: var(--bz-surface);
+  --color-muted: var(--bz-muted);
+  --color-border: var(--bz-border);
+
+  --color-lavender-25: var(--bz-lavender-25);
+  --color-lavender-50: var(--bz-lavender-50);
+  --color-lavender-100: var(--bz-lavender-100);
+  --color-lavender-200: var(--bz-lavender-200);
+  --color-lavender-700: var(--bz-lavender-700);
+
+  --color-danger: var(--bz-rose-600);
+  --color-danger-surface: var(--bz-rose-50);
+  --color-peach-50: var(--bz-peach-50);
+  --color-peach-100: var(--bz-peach-100);
+  --color-peach-700: var(--bz-peach-700);
+  --color-mint-50: var(--bz-mint-50);
+  --color-mint-700: var(--bz-mint-700);
+
+  --radius-sm: var(--bz-radius-small);
+  --radius-md: var(--bz-radius-medium);
+  --radius-lg: var(--bz-radius-large);
+
+  --shadow-card: var(--bz-shadow-card);
+  --shadow-raised: var(--bz-shadow-raised);
+  --shadow-lifted: var(--bz-shadow-lifted);
+
+  /* typography.ts — Plus Jakarta Sans, weights 400 / 500 / 600 / 700 */
+  --font-sans: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Web-only editorial extension */
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+}

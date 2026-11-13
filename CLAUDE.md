@@ -138,6 +138,30 @@ Do not introduce web frameworks such as Next.js into the native application.
 
 Do not rely on browser-only APIs.
 
+## Web platform — `web/`
+
+The mobile application remains the Expo application at the repository root.
+
+A separate Next.js application lives in `web/`: the marketing website and the public booking pages.
+
+Next.js is permitted ONLY inside `web/`.
+
+Reference: `web/README.md`.
+
+- `web/` has its own `package.json`, its own `package-lock.json` and its own commands (npm only);
+- run web commands from `web/`; run mobile commands from the repository root;
+- no npm workspace, no monorepo tool (Turborepo, Nx), no shared `node_modules`;
+- the root TypeScript, ESLint and Jest configurations exclude `web/`; keep it that way;
+- `web/` never imports from the mobile `src/`, and the mobile application never imports from `web/`;
+- the mobile design tokens (`src/shared/ui/theme/`) stay the source of truth; `web/src/styles/tokens.css` mirrors the ones the web uses;
+- a Supabase secret key may only be read by a server-only module of `web/`; never by a browser component, never by the mobile application.
+
+Both applications share one Supabase backend.
+
+Production database changes — schema, data, policies, grants, flags — are prohibited without the user's explicit authorization for that change.
+
+Agents must not commit or push without the user's approval (§35).
+
 ---
 
 # 6. Native-First Rule
@@ -656,7 +680,11 @@ Future online-booking availability may consider:
 
 These rules are FUTURE scope.
 
-Do not build an online booking engine until explicitly requested.
+Online booking is an approved direction: its public pages live in `web/` (§5), and professional booking management stays in the Expo application.
+
+Build each part of it — availability, booking creation, payments, database changes — only in the phase that explicitly requests it.
+
+Do not build an online booking engine speculatively.
 
 Design the domain so that an availability layer can be added later without rewriting the Appointment model.
 
