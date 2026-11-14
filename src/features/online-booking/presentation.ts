@@ -7,6 +7,7 @@
 import type { BookingProfileField } from '@/domain/online-booking';
 
 import type { BookingProfile, BookingProfileServerField } from './gateway';
+import type { PublicPageAudience, PublicPageLink } from './public-page-url';
 
 export const ONLINE_BOOKING_TITLE = 'Réservation en ligne';
 export const ONLINE_BOOKING_ROW_TITLE = 'Réservation en ligne';
@@ -99,4 +100,77 @@ export function describeBookingPublication(
     };
   }
   return { kind: 'ONLINE', label: 'En ligne', message: 'Votre page est visible par vos clients.' };
+}
+
+export const ONLINE_BOOKING_COPY_LINK_LABEL = 'Copier le lien';
+export const ONLINE_BOOKING_LINK_COPIED = 'Lien copié.';
+export const ONLINE_BOOKING_LINK_COPY_FAILURE = 'Le lien n’a pas pu être copié. Réessayez.';
+export const ONLINE_BOOKING_SLUG_FORMAT_HINT = 'Lettres minuscules, chiffres et tirets.';
+
+export interface BookingLinkInput {
+  /** The address as typed in the field, trimmed. */
+  readonly typedSlug: string;
+  /** The address the server holds. */
+  readonly storedSlug: string | undefined;
+  readonly publication: BookingPublicationKind;
+  /** The link of the TYPED address; undefined while no website origin is configured. */
+  readonly link: PublicPageLink | undefined;
+}
+
+export interface BookingLinkPresentation {
+  /** The complete URL, the path alone without a configured website, or undefined without an address. */
+  readonly address: string | undefined;
+  /** « Lien public » / « Lien de test »; undefined when no complete URL exists. */
+  readonly audienceLabel: string | undefined;
+  readonly audience: PublicPageAudience | undefined;
+  /** What the link is, or why it cannot be copied yet. */
+  readonly message: string;
+  /** True only for the stored address of a page that is online, on a configured website. */
+  readonly copyable: boolean;
+}
+
+/**
+ * THE reading of the link under the address field. A link is copyable only
+ * when it opens the page as the server serves it now: the page is online,
+ * the typed address is the stored one, and a website origin is configured.
+ * A test origin stays copyable — for the person testing — and says so.
+ */
+export function describeBookingLink(input: BookingLinkInput): BookingLinkPresentation {
+  const { typedSlug, storedSlug, publication, link } = input;
+  if (typedSlug.length === 0) {
+    return {
+      address: undefined,
+      audienceLabel: undefined,
+      audience: undefined,
+      message: ONLINE_BOOKING_SLUG_FORMAT_HINT,
+      copyable: false,
+    };
+  }
+  const base = {
+    address: link?.url ?? `/r/${typedSlug}`,
+    audience: link?.audience,
+    audienceLabel: link === undefined ? undefined : link.audience === 'PUBLIC' ? 'Lien public' : 'Lien de test',
+  };
+  const blocked = (message: string): BookingLinkPresentation => ({ ...base, message, copyable: false });
+
+  if (link === undefined) {
+    return blocked('L’adresse complète de votre page n’est pas encore disponible dans cette version de l’application.');
+  }
+  if (typedSlug !== storedSlug) {
+    return blocked('Enregistrez vos modifications pour utiliser cette adresse.');
+  }
+  if (publication === 'DRAFT') {
+    return blocked('Ce lien ne fonctionne pas encore : publiez votre page pour pouvoir le copier.');
+  }
+  if (publication === 'OFFLINE') {
+    return blocked('Ce lien ne fonctionne pas pour le moment : votre page est hors ligne.');
+  }
+  return {
+    ...base,
+    copyable: true,
+    message:
+      link.audience === 'PUBLIC'
+        ? 'Partagez ce lien avec vos clients.'
+        : 'Adresse de test : elle ne s’ouvre que dans l’environnement de test. Ne la partagez pas avec vos clients.',
+  };
 }

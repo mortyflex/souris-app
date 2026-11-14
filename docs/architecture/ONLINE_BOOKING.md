@@ -82,6 +82,8 @@ Publication stays closed until ALL of these hold:
 5. The website is configured (`web/.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
 6. The mobile build knows the public origin (`EXPO_PUBLIC_WEB_URL`); without it the app shows the
    path of the page only and offers no link.
+   Only `https://beautizzy.fr` is presented as a link to share; any other origin is labelled
+   « Lien de test ». « Copier le lien » exists only for the stored address of a page that is online.
 
 Closing again is one statement (`…_enabled(false)`): every page goes offline, nothing is rewritten.
 

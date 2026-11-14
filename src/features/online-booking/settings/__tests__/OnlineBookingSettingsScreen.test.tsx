@@ -38,6 +38,11 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+const mockSetStringAsync = jest.fn<Promise<boolean>, [string]>();
+jest.mock('expo-clipboard', () => ({
+  setStringAsync: (text: string) => mockSetStringAsync(text),
+}));
+
 // The photo flow has its own tests; here it only has to stay out of the way.
 jest.mock('@/shared/ui/PhotoSourceFlow', () => ({ PhotoSourceFlow: () => null }));
 
@@ -76,6 +81,19 @@ function publishableGateway() {
   gateway.seedProfile(testBusiness.id, { slug: 'maison-lea' });
   return gateway;
 }
+
+const configuredWebUrl = process.env.EXPO_PUBLIC_WEB_URL;
+
+beforeEach(() => {
+  // No website configured unless a test says so, whatever the local .env holds.
+  delete process.env.EXPO_PUBLIC_WEB_URL;
+  mockSetStringAsync.mockReset().mockResolvedValue(true);
+});
+
+afterAll(() => {
+  if (configuredWebUrl === undefined) delete process.env.EXPO_PUBLIC_WEB_URL;
+  else process.env.EXPO_PUBLIC_WEB_URL = configuredWebUrl;
+});
 
 describe('OnlineBookingSettingsScreen — draft', () => {
   it('shows the empty draft the server returns, with the Business name as the public name', async () => {
@@ -214,6 +232,98 @@ describe('OnlineBookingSettingsScreen — publication', () => {
 
     await toggle(view, 'online-booking-publish', false);
     expect(view.getByText('Brouillon')).toBeTruthy();
+  });
+});
+
+describe('OnlineBookingSettingsScreen — page link', () => {
+  const messageOf = (view: View) => view.getByTestId('online-booking-url-message').props.children;
+  const copy = (view: View) => press(view, 'online-booking-copy-link');
+
+  function onlineGateway() {
+    const gateway = publishableGateway();
+    gateway.seedProfile(testBusiness.id, { published: true });
+    return gateway;
+  }
+
+  it('shows the complete production URL of an online page and copies it', async () => {
+    process.env.EXPO_PUBLIC_WEB_URL = 'https://beautizzy.fr';
+    const view = await renderSettings(onlineGateway());
+
+    expect(view.getByTestId('online-booking-url').props.children).toBe('https://beautizzy.fr/r/maison-lea');
+    expect(view.getByText('Lien public')).toBeTruthy();
+    expect(messageOf(view)).toBe('Partagez ce lien avec vos clients.');
+
+    await copy(view);
+
+    expect(mockSetStringAsync).toHaveBeenCalledTimes(1);
+    expect(mockSetStringAsync).toHaveBeenCalledWith('https://beautizzy.fr/r/maison-lea');
+    expect(messageOf(view)).toBe('Lien copié.');
+  });
+
+  it('marks a local or Staging origin as a test link, never as shareable', async () => {
+    process.env.EXPO_PUBLIC_WEB_URL = 'http://localhost:3000';
+    const view = await renderSettings(onlineGateway());
+
+    expect(view.getByTestId('online-booking-url').props.children).toBe('http://localhost:3000/r/maison-lea');
+    expect(view.getByText('Lien de test')).toBeTruthy();
+    expect(view.queryByText('Lien public')).toBeNull();
+    expect(messageOf(view)).toMatch(/Ne la partagez pas avec vos clients/);
+
+    await copy(view);
+    expect(mockSetStringAsync).toHaveBeenCalledWith('http://localhost:3000/r/maison-lea');
+  });
+
+  it('explains instead of offering a copy while the page is a draft', async () => {
+    process.env.EXPO_PUBLIC_WEB_URL = 'https://beautizzy.fr';
+    const view = await renderSettings(publishableGateway());
+
+    expect(view.getByTestId('online-booking-url').props.children).toBe('https://beautizzy.fr/r/maison-lea');
+    expect(view.queryByTestId('online-booking-copy-link')).toBeNull();
+    expect(messageOf(view)).toMatch(/publiez votre page/);
+
+    await toggle(view, 'online-booking-publish', true);
+    expect(view.getByTestId('online-booking-copy-link')).toBeTruthy();
+  });
+
+  it('explains instead of offering a copy while the page is offline', async () => {
+    process.env.EXPO_PUBLIC_WEB_URL = 'https://beautizzy.fr';
+    const gateway = onlineGateway();
+    gateway.setPublicationRule({ publicationOpen: true, plusAccess: false });
+    const view = await renderSettings(gateway);
+
+    expect(view.queryByTestId('online-booking-copy-link')).toBeNull();
+    expect(messageOf(view)).toMatch(/hors ligne/);
+  });
+
+  it('withdraws the copy while the address is being edited, and never copies an unsaved one', async () => {
+    process.env.EXPO_PUBLIC_WEB_URL = 'https://beautizzy.fr';
+    const view = await renderSettings(onlineGateway());
+
+    await type(view, 'online-booking-slug', 'nouvelle-adresse');
+
+    expect(view.getByTestId('online-booking-url').props.children).toBe('https://beautizzy.fr/r/nouvelle-adresse');
+    expect(view.queryByTestId('online-booking-copy-link')).toBeNull();
+    expect(messageOf(view)).toMatch(/Enregistrez vos modifications/);
+    expect(mockSetStringAsync).not.toHaveBeenCalled();
+  });
+
+  it('offers no copy without a configured website, even online', async () => {
+    const view = await renderSettings(onlineGateway());
+
+    expect(view.getByTestId('online-booking-url').props.children).toBe('/r/maison-lea');
+    expect(view.queryByTestId('online-booking-url-audience')).toBeNull();
+    expect(view.queryByTestId('online-booking-copy-link')).toBeNull();
+  });
+
+  it('says so when the copy fails, and keeps the action', async () => {
+    process.env.EXPO_PUBLIC_WEB_URL = 'https://beautizzy.fr';
+    mockSetStringAsync.mockRejectedValue(new Error('clipboard unavailable'));
+    const view = await renderSettings(onlineGateway());
+
+    await copy(view);
+
+    expect(messageOf(view)).toBe('Le lien n’a pas pu être copié. Réessayez.');
+    expect(view.getByTestId('online-booking-copy-link')).toBeTruthy();
   });
 });
 

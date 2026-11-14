@@ -60,13 +60,17 @@ import {
   type BookingProfile,
 } from '../gateway';
 import {
+  describeBookingLink,
   describeBookingPublication,
   formFieldOfServerField,
   ONLINE_BOOKING_BOOKINGS_HINT,
   ONLINE_BOOKING_BOOKINGS_LABEL,
+  ONLINE_BOOKING_COPY_LINK_LABEL,
   ONLINE_BOOKING_FIELD_ERRORS,
   ONLINE_BOOKING_IMAGE_FAILURE,
   ONLINE_BOOKING_IMAGE_TOO_LARGE,
+  ONLINE_BOOKING_LINK_COPIED,
+  ONLINE_BOOKING_LINK_COPY_FAILURE,
   ONLINE_BOOKING_NEEDS_SLUG,
   ONLINE_BOOKING_OFFLINE_NOTICE,
   ONLINE_BOOKING_PUBLICATION_UNAVAILABLE,
@@ -81,7 +85,7 @@ import {
   ONLINE_BOOKING_TITLE,
   type BookingPublicationKind,
 } from '../presentation';
-import { publicPagePath, readPublicPageUrl } from '../public-page-url';
+import { readPublicPageLink } from '../public-page-url';
 import { useOnlineBookingGateway } from '../session/OnlineBookingGatewayProvider';
 
 import {
@@ -156,6 +160,8 @@ export function OnlineBookingSettingsScreen() {
   const [imageSource, setImageSource] = useState<BookingImageKind>();
   const [fieldError, setFieldError] = useState<{ readonly field: BookingProfileField; readonly message: string }>();
   const [notice, setNotice] = useState<Notice>();
+  /** The outcome of the last « Copier le lien », until the form or the page state changes. */
+  const [copyOutcome, setCopyOutcome] = useState<'copied' | 'failed'>();
   // Synchronous guard: a second tap in the same frame never starts a second write.
   const writing = useRef(false);
 
@@ -232,12 +238,36 @@ export function OnlineBookingSettingsScreen() {
     images.cover.kind !== 'stored';
   const busy = saving || changingState || preparingImage !== undefined;
   const status = describeBookingPublication(profile);
-  const pageUrl = profile.slug !== undefined ? readPublicPageUrl(profile.slug) : undefined;
+  const pageUrl = profile.slug !== undefined ? readPublicPageLink(profile.slug)?.url : undefined;
+  const typedSlug = fields.slug.trim();
+  const link = describeBookingLink({
+    typedSlug,
+    storedSlug: profile.slug,
+    publication: status.kind,
+    link: typedSlug.length > 0 ? readPublicPageLink(typedSlug) : undefined,
+  });
+
+  const copyLink = async () => {
+    if (!link.copyable || link.address === undefined) return;
+    try {
+      // Loaded on demand: a build that predates the native module keeps the
+      // whole screen and only reports that the copy failed.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const clipboard = require('expo-clipboard') as typeof import('expo-clipboard');
+      await clipboard.setStringAsync(link.address);
+      setCopyOutcome('copied');
+      haptics.success();
+    } catch {
+      setCopyOutcome('failed');
+      haptics.warning();
+    }
+  };
 
   const change = (field: BookingProfileField, text: string) => {
     setFields({ ...fields, [field]: field === 'slug' ? normalizeBookingSlugInput(text) : text });
     setFieldError(undefined);
     setNotice(undefined);
+    setCopyOutcome(undefined);
   };
 
   const imageUri = (kind: BookingImageKind): string | undefined => {
@@ -340,6 +370,7 @@ export function OnlineBookingSettingsScreen() {
     writing.current = true;
     setChangingState(true);
     setNotice(undefined);
+    setCopyOutcome(undefined);
     try {
       const result = await gateway.setState(business.id, next);
       if (result.status === 'UPDATED') {
@@ -483,11 +514,42 @@ export function OnlineBookingSettingsScreen() {
               testID="online-booking-slug"
               value={fields.slug}
             />
-            <AppText variant="metadata" selectable style={styles.soft} testID="online-booking-url">
-              {fields.slug.trim().length > 0
-                ? (readPublicPageUrl(fields.slug.trim()) ?? publicPagePath(fields.slug.trim()))
-                : 'Lettres minuscules, chiffres et tirets.'}
+            {link.address !== undefined && (
+              <View style={styles.linkAddress}>
+                <AppText variant="metadata" selectable style={styles.linkUrl} testID="online-booking-url">
+                  {link.address}
+                </AppText>
+                {link.audienceLabel !== undefined && (
+                  <StatePill
+                    accessibilityLabel={link.audienceLabel}
+                    colors={link.audience === 'PUBLIC' ? statePillTones.positive : statePillTones.neutral}
+                    label={link.audienceLabel}
+                    testID="online-booking-url-audience"
+                  />
+                )}
+              </View>
+            )}
+            <AppText
+              variant="metadata"
+              accessibilityLiveRegion="polite"
+              style={copyOutcome === 'failed' ? styles.failure : styles.soft}
+              testID="online-booking-url-message"
+            >
+              {copyOutcome === 'copied'
+                ? ONLINE_BOOKING_LINK_COPIED
+                : copyOutcome === 'failed'
+                  ? ONLINE_BOOKING_LINK_COPY_FAILURE
+                  : link.message}
             </AppText>
+            {link.copyable && (
+              <AppButton
+                icon={{ ios: 'doc.on.doc', android: 'content_copy' }}
+                onPress={() => void copyLink()}
+                testID="online-booking-copy-link"
+                title={ONLINE_BOOKING_COPY_LINK_LABEL}
+                variant="tertiary"
+              />
+            )}
             {fields.slug.length === 0 && suggestedSlug.length >= 3 && (
               <AppButton
                 disabled={busy}
@@ -665,4 +727,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: interaction.pressedOpacity },
   fields: { gap: spacing.base },
   slugField: { gap: spacing.xs },
+  linkAddress: { alignItems: 'flex-start', gap: spacing.xs },
+  linkUrl: { color: semanticColors.foreground },
 });
