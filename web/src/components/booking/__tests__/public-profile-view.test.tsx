@@ -59,6 +59,22 @@ describe("PublicProfileView", () => {
     expect(html).toContain(">É</span>");
   });
 
+  it("shows a logo whole and a cover cropped from its centre, whatever their proportions", () => {
+    const html = render({ profile: minimal, logoUrl: "https://media.test/logo.jpg", coverUrl: "https://media.test/cover.jpg" });
+    expect(html).toMatch(/<img src="https:\/\/media\.test\/logo\.jpg"[^>]*object-contain/);
+    expect(html).toMatch(/<img src="https:\/\/media\.test\/cover\.jpg"[^>]*object-cover object-center/);
+  });
+
+  it("keeps one identity panel, with the name in it, with or without a cover", () => {
+    for (const coverUrl of ["https://media.test/cover.jpg", undefined]) {
+      const html = render({ profile: complete, coverUrl });
+      const header = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
+      expect(header).toContain("<h1");
+      expect(header).toContain("Coiffure sur rendez-vous.");
+      expect(header.match(/<h1/g)).toHaveLength(1);
+    }
+  });
+
   it("handles missing optional contact information: no empty section, no dangling invitation", () => {
     const html = render({ profile: minimal });
     expect(html).not.toContain("Contact");

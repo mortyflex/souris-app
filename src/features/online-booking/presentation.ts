@@ -20,6 +20,13 @@ export const ONLINE_BOOKING_SAVE_FAILURE =
 export const ONLINE_BOOKING_STATE_FAILURE =
   'Le changement n’a pas été pris en compte. Vérifiez votre connexion et réessayez.';
 export const ONLINE_BOOKING_SAVED = 'Modifications enregistrées.';
+
+export const ONLINE_BOOKING_UNSAVED_TITLE = 'Modifications non enregistrées';
+export const ONLINE_BOOKING_UNSAVED_BODY =
+  'Vous avez modifié votre page. Souhaitez-vous enregistrer vos changements avant de quitter ?';
+export const ONLINE_BOOKING_SAVE_AND_LEAVE = 'Enregistrer et quitter';
+export const ONLINE_BOOKING_KEEP_EDITING = 'Continuer la modification';
+export const ONLINE_BOOKING_DISCARD_AND_LEAVE = 'Quitter sans enregistrer';
 export const ONLINE_BOOKING_IMAGE_TOO_LARGE =
   'Cette image est trop lourde. Choisissez-en une autre.';
 export const ONLINE_BOOKING_IMAGE_FAILURE =

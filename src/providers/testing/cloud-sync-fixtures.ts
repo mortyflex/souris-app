@@ -14,13 +14,28 @@ import { REMOTE_BUSINESS_ID } from './cloud-sync-harness';
 export const SALE_ID = 'c1a2b3d4-1111-4222-8333-444455556666';
 export const REFUND_ID = 'd1a2b3d4-1111-4222-8333-444455556677';
 
-/** One Product sold to Léa, 2 × the mask, paid by card, `minutesAgo` before now. */
+/**
+ * The instant of a record made "earlier today": `minutesAgo` before `now`, but
+ * never before the start of `now`'s LOCAL calendar day — the day the screens
+ * mean by « aujourd'hui » (`startOfLocalDay`). Without the floor, a run in the
+ * first minutes after midnight dates the record on the previous day and every
+ * "today" figure reads zero. The floor is built from the local calendar
+ * fields, so it is the right midnight in any time zone, on the two daylight
+ * saving days of Europe/Paris included; the result is never after `now`.
+ */
+export function earlierTodayAt(minutesAgo: number, now: Date = new Date()): Date {
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return new Date(Math.max(now.getTime() - minutesAgo * 60_000, startOfToday));
+}
+
+/** One Product sold to Léa, 2 × the mask, paid by card, earlier today (`minutesAgo` before now when the day allows). */
 export function createRemoteSale(minutesAgo: number, overrides: Partial<Sale> = {}): Sale {
+  const soldAt = earlierTodayAt(minutesAgo);
   return {
     id: SALE_ID,
     businessId: REMOTE_BUSINESS_ID,
     clientId: 'client-lea',
-    completedAt: new Date(Date.now() - minutesAgo * 60_000),
+    completedAt: soldAt,
     items: [
       {
         id: `${SALE_ID}-item-1`,
@@ -30,7 +45,7 @@ export function createRemoteSale(minutesAgo: number, overrides: Partial<Sale> = 
         quantity: 2,
       },
     ],
-    payment: { paidAt: new Date(Date.now() - minutesAgo * 60_000), cardAmountCents: Math.round(productMask.price * 200), cashAmountCents: 0 },
+    payment: { paidAt: soldAt, cardAmountCents: Math.round(productMask.price * 200), cashAmountCents: 0 },
     ...overrides,
   };
 }

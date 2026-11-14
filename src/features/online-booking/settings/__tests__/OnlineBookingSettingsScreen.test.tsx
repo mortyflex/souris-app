@@ -5,7 +5,7 @@
 // the connectivity rule — no server answer, no form; a failed save changes
 // nothing and is never retried behind the professional's back.
 
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 import { testBusiness, TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -20,9 +20,28 @@ import { OnlineBookingSettingsScreen } from '../OnlineBookingSettingsScreen';
 jest.spyOn(haptics, 'success').mockImplementation();
 jest.spyOn(haptics, 'warning').mockImplementation();
 
+const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: jest.fn() }),
+  useRouter: () => ({ back: mockBack }),
 }));
+
+// The latest removal guard of the screen: a test plays the iOS back gesture /
+// the Android hardware back by calling it while it is enabled.
+const mockRemovalGuard: { enabled: boolean; onPrevent: () => void } = { enabled: false, onPrevent: () => {} };
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: (enabled: boolean, onPrevent: () => void) => {
+    mockRemovalGuard.enabled = enabled;
+    mockRemovalGuard.onPrevent = onPrevent;
+  },
+}));
+
+/** A native back attempt: prevented (the callback runs) or let through (the route leaves). */
+async function nativeBack() {
+  await act(async () => {
+    if (mockRemovalGuard.enabled) mockRemovalGuard.onPrevent();
+    else mockBack();
+  });
+}
 
 jest.mock('expo-symbols', () => {
   const React = jest.requireActual('react') as typeof import('react');
@@ -43,8 +62,36 @@ jest.mock('expo-clipboard', () => ({
   setStringAsync: (text: string) => mockSetStringAsync(text),
 }));
 
-// The photo flow has its own tests; here it only has to stay out of the way.
-jest.mock('@/shared/ui/PhotoSourceFlow', () => ({ PhotoSourceFlow: () => null }));
+// The shared sheet keeps its content mounted while it slides away; here it is
+// simply there or not, so a test reads « open » and « closed » directly.
+jest.mock('@/shared/ui/BottomSheet', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
+  return {
+    BottomSheet: (props: {
+      readonly visible: boolean;
+      readonly header?: React.ReactNode;
+      readonly children?: React.ReactNode;
+      readonly testID?: string;
+    }) => (props.visible ? React.createElement(View, { testID: props.testID }, props.header, props.children) : null),
+  };
+});
+
+// The photo flow has its own tests; here it only hands the screen a picked image.
+const mockPhotoFlows: Record<string, { onSelected: (uri: string) => void; onRemove: () => void }> = {};
+jest.mock('@/shared/ui/PhotoSourceFlow', () => ({
+  PhotoSourceFlow: (props: {
+    readonly testID: string;
+    readonly onSelected: (uri: string) => void;
+    readonly onRemove: () => void;
+  }) => {
+    mockPhotoFlows[props.testID] = props;
+    return null;
+  },
+}));
+jest.mock('@/shared/lib/photo-normalization', () => ({
+  normalizePhoto: (uri: string) => Promise.resolve(uri),
+}));
 
 type View = Awaited<ReturnType<typeof renderSettings>>;
 
@@ -88,6 +135,7 @@ beforeEach(() => {
   // No website configured unless a test says so, whatever the local .env holds.
   delete process.env.EXPO_PUBLIC_WEB_URL;
   mockSetStringAsync.mockReset().mockResolvedValue(true);
+  mockBack.mockReset();
 });
 
 afterAll(() => {
@@ -324,6 +372,239 @@ describe('OnlineBookingSettingsScreen — page link', () => {
 
     expect(messageOf(view)).toBe('Le lien n’a pas pu être copié. Réessayez.');
     expect(view.getByTestId('online-booking-copy-link')).toBeTruthy();
+  });
+});
+
+describe('OnlineBookingSettingsScreen — live preview', () => {
+  const previewName = (view: View) => view.getByTestId('online-booking-preview-name').props.children;
+  const previewIsUnsaved = (view: View) => view.queryByTestId('online-booking-preview-unsaved') !== null;
+  /** The URI the preview draws for an image; undefined when it draws none. */
+  const imageOf = (view: View, testID: string): string | undefined => {
+    const source = view.queryByTestId(`${testID}-image`)?.props.source as
+      | { readonly uri: string }
+      | readonly { readonly uri: string }[]
+      | undefined;
+    return source === undefined ? undefined : 'uri' in source ? source.uri : source[0]?.uri;
+  };
+
+  function storedGateway() {
+    const gateway = publishableGateway();
+    gateway.seedProfile(testBusiness.id, {
+      publicName: 'Chez Léa',
+      description: 'Coiffure sur rendez-vous.',
+      logoPath: 'media/logo/stored.jpg',
+    });
+    return gateway;
+  }
+
+  it('shows the stored page, with no unsaved mark', async () => {
+    const view = await renderSettings(storedGateway());
+
+    expect(previewName(view)).toBe('Chez Léa');
+    expect(view.getByTestId('online-booking-preview-description').props.children).toBe('Coiffure sur rendez-vous.');
+    expect(previewIsUnsaved(view)).toBe(false);
+  });
+
+  it('follows the name and the presentation as they are typed, and writes nothing', async () => {
+    const gateway = storedGateway();
+    const view = await renderSettings(gateway);
+
+    await type(view, 'online-booking-public-name', 'Maison Léa Paris');
+    await type(view, 'online-booking-description', 'Couleur et soins.');
+
+    expect(previewName(view)).toBe('Maison Léa Paris');
+    expect(view.getByTestId('online-booking-preview-description').props.children).toBe('Couleur et soins.');
+    expect(previewIsUnsaved(view)).toBe(true);
+    expect(gateway.calls.update + gateway.calls.upload + gateway.calls.remove + gateway.calls.setState).toBe(0);
+  });
+
+  it('falls back to the Business name and drops an emptied presentation', async () => {
+    const view = await renderSettings(storedGateway());
+
+    await type(view, 'online-booking-public-name', '');
+    await type(view, 'online-booking-description', '   ');
+
+    expect(previewName(view)).toBe(testBusiness.name);
+    expect(view.queryByTestId('online-booking-preview-description')).toBeNull();
+  });
+
+  it('shows a picked cover and logo at once, before any upload', async () => {
+    const gateway = storedGateway();
+    const view = await renderSettings(gateway);
+
+    await act(async () => {
+      mockPhotoFlows['online-booking-cover-photo'].onSelected('file:///cover.jpg');
+    });
+    await act(async () => {
+      mockPhotoFlows['online-booking-logo-photo'].onSelected('file:///logo.jpg');
+    });
+
+    expect(imageOf(view, 'online-booking-cover')).toBe('file:///cover.jpg');
+    expect(imageOf(view, 'online-booking-logo')).toBe('file:///logo.jpg');
+    expect(previewIsUnsaved(view)).toBe(true);
+    expect(gateway.calls.upload).toBe(0);
+  });
+
+  it('shows the monogram at once when the logo is removed, and keeps the stored file until saved', async () => {
+    const gateway = storedGateway();
+    const view = await renderSettings(gateway);
+    expect(imageOf(view, 'online-booking-logo')).toBeDefined();
+
+    await act(async () => {
+      mockPhotoFlows['online-booking-logo-photo'].onRemove();
+    });
+
+    expect(imageOf(view, 'online-booking-logo')).toBeUndefined();
+    expect(within(view.getByTestId('online-booking-logo')).getByText('C')).toBeTruthy();
+    expect(previewIsUnsaved(view)).toBe(true);
+    expect(gateway.calls.remove).toBe(0);
+  });
+
+  it('clears the unsaved mark once the changes are stored', async () => {
+    const gateway = storedGateway();
+    const view = await renderSettings(gateway);
+    await type(view, 'online-booking-public-name', 'Maison Léa Paris');
+
+    await press(view, 'online-booking-save');
+
+    expect(previewIsUnsaved(view)).toBe(false);
+    expect(previewName(view)).toBe('Maison Léa Paris');
+  });
+
+  it('shows the stored page again after leaving without saving', async () => {
+    const gateway = storedGateway();
+    const first = await renderSettings(gateway);
+    await type(first, 'online-booking-public-name', 'Brouillon abandonné');
+    await nativeBack();
+    await press(first, 'online-booking-unsaved-discard');
+    await act(async () => {
+      first.unmount();
+    });
+
+    expect(gateway.calls.update).toBe(0);
+    expect((await gateway.readProfile(testBusiness.id)).publicName).toBe('Chez Léa');
+  });
+});
+
+describe('OnlineBookingSettingsScreen — unsaved changes', () => {
+  const sheetIsOpen = (view: View) => view.queryByText('Modifications non enregistrées') !== null;
+
+  it('leaves at once, by every path, when nothing changed', async () => {
+    const view = await renderSettings(publishableGateway());
+
+    expect(mockRemovalGuard.enabled).toBe(false);
+    await press(view, 'online-booking-back');
+    await nativeBack();
+
+    expect(mockBack).toHaveBeenCalledTimes(2);
+    expect(sheetIsOpen(view)).toBe(false);
+  });
+
+  it('never asks about the publication switches: they are stored at once', async () => {
+    const view = await renderSettings(publishableGateway());
+    await toggle(view, 'online-booking-publish', true);
+    await toggle(view, 'online-booking-bookings', true);
+
+    expect(mockRemovalGuard.enabled).toBe(false);
+    await nativeBack();
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks before leaving an edited field — header button, back gesture and hardware back alike', async () => {
+    const view = await renderSettings(publishableGateway());
+    await type(view, 'online-booking-description', 'Coiffure et couleur.');
+
+    await press(view, 'online-booking-back');
+    expect(sheetIsOpen(view)).toBe(true);
+    expect(view.getByText(/Souhaitez-vous enregistrer vos changements avant de quitter/)).toBeTruthy();
+    expect(mockBack).not.toHaveBeenCalled();
+
+    await press(view, 'online-booking-unsaved-keep');
+    expect(sheetIsOpen(view)).toBe(false);
+    expect(view.getByTestId('online-booking-description').props.value).toBe('Coiffure et couleur.');
+
+    await nativeBack();
+    expect(sheetIsOpen(view)).toBe(true);
+    // A second attempt while the sheet is open asks nothing more.
+    await nativeBack();
+    expect(view.getAllByText('Modifications non enregistrées')).toHaveLength(1);
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it('asks before leaving a picked image', async () => {
+    const view = await renderSettings(publishableGateway());
+    await act(async () => {
+      mockPhotoFlows['online-booking-logo-photo'].onSelected('file:///logo.jpg');
+    });
+
+    expect(mockRemovalGuard.enabled).toBe(true);
+    await nativeBack();
+    expect(sheetIsOpen(view)).toBe(true);
+  });
+
+  it('stops asking once an edit is typed back to the stored value', async () => {
+    const view = await renderSettings(publishableGateway());
+    await type(view, 'online-booking-description', 'Brouillon');
+    await type(view, 'online-booking-description', '');
+
+    expect(mockRemovalGuard.enabled).toBe(false);
+  });
+
+  it('« Enregistrer et quitter » stores the changes, then leaves', async () => {
+    const gateway = publishableGateway();
+    const view = await renderSettings(gateway);
+    await type(view, 'online-booking-description', 'Coiffure et couleur.');
+    await nativeBack();
+
+    await press(view, 'online-booking-unsaved-save');
+
+    expect(gateway.updates).toEqual([expect.objectContaining({ description: 'Coiffure et couleur.' })]);
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(sheetIsOpen(view)).toBe(false);
+  });
+
+  it('a failed save keeps the screen, the edits and the reason', async () => {
+    const gateway = publishableGateway();
+    const view = await renderSettings(gateway);
+    await type(view, 'online-booking-description', 'Coiffure et couleur.');
+    await nativeBack();
+    gateway.failNext('NETWORK');
+
+    await press(view, 'online-booking-unsaved-save');
+
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(sheetIsOpen(view)).toBe(false);
+    expect(view.getByTestId('online-booking-description').props.value).toBe('Coiffure et couleur.');
+    expect(view.getByText(/n’ont pas été enregistrées/)).toBeTruthy();
+    expect(mockRemovalGuard.enabled).toBe(true);
+  });
+
+  it('a refused value keeps the screen and points at the field', async () => {
+    const gateway = publishableGateway();
+    const view = await renderSettings(gateway);
+    await type(view, 'online-booking-email', 'lea@');
+    await nativeBack();
+
+    await press(view, 'online-booking-unsaved-save');
+
+    expect(gateway.calls.update).toBe(0);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(view.getByText('Cette adresse e-mail n’est pas valide.')).toBeTruthy();
+  });
+
+  it('« Quitter sans enregistrer » leaves and writes nothing', async () => {
+    const gateway = publishableGateway();
+    const view = await renderSettings(gateway);
+    await type(view, 'online-booking-description', 'Coiffure et couleur.');
+    await nativeBack();
+
+    await press(view, 'online-booking-unsaved-discard');
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(gateway.calls.update).toBe(0);
+    expect(gateway.calls.upload).toBe(0);
+    expect(gateway.calls.setState).toBe(0);
+    expect(mockRemovalGuard.enabled).toBe(false);
   });
 });
 

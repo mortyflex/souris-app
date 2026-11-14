@@ -14,11 +14,10 @@
 // own subscription state is never consulted, and a refusal is explained in
 // its own words while the stored state stands.
 
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -37,18 +36,18 @@ import { haptics } from '@/shared/lib/haptics';
 import { normalizePhoto } from '@/shared/lib/photo-normalization';
 import { AppButton } from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
+import { BottomSheet } from '@/shared/ui/BottomSheet';
 import { FormScrollView } from '@/shared/ui/FormScrollView';
 import { GlassIconButton, glassIcons } from '@/shared/ui/GlassIconButton';
 import { GroupedSeparator, GroupedSurface } from '@/shared/ui/GroupedSurface';
 import { PhotoSourceFlow } from '@/shared/ui/PhotoSourceFlow';
+import { SheetHeader } from '@/shared/ui/SheetHeader';
 import { StatePill, statePillTones } from '@/shared/ui/StatePill';
 import { SwitchRow } from '@/shared/ui/SwitchRow';
 import { TextField } from '@/shared/ui/TextField';
 import {
   foregroundSoft,
   gutter,
-  interaction,
-  radii,
   rose,
   semanticColors,
   spacing,
@@ -66,9 +65,11 @@ import {
   ONLINE_BOOKING_BOOKINGS_HINT,
   ONLINE_BOOKING_BOOKINGS_LABEL,
   ONLINE_BOOKING_COPY_LINK_LABEL,
+  ONLINE_BOOKING_DISCARD_AND_LEAVE,
   ONLINE_BOOKING_FIELD_ERRORS,
   ONLINE_BOOKING_IMAGE_FAILURE,
   ONLINE_BOOKING_IMAGE_TOO_LARGE,
+  ONLINE_BOOKING_KEEP_EDITING,
   ONLINE_BOOKING_LINK_COPIED,
   ONLINE_BOOKING_LINK_COPY_FAILURE,
   ONLINE_BOOKING_NEEDS_SLUG,
@@ -76,6 +77,7 @@ import {
   ONLINE_BOOKING_PUBLICATION_UNAVAILABLE,
   ONLINE_BOOKING_PUBLISH_LABEL,
   ONLINE_BOOKING_REQUIRES_PLUS,
+  ONLINE_BOOKING_SAVE_AND_LEAVE,
   ONLINE_BOOKING_SAVE_BEFORE_PUBLISHING,
   ONLINE_BOOKING_SAVE_FAILURE,
   ONLINE_BOOKING_SAVED,
@@ -83,11 +85,14 @@ import {
   ONLINE_BOOKING_SLUG_UNAVAILABLE,
   ONLINE_BOOKING_STATE_FAILURE,
   ONLINE_BOOKING_TITLE,
+  ONLINE_BOOKING_UNSAVED_BODY,
+  ONLINE_BOOKING_UNSAVED_TITLE,
   type BookingPublicationKind,
 } from '../presentation';
 import { readPublicPageLink } from '../public-page-url';
 import { useOnlineBookingGateway } from '../session/OnlineBookingGatewayProvider';
 
+import { BookingProfilePreview } from './BookingProfilePreview';
 import {
   saveBookingProfile,
   UNCHANGED_BOOKING_IMAGES,
@@ -105,14 +110,10 @@ const IMAGE_COPY = {
   logo: {
     sheetTitle: 'Logo ou photo de profil',
     cameraHint: 'Cadrez votre logo ou votre portrait.',
-    add: 'Ajouter un logo ou une photo de profil',
-    edit: 'Modifier le logo ou la photo de profil',
   },
   cover: {
     sheetTitle: 'Photo de couverture',
     cameraHint: 'Cadrez votre salon ou votre espace de travail.',
-    add: 'Ajouter une photo de couverture',
-    edit: 'Modifier la photo de couverture',
   },
 } as const;
 
@@ -164,6 +165,10 @@ export function OnlineBookingSettingsScreen() {
   const [copyOutcome, setCopyOutcome] = useState<'copied' | 'failed'>();
   // Synchronous guard: a second tap in the same frame never starts a second write.
   const writing = useRef(false);
+  /** The unsaved-changes sheet is open. */
+  const [leaveRequested, setLeaveRequested] = useState(false);
+  /** The professional decided to leave: the guard is lifted and the route goes back. */
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     if (gateway === undefined) return;
@@ -185,6 +190,34 @@ export function OnlineBookingSettingsScreen() {
     };
   }, [business.id, gateway, reloadToken]);
 
+  // Unsaved work: a field or an image that differs from what the server holds.
+  // The two switches write at once and never wait for « Enregistrer ».
+  const dirty =
+    profile !== undefined &&
+    fields !== undefined &&
+    (FIELD_KEYS.some((key) => fields[key].trim() !== fieldsOf(profile)[key]) ||
+      images.logo.kind !== 'stored' ||
+      images.cover.kind !== 'stored');
+
+  // Every way out — the header button, the iOS back gesture, the Android
+  // hardware back — asks first while something is unsaved. A write in flight
+  // is never interrupted, and never asked about twice.
+  const requestLeave = () => {
+    if (writing.current || leaveRequested) return;
+    haptics.warning();
+    setLeaveRequested(true);
+  };
+  usePreventRemove(dirty && !leaving, requestLeave);
+
+  useEffect(() => {
+    if (leaving) router.back();
+  }, [leaving, router]);
+
+  const goBack = () => {
+    if (dirty) requestLeave();
+    else router.back();
+  };
+
   const unavailable = gateway === undefined || loadFailed;
   const retry = () => {
     setLoadFailed(false);
@@ -193,7 +226,7 @@ export function OnlineBookingSettingsScreen() {
 
   const header = (
     <View style={styles.topBar}>
-      <GlassIconButton accessibilityLabel="Retour" icon={glassIcons.back} onPress={() => router.back()} />
+      <GlassIconButton accessibilityLabel="Retour" icon={glassIcons.back} onPress={goBack} testID="online-booking-back" />
       <AppText variant="eyebrow" style={styles.eyebrow}>
         GESTION
       </AppText>
@@ -231,11 +264,6 @@ export function OnlineBookingSettingsScreen() {
     );
   }
 
-  const stored = fieldsOf(profile);
-  const dirty =
-    FIELD_KEYS.some((key) => fields[key].trim() !== stored[key]) ||
-    images.logo.kind !== 'stored' ||
-    images.cover.kind !== 'stored';
   const busy = saving || changingState || preparingImage !== undefined;
   const status = describeBookingPublication(profile);
   const pageUrl = profile.slug !== undefined ? readPublicPageLink(profile.slug)?.url : undefined;
@@ -297,13 +325,14 @@ export function OnlineBookingSettingsScreen() {
     setNotice(undefined);
   };
 
-  const save = async () => {
-    if (writing.current || !dirty) return;
+  /** Resolves true only when the server stored the changes. */
+  const save = async (): Promise<boolean> => {
+    if (writing.current || !dirty) return false;
     const issue = findBookingProfileIssue(fields);
     if (issue !== undefined) {
       setFieldError({ field: issue, message: ONLINE_BOOKING_FIELD_ERRORS[issue] });
       haptics.warning();
-      return;
+      return false;
     }
     writing.current = true;
     setSaving(true);
@@ -317,7 +346,7 @@ export function OnlineBookingSettingsScreen() {
         setImages(UNCHANGED_BOOKING_IMAGES);
         setNotice({ tone: 'success', text: ONLINE_BOOKING_SAVED });
         haptics.success();
-        return;
+        return true;
       }
       haptics.warning();
       if (result.status === 'SLUG_UNAVAILABLE') {
@@ -335,6 +364,7 @@ export function OnlineBookingSettingsScreen() {
         if (field !== undefined) setFieldError({ field, message: ONLINE_BOOKING_FIELD_ERRORS[field] });
         else setNotice({ tone: 'failure', text: ONLINE_BOOKING_SAVE_FAILURE });
       }
+      return false;
     } catch (error) {
       setNotice({
         tone: 'failure',
@@ -346,10 +376,23 @@ export function OnlineBookingSettingsScreen() {
               : ONLINE_BOOKING_SAVE_FAILURE,
       });
       haptics.warning();
+      return false;
     } finally {
       writing.current = false;
       setSaving(false);
     }
+  };
+
+  // Leaves only once the server stored the changes; a refusal or a failure
+  // keeps the screen, the edits and the reason on display.
+  const saveAndLeave = async () => {
+    setLeaveRequested(false);
+    if (await save()) setLeaving(true);
+  };
+
+  const discardAndLeave = () => {
+    setLeaveRequested(false);
+    setLeaving(true);
   };
 
   const changeState = async (next: { readonly published: boolean; readonly bookingEnabled: boolean }) => {
@@ -431,49 +474,16 @@ export function OnlineBookingSettingsScreen() {
           </AppText>
         </View>
 
-        {/* The page as it will open: cover, logo over its lower edge, public name. */}
-        <View style={styles.preview} testID="online-booking-preview">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={coverUri ? IMAGE_COPY.cover.edit : IMAGE_COPY.cover.add}
-            disabled={busy}
-            onPress={() => setImageSource('cover')}
-            style={({ pressed }) => [styles.cover, pressed && styles.pressed]}
-            testID="online-booking-cover"
-          >
-            {coverUri ? (
-              <Image accessibilityIgnoresInvertColors contentFit="cover" source={{ uri: coverUri }} style={styles.fill} />
-            ) : (
-              <View style={styles.imagePlaceholder}>
-                <SymbolView name={{ ios: 'photo', android: 'image' }} size={22} tintColor={semanticColors.accent} />
-                <AppText variant="metadata" style={styles.soft}>
-                  Photo de couverture
-                </AppText>
-              </View>
-            )}
-            {preparingImage === 'cover' && <ActivityIndicator color={semanticColors.accent} style={styles.imageBusy} />}
-          </Pressable>
-          <View style={styles.identity}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={logoUri ? IMAGE_COPY.logo.edit : IMAGE_COPY.logo.add}
-              disabled={busy}
-              onPress={() => setImageSource('logo')}
-              style={({ pressed }) => [styles.logo, pressed && styles.pressed]}
-              testID="online-booking-logo"
-            >
-              {logoUri ? (
-                <Image accessibilityIgnoresInvertColors contentFit="cover" source={{ uri: logoUri }} style={styles.fill} />
-              ) : (
-                <SymbolView name={{ ios: 'camera', android: 'photo_camera' }} size={20} tintColor={semanticColors.accent} />
-              )}
-              {preparingImage === 'logo' && <ActivityIndicator color={semanticColors.accent} style={styles.imageBusy} />}
-            </Pressable>
-            <AppText variant="sectionTitle" numberOfLines={2} style={styles.previewName} testID="online-booking-preview-name">
-              {shownName}
-            </AppText>
-          </View>
-        </View>
+        <BookingProfilePreview
+          coverUri={coverUri}
+          description={fields.description}
+          disabled={busy}
+          logoUri={logoUri}
+          name={shownName}
+          onPressImage={setImageSource}
+          preparingImage={preparingImage}
+          unsaved={dirty}
+        />
 
         <View style={styles.fields}>
           <TextField
@@ -656,6 +666,39 @@ export function OnlineBookingSettingsScreen() {
         )}
       </FormScrollView>
 
+      <BottomSheet
+        backdropLabel={ONLINE_BOOKING_KEEP_EDITING}
+        header={<SheetHeader title={ONLINE_BOOKING_UNSAVED_TITLE} />}
+        onClose={() => setLeaveRequested(false)}
+        testID="online-booking-unsaved"
+        visible={leaveRequested}
+      >
+        <View style={styles.unsaved}>
+          <AppText variant="metadata" style={styles.soft}>
+            {ONLINE_BOOKING_UNSAVED_BODY}
+          </AppText>
+          <View style={styles.unsavedActions}>
+            <AppButton
+              onPress={() => void saveAndLeave()}
+              testID="online-booking-unsaved-save"
+              title={ONLINE_BOOKING_SAVE_AND_LEAVE}
+            />
+            <AppButton
+              onPress={() => setLeaveRequested(false)}
+              testID="online-booking-unsaved-keep"
+              title={ONLINE_BOOKING_KEEP_EDITING}
+              variant="secondary"
+            />
+            <AppButton
+              onPress={discardAndLeave}
+              testID="online-booking-unsaved-discard"
+              title={ONLINE_BOOKING_DISCARD_AND_LEAVE}
+              variant="dangerSoft"
+            />
+          </View>
+        </View>
+      </BottomSheet>
+
       {(['logo', 'cover'] as const).map((kind) => (
         <PhotoSourceFlow
           cameraHint={IMAGE_COPY[kind].cameraHint}
@@ -675,8 +718,6 @@ export function OnlineBookingSettingsScreen() {
     </SafeAreaView>
   );
 }
-
-const LOGO_SIZE = 72;
 
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: semanticColors.screenWarm, flex: 1 },
@@ -701,32 +742,10 @@ const styles = StyleSheet.create({
   loading: { alignSelf: 'flex-start', marginTop: spacing.base },
   offlineNotice: { alignItems: 'flex-start', gap: spacing.xs },
   overview: { alignItems: 'flex-start', gap: spacing.sm },
-  preview: { gap: spacing.sm },
-  cover: {
-    aspectRatio: 16 / 7,
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    overflow: 'hidden',
-  },
-  fill: { height: '100%', width: '100%' },
-  imagePlaceholder: { alignItems: 'center', flex: 1, gap: spacing.xs, justifyContent: 'center' },
-  imageBusy: { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
-  identity: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
-  logo: {
-    alignItems: 'center',
-    backgroundColor: semanticColors.surfaceLavenderStrong,
-    borderCurve: 'continuous',
-    borderRadius: radii.large,
-    height: LOGO_SIZE,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    width: LOGO_SIZE,
-  },
-  previewName: { flex: 1 },
-  pressed: { opacity: interaction.pressedOpacity },
   fields: { gap: spacing.base },
   slugField: { gap: spacing.xs },
+  unsaved: { gap: spacing.lg, paddingBottom: spacing.base },
+  unsavedActions: { gap: spacing.sm },
   linkAddress: { alignItems: 'flex-start', gap: spacing.xs },
   linkUrl: { color: semanticColors.foreground },
 });
