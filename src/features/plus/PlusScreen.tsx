@@ -8,6 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SubscriptionStatusSection } from '@/features/access/status/SubscriptionStatusSection';
 import { formatBusinessActivityType } from '@/features/business/presentation';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
+import { ONLINE_BOOKING_ROW_META, ONLINE_BOOKING_ROW_TITLE } from '@/features/online-booking/presentation';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { usePersistence } from '@/providers/PersistenceProvider';
 import { cashRegisterIcon } from '@/shared/icons/payment-method-icons';
@@ -136,6 +137,32 @@ export function PlusScreen() {
                 <AppText variant="rowTitle">Rappels clients</AppText>
                 <AppText variant="metadata" style={styles.meta}>
                   Rappels par e-mail
+                </AppText>
+              </View>
+              <SymbolView
+                name={{ ios: 'chevron.right', android: 'chevron_right' }}
+                size={15}
+                tintColor={semanticColors.foregroundMuted}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${ONLINE_BOOKING_ROW_TITLE}, ${ONLINE_BOOKING_ROW_META}`}
+              onPress={() => router.push('/online-booking-settings')}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              testID="plus-online-booking-settings"
+            >
+              <View style={styles.iconSurface}>
+                <SymbolView
+                  name={{ ios: 'globe', android: 'language' }}
+                  size={19}
+                  tintColor={semanticColors.accent}
+                />
+              </View>
+              <View style={styles.copy}>
+                <AppText variant="rowTitle">{ONLINE_BOOKING_ROW_TITLE}</AppText>
+                <AppText variant="metadata" style={styles.meta}>
+                  {ONLINE_BOOKING_ROW_META}
                 </AppText>
               </View>
               <SymbolView

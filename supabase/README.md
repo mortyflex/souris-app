@@ -1270,3 +1270,43 @@ Shipping the build BEFORE step 3 loses nothing — categories and described Serv
 device as `REMOTE_SCHEMA_PENDING` and go with the first run after the migration — but the
 professional would see them unsynchronized until then. Applying the migration first is the
 supported order. Never apply it automatically.
+
+## Online booking profiles (Sprint 2) — NOT applied, switch DISABLED
+
+`migrations/20261015120000_create_online_booking_profiles.sql` — BY HAND, after every earlier
+migration. Contract and security model: `docs/architecture/ONLINE_BOOKING.md`.
+
+It only ADDS objects: the table `business_booking_profiles` (RLS, no policy, no grant), the public
+bucket `business-public-media` with its three owner policies, the flag row
+`ONLINE_BOOKING_PUBLICATION` (**disabled**), three owner RPCs (`authenticated`), one public-read RPC
+(`service_role`) and an operator switch (no grant). No existing table, column, policy, grant,
+function or flag is touched, so installed builds are unaffected. Safe to re-run.
+
+After applying, verify:
+
+```sql
+select flag, enabled from public.server_feature_flags where flag = 'ONLINE_BOOKING_PUBLICATION'; -- false
+select id, public, file_size_limit, allowed_mime_types from storage.buckets order by id;
+-- business-media: false (unchanged) · business-public-media: true, 2097152, {image/jpeg}
+select grantee, privilege_type from information_schema.table_privileges
+ where table_schema = 'public' and table_name = 'business_booking_profiles'
+   and grantee in ('anon', 'authenticated', 'service_role');                                      -- no row
+select public.online_booking_public_profile('nobody-here');                                      -- NULL
+```
+
+### Opening publication (deliberate manual step — NOT performed by the sprint)
+
+Only after the prerequisites of `docs/architecture/ONLINE_BOOKING.md` §4:
+
+```sql
+select public.online_booking_set_publication_enabled(true);
+-- { "enabled": true, "published_profiles": n, "published_without_plus": m }
+```
+
+`select public.online_booking_set_publication_enabled(false);` closes it again: every public page
+goes offline at once and no row is rewritten.
+
+### Rollout order
+
+Staging first. Production only with the user's explicit authorization for that change, after the
+Staging validation.

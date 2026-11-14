@@ -8,8 +8,10 @@ import { AuthGatewayError, type AuthGateway } from '@/features/auth/gateway';
 import { createPasswordResetCooldown, type PasswordResetCooldown } from '@/features/auth/password-reset-cooldown';
 import { BusinessGatewayError, type BusinessGateway } from '@/features/business/gateway';
 import type { CommunicationsGateway } from '@/features/communications/gateway';
+import type { OnlineBookingGateway } from '@/features/online-booking/gateway';
 import type { BusinessMediaRemote } from '@/persistence/media/business-media';
 import type { SyncRemoteGateway } from '@/persistence/sync/remote-gateway';
+import { createUuidV4 } from '@/shared/lib/uuid';
 
 import { expoSocialAuthPlatform } from '../social-auth/expo-social-auth-platform';
 
@@ -19,6 +21,7 @@ import { createSupabaseBusinessMediaGateway } from './business-media-gateway';
 import { createSupabaseCommunicationsGateway } from './communications-gateway';
 import { getSupabaseClient } from './client';
 import { readSupabaseConfig, SupabaseConfigurationError } from './config';
+import { createSupabaseOnlineBookingGateway } from './online-booking-gateway';
 import { expoPhotoFileIO } from './photo-file-io';
 import { createSupabaseSyncGateway } from './sync-gateway';
 
@@ -31,6 +34,8 @@ export interface AccountGateways {
   readonly media: BusinessMediaRemote | undefined;
   /** Undefined when Supabase is not configured: reminder settings then read as disabled. */
   readonly communications: CommunicationsGateway | undefined;
+  /** Undefined when Supabase is not configured: the online booking settings then read as unavailable. */
+  readonly onlineBooking: OnlineBookingGateway | undefined;
   /**
    * The password recovery resend cooldown: in the session's storage, scoped
    * to the Supabase project so Staging and Production never share it. In
@@ -64,6 +69,7 @@ function createUnconfiguredGateways(): AccountGateways {
     sync: undefined,
     media: undefined,
     communications: undefined,
+    onlineBooking: undefined,
     passwordResetCooldown: createPasswordResetCooldown({ scope: 'unconfigured' }),
   };
 }
@@ -79,6 +85,7 @@ export function createAccountGateways(): AccountGateways {
       sync: createSupabaseSyncGateway(client),
       media: createSupabaseBusinessMediaGateway(client, expoPhotoFileIO),
       communications: createSupabaseCommunicationsGateway(client),
+      onlineBooking: createSupabaseOnlineBookingGateway(client, expoPhotoFileIO, createUuidV4),
       passwordResetCooldown: createPasswordResetCooldown({ scope: readSupabaseConfig().url, storage: localStorage }),
     };
   } catch (error) {

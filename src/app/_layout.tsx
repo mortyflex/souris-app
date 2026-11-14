@@ -18,6 +18,7 @@ import type { SubscriptionSource } from '@/features/access/subscription-source';
 import { AuthProvider } from '@/features/auth/session/AuthProvider';
 import { BusinessSessionProvider } from '@/features/business/session/BusinessSessionProvider';
 import { CommunicationsGatewayProvider } from '@/features/communications/session/CommunicationsGatewayProvider';
+import { OnlineBookingGatewayProvider } from '@/features/online-booking/session/OnlineBookingGatewayProvider';
 import { createAccountSubscriptionSource } from '@/infrastructure/revenuecat';
 import { createAccountGateways, type AccountGateways } from '@/infrastructure/supabase';
 import { openSourisDatabase } from '@/persistence/expo-database';
@@ -138,7 +139,9 @@ function AccountSession({
           <CloudSyncRunner gateway={gateways.sync}>
             <BusinessMediaProvider remote={gateways.media}>
               <CommunicationsGatewayProvider gateway={gateways.communications}>
-                <RootNavigator />
+                <OnlineBookingGatewayProvider gateway={gateways.onlineBooking}>
+                  <RootNavigator />
+                </OnlineBookingGatewayProvider>
               </CommunicationsGatewayProvider>
             </BusinessMediaProvider>
           </CloudSyncRunner>

@@ -7,8 +7,8 @@ import "server-only";
  * module, so a secret can never reach the browser bundle. Secrets are read
  * lazily, at the moment a server module needs one, never at import time.
  *
- * Nothing calls this yet: no privileged database operation exists in this
- * sprint. Future server modules (booking reads and writes) import from here.
+ * One caller today: the public profile lookup
+ * (src/features/public-profile/get-public-profile.ts).
  */
 
 export class MissingServerEnvError extends Error {
@@ -26,6 +26,6 @@ function required(name: string): string {
 }
 
 export const serverEnv = {
-  /** Supabase SECRET key for the booking server modules. Never prefixed NEXT_PUBLIC_. */
+  /** Supabase SECRET key (sb_secret_…) of the server-side lookups. Never prefixed NEXT_PUBLIC_. */
   supabaseSecretKey: () => required("SUPABASE_SECRET_KEY"),
 } as const;

@@ -34,12 +34,14 @@ function withoutBranch(body: string, from: string, to: string): string {
 describe('multi-profession Step 3 — service categories and descriptions migration', () => {
   it('is ONE forward-only migration; only later, unrelated phases follow it', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    // The sale adjustments migrations (CLOUD_SYNC.md §28, §28.1) sort after it.
+    // The sale adjustments migrations (CLOUD_SYNC.md §28, §28.1) sort after it, then the online
+    // booking profile (ONLINE_BOOKING.md), which only adds objects.
     expect(names.slice(names.indexOf(MIGRATION_NAME) + 1)).toEqual([
       '20261011120000_create_sale_adjustments.sql',
       '20261012120000_add_sale_refund_outflows.sql',
       '20261013120000_prevent_refunds_after_over_refund.sql',
       '20261014120000_identify_new_refund_by_write.sql',
+      '20261015120000_create_online_booking_profiles.sql',
     ]);
     expect(names.filter((name) => name.includes('service_categories'))).toEqual([MIGRATION_NAME]);
   });

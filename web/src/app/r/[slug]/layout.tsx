@@ -4,7 +4,7 @@ import Link from "next/link";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { Container } from "@/components/ui/container";
 
-// Booking pages are placeholders: keep them out of search results.
+// Online booking is not live yet: keep the public pages out of search results until it is.
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };

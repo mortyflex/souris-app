@@ -3,8 +3,8 @@
  *
  * Only `NEXT_PUBLIC_*` variables belong here. Each one is read with a literal
  * `process.env.NEXT_PUBLIC_…` expression so that Next.js can inline it.
- * Nothing in this sprint opens a Supabase connection: the two Supabase values
- * are declared for the next sprint and may stay empty.
+ * The browser never talks to Supabase: the project URL is used by server code
+ * and to build the public URLs of branding images.
  */
 
 function optional(value: string | undefined): string | undefined {
@@ -17,8 +17,8 @@ export const publicEnv = {
   siteUrl: optional(process.env.NEXT_PUBLIC_SITE_URL),
   /** Contact address shown on the marketing pages. Absent: no contact link is rendered. */
   contactEmail: optional(process.env.NEXT_PUBLIC_CONTACT_EMAIL),
-  /** Supabase project URL (public). Unused until booking is implemented. */
+  /** Supabase project URL (public): the server lookups and the public image URLs. */
   supabaseUrl: optional(process.env.NEXT_PUBLIC_SUPABASE_URL),
-  /** Supabase PUBLISHABLE key (public). Unused until booking is implemented. */
+  /** Supabase PUBLISHABLE key (public). Unused: no browser code calls Supabase yet. */
   supabasePublishableKey: optional(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
 } as const;

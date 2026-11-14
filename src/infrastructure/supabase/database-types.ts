@@ -120,6 +120,28 @@ export type Database = {
         };
         Returns: Json;
       };
+      online_booking_read_profile: {
+        Args: { p_business_id: string };
+        Returns: Json;
+      };
+      online_booking_update_profile: {
+        Args: {
+          p_business_id: string;
+          p_slug: string | null;
+          p_public_name: string | null;
+          p_description: string | null;
+          p_public_phone: string | null;
+          p_public_email: string | null;
+          p_address: string | null;
+          p_logo_path: string | null;
+          p_cover_path: string | null;
+        };
+        Returns: Json;
+      };
+      online_booking_set_state: {
+        Args: { p_business_id: string; p_published: boolean; p_booking_enabled: boolean };
+        Returns: Json;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

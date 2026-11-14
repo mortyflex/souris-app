@@ -34,10 +34,17 @@ const BREACH_2 = 'create or replace function public.sync_sale_adjustment_breach(
 const PUSH = 'create or replace function public.sync_push_aggregate(';
 
 describe('sale adjustments — the new refund is the row the write inserted (20261014120000)', () => {
-  it('is ONE forward-only migration and sorts last', () => {
+  it('is ONE forward-only migration, the last one to define a sync function', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
-    expect(names.at(-1)).toBe(MIGRATION_NAME);
-    expect(names.at(-2)).toBe(PREVIOUS_BREACH);
+    const index = names.indexOf(MIGRATION_NAME);
+    expect(names[index - 1]).toBe(PREVIOUS_BREACH);
+    // Only the online booking profile follows; it adds objects and replaces none of these functions.
+    const later = names.slice(index + 1);
+    expect(later).toEqual(['20261015120000_create_online_booking_profiles.sql']);
+    for (const name of later) {
+      const source = readFileSync(join(MIGRATIONS_DIR, name), 'utf8').replace(/^\s*--.*$/gm, '');
+      expect(source).not.toMatch(/sync_push_aggregate|sync_sale_adjustment_/);
+    }
   });
 
   it('changes no table, column, index, row, trigger or policy and drops nothing', () => {

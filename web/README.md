@@ -21,21 +21,20 @@ Run every command from `web/`, never from the repository root.
 | `npm run start` | Serves the production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Generates the route types, then `tsc --noEmit` |
-| `npm run check` | Lint, type check and build — the validation to run before a review |
-
-There is no test runner yet: nothing in this sprint has behavior worth one. Add it with the first booking logic.
+| `npm run test` | Vitest (`src/**/*.test.ts(x)`) |
+| `npm run check` | Lint, type check, tests and build — the validation to run before a review |
 
 ## Environment variables
 
-Copy `.env.example` to `.env.local` (gitignored). Every variable is optional today; no Supabase connection is opened.
+Copy `.env.example` to `.env.local` (gitignored). The marketing pages need nothing; the public profile pages need the two Supabase values marked below.
 
 | Variable | Scope | Purpose |
 | --- | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | public | Canonical origin of the site |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | public | Contact link on the marketing pages; empty hides it |
-| `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase project URL (unused yet) |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | Supabase publishable key (unused yet) |
-| `SUPABASE_SECRET_KEY` | server only | Reserved for the future booking server modules (unused yet) |
+| `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase project URL — **required by `/r/[slug]`** (lookup, image URLs) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | Supabase publishable key (unused: the browser never calls Supabase) |
+| `SUPABASE_SECRET_KEY` | server only | Supabase secret key — **required by `/r/[slug]`**, read by the profile lookup only |
 
 Rules:
 
@@ -48,12 +47,16 @@ Rules:
 | Route | Status |
 | --- | --- |
 | `/` | Marketing homepage |
-| `/r/[slug]` | Future public profile of a professional — shows a "not yet available" notice |
-| `/r/[slug]/reserver` | Future booking flow — shows a "not yet available" notice |
+| `/r/[slug]` | Public profile of a professional, read from Supabase on every request |
+| `/r/[slug]/reserver` | Future booking flow — a "not yet available" notice for an online profile |
 
 Public profiles live under `/r/` so that a slug can never collide with a marketing or legal page. Future legal pages (privacy, terms, legal notice) go in `src/app/(marketing)/` and inherit the marketing header and footer.
 
-The booking routes are placeholders: no availability, no form and no reservation exists behind them, and they are excluded from search indexing.
+`/r/[slug]` shows only what the professional published in the mobile application (name, description, contact, logo, cover) and whether she accepts online bookings. No availability, form or reservation exists behind it. Both routes answer a real HTTP 404 when no page is online at the address — unknown, malformed, draft, unpublished, or offline for lack of a verified subscription — and an error (never a 404) when the lookup itself fails. They are excluded from search indexing for now.
+
+The lookup (`src/features/public-profile/get-public-profile.ts`) is server-only: it calls the one database function reserved to the website, `online_booking_public_profile`, with the secret key. Contract and security model: `../docs/architecture/ONLINE_BOOKING.md`.
+
+Cache Components is off (`next.config.ts`): with it, a request-time lookup runs after the shell is sent and the status could only be 200.
 
 ## Structure
 
@@ -67,9 +70,9 @@ src/
     ui/                   accessible primitives (shadcn/ui conventions)
     brand/                the official logo
     marketing/            marketing sections
-    booking/              booking page components
+    booking/              public profile view, booking notice
   features/
-    public-profile/       slug rules and paths
+    public-profile/       slug rules, the public profile contract, the server lookup
   lib/
     env/                  public and server-only environment contracts
   styles/

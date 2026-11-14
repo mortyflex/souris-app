@@ -2,8 +2,10 @@
  * Shape of a public profile slug: /r/<slug>.
  *
  * Lowercase letters, digits and single hyphens, 3 to 60 characters. This is a
- * URL-shape rule only — whether a professional owns a slug is a server
- * question that does not exist yet.
+ * URL-shape rule only, the same as the database
+ * (`online_booking_is_valid_slug`) and the mobile application
+ * (`src/domain/online-booking`). Whether a page is online behind a slug is
+ * the server's answer (`get-public-profile.ts`).
  */
 const PROFILE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MIN_LENGTH = 3;

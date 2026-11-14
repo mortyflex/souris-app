@@ -682,6 +682,16 @@ These rules are FUTURE scope.
 
 Online booking is an approved direction: its public pages live in `web/` (§5), and professional booking management stays in the Expo application.
 
+Implemented (reference: `docs/architecture/ONLINE_BOOKING.md`): the public booking profile — draft, publication, public images — edited in Plus › Réservation en ligne and shown at `/r/<slug>`.
+
+- it lives in `business_booking_profiles`, OUTSIDE the offline sync: never an aggregate, never queued; the settings need connectivity;
+- the server alone decides publication: its own operator switch (disabled by default) AND verified Plus access (`subscription_has_plus_access`), re-checked at every public read;
+- never gate it on the app's subscription state, and never on `business_mutation_is_entitled`;
+- the website reads ONE `service_role` function from server-only code; `anon` has no access to anything;
+- public images go to the public `business-public-media` bucket; the private `business-media` bucket never becomes public.
+
+Not implemented: working hours, availability, slots, booking creation, customers, payments.
+
 Build each part of it — availability, booking creation, payments, database changes — only in the phase that explicitly requests it.
 
 Do not build an online booking engine speculatively.
