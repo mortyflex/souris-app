@@ -1310,3 +1310,52 @@ goes offline at once and no row is rewritten.
 
 Staging first. Production only with the user's explicit authorization for that change, after the
 Staging validation.
+
+## Online booking working hours (Sprint 3A) — NOT applied
+
+`migrations/20261016120000_create_online_booking_working_hours.sql` — BY HAND, after the online
+booking profiles migration (it reads `business_booking_profiles.time_zone`). Contract, time rule
+and security model: `docs/architecture/ONLINE_BOOKING.md` §7.
+
+It only ADDS objects: the table `business_working_hours` (RLS, no policy, no grant, a CHECK backed
+by `online_booking_working_day_issue`), its `before write` trigger, two owner RPCs
+(`authenticated`) and the read-only engine contract `online_booking_working_intervals` (no grant).
+No existing table, column, row, policy, grant, function, bucket or flag is touched, so installed
+builds are unaffected; a build without the Horaires screen never calls it. Safe to re-run.
+
+Until it is applied, Plus › Horaires reads as unavailable (« Connexion nécessaire… », the RPC
+answers `PGRST202`) and nothing else changes.
+
+After applying, verify:
+
+```sql
+select grantee, privilege_type from information_schema.table_privileges
+ where table_schema = 'public' and table_name = 'business_working_hours'
+   and grantee in ('anon', 'authenticated', 'service_role');                    -- no row
+select p.proname,
+       has_function_privilege('anon', p.oid, 'execute')          as anon,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('service_role', p.oid, 'execute')  as service_role
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('online_booking_read_working_hours', 'online_booking_save_working_day',
+                     'online_booking_working_intervals', 'online_booking_working_day_issue',
+                     'online_booking_working_hours_json', 'business_working_hours_before_write');
+-- authenticated: true for the read and the save ONLY; anon and service_role: false everywhere
+select public.online_booking_working_day_issue(true, '[{"start_minute":540,"end_minute":780},{"start_minute":720,"end_minute":900}]');
+-- OVERLAP
+select count(*) from public.business_working_hours;                              -- 0
+```
+
+Staging end-to-end (a signed-in test owner, the mobile build pointed at Staging):
+Plus › Horaires shows seven « Fermé » days → open a day, add a break, save → the summary updates →
+kill and reopen the app: the same week comes back → airplane mode: a save fails with its reason
+and the stored week is unchanged. Then, in the SQL Editor:
+
+```sql
+select * from public.online_booking_working_intervals('<business id>', '2026-03-23', '2026-04-05');
+-- the open days only; 09:00 Paris = 08:00Z before 29 March, 07:00Z after
+```
+
+Production only with the user's explicit authorization for that change, after the Staging
+validation.

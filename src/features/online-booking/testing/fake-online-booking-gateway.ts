@@ -1,11 +1,19 @@
 // BeautIzzy — in-memory OnlineBookingGateway (tests only)
 //
-// The server contract of the three owner RPCs and the public bucket,
-// deterministic and offline: one profile per Business (an empty draft on
-// first read, like the server), the slug and publication refusals, and
-// scriptable failures.
+// The server contract of the owner RPCs and the public bucket, deterministic
+// and offline: one profile per Business (an empty draft on first read, like
+// the server), the slug and publication refusals, the weekly working hours
+// (seven closed days until a day is saved, the same validation as the
+// server), and scriptable failures.
 
-import { isValidBookingSlug } from '@/domain/online-booking';
+import {
+  closedWorkingDay,
+  ISO_WEEKDAYS,
+  isValidBookingSlug,
+  normalizeWorkingDay,
+  validateWorkingDay,
+  type WorkingDay,
+} from '@/domain/online-booking';
 
 import {
   OnlineBookingGatewayError,
@@ -13,12 +21,25 @@ import {
   type BookingProfileDraft,
   type OnlineBookingFailureCode,
   type OnlineBookingGateway,
+  type WorkingHours,
 } from '../gateway';
 
 export const FAKE_MEDIA_ID = '99999999-9999-4999-8999-999999999999';
 
 export interface FakeOnlineBookingGateway extends OnlineBookingGateway {
-  readonly calls: { read: number; update: number; setState: number; upload: number; remove: number };
+  readonly calls: {
+    read: number;
+    update: number;
+    setState: number;
+    upload: number;
+    remove: number;
+    readHours: number;
+    saveDay: number;
+  };
+  /** Every day the server accepted, in its saved form, in order. */
+  readonly savedDays: WorkingDay[];
+  /** Replaces the stored week of a Business (days not given stay as they are). */
+  seedWorkingHours(businessId: string, days: readonly WorkingDay[]): void;
   /** Draft of every accepted update, in order. */
   readonly updates: BookingProfileDraft[];
   /** Object paths currently stored in the bucket. */
@@ -34,8 +55,25 @@ export interface FakeOnlineBookingGateway extends OnlineBookingGateway {
 
 export function createFakeOnlineBookingGateway(businessName = 'Salon Amélie'): FakeOnlineBookingGateway {
   const profiles = new Map<string, BookingProfile>();
-  const calls = { read: 0, update: 0, setState: 0, upload: 0, remove: 0 };
+  const calls = { read: 0, update: 0, setState: 0, upload: 0, remove: 0, readHours: 0, saveDay: 0 };
   const updates: BookingProfileDraft[] = [];
+  const weeks = new Map<string, readonly WorkingDay[]>();
+  const savedDays: WorkingDay[] = [];
+
+  const weekOf = (businessId: string): WorkingHours => ({
+    timeZone: 'Europe/Paris',
+    days: weeks.get(businessId) ?? ISO_WEEKDAYS.map(closedWorkingDay),
+  });
+  const storeDays = (businessId: string, days: readonly WorkingDay[]) => {
+    const current = weekOf(businessId).days;
+    weeks.set(
+      businessId,
+      current.map((stored) => {
+        const replacement = days.find((day) => day.weekday === stored.weekday);
+        return replacement !== undefined ? normalizeWorkingDay(replacement) : stored;
+      }),
+    );
+  };
   const objects = new Set<string>();
   const takenSlugs = new Set<string>();
   let rule = { publicationOpen: false, plusAccess: false };
@@ -67,10 +105,14 @@ export function createFakeOnlineBookingGateway(businessName = 'Salon Amélie'): 
   return {
     calls,
     updates,
+    savedDays,
     objects,
     takenSlugs,
     failNext(code) {
       pendingFailure = code;
+    },
+    seedWorkingHours(businessId, days) {
+      storeDays(businessId, days);
     },
     setPublicationRule(next) {
       rule = next;
@@ -149,6 +191,30 @@ export function createFakeOnlineBookingGateway(businessName = 'Salon Amélie'): 
 
     imageUrl(objectPath) {
       return `https://media.example.test/${objectPath}`;
+    },
+
+    async readWorkingHours(businessId) {
+      calls.readHours += 1;
+      failIfScripted();
+      return weekOf(businessId);
+    },
+
+    async saveWorkingDay(businessId, day) {
+      calls.saveDay += 1;
+      failIfScripted();
+      const validation = validateWorkingDay(day);
+      if (!validation.valid) {
+        return {
+          status: 'INVALID_DAY',
+          reason:
+            validation.dayIssue ??
+            (validation.intervalIssues.includes('OVERLAP') ? 'OVERLAP' : 'INVALID_INTERVAL'),
+        };
+      }
+      const saved = normalizeWorkingDay(day);
+      savedDays.push(saved);
+      storeDays(businessId, [saved]);
+      return { status: 'UPDATED', workingHours: weekOf(businessId) };
     },
   };
 }

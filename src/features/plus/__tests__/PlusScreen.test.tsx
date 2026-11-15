@@ -220,6 +220,25 @@ describe('PlusScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/cash-register');
   });
 
+  it('offers the working hours under Gestion, right after Réservation en ligne, and opens them', async () => {
+    mockPush.mockClear();
+    const { view } = await renderPlus();
+
+    const row = view.getByTestId('plus-working-hours-settings');
+    expect(row.props.accessibilityLabel).toBe('Horaires, Jours et heures de travail');
+    const rows = view
+      .getAllByRole('button')
+      .map((button) => button.props.testID as string | undefined)
+      .filter((testID) => testID === 'plus-online-booking-settings' || testID === 'plus-working-hours-settings');
+    expect(rows).toEqual(['plus-online-booking-settings', 'plus-working-hours-settings']);
+
+    await act(async () => {
+      fireEvent.press(row);
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/working-hours-settings');
+  });
+
   it('anchors the decorative settings watermark, hidden from accessibility', async () => {
     const { view } = await renderPlus();
 

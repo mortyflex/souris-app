@@ -1,9 +1,13 @@
 // BeautIzzy — online booking gateway boundary
 //
-// The narrow app surface of the public booking profile. The server is
-// authoritative for everything here: the app reads and edits ONE owner-scoped
-// profile and asks for its publication. Nothing goes through the offline
-// sync — every call needs connectivity, and a failed call changes nothing.
+// The narrow app surface of the public booking profile and of the weekly
+// working hours. The server is authoritative for everything here: the app
+// reads and edits ONE owner-scoped profile, asks for its publication, and
+// reads and saves the working hours one day at a time. Nothing goes through
+// the offline sync — every call needs connectivity, and a failed call
+// changes nothing.
+
+import type { WorkingDay } from '@/domain/online-booking';
 
 export interface BookingProfile {
   /** The address of the page (/r/<slug>); absent while the draft has none. */
@@ -67,6 +71,27 @@ export type SetBookingStateResult =
   /** The server holds no verified BeautIzzy Plus access for the owner. */
   | { readonly status: 'ENTITLEMENT_REQUIRED' };
 
+export interface WorkingHours {
+  /** The IANA time zone of the Business: every minute of the week is wall-clock time there. */
+  readonly timeZone: string;
+  /** Seven days, Monday first; a day never configured reads as closed. */
+  readonly days: readonly WorkingDay[];
+}
+
+/** The rule the server says a refused day breaks (online_booking_working_day_issue). */
+export type WorkingDayServerIssue =
+  | 'INVALID_DAY'
+  | 'INTERVAL_REQUIRED'
+  | 'CLOSED_DAY_INTERVALS'
+  | 'TOO_MANY_INTERVALS'
+  | 'INVALID_INTERVAL'
+  | 'OVERLAP';
+
+export type SaveWorkingDayResult =
+  | { readonly status: 'UPDATED'; readonly workingHours: WorkingHours }
+  /** Nothing was written. */
+  | { readonly status: 'INVALID_DAY'; readonly reason?: WorkingDayServerIssue };
+
 export type BookingImageKind = 'logo' | 'cover';
 
 /** The server limit of one public image (bucket `business-public-media`). */
@@ -107,4 +132,8 @@ export interface OnlineBookingGateway {
   removeImage(objectPath: string): Promise<void>;
   /** The public URL of a stored image. */
   imageUrl(objectPath: string): string;
+  /** The owner's weekly working hours. */
+  readWorkingHours(businessId: string): Promise<WorkingHours>;
+  /** Replaces the open state and the intervals of ONE weekday; answers the whole week. */
+  saveWorkingDay(businessId: string, day: WorkingDay): Promise<SaveWorkingDayResult>;
 }

@@ -236,8 +236,10 @@ cloud    aggregate CALENDAR_BLOCK through the existing sync   docs/architecture/
 ## 9. Not implemented
 
 - recurring blocks (a daily lunch break), all-day or multi-day blocks, time off / holidays;
-- working hours, breaks as business settings, an availability policy for online booking
-  (`APPOINTMENTS.md` §20–§21 — a Calendar Block is one future INPUT of that layer, not the layer);
+- an availability policy for online booking (`APPOINTMENTS.md` §20–§21 — a Calendar Block is one
+  future INPUT of that layer, not the layer). The weekly working hours and their breaks exist since
+  Sprint 3A (`docs/architecture/ONLINE_BOOKING.md` §7) as another future input; they never read or
+  constrain a Calendar Block;
 - a staff picker; blocks for several professionals at once;
 - suggestions of the next free slot.
 

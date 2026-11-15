@@ -8,6 +8,7 @@ import {
   isJpeg,
   mapOnlineBookingPostgrestError,
   toBookingProfile,
+  toWorkingHours,
   type SupabaseOnlineBookingApi,
 } from '../online-booking-gateway';
 
@@ -224,5 +225,122 @@ describe('Supabase online booking gateway — public images', () => {
     await gateway.removeImage(LOGO_PATH);
     expect(bucketApi.remove).toHaveBeenCalledWith([LOGO_PATH]);
     expect(gateway.imageUrl(LOGO_PATH)).toBe(`https://project.example/public/${LOGO_PATH}`);
+  });
+});
+
+describe('Supabase online booking gateway — working hours', () => {
+  const closed = (weekday: number) => ({ weekday, is_open: false, intervals: [] });
+  const serverWeek = {
+    time_zone: 'Europe/Paris',
+    days: [
+      {
+        weekday: 1,
+        is_open: true,
+        intervals: [
+          { start_minute: 540, end_minute: 720 },
+          { start_minute: 840, end_minute: 1140 },
+        ],
+      },
+      ...[2, 3, 4, 5, 6, 7].map(closed),
+    ],
+  };
+
+  it('reads the week through the owner RPC only, Monday first', async () => {
+    const { gateway, rpc } = createClient({ data: serverWeek, error: null });
+
+    const hours = await gateway.readWorkingHours(BUSINESS_ID);
+
+    expect(rpc).toHaveBeenCalledWith('online_booking_read_working_hours', { p_business_id: BUSINESS_ID });
+    expect(hours.timeZone).toBe('Europe/Paris');
+    expect(hours.days.map((day) => day.weekday)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(hours.days[0]).toEqual({
+      weekday: 1,
+      isOpen: true,
+      intervals: [
+        { startMinute: 540, endMinute: 720 },
+        { startMinute: 840, endMinute: 1140 },
+      ],
+    });
+    expect(hours.days[1]).toEqual({ weekday: 2, isOpen: false, intervals: [] });
+  });
+
+  it('sends one day in its saved form: ascending, and no interval when closed', async () => {
+    const { gateway, rpc } = createClient({ data: { status: 'UPDATED', ...serverWeek }, error: null });
+
+    await gateway.saveWorkingDay(BUSINESS_ID, {
+      weekday: 1,
+      isOpen: true,
+      intervals: [
+        { startMinute: 840, endMinute: 1140 },
+        { startMinute: 540, endMinute: 720 },
+      ],
+    });
+    await gateway.saveWorkingDay(BUSINESS_ID, {
+      weekday: 2,
+      isOpen: false,
+      intervals: [{ startMinute: 540, endMinute: 720 }],
+    });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'online_booking_save_working_day', {
+      p_business_id: BUSINESS_ID,
+      p_weekday: 1,
+      p_is_open: true,
+      p_intervals: [
+        { start_minute: 540, end_minute: 720 },
+        { start_minute: 840, end_minute: 1140 },
+      ],
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'online_booking_save_working_day', {
+      p_business_id: BUSINESS_ID,
+      p_weekday: 2,
+      p_is_open: false,
+      p_intervals: [],
+    });
+  });
+
+  it('returns the stored week after a save', async () => {
+    const { gateway } = createClient({ data: { status: 'UPDATED', ...serverWeek }, error: null });
+    const result = await gateway.saveWorkingDay(BUSINESS_ID, { weekday: 2, isOpen: false, intervals: [] });
+    expect(result.status).toBe('UPDATED');
+    expect(result.status === 'UPDATED' && result.workingHours.days).toHaveLength(7);
+  });
+
+  it.each([
+    [{ status: 'INVALID_DAY', reason: 'OVERLAP' }, { status: 'INVALID_DAY', reason: 'OVERLAP' }],
+    [{ status: 'INVALID_DAY', reason: 'INTERVAL_REQUIRED' }, { status: 'INVALID_DAY', reason: 'INTERVAL_REQUIRED' }],
+    [{ status: 'INVALID_DAY', reason: 'SOMETHING_NEW' }, { status: 'INVALID_DAY' }],
+  ])('returns the refusal %j and nothing else', async (answer, expected) => {
+    const { gateway } = createClient({ data: answer, error: null });
+    await expect(
+      gateway.saveWorkingDay(BUSINESS_ID, { weekday: 3, isOpen: true, intervals: [{ startMinute: 540, endMinute: 720 }] }),
+    ).resolves.toEqual(expected);
+  });
+
+  it.each([
+    ['a week of six days', { ...serverWeek, days: serverWeek.days.slice(0, 6) }],
+    ['days out of order', { ...serverWeek, days: [closed(2), closed(1), ...[3, 4, 5, 6, 7].map(closed)] }],
+    ['no time zone', { days: serverWeek.days }],
+    ['a fractional minute', { ...serverWeek, days: [{ weekday: 1, is_open: true, intervals: [{ start_minute: 540.5, end_minute: 720 }] }, ...[2, 3, 4, 5, 6, 7].map(closed)] }],
+    ['an end before its start', { ...serverWeek, days: [{ weekday: 1, is_open: true, intervals: [{ start_minute: 720, end_minute: 540 }] }, ...[2, 3, 4, 5, 6, 7].map(closed)] }],
+    ['a minute after midnight', { ...serverWeek, days: [{ weekday: 1, is_open: true, intervals: [{ start_minute: 540, end_minute: 1441 }] }, ...[2, 3, 4, 5, 6, 7].map(closed)] }],
+    ['a missing open state', { ...serverWeek, days: [{ weekday: 1, intervals: [] }, ...[2, 3, 4, 5, 6, 7].map(closed)] }],
+  ])('rejects %s instead of guessing', (_label, answer) => {
+    expect(() => toWorkingHours(answer)).toThrow(OnlineBookingGatewayError);
+  });
+
+  it('rejects a save answer it does not understand', async () => {
+    const { gateway } = createClient({ data: { status: 'SOMETHING_ELSE' }, error: null });
+    await expect(gateway.saveWorkingDay(BUSINESS_ID, { weekday: 1, isOpen: false, intervals: [] })).rejects.toMatchObject({
+      code: 'UNKNOWN',
+    });
+  });
+
+  it('surfaces offline and unauthorized calls as stable codes', async () => {
+    const offline = createClient({ data: null, error: { code: '', message: 'TypeError: Network request failed' } });
+    await expect(offline.gateway.readWorkingHours(BUSINESS_ID)).rejects.toMatchObject({ code: 'NETWORK' });
+    const stranger = createClient({ data: null, error: { code: '42501', message: 'online booking: not the owner of this Business' } });
+    await expect(
+      stranger.gateway.saveWorkingDay(BUSINESS_ID, { weekday: 1, isOpen: false, intervals: [] }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

@@ -10,6 +10,23 @@ export {
   type BookingProfileFields,
 } from './profile';
 export {
+  closedWorkingDay,
+  isIsoWeekday,
+  isMinuteOfDay,
+  isSameWorkingDay,
+  ISO_WEEKDAYS,
+  MINUTES_PER_DAY,
+  normalizeWorkingDay,
+  validateWorkingDay,
+  WORKING_INTERVALS_MAX_PER_DAY,
+  type IsoWeekday,
+  type WorkingDay,
+  type WorkingDayIssue,
+  type WorkingDayValidation,
+  type WorkingInterval,
+  type WorkingIntervalIssue,
+} from './working-hours';
+export {
   BOOKING_SLUG_MAX_LENGTH,
   BOOKING_SLUG_MIN_LENGTH,
   isValidBookingSlug,

@@ -142,6 +142,20 @@ export type Database = {
         Args: { p_business_id: string; p_published: boolean; p_booking_enabled: boolean };
         Returns: Json;
       };
+      online_booking_read_working_hours: {
+        Args: { p_business_id: string };
+        Returns: Json;
+      };
+      online_booking_save_working_day: {
+        Args: {
+          p_business_id: string;
+          p_weekday: number;
+          p_is_open: boolean;
+          /** [{ start_minute, end_minute }, …] — wall-clock minutes after local midnight. */
+          p_intervals: Json;
+        };
+        Returns: Json;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

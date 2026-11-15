@@ -617,7 +617,7 @@ The staff identifier of Appointments and Calendar Blocks comes from ONE source:
 Not implemented yet:
 
 - recurring, all-day or multi-day blocks;
-- working hours, breaks as settings, time off;
+- time off; working hours as an Agenda constraint (they exist for online booking only, §17);
 - an availability policy for online booking.
 
 Do not build these before their dedicated phase.
@@ -690,7 +690,15 @@ Implemented (reference: `docs/architecture/ONLINE_BOOKING.md`): the public booki
 - the website reads ONE `service_role` function from server-only code; `anon` has no access to anything;
 - public images go to the public `business-public-media` bucket; the private `business-media` bucket never becomes public.
 
-Not implemented: working hours, availability, slots, booking creation, customers, payments.
+Implemented (same reference, §7): the weekly working hours — seven days, open or closed, one to four intervals per day, a break being the gap between two — edited in Plus › Horaires.
+
+- they live in `business_working_hours`, OUTSIDE the offline sync, like the profile: the screen needs connectivity, a day is saved at once or not at all;
+- an interval is wall-clock minutes after local midnight in the Business time zone (`business_booking_profiles.time_zone`), never an instant: ONE server rule resolves a date (`online_booking_working_intervals`, DST-safe);
+- ONE validation rule (`online_booking_working_day_issue`) backs the table's CHECK and the save RPC; the app's `validateWorkingDay` holds the same rules;
+- they never constrain manual scheduling: the Agenda, Appointments and Calendar Blocks never read them;
+- the engine contract is granted to no API role, and the website reads nothing of them.
+
+Not implemented: availability, slots, booking creation, customers, payments.
 
 Build each part of it — availability, booking creation, payments, database changes — only in the phase that explicitly requests it.
 

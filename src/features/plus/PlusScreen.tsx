@@ -9,6 +9,10 @@ import { SubscriptionStatusSection } from '@/features/access/status/Subscription
 import { formatBusinessActivityType } from '@/features/business/presentation';
 import { useCurrentBusiness } from '@/features/business/session/CurrentBusinessProvider';
 import { ONLINE_BOOKING_ROW_META, ONLINE_BOOKING_ROW_TITLE } from '@/features/online-booking/presentation';
+import {
+  WORKING_HOURS_ROW_META,
+  WORKING_HOURS_ROW_TITLE,
+} from '@/features/online-booking/working-hours/presentation';
 import { useServiceCatalog } from '@/features/services/session/ServiceCatalogProvider';
 import { usePersistence } from '@/providers/PersistenceProvider';
 import { cashRegisterIcon } from '@/shared/icons/payment-method-icons';
@@ -163,6 +167,32 @@ export function PlusScreen() {
                 <AppText variant="rowTitle">{ONLINE_BOOKING_ROW_TITLE}</AppText>
                 <AppText variant="metadata" style={styles.meta}>
                   {ONLINE_BOOKING_ROW_META}
+                </AppText>
+              </View>
+              <SymbolView
+                name={{ ios: 'chevron.right', android: 'chevron_right' }}
+                size={15}
+                tintColor={semanticColors.foregroundMuted}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${WORKING_HOURS_ROW_TITLE}, ${WORKING_HOURS_ROW_META}`}
+              onPress={() => router.push('/working-hours-settings')}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              testID="plus-working-hours-settings"
+            >
+              <View style={styles.iconSurface}>
+                <SymbolView
+                  name={{ ios: 'clock', android: 'schedule' }}
+                  size={19}
+                  tintColor={semanticColors.accent}
+                />
+              </View>
+              <View style={styles.copy}>
+                <AppText variant="rowTitle">{WORKING_HOURS_ROW_TITLE}</AppText>
+                <AppText variant="metadata" style={styles.meta}>
+                  {WORKING_HOURS_ROW_META}
                 </AppText>
               </View>
               <SymbolView

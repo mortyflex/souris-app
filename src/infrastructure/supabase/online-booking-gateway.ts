@@ -1,17 +1,27 @@
 // BeautIzzy — OnlineBookingGateway bound to the owner RPCs and the public bucket
 //
-// Three SECURITY DEFINER owner RPCs and one PUBLIC Storage bucket
-// (supabase/migrations/20261015120000_create_online_booking_profiles.sql).
-// Uses the ONE publishable-key client with the signed-in owner's session.
-// The public read of the website (`online_booking_public_profile`) is
-// service_role only and is never called from the app.
+// Five SECURITY DEFINER owner RPCs and one PUBLIC Storage bucket
+// (supabase/migrations/20261015120000_create_online_booking_profiles.sql,
+// 20261016120000_create_online_booking_working_hours.sql). Uses the ONE
+// publishable-key client with the signed-in owner's session. The public read
+// of the website (`online_booking_public_profile`) is service_role only and
+// is never called from the app.
 //
 // Images: JPEG only, checked for size BEFORE anything is sent; an object is
 // never overwritten (`upsert: false`) — a replaced image is a new path.
+// Working hours: one day per write, sent in its saved form; the answer is
+// the whole week, parsed strictly (seven days, Monday first, whole minutes).
 // Remote errors are reduced to stable codes; their text never reaches the UI.
 
 import type { PostgrestError } from '@supabase/supabase-js';
 
+import {
+  ISO_WEEKDAYS,
+  isMinuteOfDay,
+  normalizeWorkingDay,
+  type WorkingDay,
+  type WorkingInterval,
+} from '@/domain/online-booking';
 import {
   BOOKING_IMAGE_MAX_BYTES,
   OnlineBookingGatewayError,
@@ -19,8 +29,11 @@ import {
   type BookingProfile,
   type BookingProfileServerField,
   type OnlineBookingGateway,
+  type SaveWorkingDayResult,
   type SetBookingStateResult,
   type UpdateBookingProfileResult,
+  type WorkingDayServerIssue,
+  type WorkingHours,
 } from '@/features/online-booking/gateway';
 
 import type { PhotoFileIO } from './business-media-gateway';
@@ -100,6 +113,45 @@ export function toBookingProfile(data: unknown): BookingProfile {
     ...optional('address', row.address),
     ...optional('logoPath', row.logo_path),
     ...optional('coverPath', row.cover_path),
+  };
+}
+
+const WORKING_DAY_SERVER_ISSUES: readonly WorkingDayServerIssue[] = [
+  'INVALID_DAY',
+  'INTERVAL_REQUIRED',
+  'CLOSED_DAY_INTERVALS',
+  'TOO_MANY_INTERVALS',
+  'INVALID_INTERVAL',
+  'OVERLAP',
+];
+
+function toWorkingInterval(value: unknown): WorkingInterval {
+  const row = asObject(value);
+  const startMinute = row.start_minute;
+  const endMinute = row.end_minute;
+  if (!isMinuteOfDay(startMinute) || !isMinuteOfDay(endMinute) || endMinute <= startMinute) {
+    throw new OnlineBookingGatewayError('UNKNOWN', 'BADRESULT');
+  }
+  return { startMinute, endMinute };
+}
+
+/** Exported for tests: jsonb week → validated working hours. */
+export function toWorkingHours(data: unknown): WorkingHours {
+  const row = asObject(data);
+  const timeZone = row.time_zone;
+  const days = row.days;
+  if (typeof timeZone !== 'string' || timeZone.length === 0 || !Array.isArray(days) || days.length !== 7) {
+    throw new OnlineBookingGatewayError('UNKNOWN', 'BADRESULT');
+  }
+  return {
+    timeZone,
+    days: ISO_WEEKDAYS.map((weekday, index): WorkingDay => {
+      const day = asObject(days[index]);
+      if (day.weekday !== weekday || typeof day.is_open !== 'boolean' || !Array.isArray(day.intervals)) {
+        throw new OnlineBookingGatewayError('UNKNOWN', 'BADRESULT');
+      }
+      return { weekday, isOpen: day.is_open, intervals: day.intervals.map(toWorkingInterval) };
+    }),
   };
 }
 
@@ -196,6 +248,35 @@ export function createSupabaseOnlineBookingGateway(
 
     imageUrl(objectPath) {
       return bucket().getPublicUrl(objectPath).data.publicUrl;
+    },
+
+    async readWorkingHours(businessId) {
+      const { data, error } = await client.rpc('online_booking_read_working_hours', {
+        p_business_id: businessId,
+      });
+      if (error) throw mapOnlineBookingPostgrestError(error);
+      return toWorkingHours(data);
+    },
+
+    async saveWorkingDay(businessId, day): Promise<SaveWorkingDayResult> {
+      const saved = normalizeWorkingDay(day);
+      const { data, error } = await client.rpc('online_booking_save_working_day', {
+        p_business_id: businessId,
+        p_weekday: saved.weekday,
+        p_is_open: saved.isOpen,
+        p_intervals: saved.intervals.map((interval) => ({
+          start_minute: interval.startMinute,
+          end_minute: interval.endMinute,
+        })),
+      });
+      if (error) throw mapOnlineBookingPostgrestError(error);
+      const row = asObject(data);
+      if (row.status === 'INVALID_DAY') {
+        const reason = WORKING_DAY_SERVER_ISSUES.find((candidate) => candidate === row.reason);
+        return { status: 'INVALID_DAY', ...(reason !== undefined ? { reason } : {}) };
+      }
+      if (row.status !== 'UPDATED') throw new OnlineBookingGatewayError('UNKNOWN', 'BADRESULT');
+      return { status: 'UPDATED', workingHours: toWorkingHours(data) };
     },
   };
 }
