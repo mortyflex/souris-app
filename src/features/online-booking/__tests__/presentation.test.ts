@@ -53,8 +53,6 @@ describe('public page address', () => {
   });
 
   it.each([
-    'http://localhost:3000',
-    'http://192.168.1.20:3000',
     'https://staging.beautizzy.fr',
     'https://beautizzy-web.vercel.app',
     'http://beautizzy.fr',
@@ -62,6 +60,18 @@ describe('public page address', () => {
     'https://beautizzy.fr.example.test',
   ])('treats %s as a test address', (origin) => {
     expect(resolvePublicPageLink(origin, 'abc')?.audience).toBe('TEST');
+  });
+
+  it.each([
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://10.0.2.2:3000',
+    'http://192.168.1.20:3000',
+    'http://172.20.0.5:3000',
+    'http://10.1.2.3:3000',
+    'http://mac-de-lea.local:3000',
+  ])('treats %s as a LOCAL development address', (origin) => {
+    expect(resolvePublicPageLink(origin, 'abc')?.audience).toBe('LOCAL');
   });
 });
 
@@ -84,6 +94,28 @@ describe('booking link under the address field', () => {
     const link = describeBookingLink({ ...online, link: testLink });
     expect(link).toMatchObject({ address: testLink.url, audienceLabel: 'Lien de test', copyable: true });
     expect(link.message).toMatch(/Ne la partagez pas avec vos clients/);
+  });
+
+  it('names a local development link as such, distinct from a remote test link', () => {
+    const local = { url: 'http://10.0.2.2:3000/r/maison-lea', audience: 'LOCAL' } as const;
+    const link = describeBookingLink({ ...online, link: local });
+    expect(link).toMatchObject({
+      address: 'http://10.0.2.2:3000/r/maison-lea',
+      audience: 'LOCAL',
+      audienceLabel: 'Lien de test local',
+      copyable: true,
+    });
+    expect(link.message).toMatch(/^Adresse locale de développement/);
+    expect(link.message).toMatch(/Ne la partagez pas avec vos clients/);
+  });
+
+  it('says what a physical device needs instead of showing an address it cannot open', () => {
+    const link = describeBookingLink({ ...online, link: undefined, originStatus: 'DEVICE_ORIGIN_REQUIRED' });
+    expect(link).toMatchObject({ address: '/r/maison-lea', audienceLabel: undefined, copyable: false });
+    expect(link.message).toMatch(/EXPO_PUBLIC_WEB_DEVICE_URL/);
+    expect(describeBookingLink({ ...online, link: undefined, originStatus: 'NOT_CONFIGURED' }).message).toMatch(
+      /pas encore disponible/,
+    );
   });
 
   it('explains why the link of a draft or an offline page cannot be copied', () => {

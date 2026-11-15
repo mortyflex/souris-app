@@ -6,6 +6,7 @@
 // nothing and is never retried behind the professional's back.
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { Linking, Platform } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 import { testBusiness, TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -56,6 +57,15 @@ jest.mock('react-native-safe-area-context', () => {
       React.createElement(View, props, children),
   };
 });
+
+// The iOS Simulator unless a test says otherwise (public-page-url.ts reads it at every render).
+let mockIsPhysicalDevice = false;
+jest.mock('expo-device', () => ({
+  __esModule: true,
+  get isDevice() {
+    return mockIsPhysicalDevice;
+  },
+}));
 
 const mockSetStringAsync = jest.fn<Promise<boolean>, [string]>();
 jest.mock('expo-clipboard', () => ({
@@ -308,17 +318,98 @@ describe('OnlineBookingSettingsScreen — page link', () => {
     expect(messageOf(view)).toBe('Lien copié.');
   });
 
-  it('marks a local or Staging origin as a test link, never as shareable', async () => {
+  it('marks a local origin as a LOCAL test link, never as shareable (iOS Simulator: localhost)', async () => {
     process.env.EXPO_PUBLIC_WEB_URL = 'http://localhost:3000';
     const view = await renderSettings(onlineGateway());
 
     expect(view.getByTestId('online-booking-url').props.children).toBe('http://localhost:3000/r/maison-lea');
-    expect(view.getByText('Lien de test')).toBeTruthy();
+    expect(view.getByText('Lien de test local')).toBeTruthy();
     expect(view.queryByText('Lien public')).toBeNull();
     expect(messageOf(view)).toMatch(/Ne la partagez pas avec vos clients/);
 
     await copy(view);
     expect(mockSetStringAsync).toHaveBeenCalledWith('http://localhost:3000/r/maison-lea');
+  });
+
+  it('marks a Staging origin as a test link, never as shareable', async () => {
+    process.env.EXPO_PUBLIC_WEB_URL = 'https://staging.beautizzy.fr';
+    const view = await renderSettings(onlineGateway());
+
+    expect(view.getByTestId('online-booking-url').props.children).toBe('https://staging.beautizzy.fr/r/maison-lea');
+    expect(view.getByText('Lien de test')).toBeTruthy();
+    expect(messageOf(view)).toMatch(/environnement de test/);
+  });
+
+  describe('on other runtimes', () => {
+    let restorePlatform: (() => void) | undefined;
+    const openURL = jest.spyOn(Linking, 'openURL');
+
+    beforeEach(() => {
+      openURL.mockReset().mockResolvedValue(true);
+    });
+
+    afterEach(() => {
+      restorePlatform?.();
+      restorePlatform = undefined;
+      mockIsPhysicalDevice = false;
+      delete process.env.EXPO_PUBLIC_WEB_DEVICE_URL;
+    });
+
+    const runOn = (os: 'ios' | 'android', physical: boolean) => {
+      restorePlatform = jest.replaceProperty(Platform, 'OS', os).restore;
+      mockIsPhysicalDevice = physical;
+    };
+
+    it('Android Emulator: shows, copies and opens the computer at 10.0.2.2', async () => {
+      runOn('android', false);
+      process.env.EXPO_PUBLIC_WEB_URL = 'http://localhost:3000';
+      const view = await renderSettings(onlineGateway());
+
+      expect(view.getByTestId('online-booking-url').props.children).toBe('http://10.0.2.2:3000/r/maison-lea');
+      expect(view.getByText('Lien de test local')).toBeTruthy();
+      await copy(view);
+      expect(mockSetStringAsync).toHaveBeenCalledWith('http://10.0.2.2:3000/r/maison-lea');
+      await press(view, 'online-booking-open-page');
+      expect(openURL).toHaveBeenCalledWith('http://10.0.2.2:3000/r/maison-lea');
+    });
+
+    it('physical device without a device origin: no unreachable link, and says what to configure', async () => {
+      runOn('android', true);
+      process.env.EXPO_PUBLIC_WEB_URL = 'http://localhost:3000';
+      const view = await renderSettings(onlineGateway());
+
+      expect(view.getByTestId('online-booking-url').props.children).toBe('/r/maison-lea');
+      expect(messageOf(view)).toMatch(/EXPO_PUBLIC_WEB_DEVICE_URL/);
+      expect(view.queryByTestId('online-booking-copy-link')).toBeNull();
+      expect(view.queryByTestId('online-booking-open-page')).toBeNull();
+      expect(view.queryByText(/10\.0\.2\.2|localhost/)).toBeNull();
+    });
+
+    it('physical device with a device origin: shows, copies and opens that host', async () => {
+      runOn('ios', true);
+      process.env.EXPO_PUBLIC_WEB_URL = 'http://localhost:3000';
+      process.env.EXPO_PUBLIC_WEB_DEVICE_URL = 'http://192.168.1.20:3000';
+      const view = await renderSettings(onlineGateway());
+
+      expect(view.getByTestId('online-booking-url').props.children).toBe('http://192.168.1.20:3000/r/maison-lea');
+      expect(view.getByText('Lien de test local')).toBeTruthy();
+      await copy(view);
+      expect(mockSetStringAsync).toHaveBeenCalledWith('http://192.168.1.20:3000/r/maison-lea');
+      await press(view, 'online-booking-open-page');
+      expect(openURL).toHaveBeenCalledWith('http://192.168.1.20:3000/r/maison-lea');
+    });
+
+    it('production origin: the same public link on every runtime', async () => {
+      runOn('android', true);
+      process.env.EXPO_PUBLIC_WEB_URL = 'https://beautizzy.fr';
+      process.env.EXPO_PUBLIC_WEB_DEVICE_URL = 'http://192.168.1.20:3000';
+      const view = await renderSettings(onlineGateway());
+
+      expect(view.getByTestId('online-booking-url').props.children).toBe('https://beautizzy.fr/r/maison-lea');
+      expect(view.getByText('Lien public')).toBeTruthy();
+      await press(view, 'online-booking-open-page');
+      expect(openURL).toHaveBeenCalledWith('https://beautizzy.fr/r/maison-lea');
+    });
   });
 
   it('explains instead of offering a copy while the page is a draft', async () => {

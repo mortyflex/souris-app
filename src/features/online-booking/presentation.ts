@@ -7,7 +7,7 @@
 import type { BookingProfileField } from '@/domain/online-booking';
 
 import type { BookingProfile, BookingProfileServerField } from './gateway';
-import type { PublicPageAudience, PublicPageLink } from './public-page-url';
+import type { PublicPageAudience, PublicPageLink, PublicWebOrigin } from './public-page-url';
 
 export const ONLINE_BOOKING_TITLE = 'Réservation en ligne';
 export const ONLINE_BOOKING_ROW_TITLE = 'Réservation en ligne';
@@ -120,14 +120,33 @@ export interface BookingLinkInput {
   /** The address the server holds. */
   readonly storedSlug: string | undefined;
   readonly publication: BookingPublicationKind;
-  /** The link of the TYPED address; undefined while no website origin is configured. */
+  /** The link of the TYPED address; undefined while no website origin is usable. */
   readonly link: PublicPageLink | undefined;
+  /** Why no origin is usable, when none is (public-page-url.ts). */
+  readonly originStatus?: PublicWebOrigin['status'];
 }
+
+const AUDIENCE_LABELS: Readonly<Record<PublicPageAudience, string>> = {
+  PUBLIC: 'Lien public',
+  TEST: 'Lien de test',
+  LOCAL: 'Lien de test local',
+};
+
+const COPYABLE_MESSAGES: Readonly<Record<PublicPageAudience, string>> = {
+  PUBLIC: 'Partagez ce lien avec vos clients.',
+  TEST: 'Adresse de test : elle ne s’ouvre que dans l’environnement de test. Ne la partagez pas avec vos clients.',
+  LOCAL:
+    'Adresse locale de développement : elle ne s’ouvre que sur cet appareil de test, le site lancé sur votre ordinateur. Ne la partagez pas avec vos clients.',
+};
+
+/** Development builds on a physical device only: localhost and 10.0.2.2 cannot be reached from it. */
+export const ONLINE_BOOKING_DEVICE_ORIGIN_REQUIRED =
+  'Sur un appareil physique, le site de développement n’est joignable qu’à l’adresse de votre ordinateur sur le réseau : renseignez EXPO_PUBLIC_WEB_DEVICE_URL.';
 
 export interface BookingLinkPresentation {
   /** The complete URL, the path alone without a configured website, or undefined without an address. */
   readonly address: string | undefined;
-  /** « Lien public » / « Lien de test »; undefined when no complete URL exists. */
+  /** « Lien public » / « Lien de test » / « Lien de test local »; undefined when no complete URL exists. */
   readonly audienceLabel: string | undefined;
   readonly audience: PublicPageAudience | undefined;
   /** What the link is, or why it cannot be copied yet. */
@@ -139,11 +158,12 @@ export interface BookingLinkPresentation {
 /**
  * THE reading of the link under the address field. A link is copyable only
  * when it opens the page as the server serves it now: the page is online,
- * the typed address is the stored one, and a website origin is configured.
- * A test origin stays copyable — for the person testing — and says so.
+ * the typed address is the stored one, and a website origin is usable. A
+ * test or local origin stays copyable — for the person testing — and says so;
+ * only the production website is ever presented as shareable.
  */
 export function describeBookingLink(input: BookingLinkInput): BookingLinkPresentation {
-  const { typedSlug, storedSlug, publication, link } = input;
+  const { typedSlug, storedSlug, publication, link, originStatus } = input;
   if (typedSlug.length === 0) {
     return {
       address: undefined,
@@ -156,12 +176,16 @@ export function describeBookingLink(input: BookingLinkInput): BookingLinkPresent
   const base = {
     address: link?.url ?? `/r/${typedSlug}`,
     audience: link?.audience,
-    audienceLabel: link === undefined ? undefined : link.audience === 'PUBLIC' ? 'Lien public' : 'Lien de test',
+    audienceLabel: link === undefined ? undefined : AUDIENCE_LABELS[link.audience],
   };
   const blocked = (message: string): BookingLinkPresentation => ({ ...base, message, copyable: false });
 
   if (link === undefined) {
-    return blocked('L’adresse complète de votre page n’est pas encore disponible dans cette version de l’application.');
+    return blocked(
+      originStatus === 'DEVICE_ORIGIN_REQUIRED'
+        ? ONLINE_BOOKING_DEVICE_ORIGIN_REQUIRED
+        : 'L’adresse complète de votre page n’est pas encore disponible dans cette version de l’application.',
+    );
   }
   if (typedSlug !== storedSlug) {
     return blocked('Enregistrez vos modifications pour utiliser cette adresse.');
@@ -172,12 +196,5 @@ export function describeBookingLink(input: BookingLinkInput): BookingLinkPresent
   if (publication === 'OFFLINE') {
     return blocked('Ce lien ne fonctionne pas pour le moment : votre page est hors ligne.');
   }
-  return {
-    ...base,
-    copyable: true,
-    message:
-      link.audience === 'PUBLIC'
-        ? 'Partagez ce lien avec vos clients.'
-        : 'Adresse de test : elle ne s’ouvre que dans l’environnement de test. Ne la partagez pas avec vos clients.',
-  };
+  return { ...base, copyable: true, message: COPYABLE_MESSAGES[link.audience] };
 }

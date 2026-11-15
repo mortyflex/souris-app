@@ -83,8 +83,25 @@ Publication stays closed until ALL of these hold:
 5. The website is configured (`web/.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
 6. The mobile build knows the public origin (`EXPO_PUBLIC_WEB_URL`); without it the app shows the
    path of the page only and offers no link.
-   Only `https://beautizzy.fr` is presented as a link to share; any other origin is labelled
-   « Lien de test ». « Copier le lien » exists only for the stored address of a page that is online.
+   Only `https://beautizzy.fr` is presented as a link to share (« Lien public »); a remote test
+   origin is labelled « Lien de test », the developer's own computer « Lien de test local ».
+   « Copier le lien » exists only for the stored address of a page that is online.
+
+   ONE resolver decides the origin of « Voir ma page », the address shown and « Copier le lien »
+   (`src/features/online-booking/public-page-url.ts`). In a development build, an origin naming
+   « this machine » (`localhost`, `127.0.0.1`, `10.0.2.2`) is re-targeted for the runtime:
+
+   | Runtime | `EXPO_PUBLIC_WEB_URL=http://localhost:3000` opens |
+   | --- | --- |
+   | iOS Simulator | `http://localhost:3000` |
+   | standard Android Emulator | `http://10.0.2.2:3000` |
+   | physical device | `EXPO_PUBLIC_WEB_DEVICE_URL` (e.g. `http://192.168.1.20:3000`); without it, no link and a notice — `10.0.2.2` is never assumed |
+
+   A private-network origin (`192.168.x.x`, `10.x`, `172.16–31.x`, `*.local`) is used as
+   configured. A release build never shows a local origin (it reads as not configured) and never
+   reads `EXPO_PUBLIC_WEB_DEVICE_URL`; production and remote test origins are identical on every
+   runtime. The web dev server accepts the emulator's live-reload socket from `10.0.2.2`
+   (`allowedDevOrigins`, `web/next.config.ts`, development only).
 
 Closing again is one statement (`…_enabled(false)`): every page goes offline, nothing is rewritten.
 

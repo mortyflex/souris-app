@@ -89,7 +89,7 @@ import {
   ONLINE_BOOKING_UNSAVED_TITLE,
   type BookingPublicationKind,
 } from '../presentation';
-import { readPublicPageLink } from '../public-page-url';
+import { publicPageLinkOf, readPublicWebOrigin } from '../public-page-url';
 import { useOnlineBookingGateway } from '../session/OnlineBookingGatewayProvider';
 
 import { BookingProfilePreview } from './BookingProfilePreview';
@@ -266,13 +266,17 @@ export function OnlineBookingSettingsScreen() {
 
   const busy = saving || changingState || preparingImage !== undefined;
   const status = describeBookingPublication(profile);
-  const pageUrl = profile.slug !== undefined ? readPublicPageLink(profile.slug)?.url : undefined;
+  // ONE origin for « Voir ma page », the address shown and « Copier le lien »,
+  // resolved for the runtime that will open it (public-page-url.ts).
+  const webOrigin = readPublicWebOrigin();
+  const pageUrl = profile.slug !== undefined ? publicPageLinkOf(webOrigin, profile.slug)?.url : undefined;
   const typedSlug = fields.slug.trim();
   const link = describeBookingLink({
     typedSlug,
     storedSlug: profile.slug,
     publication: status.kind,
-    link: typedSlug.length > 0 ? readPublicPageLink(typedSlug) : undefined,
+    link: typedSlug.length > 0 ? publicPageLinkOf(webOrigin, typedSlug) : undefined,
+    originStatus: webOrigin.status,
   });
 
   const copyLink = async () => {

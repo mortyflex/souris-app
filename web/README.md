@@ -24,6 +24,11 @@ Run every command from `web/`, never from the repository root.
 | `npm run test` | Vitest (`src/**/*.test.ts(x)`) |
 | `npm run check` | Lint, type check, tests and build — the validation to run before a review |
 
+From the mobile app in development: the iOS Simulator opens http://localhost:3000, the standard
+Android Emulator http://10.0.2.2:3000 (accepted by `allowedDevOrigins` in `next.config.ts`), and a
+physical device the address set in the mobile `EXPO_PUBLIC_WEB_DEVICE_URL`
+(`docs/architecture/ONLINE_BOOKING.md` §4).
+
 ## Environment variables
 
 Copy `.env.example` to `.env.local` (gitignored). The marketing pages need nothing; the public profile pages need the two Supabase values marked below.
