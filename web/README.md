@@ -39,7 +39,8 @@ Copy `.env.example` to `.env.local` (gitignored). The marketing pages need nothi
 | `NEXT_PUBLIC_CONTACT_EMAIL` | public | Contact link on the marketing pages; empty hides it |
 | `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase project URL — **required by `/r/[slug]`** (lookup, image URLs) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | Supabase publishable key (unused: the browser never calls Supabase) |
-| `SUPABASE_SECRET_KEY` | server only | Supabase secret key — **required by `/r/[slug]`**, read by the profile lookup only |
+| `SUPABASE_SECRET_KEY` | server only | Supabase secret key — **required by `/r/[slug]`**, read by the profile and availability lookups only |
+| `ONLINE_BOOKING_AVAILABILITY_PREVIEW` | server only | `enabled` shows the read-only availability preview on `/r/[slug]/reserver` — **development / Staging only**, ignored on the production website |
 
 Rules:
 
@@ -53,13 +54,15 @@ Rules:
 | --- | --- |
 | `/` | Marketing homepage |
 | `/r/[slug]` | Public profile of a professional, read from Supabase on every request |
-| `/r/[slug]/reserver` | Future booking flow — a "not yet available" notice for an online profile |
+| `/r/[slug]/reserver` | Future booking flow — a "not yet available" notice for an online profile; with the preview switch (Staging / development), a read-only availability preview |
 
 Public profiles live under `/r/` so that a slug can never collide with a marketing or legal page. Future legal pages (privacy, terms, legal notice) go in `src/app/(marketing)/` and inherit the marketing header and footer.
 
 `/r/[slug]` shows only what the professional published in the mobile application (name, description, contact, logo, cover) and whether she accepts online bookings. No availability, form or reservation exists behind it. Both routes answer a real HTTP 404 when no page is online at the address — unknown, malformed, draft, unpublished, or offline for lack of a verified subscription — and an error (never a 404) when the lookup itself fails. They are excluded from search indexing for now.
 
 The lookup (`src/features/public-profile/get-public-profile.ts`) is server-only: it calls the one database function reserved to the website, `online_booking_public_profile`, with the secret key. Contract and security model: `../docs/architecture/ONLINE_BOOKING.md`.
+
+The availability preview (`src/features/availability/`, `src/components/booking/availability-preview.tsx`) calls `online_booking_public_availability` the same way. It shows services, dates and start times as labels only — no form, nothing to book — and only when the page accepts bookings. A displayed time is never a guarantee (`../docs/architecture/ONLINE_BOOKING.md` §8).
 
 Cache Components is off (`next.config.ts`): with it, a request-time lookup runs after the shell is sent and the status could only be 200.
 

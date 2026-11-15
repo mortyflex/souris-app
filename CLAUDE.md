@@ -687,7 +687,7 @@ Implemented (reference: `docs/architecture/ONLINE_BOOKING.md`): the public booki
 - it lives in `business_booking_profiles`, OUTSIDE the offline sync: never an aggregate, never queued; the settings need connectivity;
 - the server alone decides publication: its own operator switch (disabled by default) AND verified Plus access (`subscription_has_plus_access`), re-checked at every public read;
 - never gate it on the app's subscription state, and never on `business_mutation_is_entitled`;
-- the website reads ONE `service_role` function from server-only code; `anon` has no access to anything;
+- the website reads only narrowly scoped `service_role` functions keyed by the slug (the profile, the availability), from server-only code; `anon` has no access to anything;
 - public images go to the public `business-public-media` bucket; the private `business-media` bucket never becomes public.
 
 Implemented (same reference, §7): the weekly working hours — seven days, open or closed, one to four intervals per day, a break being the gap between two — edited in Plus › Horaires.
@@ -698,9 +698,18 @@ Implemented (same reference, §7): the weekly working hours — seven days, open
 - they never constrain manual scheduling: the Agenda, Appointments and Calendar Blocks never read them;
 - the engine contract is granted to no API role, and the website reads nothing of them.
 
-Not implemented: availability, slots, booking creation, customers, payments.
+Implemented (same reference, §8): the READ-ONLY availability engine — the start times that could be offered for one bookable service on one local date.
 
-Build each part of it — availability, booking creation, payments, database changes — only in the phase that explicitly requests it.
+- ONE slot rule (`online_booking_compute_slots`) and ONE place for the default rules (`online_booking_rules`: 15-minute local grid, 24 h notice, 30-day horizon);
+- conservative: an appointment blocks its full span, processing included, unless `CANCELLED`, `NO_SHOW` or deleted; calendar blocks block; the whole service fits inside one working interval;
+- a service is bookable only if opted in (`business_bookable_services`, server-side, absent = not bookable);
+- ONE website entry point, `online_booking_public_availability(slug, service, date)`, `service_role` only, answering only for a page that accepts bookings;
+- the website shows it only as a development / Staging preview (`ONLINE_BOOKING_AVAILABILITY_PREVIEW`), never on the production website, never bookable;
+- a displayed slot is never a guarantee: the server cannot see unsynchronized appointments; booking creation must lock and revalidate with `online_booking_slot_is_available`.
+
+Not implemented: booking creation, holding a slot, customers, payments, the editor of bookable services.
+
+Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
 
 Do not build an online booking engine speculatively.
 

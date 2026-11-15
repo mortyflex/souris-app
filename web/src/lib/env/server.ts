@@ -7,8 +7,9 @@ import "server-only";
  * module, so a secret can never reach the browser bundle. Secrets are read
  * lazily, at the moment a server module needs one, never at import time.
  *
- * One caller today: the public profile lookup
- * (src/features/public-profile/get-public-profile.ts).
+ * Callers: the public profile lookup
+ * (src/features/public-profile/get-public-profile.ts), the availability
+ * lookup and its preview switch (src/features/availability/).
  */
 
 export class MissingServerEnvError extends Error {
@@ -28,4 +29,10 @@ function required(name: string): string {
 export const serverEnv = {
   /** Supabase SECRET key (sb_secret_…) of the server-side lookups. Never prefixed NEXT_PUBLIC_. */
   supabaseSecretKey: () => required("SUPABASE_SECRET_KEY"),
+  /**
+   * Development / Staging only: `enabled` shows the read-only availability
+   * preview on /r/<slug>/reserver. Absent or anything else: the route keeps its
+   * « pas encore disponible » notice. Never set on the production website.
+   */
+  availabilityPreviewSwitch: () => process.env.ONLINE_BOOKING_AVAILABILITY_PREVIEW?.trim() === "enabled",
 } as const;

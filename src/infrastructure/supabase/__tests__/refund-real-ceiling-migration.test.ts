@@ -29,13 +29,14 @@ function functionBody(sql: string, name: string): string {
 const normalize = (sql: string) => sql.replace(/\s+/g, ' ').trim();
 
 describe('sale adjustments — no new refund after an over-refund (20261013120000)', () => {
-  it('is ONE forward-only migration; only its write-scoped fix (20261014120000) and the unrelated online booking profile and working hours follow it', () => {
+  it('is ONE forward-only migration; only its write-scoped fix (20261014120000) and the unrelated online booking profile, working hours and availability follow it', () => {
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
     expect(names.slice(names.indexOf(MIGRATION_NAME) + 1)).toEqual([
       '20261014120000_identify_new_refund_by_write.sql',
       // Unrelated: they only add objects and define no sync function (online-booking-*migration.test.ts).
       '20261015120000_create_online_booking_profiles.sql',
       '20261016120000_create_online_booking_working_hours.sql',
+      '20261017120000_create_online_booking_availability.sql',
     ]);
     expect(names.filter((name) => name.includes('over_refund'))).toEqual([MIGRATION_NAME]);
   });

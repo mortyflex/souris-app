@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -83,5 +84,43 @@ describe("/r/[slug]/reserver", () => {
     const { bookingPage } = await load();
     await expect(digestOf(bookingPage.default(props("nobody-here")))).resolves.toBe(NOT_FOUND);
     await expect(digestOf(bookingPage.default(props("Bad_Slug")))).resolves.toBe(NOT_FOUND);
+  });
+
+  it("without the preview switch, never asks for availability", async () => {
+    const fetchMock = vi.fn(async () => respond({ slug: "chez-amelie", name: "Chez Amélie", booking_enabled: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { bookingPage } = await load();
+    const html = renderToStaticMarkup(
+      await bookingPage.default({ ...props("chez-amelie"), searchParams: Promise.resolve({ service: "svc-coupe" }) }),
+    );
+    expect(html).toContain("Pas encore disponible");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toMatch(/online_booking_public_profile$/);
+  });
+
+  it("on the production website the switch is ignored", async () => {
+    vi.stubEnv("ONLINE_BOOKING_AVAILABILITY_PREVIEW", "enabled");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://beautizzy.fr");
+    vi.stubGlobal("fetch", vi.fn(async () => respond({ slug: "chez-amelie", name: "Chez Amélie", booking_enabled: true })));
+    const { bookingPage } = await load();
+    expect(renderToStaticMarkup(await bookingPage.default(props("chez-amelie")))).toContain("Pas encore disponible");
+  });
+
+  it("with the preview switch, streams the validated preview under its own Suspense — and still answers a real 404", async () => {
+    vi.stubEnv("ONLINE_BOOKING_AVAILABILITY_PREVIEW", "enabled");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000");
+    vi.stubGlobal("fetch", vi.fn(async () => respond({ slug: "chez-amelie", name: "Chez Amélie", booking_enabled: true })));
+    const { bookingPage } = await load();
+    const element = (await bookingPage.default({
+      ...props("chez-amelie"),
+      searchParams: Promise.resolve({ service: "svc-coupe", date: "2026-02-30" }),
+    })) as ReactElement<{ fallback: ReactElement; children: ReactElement<{ query: unknown }> }>;
+    // The malformed date is dropped before anything reaches the server.
+    expect(element.props.children.props.query).toEqual({ serviceId: "svc-coupe" });
+    expect(renderToStaticMarkup(element.props.fallback)).toContain("Chargement des disponibilités…");
+
+    vi.stubGlobal("fetch", vi.fn(async () => respond(null)));
+    const again = await load();
+    await expect(digestOf(again.bookingPage.default(props("nobody-here")))).resolves.toBe(NOT_FOUND);
   });
 });

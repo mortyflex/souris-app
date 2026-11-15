@@ -37,7 +37,7 @@ describe('Phase 6.5C step 8 — client consent withdrawal migration', () => {
     const index = names.indexOf(MIGRATION_NAME);
     expect(names[index - 1]).toBe(STEP6_MIGRATION_NAME);
     // Only later, unrelated phases follow it (multi-profession Step 3: service categories; sale adjustments
-    // and their exceptional outflows; the online booking profile and working hours, which only add objects).
+    // and their exceptional outflows; the online booking profile, working hours and availability, which only add objects).
     expect(names.slice(index + 1)).toEqual([
       '20261010120000_add_service_categories_and_descriptions.sql',
       '20261011120000_create_sale_adjustments.sql',
@@ -46,6 +46,7 @@ describe('Phase 6.5C step 8 — client consent withdrawal migration', () => {
       '20261014120000_identify_new_refund_by_write.sql',
       '20261015120000_create_online_booking_profiles.sql',
       '20261016120000_create_online_booking_working_hours.sql',
+      '20261017120000_create_online_booking_availability.sql',
     ]);
     expect(names.filter((name) => name.includes('consent_withdrawal'))).toEqual([MIGRATION_NAME]);
     expect(step4).not.toMatch(/sync_withdraw_client_sms_consent/);

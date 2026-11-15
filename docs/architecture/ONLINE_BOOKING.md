@@ -1,8 +1,10 @@
 # BeautIzzy — Online booking
 
-Status: **Sprint 3A — weekly working hours** (on top of Sprint 2 — public profile and booking
-settings). No availability, no slot, no booking creation, no customer, no payment exists.
-Publication is closed by default. The Sprint 3A migration is applied to no Supabase project.
+Status: **Sprint 3B — read-only availability engine** (on top of Sprint 3A — weekly working
+hours — and Sprint 2 — public profile and booking settings). Start times can be COMPUTED; nothing
+can be booked: no booking creation, no customer, no payment exists. Publication is closed by
+default, and the website shows availability only in a development / Staging preview (§8.6). The
+Sprint 3B migration is applied to no Supabase project.
 
 ## 1. Shape
 
@@ -11,6 +13,9 @@ Expo app (professional)                 Supabase                          web/ (
 Plus › Réservation en ligne  ──RPC──▶  business_booking_profiles  ◀──RPC──  /r/<slug>  (server-only)
         images ──Storage──▶  business-public-media (public bucket) ──public URL──▶ <img>
 Plus › Horaires              ──RPC──▶  business_working_hours        (nothing reads it publicly)
+                     appointments, calendar blocks, services (synced) ─┐
+                     business_bookable_services (opt-in)              ├▶ availability ◀──RPC── /r/<slug>/reserver
+                                                                       ┘   (read-only)          (preview only)
 ```
 
 - One row per Business in `public.business_booking_profiles`
@@ -26,8 +31,8 @@ Plus › Horaires              ──RPC──▶  business_working_hours       
 | --- | --- |
 | `anon` | nothing — no grant on any object of the feature |
 | owner (`authenticated`) | `online_booking_read_profile`, `online_booking_update_profile`, `online_booking_set_state`, `online_booking_read_working_hours`, `online_booking_save_working_day`; Storage select/insert/delete inside her own media folder |
-| website (`service_role`, secret key, server-only) | `online_booking_public_profile(slug)` only |
-| operator (SQL Editor) | `online_booking_set_publication_enabled(boolean)`; `online_booking_working_intervals(…)` (§7.4) |
+| website (`service_role`, secret key, server-only) | `online_booking_public_profile(slug)` and `online_booking_public_availability(slug, service, date)` (§8) only |
+| operator (SQL Editor) | `online_booking_set_publication_enabled(boolean)`; `online_booking_working_intervals(…)` (§7.4); the internal availability functions and the `business_bookable_services` opt-ins (§8) |
 
 - The table has RLS enabled, **no policy and no grant**: every access goes through a
   `SECURITY DEFINER` function with `search_path = ''`, revoked from `public`, `anon`,
@@ -110,21 +115,32 @@ Closing again is one statement (`…_enabled(false)`): every page goes offline, 
 - Mobile (Jest): `src/domain/online-booking`, `src/features/online-booking` (the working hours
   screen included), `src/infrastructure/supabase/__tests__/online-booking-*.test.ts` (gateway,
   images, the two source-level migration guards).
-- Web (Vitest, `web/`): slug, answer parsing, the server lookup, page rendering and 404.
+- Web (Vitest, `web/`): slug, answer parsing, the server lookups (profile and availability), the
+  preview switch, page rendering and 404, the availability preview (slots, empty, unknown service,
+  out of window, loading, error, inactive).
 - SQL behavior: an in-process Postgres harness outside the repository (like the other migrations) —
   ownership, slug uniqueness, field separation, publication gating, lapse, Storage policies,
   backward compatibility; for Sprint 3A, ownership, day validation, overlaps, closed days,
   persistence, the CHECK against any writer, DST resolution, session-time-zone independence,
   cascade and backward compatibility (no existing object or row changed; the Sprint 2 harness
-  still passes with Sprint 3A applied).
+  still passes with Sprint 3A applied); for Sprint 3B, every rule of §8.2 on a populated world
+  with deterministic clocks — normal day, closed day, break, exact end fit, crossing a break,
+  overlapping appointments, CANCELLED / NO_SHOW / deleted, COMPLETED / IN_PROGRESS, another staff
+  member, an overnight appointment, calendar blocks, durations, notice, horizon, past, empty,
+  midnight, year change, both Paris DST Sundays, session time zones, the Business time zone —
+  plus the gating, the grants, malformed input, isolation between Businesses, the absence of
+  private fields, the revalidation function and backward compatibility (the Sprint 2 and 3A
+  harnesses still pass with Sprint 3B applied).
 
 ## 6. Not implemented
 
-Availability, slots, booking creation, customers, deposits, Stripe, notifications to the
+Booking creation, holding a slot, customers, deposits, Stripe, notifications to the
 professional, customer cancellation, slug history or redirects, a time-zone editor, search
 indexing of public pages, server-side cleanup of unreferenced images; for working hours: per-staff
 hours, exceptional days and time off, overnight intervals, showing the hours on the public page,
-and any effect on the Agenda.
+and any effect on the Agenda; for availability: the professional's editor of bookable services
+and of the booking rules, parallel booking during processing time, multi-staff availability, a
+public (non-preview) booking page, rate limiting at the edge.
 
 ## 7. Weekly working hours (Sprint 3A)
 
@@ -198,4 +214,114 @@ two local dates (inclusive, at most 92), chronological, resolved by §7.3.
   lead time and horizon belong to the future engine.
 - It asks nothing about publication or subscription: its caller decides.
 - No EXECUTE grant: only a SECURITY DEFINER function owned by the table owner (the future engine)
-  or the SQL Editor can call it. The ONE website read stays `online_booking_public_profile`.
+  or the SQL Editor can call it. Sprint 3B consumes it from `online_booking_compute_slots` (§8),
+  without granting it to anyone.
+
+## 8. Availability engine (Sprint 3B) — read-only
+
+`supabase/migrations/20261017120000_create_online_booking_availability.sql`. It computes the start
+times that COULD be offered; it never writes an appointment and never holds a slot.
+
+### 8.1 What the engine reads — findings of the inspection (November 2026)
+
+| Concern | Where it lives | What the engine relies on |
+| --- | --- | --- |
+| Publication | `business_booking_profiles` (Sprint 2) | `published`, `booking_enabled`, `time_zone`; THE rule `online_booking_may_be_public` (operator switch + `subscription_has_plus_access`) |
+| Working hours | `business_working_hours` (Sprint 3A) | `online_booking_working_intervals(business, date, date)` — wall-clock minutes resolved in the Business time zone, DST-safe, zero grants (kept) |
+| Services | synced `services` + `service_phases` | `active`, `deleted_at` (sync tombstone), ordered phases with `duration_minutes` ≥ 0 and `requires_staff`; a service's duration is the sum of its phases (`calculateAppointmentTimeline`) |
+| Online bookability | **did not exist** — `SERVICES.md` §12 is design only | new opt-in table `business_bookable_services` (§8.3) |
+| Appointments | synced `appointments` + `appointment_items` + `appointment_phases` | `start_at`, `status`, `deleted_at`; end = `start_at` + Σ every phase of every item (items and phases are strictly sequential) |
+| Blocking statuses | `doesAppointmentOccupySchedule` (`src/domain/appointments/occupancy.ts`) | every status except `CANCELLED` and `NO_SHOW` occupies the schedule (`SCHEDULED`, `CONFIRMED`, `IN_PROGRESS`, `COMPLETED`); no new status |
+| Calendar blocks | synced `calendar_blocks` | `[start_at, end_at)`, `deleted_at` |
+| Staff | `staff_member_id` text on appointments and blocks; ONE placeholder in the app (`current-staff-member.ts`), no staff table | one professional per Business: every appointment and block of the Business occupies her, whatever the id |
+| Concurrency of the sync | per-row `FOR UPDATE` + `sync_version` inside `sync_push_aggregate`; no Business-wide lock | nothing changed; see §8.7 |
+| Website access | `web/src/lib/env/server.ts` (`server-only`), RPC over PostgREST with the secret key | a second narrowly scoped `service_role` function |
+
+No approved slot rule existed (`APPOINTMENTS.md` §21 lists future inputs only), so the sprint's
+defaults apply.
+
+### 8.2 Rules
+
+THE default rules live in ONE function, `online_booking_rules()`:
+
+| Rule | Value |
+| --- | --- |
+| start grid | every 15 minutes of LOCAL wall-clock time (09:00, 09:15 …) |
+| minimum notice | 24 hours: a start is offered only if `start ≥ now + 24 h` |
+| horizon | the last bookable local date is today + 30 days (business time zone) |
+| service length | 1 to 720 minutes (sum of its catalog phases) |
+
+The window is `[local date of (now + notice), local today + 30]`. A slot is offered only when:
+
+1. the page is published, accepts bookings (`booking_enabled`) and passes THE publication rule;
+2. the service is opted in, active, not deleted, and lasts 1–720 minutes;
+3. the local date is inside the window, and the start is at least the notice after now;
+4. the WHOLE service `[start, start + duration)` fits inside ONE working interval of that date —
+   so it never crosses a break, a closed day or midnight;
+5. it intersects no busy interval: an appointment occupies its **full span** (processing phases
+   included — conservative MVP, no parallel booking), unless `CANCELLED`, `NO_SHOW` or deleted;
+   an appointment of length 0 occupies nothing; a calendar block occupies `[start_at, end_at)`.
+
+Ends are exclusive everywhere: a slot may end exactly when an appointment, a block or a working
+interval starts or ends.
+
+### 8.3 Bookable services — a deliberate deviation from `SERVICES.md` §12
+
+`SERVICES.md` §12 designs online visibility as a synced `services.online_visibility` column. That
+requires a SERVICE sync change, which Sprint 3B excludes. The opt-in therefore lives server-side,
+like the profile and the hours: `business_bookable_services (business_id, service_id)`, FK to the
+synced service (cascade), absent = not bookable. There is no writer yet besides the operator's SQL
+Editor; the professional's editor (and the final representation) is a decision for a later sprint.
+
+### 8.4 Time
+
+- Candidates are LOCAL minutes of the date, turned into instants by THE Sprint 3A rule
+  `(date + minutes) AT TIME ZONE tz` — never the session or the server time zone.
+- Spring forward: a candidate that does not come back as the same wall-clock time does not exist
+  and is never offered (29 March 2026: 02:00–02:45 are skipped; 01:45 and 03:00 are offered).
+- Fall back: a wall-clock time that exists twice is offered ONCE, as its standard-time occurrence
+  (25 October 2026: « 02:00 » is 01:00Z, never also 00:00Z). No duplicate start, no duplicate label.
+- Durations are real minutes: on a DST Sunday a working interval has its real length (§7.3).
+- The answer carries UTC instants (`…Z`) for a future booking and the local label (« 09:15 ») for
+  display: web and mobile show the same wall-clock time without any time-zone arithmetic.
+
+### 8.5 Security
+
+- ONE public entry point, `online_booking_public_availability(p_slug, p_service_id, p_date)`,
+  `service_role` only, keyed by the public slug: no Business id and no staff id is accepted. It
+  answers `NULL` — the same `NULL` — for an unknown or malformed slug, a draft, a page that does
+  not accept bookings, a lapsed subscription and any slug while the operator switch is off.
+- Every other function and the new table have no grant at all; `anon` and `authenticated` reach
+  nothing. `online_booking_working_intervals` keeps its zero-grant boundary.
+- The answer names services (id, name, duration), the window and start times — never a Business
+  id, a client, an appointment, a note, a price or a staff member. A private, inactive, deleted or
+  foreign service gets the same `UNKNOWN_SERVICE`.
+- Bounds: one service, one local date per call; at most 96 candidates; appointments read through
+  the `(business_id, start_at)` index from 7 days before the day; every input validated (the web
+  validates the slug, the service id and the date before calling).
+
+### 8.6 Web — a read-only preview, development and Staging only
+
+- `/r/<slug>/reserver` keeps the « pas encore disponible » notice everywhere by default.
+- With `ONLINE_BOOKING_AVAILABILITY_PREVIEW=enabled` (server-only variable) — and never when
+  `NEXT_PUBLIC_SITE_URL` is the production website — it shows « Aperçu »: the bookable services,
+  the dates of the window and the start times of the chosen day as plain labels, with an empty
+  state, a loading state (Suspense keyed by the selection) and an error state. No form, no button
+  that books, no customer field; the page says a displayed time is never reserved.
+- The profile lookup completes before anything streams, so an unknown address still answers a
+  real HTTP 404.
+- No rate limiting exists at the edge: the endpoint is bounded per request and, in production,
+  not exposed at all. A public booking page must add rate limiting (or a challenge) first.
+
+### 8.7 What the server cannot see — and the booking-creation contract
+
+- An appointment created on a device and not synchronized yet is invisible to the server. A
+  displayed slot is therefore never a guarantee, and the website never says it is.
+- The future booking creation must, in ONE transaction: lock the Business (e.g. `select … from
+  business_booking_profiles where business_id = $1 for update`), call
+  `online_booking_slot_is_available(business, service, starts_at, now())` (the SAME rule as the
+  displayed slots), then create the request or the appointment. The professional's own sync push
+  does not take that lock: an overlap with a not-yet-synchronized appointment stays possible, which
+  manual scheduling already allows (`CLAUDE.md` §16); the confirmation step must surface it.
+- `online_booking_compute_slots(business, service, date, now)` takes `now` explicitly: deterministic
+  and testable; the public entry point passes `now()`.

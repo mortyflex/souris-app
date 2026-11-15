@@ -38,11 +38,12 @@ describe('sale adjustments — the new refund is the row the write inserted (202
     const names = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort();
     const index = names.indexOf(MIGRATION_NAME);
     expect(names[index - 1]).toBe(PREVIOUS_BREACH);
-    // Only the online booking profile and working hours follow; they add objects and replace none of these functions.
+    // Only the online booking profile, working hours and availability follow; they add objects and replace none of these functions.
     const later = names.slice(index + 1);
     expect(later).toEqual([
       '20261015120000_create_online_booking_profiles.sql',
       '20261016120000_create_online_booking_working_hours.sql',
+      '20261017120000_create_online_booking_availability.sql',
     ]);
     for (const name of later) {
       const source = readFileSync(join(MIGRATIONS_DIR, name), 'utf8').replace(/^\s*--.*$/gm, '');

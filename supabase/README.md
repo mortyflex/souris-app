@@ -1359,3 +1359,98 @@ select * from public.online_booking_working_intervals('<business id>', '2026-03-
 
 Production only with the user's explicit authorization for that change, after the Staging
 validation.
+
+## Online booking availability (Sprint 3B) — NOT applied
+
+`migrations/20261017120000_create_online_booking_availability.sql` — BY HAND, after the working
+hours migration (it calls `online_booking_working_intervals`). Contract, rules, time policy and
+security model: `docs/architecture/ONLINE_BOOKING.md` §8.
+
+It only ADDS objects: the opt-in table `business_bookable_services` (RLS, no policy, no grant, FK
+to the synced service), seven internal read-only functions (no grant) and ONE website read,
+`online_booking_public_availability(slug, service, date)` (`service_role` only). It writes no
+row; appointments, calendar blocks, services, profiles, hours, flags and the sync are untouched.
+Installed builds are unaffected. Safe to re-run.
+
+After applying, verify:
+
+```sql
+select relrowsecurity from pg_class where oid = 'public.business_bookable_services'::regclass;  -- true
+select grantee, privilege_type from information_schema.table_privileges
+ where table_schema = 'public' and table_name = 'business_bookable_services'
+   and grantee in ('anon', 'authenticated', 'service_role');                                      -- no row
+select p.proname,
+       has_function_privilege('anon', p.oid, 'execute')          as anon,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('service_role', p.oid, 'execute')  as service_role
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('online_booking_rules', 'online_booking_window', 'online_booking_bookable_services',
+                     'online_booking_busy_intervals', 'online_booking_compute_slots',
+                     'online_booking_slot_is_available', 'online_booking_availability_json',
+                     'online_booking_public_availability', 'online_booking_working_intervals')
+ order by 1;
+-- false everywhere, except service_role = true on online_booking_public_availability
+select * from public.online_booking_rules();                         -- 15 | 1440 | 30 | 720
+select public.online_booking_public_availability('nobody-here');      -- NULL
+select count(*) from public.business_bookable_services;              -- 0
+-- The skipped hour of 29 March 2026 does not exist on the wall clock (false for 02:00 … 02:45):
+select m, ((date '2026-03-29' + make_interval(mins => m)) at time zone 'Europe/Paris') at time zone 'Europe/Paris'
+          = date '2026-03-29' + make_interval(mins => m) as exists_on_wall_clock
+  from generate_series(105, 195, 15) m;
+```
+
+### Staging scenario (deliberate manual steps — none performed by the sprint)
+
+1. Pick the Staging test Business and one 45-minute SERVICE of its catalogue:
+
+   ```sql
+   select b.id, p.slug, p.published, p.booking_enabled
+     from public.businesses b join public.business_booking_profiles p on p.business_id = b.id
+    where p.slug = '<slug>';
+   select s.id, s.name, s.active, s.deleted_at,
+          (select sum(ph.duration_minutes) from public.service_phases ph
+            where ph.business_id = s.business_id and ph.service_id = s.id) as minutes
+     from public.services s where s.business_id = '<business id>' order by s.name;
+   ```
+
+2. Opt that service in (the only writer today is the SQL Editor):
+
+   ```sql
+   insert into public.business_bookable_services (business_id, service_id)
+   values ('<business id>', '<service id>');
+   ```
+
+3. In the app (Staging build): Plus › Horaires — Monday 09:00–12:00 and 14:00–18:00. On an
+   otherwise empty Monday at least three days ahead (`<monday>`), create a 60-minute appointment
+   at 10:00 and a calendar block 11:00–11:15; let the sync push them.
+
+4. Compute that Monday, seen from the Friday before at 09:00 Paris (any `booking_enabled`):
+
+   ```sql
+   select local_time, starts_at, ends_at
+     from public.online_booking_compute_slots('<business id>', '<service id>', '<monday>',
+                                              (('<monday>'::date - 3) + time '09:00') at time zone 'Europe/Paris');
+   -- 17 rows: 09:00, 09:15, 11:15, then 14:00, 14:15 … 17:15
+   select * from public.online_booking_busy_intervals('<business id>',
+     ('<monday>'::date + time '00:00') at time zone 'Europe/Paris',
+     ('<monday>'::date + time '23:59') at time zone 'Europe/Paris');
+   -- the appointment 10:00–11:00 and the block 11:00–11:15 (as UTC instants)
+   ```
+
+5. The public read answers only for a page that accepts bookings:
+
+   ```sql
+   select public.online_booking_public_availability('<slug>', '<service id>', '<monday>');
+   -- NULL while « Accepter les réservations » is off
+   ```
+
+   To see the web preview, on STAGING only: turn « Accepter les réservations » on in the app
+   (needs publication open and the Staging Plus grant), run `web/` with
+   `ONLINE_BOOKING_AVAILABILITY_PREVIEW=enabled` against Staging, open
+   `/r/<slug>/reserver?service=<service id>&date=<monday>`. Turn bookings off again afterwards;
+   remove the opt-in with `delete from public.business_bookable_services where business_id =
+   '<business id>' and service_id = '<service id>';` if it should not stay.
+
+Production only with the user's explicit authorization for that change, after the Staging
+validation. Never set `ONLINE_BOOKING_AVAILABILITY_PREVIEW` on the production website.

@@ -403,6 +403,12 @@ SERVICE keys (`docs/architecture/CLOUD_SYNC.md` §27), the hand-applied Supabase
 
 ## 12. Online booking visibility — design only (NOT implemented)
 
+> Sprint 3B (November 2026): the BOOKABLE opt-in exists server-side only, as
+> `business_bookable_services (business_id, service_id)` — absent = not bookable — read only by
+> the availability engine (`docs/architecture/ONLINE_BOOKING.md` §8.3). The synced column below
+> was NOT added: it needs a SERVICE sync change that the sprint excluded. Which representation
+> is final, and the professional's editor, are open decisions.
+
 The future online-booking MVP needs to say, per prestation, whether a customer may see it and
 book it. Nothing below exists yet; it is recorded so the field is added once, correctly.
 
