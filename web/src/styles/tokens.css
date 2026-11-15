@@ -3,12 +3,12 @@
  *
  * Every value below is copied from the mobile design system, which stays the
  * source of truth: ../../../src/shared/ui/theme/ (colors.ts, radii.ts,
- * shadows.ts, typography.ts). The comment next to each variable names the
- * original token. Only the tokens the web interface uses are mirrored here:
- * add one when a screen needs it, never invent a value.
+ * shadows.ts). The comment next to each variable names the original token.
+ * Only the tokens the web interface uses are mirrored here: add one when a
+ * screen needs it, never invent a value.
  *
- * Instrument Serif is the one approved web-only extension (editorial
- * headings); it has no mobile counterpart.
+ * Typography is the exception: the web has its own brand type system,
+ * Bodoni Moda + Manrope, in typography.css.
  */
 
 :root {
@@ -77,9 +77,4 @@
   --shadow-card: var(--bz-shadow-card);
   --shadow-raised: var(--bz-shadow-raised);
   --shadow-lifted: var(--bz-shadow-lifted);
-
-  /* typography.ts — Plus Jakarta Sans, weights 400 / 500 / 600 / 700 */
-  --font-sans: var(--font-plus-jakarta-sans), ui-sans-serif, system-ui, sans-serif;
-  /* Web-only editorial extension */
-  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
 }

@@ -1,0 +1,260 @@
+/*
+ * BeautIzzy brand typography — the web's type system.
+ *
+ * Two families, no third:
+ *   - Bodoni Moda (display): identity, hero and editorial headings, 500 / 600;
+ *   - Manrope (text): everything that is read, scanned or acted on, 400–700.
+ * Both are variable fonts self-hosted by next/font (src/app/layout.tsx).
+ * Bodoni Moda keeps its optical-size axis (opsz 6–96): on a 2× screen or
+ * denser the browser sizes it automatically (opsz = font size: the finest,
+ * most contrasted hairlines); on a standard-density screen, where those
+ * hairlines break apart above ~30px, each display role draws a sturdier cut
+ * (`--bz-opsz-*`).
+ *
+ * Use the semantic roles below (`type-*`), never a raw family + size pair.
+ * Guidelines, scale and the do / don't list: ../../../docs/design/BRAND_TYPOGRAPHY.md
+ *
+ * Colors, radii and shadows still mirror the mobile theme (tokens.css). The
+ * typography does not: the native application keeps Plus Jakarta Sans as its
+ * UI family, by decision — only its public-page preview uses Bodoni Moda.
+ */
+
+:root {
+  /* Families — the next/font variables first, then sensible local fallbacks. */
+  --bz-font-display: var(--font-bodoni-moda), ui-serif, Georgia, serif;
+  --bz-font-display-italic: var(--font-bodoni-moda-italic), ui-serif, Georgia, serif;
+  --bz-font-text: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+  /* Weights — the whole vocabulary. Bodoni Moda uses 500 and 600 only. */
+  --bz-weight-regular: 400; /* body copy */
+  --bz-weight-medium: 500; /* supporting information, display headings */
+  --bz-weight-semibold: 600; /* buttons, labels, important metadata, small display */
+  --bz-weight-bold: 700; /* rare, selected strong emphasis */
+
+  /*
+   * Fluid scale. Each clamp() is linear from a 320px to a 1280px viewport:
+   * the comment gives the size at both ends. rem-based, so it follows the
+   * reader's font-size setting and browser zoom.
+   */
+  --bz-text-display: clamp(2.25rem, 1.6667rem + 2.9167vw, 4rem); /* 36 → 64 */
+  --bz-text-name: clamp(2.25rem, 1.8333rem + 2.0833vw, 3.5rem); /* 36 → 56 */
+  --bz-text-name-medium: clamp(1.875rem, 1.5833rem + 1.4583vw, 2.75rem); /* 30 → 44 */
+  --bz-text-name-long: clamp(1.5rem, 1.3333rem + 0.8333vw, 2rem); /* 24 → 32 */
+  --bz-text-headline: clamp(1.75rem, 1.5rem + 1.25vw, 2.5rem); /* 28 → 40 */
+  --bz-text-title: clamp(1.25rem, 1.1667rem + 0.4167vw, 1.5rem); /* 20 → 24 */
+  --bz-text-lead: clamp(1.0625rem, 1.0208rem + 0.2083vw, 1.1875rem); /* 17 → 19 */
+  --bz-text-body: clamp(1rem, 0.9792rem + 0.1042vw, 1.0625rem); /* 16 → 17 */
+  --bz-text-body-small: 0.9375rem; /* 15 */
+  --bz-text-subtitle: clamp(1rem, 0.9792rem + 0.1042vw, 1.0625rem); /* 16 → 17 */
+  --bz-text-label: 0.9375rem; /* 15 */
+  --bz-text-figure: 0.9375rem; /* 15 */
+  --bz-text-meta: clamp(0.8125rem, 0.7917rem + 0.1042vw, 0.875rem); /* 13 → 14 */
+  --bz-text-caption: 0.75rem; /* 12 */
+
+  /*
+   * Optical size of Bodoni Moda on standard-density (1×) screens only — see
+   * the header. 2× and denser screens use automatic optical sizing.
+   */
+  --bz-opsz-display: 28; /* display, name */
+  --bz-opsz-headline: 24; /* headline, long name */
+  --bz-opsz-title: 18; /* title */
+}
+
+@theme inline {
+  --font-display: var(--bz-font-display);
+  --font-sans: var(--bz-font-text);
+  /* No third family: `font-serif` does not exist on this site. */
+  --font-serif: initial;
+}
+
+/* ── Display roles — Bodoni Moda ─────────────────────────────────────────── */
+
+/* Hero headline of a page that introduces something (marketing hero). */
+@utility type-display {
+  font-family: var(--bz-font-display);
+  font-size: var(--bz-text-display);
+  font-weight: var(--bz-weight-medium);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" var(--bz-opsz-display);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+
+  @media (min-resolution: 2dppx) {
+    font-variation-settings: normal;
+  }
+
+  & :where(em, i) {
+    font-family: var(--bz-font-display-italic);
+    font-style: italic;
+  }
+}
+
+/*
+ * The professional's name in the profile hero. Three lengths, never one size
+ * for every name: `profileNameRole` (components/booking/profile-name.ts)
+ * picks one so a 120-character name stays a compact block.
+ */
+@utility type-name {
+  font-family: var(--bz-font-display);
+  font-size: var(--bz-text-name);
+  font-weight: var(--bz-weight-medium);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" var(--bz-opsz-display);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+
+  @media (min-resolution: 2dppx) {
+    font-variation-settings: normal;
+  }
+}
+
+@utility type-name-medium {
+  font-family: var(--bz-font-display);
+  font-size: var(--bz-text-name-medium);
+  font-weight: var(--bz-weight-medium);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" var(--bz-opsz-display);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+
+  @media (min-resolution: 2dppx) {
+    font-variation-settings: normal;
+  }
+}
+
+@utility type-name-long {
+  font-family: var(--bz-font-display);
+  font-size: var(--bz-text-name-long);
+  font-weight: var(--bz-weight-medium);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" var(--bz-opsz-headline);
+  line-height: 1.14;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+
+  @media (min-resolution: 2dppx) {
+    font-variation-settings: normal;
+  }
+}
+
+/* Page and section headings: a notice, a step, an editorial statement. */
+@utility type-headline {
+  font-family: var(--bz-font-display);
+  font-size: var(--bz-text-headline);
+  font-weight: var(--bz-weight-medium);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" var(--bz-opsz-headline);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+
+  @media (min-resolution: 2dppx) {
+    font-variation-settings: normal;
+  }
+
+  & :where(em, i) {
+    font-family: var(--bz-font-display-italic);
+    font-style: italic;
+  }
+}
+
+/* Supporting headings inside a page (« Prestation », « Date »). The smallest
+   Bodoni Moda size: 600, never lighter. */
+@utility type-title {
+  font-family: var(--bz-font-display);
+  font-size: var(--bz-text-title);
+  font-weight: var(--bz-weight-semibold);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" var(--bz-opsz-title);
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-wrap: balance;
+
+  @media (min-resolution: 2dppx) {
+    font-variation-settings: normal;
+  }
+}
+
+/* ── Text roles — Manrope ────────────────────────────────────────────────── */
+
+/* The paragraph that introduces a page or a section. */
+@utility type-lead {
+  font-family: var(--bz-font-text);
+  font-size: var(--bz-text-lead);
+  font-weight: var(--bz-weight-regular);
+  line-height: 1.65;
+  letter-spacing: 0;
+  text-wrap: pretty;
+}
+
+/* Running text: descriptions, explanations. */
+@utility type-body {
+  font-family: var(--bz-font-text);
+  font-size: var(--bz-text-body);
+  font-weight: var(--bz-weight-regular);
+  line-height: 1.7;
+  letter-spacing: 0;
+  text-wrap: pretty;
+}
+
+/* Secondary paragraphs: notes, notice bodies, footnotes. */
+@utility type-body-small {
+  font-family: var(--bz-font-text);
+  font-size: var(--bz-text-body-small);
+  font-weight: var(--bz-weight-regular);
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-wrap: pretty;
+}
+
+/* A name inside a list or a card: a service, a notice title, a feature. */
+@utility type-subtitle {
+  font-family: var(--bz-font-text);
+  font-size: var(--bz-text-subtitle);
+  font-weight: var(--bz-weight-semibold);
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+}
+
+/* Buttons, choices, field labels, navigation. */
+@utility type-label {
+  font-family: var(--bz-font-text);
+  font-size: var(--bz-text-label);
+  font-weight: var(--bz-weight-semibold);
+  line-height: 1.25;
+  letter-spacing: 0.005em;
+}
+
+/* Prices, times, counts — anything that is compared or changes: tabular. */
+@utility type-figure {
+  font-family: var(--bz-font-text);
+  font-size: var(--bz-text-figure);
+  font-weight: var(--bz-weight-semibold);
+  line-height: 1.25;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Small supporting information: a duration, a field caption, a detail label. */
+@utility type-meta {
+  font-family: var(--bz-font-text);
+  font-size: var(--bz-text-meta);
+  font-weight: var(--bz-weight-medium);
+  line-height: 1.45;
+  letter-spacing: 0.005em;
+}
+
+/* Badges and tags — the smallest text on the site. */
+@utility type-caption {
+  font-family: var(--bz-font-text);
+  font-size: var(--bz-text-caption);
+  font-weight: var(--bz-weight-semibold);
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}

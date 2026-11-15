@@ -49,6 +49,7 @@ import {
   foregroundSoft,
   gutter,
   rose,
+  screenTitleAndroid,
   semanticColors,
   spacing,
 } from '@/shared/ui/theme';
@@ -239,7 +240,7 @@ export function OnlineBookingSettingsScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']} testID="online-booking-settings-screen">
         {header}
         <View style={styles.content}>
-          <AppText variant="screenTitle" accessibilityRole="header">
+          <AppText variant="screenTitle" accessibilityRole="header" style={styles.title}>
             {ONLINE_BOOKING_TITLE}
           </AppText>
           {unavailable ? (
@@ -462,7 +463,7 @@ export function OnlineBookingSettingsScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <AppText variant="screenTitle" accessibilityRole="header">
+        <AppText variant="screenTitle" accessibilityRole="header" style={styles.title}>
           {ONLINE_BOOKING_TITLE}
         </AppText>
 
@@ -733,6 +734,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   eyebrow: { color: foregroundSoft },
+  // The compact native screen title (27 / 33) on BOTH platforms. The page
+  // preview's display name sits right under it: at the iOS 30pt role the two
+  // competed and the title dominated the screen. Same family and weight
+  // (Plus Jakarta Sans 700) — only this screen; the role itself is unchanged.
+  title: {
+    fontSize: screenTitleAndroid.fontSize,
+    letterSpacing: screenTitleAndroid.letterSpacing,
+    lineHeight: screenTitleAndroid.lineHeight,
+  },
   topBarSpacer: { width: 44 },
   content: {
     gap: spacing.lg,

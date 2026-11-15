@@ -33,10 +33,8 @@ function FeatureGrid() {
     <section id="fonctionnalites" className="scroll-mt-20 py-16 sm:py-24">
       <Container className="flex flex-col gap-10">
         <div className="flex max-w-2xl flex-col gap-4">
-          <h2 className="font-serif text-4xl leading-tight tracking-tight text-balance sm:text-5xl">
-            L&apos;essentiel, très bien fait.
-          </h2>
-          <p className="text-lg leading-relaxed text-foreground/75">
+          <h2 className="type-headline">L&apos;essentiel, très bien fait.</h2>
+          <p className="type-lead text-foreground/75">
             Peu de fonctionnalités, mais celles dont vous vous servez toute la journée.
           </p>
         </div>
@@ -46,8 +44,8 @@ function FeatureGrid() {
               key={feature.title}
               className="flex flex-col gap-2 rounded-lg border border-border bg-background p-6 shadow-card"
             >
-              <h3 className="text-lg font-semibold">{feature.title}</h3>
-              <p className="leading-relaxed text-foreground/75">{feature.body}</p>
+              <h3 className="type-subtitle">{feature.title}</h3>
+              <p className="type-body text-foreground/75">{feature.body}</p>
             </li>
           ))}
         </ul>

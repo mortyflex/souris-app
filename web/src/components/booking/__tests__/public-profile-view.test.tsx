@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -90,11 +93,22 @@ describe("PublicProfileView", () => {
     expect(html).not.toContain("Adresse");
   });
 
-  it("lets a long business name wrap instead of overflowing", () => {
+  it("lets a long business name wrap instead of overflowing, at a smaller display size", () => {
     const name = `Institut ${"Trèslongnomsansaucuneespace".repeat(4)} & Spa`;
     const html = render({ profile: { ...minimal, name } });
     expect(html).toContain(name.replace("&", "&amp;"));
-    expect(html).toMatch(/<h1 class="[^"]*break-words[^"]*min-w-0|<h1 class="[^"]*min-w-0[^"]*break-words/);
+    // The name role breaks an unbreakable word (overflow-wrap: anywhere — see the
+    // stylesheet test below); min-w-0 lets the heading shrink beside the logo.
+    expect(html).toMatch(/<h1 class="type-name-long [^"]*min-w-0/);
+    expect(render({ profile: minimal })).toMatch(/<h1 class="type-name [^"]*min-w-0/);
+  });
+
+  it("gives every name role a wrap that cannot overflow", () => {
+    const css = readFileSync(path.join(__dirname, "../../../styles/typography.css"), "utf8");
+    for (const role of ["type-name", "type-name-medium", "type-name-long"]) {
+      const block = css.match(new RegExp(`@utility ${role} \\{([^}]*)\\}`))?.[1];
+      expect(block, role).toContain("overflow-wrap: anywhere;");
+    }
   });
 
   it("escapes what the professional typed", () => {

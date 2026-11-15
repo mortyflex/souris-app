@@ -153,7 +153,7 @@ Reference: `web/README.md`.
 - no npm workspace, no monorepo tool (Turborepo, Nx), no shared `node_modules`;
 - the root TypeScript, ESLint and Jest configurations exclude `web/`; keep it that way;
 - `web/` never imports from the mobile `src/`, and the mobile application never imports from `web/`;
-- the mobile design tokens (`src/shared/ui/theme/`) stay the source of truth; `web/src/styles/tokens.css` mirrors the ones the web uses;
+- the mobile design tokens (`src/shared/ui/theme/`) stay the source of truth; `web/src/styles/tokens.css` mirrors the ones the web uses — typography excepted: the web follows the brand typography (§26);
 - a Supabase secret key may only be read by a server-only module of `web/`; never by a browser component, never by the mobile application.
 
 Both applications share one Supabase backend.
@@ -1214,6 +1214,19 @@ BeautIzzy should feel:
 - slightly playful.
 
 Avoid generic SaaS dashboard aesthetics.
+
+## Brand typography
+
+Source of truth: `docs/design/BRAND_TYPOGRAPHY.md` — usage, hierarchy, weights and responsive behavior.
+
+- Bodoni Moda is the editorial / display font of BeautIzzy's branded experiences.
+- Manrope is its complement for customer-facing web content and interface elements.
+- The pairing is the long-term reference for the public booking website, the future landing page and other branded surfaces.
+- It is an intentional exception to the rule that web design values mirror the native theme (§5).
+- The native application keeps its global typography (Plus Jakarta Sans).
+- A native screen or component uses the brand display font only when it explicitly requires it — today, the name and monogram of the public-page preview.
+
+Do not introduce a third font family.
 
 ---
 

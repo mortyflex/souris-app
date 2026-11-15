@@ -3,28 +3,36 @@
 // A native rendering of the hero of the public page
 // (web/src/components/booking/public-profile-view.tsx, phone layout): the
 // cover as the ground, a white identity panel resting on its lower edge, the
-// logo straddling both, the name in the editorial serif, the presentation
+// logo straddling both, the name in the brand display face, the presentation
 // under a hairline. Proportions, radii and paddings are the web's.
 //
 // It shows the form as it stands — unsaved edits included — and says so; it
 // reads nothing and writes nothing. The cover and the logo are the two entry
 // points of the photo sheet, exactly as before.
 //
-// Instrument Serif is the web's editorial face and has no place in the mobile
-// type system: it is loaded here, for the name and the monogram of this
-// preview only. Until its file is ready the name is drawn in the platform
-// serif, never withheld.
+// Bodoni Moda is the brand display face of the public pages
+// (docs/design/BRAND_TYPOGRAPHY.md) and has no place in the mobile type
+// system, which stays Plus Jakarta Sans: it is loaded here, in its 500 weight,
+// for the name and the monogram of this preview only. Until its file is ready
+// the name is drawn in the platform serif, never withheld.
+//
+// The name is always shown whole. Its size and line breaks come from the
+// width the panel really has (measured, estimated before the first layout)
+// and from the font's glyph advances: `layoutPreviewName`. It is smaller than
+// the web hero on purpose — a preview inside a settings screen, not a page.
 
-import { InstrumentSerif_400Regular, useFonts } from '@expo-google-fonts/instrument-serif';
+import { BodoniModa_500Medium, useFonts } from '@expo-google-fonts/bodoni-moda';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { AppText } from '@/shared/ui/AppText';
 import { StatePill } from '@/shared/ui/StatePill';
 import {
   colors,
   foregroundSoft,
+  gutter,
   interaction,
   lavender,
   nativeShadows,
@@ -34,6 +42,8 @@ import {
 } from '@/shared/ui/theme';
 
 import type { BookingImageKind } from '../gateway';
+
+import { PREVIEW_NAME_MAX_FONT_SCALE, layoutPreviewName } from './preview-name-layout';
 
 interface BookingProfilePreviewProps {
   /** The name the page shows: the typed public name, or the Business name. */
@@ -59,6 +69,9 @@ function initialOf(name: string): string {
   return (Array.from(name.trim())[0] ?? '').toUpperCase();
 }
 
+/** The settings screen's side gutter: the panel's width before its first layout. */
+const SCREEN_GUTTER = Platform.OS === 'android' ? gutter.android : gutter.ios;
+
 export function BookingProfilePreview({
   name,
   description,
@@ -69,9 +82,14 @@ export function BookingProfilePreview({
   preparingImage,
   onPressImage,
 }: BookingProfilePreviewProps) {
-  const [serifLoaded] = useFonts({ InstrumentSerif_400Regular });
-  const serif = { fontFamily: serifLoaded ? 'InstrumentSerif_400Regular' : SERIF_FALLBACK };
+  const [serifLoaded] = useFonts({ BodoniModa_500Medium });
+  const serif = { fontFamily: serifLoaded ? 'BodoniModa_500Medium' : SERIF_FALLBACK };
   const presentation = description.trim();
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const [panelWidth, setPanelWidth] = useState<number>();
+  const nameColumn =
+    (panelWidth ?? windowWidth - 2 * SCREEN_GUTTER - 2 * PANEL_INSET) - 2 * PANEL_PADDING;
+  const nameLayout = layoutPreviewName(name, nameColumn, fontScale);
 
   return (
     <View style={styles.root} testID="online-booking-preview">
@@ -116,7 +134,11 @@ export function BookingProfilePreview({
           {preparingImage === 'cover' && <ActivityIndicator color={semanticColors.accent} style={styles.busy} />}
         </Pressable>
 
-        <View style={styles.panel}>
+        <View
+          onLayout={(event) => setPanelWidth(event.nativeEvent.layout.width)}
+          style={styles.panel}
+          testID="online-booking-preview-panel"
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -138,7 +160,8 @@ export function BookingProfilePreview({
                   testID="online-booking-logo-image"
                 />
               ) : (
-                <AppText variant="sectionTitle" style={[styles.monogram, serif]}>
+                // A logo stand-in: it keeps its frame's proportions, so it never scales with the text size.
+                <AppText allowFontScaling={false} variant="sectionTitle" style={[styles.monogram, serif]}>
                   {initialOf(name)}
                 </AppText>
               )}
@@ -150,13 +173,26 @@ export function BookingProfilePreview({
           </Pressable>
 
           <AppText
+            accessibilityLabel={name.trim()}
             accessibilityRole="header"
-            numberOfLines={4}
-            style={[styles.name, serif]}
+            maxFontSizeMultiplier={PREVIEW_NAME_MAX_FONT_SCALE}
+            style={[
+              styles.name,
+              serif,
+              {
+                fontSize: nameLayout.fontSize,
+                letterSpacing: nameLayout.letterSpacing,
+                lineHeight: nameLayout.lineHeight,
+                // The accents' room is taken from the gap above, so the
+                // name sits where it would without it.
+                marginTop: -nameLayout.paddingTop,
+                paddingTop: nameLayout.paddingTop,
+              },
+            ]}
             testID="online-booking-preview-name"
             variant="sectionTitle"
           >
-            {name}
+            {nameLayout.text}
           </AppText>
 
           {presentation.length > 0 && (
@@ -173,6 +209,8 @@ export function BookingProfilePreview({
 const LOGO_SIZE = 80;
 const LOGO_RING = 4;
 const PANEL_OVERLAP = 48;
+const PANEL_INSET = 12;
+const PANEL_PADDING = 20;
 
 const styles = StyleSheet.create({
   root: { gap: spacing.sm },
@@ -211,10 +249,10 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
     gap: spacing.base,
-    marginHorizontal: 12,
+    marginHorizontal: PANEL_INSET,
     marginTop: -PANEL_OVERLAP,
     paddingBottom: 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: PANEL_PADDING,
     ...nativeShadows.lifted,
   },
   // web: -mt-10 h-20 w-20 rounded-[1.25rem] ring-4 ring-background.
@@ -245,16 +283,12 @@ const styles = StyleSheet.create({
     right: -2,
     width: 26,
   },
-  monogram: { color: lavender.lav700, fontSize: 40, fontWeight: '400', letterSpacing: 0, lineHeight: 46 },
-  // web: font-serif, clamp(2rem, …) → 32px on a phone, leading 1.06, centred.
-  name: {
-    color: colors.foreground,
-    fontSize: 32,
-    fontWeight: '400',
-    letterSpacing: -0.32,
-    lineHeight: 35,
-    textAlign: 'center',
-  },
+  // The family encodes the weight (500): no fontWeight, as in AppText. The
+  // line box is Bodoni Moda's own (1.525em → 61): React Native then centres
+  // the glyph in it, and an accented initial (« É ») keeps its accent on iOS.
+  monogram: { color: lavender.lav700, fontSize: 40, letterSpacing: 0, lineHeight: 61 },
+  // Size, leading, tracking and top inset: `layoutPreviewName`.
+  name: { alignSelf: 'stretch', color: colors.foreground, textAlign: 'center' },
   // web: border-t pt-5, text-base leading-7, text-foreground/80, centred.
   description: {
     alignSelf: 'stretch',

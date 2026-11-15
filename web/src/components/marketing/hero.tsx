@@ -12,10 +12,10 @@ function Hero() {
       <Container className="grid items-center gap-10 py-16 sm:py-24 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="flex flex-col items-start gap-6">
           <Badge>Application mobile pour les professionnelles de la beauté</Badge>
-          <h1 className="font-serif text-5xl leading-[1.05] tracking-tight text-balance sm:text-6xl lg:text-7xl">
+          <h1 className="type-display">
             Votre journée, <em className="text-accent">simplement</em> organisée.
           </h1>
-          <p className="max-w-xl text-lg leading-relaxed text-foreground/75">
+          <p className="type-lead max-w-xl text-foreground/75">
             BeautIzzy réunit l&apos;agenda, les clientes et la caisse dans une application
             claire et rapide — l&apos;essentiel pour bien travailler, sans la lourdeur d&apos;un
             logiciel de salon.

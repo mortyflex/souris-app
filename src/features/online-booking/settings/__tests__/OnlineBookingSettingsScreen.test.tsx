@@ -6,7 +6,7 @@
 // nothing and is never retried behind the professional's back.
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Linking, Platform } from 'react-native';
+import { Dimensions, Linking, Platform, StyleSheet, type StyleProp, type TextStyle } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 import { testBusiness, TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -517,6 +517,55 @@ describe('OnlineBookingSettingsScreen — live preview', () => {
 
     expect(previewName(view)).toBe(testBusiness.name);
     expect(view.queryByTestId('online-booking-preview-description')).toBeNull();
+  });
+
+  it('sizes the name from the panel’s measured width and always shows it whole, in balanced lines', async () => {
+    // The React Native jest preset reports an enlarged `fontScale: 2`: an
+    // iPhone 17 Pro at the default text size instead.
+    const device = Dimensions.get('window');
+    Dimensions.set({ window: { ...device, width: 402, fontScale: 1 } });
+    try {
+      const view = await renderSettings(storedGateway());
+      const nameNode = () => view.getByTestId('online-booking-preview-name');
+      const nameStyle = () => StyleSheet.flatten(nameNode().props.style as StyleProp<TextStyle>);
+      // Its 338pt panel: a 298pt text column.
+      await act(async () => {
+        fireEvent(view.getByTestId('online-booking-preview-panel'), 'layout', {
+          nativeEvent: { layout: { x: 0, y: 0, width: 338, height: 300 } },
+        });
+      });
+
+      await type(view, 'online-booking-public-name', 'Studio Esthetique Pro');
+      expect(nameNode().props.children).toBe('Studio Esthetique Pro');
+      expect(nameStyle().fontSize).toBe(28);
+
+      const long =
+        'Institut de beauté Cœur d’Ébène — soins du visage, onglerie, extensions de cils & maquillage permanent à Aix-en-Provence';
+      await type(view, 'online-booking-public-name', long);
+      expect(nameStyle().fontSize).toBe(20);
+      expect(nameNode().props.numberOfLines).toBeUndefined();
+      expect(String(nameNode().props.children).split('\n').length).toBeGreaterThan(1);
+      expect(String(nameNode().props.children).replace(/\n/g, ' ')).toBe(long);
+      // Read as one name, not as its visual lines.
+      expect(nameNode().props.accessibilityLabel).toBe(long);
+      // Room above the first line for « É », taken from the gap above.
+      expect(nameStyle().paddingTop).toBeGreaterThan(0);
+      expect(nameStyle().marginTop).toBe(-(nameStyle().paddingTop as number));
+    } finally {
+      await act(async () => {
+        Dimensions.set({ window: device });
+      });
+    }
+  });
+
+  it('sets the screen title at the compact native size, not the iOS 30pt role', async () => {
+    const view = await renderSettings(storedGateway());
+    const title = view.getByRole('header', { name: 'Réservation en ligne' });
+    const style = StyleSheet.flatten(title.props.style as StyleProp<TextStyle>);
+
+    expect(Platform.OS).toBe('ios');
+    expect(style.fontSize).toBe(27);
+    expect(style.lineHeight).toBe(33);
   });
 
   it('shows a picked cover and logo at once, before any upload', async () => {

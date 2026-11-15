@@ -2,6 +2,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PublicProfile } from "@/features/public-profile/public-profile";
 
+import { profileNameRole } from "./profile-name";
+
 interface PublicProfileViewProps {
   profile: PublicProfile;
   /** Public URLs of the branding images; absent when the professional has none. */
@@ -9,11 +11,11 @@ interface PublicProfileViewProps {
   coverUrl?: string;
 }
 
-// Instrument Serif carries the identity and the section headlines; Plus Jakarta
-// Sans carries everything that is read or acted on.
-const sectionTitle = "font-serif text-[1.75rem] leading-[1.15] text-balance sm:text-[2rem]";
-const sectionBody = "max-w-[58ch] text-base leading-7 text-foreground/80";
-const detailLabel = "text-xs font-semibold tracking-[0.08em] text-foreground/65 uppercase";
+// Bodoni Moda carries the identity and the section headlines; Manrope carries
+// everything that is read or acted on (src/styles/typography.css).
+const sectionTitle = "type-headline";
+const sectionBody = "type-body max-w-[58ch] text-foreground/80";
+const detailLabel = "type-meta text-foreground/65";
 const detailLink =
   "font-medium text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700";
 
@@ -79,18 +81,18 @@ function PublicProfileView({ profile, logoUrl, coverUrl }: PublicProfileViewProp
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={logoUrl} alt="" className="h-full w-full bg-background object-contain" decoding="async" />
               ) : (
-                <span aria-hidden="true" className="font-serif text-[2.5rem] leading-none text-lavender-700 sm:text-[3.25rem]">
+                <span aria-hidden="true" className="type-name text-[2.5rem] leading-none text-lavender-700 sm:text-[3.25rem]">
                   {initialOf(profile.name)}
                 </span>
               )}
             </div>
-            <h1 className="min-w-0 max-w-full break-words text-center font-serif text-[clamp(2rem,1.4rem+3vw,3.25rem)] leading-[1.06] tracking-[-0.01em] text-balance [overflow-wrap:anywhere] sm:pt-5 sm:text-left">
+            <h1 className={cn(profileNameRole(profile.name), "min-w-0 max-w-full text-center sm:pt-5 sm:text-left")}>
               {profile.name}
             </h1>
           </div>
 
           {profile.description ? (
-            <p className="mx-auto mt-5 max-w-[62ch] border-t border-border/70 pt-5 text-center text-base leading-7 whitespace-pre-line break-words text-foreground/80 sm:mx-0 sm:mt-7 sm:pt-7 sm:text-left sm:text-[1.0625rem] sm:leading-[1.75]">
+            <p className="type-body mx-auto mt-5 max-w-[62ch] border-t border-border/70 pt-5 text-center whitespace-pre-line break-words text-foreground/80 sm:mx-0 sm:mt-7 sm:pt-7 sm:text-left">
               {profile.description}
             </p>
           ) : null}
@@ -135,7 +137,7 @@ function PublicProfileView({ profile, logoUrl, coverUrl }: PublicProfileViewProp
             {profile.phone ? (
               <div className="flex flex-col gap-1.5">
                 <dt className={detailLabel}>Téléphone</dt>
-                <dd>
+                <dd className="type-body">
                   <a href={`tel:${profile.phone.replace(/[^\d+]/g, "")}`} className={detailLink}>
                     {profile.phone}
                   </a>
@@ -145,7 +147,7 @@ function PublicProfileView({ profile, logoUrl, coverUrl }: PublicProfileViewProp
             {profile.email ? (
               <div className="flex min-w-0 flex-col gap-1.5">
                 <dt className={detailLabel}>E-mail</dt>
-                <dd className="break-words [overflow-wrap:anywhere]">
+                <dd className="type-body break-words [overflow-wrap:anywhere]">
                   <a href={`mailto:${profile.email}`} className={detailLink}>
                     {profile.email}
                   </a>
@@ -155,7 +157,7 @@ function PublicProfileView({ profile, logoUrl, coverUrl }: PublicProfileViewProp
             {profile.address ? (
               <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
                 <dt className={detailLabel}>Adresse</dt>
-                <dd className="max-w-[48ch] break-words leading-7 whitespace-pre-line">{profile.address}</dd>
+                <dd className="type-body max-w-[48ch] break-words whitespace-pre-line">{profile.address}</dd>
               </div>
             ) : null}
           </dl>

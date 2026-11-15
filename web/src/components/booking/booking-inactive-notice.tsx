@@ -14,10 +14,10 @@ function BookingInactiveNotice({ profile }: { profile: Pick<PublicProfile, "slug
   return (
     <div className="flex flex-col items-start gap-5 rounded-[2rem] bg-lavender-50 p-8 sm:p-12">
       <Badge>Pas encore disponible</Badge>
-      <h1 className="font-serif text-4xl leading-tight tracking-tight text-balance sm:text-5xl">
+      <h1 className="type-headline">
         La prise de rendez-vous en ligne n&apos;est pas encore ouverte.
       </h1>
-      <p className="max-w-xl text-lg leading-relaxed text-foreground/75">
+      <p className="type-lead max-w-xl text-foreground/75">
         La réservation en ligne BeautIzzy est en préparation. Aucune prise de rendez-vous
         n&apos;est possible depuis cette page pour le moment.
       </p>

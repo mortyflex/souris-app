@@ -14,9 +14,9 @@ function SiteFooter() {
       <Container className="flex flex-col gap-6 py-10 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col items-start gap-3">
           <BrandLogo className="h-8" />
-          <p className="max-w-sm text-sm text-foreground/70">{site.tagline}.</p>
+          <p className="type-body-small max-w-sm text-foreground/70">{site.tagline}.</p>
         </div>
-        <div className="flex flex-col gap-2 text-sm text-foreground/70 sm:items-end">
+        <div className="type-body-small flex flex-col gap-2 text-foreground/70 sm:items-end">
           {publicEnv.contactEmail ? (
             <a
               href={`mailto:${publicEnv.contactEmail}`}

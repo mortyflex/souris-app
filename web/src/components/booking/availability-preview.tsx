@@ -18,8 +18,8 @@ import { cn } from "@/lib/utils";
 
 import { BookingInactiveNotice } from "./booking-inactive-notice";
 
-const sectionTitle = "font-serif text-[1.5rem] leading-[1.15] text-balance sm:text-[1.75rem]";
-const quiet = "text-sm leading-6 text-foreground/70";
+const sectionTitle = "type-title";
+const quiet = "type-body-small text-foreground/70";
 const choice =
   "rounded-[1.25rem] border px-4 py-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2";
 const chosen = "border-accent bg-lavender-50 text-lavender-700";
@@ -40,8 +40,8 @@ function Notice({ title, body, tone = "neutral" }: { title: string; body?: strin
         tone === "danger" ? "bg-danger-surface text-danger" : "bg-surface text-foreground/80",
       )}
     >
-      <p className="font-semibold">{title}</p>
-      {body ? <p className="text-sm leading-6">{body}</p> : null}
+      <p className="type-subtitle">{title}</p>
+      {body ? <p className="type-body-small">{body}</p> : null}
     </div>
   );
 }
@@ -50,10 +50,10 @@ function PreviewHeader({ name }: { name: string }) {
   return (
     <header className="flex flex-col items-start gap-4">
       <Badge>Aperçu</Badge>
-      <h1 className="font-serif text-4xl leading-tight tracking-tight text-balance sm:text-5xl">
+      <h1 className="type-headline [overflow-wrap:anywhere]">
         Disponibilités de {name}
       </h1>
-      <p className="max-w-xl text-base leading-7 text-foreground/75">
+      <p className="type-lead max-w-xl text-foreground/75">
         La réservation en ligne n&apos;est pas encore ouverte : ces horaires sont un aperçu et ne
         peuvent pas être réservés depuis cette page.
       </p>
@@ -93,8 +93,8 @@ function ServiceChoices({ slug, availability }: { slug: string; availability: Av
                 href={previewHref(slug, service.id, availability.date)}
                 scroll={false}
               >
-                <span className="font-semibold">{service.name}</span>
-                <span className="shrink-0 text-sm tabular-nums text-foreground/70">
+                <span className="type-subtitle">{service.name}</span>
+                <span className="type-meta shrink-0 tabular-nums text-foreground/70">
                   {formatDuration(service.durationMinutes)}
                 </span>
               </Link>
@@ -120,7 +120,7 @@ function DateChoices({ slug, availability, serviceId }: { slug: string; availabi
               <Link
                 aria-current={selected ? "date" : undefined}
                 aria-label={formatLongDate(date)}
-                className={cn(choice, "flex min-h-11 items-center whitespace-nowrap text-sm font-semibold", selected ? chosen : notChosen)}
+                className={cn(choice, "type-label flex min-h-11 items-center whitespace-nowrap tabular-nums", selected ? chosen : notChosen)}
                 href={previewHref(slug, serviceId, date)}
                 scroll={false}
               >
@@ -155,7 +155,7 @@ function SlotList({ availability }: { availability: Availability }) {
             {availability.slots.map((slot) => (
               <li
                 key={slot.startsAt}
-                className="flex min-h-11 items-center justify-center rounded-full border border-lavender-200 bg-lavender-25 text-sm font-semibold tabular-nums text-lavender-700"
+                className="type-figure flex min-h-11 items-center justify-center rounded-full border border-lavender-200 bg-lavender-25 text-lavender-700"
               >
                 <time dateTime={slot.startsAt}>{slot.localTime}</time>
               </li>
