@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { ConfirmedBooking } from "@/features/booking/booking-answer";
+import type { ChallengeState } from "@/features/booking/challenge";
 
 import { BookingConfirmation, ReviewStep, SlotStep, type Professional } from "../booking-steps";
 
@@ -18,6 +19,7 @@ const booking: ConfirmedBooking = {
 };
 const details = { firstName: "Marie", lastName: "Dupont", email: "marie@example.test", phone: "06 12 34 56 78" };
 const noop = () => undefined;
+const ready: ChallengeState = { status: "ready", token: "0.turnstile-token" };
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
 describe("BookingConfirmation", () => {
@@ -67,12 +69,34 @@ describe("ReviewStep", () => {
           sending={false}
           retrying={false}
           locked={false}
+          challenge={ready}
           onEdit={noop}
           onBack={noop}
           onConfirm={noop}
+          onRetryChallenge={noop}
           {...overrides}
         />,
       ),
+    );
+  const reviewMarkup = (overrides: Partial<Parameters<typeof ReviewStep>[0]> = {}) =>
+    renderToStaticMarkup(
+      <ReviewStep
+        service={coupe}
+        date="2026-11-16"
+        slot={{ startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" }}
+        timeZone="Europe/Paris"
+        details={details}
+        professional={professional}
+        sending={false}
+        retrying={false}
+        locked={false}
+        challenge={ready}
+        onEdit={noop}
+        onBack={noop}
+        onConfirm={noop}
+        onRetryChallenge={noop}
+        {...overrides}
+      />,
     );
 
   it("summarizes the request with what can be changed", () => {
@@ -92,7 +116,16 @@ describe("ReviewStep", () => {
   });
 
   it("while sending: one disabled button", () => {
-    const markup = renderToStaticMarkup(
+    const markup = reviewMarkup({ sending: true, locked: true, challenge: { status: "checking" } });
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-busy="true"[^>]*>Réservation en cours…<\/button>/);
+    // The next check is already running, silently: no second message while the request is in flight.
+    expect(text(markup)).not.toContain("Vérification de sécurité");
+  });
+});
+
+describe("ReviewStep — the security check (Cloudflare Turnstile)", () => {
+  const reviewMarkup = (overrides: Partial<Parameters<typeof ReviewStep>[0]> = {}) =>
+    renderToStaticMarkup(
       <ReviewStep
         service={coupe}
         date="2026-11-16"
@@ -100,15 +133,66 @@ describe("ReviewStep", () => {
         timeZone="Europe/Paris"
         details={details}
         professional={professional}
-        sending
+        sending={false}
         retrying={false}
-        locked
+        locked={false}
+        challenge={ready}
         onEdit={noop}
         onBack={noop}
         onConfirm={noop}
+        onRetryChallenge={noop}
+        {...overrides}
       />,
     );
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-busy="true"[^>]*>Réservation en cours…<\/button>/);
+  const confirmButton = (markup: string) => /<button[^>]*>(Confirmer le rendez-vous|Réessayer)<\/button>/.exec(markup)?.[0] ?? "";
+
+  it("renders the widget's place just before the confirmation", () => {
+    const markup = reviewMarkup({ challengeSlot: <div data-testid="challenge-slot" /> });
+    expect(markup.indexOf('data-testid="challenge-slot"')).toBeGreaterThan(markup.indexOf("Vos coordonnées lui sont transmises"));
+    expect(markup.indexOf('data-testid="challenge-slot"')).toBeLessThan(markup.indexOf("Confirmer le rendez-vous"));
+  });
+
+  it("while checking: the button waits, and says why", () => {
+    const markup = reviewMarkup({ challenge: { status: "checking" } });
+    expect(confirmButton(markup)).toMatch(/disabled=""/);
+    expect(confirmButton(markup)).toContain('aria-describedby="booking-challenge-status"');
+    expect(markup).toMatch(/<p id="booking-challenge-status" role="status"[^>]*>Vérification de sécurité en cours…<\/p>/);
+  });
+
+  it("when Cloudflare asks for an interaction: the customer is told what to do", () => {
+    const markup = reviewMarkup({ challenge: { status: "interactive" } });
+    expect(confirmButton(markup)).toMatch(/disabled=""/);
+    expect(text(markup)).toContain("Pour confirmer, complétez la vérification de sécurité ci-dessus.");
+  });
+
+  it("with a fresh token: the button is enabled, the success only announced", () => {
+    const markup = reviewMarkup();
+    expect(confirmButton(markup)).not.toMatch(/disabled=""/);
+    expect(confirmButton(markup)).not.toContain("aria-describedby");
+    expect(markup).toMatch(/<p id="booking-challenge-status" role="status" class="[^"]*sr-only[^"]*">Vérification de sécurité terminée\.<\/p>/);
+  });
+
+  it("when the check cannot run: an alert, a way to try again and the professional's contact — never a way around it", () => {
+    const markup = reviewMarkup({ challenge: { status: "error" } });
+    expect(confirmButton(markup)).toMatch(/disabled=""/);
+    expect(markup).toMatch(/<div id="booking-challenge-status" role="alert"/);
+    const html = text(markup);
+    expect(html).toContain("La vérification de sécurité n’a pas pu aboutir.");
+    expect(html).toContain("Votre rendez-vous n’est pas encore réservé.");
+    expect(html).toContain("Relancer la vérification");
+    expect(html).toContain("04 78 00 00 00");
+  });
+
+  it("after an unknown outcome, the retry also waits for a new token", () => {
+    const markup = reviewMarkup({ locked: true, retrying: true, notice: "UNCERTAIN", challenge: { status: "checking" } });
+    expect(confirmButton(markup)).toMatch(/disabled=""[^>]*>Réessayer/);
+    expect(text(markup)).toContain("Il a peut-être été enregistré");
+  });
+
+  it("a refused token says a new check is running and nothing is booked yet", () => {
+    const html = text(reviewMarkup({ retrying: true, notice: "CHALLENGE_FAILED", challenge: { status: "checking" } }));
+    expect(html).toContain("La vérification de sécurité a expiré.");
+    expect(html).toContain("Votre rendez-vous n’est pas encore réservé.");
   });
 });
 

@@ -12,6 +12,7 @@ import {
 } from "@/features/availability/availability";
 import type { ConfirmedBooking } from "@/features/booking/booking-answer";
 import type { FlowNotice } from "@/features/booking/booking-flow";
+import type { ChallengeState } from "@/features/booking/challenge";
 import type { CustomerDetails, CustomerField, FieldIssue } from "@/features/booking/booking-request";
 import { formatTimeInZone, formatTimeRange } from "@/features/booking/local-time";
 import { cn } from "@/lib/utils";
@@ -122,6 +123,12 @@ export function noticeCopy(notice: FlowNotice, professionalName: string): Notice
         body: "Votre rendez-vous n’est pas réservé. Réessayez un peu plus tard.",
         contact: true,
       };
+    case "CHALLENGE_FAILED":
+      return {
+        tone: "neutral",
+        title: "La vérification de sécurité a expiré.",
+        body: "Votre rendez-vous n’est pas encore réservé. Une nouvelle vérification vient d’être lancée : confirmez à nouveau dès qu’elle est terminée.",
+      };
     case "KEY_REUSED":
       return {
         tone: "danger",
@@ -159,6 +166,52 @@ export function FlowNoticeBox({ notice, professional }: { notice: FlowNotice; pr
       <p className="type-body-small">{copy.body}</p>
       {copy.contact ? <ContactLinks professional={professional} /> : null}
     </div>
+  );
+}
+
+const CHALLENGE_STATUS_ID = "booking-challenge-status";
+
+/**
+ * Where the security check stands, next to the confirmation button. Usually a
+ * short « en cours » line; a visible request when Cloudflare needs the
+ * customer; a way to try again when it cannot run. Nothing while sending.
+ */
+export function ChallengeStatus({
+  challenge,
+  professional,
+  onRetry,
+}: {
+  challenge: ChallengeState;
+  professional: Professional;
+  onRetry: () => void;
+}) {
+  if (challenge.status === "error") {
+    return (
+      <div id={CHALLENGE_STATUS_ID} role="alert" className="flex flex-col gap-1.5 rounded-[1.25rem] bg-danger-surface px-5 py-4 text-danger">
+        <p className="type-subtitle">La vérification de sécurité n’a pas pu aboutir.</p>
+        <p className="type-body-small">
+          Votre rendez-vous n’est pas encore réservé. Vérifiez votre connexion ou désactivez un éventuel bloqueur de
+          contenu, puis relancez la vérification.
+        </p>
+        <div className="pt-1">
+          <Button type="button" variant="secondary" onClick={onRetry}>
+            Relancer la vérification
+          </Button>
+        </div>
+        <ContactLinks professional={professional} />
+      </div>
+    );
+  }
+  const message =
+    challenge.status === "checking"
+      ? "Vérification de sécurité en cours…"
+      : challenge.status === "interactive"
+        ? "Pour confirmer, complétez la vérification de sécurité ci-dessus."
+        : "Vérification de sécurité terminée.";
+  return (
+    <p id={CHALLENGE_STATUS_ID} role="status" className={cn(quiet, challenge.status === "ready" && "sr-only")}>
+      {message}
+    </p>
   );
 }
 
@@ -549,9 +602,12 @@ export function ReviewStep({
   sending,
   retrying,
   locked,
+  challenge,
+  challengeSlot,
   onEdit,
   onBack,
   onConfirm,
+  onRetryChallenge,
   headingRef,
 }: {
   service: BookableService;
@@ -566,11 +622,17 @@ export function ReviewStep({
   retrying: boolean;
   /** Frozen after an unknown outcome: nothing can be changed. */
   locked: boolean;
+  /** The security check: confirming waits for a fresh token. */
+  challenge: ChallengeState;
+  /** The check's widget, rendered by the flow; invisible unless Cloudflare asks for an interaction. */
+  challengeSlot?: ReactNode;
   onEdit: (step: "service" | "slot" | "details") => void;
   onBack: () => void;
   onConfirm: () => void;
+  onRetryChallenge: () => void;
   headingRef?: Ref<HTMLHeadingElement>;
 }) {
+  const verified = challenge.status === "ready";
   return (
     <section aria-labelledby="booking-step-heading" className="flex flex-col gap-6">
       <StepHeading headingRef={headingRef}>Vérifiez votre rendez-vous</StepHeading>
@@ -606,13 +668,25 @@ export function ReviewStep({
         rendez-vous.
       </p>
 
+      <div className="flex min-w-0 flex-col gap-3">
+        {challengeSlot}
+        {sending ? null : <ChallengeStatus challenge={challenge} professional={professional} onRetry={onRetryChallenge} />}
+      </div>
+
       <Actions>
         {locked ? <span /> : (
           <Button type="button" variant="ghost" onClick={onBack}>
             Retour
           </Button>
         )}
-        <Button type="button" size="lg" onClick={onConfirm} disabled={sending} aria-busy={sending || undefined}>
+        <Button
+          type="button"
+          size="lg"
+          onClick={onConfirm}
+          disabled={sending || !verified}
+          aria-busy={sending || undefined}
+          aria-describedby={sending || verified ? undefined : CHALLENGE_STATUS_ID}
+        >
           {sending ? "Réservation en cours…" : retrying ? "Réessayer" : "Confirmer le rendez-vous"}
         </Button>
       </Actions>

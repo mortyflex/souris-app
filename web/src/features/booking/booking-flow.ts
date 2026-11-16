@@ -15,6 +15,9 @@
  *     edited meanwhile, and the key is never replaced silently.
  *   * While a request is in flight, nothing else is sent (no double
  *     submission).
+ *   * The bot-challenge token is NOT part of an attempt: it is single-use and
+ *     travels beside the request, so a retry sends the same request under the
+ *     same key with a new token (`booking-flow.tsx`, `challenge.ts`).
  *   * A definitive refusal releases the attempt: SLOT_UNAVAILABLE keeps the
  *     customer's details and goes back to the times, which are read again.
  *
@@ -54,6 +57,8 @@ export type FlowNotice =
   | "UNCERTAIN"
   | "RATE_LIMITED"
   | "PROTECTION_UNAVAILABLE"
+  /** The security check was refused (expired, already used…): a new one runs; confirm again. */
+  | "CHALLENGE_FAILED"
   /** The key already booked something else: nothing was booked this time. */
   | "KEY_REUSED"
   /** Online booking is not available. */
@@ -213,6 +218,9 @@ function settle(state: FlowState, response: BookingResponse): FlowState {
       return { ...state, attempt: paused, notice: "RATE_LIMITED" };
     case "PROTECTION_UNAVAILABLE":
       return { ...state, attempt: paused, notice: "PROTECTION_UNAVAILABLE" };
+    case "CHALLENGE_FAILED":
+      // Refused before the engine: this send booked nothing — an earlier unknown one still may have.
+      return { ...state, attempt: paused, notice: attempt.uncertain ? "UNCERTAIN" : "CHALLENGE_FAILED" };
     case "IDEMPOTENCY_KEY_REUSED":
       // Nothing was booked by THIS request; a new attempt needs the customer's explicit confirmation.
       return { ...state, attempt: undefined, notice: "KEY_REUSED" };

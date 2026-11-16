@@ -160,6 +160,28 @@ describe("idempotency: one key per attempt", () => {
     expect(press(limited).plan?.attempt.key).toBe(first.plan?.attempt.key);
   });
 
+  it("a refused security token keeps the same request and key: confirming again sends them unchanged", () => {
+    const first = press(atReview());
+    const refused = answer(first.state, { status: "CHALLENGE_FAILED" });
+    expect(refused).toMatchObject({ step: "review", notice: "CHALLENGE_FAILED" });
+    expect(isAttemptLocked(refused)).toBe(false);
+    const again = press(refused);
+    expect(again.plan?.attempt.key).toBe(first.plan?.attempt.key);
+    expect(again.plan?.attempt.request).toEqual(first.plan?.attempt.request);
+  });
+
+  it("a refused security token never hides an earlier unknown outcome: the request stays frozen", () => {
+    const first = press(atReview());
+    const uncertain = answer(first.state, { status: "ERROR" });
+    const refused = answer(press(uncertain).state, { status: "CHALLENGE_FAILED" });
+    expect(refused.notice).toBe("UNCERTAIN");
+    expect(refused.attempt?.uncertain).toBe(true);
+    expect(isAttemptLocked(refused)).toBe(true);
+    // Nothing can be edited; the retry is the same request under the same key.
+    expect(run(refused, { type: "EDIT_DETAIL", field: "phone", value: "07 00 00 00 00" })).toBe(refused);
+    expect(press(refused).plan?.attempt.key).toBe(first.plan?.attempt.key);
+  });
+
   it("IDEMPOTENCY_KEY_REUSED is recoverable: nothing is retried until the customer confirms again, under a new key", () => {
     const first = press(atReview());
     const reused = answer(first.state, { status: "IDEMPOTENCY_KEY_REUSED" });

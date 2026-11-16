@@ -11,6 +11,7 @@ import { parseAvailabilityQuery, type Availability } from "@/features/availabili
 import { getAvailability } from "@/features/availability/get-availability";
 import { isAvailabilityPreviewEnabled } from "@/features/availability/preview";
 import { isBookingFlowEnabled } from "@/features/booking/flow-gate";
+import { challengeSiteKey } from "@/features/booking/turnstile";
 import { getPublicProfile } from "@/features/public-profile/get-public-profile";
 import type { PublicProfile } from "@/features/public-profile/public-profile";
 import { bookingPath, profilePath } from "@/features/public-profile/slug";
@@ -47,6 +48,9 @@ function BookingLoadError({ profile }: { profile: PublicProfile }) {
  * bookings says so. Everything after that — times, booking — goes through the
  * website's own endpoints (/api/booking/<slug>), never to Supabase.
  *
+ * Without a usable bot challenge (Cloudflare Turnstile keys, `turnstile.ts`)
+ * the flow is not offered: the page says booking is unavailable (fail closed).
+ *
  * Elsewhere the route keeps its notice, or the read-only availability preview
  * (`isAvailabilityPreviewEnabled`).
  */
@@ -57,6 +61,8 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
 
   if (isBookingFlowEnabled()) {
     if (!profile.bookingEnabled) return <BookingInactiveNotice profile={profile} reason="paused" />;
+    const siteKey = challengeSiteKey();
+    if (siteKey === undefined) return <BookingInactiveNotice profile={profile} reason="unavailable" />;
     let availability: Availability | null;
     try {
       availability = await getAvailability(profile.slug, {});
@@ -68,6 +74,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
       <BookingFlow
         slug={profile.slug}
         profileHref={profilePath(profile.slug)}
+        challengeSiteKey={siteKey}
         professional={{
           name: profile.name,
           ...(profile.address !== undefined ? { address: profile.address } : {}),

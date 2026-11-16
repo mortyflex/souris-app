@@ -10,7 +10,7 @@ import "server-only";
  * Callers: the public profile lookup
  * (src/features/public-profile/get-public-profile.ts), the availability
  * lookup and its preview switch (src/features/availability/), the booking
- * flow gate, booking creation and its request protection
+ * flow gate, booking creation, its request protection and its bot challenge
  * (src/features/booking/).
  */
 
@@ -34,6 +34,11 @@ function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new MissingServerEnvError(name);
   return value;
+}
+
+function optional(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
 }
 
 /** Shortest accepted HMAC key of the request counters: 32 characters (≥ 128 bits of a random string). */
@@ -68,4 +73,14 @@ export const serverEnv = {
     }
     return value;
   },
+  /**
+   * Cloudflare Turnstile widget of the booking flow
+   * (src/features/booking/turnstile.ts). The site key is public by nature: the
+   * server hands it to the page. Cloudflare's TEST keys are honoured on a
+   * local site only. Absent: the booking flow refuses every booking (fail
+   * closed).
+   */
+  turnstileSiteKey: () => optional("TURNSTILE_SITE_KEY"),
+  /** The widget's SECRET key: Siteverify only, from server-only code. Never prefixed NEXT_PUBLIC_. */
+  turnstileSecretKey: () => optional("TURNSTILE_SECRET_KEY"),
 } as const;

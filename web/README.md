@@ -43,6 +43,8 @@ Copy `.env.example` to `.env.local` (gitignored). The marketing pages need nothi
 | `ONLINE_BOOKING_AVAILABILITY_PREVIEW` | server only | `enabled` shows the read-only availability preview on `/r/[slug]/reserver` — **development / Staging only**, ignored on the production website |
 | `ONLINE_BOOKING_WEB_BOOKING` | server only | `enabled` opens the public booking flow on `/r/[slug]/reserver` and its endpoints under `/api/booking/[slug]` — **development / Staging only**, ignored on the production website |
 | `ONLINE_BOOKING_REQUEST_LIMIT_SECRET` | server only | Random string of 32+ characters, distinct per environment: the HMAC key of the request counters. **Required by the booking flow**: without it every booking endpoint refuses (fail closed) |
+| `TURNSTILE_SITE_KEY` | server (handed to the page; public by nature) | Site key of this environment's Cloudflare Turnstile widget (managed mode, hostname = this site's). **Required by the booking flow**: without it the flow is not offered (fail closed). Cloudflare's test keys are honoured on a local site only |
+| `TURNSTILE_SECRET_KEY` | server only | The widget's secret, for Cloudflare Siteverify. **Required by the booking flow**: without it every booking is refused (fail closed). Never `NEXT_PUBLIC_`, never committed |
 
 Rules:
 
@@ -58,7 +60,7 @@ Rules:
 | `/r/[slug]` | Public profile of a professional, read from Supabase on every request |
 | `/r/[slug]/reserver` | The booking flow where `ONLINE_BOOKING_WEB_BOOKING=enabled` (development / Staging); elsewhere a "not yet available" notice, or the read-only availability preview with its own switch |
 | `GET /api/booking/[slug]/availability` | Start times of one service on one date, for the booking flow — server-side, rate-limited, never cached |
-| `POST /api/booking/[slug]` | Creates ONE booking — server-side, same-origin JSON only, rate-limited, idempotent by key |
+| `POST /api/booking/[slug]` | Creates ONE booking — server-side, same-origin JSON only, Turnstile-verified, rate-limited, idempotent by key |
 
 Public profiles live under `/r/` so that a slug can never collide with a marketing or legal page. Future legal pages (privacy, terms, legal notice) go in `src/app/(marketing)/` and inherit the marketing header and footer.
 
@@ -66,7 +68,7 @@ Public profiles live under `/r/` so that a slug can never collide with a marketi
 
 The lookup (`src/features/public-profile/get-public-profile.ts`) is server-only: it calls the one database function reserved to the website, `online_booking_public_profile`, with the secret key. Contract and security model: `../docs/architecture/ONLINE_BOOKING.md`.
 
-The booking flow (`src/features/booking/`, `src/components/booking/booking-flow.tsx`, `src/app/api/booking/`) is a four-step journey — service, date and time, details, review — then the server's confirmation. The browser calls the two endpoints above only; they check the origin, the content type, the size and every field, then take the request quota in the database (`online_booking_take_request_quota`, migration `20261019120000`; fail closed when it is missing), and only then call `online_booking_create_booking` with the secret key. One idempotency key per booking attempt; an unknown outcome is retried with the same key and the same request. No price is shown (the public contract has none) and no confirmation email is sent. Contract, limits and rules: `../docs/architecture/ONLINE_BOOKING.md` §10.
+The booking flow (`src/features/booking/`, `src/components/booking/booking-flow.tsx`, `src/app/api/booking/`) is a four-step journey — service, date and time, details, review — then the server's confirmation. The browser calls the two endpoints above only; they check the origin, the content type, the size and every field, then (booking only) the Cloudflare Turnstile token of the review step — header `X-Turnstile-Token`, verified with Siteverify, fail closed — then take the request quota in the database (`online_booking_take_request_quota`, migration `20261019120000`; fail closed when it is missing), and only then call `online_booking_create_booking` with the secret key. One idempotency key per booking attempt; an unknown outcome is retried with the same key and the same request. No price is shown (the public contract has none) and no confirmation email is sent. Contract, limits and rules: `../docs/architecture/ONLINE_BOOKING.md` §10.
 
 The availability preview (`src/features/availability/`, `src/components/booking/availability-preview.tsx`) calls `online_booking_public_availability` the same way. It shows services, dates and start times as labels only — no form, nothing to book — and only when the page accepts bookings. A displayed time is never a guarantee (`../docs/architecture/ONLINE_BOOKING.md` §8).
 

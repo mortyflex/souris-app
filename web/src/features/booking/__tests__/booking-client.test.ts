@@ -13,6 +13,7 @@ const request: BookingRequest = {
   phone: "06 12 34 56 78",
 };
 const KEY = "0123456789abcdef0123456789abcdef";
+const TOKEN = "0.turnstile-token-of-this-send";
 const bookedWire = {
   status: "BOOKED",
   booking: {
@@ -39,9 +40,9 @@ describe("newIdempotencyKey", () => {
 });
 
 describe("submitBooking", () => {
-  it("posts exactly the request and its key to the website's own endpoint", async () => {
+  it("posts exactly the request and its key to the website's own endpoint — the token in its own header", async () => {
     const fetchImpl = vi.fn(async () => json(bookedWire));
-    const response = await submitBooking("chez-amelie", request, KEY, { fetchImpl: fetchImpl as unknown as Fetch });
+    const response = await submitBooking("chez-amelie", request, KEY, TOKEN, { fetchImpl: fetchImpl as unknown as Fetch });
 
     expect(response).toMatchObject({ status: "BOOKED", booking: { localTime: "14:00", timeZone: "Europe/Paris" } });
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
@@ -56,6 +57,8 @@ describe("submitBooking", () => {
       phone: "06 12 34 56 78",
       idempotency_key: KEY,
     });
+    expect((init.headers as Record<string, string>)["X-Turnstile-Token"]).toBe(TOKEN);
+    expect(init.body as string).not.toContain(TOKEN);
   });
 
   it.each<[string, () => Promise<Response>, string]>([
@@ -68,8 +71,10 @@ describe("submitBooking", () => {
     ["a request timeout page", async () => html(408), "ERROR"],
     ["a rate limit", async () => json({ status: "RATE_LIMITED" }, 429), "RATE_LIMITED"],
     ["the creation switch off", async () => json({ status: "UNAVAILABLE" }), "UNAVAILABLE"],
+    ["a refused security token", async () => json({ status: "CHALLENGE_FAILED" }, 403), "CHALLENGE_FAILED"],
+    ["an unavailable security check", async () => json({ status: "PROTECTION_UNAVAILABLE" }, 503), "PROTECTION_UNAVAILABLE"],
   ])("reads %s as %s — never as a success", async (_label, respond, status) => {
-    const response = await submitBooking("chez-amelie", request, KEY, { fetchImpl: vi.fn(respond) as unknown as Fetch });
+    const response = await submitBooking("chez-amelie", request, KEY, TOKEN, { fetchImpl: vi.fn(respond) as unknown as Fetch });
     expect(response.status).toBe(status);
   });
 
@@ -78,7 +83,7 @@ describe("submitBooking", () => {
       (_url: string, init: RequestInit) =>
         new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")))),
     );
-    const response = await submitBooking("chez-amelie", request, KEY, { fetchImpl: never as unknown as Fetch, timeoutMs: 20 });
+    const response = await submitBooking("chez-amelie", request, KEY, TOKEN, { fetchImpl: never as unknown as Fetch, timeoutMs: 20 });
     expect(response).toEqual({ status: "ERROR" });
   });
 });
@@ -86,9 +91,11 @@ describe("submitBooking", () => {
 describe("repeated submission and retry after an uncertain response", () => {
   it("re-sends the identical body under the identical key until a definitive answer, never more than one at a time", async () => {
     const bodies: string[] = [];
+    const tokens: string[] = [];
     let call = 0;
     const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
       bodies.push(init.body as string);
+      tokens.push((init.headers as Record<string, string>)["X-Turnstile-Token"]);
       call += 1;
       if (call === 1) throw new TypeError("Failed to fetch"); // the booking may or may not exist
       if (call === 2) return html(504); // still unknown
@@ -120,7 +127,8 @@ describe("repeated submission and retry after an uncertain response", () => {
       state = flowReducer(state, { type: "SENDING", attempt: plan!.attempt });
       // A double press while in flight sends nothing.
       expect(planSend(state, newKey)).toBeUndefined();
-      const response = await submitBooking("chez-amelie", plan!.attempt.request, plan!.attempt.key, { fetchImpl });
+      // Every send spends its token: each one carries a new token.
+      const response = await submitBooking("chez-amelie", plan!.attempt.request, plan!.attempt.key, `token-of-send-${press}`, { fetchImpl });
       state = flowReducer(state, { type: "ANSWER", response });
       if (state.step === "done") break;
       expect(state.notice).toBe("UNCERTAIN");
@@ -131,6 +139,8 @@ describe("repeated submission and retry after an uncertain response", () => {
     expect(bodies).toHaveLength(3);
     expect(new Set(bodies).size).toBe(1);
     expect(JSON.parse(bodies[0]).idempotency_key).toBe(drawn[0]);
+    // Same body, same key — a new token every time.
+    expect(new Set(tokens).size).toBe(3);
   });
 });
 

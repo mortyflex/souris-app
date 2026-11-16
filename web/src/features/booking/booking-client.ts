@@ -9,10 +9,14 @@ import { parseAvailability, type Availability } from "@/features/availability/av
 
 import { parseResponseWire, type BookingResponse } from "./booking-answer";
 import { toRequestWire, type BookingRequest } from "./booking-request";
+import { CHALLENGE_HEADER } from "./challenge";
 
 type Fetch = typeof fetch;
 
-/** Longer than the server's own wait for the engine (10 s), so the server answers first. */
+/**
+ * Longer than the server's worst case — challenge 3 s + request limits 5 s +
+ * engine 10 s — so the server answers first.
+ */
 export const BOOKING_REQUEST_TIMEOUT_MS = 20_000;
 
 /**
@@ -39,11 +43,16 @@ export function bookingEndpoint(slug: string): string {
  *     the website's handler, so nothing was booked by it;
  *   * anything else — network failure, timeout, 5xx, unreadable 2xx — ERROR:
  *     the outcome is UNKNOWN and only the same key can tell.
+ *
+ * The bot-challenge token travels in its own header, never in the body: it is
+ * single-use, so every send — a retry too — carries a new one, while the body
+ * and its key stay the same.
  */
 export async function submitBooking(
   slug: string,
   request: BookingRequest,
   idempotencyKey: string,
+  challengeToken: string,
   { fetchImpl = fetch, timeoutMs = BOOKING_REQUEST_TIMEOUT_MS }: { fetchImpl?: Fetch; timeoutMs?: number } = {},
 ): Promise<BookingResponse> {
   // A plain timer, not AbortSignal.timeout(): older mobile browsers lack it.
@@ -55,7 +64,7 @@ export async function submitBooking(
     try {
       response = await fetchImpl(bookingEndpoint(slug), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json", [CHALLENGE_HEADER]: challengeToken },
         body: JSON.stringify(toRequestWire(request, idempotencyKey)),
         cache: "no-store",
         credentials: "same-origin",

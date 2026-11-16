@@ -15,6 +15,7 @@ import {
   type FlowStep,
 } from "@/features/booking/booking-flow";
 import type { CustomerField } from "@/features/booking/booking-request";
+import { CHECKING, type ChallengeState } from "@/features/booking/challenge";
 import { cn } from "@/lib/utils";
 
 import {
@@ -27,11 +28,14 @@ import {
   type Professional,
   type SlotsView,
 } from "./booking-steps";
+import { TurnstileWidget } from "./turnstile-widget";
 
 export interface BookingFlowProps {
   readonly slug: string;
   readonly professional: Professional;
   readonly profileHref: string;
+  /** The Cloudflare Turnstile site key the server configured (public by nature). */
+  readonly challengeSiteKey: string;
   /** What the server read for this page: the bookable services and the bookable window. */
   readonly initial: {
     readonly services: readonly BookableService[];
@@ -99,12 +103,15 @@ function focusWithoutJump(element: HTMLElement | null) {
  * network (the website's own endpoints only), the browser history (Back
  * returns to the previous step) and the focus (each step's heading).
  */
-export function BookingFlow({ slug, professional, profileHref, initial }: BookingFlowProps) {
+export function BookingFlow({ slug, professional, profileHref, challengeSiteKey, initial }: BookingFlowProps) {
   const [state, dispatch] = useReducer(flowReducer, undefined, () => initialFlowState());
   const [catalog, setCatalog] = useState<Catalog>({ ...initial, revision: 0 });
   const [slotResult, setSlotResult] = useState<{ key: string; view: SlotsView }>();
   const [slotRetry, setSlotRetry] = useState(0);
   const [popCount, setPopCount] = useState(0);
+  /** The security check of the review step, and a counter that asks it for a new token. */
+  const [challenge, setChallenge] = useState<ChallengeState>(CHECKING);
+  const [challengeReset, setChallengeReset] = useState(0);
 
   const topRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -284,15 +291,21 @@ export function BookingFlow({ slug, professional, profileHref, initial }: Bookin
     [],
   );
 
-  // ---- Confirm: ONE request in flight at most; a pending attempt is re-sent unchanged.
+  // ---- Confirm: ONE request in flight at most; a pending attempt is re-sent unchanged,
+  // with a NEW security token (a token is single-use and is not part of the request).
   const confirm = async () => {
     if (sendingRef.current) return;
+    if (challenge.status !== "ready") return;
     const plan = planSend(state, newIdempotencyKey);
     if (plan === undefined) return;
+    const challengeToken = challenge.token;
     sendingRef.current = true;
+    // This send spends the token, whatever its outcome: ask for the next one now.
+    setChallenge(CHECKING);
+    setChallengeReset((count) => count + 1);
     dispatch({ type: "SENDING", attempt: plan.attempt });
     try {
-      const response = await submitBooking(slug, plan.attempt.request, plan.attempt.key);
+      const response = await submitBooking(slug, plan.attempt.request, plan.attempt.key, challengeToken);
       historyModeRef.current = "replace";
       dispatch({ type: "ANSWER", response });
     } finally {
@@ -384,11 +397,14 @@ export function BookingFlow({ slug, professional, profileHref, initial }: Bookin
           sending={state.attempt?.sending === true}
           retrying={state.attempt !== undefined}
           locked={locked}
+          challenge={challenge}
+          challengeSlot={<TurnstileWidget siteKey={challengeSiteKey} resetSignal={challengeReset} onChange={setChallenge} />}
           onEdit={(target) => {
             if (canShowStep(state, target)) navigate({ type: "GO_TO", step: target });
           }}
           onBack={back}
           onConfirm={() => void confirm()}
+          onRetryChallenge={() => setChallengeReset((count) => count + 1)}
         />
       ) : null}
 

@@ -45,6 +45,8 @@ export type GuardAnswer =
   | { readonly status: "RATE_LIMITED" }
   /** The request protection is not available (configuration): the engine was not called — fail closed. */
   | { readonly status: "PROTECTION_UNAVAILABLE" }
+  /** No valid bot-challenge token (missing, invalid, expired or already used): the engine was not called. */
+  | { readonly status: "CHALLENGE_FAILED" }
   /** Refused at the door (flow closed, foreign origin, malformed): the engine was not called. */
   | { readonly status: "REJECTED" }
   /** The outcome is UNKNOWN (network, timeout, server error): the same key must be retried. */
@@ -92,7 +94,7 @@ function parseBooking(value: unknown): ConfirmedBooking | undefined {
 }
 
 const SIMPLE_ENGINE_STATUSES = ["SLOT_UNAVAILABLE", "UNKNOWN_SERVICE", "BUSY", "IDEMPOTENCY_KEY_REUSED"] as const;
-const GUARD_STATUSES = ["RATE_LIMITED", "PROTECTION_UNAVAILABLE", "REJECTED", "ERROR"] as const;
+const GUARD_STATUSES = ["RATE_LIMITED", "PROTECTION_UNAVAILABLE", "CHALLENGE_FAILED", "REJECTED", "ERROR"] as const;
 
 function parseEngineObject(data: Record<string, unknown>): EngineAnswer | undefined {
   if (data.status === "BOOKED") {

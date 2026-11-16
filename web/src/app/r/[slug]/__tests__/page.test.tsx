@@ -32,6 +32,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("/r/[slug]", () => {
@@ -145,6 +146,8 @@ describe("the booking flow (development / Staging gate)", () => {
   beforeEach(() => {
     vi.stubEnv("ONLINE_BOOKING_WEB_BOOKING", "enabled");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000");
+    vi.stubEnv("TURNSTILE_SITE_KEY", "0x4AAAAAAAsiteKeyOfTheTests");
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "0x4AAAAAAAsecretKeyOfTheTests00000");
   });
 
   it("the profile invites to book", async () => {
@@ -166,7 +169,28 @@ describe("the booking flow (development / Staging gate)", () => {
     expect(html).toContain("1 h 30");
     expect(html).toContain("Étape 1 sur 4");
     expect(html).not.toMatch(/€|sb_secret/);
+    expect(html).not.toContain("0x4AAAAAAAsecretKeyOfTheTests00000");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each<[string, Record<string, string>]>([
+    ["no Turnstile site key", { TURNSTILE_SITE_KEY: "" }],
+    ["no Turnstile secret", { TURNSTILE_SECRET_KEY: "" }],
+    ["Cloudflare's test keys on a hosted site", {
+      NEXT_PUBLIC_SITE_URL: "https://staging.beautizzy.example",
+      TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
+      TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+    }],
+  ])("without a usable security check (%s) the flow is not offered, and no availability is read", async (_label, env) => {
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+    const fetchMock = answering(online, choose);
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { bookingPage } = await load();
+    const html = renderToStaticMarkup(await bookingPage.default(props("chez-amelie")));
+    expect(html).toContain("pas disponible pour le moment");
+    expect(html).not.toContain("Choisissez une prestation");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("a paused page says so, without asking for availability", async () => {

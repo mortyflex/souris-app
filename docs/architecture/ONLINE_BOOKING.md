@@ -573,8 +573,9 @@ Status after Sprint 3C-B (§10):
   professional when a booking arrives — without them she is not told (§9.5);
 - OPEN: the confirmation the customer receives (email, §10.6): a lost answer is only recovered by
   the same key, in the same browser tab;
-- OPEN: a challenge (CAPTCHA) against distributed abuse — the limits bound one network, one email
-  and one page, not a botnet;
+- DONE locally, to validate on a hosted Staging: a challenge against automated bookings —
+  Cloudflare Turnstile in front of the request limits (§10.8); the limits still bound what a
+  solved challenge can do;
 - OPEN: product decisions recorded here as defaults, to confirm: `SCHEDULED` status, the note
   « Réservation en ligne », phone required, archived Clients not matched, the matching rule.
 
@@ -616,10 +617,11 @@ origin (an `Origin` equal to the site's own; `Sec-Fetch-Site` cross-site refused
 most 2 KB read (whatever `Content-Length` claims), exactly seven string keys (`service_id`,
 `starts_at`, `first_name`, `last_name`, `email`, `phone`, `idempotency_key` — nothing else can be
 forwarded), the field rules of the engine (mirrored in `booking-request.ts`, the engine stays the
-authority), then the request limits. Answers: the engine's (200), `REJECTED` (400/403/404/413/
-415), `INVALID_REQUEST` + field (400), `RATE_LIMITED` (429), `PROTECTION_UNAVAILABLE` (503),
-`ERROR` (502, outcome unknown). Nothing the customer typed, no request body and no secret is
-logged; a failure is logged as a status only.
+authority), then the bot challenge (§10.8), then the request limits. Answers: the engine's (200),
+`REJECTED` (400/403/404/413/415), `INVALID_REQUEST` + field (400), `CHALLENGE_FAILED` (403),
+`RATE_LIMITED` (429), `PROTECTION_UNAVAILABLE` (503), `ERROR` (502, outcome unknown). Nothing the
+customer typed, no request body, no token and no secret is logged; a failure is logged as a
+status or a Cloudflare error code only.
 
 ### 10.3 Request limits — counted in the database
 
@@ -654,7 +656,8 @@ counters live in the database every instance shares.
   request (`PROTECTION_UNAVAILABLE`) and the engine is never called.
 - Limits, not a wall: a botnet rotating networks and emails is bounded per page (30 / 10 min),
   which also lets it exhaust that page's quota — three networks suffice, and one IPv6
-  subscriber often holds many /64s. A challenge is the next layer (§9.9).
+  subscriber often holds many /64s. The challenge (§10.8) stands in front of them: a request
+  without a verified token touches no counter, so exhausting a page now takes solved challenges.
 
 ### 10.4 Idempotency, retries and stale data
 
@@ -665,8 +668,11 @@ counters live in the database every instance shares.
   the very same body; the engine replays the booking instead of creating another. The key is
   never replaced silently.
 - One request in flight at most (a guard outside React state, and a disabled button).
-- `BUSY`, `RATE_LIMITED`, `PROTECTION_UNAVAILABLE`: retry with the same key; when nothing was
-  uncertain, changing the request starts a new attempt.
+- Every send carries a NEW Turnstile token in its own header (§10.8): a retry is the same body
+  under the same key with a new token — the token is never part of an attempt.
+- `BUSY`, `RATE_LIMITED`, `PROTECTION_UNAVAILABLE`, `CHALLENGE_FAILED`: retry with the same key;
+  when nothing was uncertain, changing the request starts a new attempt. `CHALLENGE_FAILED` after
+  an earlier unknown outcome keeps the request frozen (« Réessayer », the same request).
 - `SLOT_UNAVAILABLE`: back to the times of the same date, read again; the details are kept.
   `UNKNOWN_SERVICE`: back to the services, read again. `INVALID_REQUEST`: the refused field, or
   the times again. `IDEMPOTENCY_KEY_REUSED`: nothing booked this time; a new attempt needs the
@@ -706,10 +712,51 @@ under the professional's own preference (§9.1).
   fail-closed protection, the gate, no customer detail or secret in an answer or a log); the
   request rules; the flow reducer (one key per attempt, frozen retries, no double send, every
   answer); the browser client (same-key retries, timeouts, stale reads); times in the
-  professional's zone whatever the runtime's; the screens and the page wiring.
+  professional's zone whatever the runtime's; the screens and the page wiring. The challenge
+  (§10.8), every outside call mocked: Siteverify's request, every refusal and every failure, the
+  configuration rules (test keys local only), the order (challenge before any counter, a flood of
+  unverified requests touching none), single use, same-body retries with new tokens, the widget's
+  options, states and script loading, and the review step's states.
 - Real PostgreSQL (scratch harnesses outside the repository): the request counters (privileges,
   semantics, malformed input, window rollover, cleanup, 30 concurrent callers against a limit of
   10 → exactly 10); the website end to end through `next start` and a PostgREST stand-in — two
   booking transactions shown in flight at the same time with exactly one booked, a lost answer
   then the same-key retry, rate limits before the engine, fail-closed protection; the journey in
   headless Chrome at 390 px and 1280 px with a New York browser time zone.
+
+### 10.8 Bot challenge — Cloudflare Turnstile
+
+`web/src/features/booking/turnstile.ts` (server-only: configuration and Siteverify),
+`web/src/features/booking/challenge.ts` (shared: header, action, token shape; the browser's
+script loading and widget), `web/src/components/booking/turnstile-widget.tsx` (the widget on the
+review step). No migration, no npm dependency.
+
+- ONE managed widget, on the review step just before « Confirmer le rendez-vous », action
+  `booking`, French, invisible unless Cloudflare asks for an interaction (`interaction-only`),
+  refreshed automatically when it expires; `compact` below 300 px of width, `flexible` above (no
+  horizontal overflow on a 320 px phone). Cloudflare's script (`api.js?render=explicit`) is loaded
+  from its own address once, on that step only.
+- The button waits for a fresh token (« Vérification de sécurité en cours… »; « complétez la
+  vérification ci-dessus » when an interaction is needed). If the check cannot run (script
+  blocked, network, unsupported browser): an alert, « Relancer la vérification », the
+  professional's contact — never a way around it.
+- A token is SINGLE-USE and lives 300 s (Cloudflare's rules). It travels in the
+  `X-Turnstile-Token` header, never in the body; every send spends it and the widget is reset
+  at once, so a retry carries a new token with the same body and key (§10.4).
+- The server, after the request's own checks and BEFORE any counter or the engine, asks
+  Siteverify (secret, token, the client's address; uncached; 3 s): PASSED only for `success`,
+  the action `booking` and the CONFIGURED site's host (`NEXT_PUBLIC_SITE_URL`, never a host the
+  request claims). No, malformed, invalid, expired or reused token (`timeout-or-duplicate`) →
+  `CHALLENGE_FAILED` (403). Cloudflare unreachable, slow, failing or answering something
+  unexpected, a refused secret, a missing or inconsistent configuration →
+  `PROTECTION_UNAVAILABLE` (503): FAIL CLOSED, nothing is booked without a verified token.
+- Worst case of one request: 3 s (challenge) + 5 s (limits) + 10 s (engine) = 18 s, inside the
+  browser's 20 s.
+- Configuration, per environment: `TURNSTILE_SITE_KEY` (handed to the page by the server) and
+  `TURNSTILE_SECRET_KEY` (server-only), from one Turnstile widget per environment whose hostname
+  is that environment's site. Without them the page does not offer the flow and the endpoint
+  refuses every booking. Cloudflare's TEST keys are honoured only when both the configured site
+  and the request's own host are local (loopback, `*.localhost`, a private IPv4 network) — never
+  on a hosted deployment.
+- The availability reads are NOT challenged (read-only, rate-limited; a single-use token per date
+  change would cost the customer for little).

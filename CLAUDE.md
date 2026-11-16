@@ -723,11 +723,12 @@ Implemented (same reference, §10): the PUBLIC booking flow on `/r/<slug>/reserv
 - development / Staging only: open where `ONLINE_BOOKING_WEB_BOOKING=enabled`, never on the production website (`isBookingFlowEnabled`); the database still decides what can be booked;
 - the browser calls the website's own endpoints only (`/api/booking/<slug>`, availability and creation); every Supabase call stays server-side, with the secret key;
 - every request is checked before the engine — origin, JSON, size, exactly the permitted fields, the engine's field rules — then counted in the DATABASE (`online_booking_take_request_quota`, HMAC keys, never an IP, email or slug stored); fail closed without the secret or the function; never an in-memory counter;
+- a booking also needs a Cloudflare Turnstile token (same reference, §10.8): ONE managed widget on the review step, the single-use token in the `X-Turnstile-Token` header (never in the body), verified server-side with Siteverify — action and the CONFIGURED site's host — BEFORE any counter; fail closed without the keys or when Cloudflare cannot answer; Cloudflare's test keys on a local site only; the secret stays server-only;
 - ONE idempotency key per booking attempt; an unknown outcome freezes the request and is retried with the SAME key and the SAME body; one request in flight at most (`web/src/features/booking/booking-flow.ts`);
 - times are the server's: starts are its labels, ends are formatted in the time zone it returned, never the browser's;
 - no price is shown (the public contract has none) and no confirmation email is sent — the page says so.
 
-Not implemented: confirmation emails, an app surface for online bookings and their overlaps, a challenge (CAPTCHA), the booking flow on the production website, prices on public pages, holding a slot, customer accounts, payments, the editor of bookable services.
+Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, prices on public pages, holding a slot, customer accounts, payments, the editor of bookable services.
 
 Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
 
