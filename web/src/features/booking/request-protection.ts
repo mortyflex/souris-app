@@ -20,12 +20,19 @@ import { callBookingRpc } from "./supabase-rpc";
  *      instance shares, so the limit holds across serverless instances. An
  *      in-memory counter would hold per instance only and is not used.
  *
- * The limits (fixed windows; a refused request counts too):
+ * The limits (fixed windows):
  *
  *   availability   per network          120 / 10 min
  *   booking        per network           10 / 10 min, 40 / 24 h
  *                  per customer email     6 / 24 h
  *                  per page (slug)       30 / 10 min
+ *
+ * Two kinds of counter, taken in two steps. The client's OWN counters
+ * (network, email) come first, and a refused request counts on them too, so
+ * a refused client cannot probe its way back in. The page's SHARED counter
+ * comes second, and only for a request the client's own limits allowed: one
+ * client, however often it is refused, adds at most its own allowance to the
+ * page (10 of its 30), never locking the page's other customers out.
  *
  * A network is the client's IPv4 address or its IPv6 /64, read from the
  * platform's forwarding headers (Vercel overwrites them; a self-hosted proxy
@@ -63,6 +70,7 @@ export type QuotaDecision = "ALLOWED" | "LIMITED" | "UNAVAILABLE";
 
 /** Largest accepted booking body. A legitimate request is about 300 bytes. */
 export const MAX_BOOKING_BODY_BYTES = 2048;
+/** For the whole quota, both steps together. */
 const QUOTA_TIMEOUT_MS = 5_000;
 
 // ---------------------------------------------------------------------------
@@ -186,11 +194,38 @@ function identifierOf(per: "network" | "email" | "page", identity: RequestIdenti
   return identity.email?.trim().toLowerCase();
 }
 
+interface Counter {
+  readonly key: string;
+  readonly limit: number;
+  readonly window_seconds: number;
+}
+
 /**
- * Takes this request's quota for an action. ALLOWED only when the database
- * answered that every counter is within its limit. Every other case —
+ * ONE database call: increments every counter given (one transaction) and
+ * answers whether all of them are still within their limit.
+ */
+async function takeCounters(counters: readonly Counter[], deadline: number): Promise<QuotaDecision> {
+  const timeoutMs = deadline - Date.now();
+  if (timeoutMs <= 0) {
+    console.error("booking: request protection unavailable (timeout)");
+    return "UNAVAILABLE";
+  }
+  const result = await callBookingRpc("online_booking_take_request_quota", { p_counters: counters }, timeoutMs);
+  if (result.ok && result.data === true) return "ALLOWED";
+  if (result.ok && result.data === false) return "LIMITED";
+  // The status only — never a body, an identifier or a key.
+  console.error(`booking: request protection unavailable (${result.ok ? "unexpected answer" : `HTTP ${result.status ?? "none"}`})`);
+  return "UNAVAILABLE";
+}
+
+/**
+ * Takes this request's quota for an action: the client's own counters, then
+ * — only when they allow it — the page's shared counter. ALLOWED only when
+ * the database answered that every counter is within its limit; LIMITED as
+ * soon as one step refuses (the next step is not taken). Every other case —
  * missing or invalid secret, missing function, network failure, unexpected
- * answer — is UNAVAILABLE, and the caller refuses the request.
+ * answer, the time budget spent — is UNAVAILABLE, and the caller refuses the
+ * request.
  */
 export async function takeRequestQuota(action: ProtectedAction, identity: RequestIdentity): Promise<QuotaDecision> {
   let secret: string;
@@ -201,22 +236,24 @@ export async function takeRequestQuota(action: ProtectedAction, identity: Reques
     return "UNAVAILABLE";
   }
 
-  const counters: { key: string; limit: number; window_seconds: number }[] = [];
+  const own: Counter[] = [];
+  const shared: Counter[] = [];
   for (const rule of REQUEST_LIMITS[action]) {
     const identifier = identifierOf(rule.per, identity);
     // A limit that cannot be keyed is a request that cannot be protected.
     if (identifier === undefined || identifier.length === 0) return "UNAVAILABLE";
-    counters.push({
+    (rule.per === "page" ? shared : own).push({
       key: counterKey(secret, rule.scope, rule.windowSeconds, identifier),
       limit: rule.limit,
       window_seconds: rule.windowSeconds,
     });
   }
 
-  const result = await callBookingRpc("online_booking_take_request_quota", { p_counters: counters }, QUOTA_TIMEOUT_MS);
-  if (result.ok && result.data === true) return "ALLOWED";
-  if (result.ok && result.data === false) return "LIMITED";
-  // The status only — never a body, an identifier or a key.
-  console.error(`booking: request protection unavailable (${result.ok ? "unexpected answer" : `HTTP ${result.status ?? "none"}`})`);
-  return "UNAVAILABLE";
+  const deadline = Date.now() + QUOTA_TIMEOUT_MS;
+  for (const step of [own, shared]) {
+    if (step.length === 0) continue;
+    const decision = await takeCounters(step, deadline);
+    if (decision !== "ALLOWED") return decision;
+  }
+  return "ALLOWED";
 }

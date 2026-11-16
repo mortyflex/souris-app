@@ -644,11 +644,17 @@ counters live in the database every instance shares.
 
   A network is the IPv4 address or the IPv6 /64, read from `x-real-ip` / `x-forwarded-for` as
   the platform sets them (Vercel overwrites them; a self-hosted proxy must do the same).
+- Two steps per booking request, two calls: the client's OWN counters (network, email) first —
+  a request they refuse still counts on them —, then the page's SHARED counter, only for a
+  request they allowed. One client, however often it is refused, adds at most its own allowance
+  to the page (10 of its 30) and cannot lock the page's other customers out. Both steps share one
+  5-second budget.
 - FAIL CLOSED: without `ONLINE_BOOKING_REQUEST_LIMIT_SECRET` (32+ characters), without the
   function (migration not applied), or when it does not answer, both endpoints refuse every
   request (`PROTECTION_UNAVAILABLE`) and the engine is never called.
 - Limits, not a wall: a botnet rotating networks and emails is bounded per page (30 / 10 min),
-  which also lets it exhaust that page's quota. A challenge is the next layer (§9.9).
+  which also lets it exhaust that page's quota — three networks suffice, and one IPv6
+  subscriber often holds many /64s. A challenge is the next layer (§9.9).
 
 ### 10.4 Idempotency, retries and stale data
 

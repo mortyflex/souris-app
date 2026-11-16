@@ -30,17 +30,34 @@ const booked = {
 };
 
 type Answer = { status: number; body: unknown } | "network";
+interface Counter {
+  key: string;
+  limit: number;
+  window_seconds: number;
+}
 interface Fake {
-  quota: Answer;
+  /** An answer, or one decided from the counters of the call. */
+  quota: Answer | ((counters: Counter[]) => Answer | Promise<Answer>);
   booking: Answer;
   calls: { fn: string; body: Record<string, unknown>; headers: Record<string, string> }[];
 }
 
+const QUOTA = "online_booking_take_request_quota";
+const BOOK = "online_booking_create_booking";
+
 function fakeSupabase(fake: Fake) {
   return vi.fn(async (url: string, init: RequestInit) => {
     const fn = url.replace(`${SUPABASE}/rest/v1/rpc/`, "");
-    fake.calls.push({ fn, body: JSON.parse(init.body as string), headers: init.headers as Record<string, string> });
-    const answer = fn === "online_booking_take_request_quota" ? fake.quota : fn === "online_booking_create_booking" ? fake.booking : undefined;
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    fake.calls.push({ fn, body, headers: init.headers as Record<string, string> });
+    const answer =
+      fn === QUOTA
+        ? typeof fake.quota === "function"
+          ? await fake.quota(body.p_counters as Counter[])
+          : fake.quota
+        : fn === BOOK
+          ? fake.booking
+          : undefined;
     if (answer === undefined) throw new Error(`unexpected call ${fn}`);
     if (answer === "network") throw new TypeError("fetch failed");
     return new Response(JSON.stringify(answer.body), { status: answer.status, headers: { "Content-Type": "application/json" } });
@@ -89,18 +106,30 @@ afterEach(() => {
 });
 
 const fns = () => fake.calls.map((call) => call.fn);
+const countersOf = (call: Fake["calls"][number]) => call.body.p_counters as Counter[];
+/** Each quota call, as the limit / window of each counter it takes. */
+const quotaSteps = () =>
+  fake.calls.filter((call) => call.fn === QUOTA).map((call) => countersOf(call).map((c) => `${c.limit}/${c.window_seconds}`));
+const OWN_STEP = ["10/600", "40/86400", "6/86400"];
+const PAGE_STEP = ["30/600"];
+const isPageCounter = (c: Counter) => c.limit === 30 && c.window_seconds === 600;
+const isPageStep = (counters: Counter[]) => counters.some(isPageCounter);
+/** The key of the page's counter, in whichever quota call took it. */
+const pageKeys = () =>
+  fake.calls.filter((call) => call.fn === QUOTA).flatMap((call) => countersOf(call).filter(isPageCounter).map((c) => c.key));
 
 describe("POST /api/booking/[slug] — success through the server boundary", () => {
-  it("takes the quota, then books with exactly the permitted fields, and answers the server's confirmation", async () => {
+  it("takes the client's own quota, then the page's, then books with exactly the permitted fields", async () => {
     const { POST } = await load();
     const response = await POST(post(request), context());
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(await response.json()).toEqual(booked);
-    expect(fns()).toEqual(["online_booking_take_request_quota", "online_booking_create_booking"]);
+    expect(fns()).toEqual([QUOTA, QUOTA, BOOK]);
+    expect(quotaSteps()).toEqual([OWN_STEP, PAGE_STEP]);
 
-    const bookingCall = fake.calls[1];
+    const bookingCall = fake.calls[2];
     expect(bookingCall.body).toEqual({
       p_slug: "chez-amelie",
       p_service_id: "svc-coupe",
@@ -118,10 +147,11 @@ describe("POST /api/booking/[slug] — success through the server boundary", () 
     const { POST } = await load();
     await POST(post(request), context());
 
-    const counters = fake.calls[0].body.p_counters as { key: string; limit: number; window_seconds: number }[];
+    const quotaCalls = fake.calls.filter((call) => call.fn === QUOTA);
+    const counters = quotaCalls.flatMap(countersOf);
     expect(counters).toHaveLength(4);
     for (const counter of counters) expect(counter.key).toMatch(/^[0-9a-f]{64}$/);
-    const sent = JSON.stringify(fake.calls[0].body);
+    const sent = JSON.stringify(quotaCalls.map((call) => call.body));
     for (const secretOrPersonal of ["203.0.113.7", "marie", "example.test", "chez-amelie", LIMIT_SECRET]) {
       expect(sent).not.toContain(secretOrPersonal);
     }
@@ -237,28 +267,80 @@ describe("POST /api/booking/[slug] — refused before the engine", () => {
 });
 
 describe("POST /api/booking/[slug] — abuse protection", () => {
-  it("rejects a request over its limit BEFORE the booking engine is called", async () => {
+  it("rejects a request over its own limits BEFORE the booking engine — and before the page's shared counter", async () => {
     fake.quota = { status: 200, body: false };
     const { POST } = await load();
     const response = await POST(post(request), context());
     expect(response.status).toBe(429);
     expect(response.headers.get("retry-after")).toBe("600");
     expect(await response.json()).toEqual({ status: "RATE_LIMITED" });
-    expect(fns()).toEqual(["online_booking_take_request_quota"]);
+    expect(fns()).toEqual([QUOTA]);
+    expect(quotaSteps()).toEqual([OWN_STEP]);
   });
 
-  it.each<[string, Answer]>([
+  it("rejects a request the page's limit refuses, after the client's own limits allowed it: no booking", async () => {
+    fake.quota = (counters) => ({ status: 200, body: !isPageStep(counters) });
+    const { POST } = await load();
+    const response = await POST(post(request), context());
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("600");
+    expect(await response.json()).toEqual({ status: "RATE_LIMITED" });
+    expect(fns()).toEqual([QUOTA, QUOTA]);
+    expect(quotaSteps()).toEqual([OWN_STEP, PAGE_STEP]);
+  });
+
+  const failures: [string, Answer][] = [
     ["the counter function is missing (migration not applied)", { status: 404, body: { code: "PGRST202" } }],
     ["the counter function fails", { status: 500, body: {} }],
     ["the database cannot be reached", "network"],
     ["an unexpected answer", { status: 200, body: "yes" }],
-  ])("fails CLOSED when %s: no booking", async (_label, answer) => {
+  ];
+
+  it.each(failures)("fails CLOSED when %s: no booking, and the page's counter is not taken", async (_label, answer) => {
     fake.quota = answer;
     const { POST } = await load();
     const response = await POST(post(request), context());
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ status: "PROTECTION_UNAVAILABLE" });
-    expect(fns()).toEqual(["online_booking_take_request_quota"]);
+    expect(fns()).toEqual([QUOTA]);
+  });
+
+  it.each(failures)("fails CLOSED when, at the page's step, %s: no booking", async (_label, answer) => {
+    fake.quota = (counters) => (isPageStep(counters) ? answer : { status: 200, body: true });
+    const { POST } = await load();
+    const response = await POST(post(request), context());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: "PROTECTION_UNAVAILABLE" });
+    expect(fns()).toEqual([QUOTA, QUOTA]);
+  });
+
+  it("keeps ONE time budget of 5 seconds for both steps: the page's step gets what the first left", async () => {
+    let clock = 1_800_000_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
+    const timeouts = vi.spyOn(AbortSignal, "timeout");
+    fake.quota = (counters) => {
+      if (!isPageStep(counters)) clock += 3_000;
+      return { status: 200, body: true };
+    };
+    const { POST } = await load();
+    const response = await POST(post(request), context());
+    expect(response.status).toBe(200);
+    expect(timeouts.mock.calls.slice(0, 2)).toEqual([[5_000], [2_000]]);
+  });
+
+  it("fails CLOSED, without the page's step, when the first step spent the whole budget", async () => {
+    let clock = 1_800_000_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
+    fake.quota = () => {
+      clock += 5_000;
+      return { status: 200, body: true };
+    };
+    const { POST } = await load();
+    const response = await POST(post(request), context());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: "PROTECTION_UNAVAILABLE" });
+    expect(fns()).toEqual([QUOTA]);
+    expect(logs).toContain("booking: request protection unavailable (timeout)");
   });
 
   it.each([
@@ -278,11 +360,139 @@ describe("POST /api/booking/[slug] — abuse protection", () => {
     await POST(post(request), context());
     await POST(post({ ...request, idempotency_key: "fedcba9876543210fedcba9876543210" }), context());
     await POST(post({ ...request, email: "zoe@example.test", idempotency_key: "aaaabbbbccccddddaaaabbbbccccdddd" }), context());
-    const keys = fake.calls.filter((call) => call.fn === "online_booking_take_request_quota").map((call) =>
-      (call.body.p_counters as { key: string }[]).map((counter) => counter.key),
-    );
+    const quotaCalls = fake.calls.filter((call) => call.fn === QUOTA);
+    expect(quotaCalls).toHaveLength(6);
+    // Two steps per request: its own counters, then the page's.
+    const keys = [0, 2, 4].map((i) => [...countersOf(quotaCalls[i]), ...countersOf(quotaCalls[i + 1])].map((c) => c.key));
     expect(keys[1]).toEqual(keys[0]);
     // Same network and page, another email: only the email counter differs.
     expect(keys[2].filter((key) => !keys[0].includes(key))).toHaveLength(1);
+  });
+
+  it("shares the page's counter between every customer of a page, and only of that page", async () => {
+    const { POST } = await load();
+    await POST(post(request), context());
+    await POST(post({ ...request, email: "zoe@example.test" }, { "x-forwarded-for": "198.51.100.20" }), context());
+    await POST(post(request, {}, "autre-salon"), context("autre-salon"));
+    const keys = pageKeys();
+    expect(keys).toHaveLength(3);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+});
+
+/**
+ * The counters of `online_booking_take_request_quota` (migration
+ * 20261019120000), modelled: one call increments EVERY counter it is given —
+ * a refused call too — as one atomic step, and answers whether all of them are
+ * still within their limit. One window: a test lasts milliseconds. Each call
+ * first yields, so every request in flight interleaves with the others between
+ * its two steps, as on a real server. (The same scenarios run against the real
+ * function on PostgreSQL in the review harness.)
+ */
+function counterDatabase() {
+  const hits = new Map<string, number>();
+  const take = async (counters: Counter[]): Promise<Answer> => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (counters.length < 1 || counters.length > 8 || counters.some((c) => !/^[0-9a-f]{64}$/.test(c.key))) {
+      return { status: 400, body: { code: "22023" } };
+    }
+    let allowed = true;
+    for (const counter of counters) {
+      const count = (hits.get(counter.key) ?? 0) + 1;
+      hits.set(counter.key, count);
+      if (count > counter.limit) allowed = false;
+    }
+    return { status: 200, body: allowed };
+  };
+  return { hits, take };
+}
+
+describe("POST /api/booking/[slug] — one client cannot use up the page's shared quota", () => {
+  let database: ReturnType<typeof counterDatabase>;
+  let sent = 0;
+
+  beforeEach(() => {
+    database = counterDatabase();
+    fake.quota = database.take;
+    sent = 0;
+  });
+
+  /** A new booking attempt (its own key) from a network, by default with its own email. */
+  const from = (network: string, email?: string) => {
+    sent += 1;
+    return post(
+      { ...request, email: email ?? `client${sent}@example.test`, idempotency_key: String(sent).padStart(32, "0") },
+      { "x-forwarded-for": network },
+    );
+  };
+  type Handler = Awaited<ReturnType<typeof load>>["POST"];
+  const together = (POST: Handler, requests: Request[]) =>
+    Promise.all(requests.map(async (r) => (await POST(r, context())).status));
+  const count = (statuses: number[], status: number) => statuses.filter((s) => s === status).length;
+  const bookings = () => fns().filter((fn) => fn === BOOK).length;
+  const pageHits = () => {
+    const [key] = pageKeys();
+    return key === undefined ? 0 : (database.hits.get(key) ?? 0);
+  };
+
+  it("a network refused by its own limits adds nothing more to the page: another customer still books", async () => {
+    const { POST } = await load();
+    const flood: number[] = [];
+    for (let i = 0; i < 60; i += 1) flood.push((await POST(from("203.0.113.7"), context())).status);
+    expect(count(flood, 200)).toBe(10);
+    expect(count(flood, 429)).toBe(50);
+
+    const customer = await POST(from("198.51.100.20"), context());
+    expect(customer.status).toBe(200);
+    expect(await customer.json()).toEqual(booked);
+    expect(bookings()).toBe(11);
+    // Only the 10 requests its own limits allowed reached the page's counter (+ the customer).
+    expect(pageHits()).toBe(11);
+  });
+
+  it("30 simultaneous requests from one network: exactly 10 pass, and the page keeps room for 20 others", async () => {
+    const { POST } = await load();
+    const flood = await together(POST, Array.from({ length: 30 }, () => from("203.0.113.7")));
+    expect(count(flood, 200)).toBe(10);
+    expect(count(flood, 429)).toBe(20);
+
+    const customers = await together(POST, Array.from({ length: 20 }, (_, i) => from(`198.51.100.${i + 1}`)));
+    expect(customers).toEqual(Array<number>(20).fill(200));
+    expect(bookings()).toBe(30);
+    expect(pageHits()).toBe(30);
+  });
+
+  it("still holds the page to 30 under concurrency: 45 customers on 45 networks at once, exactly 30 booked", async () => {
+    const { POST } = await load();
+    const statuses = await together(POST, Array.from({ length: 45 }, (_, i) => from(`198.51.100.${i + 1}`)));
+    expect(count(statuses, 200)).toBe(30);
+    expect(count(statuses, 429)).toBe(15);
+    expect(bookings()).toBe(30);
+    expect(pageHits()).toBe(45);
+  });
+
+  it("a flood and real customers at once: the page's 30 are shared, the flood gets at most its network's 10", async () => {
+    const { POST } = await load();
+    const statuses = await together(POST, [
+      ...Array.from({ length: 30 }, () => from("203.0.113.7")),
+      ...Array.from({ length: 25 }, (_, i) => from(`198.51.100.${i + 1}`)),
+    ]);
+    const flood = statuses.slice(0, 30);
+    const customers = statuses.slice(30);
+    expect(count(statuses, 200)).toBe(30);
+    expect(count(flood, 200)).toBeLessThanOrEqual(10);
+    expect(count(customers, 200)).toBeGreaterThanOrEqual(20);
+    expect(bookings()).toBe(30);
+    // 10 from the flood's network + 25 customers reached the page's counter.
+    expect(pageHits()).toBe(35);
+  });
+
+  it("keeps the client's own limits: one email from 7 networks, the 7th refused", async () => {
+    const { POST } = await load();
+    const statuses: number[] = [];
+    for (let i = 1; i <= 7; i += 1) statuses.push((await POST(from(`198.51.100.${i}`, "marie.dupont@example.test"), context())).status);
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 200, 429]);
+    expect(pageHits()).toBe(6);
   });
 });
