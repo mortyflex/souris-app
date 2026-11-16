@@ -16,6 +16,21 @@ async function load() {
 
 const props = (slug: string) => ({ params: Promise.resolve({ slug }), searchParams: Promise.resolve({}) });
 
+/** The first element of a tree that carries a Suspense `fallback`. */
+function findSuspense(node: unknown): ReactElement | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findSuspense(child);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (typeof node !== "object" || node === null || !("props" in node)) return undefined;
+  const element = node as ReactElement<{ fallback?: unknown; children?: unknown }>;
+  if (element.props.fallback !== undefined) return element;
+  return findSuspense(element.props.children);
+}
+
 /** What `notFound()` throws: Next.js turns it into an HTTP 404 when nothing has been sent yet. */
 const NOT_FOUND = "NEXT_HTTP_ERROR_FALLBACK;404";
 const digestOf = (promise: Promise<unknown>) =>
@@ -112,10 +127,12 @@ describe("/r/[slug]/reserver", () => {
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000");
     vi.stubGlobal("fetch", vi.fn(async () => respond({ slug: "chez-amelie", name: "Chez Amélie", booking_enabled: true })));
     const { bookingPage } = await load();
-    const element = (await bookingPage.default({
+    const page = (await bookingPage.default({
       ...props("chez-amelie"),
       searchParams: Promise.resolve({ service: "svc-coupe", date: "2026-02-30" }),
-    })) as ReactElement<{ fallback: ReactElement; children: ReactElement<{ query: unknown }> }>;
+    })) as ReactElement;
+    // The page shell (header, main) wraps the content: find the preview's own Suspense boundary.
+    const element = findSuspense(page) as ReactElement<{ fallback: ReactElement; children: ReactElement<{ query: unknown }> }>;
     // The malformed date is dropped before anything reaches the server.
     expect(element.props.children.props.query).toEqual({ serviceId: "svc-coupe" });
     expect(renderToStaticMarkup(element.props.fallback)).toContain("Chargement des disponibilités…");

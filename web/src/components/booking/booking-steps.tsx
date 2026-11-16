@@ -1,6 +1,9 @@
-import type { ReactNode, Ref } from "react";
+import { useRef, type ReactNode, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CalendarIcon, CheckIcon, ClockIcon, UserIcon } from "@/components/ui/icons";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import {
   datesOfWindow,
   describeTimeZone,
@@ -16,6 +19,9 @@ import type { ChallengeState } from "@/features/booking/challenge";
 import type { CustomerDetails, CustomerField, FieldIssue } from "@/features/booking/booking-request";
 import { formatTimeInZone, formatTimeRange } from "@/features/booking/local-time";
 import { cn } from "@/lib/utils";
+
+import { DateStrip } from "./date-strip";
+import { groupSlotsByPeriod, skeletonCount } from "./date-strip-rules";
 
 /**
  * The screens of the public booking flow — presentation only. State, network
@@ -226,6 +232,8 @@ export function ServiceStep({
   services,
   selectedId,
   loading,
+  issue,
+  onRetry,
   onChoose,
   headingRef,
   professional,
@@ -233,6 +241,9 @@ export function ServiceStep({
   services: readonly BookableService[];
   selectedId?: string;
   loading?: boolean;
+  /** The list could not be read again: it may be out of date. */
+  issue?: "error" | "limited";
+  onRetry?: () => void;
   onChoose: (service: BookableService) => void;
   headingRef?: Ref<HTMLHeadingElement>;
   professional: Professional;
@@ -240,6 +251,24 @@ export function ServiceStep({
   return (
     <section aria-labelledby="booking-step-heading" className="flex flex-col gap-5">
       <StepHeading headingRef={headingRef}>Choisissez une prestation</StepHeading>
+      {loading ? (
+        <p role="status" className={cn(quiet, "flex items-center gap-2 text-lavender-700")}>
+          <Spinner size={14} />
+          Mise à jour des prestations…
+        </p>
+      ) : issue ? (
+        <div role="status" className="flex flex-col items-start gap-3 rounded-[1.25rem] bg-surface px-5 py-4">
+          <p className="type-subtitle">
+            {issue === "limited" ? "Trop de demandes depuis votre connexion." : "La liste des prestations n’a pas pu être mise à jour."}
+          </p>
+          <p className={quiet}>{issue === "limited" ? "Patientez quelques minutes, puis réessayez." : "Elle n’est peut-être plus à jour."}</p>
+          {onRetry ? (
+            <Button type="button" variant="secondary" onClick={onRetry}>
+              Réessayer
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {services.length === 0 ? (
         <div className="flex flex-col gap-2 rounded-[1.25rem] bg-surface px-5 py-4">
           <p className="type-subtitle">Aucune prestation n’est proposée en ligne pour le moment.</p>
@@ -257,10 +286,17 @@ export function ServiceStep({
                   aria-pressed={selected}
                   disabled={loading}
                   onClick={() => onChoose(service)}
-                  className={cn(choice, "flex min-h-14 w-full items-center justify-between gap-4 px-5 py-4", selected ? chosen : notChosen)}
+                  className={cn(
+                    choice,
+                    "group flex min-h-[4.5rem] w-full items-center justify-between gap-4 px-5 py-4 shadow-card",
+                    selected ? chosen : notChosen,
+                  )}
                 >
                   <span className="type-subtitle min-w-0 [overflow-wrap:anywhere]">{service.name}</span>
-                  <span className="type-meta shrink-0 tabular-nums text-foreground/70">{formatDuration(service.durationMinutes)}</span>
+                  <span className="type-meta inline-flex shrink-0 items-center gap-1.5 rounded-full bg-lavender-50 px-2.5 py-1 tabular-nums text-lavender-700 transition-colors duration-[var(--bz-duration-state)] group-hover:bg-background">
+                    <ClockIcon size={14} />
+                    {formatDuration(service.durationMinutes)}
+                  </span>
                 </button>
               </li>
             );
@@ -288,6 +324,8 @@ export function SlotStep({
   slot,
   slots,
   timeZone,
+  professional,
+  loadingCount,
   onChangeService,
   onChooseDate,
   onChooseSlot,
@@ -302,6 +340,10 @@ export function SlotStep({
   slot?: AvailableSlot;
   slots: SlotsView;
   timeZone: string;
+  /** Shown in the appointment summary beside the step (desktop). */
+  professional?: Professional;
+  /** How many placeholders the loading grid draws (the last day seen). */
+  loadingCount?: number;
   onChangeService: () => void;
   onChooseDate: (date: string) => void;
   onChooseSlot: (slot: AvailableSlot) => void;
@@ -310,134 +352,258 @@ export function SlotStep({
   onContinue: () => void;
   headingRef?: Ref<HTMLHeadingElement>;
 }) {
+  const timesHeadingRef = useRef<HTMLHeadingElement>(null);
   const dates = datesOfWindow(window.firstDate, window.lastDate);
   const nextDate = date === undefined ? undefined : dates[dates.indexOf(date) + 1];
+  // A control inside the times region is replaced by the loading grid: the focus moves to the times' heading.
+  const focusTimes = () => {
+    requestAnimationFrame(() => timesHeadingRef.current?.focus());
+  };
+  const selection = slot && date ? `${capitalized(formatShortDate(date))} · ${slot.localTime}` : undefined;
+
   return (
-    <section aria-labelledby="booking-step-heading" className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <StepHeading headingRef={headingRef}>Choisissez une date et un horaire</StepHeading>
-        <p className="type-body-small flex flex-wrap items-center gap-x-3 text-foreground/75">
-          <span>
-            {service.name} · <span className="tabular-nums">{formatDuration(service.durationMinutes)}</span>
-          </span>
-          <button type="button" onClick={onChangeService} className={cn(link, "min-h-11")}>
-            Changer de prestation
-          </button>
-        </p>
-      </div>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-8">
+      <section
+        aria-labelledby="booking-step-heading"
+        className="flex min-w-0 flex-col gap-7 lg:rounded-[1.75rem] lg:bg-background lg:p-9 lg:shadow-card lg:ring-1 lg:ring-border/65"
+      >
+        <div className="flex flex-col gap-2">
+          <StepHeading headingRef={headingRef}>Choisissez une date et un horaire</StepHeading>
+          <p className="type-body-small flex flex-wrap items-center gap-x-3 text-foreground/75">
+            <span>
+              {service.name} · <span className="tabular-nums">{formatDuration(service.durationMinutes)}</span>
+            </span>
+            <button type="button" onClick={onChangeService} className={cn(link, "min-h-11")}>
+              Changer de prestation
+            </button>
+          </p>
+        </div>
 
-      <div className="flex flex-col gap-3">
-        <h3 id="booking-dates" className="type-label">
-          Date
-        </h3>
-        <ul aria-labelledby="booking-dates" className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]">
-          {dates.map((candidate) => {
-            const selected = candidate === date;
-            return (
-              <li key={candidate} className="shrink-0 snap-start">
-                <button
-                  type="button"
-                  id={`booking-date-${candidate}`}
-                  aria-pressed={selected}
-                  aria-label={capitalized(formatLongDate(candidate))}
-                  onClick={() => onChooseDate(candidate)}
-                  className={cn(choice, "type-label flex min-h-11 items-center whitespace-nowrap px-4 py-2 tabular-nums", selected ? chosen : notChosen)}
-                >
-                  {formatShortDate(candidate)}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+        <DateStrip dates={dates} selected={date} onChoose={onChooseDate} />
 
-      <div className="flex flex-col gap-3">
-        <h3 id="booking-times" className="type-label">
-          {date ? `Horaires du ${formatLongDate(date)}` : "Horaires"}
-        </h3>
-        {slots.status === "loading" ? (
-          <div aria-busy="true" className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-            <span className="sr-only">Chargement des horaires…</span>
-            {Array.from({ length: 10 }, (_, index) => (
-              <div key={index} className="h-11 animate-pulse rounded-full bg-lavender-50" />
-            ))}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+            <h3
+              ref={timesHeadingRef}
+              id="booking-times"
+              tabIndex={-1}
+              className="type-label rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-4"
+            >
+              {date ? `Horaires du ${formatLongDate(date)}` : "Horaires"}
+            </h3>
+            <span className="type-meta text-foreground/60">Horaires {describeTimeZone(timeZone)}</span>
           </div>
-        ) : slots.status === "error" ? (
-          <div className="flex flex-col items-start gap-3 rounded-[1.25rem] bg-danger-surface px-5 py-4 text-danger" role="alert">
-            <p className="type-subtitle">Les horaires n’ont pas pu être chargés.</p>
-            <Button type="button" variant="secondary" onClick={onRetry}>
-              Réessayer
-            </Button>
-          </div>
-        ) : slots.status === "limited" ? (
-          <div className="flex flex-col items-start gap-3 rounded-[1.25rem] bg-surface px-5 py-4" role="status">
-            <p className="type-subtitle">Trop de demandes depuis votre connexion.</p>
-            <p className={quiet}>Patientez quelques minutes, puis réessayez.</p>
-            <Button type="button" variant="secondary" onClick={onRetry}>
-              Réessayer
-            </Button>
-          </div>
-        ) : slots.status === "out_of_window" ? (
-          <div className="rounded-[1.25rem] bg-surface px-5 py-4" role="status">
-            <p className="type-subtitle">Cette date n’est plus ouverte à la réservation.</p>
-            <p className={quiet}>Choisissez une autre date.</p>
-          </div>
-        ) : slots.slots.length === 0 ? (
-          <div className="flex flex-col items-start gap-3 rounded-[1.25rem] bg-surface px-5 py-4" role="status">
-            <p className="type-subtitle">Aucun horaire disponible ce jour-là.</p>
-            {nextDate ? (
-              <Button type="button" variant="secondary" onClick={() => onChooseDate(nextDate)}>
-                Voir le {formatLongDate(nextDate)}
+
+          {slots.status === "loading" ? (
+            <div aria-busy="true" className="flex flex-col gap-6">
+              <span className="sr-only">Chargement des horaires…</span>
+              {splitForSkeleton(skeletonCount(loadingCount)).map((count, index) => (
+                <div key={index} className="flex flex-col gap-3">
+                  <Skeleton className="h-3.5 w-28" />
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 sm:gap-2.5 lg:grid-cols-6">
+                    {Array.from({ length: count }, (_, cell) => (
+                      <Skeleton key={cell} className="h-11" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : slots.status === "error" ? (
+            <div className="flex flex-col items-start gap-3 rounded-[1.25rem] bg-danger-surface px-5 py-4 text-danger" role="alert">
+              <p className="type-subtitle">Les horaires n’ont pas pu être chargés.</p>
+              <Button type="button" variant="secondary" onClick={() => {
+                  onRetry();
+                  focusTimes();
+                }}>
+                Réessayer
               </Button>
-            ) : (
-              <p className={quiet}>Essayez une autre date.</p>
-            )}
-          </div>
-        ) : (
-          <ul aria-labelledby="booking-times" className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-            {slots.slots.map((candidate) => {
-              const selected = candidate.startsAt === slot?.startsAt;
-              const end = formatTimeInZone(candidate.endsAt, timeZone);
-              return (
-                <li key={candidate.startsAt}>
-                  <button
-                    type="button"
-                    aria-pressed={selected}
-                    aria-label={end ? `De ${candidate.localTime} à ${end}` : candidate.localTime}
-                    onClick={() => onChooseSlot(candidate)}
-                    className={cn(
-                      "type-figure flex min-h-11 w-full items-center justify-center rounded-full border transition-colors",
-                      selected ? "border-accent bg-accent text-white" : "border-lavender-200 bg-lavender-25 text-lavender-700 hover:bg-lavender-50",
-                    )}
-                  >
-                    <time dateTime={candidate.startsAt}>{candidate.localTime}</time>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <p className={quiet}>
-          Horaires {describeTimeZone(timeZone)}. Un horaire n’est réservé qu’une fois votre rendez-vous confirmé.
-        </p>
-      </div>
+            </div>
+          ) : slots.status === "limited" ? (
+            <div className="flex flex-col items-start gap-3 rounded-[1.25rem] bg-surface px-5 py-4" role="status">
+              <p className="type-subtitle">Trop de demandes depuis votre connexion.</p>
+              <p className={quiet}>Patientez quelques minutes, puis réessayez.</p>
+              <Button type="button" variant="secondary" onClick={() => {
+                  onRetry();
+                  focusTimes();
+                }}>
+                Réessayer
+              </Button>
+            </div>
+          ) : slots.status === "out_of_window" ? (
+            <div className="rounded-[1.25rem] bg-surface px-5 py-4" role="status">
+              <p className="type-subtitle">Cette date n’est plus ouverte à la réservation.</p>
+              <p className={quiet}>Choisissez une autre date.</p>
+            </div>
+          ) : slots.slots.length === 0 ? (
+            <div className="flex flex-col items-start gap-3.5 rounded-[1.4rem] bg-lavender-25 p-5 ring-1 ring-inset ring-lavender-100" role="status">
+              <span aria-hidden="true" className="grid size-14 place-items-center rounded-full bg-background text-lavender-700 shadow-card">
+                <CalendarIcon size={22} />
+              </span>
+              <div className="flex flex-col gap-0.5">
+                <p className="type-subtitle">Aucun horaire disponible ce jour-là.</p>
+                {nextDate ? null : <p className={quiet}>Essayez une autre date.</p>}
+              </div>
+              {nextDate ? (
+                <Button type="button" variant="secondary" onClick={() => {
+                    onChooseDate(nextDate);
+                    focusTimes();
+                  }}>
+                  Voir le {formatLongDate(nextDate)}
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6 motion-safe:animate-[bz-rise_var(--bz-duration-state)_var(--bz-ease-out)_both]">
+              {groupSlotsByPeriod(slots.slots).map((group) => (
+                <section key={group.period} aria-labelledby={`booking-times-${group.period}`} className="flex flex-col gap-3">
+                  <h4 id={`booking-times-${group.period}`} className="flex items-center gap-2.5 after:h-px after:flex-1 after:bg-border/70">
+                    <span className="type-label">{group.period}</span>
+                    <span className="type-meta text-foreground/55">
+                      {group.slots.length} horaire{group.slots.length > 1 ? "s" : ""}
+                    </span>
+                  </h4>
+                  <ul className="grid grid-cols-4 gap-2 sm:grid-cols-5 sm:gap-2.5 lg:grid-cols-6">
+                    {group.slots.map((candidate) => {
+                      const selected = candidate.startsAt === slot?.startsAt;
+                      const end = formatTimeInZone(candidate.endsAt, timeZone);
+                      return (
+                        <li key={candidate.startsAt}>
+                          <button
+                            type="button"
+                            aria-pressed={selected}
+                            aria-label={end ? `De ${candidate.localTime} à ${end}` : candidate.localTime}
+                            onClick={() => onChooseSlot(candidate)}
+                            className={cn(
+                              "type-figure flex min-h-11 w-full items-center justify-center rounded-full border transition-[background-color,border-color,color,box-shadow] duration-[var(--bz-duration-state)]",
+                              selected
+                                ? "border-accent bg-accent text-white shadow-raised"
+                                : "border-lavender-200 bg-lavender-25 text-lavender-700 hover:bg-lavender-50",
+                            )}
+                          >
+                            <time dateTime={candidate.startsAt}>{candidate.localTime}</time>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+          <p className="type-meta flex items-start gap-2 text-foreground/60">
+            <ClockIcon size={16} className="mt-0.5 shrink-0 text-lavender-700" />
+            Un horaire n’est réservé qu’une fois votre rendez-vous confirmé.
+          </p>
+        </div>
 
-      <Actions>
-        <Button type="button" variant="ghost" onClick={onBack}>
+        <Button type="button" variant="ghost" onClick={onBack} className="self-start lg:hidden">
           Retour
         </Button>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-          {slot && date ? (
-            <p className="type-body-small text-foreground/75" aria-live="polite">
-              {capitalized(formatLongDate(date))} à <span className="tabular-nums">{slot.localTime}</span>
-            </p>
-          ) : null}
-          <Button type="button" size="lg" disabled={slot === undefined} onClick={onContinue}>
+
+        {/* Phone: the selection and « Continuer » follow the reader, then dock at the end of the step. */}
+        <div data-sticky-cta="" className="sticky bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-20 lg:hidden">
+          <div className="flex items-center gap-3 rounded-[1.5rem] bg-background py-2.5 pl-5 pr-2.5 shadow-[0_0_0_1px_rgb(223_222_228_/_0.7),0_12px_32px_rgba(31,28,61,0.14)]">
+            <div className="min-w-0 flex-1" aria-live="polite">
+              <p className="type-subtitle truncate">{selection ?? "Choisissez un horaire"}</p>
+              <p className="type-meta truncate text-foreground/60">
+                {service.name} · {formatDuration(service.durationMinutes)}
+              </p>
+            </div>
+            <Button type="button" size="lg" disabled={slot === undefined} onClick={onContinue}>
+              Continuer
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <AppointmentSummary service={service} professional={professional} date={date} slot={slot} timeZone={timeZone} className="hidden lg:flex">
+        <div className="flex flex-col gap-2">
+          <Button type="button" size="lg" disabled={slot === undefined} onClick={onContinue} className="w-full">
             Continuer
           </Button>
+          <Button type="button" variant="ghost" onClick={onBack} className="w-full">
+            Retour
+          </Button>
         </div>
-      </Actions>
-    </section>
+      </AppointmentSummary>
+    </div>
+  );
+}
+
+/** The skeleton draws the day as two parts, as the times will be grouped. */
+function splitForSkeleton(count: number): number[] {
+  const first = Math.max(3, Math.round(count * 0.4));
+  return [first, Math.max(3, count - first)];
+}
+
+/**
+ * What is being booked, as the customer has chosen it so far — a sticky card
+ * beside the step on a desktop (date and time, details). Never a price: the
+ * public contract has none.
+ */
+export function AppointmentSummary({
+  service,
+  professional,
+  date,
+  slot,
+  timeZone,
+  className,
+  children,
+}: {
+  service: BookableService;
+  professional?: Professional;
+  date?: string;
+  slot?: AvailableSlot;
+  timeZone: string;
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <aside
+      aria-labelledby="booking-summary-title"
+      className={cn(
+        "sticky top-6 flex-col gap-5 rounded-[1.75rem] bg-[linear-gradient(180deg,var(--bz-lavender-50)_0%,#fff_120px)] p-7 shadow-lifted ring-1 ring-border/60",
+        className,
+      )}
+    >
+      <h2 id="booking-summary-title" className="type-caption uppercase tracking-[0.12em] text-lavender-700">
+        Votre rendez-vous
+      </h2>
+      <dl className="flex flex-col">
+        <SummaryLine icon={<CheckIcon size={17} />} label="Prestation">
+          <strong className="font-semibold">{service.name}</strong> · {formatDuration(service.durationMinutes)}
+        </SummaryLine>
+        {professional ? (
+          <SummaryLine icon={<UserIcon size={17} />} label="Avec">
+            <strong className="font-semibold">{professional.name}</strong>
+            {professional.address ? <span className="block whitespace-pre-line text-foreground/60">{professional.address}</span> : null}
+          </SummaryLine>
+        ) : null}
+        <SummaryLine icon={<CalendarIcon size={17} />} label="Date et horaire">
+          {date ? <span className={cn("block", slot ? "font-semibold" : "text-foreground/60")}>{capitalized(formatLongDate(date))}</span> : null}
+          {slot ? (
+            <span className="block tabular-nums">{formatTimeRange(slot.localTime, slot.endsAt, timeZone)}</span>
+          ) : (
+            <span className="block text-foreground/60">Choisissez un horaire</span>
+          )}
+        </SummaryLine>
+      </dl>
+      {children}
+    </aside>
+  );
+}
+
+function SummaryLine({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className="flex gap-3.5 border-t border-border/70 py-3.5 first:border-t-0 first:pt-0">
+      <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-xl bg-lavender-50 text-lavender-700">
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <dt className="type-meta text-foreground/60">{label}</dt>
+        <dd className="type-body-small min-w-0 [overflow-wrap:anywhere]">{children}</dd>
+      </div>
+    </div>
   );
 }
 
@@ -582,10 +748,21 @@ function SummaryRow({ label, children, action }: { label: string; children: Reac
   );
 }
 
-function EditButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled: boolean }) {
-  if (disabled) return null;
+/**
+ * « Modifier » beside a line of the review: available; disabled in place
+ * while a request is in flight (nothing moves, nothing can be changed); gone
+ * once the request is frozen after an unknown outcome.
+ */
+function EditButton({ label, onClick, state }: { label: string; onClick: () => void; state: "enabled" | "busy" | "hidden" }) {
+  if (state === "hidden") return null;
   return (
-    <button type="button" onClick={onClick} className={cn(link, "type-body-small min-h-11 shrink-0")} aria-label={label}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={state === "busy"}
+      className={cn(link, "type-body-small min-h-11 shrink-0 disabled:cursor-default disabled:opacity-40 disabled:no-underline")}
+      aria-label={label}
+    >
       Modifier
     </button>
   );
@@ -608,6 +785,7 @@ export function ReviewStep({
   onBack,
   onConfirm,
   onRetryChallenge,
+  slow = false,
   headingRef,
 }: {
   service: BookableService;
@@ -630,20 +808,23 @@ export function ReviewStep({
   onBack: () => void;
   onConfirm: () => void;
   onRetryChallenge: () => void;
+  /** The request has been in flight for a while: say it is still on its way. */
+  slow?: boolean;
   headingRef?: Ref<HTMLHeadingElement>;
 }) {
   const verified = challenge.status === "ready";
+  const editState = sending ? "busy" : locked ? "hidden" : "enabled";
   return (
     <section aria-labelledby="booking-step-heading" className="flex flex-col gap-6">
       <StepHeading headingRef={headingRef}>Vérifiez votre rendez-vous</StepHeading>
       <dl className="rounded-[1.5rem] border border-border/80 bg-background px-5 py-5 sm:px-7">
         <SummaryRow
           label="Prestation"
-          action={<EditButton label="Modifier la prestation" disabled={locked} onClick={() => onEdit("service")} />}
+          action={<EditButton label="Modifier la prestation" state={editState} onClick={() => onEdit("service")} />}
         >
           {service.name} <span className="text-foreground/65 tabular-nums">· {formatDuration(service.durationMinutes)}</span>
         </SummaryRow>
-        <SummaryRow label="Date et horaire" action={<EditButton label="Modifier la date et l’horaire" disabled={locked} onClick={() => onEdit("slot")} />}>
+        <SummaryRow label="Date et horaire" action={<EditButton label="Modifier la date et l’horaire" state={editState} onClick={() => onEdit("slot")} />}>
           {capitalized(formatLongDate(date))}
           <span className="block tabular-nums">{formatTimeRange(slot.localTime, slot.endsAt, timeZone)}</span>
           <span className="type-body-small block text-foreground/65">Horaires {describeTimeZone(timeZone)}</span>
@@ -654,7 +835,7 @@ export function ReviewStep({
             <span className="type-body-small block whitespace-pre-line text-foreground/65">{professional.address}</span>
           ) : null}
         </SummaryRow>
-        <SummaryRow label="Vos coordonnées" action={<EditButton label="Modifier vos coordonnées" disabled={locked} onClick={() => onEdit("details")} />}>
+        <SummaryRow label="Vos coordonnées" action={<EditButton label="Modifier vos coordonnées" state={editState} onClick={() => onEdit("details")} />}>
           {details.firstName} {details.lastName}
           <span className="type-body-small block text-foreground/65">{details.email}</span>
           <span className="type-body-small block text-foreground/65 tabular-nums">{details.phone}</span>
@@ -670,7 +851,15 @@ export function ReviewStep({
 
       <div className="flex min-w-0 flex-col gap-3">
         {challengeSlot}
-        {sending ? null : <ChallengeStatus challenge={challenge} professional={professional} onRetry={onRetryChallenge} />}
+        {/* One line of fixed height in every state: the confirmation button never jumps. */}
+        <div className="flex min-h-6 items-center gap-2 text-foreground/70">
+          {sending ? null : (
+            <>
+              {challenge.status === "checking" ? <Spinner size={14} className="text-lavender-700" /> : null}
+              <ChallengeStatus challenge={challenge} professional={professional} onRetry={onRetryChallenge} />
+            </>
+          )}
+        </div>
       </div>
 
       <Actions>
@@ -682,6 +871,7 @@ export function ReviewStep({
         <Button
           type="button"
           size="lg"
+          className="busy-glyph sm:min-w-[15.5rem]"
           onClick={onConfirm}
           disabled={sending || !verified}
           aria-busy={sending || undefined}
@@ -690,6 +880,11 @@ export function ReviewStep({
           {sending ? "Réservation en cours…" : retrying ? "Réessayer" : "Confirmer le rendez-vous"}
         </Button>
       </Actions>
+      {sending && slow ? (
+        <p role="status" className={cn(quiet, "-mt-2 sm:text-right")}>
+          Cela prend un peu plus de temps que prévu. Ne fermez pas cette page : votre demande est toujours en cours.
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -712,7 +907,7 @@ export function BookingConfirmation({
 }) {
   return (
     <section aria-labelledby="booking-step-heading" className="flex flex-col gap-6">
-      <div className="flex flex-col items-start gap-3 rounded-[1.75rem] bg-mint-50 p-6 sm:p-8">
+      <div className="flex flex-col items-start gap-3 rounded-[1.75rem] bg-mint-50 p-6 motion-safe:animate-[bz-rise_var(--bz-duration-enter)_var(--bz-ease-emphasized)_both] sm:p-8">
         <StepHeading headingRef={headingRef}>Votre rendez-vous est réservé.</StepHeading>
         <p className="type-body text-foreground/80">
           {professional.name} vous attend le {formatLongDate(booking.localDate)} à{" "}

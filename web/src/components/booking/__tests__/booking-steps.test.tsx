@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { ConfirmedBooking } from "@/features/booking/booking-answer";
 import type { ChallengeState } from "@/features/booking/challenge";
 
-import { BookingConfirmation, ReviewStep, SlotStep, type Professional } from "../booking-steps";
+import { BookingConfirmation, ReviewStep, ServiceStep, SlotStep, type Professional } from "../booking-steps";
 
 const professional: Professional = { name: "Studio Esthétique", address: "12 rue des Lilas, Lyon", phone: "04 78 00 00 00" };
 const coupe = { id: "svc-coupe", name: "Coupe", durationMinutes: 45 };
@@ -235,5 +235,114 @@ describe("SlotStep", () => {
     const failed = text(renderToStaticMarkup(<SlotStep {...base} slots={{ status: "error" }} />));
     expect(failed).toContain("Les horaires n’ont pas pu être chargés.");
     expect(failed).not.toContain("Aucun horaire disponible");
+  });
+});
+
+describe("SlotStep — the approved date and time design", () => {
+  const base = {
+    service: coupe,
+    window: { firstDate: "2026-11-16", lastDate: "2026-11-30" },
+    date: "2026-11-17",
+    timeZone: "Europe/Paris",
+    professional,
+    onChangeService: noop,
+    onChooseDate: noop,
+    onChooseSlot: noop,
+    onRetry: noop,
+    onBack: noop,
+    onContinue: noop,
+  };
+  const at = (localTime: string, startsAt: string, endsAt: string) => ({ localTime, startsAt, endsAt });
+  const ready = {
+    status: "ready" as const,
+    slots: [at("09:15", "2026-11-17T08:15:00Z", "2026-11-17T09:00:00Z"), at("14:30", "2026-11-17T13:30:00Z", "2026-11-17T14:15:00Z"), at("18:00", "2026-11-17T17:00:00Z", "2026-11-17T17:45:00Z")],
+  };
+
+  it("groups the server's times by part of the day", () => {
+    const html = text(renderToStaticMarkup(<SlotStep {...base} slots={ready} />));
+    expect(html).toMatch(/Matin 1 horaire .*Après-midi 1 horaire .*Soir 1 horaire/);
+  });
+
+  it("draws two-line date chips with ONE Tab stop — the chosen date — and arrows kept out of the Tab order", () => {
+    const markup = renderToStaticMarkup(<SlotStep {...base} slots={ready} />);
+    expect(markup.match(/tabindex="0"/g)).toHaveLength(1);
+    expect(markup).toMatch(/id="booking-date-2026-11-17"[^>]*aria-pressed="true"[^>]*aria-label="Mardi 17 novembre"[^>]*tabindex="0"/);
+    expect(markup).toMatch(/aria-label="Dates précédentes"[^>]*aria-controls="booking-date-strip"[^>]*tabindex="-1"|tabindex="-1"[^>]*aria-label="Dates précédentes"/);
+    expect(text(markup)).toContain("mar. 17");
+  });
+
+  it("sizes the loading grid from the last day seen, and says it is loading", () => {
+    const markup = renderToStaticMarkup(<SlotStep {...base} slots={{ status: "loading" }} loadingCount={20} />);
+    expect(markup).toContain('aria-busy="true"');
+    expect(text(markup)).toContain("Chargement des horaires…");
+    // 20 times + one title placeholder per group (2).
+    expect(markup.match(/class="skeleton /g)).toHaveLength(22);
+  });
+
+  it("keeps the selection and « Continuer » within reach: a summary beside the step, a sticky bar on a phone — never a price", () => {
+    const markup = renderToStaticMarkup(<SlotStep {...base} slots={ready} slot={ready.slots[1]} />);
+    const html = text(markup);
+    expect(html).toContain("Votre rendez-vous");
+    expect(html).toContain("Studio Esthétique");
+    expect(html).toContain("14:30 – 15:15");
+    expect(markup).toContain("data-sticky-cta");
+    expect(html).toContain("Mar. 17 nov. · 14:30");
+    expect(html).not.toMatch(/€|prix|tarif/i);
+  });
+});
+
+describe("ReviewStep — while a request is in flight", () => {
+  const props = {
+    service: coupe,
+    date: "2026-11-16",
+    slot: { startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" },
+    timeZone: "Europe/Paris",
+    details,
+    professional,
+    retrying: false,
+    challenge: ready,
+    onEdit: noop,
+    onBack: noop,
+    onConfirm: noop,
+    onRetryChallenge: noop,
+  };
+
+  it("keeps « Modifier » in place, disabled — nothing moves, nothing can be changed", () => {
+    const markup = renderToStaticMarkup(<ReviewStep {...props} sending locked challenge={{ status: "checking" }} />);
+    expect(markup.match(/<button[^>]*disabled=""[^>]*>Modifier<\/button>/g)).toHaveLength(3);
+  });
+
+  it("turns a small ring before the label by CSS only (the accessible name never changes)", () => {
+    const markup = renderToStaticMarkup(<ReviewStep {...props} sending locked challenge={{ status: "checking" }} />);
+    expect(markup).toMatch(/<button[^>]*class="[^"]*busy-glyph[^"]*"[^>]*aria-busy="true"[^>]*>Réservation en cours…<\/button>/);
+  });
+
+  it("says a long request is still on its way — only when it is long", () => {
+    const slow = text(renderToStaticMarkup(<ReviewStep {...props} sending locked slow challenge={{ status: "checking" }} />));
+    expect(slow).toContain("Ne fermez pas cette page");
+    expect(text(renderToStaticMarkup(<ReviewStep {...props} sending locked challenge={{ status: "checking" }} />))).not.toContain("Ne fermez pas");
+    expect(text(renderToStaticMarkup(<ReviewStep {...props} sending={false} locked={false} slow />))).not.toContain("Ne fermez pas");
+  });
+
+  it("reserves the status line in every state: the confirmation button never jumps", () => {
+    for (const challenge of [ready, { status: "checking" } as ChallengeState, { status: "interactive" } as ChallengeState]) {
+      const markup = renderToStaticMarkup(<ReviewStep {...props} sending={false} locked={false} challenge={challenge} />);
+      expect(markup).toContain('class="flex min-h-6 items-center gap-2');
+    }
+  });
+});
+
+describe("ServiceStep — the list read again", () => {
+  const services = [coupe];
+  it("says it is updating, without hiding the list", () => {
+    const html = text(renderToStaticMarkup(<ServiceStep services={services} loading professional={professional} onChoose={noop} />));
+    expect(html).toContain("Mise à jour des prestations…");
+    expect(html).toContain("Coupe");
+  });
+
+  it("never fails silently: a notice and a way to read it again", () => {
+    const html = text(renderToStaticMarkup(<ServiceStep services={services} issue="error" onRetry={noop} professional={professional} onChoose={noop} />));
+    expect(html).toContain("La liste des prestations n’a pas pu être mise à jour.");
+    expect(html).toContain("Réessayer");
   });
 });

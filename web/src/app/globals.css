@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
 @import "../styles/typography.css";
+@import "../styles/motion.css";
+@import "../styles/nacre.css";
 
 @layer base {
   html {
@@ -21,6 +23,13 @@
     font-family: var(--font-sans);
     /* Never a faked weight or slant: a style the brand fonts lack stays upright. */
     font-synthesis: none;
+  }
+
+  /* A sticky bottom action (profile, booking) never hides the focused element (WCAG 2.4.11). */
+  @media (max-width: 1023.98px) {
+    html:has([data-sticky-cta]) {
+      scroll-padding-bottom: 8rem;
+    }
   }
 
   :focus-visible {

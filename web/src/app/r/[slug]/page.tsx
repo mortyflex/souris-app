@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PublicProfileView } from "@/components/booking/public-profile-view";
+import { BrandLogo } from "@/components/brand/brand-logo";
+import { SiteHeader } from "@/components/layout/site-header";
 import { isBookingFlowEnabled } from "@/features/booking/flow-gate";
 import { getPublicProfile } from "@/features/public-profile/get-public-profile";
 import { publicMediaUrl } from "@/features/public-profile/public-profile";
@@ -28,11 +30,21 @@ export default async function PublicProfilePage({ params }: PageProps<"/r/[slug]
   if (profile === null) notFound();
 
   return (
-    <PublicProfileView
-      profile={profile}
-      logoUrl={profile.logoPath ? publicMediaUrl(publicEnv.supabaseUrl, profile.logoPath) : undefined}
-      coverUrl={profile.coverPath ? publicMediaUrl(publicEnv.supabaseUrl, profile.coverPath) : undefined}
-      bookingOpen={isBookingFlowEnabled()}
-    />
+    <>
+      <SiteHeader variant="profile" />
+      <main className="flex-1 pb-16 pt-5 sm:pt-8 lg:pb-24">
+        <PublicProfileView
+          profile={profile}
+          logoUrl={profile.logoPath ? publicMediaUrl(publicEnv.supabaseUrl, profile.logoPath) : undefined}
+          coverUrl={profile.coverPath ? publicMediaUrl(publicEnv.supabaseUrl, profile.coverPath) : undefined}
+          bookingOpen={isBookingFlowEnabled()}
+        />
+      </main>
+      <footer className="border-t border-border/60 py-8">
+        <p className="type-meta flex items-center justify-center gap-2 text-foreground/60">
+          Réservation en ligne avec <BrandLogo className="h-[18px]" sizes="50px" />
+        </p>
+      </footer>
+    </>
   );
 }

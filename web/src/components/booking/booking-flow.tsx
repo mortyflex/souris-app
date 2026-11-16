@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useRef, useState, type RefObject } from "react";
 
-import type { AvailableSlot, BookableService } from "@/features/availability/availability";
+import { formatLongDate, type AvailableSlot, type BookableService } from "@/features/availability/availability";
 import { createAvailabilityReader, newIdempotencyKey, submitBooking } from "@/features/booking/booking-client";
 import {
   canShowStep,
@@ -16,9 +16,11 @@ import {
 } from "@/features/booking/booking-flow";
 import type { CustomerField } from "@/features/booking/booking-request";
 import { CHECKING, type ChallengeState } from "@/features/booking/challenge";
+import { ArrowLeftIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 import {
+  AppointmentSummary,
   BookingConfirmation,
   DetailsStep,
   FlowNoticeBox,
@@ -44,6 +46,9 @@ export interface BookingFlowProps {
     readonly timeZone: string;
   };
 }
+
+/** The steps without a summary beside them keep a comfortable reading width. */
+const NARROW = "w-full max-w-3xl";
 
 const STEP_LABELS: Readonly<Record<Exclude<FlowStep, "done">, string>> = {
   service: "Prestation",
@@ -112,6 +117,14 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
   /** The security check of the review step, and a counter that asks it for a new token. */
   const [challenge, setChallenge] = useState<ChallengeState>(CHECKING);
   const [challengeReset, setChallengeReset] = useState(0);
+  /** The number of times of the last day seen, per service: the loading grid is drawn at that size. */
+  const [lastCounts, setLastCounts] = useState<Readonly<Record<string, number>>>({});
+  /** The list of services could not be read again (it may be out of date), and the retry of that read. */
+  const [catalogIssue, setCatalogIssue] = useState<"error" | "limited">();
+  const [catalogRetry, setCatalogRetry] = useState(0);
+  /** Each send is numbered; a send still in flight after a while says so (`slowSend` = its number). */
+  const [sendSerial, setSendSerial] = useState(0);
+  const [slowSend, setSlowSend] = useState(-1);
 
   const topRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -207,12 +220,6 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.issues]);
 
-  // ---- The chosen date stays in view in the horizontal list (a narrow screen shows a few dates only).
-  useEffect(() => {
-    if (!onSlotStep || date === undefined) return;
-    document.getElementById(`booking-date-${date}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [onSlotStep, date]);
-
   // ---- The times of the chosen service and date — read again whenever the key changes.
   useEffect(() => {
     if (!onSlotStep || slotKey === undefined || serviceId === undefined || date === undefined) return;
@@ -232,6 +239,10 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
         if (availability.status === "UNKNOWN_SERVICE") {
           dispatch({ type: "SERVICE_UNAVAILABLE" });
           return;
+        }
+        if (availability.status === "SLOTS" && availability.slots.length > 0) {
+          const count = availability.slots.length;
+          setLastCounts((previous) => ({ ...previous, [serviceId]: count }));
         }
         setSlotResult({
           key: slotKey,
@@ -273,15 +284,38 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
           timeZone: availability.timeZone,
           revision,
         });
+        setCatalogIssue(undefined);
         return;
       }
       if (result.status === "UNAVAILABLE") dispatch({ type: "CLOSED" });
+      // The list may be out of date: say so, and offer to read it again (never silently).
+      if (result.status === "ERROR" || result.status === "RATE_LIMITED") setCatalogIssue(result.status === "RATE_LIMITED" ? "limited" : "error");
       setCatalog((previous) => ({ ...previous, revision }));
     });
     return () => {
       active = false;
     };
-  }, [slug, state.servicesRevision]);
+  }, [slug, state.servicesRevision, catalogRetry]);
+
+  // ---- A send still in flight after 8 s says it is on its way (the request itself is never repeated).
+  const sending = state.attempt?.sending === true;
+  useEffect(() => {
+    if (!sending) return;
+    const serial = sendSerial;
+    const timer = setTimeout(() => setSlowSend(serial), 8000);
+    return () => clearTimeout(timer);
+  }, [sending, sendSerial]);
+
+  // ---- Leaving while a request is in flight, or frozen after an unknown outcome, would lose it: ask first.
+  useEffect(() => {
+    if (!locked) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [locked]);
 
   useEffect(
     () => () => {
@@ -300,6 +334,7 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
     if (plan === undefined) return;
     const challengeToken = challenge.token;
     sendingRef.current = true;
+    setSendSerial((serial) => serial + 1);
     // This send spends the token, whatever its outcome: ask for the next one now.
     setChallenge(CHECKING);
     setChallengeReset((count) => count + 1);
@@ -315,39 +350,59 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
 
   const catalogLoading = catalog.revision !== state.servicesRevision;
   const stepNotice = state.notice !== undefined && STEP_NOTICES.has(state.notice) && step !== "review" ? state.notice : undefined;
+  const day = date === undefined ? "" : ` le ${formatLongDate(date)}`;
   const announcement =
-    step === "slot" && slots.status === "ready"
-      ? slots.slots.length === 0
-        ? "Aucun horaire disponible ce jour-là."
-        : `${slots.slots.length} horaire${slots.slots.length > 1 ? "s" : ""} disponible${slots.slots.length > 1 ? "s" : ""}.`
-      : step === "review" && state.attempt?.sending
-        ? "Réservation en cours…"
-        : "";
+    step === "slot" && slots.status === "loading" && date !== undefined
+      ? `Chargement des horaires du ${formatLongDate(date)}…`
+      : step === "slot" && slots.status === "ready"
+        ? slots.slots.length === 0
+          ? `Aucun horaire disponible${day}.`
+          : `${slots.slots.length} horaire${slots.slots.length > 1 ? "s" : ""} disponible${slots.slots.length > 1 ? "s" : ""}${day}.`
+        : step === "review" && state.attempt?.sending
+          ? "Réservation en cours…"
+          : "";
 
   return (
     <div ref={topRef} className="flex scroll-mt-6 flex-col gap-8">
       <header className="flex flex-col gap-5">
-        <a
-          href={profileHref}
-          className="type-body-small self-start font-medium text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700"
-        >
-          {professional.name}
-        </a>
+        {locked ? (
+          // A request in flight or frozen must not be left by accident: the name is no longer a link.
+          <span className="type-body-small self-start font-medium text-lavender-700">{professional.name}</span>
+        ) : (
+          <a
+            href={profileHref}
+            className="type-body-small inline-flex min-h-8 items-center gap-2 self-start font-semibold text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700"
+          >
+            <ArrowLeftIcon size={16} />
+            {professional.name}
+          </a>
+        )}
         <h1 className="type-headline">{step === "done" ? "Rendez-vous confirmé" : "Prendre rendez-vous"}</h1>
         {step !== "done" ? <Progress current={step} /> : null}
       </header>
 
-      {stepNotice ? <FlowNoticeBox notice={stepNotice} professional={professional} /> : null}
+      {stepNotice ? (
+        <div className={step === "slot" ? undefined : NARROW}>
+          <FlowNoticeBox notice={stepNotice} professional={professional} />
+        </div>
+      ) : null}
 
       {step === "service" ? (
-        <ServiceStep
-          headingRef={headingRef}
-          services={catalog.services}
-          selectedId={serviceId}
-          loading={catalogLoading}
-          professional={professional}
-          onChoose={(chosen) => navigate({ type: "CHOOSE_SERVICE", service: chosen, firstDate: catalog.firstDate })}
-        />
+        <div className={NARROW}>
+          <ServiceStep
+            headingRef={headingRef}
+            services={catalog.services}
+            selectedId={serviceId}
+            loading={catalogLoading}
+            issue={catalogLoading ? undefined : catalogIssue}
+            onRetry={() => {
+              setCatalogIssue(undefined);
+              setCatalogRetry((count) => count + 1);
+            }}
+            professional={professional}
+            onChoose={(chosen) => navigate({ type: "CHOOSE_SERVICE", service: chosen, firstDate: catalog.firstDate })}
+          />
+        </div>
       ) : null}
 
       {step === "slot" && service !== undefined ? (
@@ -359,6 +414,8 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
           slot={slot}
           slots={slots}
           timeZone={catalog.timeZone}
+          professional={professional}
+          loadingCount={serviceId === undefined ? undefined : lastCounts[serviceId]}
           onChangeService={back}
           onChooseDate={(chosen) => dispatch({ type: "CHOOSE_DATE", date: chosen })}
           onChooseSlot={(chosen: AvailableSlot) => dispatch({ type: "CHOOSE_SLOT", slot: chosen })}
@@ -369,56 +426,68 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
       ) : null}
 
       {step === "details" ? (
-        <DetailsStep
-          headingRef={headingRef}
-          fieldRefs={fieldRefs}
-          details={state.details}
-          issues={state.issues}
-          professional={professional}
-          onEdit={(field, value) => dispatch({ type: "EDIT_DETAIL", field, value })}
-          onBack={back}
-          onContinue={() => {
-            focusIssuesRef.current = true;
-            navigate({ type: "REVIEW_DETAILS" });
-          }}
-        />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-8">
+          <div className="min-w-0 lg:rounded-[1.75rem] lg:bg-background lg:p-9 lg:shadow-card lg:ring-1 lg:ring-border/65">
+            <DetailsStep
+              headingRef={headingRef}
+              fieldRefs={fieldRefs}
+              details={state.details}
+              issues={state.issues}
+              professional={professional}
+              onEdit={(field, value) => dispatch({ type: "EDIT_DETAIL", field, value })}
+              onBack={back}
+              onContinue={() => {
+                focusIssuesRef.current = true;
+                navigate({ type: "REVIEW_DETAILS" });
+              }}
+            />
+          </div>
+          {service !== undefined ? (
+            <AppointmentSummary service={service} professional={professional} date={date} slot={slot} timeZone={catalog.timeZone} className="hidden lg:flex" />
+          ) : null}
+        </div>
       ) : null}
 
       {step === "review" && service !== undefined && date !== undefined && slot !== undefined ? (
-        <ReviewStep
-          headingRef={headingRef}
-          service={service}
-          date={date}
-          slot={slot}
-          timeZone={catalog.timeZone}
-          details={state.details}
-          professional={professional}
-          notice={state.notice}
-          sending={state.attempt?.sending === true}
-          retrying={state.attempt !== undefined}
-          locked={locked}
-          challenge={challenge}
-          challengeSlot={<TurnstileWidget siteKey={challengeSiteKey} resetSignal={challengeReset} onChange={setChallenge} />}
-          onEdit={(target) => {
-            if (canShowStep(state, target)) navigate({ type: "GO_TO", step: target });
-          }}
-          onBack={back}
-          onConfirm={() => void confirm()}
-          onRetryChallenge={() => setChallengeReset((count) => count + 1)}
-        />
+        <div className={NARROW}>
+          <ReviewStep
+            headingRef={headingRef}
+            service={service}
+            date={date}
+            slot={slot}
+            timeZone={catalog.timeZone}
+            details={state.details}
+            professional={professional}
+            notice={state.notice}
+            sending={state.attempt?.sending === true}
+            retrying={state.attempt !== undefined}
+            locked={locked}
+            challenge={challenge}
+            challengeSlot={<TurnstileWidget siteKey={challengeSiteKey} resetSignal={challengeReset} onChange={setChallenge} />}
+            onEdit={(target) => {
+              if (canShowStep(state, target)) navigate({ type: "GO_TO", step: target });
+            }}
+            onBack={back}
+            onConfirm={() => void confirm()}
+            onRetryChallenge={() => setChallengeReset((count) => count + 1)}
+            slow={slowSend === sendSerial}
+          />
+        </div>
       ) : null}
 
       {step === "done" && state.confirmation !== undefined ? (
-        <BookingConfirmation
-          headingRef={headingRef}
-          booking={state.confirmation}
-          professional={professional}
-          profileHref={profileHref}
-          onRestart={() => {
-            historyModeRef.current = "replace";
-            dispatch({ type: "RESTART" });
-          }}
-        />
+        <div className={NARROW}>
+          <BookingConfirmation
+            headingRef={headingRef}
+            booking={state.confirmation}
+            professional={professional}
+            profileHref={profileHref}
+            onRestart={() => {
+              historyModeRef.current = "replace";
+              dispatch({ type: "RESTART" });
+            }}
+          />
+        </div>
       ) : null}
 
       <p aria-live="polite" className="sr-only">

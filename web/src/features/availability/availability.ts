@@ -208,6 +208,30 @@ export function formatLongDate(date: string): string {
   return LONG_DATE.format(civilDate(date));
 }
 
+const WEEKDAY_SHORT = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", weekday: "short" });
+const MONTH_SHORT = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", month: "short" });
+const MONTH_YEAR = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", month: "long", year: "numeric" });
+
+/** « lun. » — the first line of a two-line date chip. */
+export function formatWeekdayShort(date: string): string {
+  return WEEKDAY_SHORT.format(civilDate(date));
+}
+
+/** 16 — the second line of a two-line date chip. */
+export function dayOfMonth(date: string): number {
+  return civilDate(date).getUTCDate();
+}
+
+/** « déc. » — a month marker in the date strip. */
+export function formatMonthShort(date: string): string {
+  return MONTH_SHORT.format(civilDate(date));
+}
+
+/** « novembre 2026 » */
+export function formatMonthYear(date: string): string {
+  return MONTH_YEAR.format(civilDate(date));
+}
+
 /** « 45 min », « 1 h », « 1 h 30 » */
 export function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);

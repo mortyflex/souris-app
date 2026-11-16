@@ -123,6 +123,52 @@ describe("PublicProfileView", () => {
   });
 });
 
+describe("PublicProfileView — the Nacre design", () => {
+  it("without a photo: the animated Nacre artwork, decorative, light and self-contained", () => {
+    const html = render({ profile: complete });
+    expect(html).toMatch(/<div aria-hidden="true" data-animated="true" class="nacre/);
+    expect(html).not.toMatch(/<filter|<image|<text|feGaussianBlur|url\(http/);
+    expect(html).not.toContain("<img");
+  });
+
+  it("a published photo always wins: Nacre stays underneath, at rest", () => {
+    const html = render({ profile: complete, coverUrl: "https://media.test/cover.jpg" });
+    expect(html).toMatch(/data-animated="false" class="nacre/);
+    expect(html.indexOf("nacre")).toBeLessThan(html.indexOf('src="https://media.test/cover.jpg"'));
+  });
+
+  it("shows no map, no coordinates and no directions until an explicit address privacy setting exists", () => {
+    const html = render({ profile: complete });
+    expect(html).not.toMatch(/<iframe|maps\.|google|apple\.com|geo:|Itinéraire|latitude|longitude/i);
+    expect(html).toContain("1 rue de la Paix, 75002 Paris");
+  });
+
+  it("offers a contact action only for what is published", () => {
+    expect(render({ profile: { ...minimal, phone: "06 00 00 00 00" } })).toContain(">Appeler</a>");
+    expect(render({ profile: { ...minimal, phone: "06 00 00 00 00" } })).not.toContain(">Écrire</a>");
+    expect(render({ profile: { ...minimal, email: "a@example.test" } })).toContain(">Écrire</a>");
+    expect(render({ profile: minimal })).not.toMatch(/Appeler|Écrire|role="group"/);
+  });
+
+  it("invites to book with a sticky action only where booking is open", () => {
+    const open = render({ profile: complete, bookingOpen: true });
+    expect(open).toContain("data-sticky-cta");
+    expect(open).toContain('href="/r/chez-amelie/reserver"');
+    expect(open).toContain("Horaires à l’heure de Paris");
+    for (const props of [{ profile: complete }, { profile: { ...complete, bookingEnabled: false }, bookingOpen: true }]) {
+      const html = render(props);
+      expect(html).not.toContain("data-sticky-cta");
+      expect(html).not.toContain("/reserver");
+    }
+  });
+
+  it("never assumes the professional's gender", () => {
+    const html = render({ profile: { ...complete, bookingEnabled: false } });
+    expect(html).not.toMatch(/professionnelle|la contacter|le contacter/);
+    expect(html).toContain("Vous pouvez contacter Chez Amélie directement.");
+  });
+});
+
 describe("BookingInactiveNotice", () => {
   it("says booking is not open and links back to the professional's page only", () => {
     const html = renderToStaticMarkup(<BookingInactiveNotice profile={minimal} />);

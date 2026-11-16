@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { AvailabilityLoading, AvailabilityPreview } from "@/components/booking/availability-preview";
 import { BookingFlow } from "@/components/booking/booking-flow";
 import { BookingInactiveNotice } from "@/components/booking/booking-inactive-notice";
+import { SiteHeader } from "@/components/layout/site-header";
+import { LinkPendingGlyph } from "@/components/motion/link-pending-glyph";
 import { Button } from "@/components/ui/button";
+import { Container } from "@/components/ui/container";
 import { parseAvailabilityQuery, type Availability } from "@/features/availability/availability";
 import { getAvailability } from "@/features/availability/get-availability";
 import { isAvailabilityPreviewEnabled } from "@/features/availability/preview";
@@ -30,7 +33,10 @@ function BookingLoadError({ profile }: { profile: PublicProfile }) {
       </div>
       <div className="flex flex-col gap-3 sm:flex-row">
         <Button asChild>
-          <Link href={bookingPath(profile.slug)}>Réessayer</Link>
+          <Link href={bookingPath(profile.slug)}>
+            Réessayer
+            <LinkPendingGlyph />
+          </Link>
         </Button>
         <Button asChild variant="secondary">
           <Link href={profilePath(profile.slug)}>Retour à la page de {profile.name}</Link>
@@ -54,49 +60,74 @@ function BookingLoadError({ profile }: { profile: PublicProfile }) {
  * Elsewhere the route keeps its notice, or the read-only availability preview
  * (`isAvailabilityPreviewEnabled`).
  */
-export default async function BookingPage({ params, searchParams }: PageProps<"/r/[slug]/reserver">) {
+export default async function BookingPage(props: PageProps<"/r/[slug]/reserver">) {
+  // Resolved BEFORE anything renders: an address with no page online still answers a real 404.
+  const { content, wide } = await bookingContent(props);
+  return (
+    <>
+      <SiteHeader variant="flow" />
+      <main className="flex-1 bg-[linear-gradient(180deg,var(--bz-lavender-25)_0,#fff_460px)] py-8 sm:py-12 lg:py-14">
+        {/* The flow (steps beside their summary) is wide; a notice keeps a reading width. */}
+        <Container className={wide ? undefined : "max-w-3xl"}>{content}</Container>
+      </main>
+    </>
+  );
+}
+
+interface BookingContent {
+  readonly content: ReactNode;
+  readonly wide: boolean;
+}
+
+async function bookingContent({ params, searchParams }: PageProps<"/r/[slug]/reserver">): Promise<BookingContent> {
   const { slug } = await params;
   const profile = await getPublicProfile(slug);
   if (profile === null) notFound();
 
   if (isBookingFlowEnabled()) {
-    if (!profile.bookingEnabled) return <BookingInactiveNotice profile={profile} reason="paused" />;
+    if (!profile.bookingEnabled) return { content: <BookingInactiveNotice profile={profile} reason="paused" />, wide: false };
     const siteKey = challengeSiteKey();
-    if (siteKey === undefined) return <BookingInactiveNotice profile={profile} reason="unavailable" />;
+    if (siteKey === undefined) return { content: <BookingInactiveNotice profile={profile} reason="unavailable" />, wide: false };
     let availability: Availability | null;
     try {
       availability = await getAvailability(profile.slug, {});
     } catch {
-      return <BookingLoadError profile={profile} />;
+      return { content: <BookingLoadError profile={profile} />, wide: false };
     }
-    if (availability === null) return <BookingInactiveNotice profile={profile} reason="unavailable" />;
-    return (
-      <BookingFlow
-        slug={profile.slug}
-        profileHref={profilePath(profile.slug)}
-        challengeSiteKey={siteKey}
-        professional={{
-          name: profile.name,
-          ...(profile.address !== undefined ? { address: profile.address } : {}),
-          ...(profile.phone !== undefined ? { phone: profile.phone } : {}),
-          ...(profile.email !== undefined ? { email: profile.email } : {}),
-        }}
-        initial={{
-          services: availability.services,
-          firstDate: availability.firstDate,
-          lastDate: availability.lastDate,
-          timeZone: availability.timeZone,
-        }}
-      />
-    );
+    if (availability === null) return { content: <BookingInactiveNotice profile={profile} reason="unavailable" />, wide: false };
+    return {
+      wide: true,
+      content: (
+        <BookingFlow
+          slug={profile.slug}
+          profileHref={profilePath(profile.slug)}
+          challengeSiteKey={siteKey}
+          professional={{
+            name: profile.name,
+            ...(profile.address !== undefined ? { address: profile.address } : {}),
+            ...(profile.phone !== undefined ? { phone: profile.phone } : {}),
+            ...(profile.email !== undefined ? { email: profile.email } : {}),
+          }}
+          initial={{
+            services: availability.services,
+            firstDate: availability.firstDate,
+            lastDate: availability.lastDate,
+            timeZone: availability.timeZone,
+          }}
+        />
+      ),
+    };
   }
 
-  if (!isAvailabilityPreviewEnabled()) return <BookingInactiveNotice profile={profile} />;
+  if (!isAvailabilityPreviewEnabled()) return { content: <BookingInactiveNotice profile={profile} />, wide: false };
 
   const query = parseAvailabilityQuery(await searchParams);
-  return (
-    <Suspense key={`${query.serviceId ?? ""}|${query.date ?? ""}`} fallback={<AvailabilityLoading />}>
-      <AvailabilityPreview profile={profile} query={query} />
-    </Suspense>
-  );
+  return {
+    wide: false,
+    content: (
+      <Suspense key={`${query.serviceId ?? ""}|${query.date ?? ""}`} fallback={<AvailabilityLoading />}>
+        <AvailabilityPreview profile={profile} query={query} />
+      </Suspense>
+    ),
+  };
 }

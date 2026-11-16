@@ -41,6 +41,14 @@
   --bz-radius-medium: 12px; /* radii.medium */
   --bz-radius-large: 16px; /* radii.large */
 
+  /* motion.ts — duration (ms) and easing.out */
+  --bz-duration-tap: 120ms; /* duration.tap — press feedback, delayed hints */
+  --bz-duration-state: 160ms; /* duration.state — colour and state changes */
+  --bz-duration-disclosure: 220ms; /* duration.disclosure — a panel or a detail opening */
+  --bz-duration-settle: 240ms; /* duration.settle */
+  --bz-duration-panel: 280ms; /* duration.panel */
+  --bz-ease-out: cubic-bezier(0.32, 0.72, 0, 1); /* easing.out */
+
   /* shadows.ts — navy-tinted, never generic black */
   --bz-shadow-card: 0 1px 3px rgba(31, 28, 61, 0.1); /* nativeShadows.card */
   --bz-shadow-raised: 0 4px 14px rgba(31, 28, 61, 0.1); /* nativeShadows.raised */
