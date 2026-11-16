@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PublicProfileView } from "@/components/booking/public-profile-view";
-import { BrandLogo } from "@/components/brand/brand-logo";
+import { PublicFooter } from "@/components/layout/public-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { isBookingFlowEnabled } from "@/features/booking/flow-gate";
 import { getPublicProfile } from "@/features/public-profile/get-public-profile";
@@ -40,11 +40,7 @@ export default async function PublicProfilePage({ params }: PageProps<"/r/[slug]
           bookingOpen={isBookingFlowEnabled()}
         />
       </main>
-      <footer className="border-t border-border/60 py-8">
-        <p className="type-meta flex items-center justify-center gap-2 text-foreground/60">
-          Réservation en ligne avec <BrandLogo className="h-[18px]" sizes="50px" />
-        </p>
-      </footer>
+      <PublicFooter variant="profile" />
     </>
   );
 }

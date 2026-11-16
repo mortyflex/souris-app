@@ -131,16 +131,19 @@ function PublicProfileView({ profile, logoUrl, coverUrl, bookingOpen = false }: 
                   </ContactRow>
                 ) : null}
                 {profile.address ? (
-                  <div className="flex items-start gap-3.5 border-t border-border/60 py-5 first:border-t-0 lg:col-span-2">
+                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3.5 gap-y-4 border-t border-border/60 py-5 first:border-t-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_10rem] lg:col-span-2">
                     <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-[0.875rem] bg-lavender-50 text-lavender-700">
                       <PinIcon size={18} />
                     </span>
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex min-w-0 flex-col gap-1">
                       <dt className="type-meta text-foreground/65">Adresse</dt>
                       <dd className="type-body max-w-[48ch] whitespace-pre-line break-words">{profile.address}</dd>
                     </div>
-                    {/* Reserved for the location view of a later milestone: decorative only, no map, no coordinates. */}
-                    <div aria-hidden="true" className="relative hidden h-24 w-40 shrink-0 overflow-hidden rounded-[1.1rem] ring-1 ring-lavender-100 sm:block">
+                    {/*
+                      Reserved for the location view of a later milestone: decorative only, no map, no coordinates.
+                      One vignette on every screen: under the address on a phone (full row width), beside it from 640 px.
+                    */}
+                    <div aria-hidden="true" className="relative col-span-2 h-28 overflow-hidden rounded-[1.1rem] ring-1 ring-lavender-100 sm:col-span-1 sm:h-24">
                       <NacreCover animated={false} idPrefix="place" />
                       <span className="absolute inset-0 grid place-items-center">
                         <span className="grid size-10 place-items-center rounded-full bg-background/90 text-lavender-700 shadow-card">

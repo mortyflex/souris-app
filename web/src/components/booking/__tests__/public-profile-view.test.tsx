@@ -143,6 +143,25 @@ describe("PublicProfileView — the Nacre design", () => {
     expect(html).toContain("1 rue de la Paix, 75002 Paris");
   });
 
+  it("a published address gets its decorative location vignette on every screen: under the address on a phone, beside it from 640 px", () => {
+    const html = render({ profile: complete });
+    // One vignette (its Nacre ids stay unique on the page), at rest, hidden from assistive technologies.
+    expect(html.match(/id="place-lilac"/g)).toHaveLength(1);
+    const vignette = html.match(/<div aria-hidden="true" class="([^"]*)"><div aria-hidden="true" data-animated="false" class="nacre/)?.[1]?.split(" ") ?? [];
+    expect(vignette).toEqual(expect.arrayContaining(["col-span-2", "h-28", "sm:col-span-1", "sm:h-24"]));
+    expect(vignette).not.toContain("hidden"); // never hidden on a phone again
+    // Text first, then the vignette, in reading order.
+    expect(html.indexOf("1 rue de la Paix")).toBeLessThan(html.indexOf("place-lilac"));
+  });
+
+  it("no published address: no address row and no vignette", () => {
+    for (const profile of [minimal, { ...minimal, phone: "06 00 00 00 00", email: "a@example.test" }]) {
+      const html = render({ profile });
+      expect(html).not.toContain("Adresse");
+      expect(html).not.toContain("place-lilac");
+    }
+  });
+
   it("offers a contact action only for what is published", () => {
     expect(render({ profile: { ...minimal, phone: "06 00 00 00 00" } })).toContain(">Appeler</a>");
     expect(render({ profile: { ...minimal, phone: "06 00 00 00 00" } })).not.toContain(">Écrire</a>");

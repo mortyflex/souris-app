@@ -60,6 +60,8 @@ describe("/r/[slug]", () => {
     expect(html).toContain("Chez Amélie");
     expect(html).toContain(`https://ref.supabase.co/storage/v1/object/public/business-public-media/${LOGO}`);
     expect(html).not.toContain("sb_secret");
+    // The public footer, with the website link the profile offers.
+    expect(html).toMatch(/<footer[\s\S]*Réservation en ligne avec[\s\S]*href="\/"[^>]*>Pour les professionnels<\/a>[\s\S]*<\/footer>/);
     await expect(profilePage.generateMetadata(props("chez-amelie"))).resolves.toMatchObject({ title: "Chez Amélie" });
   });
 
@@ -188,6 +190,9 @@ describe("the booking flow (development / Staging gate)", () => {
     expect(html).not.toMatch(/€|sb_secret/);
     expect(html).not.toContain("0x4AAAAAAAsecretKeyOfTheTests00000");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    // The public footer closes the flow too, without a link out of the booking.
+    expect(html).toMatch(/<footer[\s\S]*Réservation en ligne avec[\s\S]*<\/footer>/);
+    expect(html).not.toContain('href="/"');
   });
 
   it.each<[string, Record<string, string>]>([

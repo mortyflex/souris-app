@@ -6,6 +6,7 @@ import { Suspense, type ReactNode } from "react";
 import { AvailabilityLoading, AvailabilityPreview } from "@/components/booking/availability-preview";
 import { BookingFlow } from "@/components/booking/booking-flow";
 import { BookingInactiveNotice } from "@/components/booking/booking-inactive-notice";
+import { PublicFooter } from "@/components/layout/public-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { LinkPendingGlyph } from "@/components/motion/link-pending-glyph";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ export default async function BookingPage(props: PageProps<"/r/[slug]/reserver">
         {/* The flow (steps beside their summary) is wide; a notice keeps a reading width. */}
         <Container className={wide ? undefined : "max-w-3xl"}>{content}</Container>
       </main>
+      <PublicFooter variant="flow" />
     </>
   );
 }
