@@ -707,7 +707,27 @@ Implemented (same reference, §8): the READ-ONLY availability engine — the sta
 - the website shows it only as a development / Staging preview (`ONLINE_BOOKING_AVAILABILITY_PREVIEW`), never on the production website, never bookable;
 - a displayed slot is never a guarantee: the server cannot see unsynchronized appointments; booking creation must lock and revalidate with `online_booking_slot_is_available`.
 
-Not implemented: booking creation, holding a slot, customers, payments, the editor of bookable services.
+Implemented (same reference, §9): the BACKEND of booking creation — ONE server-side function that creates the canonical Appointment (item, phases, Client) for a customer.
+
+- ONE entry point, `online_booking_create_booking(slug, service, start, first name, last name, email, phone, idempotency key)`, `service_role` only; the Business, the staff member, the duration, the price, the phases and the availability are resolved by the server, never read from the caller;
+- ONE transaction (`online_booking_book`): it locks the Business (`business_booking_profiles … for update`, 3 seconds at most), replays the idempotency key, then decides publication, service and slot again with `online_booking_slot_is_available`; never duplicate the slot rule;
+- closed by its own operator switch, `ONLINE_BOOKING_CREATION` (disabled by default, Staging only for now); the website calls it from ONE server-only module (`web/src/features/booking/create-booking.ts`);
+- the Appointment is written the way a device writes one (UUID, `SCHEDULED`, `<appointment>-item-0`, the catalog phase ids, the app's staff identifier) and reaches the device through the normal pull: the offline sync is NOT changed;
+- ONE client matching rule (`online_booking_find_client`: same Business, live, not archived, same email, compatible name); a matched Client is NEVER modified, and a new one gets identity and contact only — never a consent;
+- text is validated with the device's own trim (`online_booking_clean_text`): one row the pull refuses stops every pull of that Business;
+- a Client deleted on a device never orphans a booking (`clients_online_booking_reattach`);
+- the professional's sync push is never locked or refused; what overlaps an online booking is DERIVED (`online_booking_conflicts`, nothing stored) and read by the owner through `online_booking_read_conflicts` — the app does not show it yet.
+
+Implemented (same reference, §10): the PUBLIC booking flow on `/r/<slug>/reserver` — ONE service, a date and time, the customer's name and contact (no account), review, explicit confirmation, the server's confirmation.
+
+- development / Staging only: open where `ONLINE_BOOKING_WEB_BOOKING=enabled`, never on the production website (`isBookingFlowEnabled`); the database still decides what can be booked;
+- the browser calls the website's own endpoints only (`/api/booking/<slug>`, availability and creation); every Supabase call stays server-side, with the secret key;
+- every request is checked before the engine — origin, JSON, size, exactly the permitted fields, the engine's field rules — then counted in the DATABASE (`online_booking_take_request_quota`, HMAC keys, never an IP, email or slug stored); fail closed without the secret or the function; never an in-memory counter;
+- ONE idempotency key per booking attempt; an unknown outcome freezes the request and is retried with the SAME key and the SAME body; one request in flight at most (`web/src/features/booking/booking-flow.ts`);
+- times are the server's: starts are its labels, ends are formatted in the time zone it returned, never the browser's;
+- no price is shown (the public contract has none) and no confirmation email is sent — the page says so.
+
+Not implemented: confirmation emails, an app surface for online bookings and their overlaps, a challenge (CAPTCHA), the booking flow on the production website, prices on public pages, holding a slot, customer accounts, payments, the editor of bookable services.
 
 Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PublicProfileView } from "@/components/booking/public-profile-view";
+import { isBookingFlowEnabled } from "@/features/booking/flow-gate";
 import { getPublicProfile } from "@/features/public-profile/get-public-profile";
 import { publicMediaUrl } from "@/features/public-profile/public-profile";
 import { publicEnv } from "@/lib/env/public";
@@ -31,6 +32,7 @@ export default async function PublicProfilePage({ params }: PageProps<"/r/[slug]
       profile={profile}
       logoUrl={profile.logoPath ? publicMediaUrl(publicEnv.supabaseUrl, profile.logoPath) : undefined}
       coverUrl={profile.coverPath ? publicMediaUrl(publicEnv.supabaseUrl, profile.coverPath) : undefined}
+      bookingOpen={isBookingFlowEnabled()}
     />
   );
 }

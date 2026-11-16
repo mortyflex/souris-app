@@ -44,6 +44,8 @@ describe('multi-profession Step 3 — service categories and descriptions migrat
       '20261015120000_create_online_booking_profiles.sql',
       '20261016120000_create_online_booking_working_hours.sql',
       '20261017120000_create_online_booking_availability.sql',
+      '20261018120000_create_online_booking_creation.sql',
+      '20261019120000_create_online_booking_request_limits.sql',
     ]);
     expect(names.filter((name) => name.includes('service_categories'))).toEqual([MIGRATION_NAME]);
   });

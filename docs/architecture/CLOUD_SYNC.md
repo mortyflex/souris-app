@@ -2684,3 +2684,53 @@ open detail), `CashRegisterRemoteRefresh.test.tsx`, `ProductCatalogRemoteRefresh
 `ClientDirectoryRemoteRefresh.test.tsx`, `SalesHistoryRemoteRefresh.test.tsx`,
 `AgendaRemoteRefresh.test.tsx` — all through `providers/testing/cloud-sync-harness.tsx`: device A
 uploads, this device restores under the real stack, the tick and the gesture are the app's own.
+
+---
+
+## 30. Server-created aggregates — online bookings (no sync change)
+
+Reference: `docs/architecture/ONLINE_BOOKING.md` §9. Remote migration
+`20261018120000_create_online_booking_creation.sql`. No SQLite change, no payload key, no status,
+no sync RPC replaced.
+
+Until now every row of an operational table was written by a device through `sync_push_aggregate`.
+Online booking creation is the first writer that is NOT a device: a `SECURITY DEFINER` function
+inserts a `CLIENT` and an `APPOINTMENT` (with its item and phases) directly. To the sync engine it
+is indistinguishable from another device, provided the server keeps what devices keep:
+
+```text
+identity        UUID v4 ids; item `<appointment>-item-0`; phase ids = the catalog phase ids,
+                position renumbered from 0 — the generators of §5.1
+revision        the V1A triggers stamp created_at / updated_at / sync_version as for any write;
+                the child inserts revise the parent (an online Appointment is never at version 1)
+validity        every value passes `parseRemoteBusinessSnapshot` (§16.2). ONE refused row fails
+                the whole pull, for ever: text is trimmed with the DEVICE's rule (JavaScript
+                trim(), wider than btrim) before the first name is accepted
+pull window     updated_at is the start of the booking transaction; its only wait (the Business
+                lock) is bounded to 3 seconds — far inside PULL_OVERLAP_MS (§16.5)
+references      « a live Appointment names a live Client » (§16.2, §16.7) is a DEVICE guard. A
+                device that has not pulled a booking can tombstone its Client. The trigger
+                `clients_online_booking_reattach` then moves the booking's Appointment to a new
+                Client in the tombstone's own transaction — no reader sees the orphan, a pull
+                applies both, a restore stays possible. One new Client per distinct booking
+                contact: an Appointment never names a Client built from another booking. The
+                move is revised by the V1A trigger like any write (new sync_version, updated_at
+                = the tombstone's instant), so no cursor can return one without the other
+no conflict     the server never revises a row a device may hold dirty: a matched Client is
+                never modified (a bumped version would turn a pending local edit into a CONFLICT
+                nothing resolves — §9), and an Appointment is written once, never touched again
+                except by that trigger
+no lock         the push takes no Business lock and is never refused because of a booking:
+                overlap between appointments stays non-blocking (CLAUDE.md §16). Overlaps with
+                an online booking are derived on demand (`online_booking_conflicts`)
+```
+
+Known limits, unchanged by this section: the same « Client deleted on one device, referenced on
+another » race exists between two DEVICES and is still not handled (the trigger only covers
+Appointments of online bookings); a conflict is still never resolved nor shown (§9, V1E); and a
+device with an unsynchronized appointment is invisible to the availability rule.
+
+Coverage: `sync-online-booking-pull.test.ts` (the real validator, pull worker and stores on the
+wire shapes the server produces), `online-booking-creation-migration.test.ts`, and the real
+PostgreSQL harnesses of `ONLINE_BOOKING.md` §9.8.
+

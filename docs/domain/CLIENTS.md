@@ -700,6 +700,28 @@ in-memory arrays alone (`docs/architecture/PERSISTENCE.md`).
 Deletion is offered only from an ARCHIVED Client — the deliberate path is
 `active → archived → deleted (if safe)`.
 
+### Clients and online bookings (server-side)
+
+Reference: `docs/architecture/ONLINE_BOOKING.md` §9.3, §9.4.
+
+A booking made online attaches its Appointment to a Client of the SAME Business:
+
+- an existing one only on a reliable match — live, not archived, the same email (trimmed,
+  lowercased) and a compatible name (same first name; same last name, or none recorded);
+- otherwise a new one, with identity and contact only: no note, no birthday, no photo, and no
+  consent of any kind (`smsMarketingConsent` stays absent — UNKNOWN).
+
+A matched Client is never modified by a booking: the contact the customer typed is kept on the
+server's booking record, not written over what the professional recorded. Values are stored as
+typed, trimmed — the same convention as the form.
+
+The deletion rule above is enforced on the device, which cannot know a booking it has not pulled
+yet. If a Client is deleted while an unseen online booking names it, the server moves that
+booking's Appointment to a new Client built from the booking contact, so the invariant « a live
+Appointment names a live Client » holds everywhere. When several bookings named that Client
+with different contacts, each distinct contact gets its own new Client: one customer's phone or
+last name is never put on another's Appointment.
+
 ---
 
 ## 8. Future Client Capabilities

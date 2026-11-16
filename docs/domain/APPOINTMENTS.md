@@ -940,6 +940,15 @@ This availability layer is future scope.
 
 Do not build it during the initial Appointment domain implementation.
 
+> November 2026: the layer exists SERVER-SIDE only (`docs/architecture/ONLINE_BOOKING.md` §8),
+> and so does the backend of booking creation (§9 there). An online booking is NOT a new kind of
+> appointment: the server writes the canonical Appointment of this document — `SCHEDULED`, one
+> item, the catalog phases as a snapshot, the single staff identifier of §22 — and it reaches the
+> device through the normal pull. The Appointment model gained no field; its note reads
+> « Réservation en ligne ». Manual scheduling is unchanged and still never reads working hours
+> or the availability rule; overlaps with an online booking stay allowed for the professional and
+> are derived server-side, never blocked.
+
 ---
 
 # 22. Staff Identity

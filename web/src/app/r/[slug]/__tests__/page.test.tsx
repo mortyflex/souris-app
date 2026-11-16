@@ -124,3 +124,82 @@ describe("/r/[slug]/reserver", () => {
     await expect(digestOf(again.bookingPage.default(props("nobody-here")))).resolves.toBe(NOT_FOUND);
   });
 });
+
+describe("the booking flow (development / Staging gate)", () => {
+  const online = { slug: "chez-amelie", name: "Chez Amélie", booking_enabled: true, address: "3 place Bellecour" };
+  const choose = {
+    time_zone: "Europe/Paris",
+    slot_minutes: 15,
+    first_date: "2026-11-16",
+    last_date: "2026-12-15",
+    services: [
+      { id: "svc-coupe", name: "Coupe", duration_minutes: 45 },
+      { id: "tech-couleur", name: "Couleur", duration_minutes: 90 },
+    ],
+    status: "CHOOSE_SERVICE",
+  };
+  /** The profile, then the availability, from the ONE function each. */
+  const answering = (profile: unknown, availability: unknown) =>
+    vi.fn(async (url: string) => respond(String(url).endsWith("online_booking_public_profile") ? profile : availability));
+
+  beforeEach(() => {
+    vi.stubEnv("ONLINE_BOOKING_WEB_BOOKING", "enabled");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000");
+  });
+
+  it("the profile invites to book", async () => {
+    vi.stubGlobal("fetch", answering(online, choose));
+    const { profilePage } = await load();
+    const html = renderToStaticMarkup(await profilePage.default(props("chez-amelie")));
+    expect(html).toContain("Prendre rendez-vous");
+    expect(html).toContain('href="/r/chez-amelie/reserver"');
+    expect(html).not.toContain("arrive bientôt");
+  });
+
+  it("the booking route renders the flow with the server's services — no price, no secret", async () => {
+    const fetchMock = answering(online, choose);
+    vi.stubGlobal("fetch", fetchMock);
+    const { bookingPage } = await load();
+    const html = renderToStaticMarkup(await bookingPage.default(props("chez-amelie")));
+    expect(html).toContain("Choisissez une prestation");
+    expect(html).toContain("Coupe");
+    expect(html).toContain("1 h 30");
+    expect(html).toContain("Étape 1 sur 4");
+    expect(html).not.toMatch(/€|sb_secret/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a paused page says so, without asking for availability", async () => {
+    const fetchMock = answering({ ...online, booking_enabled: false }, choose);
+    vi.stubGlobal("fetch", fetchMock);
+    const { bookingPage } = await load();
+    const html = renderToStaticMarkup(await bookingPage.default(props("chez-amelie")));
+    expect(html).toContain("Les réservations en ligne sont en pause.");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a page whose availability answers nothing says booking is unavailable", async () => {
+    vi.stubGlobal("fetch", answering(online, null));
+    const { bookingPage } = await load();
+    expect(renderToStaticMarkup(await bookingPage.default(props("chez-amelie")))).toContain("pas disponible pour le moment");
+  });
+
+  it("a failed availability read is an error with a retry, never an empty list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => (String(url).endsWith("online_booking_public_profile") ? respond(online) : new Response("{}", { status: 500 }))),
+    );
+    const { bookingPage } = await load();
+    const html = renderToStaticMarkup(await bookingPage.default(props("chez-amelie")));
+    expect(html).toContain("Les prestations n’ont pas pu être chargées.");
+    expect(html).not.toContain("Aucune prestation");
+  });
+
+  it("is never offered on the production website", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://beautizzy.fr");
+    vi.stubGlobal("fetch", answering(online, choose));
+    const { profilePage, bookingPage } = await load();
+    expect(renderToStaticMarkup(await profilePage.default(props("chez-amelie")))).toContain("arrive bientôt");
+    expect(renderToStaticMarkup(await bookingPage.default(props("chez-amelie")))).toContain("Pas encore disponible");
+  });
+});

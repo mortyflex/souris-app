@@ -1271,7 +1271,7 @@ device as `REMOTE_SCHEMA_PENDING` and go with the first run after the migration 
 professional would see them unsynchronized until then. Applying the migration first is the
 supported order. Never apply it automatically.
 
-## Online booking profiles (Sprint 2) — NOT applied, switch DISABLED
+## Online booking profiles (Sprint 2) — applied and validated on Staging (reported by the user), NOT applied on Production
 
 `migrations/20261015120000_create_online_booking_profiles.sql` — BY HAND, after every earlier
 migration. Contract and security model: `docs/architecture/ONLINE_BOOKING.md`.
@@ -1311,7 +1311,7 @@ goes offline at once and no row is rewritten.
 Staging first. Production only with the user's explicit authorization for that change, after the
 Staging validation.
 
-## Online booking working hours (Sprint 3A) — NOT applied
+## Online booking working hours (Sprint 3A) — applied and validated on Staging (reported by the user), NOT applied on Production
 
 `migrations/20261016120000_create_online_booking_working_hours.sql` — BY HAND, after the online
 booking profiles migration (it reads `business_booking_profiles.time_zone`). Contract, time rule
@@ -1360,7 +1360,7 @@ select * from public.online_booking_working_intervals('<business id>', '2026-03-
 Production only with the user's explicit authorization for that change, after the Staging
 validation.
 
-## Online booking availability (Sprint 3B) — NOT applied
+## Online booking availability (Sprint 3B) — applied and validated on Staging (reported by the user), NOT applied on Production
 
 `migrations/20261017120000_create_online_booking_availability.sql` — BY HAND, after the working
 hours migration (it calls `online_booking_working_intervals`). Contract, rules, time policy and
@@ -1454,3 +1454,156 @@ select m, ((date '2026-03-29' + make_interval(mins => m)) at time zone 'Europe/P
 
 Production only with the user's explicit authorization for that change, after the Staging
 validation. Never set `ONLINE_BOOKING_AVAILABILITY_PREVIEW` on the production website.
+
+## Online booking creation (Sprint 3C-A) — applied and validated on Staging (reported by the user), NOT applied on Production
+
+`migrations/20261018120000_create_online_booking_creation.sql` — BY HAND, after the availability
+migration (it calls `online_booking_slot_is_available`). Transaction, concurrency, customer rules,
+sync behavior and security model: `docs/architecture/ONLINE_BOOKING.md` §9.
+
+It adds the server-only table `online_bookings` (RLS, no policy, no grant), ONE disabled switch
+(`ONLINE_BOOKING_CREATION`), fifteen new functions — ONE granted to the website
+(`online_booking_create_booking`, `service_role`), ONE to the owner
+(`online_booking_read_conflicts`, `authenticated`), the others to nobody — and ONE trigger on
+`clients` (`clients_online_booking_reattach`). It replaces `online_booking_busy_intervals` in
+place (same signature, no grant): the 7-day lookback is gone. No sync RPC is replaced; no existing
+row, column, policy or grant is touched; it enables nothing. Installed builds are unaffected.
+Safe to re-run.
+
+After applying, verify:
+
+```sql
+select enabled, enabled_at from public.server_feature_flags where flag = 'ONLINE_BOOKING_CREATION';  -- false | NULL
+select relrowsecurity from pg_class where oid = 'public.online_bookings'::regclass;                  -- true
+select grantee, privilege_type from information_schema.table_privileges
+ where table_schema = 'public' and table_name = 'online_bookings'
+   and grantee in ('anon', 'authenticated', 'service_role');                                         -- no row
+select p.proname,
+       has_function_privilege('anon', p.oid, 'execute')          as anon,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('service_role', p.oid, 'execute')  as service_role
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('online_booking_creation_enabled', 'online_booking_set_creation_enabled',
+                     'online_booking_staff_member_id', 'online_booking_appointment_note',
+                     'online_booking_clean_text', 'online_booking_is_plain_text', 'online_booking_text_key',
+                     'online_booking_request_issue', 'online_booking_find_client', 'online_booking_booking_json',
+                     'online_booking_book', 'online_booking_create_booking',
+                     'online_booking_reattach_deleted_client', 'online_booking_conflicts',
+                     'online_booking_read_conflicts', 'online_booking_busy_intervals')
+ order by 1;
+-- false everywhere, except service_role = true on online_booking_create_booking
+--                      and authenticated = true on online_booking_read_conflicts
+select tgname, tgenabled from pg_trigger where tgrelid = 'public.clients'::regclass and not tgisinternal order by 1;
+-- clients_communications_reconcile, clients_online_booking_reattach, clients_sync_before_write — all 'O'
+select count(*) from public.online_bookings;                                                         -- 0
+select public.online_booking_create_booking('nobody-here', 'x', now(), 'A', 'B', 'a@b.fr', '0612345678',
+                                            'verification-key-0001');                                 -- NULL (switch off)
+select public.online_booking_staff_member_id();                                                      -- staff-amelie
+select public.online_booking_request_issue('svc', now(), ' ', 'B', 'a@b.fr', '0612345678',
+                                           'verification-key-0001');                                 -- first_name
+select current_setting('default_transaction_isolation');                                             -- read committed
+```
+
+### Staging scenario (deliberate manual steps — none performed by the sprint)
+
+Prerequisites: the Sprint 3B scenario above is in place on the Staging test Business — a published
+page, « Accepter les réservations » ON, working hours, one opted-in 45-minute SERVICE
+(`<service id>`), the Staging Plus grant. The device is signed in on the Staging build.
+
+1. Open booking creation, on STAGING only:
+
+   ```sql
+   select public.online_booking_set_creation_enabled(true);   -- { "enabled": true, "bookings": 0 }
+   ```
+
+2. Pick a start the engine offers (at least 24 hours ahead):
+
+   ```sql
+   select public.online_booking_public_availability('<slug>', '<service id>', '<date>');
+   -- take one "starts_at" of "slots", e.g. 2026-11-23T08:00:00Z
+   ```
+
+3. Book it (the SQL Editor runs as the function owner; the website will use the secret key):
+
+   ```sql
+   select public.online_booking_create_booking(
+     '<slug>', '<service id>', '<starts_at>',
+     'Camille', 'Test', 'camille.test@example.test', '06 12 34 56 78',
+     'staging-validation-0001');
+   -- { "status": "BOOKED", "booking": { "reference": …, "local_time": …, … } }
+   ```
+
+4. Run it again, unchanged: the SAME answer, and still one row —
+
+   ```sql
+   select count(*) from public.online_bookings where idempotency_key = 'staging-validation-0001';   -- 1
+   ```
+
+   Change the key only: `SLOT_UNAVAILABLE`. Change the first name only (same key):
+   `IDEMPOTENCY_KEY_REUSED`.
+
+5. In the app: pull to refresh the Agenda. The appointment is there at that time, « Planifié »,
+   for a new client « Camille Test » with her phone and email; its Details show the note
+   « Réservation en ligne » and the service with its price. Move it by 15 minutes, let the sync
+   run, and check `select start_at from public.appointments where id = (select appointment_id from
+   public.online_bookings where idempotency_key = 'staging-validation-0001');`.
+
+6. Book a second time for the same person (new key, another offered start): no second
+   « Camille Test » appears in Clients.
+
+7. The unsynchronized-device scenario. Put the device in airplane mode; create an appointment on a
+   start the engine still offers; book that same start with the SQL of step 3 (new key) —
+   `BOOKED`, the server cannot see the device. Leave airplane mode and let the sync run: both
+   appointments are in the Agenda, and
+
+   ```sql
+   select * from public.online_booking_conflicts('<business id>', now());
+   -- one row: the online appointment and the device's one
+   ```
+
+   Move or cancel one of the two in the app, sync: the query returns no row.
+
+8. Close the switch when the validation is over, and remove the test appointments in the app
+   (their booking records stay, by design, until an administrative cleanup):
+
+   ```sql
+   select public.online_booking_set_creation_enabled(false);
+   ```
+
+Production only with the user's explicit authorization for that change, after the Staging
+validation. Never enable `ONLINE_BOOKING_CREATION` on Production before the public booking flow
+is approved.
+
+## Online booking request limits (Sprint 3C-B) — applied and validated on Staging (reported by the user), NOT applied on Production
+
+`migrations/20261019120000_create_online_booking_request_limits.sql` — BY HAND, after the
+booking-creation migration. Policy, keys and behavior: `docs/architecture/ONLINE_BOOKING.md` §10.3.
+
+It adds ONE server-only table, `online_booking_request_counters` (fixed-window counters keyed by an
+HMAC the website computes — never an IP address, an email or a slug; RLS on, no policy, no grant),
+and ONE function, `online_booking_take_request_quota(jsonb)`, granted to `service_role` only. No
+existing object, row, policy or grant is touched; the booking engine is unchanged. Safe to re-run.
+
+**Without it the website's booking flow refuses every request** (`PROTECTION_UNAVAILABLE`, fail
+closed): apply it before opening the flow on a deployment (`ONLINE_BOOKING_WEB_BOOKING=enabled`,
+plus `ONLINE_BOOKING_REQUEST_LIMIT_SECRET` in that deployment's server environment).
+
+After applying, verify:
+
+```sql
+select relrowsecurity from pg_class where oid = 'public.online_booking_request_counters'::regclass;  -- true
+select grantee, privilege_type from information_schema.table_privileges
+ where table_schema = 'public' and table_name = 'online_booking_request_counters'
+   and grantee in ('anon', 'authenticated', 'service_role');                                         -- no row
+select has_function_privilege('anon', 'public.online_booking_take_request_quota(jsonb)', 'execute'),
+       has_function_privilege('authenticated', 'public.online_booking_take_request_quota(jsonb)', 'execute'),
+       has_function_privilege('service_role', 'public.online_booking_take_request_quota(jsonb)', 'execute');
+-- false | false | true
+-- A refused malformed call (22023), counting nothing:
+select public.online_booking_take_request_quota('[{"key": "203.0.113.7", "limit": 1, "window_seconds": 60}]');
+select count(*) from public.online_booking_request_counters;                                         -- 0
+```
+
+The counters are ephemeral (expired windows are deleted by later calls). To clear them during a
+test session: `delete from public.online_booking_request_counters;` — never needed in operation.

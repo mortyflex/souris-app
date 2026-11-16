@@ -1,10 +1,14 @@
 # BeautIzzy — Online booking
 
-Status: **Sprint 3B — read-only availability engine** (on top of Sprint 3A — weekly working
-hours — and Sprint 2 — public profile and booking settings). Start times can be COMPUTED; nothing
-can be booked: no booking creation, no customer, no payment exists. Publication is closed by
-default, and the website shows availability only in a development / Staging preview (§8.6). The
-Sprint 3B migration is applied to no Supabase project.
+Status: **Sprint 3C-B — public booking flow, development / Staging only** (on top of Sprint 3C-A —
+secure booking creation —, Sprint 3B — read-only availability engine —, Sprint 3A — weekly working
+hours — and Sprint 2 — public profile and booking settings). A customer can book ONE service on
+`/r/<slug>/reserver` without an account (§10); the website reaches the engine through two
+server-side endpoints protected by request limits counted in the database. The flow is open only
+where `ONLINE_BOOKING_WEB_BOOKING=enabled` and never on the production website; creation stays
+closed by its own operator switch (`ONLINE_BOOKING_CREATION`). No confirmation email exists. The
+Sprint 3C-A migration is applied on Staging (validated); the Sprint 3C-B migration
+(`20261019120000_create_online_booking_request_limits.sql`) is applied to no Supabase project.
 
 ## 1. Shape
 
@@ -16,6 +20,11 @@ Plus › Horaires              ──RPC──▶  business_working_hours       
                      appointments, calendar blocks, services (synced) ─┐
                      business_bookable_services (opt-in)              ├▶ availability ◀──RPC── /r/<slug>/reserver
                                                                        ┘   (read-only)          (preview only)
+   appointments + items + phases, clients  ◀── booking creation (§9) ◀──RPC── /api/booking/<slug> (§10)
+        │  normal pull                          online_bookings (record + idempotency)     ▲ request limits:
+        │                                       online_booking_request_counters ◀──RPC─────┘ (opaque HMAC keys)
+        ▼
+   Expo app: the booking appears in the Agenda like any synchronized appointment
 ```
 
 - One row per Business in `public.business_booking_profiles`
@@ -30,9 +39,9 @@ Plus › Horaires              ──RPC──▶  business_working_hours       
 | Caller | Access |
 | --- | --- |
 | `anon` | nothing — no grant on any object of the feature |
-| owner (`authenticated`) | `online_booking_read_profile`, `online_booking_update_profile`, `online_booking_set_state`, `online_booking_read_working_hours`, `online_booking_save_working_day`; Storage select/insert/delete inside her own media folder |
-| website (`service_role`, secret key, server-only) | `online_booking_public_profile(slug)` and `online_booking_public_availability(slug, service, date)` (§8) only |
-| operator (SQL Editor) | `online_booking_set_publication_enabled(boolean)`; `online_booking_working_intervals(…)` (§7.4); the internal availability functions and the `business_bookable_services` opt-ins (§8) |
+| owner (`authenticated`) | `online_booking_read_profile`, `online_booking_update_profile`, `online_booking_set_state`, `online_booking_read_working_hours`, `online_booking_save_working_day`, `online_booking_read_conflicts` (§9.5); Storage select/insert/delete inside her own media folder |
+| website (`service_role`, secret key, server-only) | `online_booking_public_profile(slug)`, `online_booking_public_availability(slug, service, date)` (§8), `online_booking_create_booking(…)` (§9) and `online_booking_take_request_quota(counters)` (§10) only |
+| operator (SQL Editor) | `online_booking_set_publication_enabled(boolean)`; `online_booking_set_creation_enabled(boolean)` (§9); `online_booking_working_intervals(…)` (§7.4); the internal availability and booking functions and the `business_bookable_services` opt-ins (§8) |
 
 - The table has RLS enabled, **no policy and no grant**: every access goes through a
   `SECURITY DEFINER` function with `search_path = ''`, revoked from `public`, `anon`,
@@ -69,8 +78,8 @@ Plus › Horaires              ──RPC──▶  business_working_hours       
 - The mobile app never decides: its own subscription state is not consulted, and a refusal
   (`PUBLICATION_UNAVAILABLE`, `ENTITLEMENT_REQUIRED`, `INCOMPLETE_PROFILE`) leaves the stored
   state as it is.
-- `booking_enabled` only changes what the public page says (« arrive bientôt » / « en pause »):
-  `/r/<slug>/reserver` stays an unavailable notice until the booking engine exists.
+- `booking_enabled` decides what the public page offers: « Prendre rendez-vous » where the booking
+  flow is open (§10), « arrive bientôt » elsewhere, « en pause » when it is off.
 
 ## 4. Activation prerequisites (per environment, Staging first)
 
@@ -130,17 +139,21 @@ Closing again is one statement (`…_enabled(false)`): every page goes offline, 
   midnight, year change, both Paris DST Sundays, session time zones, the Business time zone —
   plus the gating, the grants, malformed input, isolation between Businesses, the absence of
   private fields, the revalidation function and backward compatibility (the Sprint 2 and 3A
-  harnesses still pass with Sprint 3B applied).
+  harnesses still pass with Sprint 3B applied); for Sprint 3C-A, see §9.8 — the behavior runs
+  against a REAL PostgreSQL, because locking and concurrent snapshots cannot be shown in-process.
 
 ## 6. Not implemented
 
-Booking creation, holding a slot, customers, deposits, Stripe, notifications to the
-professional, customer cancellation, slug history or redirects, a time-zone editor, search
+Confirmation emails and SMS (§10.6), holding a slot, the public booking flow on the production
+website, a challenge (CAPTCHA) in front of it, prices on the public pages (§10.5),
+customer accounts, deposits, Stripe, notifications to the professional, a surface in the app for
+overlaps (§9.5) and for telling an online booking apart, customer cancellation or rescheduling,
+booking requests awaiting approval, slug history or redirects, a time-zone editor, search
 indexing of public pages, server-side cleanup of unreferenced images; for working hours: per-staff
 hours, exceptional days and time off, overnight intervals, showing the hours on the public page,
 and any effect on the Agenda; for availability: the professional's editor of bookable services
-and of the booking rules, parallel booking during processing time, multi-staff availability, a
-public (non-preview) booking page, rate limiting at the edge.
+and of the booking rules, parallel booking during processing time, multi-staff availability,
+booking several services at once.
 
 ## 7. Weekly working hours (Sprint 3A)
 
@@ -296,9 +309,10 @@ Editor; the professional's editor (and the final representation) is a decision f
 - The answer names services (id, name, duration), the window and start times — never a Business
   id, a client, an appointment, a note, a price or a staff member. A private, inactive, deleted or
   foreign service gets the same `UNKNOWN_SERVICE`.
-- Bounds: one service, one local date per call; at most 96 candidates; appointments read through
-  the `(business_id, start_at)` index from 7 days before the day; every input validated (the web
-  validates the slug, the service id and the date before calling).
+- Bounds: one service, one local date per call; at most 96 candidates; every input validated (the
+  web validates the slug, the service id and the date before calling). Appointments are read
+  through the `(business_id, start_at)` index up to the end of the day, with NO lower bound since
+  Sprint 3C-A (§9.6): Sprint 3B started 7 days before the day and silently ignored a longer one.
 
 ### 8.6 Web — a read-only preview, development and Staging only
 
@@ -317,11 +331,379 @@ Editor; the professional's editor (and the final representation) is a decision f
 
 - An appointment created on a device and not synchronized yet is invisible to the server. A
   displayed slot is therefore never a guarantee, and the website never says it is.
-- The future booking creation must, in ONE transaction: lock the Business (e.g. `select … from
-  business_booking_profiles where business_id = $1 for update`), call
-  `online_booking_slot_is_available(business, service, starts_at, now())` (the SAME rule as the
-  displayed slots), then create the request or the appointment. The professional's own sync push
-  does not take that lock: an overlap with a not-yet-synchronized appointment stays possible, which
-  manual scheduling already allows (`CLAUDE.md` §16); the confirmation step must surface it.
+- Booking creation (§9, Sprint 3C-A) does exactly that, in ONE transaction: it locks the Business
+  (`select … from business_booking_profiles where business_id = $1 for update`), calls
+  `online_booking_slot_is_available(business, service, starts_at, now)` (the SAME rule as the
+  displayed slots), then creates the appointment. The professional's own sync push does not take
+  that lock: an overlap with a not-yet-synchronized appointment stays possible, which manual
+  scheduling already allows (`CLAUDE.md` §16); it is derived and reported, never silent (§9.5).
 - `online_booking_compute_slots(business, service, date, now)` takes `now` explicitly: deterministic
   and testable; the public entry point passes `now()`.
+
+## 9. Booking creation (Sprint 3C-A) — backend only
+
+`supabase/migrations/20261018120000_create_online_booking_creation.sql`. ONE server-side function
+turns a customer's request into a real Appointment. The website calls it from ONE server-only
+module since Sprint 3C-B (§10); the operator switch `ONLINE_BOOKING_CREATION` ships disabled.
+
+### 9.1 What the inspection established (November 2026)
+
+| Concern | Finding | Consequence |
+| --- | --- | --- |
+| Appointment model | `appointments` + `appointment_items` + `appointment_phases`, snapshots without FK to the catalog; no origin / source field | the booking writes THE canonical rows; the note « Réservation en ligne » is the only marker |
+| How a device creates one | UUID v4 id, `SCHEDULED`, items `<appointment>-item-<order>`, phases under the CATALOG phase ids with `position` = index, no note, discount and reminder flag NULL (`build-appointment.ts`, `snapshot.ts`) | the server writes the same shapes |
+| `CONFIRMED` | listed, never created by any V1 flow, no documented meaning | an online booking is `SCHEDULED` |
+| Staff | ONE placeholder, `'staff-amelie'` (`current-staff-member.ts`); the Agenda does not filter on it, the Calendar Block rule does | ONE server constant, pinned to the app's by a test |
+| Client model | only `first_name` required; phone and email stored as typed (trimmed), never normalized; no duplicate rule outside the import, where the email is the strong identifier | §9.3 |
+| Pull | whole answer validated first — ONE refused row fails the whole pull (`remote-snapshot.ts`); `first_name` must be non-blank after JavaScript `trim()`; a live Appointment whose Client is not held is not applied and HOLDS the cursor; a restore refuses a dataset where a live Appointment names a deleted Client | strict text validation (§9.3); the Client invariant kept server-side (§9.4) |
+| Pull cursor | `updated_at` = START of the writing transaction; the device re-reads 5 minutes before its cursor | the booking transaction must stay short: its lock wait is bounded to 3 seconds |
+| Push | `sync_push_aggregate`, SECURITY INVOKER, per-row `FOR UPDATE` + `sync_version`; no Business-wide lock; a CLIENT `DELETE` is not guarded server-side (the device guards it) | not replaced; §9.4 |
+| Conflicts | `CONFLICT` keeps the entry pending forever, nothing resolves it (V1E not built) and nothing shows it to the professional | the server must never create one: a matched Client is never touched |
+| Reminders | AFTER triggers on `appointments` (SECURITY DEFINER, no `auth.uid()`), under the owner's own preference | an online appointment gets the existing H-24 email like any other; nothing new is sent |
+
+### 9.2 The booking transaction
+
+`online_booking_create_booking(slug, service_id, starts_at, first_name, last_name, email, phone,
+idempotency_key)` → `online_booking_book(…, now)`. All or nothing:
+
+1. the switch is ON, the request is well-formed (§9.3), the slug names a profile;
+2. the Business is LOCKED: its `business_booking_profiles` row, `FOR UPDATE`, waiting at most
+   3 seconds — `BUSY`, nothing written, retry with the same key. The slug and the time zone are
+   read from the locked row, not before the wait: a slug renamed or handed to another Business
+   meanwhile answers `NULL` (as an unknown slug does) and writes nothing, and the time zone stored
+   on the booking is the one the slot rule reads;
+3. the idempotency key is looked up: the same request answers the stored booking again and writes
+   nothing; another request under the same key is `IDEMPOTENCY_KEY_REUSED`;
+4. everything is decided AGAIN under the lock, from committed data: published, `booking_enabled`,
+   THE publication rule (`online_booking_may_be_public`: operator switch + verified Plus); the
+   service opted in, active, not deleted (`online_booking_bookable_services`); the start still
+   offered by THE slot rule (`online_booking_slot_is_available` — nothing is recomputed here);
+5. the customer becomes a Client of THAT Business (§9.3);
+6. the Appointment, its item and its phases are written as a device writes them, a snapshot of the
+   catalog service at that instant; the written length must equal the validated one (40001
+   otherwise);
+7. the booking record (`online_bookings`) is written with the key and the answer.
+
+Never read from the caller: the Business id, the staff member, the duration, the price, the
+phases, the subscription state, the availability.
+
+| Answer | Meaning |
+| --- | --- |
+| `NULL` | nothing can be booked here — switch off, unknown slug, draft, offline, paused, lapsed Plus (the same `NULL`) |
+| `INVALID_REQUEST` + `field` | the first unacceptable field; says nothing about any Business |
+| `BUSY` | locked for more than 3 seconds; nothing written |
+| `IDEMPOTENCY_KEY_REUSED` | the key already booked a different request |
+| `UNKNOWN_SERVICE` | not a bookable service of this Business, whatever the reason |
+| `SLOT_UNAVAILABLE` | the start is not offered any more, whatever the reason |
+| `BOOKED` + `booking` | `reference`, `service` (id, name, duration), `starts_at`, `ends_at` (UTC), `local_date`, `local_time`, `time_zone` — never a Business, Client or Appointment id, never an amount |
+
+Concurrency and idempotency:
+
+- one booking of a Business at a time (the row lock); in READ COMMITTED each statement sees what
+  the previous holder committed, so the second request for a slot is refused at step 4. The
+  function refuses to run under any other isolation level (25001);
+- the lock is the row the owner's `online_booking_set_state` / `online_booking_update_profile`
+  lock: pausing bookings and a booking in flight are serialized;
+- the key is durable: `unique (business_id, idempotency_key)` plus a sha256 fingerprint of the
+  normalized request. A replay answers from the record, so it is byte-identical to the first
+  answer, also after the page was paused. With the switch off even a replay answers `NULL`; so
+  does a replay through a slug that no longer names the Business (the key is found through the
+  Business the slug names now — never across Businesses);
+- nothing is held in application memory.
+
+### 9.3 The customer
+
+Validation (`online_booking_request_issue`, a pure rule — it reads no table):
+
+| Field | Rule |
+| --- | --- |
+| `idempotency_key` | 16–128 characters of `[A-Za-z0-9_-]` |
+| `service_id` | 1–200 characters |
+| `starts_at` | a finite instant |
+| `first_name`, `last_name` | 1–80 characters once cleaned, at least one visible character, no control character, line separator or bidirectional override |
+| `email` | THE email shape rule (`communications_is_valid_email`), no whitespace of any kind |
+| `phone` | at most 40 characters, readable by THE phone rule (`communications_client_phone_e164`) |
+
+« Cleaned » means without the leading and trailing characters JavaScript `trim()` removes
+(`online_booking_clean_text`): the device validates pulled rows with that trim, and a first name
+made of a no-break space would stop every pull of that Business. Values are stored as typed,
+cleaned — never lowercased, never canonicalized (the Client conventions, `CLIENTS.md`).
+
+Matching (`online_booking_find_client`) — an existing Client is reused only when ALL hold:
+
+- same Business (every predicate is scoped by `business_id`: never merged across Businesses);
+- live (not tombstoned) and not archived;
+- the same email, trimmed and lowercased — the strong identifier of the import rule;
+- a compatible name: the same first name, and the same last name or none recorded (case and
+  spacing ignored; accents are not folded).
+
+The oldest one when several qualify. Otherwise a NEW Client is created with identity and contact
+only: no note, no birthday, no photo, and NO consent of any kind — `sms_marketing_consent` stays
+NULL (unknown). A booking is not a marketing permission.
+
+**A matched Client is never modified.** Public, unauthenticated input must not rewrite a record
+the professional keeps (a contact detail would redirect her reminders), and a server-side change
+of a Client the device is editing offline would create a conflict nothing resolves (§9.1). The
+contact given for THIS booking is kept on the booking record instead.
+
+### 9.4 Offline-first synchronization
+
+- **No sync change.** No sync RPC is replaced, no payload key or status is added, SQLite is
+  untouched. The booking reaches the device through the normal pull, as an appointment made on
+  another device would: validated, applied with its Client first, acknowledged, never echoed.
+  From then on it is hers: she edits, moves, cancels or deletes it and the push applies.
+- **Pull window.** The rows carry the start time of the booking transaction; the lock wait is
+  bounded (3 s), so a booking is always inside the 5-minute overlap the device re-reads.
+- **A deleted Client never orphans a booking** (trigger `clients_online_booking_reattach`). A
+  device refuses to delete a Client an Appointment references — but it cannot apply that guard to
+  a booking it has not pulled yet. When such a deletion reaches the server, each live Appointment
+  of an online booking that names the tombstoned Client is moved, in the same transaction, to a
+  NEW Client built from the contact given for that booking — as if the deletion had come first.
+  Several bookings may have matched that one Client with different contacts (the phone is not
+  compared, and a Client without a last name matches any): one new Client is created per
+  distinct contact, exactly as stored, and each Appointment goes to the one built from its own
+  booking — never another booking's details. Nothing of the deleted record is carried over.
+  The moves are ordinary writes of the deleting push: `appointments_sync_before_write` gives the
+  moved Appointments a new `sync_version` and the transaction's `updated_at`, the same instant as
+  the tombstone and the new Clients, so every device pulls the three together under its usual
+  cursor (one that already held the booking applies the new Client and the move first, then the
+  tombstone). Without it the device could never apply that appointment (cursor held for ever) and
+  a new device could not restore.
+- **Her own schedule is never refused.** The sync push takes NO Business lock, on purpose:
+  overlapping appointments are allowed (`CLAUDE.md` §16) and an appointment created offline must
+  never be rejected or dropped. What a push committed before a booking makes that booking
+  impossible; what it commits after (or during) coexists with it — §9.5.
+
+### 9.5 Overlaps with an online booking — derived, never stored
+
+The exact scenario: the professional creates an appointment (or a calendar block, or moves an
+appointment) while her device has not synchronized; a customer books that time, which the server
+sees as free; the device then pushes. `sync_push_aggregate` answers `APPLIED` — both exist.
+
+- `online_booking_conflicts(business, now)` lists, for every online booking whose Appointment
+  still occupies the schedule and has not ended, each OTHER busy interval that intersects it: an
+  appointment (full span, the engine's conservative rule; `CANCELLED`, `NO_SHOW` and deleted ones
+  occupy nothing) or a calendar block. Ends are exclusive.
+- It is computed from the committed calendar at each call. Nothing is stored, so nothing can be
+  stale, and a race between a push and a booking needs no lock to be seen.
+- It reads the Appointment as it is NOW: a conflict disappears the moment she moves or cancels
+  either side — that is the recovery; nothing is ever rewritten or discarded for her.
+- The owner reads hers through `online_booking_read_conflicts(business)` (ownership checked):
+  the ids and instants of her own appointments and blocks, nothing of the booking record.
+
+**Not built: the app does not call it.** Until a surface exists in the Expo application (and a
+notification to the professional), an overlap is represented and queryable on the server but she
+is not TOLD. Double-booking protection is therefore complete between online customers and against
+everything already synchronized, and NOT complete against an unsynchronized device — a
+prerequisite of any public launch (§9.9).
+
+### 9.6 The busy-interval lookback
+
+Sprint 3B read appointments from 7 days before the window. Nothing bounds the length of an
+appointment (any number of items, any phase duration), so an appointment longer than 7 days was
+silently ignored. `online_booking_busy_intervals` is replaced in place — same signature, same
+zero-grant boundary — WITHOUT a lower bound: every live appointment that starts before the end of
+the window is measured. Cost: one phase-sum probe per appointment of the Business; measured on
+real PostgreSQL with 20 000 appointments (60 000 phases) at about 20 ms per day of slots, against
+0.2 ms bounded. If a history ever outgrows that, the exact remedy is a stored per-Business maximum
+span maintained by a trigger — not a guessed constant.
+
+### 9.7 Security
+
+- ONE write entry point, `service_role` only, keyed by the public slug. `anon` and `authenticated`
+  cannot execute it; no browser code can.
+- `online_bookings`: RLS enabled, no policy, no grant. Every internal function is revoked from
+  `public`, `anon`, `authenticated` and `service_role`; SECURITY DEFINER functions pin
+  `search_path = ''` and are owned by the table owner.
+- No SQL identifier comes from the caller; no dynamic SQL exists in the migration.
+- Refusals say `NULL` or a status — never why a page is offline, never which Client matched.
+  `INVALID_REQUEST` is decided before any table is read.
+- The answer carries a random booking reference that grants nothing: no function is keyed by it.
+- The switch `ONLINE_BOOKING_CREATION` is a row the operator flips by hand
+  (`online_booking_set_creation_enabled`). Enable it on Staging only until the public flow is
+  approved. The migration enables nothing: no flag, no profile, no opt-in.
+
+### 9.8 Tests
+
+Scratch harnesses outside the repository, like the other migrations — here against a REAL
+PostgreSQL 18 (separate connections, real row locks), with every migration owned by a role that is
+neither superuser nor BYPASSRLS:
+
+- functional (255 checks): the gate; the created Appointment, item, phases, Client and record;
+  the pull seen by the owner, key for key like a device-made appointment; device edits, stale
+  push, tombstone; idempotency (replay, cosmetic differences, reuse, pause, switch off); outside
+  hours, break, closed day, off-grid, existing appointment, calendar block, `CANCELLED` /
+  `NO_SHOW` / deleted; stale availability; notice and horizon boundaries; both Paris DST Sundays;
+  session time zone; services (private, inactive, deleted, foreign); page eligibility (paused,
+  unpublished, expired Plus, Sandbox, switch off); every invalid field; matching; rollback on an
+  injected failure; the isolation guard; overlaps and their recovery; the Client deletion race;
+  the long-running appointment; privacy of the public reads; grants, RLS and ownership;
+- concurrency (57 checks): two customers on one slot (wait, then refusal; rollback hands the slot
+  over); 20 simultaneous requests → exactly one booking; 20 simultaneous duplicates of one key →
+  one booking; a packed day never over-filled; two Businesses never wait for each other; `BUSY`
+  after 3 seconds; the owner pausing during a booking, both orders; a push never blocked by a
+  booking and the overlap derived, both orders; the Client deletion race, both orders; a device
+  edit of the matched Client; a pull during a booking; the reminder trigger;
+- upgrade (26 checks): the migration applied onto a populated Sprint 3B database — no existing row
+  or object changed besides the replaced function, the old lookback defect shown then fixed, the
+  public availability and the sync unchanged, the scan cost measured;
+- review (52 checks): a Client deleted by a device that never pulled its booking — the moved
+  Appointment and its new Client carry the tombstone's own `updated_at` and a new
+  `sync_version`, and reach both devices through the real pull under the device cursor rule
+  (cursor − 5 minutes), also when the deletion is still uncommitted during a pull; a slug renamed
+  or handed to another Business, and a time zone changed, while a booking waits on the lock;
+  five bookings with different contacts on one deleted Client;
+- the Sprint 2 / 3A / 3B harnesses still pass with it applied (166 / 147 / 172, in-process).
+
+In the repository: `online-booking-creation-migration.test.ts` (source-level guard: scope, grants,
+order of the decisions, shapes, the staff constant, no caller in `web/`) and
+`sync-online-booking-pull.test.ts` (a server-created booking through the real validator, pull
+worker and stores — including a device that already held a booking whose Client another device
+deleted).
+
+### 9.9 Before a public booking flow (Sprint 3C-B and after)
+
+Status after Sprint 3C-B (§10):
+
+- DONE: the server-only web action behind its own deployment gate (§10.1); request limits per
+  network, per customer email and per page, counted in the database (§10.3);
+- DONE on Staging (reported by the user): the scenarios of `supabase/README.md` › Online booking
+  creation, except genuinely simultaneous requests on Staging itself;
+- OPEN: a surface in the app for `online_booking_read_conflicts`, and a notification to the
+  professional when a booking arrives — without them she is not told (§9.5);
+- OPEN: the confirmation the customer receives (email, §10.6): a lost answer is only recovered by
+  the same key, in the same browser tab;
+- OPEN: a challenge (CAPTCHA) against distributed abuse — the limits bound one network, one email
+  and one page, not a botnet;
+- OPEN: product decisions recorded here as defaults, to confirm: `SCHEDULED` status, the note
+  « Réservation en ligne », phone required, archived Clients not matched, the matching rule.
+
+## 10. Public booking flow (Sprint 3C-B) — development / Staging only
+
+`web/src/app/r/[slug]/reserver/page.tsx` (the page), `web/src/app/api/booking/[slug]/` (two
+endpoints), `web/src/features/booking/` (every rule), `web/src/components/booking/booking-flow.tsx`
+and `booking-steps.tsx` (the screens), and ONE migration,
+`supabase/migrations/20261019120000_create_online_booking_request_limits.sql`.
+
+### 10.1 Gate and journey
+
+- Open only where the server variable `ONLINE_BOOKING_WEB_BOOKING=enabled` is set AND the site is
+  not the production website (`isBookingFlowEnabled`, `web/src/features/booking/flow-gate.ts`).
+  Elsewhere `/r/<slug>/reserver` keeps its notice (or the §8.6 preview) and both endpoints answer
+  404. The database still decides whether anything can be booked (publication, `booking_enabled`,
+  Plus, `ONLINE_BOOKING_CREATION`).
+- The profile (`/r/<slug>`) offers « Prendre rendez-vous » when the flow is open and the page
+  accepts bookings.
+- Four steps, then the outcome: Prestation (ONE bookable service) → Date et horaire (the window's
+  dates; the start times of the chosen date) → Coordonnées (first name, last name, email, phone —
+  all required, no account) → Confirmation (review, explicit « Confirmer le rendez-vous ») →
+  the confirmed booking.
+- The profile and the bookable services are read on the server before anything is sent (a real
+  404 for an address with no page; « en pause » / « indisponible » notices). Times and booking go
+  through the website's own endpoints; the browser never talks to Supabase.
+- Browser Back / Forward move between steps (one history entry per step, no URL change); the
+  focus moves to each new step's heading, or to the first refused field.
+
+### 10.2 The two endpoints
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /api/booking/<slug>/availability?service=&date=` | `online_booking_public_availability`, validated query (only `service` and `date`), never cached, 120 reads / 10 min per network |
+| `POST /api/booking/<slug>` | `online_booking_create_booking`; the answers of §9.2 forwarded as they are |
+
+The POST checks, each BEFORE the next and all before the engine: the gate, the slug shape, the
+origin (an `Origin` equal to the site's own; `Sec-Fetch-Site` cross-site refused), JSON only, at
+most 2 KB read (whatever `Content-Length` claims), exactly seven string keys (`service_id`,
+`starts_at`, `first_name`, `last_name`, `email`, `phone`, `idempotency_key` — nothing else can be
+forwarded), the field rules of the engine (mirrored in `booking-request.ts`, the engine stays the
+authority), then the request limits. Answers: the engine's (200), `REJECTED` (400/403/404/413/
+415), `INVALID_REQUEST` + field (400), `RATE_LIMITED` (429), `PROTECTION_UNAVAILABLE` (503),
+`ERROR` (502, outcome unknown). Nothing the customer typed, no request body and no secret is
+logged; a failure is logged as a status only.
+
+### 10.3 Request limits — counted in the database
+
+An in-memory counter holds per server instance only (a serverless deployment has many): the
+counters live in the database every instance shares.
+
+- `online_booking_request_counters`: fixed windows keyed by `HMAC-SHA256(secret, scope + window +
+  identifier)` — 64 hex digits; the table never holds an IP address, an email or a slug (CHECKed).
+  RLS on, no policy, no grant.
+- `online_booking_take_request_quota(counters)` (`service_role` only): increments every counter
+  of a request (a refused request counts too), in key order (no deadlock between concurrent
+  callers), and answers whether all are within their limits. Expired windows are deleted in
+  bounded batches.
+- The policy (`web/src/features/booking/request-protection.ts`):
+
+  | Action | Per | Limit |
+  | --- | --- | --- |
+  | availability | network | 120 / 10 min |
+  | booking | network | 10 / 10 min and 40 / 24 h |
+  | booking | customer email | 6 / 24 h |
+  | booking | page (slug) | 30 / 10 min |
+
+  A network is the IPv4 address or the IPv6 /64, read from `x-real-ip` / `x-forwarded-for` as
+  the platform sets them (Vercel overwrites them; a self-hosted proxy must do the same).
+- FAIL CLOSED: without `ONLINE_BOOKING_REQUEST_LIMIT_SECRET` (32+ characters), without the
+  function (migration not applied), or when it does not answer, both endpoints refuse every
+  request (`PROTECTION_UNAVAILABLE`) and the engine is never called.
+- Limits, not a wall: a botnet rotating networks and emails is bounded per page (30 / 10 min),
+  which also lets it exhaust that page's quota. A challenge is the next layer (§9.9).
+
+### 10.4 Idempotency, retries and stale data
+
+- ONE key per booking attempt (32 hex digits from `crypto.getRandomValues`), an attempt being one
+  immutable request. `planSend` (`booking-flow.ts`) draws a key only for a new attempt.
+- Unknown outcome (network failure, timeout, 5xx, an answer not understood): the request and its
+  key are FROZEN — nothing can be edited, Back cannot leave the review — and « Réessayer » sends
+  the very same body; the engine replays the booking instead of creating another. The key is
+  never replaced silently.
+- One request in flight at most (a guard outside React state, and a disabled button).
+- `BUSY`, `RATE_LIMITED`, `PROTECTION_UNAVAILABLE`: retry with the same key; when nothing was
+  uncertain, changing the request starts a new attempt.
+- `SLOT_UNAVAILABLE`: back to the times of the same date, read again; the details are kept.
+  `UNKNOWN_SERVICE`: back to the services, read again. `INVALID_REQUEST`: the refused field, or
+  the times again. `IDEMPOTENCY_KEY_REUSED`: nothing booked this time; a new attempt needs the
+  customer to confirm again. `UNAVAILABLE` (the engine's NULL): booking closed — and, after an
+  earlier unknown outcome, an explicit « nous ne pouvons pas confirmer » with the contact.
+- Availability reads are never cached (endpoint `no-store`, fetch `no-store`); every new read
+  aborts the previous one and an answer older than the latest read is discarded (`STALE`). A time
+  shown is never held: creation decides again under the Business lock (§9.2).
+- Not covered: a reload during an unknown outcome loses the frozen request (it lives in memory
+  only); the customer is told to contact the professional.
+
+### 10.5 What is shown — and what is not
+
+- Times are the server's: a start is the slot's own `local_time`; an end is the UTC instant
+  formatted in the time zone the server returned (`formatTimeInZone`, explicit `timeZone`) —
+  never the browser's or the server's zone. « Horaires à l’heure de Paris. » says which clock.
+- The confirmation shows what the engine confirmed: the reference, the service, the local date,
+  start – end, the professional (her published name, and address if published).
+- **No price**: the public contract (`online_booking_public_profile`,
+  `online_booking_public_availability`, the booking answer) exposes none, and the website does
+  not read restricted tables to find one. Showing prices needs a deliberate change of the public
+  contract.
+
+### 10.6 Confirmation email — not built
+
+The communications queue (`scheduled_communications`) knows reminder, rescheduling,
+cancellation and client-lifecycle kinds only; a booking confirmation needs a new kind, its
+enqueue at booking time (deduplicated by the booking, so a replay never sends twice), its
+template in the worker and a deployment of the worker — out of this increment. The confirmation
+page says that no email is sent. An online appointment still gets the existing H-24 reminder
+under the professional's own preference (§9.1).
+
+### 10.7 Tests
+
+- Web (Vitest): the two endpoints at the server boundary (success, every engine answer, unknown
+  outcomes, every refusal before the engine with no call made, rate limit before the engine,
+  fail-closed protection, the gate, no customer detail or secret in an answer or a log); the
+  request rules; the flow reducer (one key per attempt, frozen retries, no double send, every
+  answer); the browser client (same-key retries, timeouts, stale reads); times in the
+  professional's zone whatever the runtime's; the screens and the page wiring.
+- Real PostgreSQL (scratch harnesses outside the repository): the request counters (privileges,
+  semantics, malformed input, window rollover, cleanup, 30 concurrent callers against a limit of
+  10 → exactly 10); the website end to end through `next start` and a PostgREST stand-in — two
+  booking transactions shown in flight at the same time with exactly one booked, a lost answer
+  then the same-key retry, rate limits before the engine, fail-closed protection; the journey in
+  headless Chrome at 390 px and 1280 px with a New York browser time zone.

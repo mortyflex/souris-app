@@ -1,6 +1,10 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PublicProfile } from "@/features/public-profile/public-profile";
+import { bookingPath } from "@/features/public-profile/slug";
 
 import { profileNameRole } from "./profile-name";
 
@@ -9,6 +13,12 @@ interface PublicProfileViewProps {
   /** Public URLs of the branding images; absent when the professional has none. */
   logoUrl?: string;
   coverUrl?: string;
+  /**
+   * Whether this deployment offers the booking flow (`isBookingFlowEnabled`).
+   * With it, a page that accepts bookings invites to book; without it, the
+   * page says booking is coming.
+   */
+  bookingOpen?: boolean;
 }
 
 // Bodoni Moda carries the identity and the section headlines; Manrope carries
@@ -25,10 +35,11 @@ function initialOf(name: string): string {
 
 /**
  * The public page of a professional. It shows what she chose to publish and
- * nothing else: no service, no price, no time slot — the booking engine does
- * not exist yet, and the page says so instead of pretending.
+ * nothing else: no service, no price, no time slot. Where the booking flow is
+ * offered and her page accepts bookings, it leads to it; otherwise it says
+ * booking is coming or paused, instead of pretending.
  */
-function PublicProfileView({ profile, logoUrl, coverUrl }: PublicProfileViewProps) {
+function PublicProfileView({ profile, logoUrl, coverUrl, bookingOpen = false }: PublicProfileViewProps) {
   const hasContact = Boolean(profile.phone || profile.email || profile.address);
 
   return (
@@ -103,7 +114,18 @@ function PublicProfileView({ profile, logoUrl, coverUrl }: PublicProfileViewProp
         aria-labelledby="booking-status"
         className="flex flex-col items-start gap-3 rounded-[1.75rem] bg-lavender-50 p-6 sm:rounded-[2rem] sm:p-9"
       >
-        {profile.bookingEnabled ? (
+        {profile.bookingEnabled && bookingOpen ? (
+          <>
+            <Badge>Réservation en ligne</Badge>
+            <h2 id="booking-status" className={sectionTitle}>
+              Prenez rendez-vous en ligne.
+            </h2>
+            <p className={sectionBody}>Choisissez une prestation et un horaire disponible, sans créer de compte.</p>
+            <Button asChild size="lg" className="mt-2">
+              <Link href={bookingPath(profile.slug)}>Prendre rendez-vous</Link>
+            </Button>
+          </>
+        ) : profile.bookingEnabled ? (
           <>
             <Badge>Bientôt disponible</Badge>
             <h2 id="booking-status" className={sectionTitle}>

@@ -133,6 +133,34 @@ export function parseAvailability(data: unknown): Availability | undefined {
   };
 }
 
+/**
+ * The availability in the server's own form again, approved fields only — what
+ * the website's availability endpoint sends, so the browser reads it with the
+ * very same `parseAvailability`.
+ */
+export function availabilityToWire(availability: Availability): Record<string, unknown> {
+  const service = (value: BookableService) => ({ id: value.id, name: value.name, duration_minutes: value.durationMinutes });
+  return {
+    time_zone: availability.timeZone,
+    slot_minutes: availability.slotMinutes,
+    first_date: availability.firstDate,
+    last_date: availability.lastDate,
+    services: availability.services.map(service),
+    status: availability.status,
+    ...(availability.service !== undefined ? { service: service(availability.service) } : {}),
+    ...(availability.date !== undefined ? { date: availability.date } : {}),
+    ...(availability.status === "SLOTS"
+      ? {
+          slots: availability.slots.map((slot) => ({
+            starts_at: slot.startsAt,
+            ends_at: slot.endsAt,
+            local_time: slot.localTime,
+          })),
+        }
+      : {}),
+  };
+}
+
 export interface AvailabilityQuery {
   readonly serviceId?: string;
   readonly date?: string;

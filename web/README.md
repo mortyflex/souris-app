@@ -41,6 +41,8 @@ Copy `.env.example` to `.env.local` (gitignored). The marketing pages need nothi
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | Supabase publishable key (unused: the browser never calls Supabase) |
 | `SUPABASE_SECRET_KEY` | server only | Supabase secret key — **required by `/r/[slug]`**, read by the profile and availability lookups only |
 | `ONLINE_BOOKING_AVAILABILITY_PREVIEW` | server only | `enabled` shows the read-only availability preview on `/r/[slug]/reserver` — **development / Staging only**, ignored on the production website |
+| `ONLINE_BOOKING_WEB_BOOKING` | server only | `enabled` opens the public booking flow on `/r/[slug]/reserver` and its endpoints under `/api/booking/[slug]` — **development / Staging only**, ignored on the production website |
+| `ONLINE_BOOKING_REQUEST_LIMIT_SECRET` | server only | Random string of 32+ characters, distinct per environment: the HMAC key of the request counters. **Required by the booking flow**: without it every booking endpoint refuses (fail closed) |
 
 Rules:
 
@@ -54,13 +56,17 @@ Rules:
 | --- | --- |
 | `/` | Marketing homepage |
 | `/r/[slug]` | Public profile of a professional, read from Supabase on every request |
-| `/r/[slug]/reserver` | Future booking flow — a "not yet available" notice for an online profile; with the preview switch (Staging / development), a read-only availability preview |
+| `/r/[slug]/reserver` | The booking flow where `ONLINE_BOOKING_WEB_BOOKING=enabled` (development / Staging); elsewhere a "not yet available" notice, or the read-only availability preview with its own switch |
+| `GET /api/booking/[slug]/availability` | Start times of one service on one date, for the booking flow — server-side, rate-limited, never cached |
+| `POST /api/booking/[slug]` | Creates ONE booking — server-side, same-origin JSON only, rate-limited, idempotent by key |
 
 Public profiles live under `/r/` so that a slug can never collide with a marketing or legal page. Future legal pages (privacy, terms, legal notice) go in `src/app/(marketing)/` and inherit the marketing header and footer.
 
-`/r/[slug]` shows only what the professional published in the mobile application (name, description, contact, logo, cover) and whether she accepts online bookings. No availability, form or reservation exists behind it. Both routes answer a real HTTP 404 when no page is online at the address — unknown, malformed, draft, unpublished, or offline for lack of a verified subscription — and an error (never a 404) when the lookup itself fails. They are excluded from search indexing for now.
+`/r/[slug]` shows only what the professional published in the mobile application (name, description, contact, logo, cover) and whether she accepts online bookings — with « Prendre rendez-vous » where the booking flow is open. Both routes answer a real HTTP 404 when no page is online at the address — unknown, malformed, draft, unpublished, or offline for lack of a verified subscription — and an error (never a 404) when the lookup itself fails. They are excluded from search indexing for now.
 
 The lookup (`src/features/public-profile/get-public-profile.ts`) is server-only: it calls the one database function reserved to the website, `online_booking_public_profile`, with the secret key. Contract and security model: `../docs/architecture/ONLINE_BOOKING.md`.
+
+The booking flow (`src/features/booking/`, `src/components/booking/booking-flow.tsx`, `src/app/api/booking/`) is a four-step journey — service, date and time, details, review — then the server's confirmation. The browser calls the two endpoints above only; they check the origin, the content type, the size and every field, then take the request quota in the database (`online_booking_take_request_quota`, migration `20261019120000`; fail closed when it is missing), and only then call `online_booking_create_booking` with the secret key. One idempotency key per booking attempt; an unknown outcome is retried with the same key and the same request. No price is shown (the public contract has none) and no confirmation email is sent. Contract, limits and rules: `../docs/architecture/ONLINE_BOOKING.md` §10.
 
 The availability preview (`src/features/availability/`, `src/components/booking/availability-preview.tsx`) calls `online_booking_public_availability` the same way. It shows services, dates and start times as labels only — no form, nothing to book — and only when the page accepts bookings. A displayed time is never a guarantee (`../docs/architecture/ONLINE_BOOKING.md` §8).
 
@@ -81,6 +87,7 @@ src/
     booking/              public profile view, booking notice
   features/
     public-profile/       slug rules, the public profile contract, the server lookup
+    booking/              the booking flow: request rules, answers, flow state, endpoints' protection
   lib/
     env/                  public and server-only environment contracts
   styles/

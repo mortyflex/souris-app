@@ -408,6 +408,12 @@ SERVICE keys (`docs/architecture/CLOUD_SYNC.md` §27), the hand-applied Supabase
 > the availability engine (`docs/architecture/ONLINE_BOOKING.md` §8.3). The synced column below
 > was NOT added: it needs a SERVICE sync change that the sprint excluded. Which representation
 > is final, and the professional's editor, are open decisions.
+>
+> Sprint 3C-A: when a bookable service is booked online, the server snapshots it exactly as the
+> app does (`docs/domain/APPOINTMENTS.md` §12): name, type, price in cents and the ordered phases under their own ids,
+> as they are at that instant. A later catalogue edit never changes the booked Appointment. The
+> service must be opted in, active and not deleted at the instant of the booking, not only when
+> its slots were displayed.
 
 The future online-booking MVP needs to say, per prestation, whether a customer may see it and
 book it. Nothing below exists yet; it is recorded so the field is added once, correctly.
