@@ -3,6 +3,7 @@
 @import "../styles/typography.css";
 @import "../styles/motion.css";
 @import "../styles/nacre.css";
+@import "../styles/header.css";
 
 @layer base {
   html {

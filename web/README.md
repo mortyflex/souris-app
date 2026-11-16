@@ -113,3 +113,52 @@ Typography is the web's own brand system: Bodoni Moda (display) and Manrope (tex
 - The root `tsconfig.json`, `eslint.config.js` and `jest.config.js` exclude `web/`; the root `npm run check` validates the mobile application only.
 - Both applications will use the same Supabase backend. Database changes are made by hand through the root `supabase/migrations/`, never from this application.
 - Deployment target: Vercel, with `web/` as the project root directory.
+
+## Store links (App Store, Google Play)
+
+The website shows an official store badge for a platform only once its public
+listing is live. Until then the download places (the header and its mobile
+menu) say « Bientôt » — « Bientôt pour iPhone et Android », « Bientôt sur
+l’App Store et Google Play. ».
+
+- **The one file to edit:** `src/lib/store-listings.ts`. The rules (URL checks,
+  wording) are in `src/lib/stores.ts`.
+- **Availability is never read from the environment**: Staging and Production
+  show the same thing.
+- **Public means anyone can download**: TestFlight, Play internal/closed testing
+  and private links are not public, and their URLs are refused anyway.
+- **Each platform is independent**: set one to `public` while the other stays
+  `pending`.
+
+To publish a listing, set it to `public` with the URL the store itself shows:
+
+```ts
+appStore:   { status: "public", url: "https://apps.apple.com/fr/app/beautizzy/id<numeric Apple ID>" },
+googlePlay: { status: "public", url: "https://play.google.com/store/apps/details?id=com.mortyflex.sourisapp" },
+```
+
+- App Store: `https://apps.apple.com/…/app/…/id<digits>` only.
+- Google Play: `https://play.google.com/store/apps/details` with `id=com.mortyflex.sourisapp` only.
+- Any other URL keeps the platform « Bientôt »: never a dead link.
+
+The badges in `public/stores/` are the official artwork, unmodified (same
+bytes as downloaded on 2026-11-16):
+
+- `app-store-badge-fr.svg`: Apple Marketing Tools, « Download on the App
+  Store », black, fr-FR
+  (`toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/fr-fr`);
+- `google-play-badge-fr.png`: Google Play badge, « Disponible sur Google Play »
+  (`play.google.com/intl/en_us/badges/static/images/badges/fr_badge_web_generic.png`).
+
+Follow the guidelines when changing their size or surroundings:
+<https://developer.apple.com/app-store/marketing/guidelines/> and
+<https://partnermarketinghub.withgoogle.com/brands/google-play/google-play/lockups-icons-badges/>.
+
+Pre-order and pre-registration badges are not supported: no official
+localized artwork for them was verified.
+
+Only that official artwork may live in `public/stores/`: everything in
+`public/` is served at its URL once deployed. Custom or redrawn store buttons
+(recoloured badges, the Apple logo, the Google Play icon outside the official
+lockup) are not allowed by either guideline and stay out of this repository; a
+test checks the folder's contents and the badges' checksums.

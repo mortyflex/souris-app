@@ -1,5 +1,5 @@
 import { SiteFooter } from "@/components/marketing/site-footer";
-import { SiteHeader } from "@/components/marketing/site-header";
+import { SiteHeader } from "@/components/layout/site-header";
 
 /**
  * Shared shell of the marketing pages. Future legal pages (privacy, terms,
@@ -14,7 +14,7 @@ export default function MarketingLayout({ children }: LayoutProps<"/">) {
       >
         Aller au contenu
       </a>
-      <SiteHeader />
+      <SiteHeader variant="marketing" />
       <main id="contenu" className="flex-1">
         {children}
       </main>

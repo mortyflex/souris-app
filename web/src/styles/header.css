@@ -1,0 +1,55 @@
+/*
+ * The site header (components/layout): sticky bar, active section, mobile menu.
+ * Colours and shadows only change — never the bar's height (no layout shift).
+ */
+
+/* The bar reinforces itself once the page has left its top. */
+.site-header {
+  background-color: var(--bz-background, #fff);
+  border-bottom: 1px solid transparent;
+  transition: background-color 220ms var(--bz-ease-out), border-color 220ms var(--bz-ease-out), box-shadow 220ms var(--bz-ease-out);
+}
+.site-header[data-scrolled="true"] {
+  background-color: rgb(255 255 255 / 0.86);
+  border-bottom-color: rgb(25 22 63 / 0.08);
+  box-shadow: 0 8px 24px rgb(31 28 61 / 0.06);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+}
+/* While the mobile menu is open, the bar is solid: the menu reads on it. */
+.site-header:has(.mobile-menu[data-open="true"]) { background-color: #fff; }
+
+/* The current section: a short violet line under its name. */
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 18px;
+  height: 2px;
+  margin-left: -9px;
+  border-radius: 9999px;
+  background: var(--bz-accent);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition: opacity 200ms var(--bz-ease-out), transform 260ms var(--bz-ease-out);
+}
+.nav-link[aria-current="location"]::after { opacity: 1; transform: none; }
+
+/* The mobile menu: a panel under the bar, a few pixels of travel. */
+.mobile-menu {
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(0, -6px, 0);
+  transition: opacity 180ms var(--bz-ease-out), transform 180ms var(--bz-ease-out), visibility 0s linear 180ms;
+}
+.mobile-menu[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 220ms var(--bz-ease-out), transform 260ms var(--bz-ease-out), visibility 0s;
+}
+/* The menu glyph: two lines that cross when open. */
+.menu-glyph > span { transition: transform 220ms var(--bz-ease-out), top 220ms var(--bz-ease-out), bottom 220ms var(--bz-ease-out); }
+.menu-button[aria-expanded="true"] .menu-glyph > span:first-child { top: 5px; transform: rotate(45deg); }
+.menu-button[aria-expanded="true"] .menu-glyph > span:last-child { bottom: 5px; transform: rotate(-45deg); }
