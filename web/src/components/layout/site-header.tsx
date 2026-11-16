@@ -13,6 +13,8 @@ import { DesktopNav, HeaderScrollState, MobileMenu } from "./header-controls";
 export const MARKETING_NAV = [
   { href: "/#fonctionnalites", label: "Fonctionnalités" },
   { href: "/#reservation-en-ligne", label: "Réservation en ligne" },
+  { href: "/#tarif", label: "Tarif" },
+  { href: "/#questions", label: "Questions" },
 ] as const;
 
 export type SiteHeaderVariant = "marketing" | "profile" | "flow";

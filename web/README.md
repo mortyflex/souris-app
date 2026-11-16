@@ -117,9 +117,12 @@ Typography is the web's own brand system: Bodoni Moda (display) and Manrope (tex
 ## Store links (App Store, Google Play)
 
 The website shows an official store badge for a platform only once its public
-listing is live. Until then the download places (the header and its mobile
-menu) say « Bientôt » — « Bientôt pour iPhone et Android », « Bientôt sur
-l’App Store et Google Play. ».
+listing is live. Until then, no download location shows a badge or a store
+link: the hero, mobile menu, closing call and footer say
+« Bientôt sur l’App Store et Google Play. », the FAQ explains that the
+application has not been published yet, and the desktop header offers
+« Demander un accès » when a contact address is configured (otherwise
+« Bientôt pour iPhone et Android »).
 
 - **The one file to edit:** `src/lib/store-listings.ts`. The rules (URL checks,
   wording) are in `src/lib/stores.ts`.

@@ -24,7 +24,7 @@ describe("SiteHeader", () => {
   it("marketing: the landing's sections and a contact call to action with a real destination", async () => {
     const html = await header("marketing", "bonjour@example.test");
     expect(html).toContain('aria-label="Navigation principale"');
-    for (const anchor of ["/#fonctionnalites", "/#reservation-en-ligne"]) expect(html).toContain(`href="${anchor}"`);
+    for (const anchor of ["/#fonctionnalites", "/#reservation-en-ligne", "/#tarif", "/#questions"]) expect(html).toContain(`href="${anchor}"`);
     expect(html).toContain("mailto:bonjour@example.test?subject=");
     expect(html).toContain("Demander un accès");
   });

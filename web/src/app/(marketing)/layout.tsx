@@ -15,7 +15,8 @@ export default function MarketingLayout({ children }: LayoutProps<"/">) {
         Aller au contenu
       </a>
       <SiteHeader variant="marketing" />
-      <main id="contenu" className="flex-1">
+      {/* `clip`, not `hidden`: a demonstration waiting off screen (shifted for its entrance) never widens the page, and no scroll container is created. */}
+      <main id="contenu" className="flex-1 overflow-x-clip">
         {children}
       </main>
       <SiteFooter />

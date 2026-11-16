@@ -31,6 +31,7 @@
 @keyframes bz-sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @keyframes bz-rise { from { opacity: 0; transform: translate3d(0, 12px, 0); } }
 @keyframes bz-fade { from { opacity: 0; } }
+@keyframes bz-float { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -9px, 0); } }
 
 /* ── Skeleton: a placeholder on the real grid, a 1.4 s sheen (DESIGN.md §6) ── */
 @utility skeleton {
@@ -45,6 +46,16 @@
     background: linear-gradient(90deg, rgb(255 255 255 / 0), rgb(255 255 255 / 0.85), rgb(255 255 255 / 0));
     animation: bz-sheen 1.4s linear infinite;
   }
+}
+
+/* ── Reveal: hidden ONLY once a script has seen the element below the fold ── */
+[data-reveal="pending"] { opacity: 0; transform: translate3d(0, 16px, 0); }
+[data-reveal="shown"] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--bz-duration-enter) var(--bz-ease-out) var(--reveal-delay, 0ms),
+    transform var(--bz-duration-enter-emphasized) var(--bz-ease-emphasized) var(--reveal-delay, 0ms);
 }
 
 /* ── A busy button: a small ring BEFORE its label while `aria-busy="true"` — drawn
@@ -64,6 +75,12 @@
   }
 }
 
+/* ── An ambient float (product devices): paused off screen ───────────── */
+@utility float-slow {
+  animation: bz-float 10s var(--bz-ease-in-out) infinite;
+}
+[data-offscreen="true"] .float-slow, [data-offscreen="true"].float-slow { animation-play-state: paused; }
+
 /* ── Reduced motion: every duration neutralised ──────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -74,4 +91,5 @@
     scroll-behavior: auto !important;
   }
   .skeleton::after { display: none; }
+  [data-reveal="pending"] { opacity: 1; transform: none; }
 }

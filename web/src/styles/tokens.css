@@ -36,6 +36,43 @@
   --bz-mint-50: #eafbf1; /* mint.mint050 */
   --bz-mint-700: #0c5c3c; /* mint.mint700 */
 
+  /* colors.ts — Agenda planning-card pastels (three of the fifteen families),
+     for the landing page's agenda demonstration only */
+  --bz-card-peach-bg: #fcead8; /* peach.background */
+  --bz-card-peach-accent: #d96a16; /* peach.accent */
+  --bz-card-peach-title: #9b4209; /* peach.title */
+  --bz-card-aqua-bg: #dff4f1; /* aqua.background */
+  --bz-card-aqua-accent: #2b9d90; /* aqua.accent */
+  --bz-card-aqua-title: #17665e; /* aqua.title */
+  --bz-card-sky-bg: #e2f1ff; /* skyBlue.background */
+  --bz-card-sky-accent: #2785c7; /* skyBlue.accent */
+  --bz-card-sky-title: #155b8a; /* skyBlue.title */
+
+  /* colors.ts — the receipts (« Résumé du jour », « Tops & tendances »),
+     for the landing page's reproductions only */
+  --bz-receipt-paper: #fefbf7; /* receiptPaper.surface */
+  --bz-receipt-separator: rgba(25, 22, 63, 0.2); /* receiptPaper.separator */
+  --bz-receipt-slot: rgba(25, 22, 63, 0.24); /* receiptPaper.slot */
+  --bz-medal-gold-fill: #e6cd8c; /* receiptMedal.gold */
+  --bz-medal-gold-rim: #b48f3e;
+  --bz-medal-gold-inset: #f3e4b8;
+  --bz-medal-gold-text: #5a4213;
+  --bz-medal-silver-fill: #dedce7; /* receiptMedal.silver */
+  --bz-medal-silver-rim: #9e9bb2;
+  --bz-medal-silver-inset: #efeef4;
+  --bz-medal-silver-text: #3f3d55;
+  --bz-medal-bronze-fill: #e2bfa2; /* receiptMedal.bronze */
+  --bz-medal-bronze-rim: #a6704b;
+  --bz-medal-bronze-inset: #f0d8c4;
+  --bz-medal-bronze-text: #5b331a;
+  --bz-podium-first-face: #dccef6; /* receiptPodium.first */
+  --bz-podium-first-top: #c8b5ef;
+  --bz-podium-first-number: #7c5fc9;
+  --bz-podium-place-face: #eae2fb; /* receiptPodium.place */
+  --bz-podium-place-top: #d8caf5;
+  --bz-podium-place-number: #9a85d6;
+  --bz-receipt-collected: #0c5c3c; /* mint.mint700 — « Déjà encaissé » on the receipt */
+
   /* radii.ts */
   --bz-radius-small: 8px; /* radii.small */
   --bz-radius-medium: 12px; /* radii.medium */

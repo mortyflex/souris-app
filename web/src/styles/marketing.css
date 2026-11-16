@@ -1,0 +1,254 @@
+/*
+ * The landing page's motion (components/marketing). Three kinds, never mixed:
+ *
+ *   AMBIENT          the Nacre drift (nacre.css): only while visible
+ *   DEMONSTRATIONS   one sequence per scene (`DemoScene`, demo-lifecycle.ts):
+ *                    plays when seen, holds its final state, « Revoir »
+ *   MICRO            hover, press, toggles, tabs: CSS transitions, so they
+ *                    can always be interrupted
+ *
+ * A demonstration part names its motion (`da da-rise`), its moment (`--d`)
+ * and, if needed, its length (`--t`) and curve (`--e`). The rules below only
+ * apply while a scene is `ready` (held at its first frame) or `play`: the
+ * server, a reader without JavaScript and reduced motion all get the final
+ * state, which is the element's own style. Transform and opacity only, plus
+ * one clip on the receipt; no filter, no layout property.
+ */
+
+:root {
+  /* A long, decisive landing (Stripe-like): large surfaces, 600–1 000 ms. */
+  --bz-ease-expo: cubic-bezier(0.2, 1, 0.2, 1);
+  /* A restrained overshoot: the podium, a medal, a confirmation. */
+  --bz-ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+/* ── Demonstration parts ─────────────────────────────────────────────── */
+:is([data-demo="ready"], [data-demo="play"]) .da {
+  animation-duration: var(--t, 720ms);
+  animation-timing-function: var(--e, var(--bz-ease-expo));
+  animation-delay: var(--d, 0ms);
+  animation-fill-mode: both;
+}
+:is([data-demo="ready"], [data-demo="play"]) :is(.da-mark, .da-ring, .da-halo, .da-sheen, .da-touch)::after {
+  animation-duration: var(--t, 1100ms);
+  animation-timing-function: var(--bz-ease-out);
+  animation-delay: var(--d, 0ms);
+  animation-fill-mode: both;
+}
+[data-demo="ready"] .da,
+[data-demo="ready"] :is(.da-mark, .da-ring, .da-halo, .da-sheen, .da-touch)::after { animation-play-state: paused; }
+
+:is([data-demo="ready"], [data-demo="play"]) .da-rise { animation-name: da-rise; }
+:is([data-demo="ready"], [data-demo="play"]) .da-fade { animation-name: da-fade; }
+:is([data-demo="ready"], [data-demo="play"]) .da-slide { animation-name: da-slide; }
+:is([data-demo="ready"], [data-demo="play"]) .da-drop { animation-name: da-drop; }
+:is([data-demo="ready"], [data-demo="play"]) .da-pop { animation-name: da-pop; --e: var(--bz-ease-spring); }
+:is([data-demo="ready"], [data-demo="play"]) .da-grow { animation-name: da-grow; --e: var(--bz-ease-spring); }
+:is([data-demo="ready"], [data-demo="play"]) .da-grow-x { animation-name: da-grow-x; }
+:is([data-demo="ready"], [data-demo="play"]) .da-feed { animation-name: da-feed; --t: 1310ms; --e: linear; }
+:is([data-demo="ready"], [data-demo="play"]) .da-tap { animation-name: da-tap; --t: 420ms; --e: var(--bz-ease-out); }
+:is([data-demo="ready"], [data-demo="play"]) .da-leave { animation-name: da-leave; --t: 420ms; }
+:is([data-demo="ready"], [data-demo="play"]) .da-arrive { animation-name: da-arrive; --t: 520ms; --e: var(--bz-ease-spring); }
+:is([data-demo="ready"], [data-demo="play"]) .da-mark::after { animation-name: da-mark; }
+:is([data-demo="ready"], [data-demo="play"]) .da-ring::after { animation-name: da-ring; }
+:is([data-demo="ready"], [data-demo="play"]) .da-halo::after { animation-name: da-halo; }
+:is([data-demo="ready"], [data-demo="play"]) .da-sheen::after { animation-name: da-sheen; }
+:is([data-demo="ready"], [data-demo="play"]) .da-touch::after { animation-name: da-touch; }
+
+.da-grow { transform-origin: 50% 100%; }
+.da-grow-x { transform-origin: 0 50%; }
+.da-grow-down { transform-origin: 50% 0; }
+/* Leaves during the sequence: hidden in the final state. */
+.da-leave { opacity: 0; }
+
+/* Effects drawn on a pseudo-element: invisible at rest unless stated. */
+/* Resting layout of the effect hosts — in the components layer, so a Tailwind
+   utility on the same element (`absolute`, `overflow-*`) always wins. */
+@layer components {
+  :is(.da-mark, .da-ring, .da-halo, .da-sheen, .da-touch, .da-flash) { position: relative; }
+  .da-mark { isolation: isolate; }
+  .da-sheen { overflow: hidden; }
+}
+:is(.da-mark, .da-ring, .da-halo, .da-sheen, .da-touch)::after { content: ""; position: absolute; pointer-events: none; }
+.da-mark::after { inset: -2px -8px; z-index: -1; border-radius: 10px; background: var(--bz-lavender-100); opacity: 0; transform-origin: 0 50%; }
+.da-ring::after { inset: -6px; border-radius: inherit; border: 2px solid var(--bz-accent, #7254c8); opacity: 0.9; }
+.da-halo::after { inset: -10px; border-radius: 9999px; border: 2px solid currentColor; opacity: 0; }
+.da-sheen::after { inset: 0; background: linear-gradient(100deg, rgb(255 255 255 / 0) 30%, rgb(255 255 255 / 0.75) 50%, rgb(255 255 255 / 0) 70%); opacity: 0; }
+.da-touch::after { width: 34px; height: 34px; left: calc(50% - 17px); top: calc(50% - 17px); border-radius: 9999px; background: rgb(114 84 200 / 0.28); border: 2px solid rgb(255 255 255 / 0.9); box-shadow: 0 6px 16px rgb(31 28 61 / 0.18); opacity: 0; }
+
+@keyframes da-rise { from { opacity: 0; transform: translate3d(0, 22px, 0) scale(0.98); } }
+@keyframes da-fade { from { opacity: 0; } }
+@keyframes da-slide { from { opacity: 0; transform: translate3d(40px, 0, 0); } }
+@keyframes da-drop { from { opacity: 0; transform: translate3d(0, -18px, 0); } }
+@keyframes da-pop { from { opacity: 0; transform: scale(0.6); } }
+@keyframes da-grow { from { transform: scaleY(0.02); } }
+@keyframes da-grow-x { from { transform: scaleX(0); } }
+/* « Résumé du jour »: the paper feeds out of the groove in 1 s, gives 5 px, comes back (receiptPrint). */
+@keyframes da-feed {
+  0% { transform: translate3d(0, -100%, 0); animation-timing-function: cubic-bezier(0.33, 0, 0.2, 1); }
+  76.3% { transform: translate3d(0, 0, 0); animation-timing-function: cubic-bezier(0.3, 0, 0.5, 1); }
+  84.7% { transform: translate3d(0, 5px, 0); animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+@keyframes da-tap { 40% { transform: scale(0.93); } }
+@keyframes da-leave { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate3d(0, -70%, 0); } }
+@keyframes da-arrive { from { opacity: 0; transform: translate3d(0, 70%, 0); } }
+@keyframes da-mark { 0% { opacity: 0; transform: scaleX(0); } 35% { opacity: 1; transform: scaleX(1); } 100% { opacity: 0; transform: scaleX(1); } }
+@keyframes da-ring { from { opacity: 0; transform: scale(1.12); } }
+@keyframes da-halo { 0% { opacity: 0.7; transform: scale(0.7); } 100% { opacity: 0; transform: scale(1.9); } }
+@keyframes da-sheen { 0% { opacity: 1; transform: translateX(-100%); } 100% { opacity: 1; transform: translateX(100%); } }
+@keyframes da-touch {
+  0% { opacity: 0; transform: scale(0.6); }
+  25% { opacity: 1; transform: scale(1); }
+  45% { opacity: 1; transform: scale(0.82); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+
+/* « Revoir »: discreet while the sequence runs, settled at its end. */
+[data-demo="play"] > .demo-replay { opacity: 0.55; }
+[data-demo="play"] > .demo-replay .demo-replay-glyph { animation: bz-spin 900ms var(--bz-ease-out) 1; }
+
+/* ── Hero: an entrance on load (CSS only, so it plays without JavaScript) ── */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-in { animation: var(--hero-in) var(--t, 1000ms) var(--bz-ease-expo) var(--d, 0ms) both; }
+}
+.hero-in-fade { --hero-in: da-fade; }
+.hero-in-rise { --hero-in: da-rise; }
+.hero-in-phone { --hero-in: hero-phone; }
+.hero-in-stage { --hero-in: hero-stage; }
+@keyframes hero-phone { from { opacity: 0; transform: translate3d(0, 56px, 0) scale(0.9) rotate(-3deg); } }
+@keyframes hero-stage { from { opacity: 0; transform: translate3d(48px, 18px, 0) scale(0.96); } }
+
+/* ── Tours: synchronised tabs and panels (`FeatureTour`, src/lib/tour-state.ts) ──
+   The chosen panel comes in from its side (a later one from the right, an
+   earlier one from the left): 350–500 ms for the hero, 150–220 ms for tabs. */
+[data-tour] { --tour-in: 460ms; --tour-fade: 380ms; --tour-out: 240ms; --tour-shift: 28px; }
+[data-tour][data-speed="quick"] { --tour-in: 220ms; --tour-fade: 200ms; --tour-out: 150ms; --tour-shift: 14px; }
+[data-tour-panel] {
+  transition:
+    opacity var(--tour-out) var(--bz-ease-out),
+    transform var(--tour-out) var(--bz-ease-out),
+    visibility 0s linear var(--tour-out);
+}
+[data-tour-panel]:is([data-pos="before"], [data-pos="after"]) { opacity: 0; visibility: hidden; pointer-events: none; }
+[data-tour-panel][data-pos="before"] { transform: translate3d(calc(var(--tour-shift) * -1), 0, 0); }
+[data-tour-panel][data-pos="after"] { transform: translate3d(var(--tour-shift), 0, 0); }
+[data-tour-panel][data-pos="active"] {
+  transition:
+    opacity var(--tour-fade) var(--bz-ease-out),
+    transform var(--tour-in) var(--bz-ease-expo),
+    visibility 0s;
+}
+/* In the hero, the parts of the new module follow one another. */
+[data-tour][data-speed="calm"] [data-tour-panel][data-pos="active"] .tour-part {
+  animation: da-rise 520ms var(--bz-ease-expo) both;
+  animation-delay: calc(80ms + var(--i, 0) * 60ms);
+}
+
+/* The progress line: a track of its own, UNDER the label — never on it. */
+.tour-track { background: transparent; transition: background-color 200ms var(--bz-ease-out); }
+[data-tour] [aria-selected="true"] .tour-track { background: var(--bz-lavender-100); }
+.tour-fill { background: var(--bz-accent); transform: scaleX(0); transform-origin: 0 50%; }
+[data-tour] [data-done="true"] .tour-fill { transform: scaleX(1); opacity: 0.4; }
+/* Manual tabs, and a pass that is over: the chosen step's line is simply full. */
+:is([data-tour="manual"], [data-tour="done"]) [aria-selected="true"] .tour-fill { transform: scaleX(1); }
+/* Autoplay: the line IS the timer (longhands, so a pause can never be overridden). */
+[data-tour="playing"] [aria-selected="true"] .tour-fill,
+[data-tour="paused"][data-resume="playing"] [aria-selected="true"] .tour-fill {
+  animation-name: tour-fill;
+  animation-duration: var(--tour-step);
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+/* After the last module, its line stays full during the rest; a held module waits, empty. */
+[data-tour="resting"] [aria-selected="true"] .tour-fill,
+[data-tour="paused"][data-resume="resting"] [aria-selected="true"] .tour-fill { transform: scaleX(1); }
+[data-tour="resting"] .tour-rest,
+[data-tour="paused"][data-resume="resting"] .tour-rest {
+  animation-name: tour-timer;
+  animation-duration: var(--tour-rest);
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+[data-tour="held"] .tour-hold {
+  animation-name: tour-timer;
+  animation-duration: var(--tour-hold);
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+/* Paused, or off screen: every timer stops exactly where it is. */
+[data-tour="paused"] :is(.tour-fill, .tour-rest),
+[data-offscreen="true"] :is(.tour-fill, .tour-rest, .tour-hold) { animation-play-state: paused; }
+@keyframes tour-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes tour-timer { from { opacity: 0; } to { opacity: 0; } }
+
+/* A segmented control's thumb slides to the selected option. */
+.segment-thumb {
+  width: calc((100% - 8px) / var(--n));
+  transform: translateX(calc(var(--i) * 100%));
+  transition: transform 220ms var(--bz-ease-expo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.tour-fill, .tour-rest, .tour-hold) { animation: none !important; }
+  [data-tour-panel][data-pos="active"] .tour-part { animation: none; }
+}
+
+/* ── Receipt paper edges: 10 px teeth, the paper colour (ReceiptPaper.tsx) ── */
+.receipt-edge { height: 5px; background-size: 10px 5px; background-repeat: repeat-x; }
+.receipt-edge-top { background-image: linear-gradient(135deg, transparent 50%, var(--bz-receipt-paper) 50%), linear-gradient(225deg, transparent 50%, var(--bz-receipt-paper) 50%); background-size: 10px 10px; background-position: 0 0, 5px 0; height: 5px; }
+.receipt-edge-bottom { background-image: linear-gradient(45deg, transparent 50%, var(--bz-receipt-paper) 50%), linear-gradient(-45deg, transparent 50%, var(--bz-receipt-paper) 50%); background-size: 10px 10px; background-position: 0 -5px, 5px -5px; height: 5px; }
+
+/* ── A flash: highlights a total once, then lets it rest (invisible at rest) ── */
+.da-flash::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; border: 2px solid var(--bz-accent); opacity: 0; pointer-events: none; }
+:is([data-demo="ready"], [data-demo="play"]) .da-flash::after {
+  animation: da-flash var(--t, 1200ms) var(--bz-ease-out) var(--d, 0ms) both;
+}
+[data-demo="ready"] .da-flash::after { animation-play-state: paused; }
+@keyframes da-flash { 0% { opacity: 0; transform: scale(1.08); } 30% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+
+/* ── Pricing: the billing switch is two native radios; CSS shows the chosen price ── */
+.pricing .plan-thumb { transition: transform 360ms var(--bz-ease-expo); }
+.pricing:has(input[value="annual"]:checked) .plan-thumb { transform: translateX(100%); }
+.pricing .plan-option { color: rgb(25 22 63 / 0.62); transition: color 200ms var(--bz-ease-out); }
+.pricing .plan-option:has(input:checked) { color: var(--bz-lavender-700); }
+.pricing .plan-option:has(input:focus-visible) { outline: 2px solid var(--bz-accent); outline-offset: 2px; }
+.pricing [data-plan] {
+  transition: opacity 240ms var(--bz-ease-out), transform 240ms var(--bz-ease-out), visibility 0s linear 240ms;
+}
+/* The leaving price rolls out one way, the chosen one rolls in from the other. */
+.pricing:has(input[value="annual"]:checked) [data-plan="monthly"] { opacity: 0; transform: translate3d(0, -45%, 0); visibility: hidden; }
+.pricing:has(input[value="monthly"]:checked) [data-plan="annual"] { opacity: 0; transform: translate3d(0, 45%, 0); visibility: hidden; }
+.pricing:has(input[value="annual"]:checked) [data-plan="annual"],
+.pricing:has(input[value="monthly"]:checked) [data-plan="monthly"] {
+  transition: opacity 420ms var(--bz-ease-out) 90ms, transform 720ms var(--bz-ease-expo) 90ms, visibility 0s;
+}
+
+/* ── The hero rail: tabs + pause control in ONE grid, laid out by the rail's own width ──
+   Narrow: rows of equal cells (3 + 3), the control the last cell.
+   From 24rem: one row, the control in its own column, same height.
+   The tab list is a subgrid, so its tabs and the control share the same tracks. */
+.rail-loop { grid-template-columns: repeat(var(--narrow), minmax(0, 1fr)); grid-template-rows: auto auto; }
+.rail-tabs { grid-column: 1 / -1; grid-row: 1 / span 2; grid-template-columns: subgrid; grid-template-rows: subgrid; }
+.rail-control { grid-column: -2 / -1; grid-row: 2; }
+@container (min-width: 24rem) {
+  .rail-loop { grid-template-columns: repeat(var(--n), minmax(0, 1fr)) auto; grid-template-rows: auto; }
+  .rail-tabs { grid-column: 1 / span var(--n); grid-row: 1; }
+  .rail-control { grid-row: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Nothing advances, so no control: the tabs take the whole row. */
+  @container (min-width: 24rem) {
+    .rail-loop { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
+  }
+}
+
+/* The playback control exists only once a script drives the tour: before that (or
+   without JavaScript) it keeps its place, invisible — never a dead button. */
+[data-tour]:not([data-scripted]) .tour-control { visibility: hidden; }
+
+/* A manual rail (the booking journey): one row when every label fits, else two rows. */
+.rail-manual { grid-template-columns: repeat(var(--half), minmax(0, 1fr)); }
+@container (min-width: 18rem) {
+  .rail-manual { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
+}
