@@ -35,7 +35,7 @@ Copy `.env.example` to `.env.local` (gitignored). The marketing pages need nothi
 
 | Variable | Scope | Purpose |
 | --- | --- | --- |
-| `NEXT_PUBLIC_SITE_URL` | public | Canonical origin of the site |
+| `NEXT_PUBLIC_SITE_URL` | public | Canonical origin of the site. **Indexing:** only `https://beautizzy.fr` (or `www.`) may be indexed, and on Vercel only in the Production environment (`VERCEL_ENV`); every other value — Staging, a preview, local development, or none — and every Vercel Preview, even one given the production origin by mistake, answers `X-Robots-Tag: noindex, nofollow` on every response, a `noindex` robots meta and a `Disallow: /` robots.txt (`src/lib/env/indexing.ts`). Never decided from a request header |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | public | Contact link on the marketing pages; empty hides it |
 | `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase project URL — **required by `/r/[slug]`** (lookup, image URLs) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | Supabase publishable key (unused: the browser never calls Supabase) |

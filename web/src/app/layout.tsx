@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bodoni_Moda, Manrope } from "next/font/google";
 
+import { siteRobots } from "@/lib/env/indexing";
 import { site } from "@/lib/site";
 
 import "./globals.css";
@@ -39,6 +40,8 @@ export const metadata: Metadata = {
     template: `%s — ${site.name}`,
   },
   description: site.description,
+  // Only the production website may be indexed (src/lib/env/indexing.ts).
+  robots: siteRobots(),
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
