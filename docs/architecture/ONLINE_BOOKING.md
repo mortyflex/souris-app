@@ -15,10 +15,14 @@ Migration state:
 | `20261015120000` … `20261018120000` (Sprints 2 – 3C-A) | applied | not applied |
 | `20261019120000_create_online_booking_request_limits.sql` (Sprint 3C-B) | applied | not applied |
 | `20261020120000_add_online_booking_location_privacy.sql` (§11) | **NOT applied** — prepared in the repository | **NOT applied** |
+| `20261021120000_add_online_booking_service_publication.sql` (§12) | **NOT applied** — prepared in the repository | **NOT applied** |
 
 Production states as recorded in `supabase/README.md`. The location privacy migration waits for
 its coordinated rollout (§11.7): once applied, the public read returns a location only as the
-professional's explicit publication level allows, and never the legacy free-text address.
+professional's explicit publication level allows, and never the legacy free-text address. The
+service publication migration (§12) is independent of it — neither needs the other, either may be
+applied first (§12.8): once applied, the professional chooses her bookable services herself and
+each public service carries its price, description and category.
 
 ## 1. Shape
 
@@ -49,9 +53,9 @@ Plus › Horaires              ──RPC──▶  business_working_hours       
 | Caller | Access |
 | --- | --- |
 | `anon` | nothing — no grant on any object of the feature |
-| owner (`authenticated`) | `online_booking_read_profile`, `online_booking_update_profile`, `online_booking_set_state`, `online_booking_read_working_hours`, `online_booking_save_working_day`, `online_booking_read_conflicts` (§9.5), `online_booking_update_location` (§11, once its migration is applied); Storage select/insert/delete inside her own media folder |
+| owner (`authenticated`) | `online_booking_read_profile`, `online_booking_update_profile`, `online_booking_set_state`, `online_booking_read_working_hours`, `online_booking_save_working_day`, `online_booking_read_conflicts` (§9.5), `online_booking_update_location` (§11, once its migration is applied), `online_booking_read_service_publication` and `online_booking_set_service_publication` (§12, once its migration is applied); Storage select/insert/delete inside her own media folder |
 | website (`service_role`, secret key, server-only) | `online_booking_public_profile(slug)`, `online_booking_public_availability(slug, service, date)` (§8), `online_booking_create_booking(…)` (§9) and `online_booking_take_request_quota(counters)` (§10) only |
-| operator (SQL Editor) | `online_booking_set_publication_enabled(boolean)`; `online_booking_set_creation_enabled(boolean)` (§9); `online_booking_working_intervals(…)` (§7.4); the internal availability and booking functions and the `business_bookable_services` opt-ins (§8) |
+| operator (SQL Editor) | `online_booking_set_publication_enabled(boolean)`; `online_booking_set_creation_enabled(boolean)` (§9); `online_booking_working_intervals(…)` (§7.4); the internal availability and booking functions and the `business_bookable_services` opt-ins (§8 — the only writer until §12 is applied) |
 
 - The table has RLS enabled, **no policy and no grant**: every access goes through a
   `SECURITY DEFINER` function with `search_path = ''`, revoked from `public`, `anon`,
@@ -157,14 +161,16 @@ Closing again is one statement (`…_enabled(false)`): every page goes offline, 
 ## 6. Not implemented
 
 Confirmation emails and SMS (§10.6), holding a slot, the public booking flow on the production
-website, a challenge (CAPTCHA) in front of it, prices on the public pages (§10.5),
+website, a challenge (CAPTCHA) in front of it, prices on the public pages (§10.5 — the public
+contract carries them once §12 is applied; the website does not show them yet), service descriptions
+and categories on the public pages (same),
 customer accounts, deposits, Stripe, notifications to the professional, a surface in the app for
 overlaps (§9.5) and for telling an online booking apart, customer cancellation or rescheduling,
 booking requests awaiting approval, slug history or redirects, a time-zone editor, search
 indexing of public pages, server-side cleanup of unreferenced images; for working hours: per-staff
 hours, exceptional days and time off, overnight intervals, showing the hours on the public page,
-and any effect on the Agenda; for availability: the professional's editor of bookable services
-and of the booking rules, parallel booking during processing time, multi-staff availability,
+and any effect on the Agenda; for availability: the app screen where the professional chooses
+her bookable services (§12.6 — its RPCs are prepared), an editor of the booking rules, parallel booking during processing time, multi-staff availability,
 booking several services at once; for the location (§11): the app's location settings, the
 website's reading of `location` (city-only rendering included), maps, directions links,
 coordinates, and the location in confirmations, emails or calendar exports.
@@ -300,6 +306,10 @@ like the profile and the hours: `business_bookable_services (business_id, servic
 synced service (cascade), absent = not bookable. There is no writer yet besides the operator's SQL
 Editor; the professional's editor (and the final representation) is a decision for a later sprint.
 
+Decided since (November 2026, §12): the table IS the final representation — the synced column is
+not built — and the owner writes it through `online_booking_set_service_publication` once
+`20261021120000` is applied.
+
 ### 8.4 Time
 
 - Candidates are LOCAL minutes of the date, turned into instants by THE Sprint 3A rule
@@ -321,7 +331,9 @@ Editor; the professional's editor (and the final representation) is a decision f
 - Every other function and the new table have no grant at all; `anon` and `authenticated` reach
   nothing. `online_booking_working_intervals` keeps its zero-grant boundary.
 - The answer names services (id, name, duration), the window and start times — never a Business
-  id, a client, an appointment, a note, a price or a staff member. A private, inactive, deleted or
+  id, a client, an appointment, a note, a price or a staff member. (Once `20261021120000` is
+  applied each service also carries its catalogue price, description and category — §12.5; still
+  bookable services only.) A private, inactive, deleted or
   foreign service gets the same `UNKNOWN_SERVICE`.
 - Bounds: one service, one local date per call; at most 96 candidates; every input validated (the
   web validates the slug, the service id and the date before calling). Appointments are read
@@ -709,7 +721,9 @@ counters live in the database every instance shares.
 - **No price**: the public contract (`online_booking_public_profile`,
   `online_booking_public_availability`, the booking answer) exposes none, and the website does
   not read restricted tables to find one. Showing prices needs a deliberate change of the public
-  contract.
+  contract. That change is decided and prepared (§12.5: `price_cents` on each bookable service,
+  `0` meaning « Tarif à confirmer »); the website shows no price until its own unit, and the
+  booking answer still carries none.
 
 ### 10.6 Confirmation email — not built
 
@@ -994,3 +1008,256 @@ the professional instead).
   runner), out of this unit's scope. The repository keeps the source-level guard; the harness and
   its logs are preserved outside the repository; `supabase/README.md` › Online booking location
   privacy lists the checks to run on a hosted project after applying.
+
+## 12. Service publication and public service metadata (catalogue expansion, Unit A)
+
+`supabase/migrations/20261021120000_add_online_booking_service_publication.sql` — prepared in the
+repository, **NOT applied to Staging, NOT applied to Production** (§12.8 says how it may be).
+Database only, functions only: the app screen (§12.6), the website's display of descriptions and
+prices, and booking several services at once (§12.9) are later units.
+
+### 12.1 What it settles
+
+- The professional chooses, herself, which of her EXISTING catalogue services may be booked
+  online. `business_bookable_services` (§8.3) stays THE record — one row = selected, no row =
+  private — and is now written by its owner through ONE function instead of the SQL Editor.
+- Nothing is duplicated: the catalogue Service (`docs/domain/SERVICES.md`) stays the only source of
+  the name, the price, the phases, the description and the category, and its id stays the
+  identifier. The selection is independent of editing the catalogue, and outside the offline sync.
+- A new Service has no row: it is never published by itself.
+- Each public service gains what a customer needs to choose it: `price_cents`, `description`,
+  `category`.
+
+### 12.2 Eligibility — ONE rule, decided at each read
+
+`online_booking_service_issue(active, deleted_at, minutes)` answers `NULL` or why not:
+
+| Reason | Meaning |
+| --- | --- |
+| `DELETED` | tombstoned — never listed to the owner, never offered |
+| `INACTIVE` | `active = false` in the catalogue |
+| `NO_DURATION` | its phases add up to 0 minute (or it has none) |
+| `TOO_LONG` | more than `online_booking_rules().max_service_minutes` (12 hours) |
+
+Three words, three meanings: **selected** (her choice, a stored row), **eligible** (THE rule,
+never stored), **bookable** = selected AND eligible — exactly the public list.
+`online_booking_bookable_services`, the function the slot rule and booking creation already read,
+is replaced in place (same signature, same rows, same order) so that its predicate IS the rule.
+
+- A selected service that becomes **inactive** keeps its row and leaves the public list at once
+  (no slot, `UNKNOWN_SERVICE` for a booking). **Reactivated, it is offered again without a new
+  choice** — the app must say so where she deactivates or selects (§12.6).
+- A **deleted** service is never offered and never listed; its row is inert and is removed at her
+  next change of the selection. A catalogue id is never reused by the app, so a deletion ends the
+  choice in practice; the one exception is a service re-created under the SAME id before any
+  change of the selection (development seeds use deterministic ids): its old row applies again.
+- **Selecting** needs a service that is eligible now (`NOT_ELIGIBLE` otherwise). A choice already
+  made is never judged again, so a repeated request is a no-op. **Withdrawing** never needs
+  eligibility.
+
+### 12.3 Owner RPCs
+
+Both are `authenticated` only, `SECURITY DEFINER`, `search_path = ''`, and start with
+`is_business_owner` (42501 otherwise: another professional, a signed-out session, an unknown
+Business). Neither needs a subscription — like the draft of the page.
+
+| Function | Answer |
+| --- | --- |
+| `online_booking_read_service_publication(business)` | the owner view; writes nothing, not even the draft |
+| `online_booking_set_service_publication(business, service_ids text[], selected boolean)` | `UPDATED` + the owner view · `UNKNOWN_SERVICE` + `service_id` · `NOT_ELIGIBLE` + `service_id`, `reason` |
+
+```jsonc
+// The owner view — every LIVE service of the Business, by name then id
+{ "max_service_minutes": 720, "selected_count": 3, "bookable_count": 2,
+  "services": [ { "id": "…", "name": "Coupe", "type": "SERVICE", "active": true,
+                  "price_cents": 4500, "duration_minutes": 45,
+                  "description": "Shampooing inclus.", "category": { "id": "…", "name": "Coupes", "position": 1 },
+                  "selected": true, "eligible": true, "ineligible_reason": null, "bookable": true } ] }
+```
+
+- ONE write for one service or many: a single toggle is an array of one; « Tout proposer » and
+  « Tout retirer » send the ids the screen shows — never "everything", so a service created
+  meanwhile on another device is never swept in. All or nothing: one unknown or ineligible id
+  refuses the whole request and writes nothing.
+- A service id is looked up inside THAT Business only: an id of another Business and an id that
+  does not exist get the same `UNKNOWN_SERVICE`. A deleted service reads the same.
+- Input: 1 to 200 ids of 1 to 200 characters, one dimension, an explicit `selected` — otherwise
+  22023 before anything is read. Duplicate ids are one choice; the primary key makes a second row
+  impossible.
+- `description` and `category` in the owner view are the PUBLIC forms (§12.5): she sees what a
+  customer would.
+- The write creates the profile draft when none exists (the same empty, unpublished row the first
+  read of Réservation en ligne creates): the Business lock needs a row.
+
+Publication is still decided elsewhere and at read time: a selection on a draft, a paused page, a
+page whose Plus access lapsed or any page while `ONLINE_BOOKING_PUBLICATION` is off is public
+nowhere (§3). The migration reads no subscription fact and no publication state.
+
+### 12.4 Locking and races
+
+The write locks THE Business row of booking creation (`business_booking_profiles … FOR UPDATE`,
+§9.2), before it decides anything:
+
+| Order | Outcome |
+| --- | --- |
+| a booking in flight, then a withdrawal of its service | the withdrawal waits; the booking commits and stays; the service is then withdrawn |
+| a withdrawal in flight, then a booking | the booking waits (3 s at most, `BUSY` after), then is refused `UNKNOWN_SERVICE` — nothing written |
+| a selection in flight, then a booking of that service | the booking waits, then is booked |
+| two devices of the owner at once | serialized; the last change wins; never a duplicate row, never a deadlock |
+
+It takes no lock of its own on a synced table. The one lock it shares with the sync is the
+foreign key's: selecting a service holds a key-share on THAT service row until the (short)
+transaction ends, so a push of that very service waits for it and then applies — never refused; a
+push of anything else, and a withdrawal, wait for nothing.
+
+### 12.5 The public service contract
+
+`online_booking_public_availability(slug, service, date)` keeps its signature, its
+`service_role`-only grant, its gate (§8.5) and every status. Each service of its answer —
+`services[]` and `service` — is built by ONE function, `online_booking_public_services`, on top of
+`online_booking_bookable_services` (so a service that is not bookable cannot appear):
+
+```jsonc
+{ "id": "…", "name": "Coupe", "duration_minutes": 45,          // unchanged, same order (name, id)
+  "price_cents": 4500,                                           // new
+  "description": "Shampooing inclus.\nSéchage naturel.",         // new — or null
+  "category": { "id": "…", "name": "Coupes", "position": 1 } }   // new — or null
+```
+
+- **`price_cents`** is the catalogue price, decided by the server. **`0` is not « free »**: the
+  catalogue cannot tell a free service from a price that was never set (the onboarding starters
+  are created at 0 — `SERVICES.md` §5). No pricing-status field exists; a client applies ONE
+  reading: `> 0` → the price; `0` → « Tarif à confirmer ». A total is shown only when every
+  selected service has a positive price (« Total indicatif »), else « Total à confirmer » with the
+  known prices still visible.
+- **`description`** is the existing `Service.description` — no second, public-only text. It is
+  returned as plain text by `online_booking_public_text`, whoever wrote the row: line endings
+  normalized to `\n` (`\r\n`, `\r`, U+2028, U+2029), at most one blank line in a row, a tab as a
+  space, no control character and no bidirectional override, trimmed as the device trims, at most
+  1000 characters (the catalogue's own `SERVICE_DESCRIPTION_MAX_LENGTH`, pinned by a test), `null`
+  when nothing visible remains. Never markup: a client renders it as text, keeping its line breaks.
+- **`category`** is the professional's own category, or `null` (none, deleted, unknown). `position`
+  is her order (ties by `id`, the app's rule). A consumer that groups by category orders the
+  groups itself; the list order stays name, then id.
+- Never returned: a service that is not bookable (private, inactive, deleted, another Business's),
+  its type, its phases, its `active` flag, a category's description, a Business or owner id.
+- The booking answer (`online_booking_create_booking`) is untouched: ONE service, no price.
+
+### 12.6 The app screen that will consume it (Unit B — not built)
+
+« Prestations proposées en ligne », reached from Réservation en ligne. It reads the SERVER's list
+(`online_booking_read_service_publication`) — what she toggles is exactly what would be
+published — and saves each change at once through `online_booking_set_service_publication`
+(connectivity required, nothing queued, no sync aggregate). It groups like her catalogue, shows
+duration and price, renders an ineligible service disabled with its reason, warns for a price of
+0 (« Tarif à confirmer » on her page) and a missing description, and offers « Tout proposer » /
+« Tout retirer » with the ids on screen. It must say that a selected service she deactivates
+leaves her page, and comes back when she reactivates it. A service created on the device and not
+synchronized yet is absent from the server's list until the push.
+
+### 12.7 Compatibility
+
+- **The website deployed today** reads `id`, `name` and `duration_minutes` of each service and
+  ignores every other key (`parseService`, pinned by a web test): it behaves exactly as before.
+  The single-service booking API — `online_booking_public_availability(slug, service, date)`,
+  `online_booking_create_booking(8 arguments)`, the slot rule, the request limits — is not
+  redefined; only `online_booking_bookable_services` and `online_booking_availability_json` are
+  replaced, in place, with their Sprint 3B signature.
+- **App builds that predate the screen** change nothing: the selection stays what it is (on
+  Staging, the one row made in the SQL Editor), and the sync is untouched — no aggregate, no
+  payload key, no SQLite change.
+- **Visible at once on a page online:** nothing, until a client reads the new keys.
+
+### 12.8 Deployment — an activation gate; independent of `20261020120000`; by hand only
+
+The migration sorts after the location privacy one (the filename rule) but does **not** need it:
+it defines neither `online_booking_public_profile` nor `online_booking_owner_profile_json` (the
+two functions `20261020120000` replaces), reads no address column and alters no table. Verified on
+a real PostgreSQL in both orders — `20261015` … `20261019` then `20261021` (Staging as it is
+today), then `20261020` on top; and the filename order — with the same final schema, functions and
+privileges.
+
+- Requires `20260914120000`, `20261010120000`, `20261015120000`, `20261017120000` and
+  `20261018120000` (all applied on Staging; `20261015` – `20261019` not on Production).
+- **Apply it alone, by hand** (SQL Editor: paste the one file). Never through tooling that replays
+  unrecorded files: the migration history recorded on Staging stops at `20261014120000` (read
+  2026-11-17; `20261015` – `20261019` were applied by hand and are not recorded), so
+  `supabase db push` there would run `20261015` – `20261020` again — the location migration
+  included, before its own rollout (§11.7).
+- Order of this work: 1. this contract committed and verified; 2. the activation gate below
+  decided; 3. Staging apply, with explicit authorization; 4. the checks of `supabase/README.md` ›
+  Online booking service publication; 5. the app screen (§12.6) and the website's cards, in either
+  order; 6. Production with the online-booking rollout, separately authorized.
+- Nothing to roll back in data: the migration writes no row.
+
+**Activation gate — the public metadata of services that are ALREADY selected.** Applying the
+migration is itself a publication act. From that instant the answer of
+`online_booking_public_availability` carries the `description`, the `price_cents` and the
+`category` of every service that is bookable at that moment — a service selected BEFORE the
+migration included (in the SQL Editor, on Staging) — and it needs no website change to do so.
+Those descriptions are existing catalogue content: the app labels the field « Description de la
+prestation (facultative) », nothing has published it until now, and a professional may have
+written it for herself.
+
+- What limits the exposure today is not a control. `anon` and `authenticated` cannot call the
+  function, and the website deployed today forwards only `id`, `name` and `duration_minutes` to a
+  browser (`availabilityToWire`, pinned by a test): at apply time the new values reach the website
+  server and stop there. That is a property of ONE deployed consumer; the contract now defines
+  them as public, and the first website that reads them shows them.
+- **So the migration is not applied to a hosted project until it is decided how the services
+  selected before it are reviewed, or consented to, for that exposure.** Not decided (November
+  2026). It is a product decision, taken per environment; this unit chooses nothing, and the SQL
+  contract is not bent to it speculatively.
+- The inventory to decide on is ONE read-only query (`supabase/README.md` › Online booking
+  service publication), valid before the migration: the selected services of each Business with
+  their price and the length of their description. Known state: Staging has ONE selected service
+  (of `studio-esthetique`), with a 35-character description and a price of 0 (read 2026-11-17);
+  Production has no opt-in table yet (`20261017120000` is not applied there, as recorded in
+  `supabase/README.md`), so nothing is selected there before its own rollout.
+- The gate holds afterwards for any selection made in the SQL Editor instead of by the
+  professional: the app screen (§12.6) is where she sees the public text before she chooses.
+
+### 12.9 Approved decisions for booking several services (NOT built)
+
+Recorded so the next units implement them as decided (November 2026):
+
+- at most **eight distinct services** per booking, and **twelve hours** of cumulative duration as
+  a hard ceiling;
+- the complete appointment must fit inside ONE actual working interval (§8.2, rule 4);
+- **one occurrence** of each service in the first public version;
+- the **customer's order** of selection is kept, validated by the server — never silently sorted
+  by category;
+- ONE transaction validates and creates every selected service: all or nothing, one Appointment
+  with one item per service;
+- the browser keeps the selected ids only, for the session; the server validates them again, and
+  they are cleared after a confirmed booking;
+- Turnstile, the Business lock, idempotency and the request limits are kept as they are.
+
+An appointment's items are strictly sequential in the domain timeline
+(`calculateAppointmentTimeline`) and an appointment blocks its full span (§8.2, rule 5): the
+availability of a selection is THE slot rule applied to the sum of its durations.
+
+### 12.10 Tests
+
+- Mobile (Jest): `online-booking-service-publication-migration.test.ts` — source-level guard:
+  ordering; functions only; the only writes; exact function list and the two replaced signatures;
+  no object shared with the location migration, in both directions; booking, slot rule, limits and
+  publication gate not redefined; grants; ownership first; the Business lock before any decision;
+  ONE eligibility rule; the public and owner shapes; the description limit equal to the app's;
+  outside the sync; no caller in the website.
+- Web (Vitest): an answer carrying the new keys parses, and is sent to the browser, exactly as
+  before.
+- Real PostgreSQL (scratch harness outside the repository, `supabase/README.md`): the migration
+  applied onto a populated database WITHOUT `20261020120000` — no table, column, constraint,
+  trigger, policy, index, privilege or row changed, seven functions new, two redefined, every
+  other definition byte-identical; the deployed website's view of every answer unchanged;
+  ownership (another owner, signed-out, `anon`, `service_role`, a role with no grant); foreign,
+  unknown and deleted ids; every ineligibility reason; all-or-nothing; retries and duplicates;
+  malformed input; bulk selection and withdrawal; deactivation, reactivation and deletion through
+  the real sync push; every description, price and category edge; the subscription and
+  publication gates; the single-service booking, its replay and its pull; seven races on separate
+  connections; both migration orders compared; cost with 65 bookable services — 234 checks. The
+  Sprint 2, 3A, 3B, 3C-A, 3C-B and location harnesses still pass with it on top (210 / 147 / 170 /
+  255 + 57 / 43 / 142), their expectations changed only for the two owner grants, the seven new
+  functions and the three public keys; booking creation, concurrency and request limits also pass
+  in the Staging order, without `20261020120000` (255 / 57 / 43).

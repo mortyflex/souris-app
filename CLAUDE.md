@@ -726,7 +726,7 @@ Implemented (same reference, §10): the PUBLIC booking flow on `/r/<slug>/reserv
 - a booking also needs a Cloudflare Turnstile token (same reference, §10.8): ONE managed widget on the review step, the single-use token in the `X-Turnstile-Token` header (never in the body), verified server-side with Siteverify — action and the CONFIGURED site's host — BEFORE any counter; fail closed without the keys or when Cloudflare cannot answer; Cloudflare's test keys on a local site only; the secret stays server-only;
 - ONE idempotency key per booking attempt; an unknown outcome freezes the request and is retried with the SAME key and the SAME body; one request in flight at most (`web/src/features/booking/booking-flow.ts`);
 - times are the server's: starts are its labels, ends are formatted in the time zone it returned, never the browser's;
-- no price is shown (the public contract has none) and no confirmation email is sent — the page says so.
+- no price is shown (the public contract has none until `20261021120000` is applied, and the website reads none) and no confirmation email is sent — the page says so.
 
 Prepared, applied nowhere yet (same reference, §11): the location privacy contract (`20261020120000`) — the professional chooses ONE publication level, and the public SQL function alone decides what leaves the database.
 
@@ -738,7 +738,18 @@ Prepared, applied nowhere yet (same reference, §11): the location privacy contr
 - no coordinates, no map provider, no URL built in the database;
 - applying it waits for the coordinated rollout (same reference, §11.7): native settings and compatible web consumers first, then Staging with explicit authorization, Production separately; never restore a legacy address's public visibility automatically.
 
-Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, prices on public pages, holding a slot, customer accounts, payments, the editor of bookable services.
+Prepared, applied nowhere yet (same reference, §12): the service publication contract (`20261021120000`) — the professional chooses which EXISTING catalogue services are bookable online, and each public service carries its price, description and category.
+
+- `business_bookable_services` is THE record (one row = selected, absent = private), outside the offline sync; never a second catalogue, never a synced column; a new Service is never selected by itself;
+- selected is not bookable: ONE eligibility rule (`online_booking_service_issue`: active, not deleted, 1 minute to 12 hours), decided at each read; a deactivated service keeps its choice and leaves the page, and comes back when reactivated;
+- ONE owner write, `online_booking_set_service_publication(business, service ids, selected)` (ownership first, no subscription needed, all or nothing, under the Business lock of booking creation), and ONE owner read, `online_booking_read_service_publication`;
+- ONE public shape (`online_booking_public_services`): `id`, `name`, `duration_minutes` unchanged, plus `price_cents`, `description` (the existing Service description as bounded plain text — never a second public text) and `category`; bookable services only;
+- a price of `0` is never « free »: clients show « Tarif à confirmer », and a total only when every selected price is positive;
+- ACTIVATION GATE: applying it is a publication act — the description, price and category of every service ALREADY selected enter the public answer at once, whatever the website shows; never apply it to a hosted project before it is decided how previously selected services are reviewed or consented to (same reference, §12.8);
+- independent of the location privacy migration: it never defines `online_booking_public_profile` nor `online_booking_owner_profile_json`; either may be applied first — by hand, one file, never `supabase db push` on Staging (it would replay `20261020120000`);
+- approved for the multi-service unit, NOT built: at most eight distinct services and twelve hours per booking, one occurrence each, the customer's order kept, one working interval, ONE atomic transaction, session-only selection ids.
+
+Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, prices, descriptions and categories on public pages (the website reads none yet), holding a slot, customer accounts, payments, the app screen for choosing bookable services, booking several services at once.
 
 Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
 

@@ -40,6 +40,7 @@ describe('sale adjustments — no new refund after an over-refund (2026101312000
       '20261018120000_create_online_booking_creation.sql',
       '20261019120000_create_online_booking_request_limits.sql',
       '20261020120000_add_online_booking_location_privacy.sql',
+      '20261021120000_add_online_booking_service_publication.sql',
     ]);
     expect(names.filter((name) => name.includes('over_refund'))).toEqual([MIGRATION_NAME]);
   });

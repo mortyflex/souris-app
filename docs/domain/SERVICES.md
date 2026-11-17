@@ -229,7 +229,8 @@ Service form rules:
 
 Not in this phase: options/variants, discounts, packages, taxes, online-booking configuration,
 staff-specific pricing, service drag ordering. Categories and descriptions arrived with
-multi-profession Step 3 (§11); the online-booking visibility is designed, not built (§12).
+multi-profession Step 3 (§11); the online-booking visibility is a server-side opt-in outside this
+model (§12).
 
 ---
 
@@ -414,6 +415,18 @@ SERVICE keys (`docs/architecture/CLOUD_SYNC.md` §27), the hand-applied Supabase
 > as they are at that instant. A later catalogue edit never changes the booked Appointment. The
 > service must be opted in, active and not deleted at the instant of the booking, not only when
 > its slots were displayed.
+>
+> Catalogue expansion, Unit A (November 2026, `ONLINE_BOOKING.md` §12 — migration
+> `20261021120000`, prepared, applied nowhere yet): the representation is DECIDED. The server-side
+> opt-in table is final and binary — selected or private; the synced `online_visibility` column
+> and its `VISIBLE` level below are NOT built. The professional chooses through two owner RPCs,
+> outside the offline sync and independently of editing the catalogue; a new Service is never
+> selected by itself. A selected Service is offered only while it is active, not deleted and lasts
+> 1 minute to 12 hours — deactivating it keeps the choice and takes it off the public page,
+> reactivating it brings it back. The public page receives the existing `description` (no second,
+> public-only text), the category (id, name, position) and `price_cents`, where **0 reads « Tarif à
+> confirmer », never « free »**: a starter prestation (§5) keeps its neutral price until she sets
+> one, and nothing in the model tells the two apart.
 
 The future online-booking MVP needs to say, per prestation, whether a customer may see it and
 book it. Nothing below exists yet; it is recorded so the field is added once, correctly.

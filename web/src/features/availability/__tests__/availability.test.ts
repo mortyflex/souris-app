@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  availabilityToWire,
   datesOfWindow,
   describeTimeZone,
   formatDuration,
@@ -68,6 +69,28 @@ describe("parseAvailability", () => {
       slots: [{ ...slotsAnswer.slots[0], appointment_id: "apt-1" }],
     });
     expect(JSON.stringify(parsed)).not.toMatch(/business|price|client|appointment|4500/);
+  });
+
+  it("reads the answer of a database that publishes price, description and category exactly as before", () => {
+    // supabase/migrations/20261021120000_add_online_booking_service_publication.sql: every service
+    // GAINS three keys; this website keeps reading the three it knows until it shows the others.
+    const metadata = [
+      { price_cents: 8900, description: "Application, pose, rinçage.\nSéchage non compris.", category: { id: "cat-1", name: "Couleurs", position: 0 } },
+      { price_cents: 0, description: null, category: null },
+    ];
+    const enriched = {
+      ...slotsAnswer,
+      services: base.services.map((service, index) => ({ ...service, ...metadata[index] })),
+      service: { ...slotsAnswer.service, ...metadata[0] },
+    };
+    const parsed = parseAvailability(enriched);
+    expect(parsed).toEqual(parseAvailability(slotsAnswer));
+    expect(parsed).toBeDefined();
+    // What the availability endpoint sends to the browser is unchanged too.
+    expect(availabilityToWire(parsed!)).toEqual(slotsAnswer);
+    for (const status of ["CHOOSE_SERVICE", "UNKNOWN_SERVICE", "CHOOSE_DATE", "OUT_OF_WINDOW"]) {
+      expect(parseAvailability({ ...enriched, status, slots: undefined })).toEqual(parseAvailability({ ...slotsAnswer, status, slots: undefined }));
+    }
   });
 
   it.each([

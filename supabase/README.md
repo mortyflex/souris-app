@@ -1663,3 +1663,107 @@ select public.online_booking_public_profile('<slug>');
 Nothing to roll back in data: the migration writes no row. Any later change of the public
 behavior is a NEW forward migration — never an edit of this one, and never a return to
 publishing the legacy free text (decision 1).
+
+## Online booking service publication — NOT applied on Staging, NOT applied on Production (prepared in the repository)
+
+`migrations/20261021120000_add_online_booking_service_publication.sql` — BY HAND. Contract,
+eligibility, races, compatibility and rollout: `docs/architecture/ONLINE_BOOKING.md` §12.
+
+Functions only — no table, column, constraint, index, trigger, policy, flag or row is created,
+altered or removed. It adds the owner RPCs `online_booking_read_service_publication` and
+`online_booking_set_service_publication` (`authenticated`), five internal functions granted to
+nobody (`online_booking_service_issue`, `online_booking_public_text`,
+`online_booking_service_category_json`, `online_booking_public_services`,
+`online_booking_service_publication_json`) and replaces IN PLACE, with their Sprint 3B signature,
+`online_booking_bookable_services` (same rows, same order) and `online_booking_availability_json`
+(each service gains `price_cents`, `description`, `category`). The only rows it lets anyone write
+are the owner's own opt-ins in `business_bookable_services` (and the empty profile draft the
+other owner RPCs already create). Booking creation, the slot rule, the request limits, the
+publication gate and the offline sync are not redefined. Safe to re-run.
+
+**Order — independent of the location privacy migration.** It sorts after `20261020120000` but
+does NOT need it and shares no object with it: either may be applied first, with the same result
+(verified in both orders on a real PostgreSQL). Applying this one does NOT apply, require or
+change anything of the location contract.
+
+Requires `20260914120000`, `20261010120000`, `20261015120000`, `20261017120000` and
+`20261018120000` — all applied on Staging; `20261015` – `20261019` are not on Production, where it
+goes with the online-booking rollout.
+
+**Apply it alone: Dashboard › SQL Editor › paste this ONE file › Run.** Do not use
+`supabase db push` (or any tool that replays every unrecorded file) on Staging: the migration
+history recorded there stops at `20261014120000` (read 2026-11-17 — the online-booking migrations
+were applied by hand and are not recorded), so a replay would run `20261015` – `20261020` again,
+the location privacy migration included, before its own coordinated rollout.
+
+**Activation gate — decide BEFORE applying it to any hosted project.** Applying this migration
+is a publication act: at once, the answer of `online_booking_public_availability` carries the
+`description`, `price_cents` and `category` of every service that is ALREADY selected and
+bookable — existing catalogue text that nothing published until now, selected in the SQL Editor
+rather than by the professional in a screen that shows it to her. It needs no website change:
+the values are in the public contract from that instant (the website deployed today happens to
+forward only three keys to a browser; that is not a control). **Do not apply it until it is
+decided how previously selected services are reviewed, or consented to, for that exposure**
+(`docs/architecture/ONLINE_BOOKING.md` §12.8 — not decided yet). The inventory, read-only and
+valid BEFORE the migration (lengths only: read a text deliberately, not by accident):
+
+```sql
+select p.slug, b.business_id, s.id as service_id, s.name, s.active, s.price_cents,
+       char_length(coalesce(s.description, '')) as description_length,
+       (s.category_id is not null) as has_category
+  from public.business_bookable_services b
+  join public.services s on s.business_id = b.business_id and s.id = b.service_id
+  left join public.business_booking_profiles p on p.business_id = b.business_id
+ where s.deleted_at is null
+ order by p.slug, s.name;
+```
+
+Known state: Staging, ONE row — a service of `studio-esthetique`, description of 35 characters,
+price 0 (read 2026-11-17). Production: no opt-in table yet (`20261017120000` is recorded above as
+not applied there), so nothing is selected there before its own rollout.
+
+**Effect at once, otherwise:** none that a customer or a professional can see. The website
+deployed today reads `id`, `name`, `duration_minutes` and ignores the new keys; no app build
+calls the owner RPCs yet; the selection made in the SQL Editor (Staging: one service of
+`studio-esthetique`) is kept as it is.
+
+After applying, verify:
+
+```sql
+-- Nine functions; only the two owner RPCs are executable by an API role, and only by the owner's.
+select p.proname,
+       has_function_privilege('anon', p.oid, 'execute') as anon,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('online_booking_service_issue', 'online_booking_bookable_services', 'online_booking_public_text',
+                     'online_booking_service_category_json', 'online_booking_public_services',
+                     'online_booking_availability_json', 'online_booking_service_publication_json',
+                     'online_booking_read_service_publication', 'online_booking_set_service_publication')
+ order by 1;                       -- 9 rows; false | true | false for the two *_service_publication RPCs, false ×3 elsewhere
+-- The website's grants are unchanged.
+select has_function_privilege('service_role', 'public.online_booking_public_availability(text,text,date)', 'execute'),
+       has_function_privilege('anon', 'public.online_booking_public_availability(text,text,date)', 'execute');  -- true | false
+-- The opt-in table is untouched: same rows, RLS on, no policy, no API privilege.
+select count(*) from public.business_bookable_services;
+select relrowsecurity from pg_class where oid = 'public.business_bookable_services'::regclass;   -- true
+select count(*) from information_schema.role_table_grants
+ where table_schema = 'public' and table_name = 'business_bookable_services'
+   and grantee in ('anon', 'authenticated', 'service_role');                                       -- 0
+-- The location migration was NOT applied by this one (while it is still pending):
+select count(*) from information_schema.columns
+ where table_schema = 'public' and table_name = 'business_booking_profiles' and column_name like 'address_%';  -- 0
+-- The public answer of a page online: the same services, each with six keys.
+select public.online_booking_public_availability('<slug>', null, null);
+-- The owner view of one Business (SQL Editor only: the RPCs check the caller's ownership).
+select public.online_booking_service_publication_json('<business id>');
+```
+
+Then, as the signed-in owner (the app, once its screen exists — or a session-authenticated RPC
+call): `online_booking_read_service_publication` lists her live services; selecting an eligible
+one answers `UPDATED` and adds it to the public answer above; withdrawing it removes it; another
+account's call answers 42501.
+
+Nothing to roll back in data: the migration writes no row. A later change of the contract is a
+NEW forward migration — never an edit of this one.
