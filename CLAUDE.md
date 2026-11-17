@@ -1245,7 +1245,7 @@ Source of truth: `docs/design/BRAND_TYPOGRAPHY.md` — usage, hierarchy, weights
 - The pairing is the long-term reference for the public booking website, the future landing page and other branded surfaces.
 - It is an intentional exception to the rule that web design values mirror the native theme (§5).
 - The native application keeps its global typography (Plus Jakarta Sans).
-- A native screen or component uses the brand display font only when it explicitly requires it — today, the name and monogram of the public-page preview.
+- A native screen or component uses the brand fonts only when it explicitly requires it — today, the public-page preview alone (Fraunces for its name and monogram, Manrope for its presentation and contact actions).
 - Bodoni Moda was removed everywhere by explicit decision (November 2026): never reintroduce it.
 
 Do not introduce a third font family.
@@ -1264,6 +1264,7 @@ assets/
     ├── logo-primary.png
     ├── logo-editorial.png
     ├── symbol.png
+    ├── nacre-cover.webp
     ├── app-icon/
     ├── email/
     └── welcome-floating/

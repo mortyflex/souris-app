@@ -6,7 +6,7 @@
 // nothing and is never retried behind the professional's back.
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Dimensions, Linking, Platform, StyleSheet, type StyleProp, type TextStyle } from 'react-native';
+import { Dimensions, Linking, Platform, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 import { haptics } from '@/shared/lib/haptics';
 import { testBusiness, TestPersistenceProvider } from '@/providers/testing/TestPersistenceProvider';
@@ -605,6 +605,147 @@ describe('OnlineBookingSettingsScreen — live preview', () => {
     expect(within(view.getByTestId('online-booking-logo')).getByText('C')).toBeTruthy();
     expect(previewIsUnsaved(view)).toBe(true);
     expect(gateway.calls.remove).toBe(0);
+  });
+
+  describe('the Nacre cover (web: public-profile-view.tsx — the photo wins, Nacre otherwise)', () => {
+    /** The cover's images, bottom to top. */
+    const coverLayers = (view: View) => [
+      ...new Set(
+        view.container
+          .queryAll((node) => typeof node.props.testID === 'string' && /^online-booking-cover-(nacre|image)$/.test(node.props.testID))
+          .map((node) => node.props.testID as string),
+      ),
+    ];
+    const nacreSource = (view: View) => JSON.stringify(view.getByTestId('online-booking-cover-nacre').props.source);
+    const coverStyle = (view: View) =>
+      StyleSheet.flatten(view.getByTestId('online-booking-cover').props.style as StyleProp<ViewStyle>);
+
+    function coveredGateway() {
+      const gateway = storedGateway();
+      gateway.seedProfile(testBusiness.id, { coverPath: 'media/cover/stored.jpg' });
+      return gateway;
+    }
+
+    it('draws Nacre without a personalised cover: the web artwork, 16:10, never a blank band', async () => {
+      const view = await renderSettings(storedGateway());
+
+      expect(coverLayers(view)).toEqual(['online-booking-cover-nacre']);
+      expect(nacreSource(view)).toContain('assets/brand/nacre-cover.webp');
+      expect(coverStyle(view).aspectRatio).toBe(16 / 10);
+      expect(within(view.getByTestId('online-booking-cover')).getByText('Photo de couverture')).toBeTruthy();
+    });
+
+    it('a personalised cover takes priority — drawn OVER Nacre, which stays under it while it loads or if it fails', async () => {
+      const gateway = coveredGateway();
+      const view = await renderSettings(gateway);
+
+      expect(imageOf(view, 'online-booking-cover')).toBe(gateway.imageUrl('media/cover/stored.jpg'));
+      expect(coverLayers(view)).toEqual(['online-booking-cover-nacre', 'online-booking-cover-image']);
+      expect(coverStyle(view).aspectRatio).toBe(16 / 10); // same frame: nothing moves
+      expect(within(view.getByTestId('online-booking-cover')).getByText('Modifier')).toBeTruthy();
+    });
+
+    it('removing the cover restores Nacre at once, in the same frame; the stored file stays until saved', async () => {
+      const gateway = coveredGateway();
+      const view = await renderSettings(gateway);
+
+      await act(async () => {
+        mockPhotoFlows['online-booking-cover-photo'].onRemove();
+      });
+
+      expect(imageOf(view, 'online-booking-cover')).toBeUndefined();
+      expect(coverLayers(view)).toEqual(['online-booking-cover-nacre']);
+      expect(coverStyle(view).aspectRatio).toBe(16 / 10);
+      expect(previewIsUnsaved(view)).toBe(true);
+      expect(gateway.calls.remove).toBe(0);
+    });
+
+    it('replacing the cover shows the new photo at once; removing it then shows Nacre — never the outdated stored photo', async () => {
+      const gateway = coveredGateway();
+      const view = await renderSettings(gateway);
+
+      await act(async () => {
+        mockPhotoFlows['online-booking-cover-photo'].onSelected('file:///new-cover.jpg');
+      });
+      expect(imageOf(view, 'online-booking-cover')).toBe('file:///new-cover.jpg');
+      expect(coverLayers(view)).toEqual(['online-booking-cover-nacre', 'online-booking-cover-image']);
+
+      await act(async () => {
+        mockPhotoFlows['online-booking-cover-photo'].onRemove();
+      });
+      expect(imageOf(view, 'online-booking-cover')).toBeUndefined();
+      expect(coverLayers(view)).toEqual(['online-booking-cover-nacre']);
+      expect(gateway.calls.upload + gateway.calls.remove).toBe(0);
+    });
+
+    it('a cover picked on a page without one can be dropped again: Nacre, and nothing left to save', async () => {
+      const view = await renderSettings(storedGateway());
+
+      await act(async () => {
+        mockPhotoFlows['online-booking-cover-photo'].onSelected('file:///cover.jpg');
+      });
+      await act(async () => {
+        mockPhotoFlows['online-booking-cover-photo'].onRemove();
+      });
+
+      expect(coverLayers(view)).toEqual(['online-booking-cover-nacre']);
+      expect(previewIsUnsaved(view)).toBe(false);
+    });
+  });
+
+  describe('the identity card', () => {
+    it('an accented initial is set upper-case in Fraunces, in the font’s own line box (its accent never clipped)', async () => {
+      const view = await renderSettings(publishableGateway()); // no logo: the monogram
+      await type(view, 'online-booking-public-name', 'élodie & co');
+
+      const monogram = within(view.getByTestId('online-booking-logo')).getByText('É');
+      const style = StyleSheet.flatten(monogram.props.style as StyleProp<TextStyle>);
+      expect(style.lineHeight).toBeGreaterThanOrEqual(1.233 * (style.fontSize as number));
+    });
+
+    it('a name with an ampersand keeps it, whole, and is read as one name', async () => {
+      const view = await renderSettings(storedGateway());
+      const name = 'Institut Élégance & Sérénité — Beauté du regard à Saint-Étienne';
+      await type(view, 'online-booking-public-name', name);
+
+      const node = view.getByTestId('online-booking-preview-name');
+      expect(String(node.props.children).replace(/\n/g, ' ')).toBe(name);
+      expect(node.props.accessibilityLabel).toBe(name);
+      expect(node.props.numberOfLines).toBeUndefined();
+    });
+
+    it('offers « Appeler » / « Écrire » exactly when the page publishes a phone / an e-mail — never their values, nor the address', async () => {
+      const view = await renderSettings(storedGateway());
+      const preview = () => within(view.getByTestId('online-booking-preview'));
+      expect(view.queryByTestId('online-booking-preview-actions')).toBeNull();
+
+      await type(view, 'online-booking-phone', '06 12 34 56 78');
+      expect(preview().getByText('Appeler')).toBeTruthy();
+      expect(preview().queryByText('Écrire')).toBeNull();
+      expect(view.getByTestId('online-booking-preview-actions').props.accessibilityLabel).toBe('Sur votre page : Appeler');
+
+      await type(view, 'online-booking-email', 'bonjour@chez-lea.test');
+      await type(view, 'online-booking-address', '8 rue des Lilas\n69001 Lyon');
+      expect(view.getByTestId('online-booking-preview-actions').props.accessibilityLabel).toBe('Sur votre page : Appeler et Écrire');
+
+      // The preview shows what the page shows, and nothing private.
+      for (const secret of ['06 12 34 56 78', 'bonjour@chez-lea.test', '8 rue des Lilas', 'Lyon']) {
+        expect(preview().queryByText(secret, { exact: false })).toBeNull();
+      }
+
+      await type(view, 'online-booking-phone', '   ');
+      await type(view, 'online-booking-email', '');
+      expect(view.queryByTestId('online-booking-preview-actions')).toBeNull();
+    });
+
+    it('the presentation reads like the web page: aligned to the start, under a hairline', async () => {
+      const view = await renderSettings(storedGateway());
+      const style = StyleSheet.flatten(
+        view.getByTestId('online-booking-preview-description').props.style as StyleProp<TextStyle>,
+      );
+      expect(style.textAlign).toBe('left');
+      expect(style.borderTopWidth).toBe(StyleSheet.hairlineWidth);
+    });
   });
 
   it('clears the unsaved mark once the changes are stored', async () => {

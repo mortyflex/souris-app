@@ -18,7 +18,7 @@ reintroduce it.
 | Marketing website and landing pages (`web/`) | **Brand typography** |
 | Future branded surfaces (e.g. a share image, a printed card) | **Brand typography**, when that surface is built |
 | Native application UI | **Plus Jakarta Sans** — unchanged (`DESIGN_OVERRIDES.md` §12) |
-| Native preview of the public page (`BookingProfilePreview`) | Fraunces for the name and monogram only (§8) |
+| Native preview of the public page (`BookingProfilePreview`) | Fraunces for the name and monogram, Manrope for the presentation and contact actions — that component only (§8) |
 
 The native application's global typography is not part of this system. Never load Fraunces or
 Manrope into `src/shared/ui/theme/`, and never use them in a native screen other than the
@@ -182,13 +182,18 @@ Don't:
 
 ## 8. Native preview of the public page
 
-`src/features/online-booking/settings/BookingProfilePreview.tsx` mirrors the web profile hero, so
-the professional sees her page as clients will.
+`src/features/online-booking/settings/BookingProfilePreview.tsx` mirrors the web profile hero
+(the « Nacre » design, phone layout), so the professional sees her page as clients will.
 
 - It loads `Fraunces_400Regular` (`@expo-google-fonts/fraunces`) for the name and the monogram,
   in that component only. It is Google Fonts' static 400 — the very cut the web draws (optical
   size 14, SOFT 0, WONK 0), so the preview and the page match. Until the file is loaded the
   platform serif stands in.
+- It loads `Manrope_400Regular` and `Manrope_600SemiBold` (`@expo-google-fonts/manrope`) for the
+  presentation (16 / 27, start-aligned, as the page's `type-body`) and the « Appeler » /
+  « Écrire » actions (600, 13pt), in that component only. Until they are loaded the native UI
+  family stands in. Each weight is imported from its own entry point (`…/400Regular`): a package
+  index would bundle every weight.
 - The name is a preview inside a settings screen, so it is smaller than the web hero, and it is
   always shown whole — no truncation, no line limit. One rule sizes it, `layoutPreviewName`
   (`src/features/online-booking/settings/preview-name-layout.ts`), from the panel's measured width
@@ -207,8 +212,8 @@ the professional sees her page as clients will.
   on iOS cuts the first line from the top, so the rule reserves a top inset from the font's
   metrics (descender 0.255em, highest French accent « Å » 0.905em). With Fraunces the leading
   already holds every accent: the inset is 0, and the rule stays for safety.
-- The monogram's line box is the font's own (50pt for 40pt), so an accented initial keeps its accent.
-- The description stays in the native UI family (Plus Jakarta Sans), as all native text does.
+- The monogram's line box is the font's own (52pt for 42pt, the web's 2.6rem), so an accented initial
+  keeps its accent.
 - React Native has no `text-wrap: balance`: the balanced breaks are computed.
 
 ---

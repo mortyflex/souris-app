@@ -318,8 +318,10 @@ exported reference keeps Inter as historical documentation.
 - Tracking stays gently negative on titles and neutral on body; uppercase eyebrows remain the
   selective brand detail described in §10.
 - The public booking pages and the marketing website use the brand typography (Fraunces +
-  Manrope, `BRAND_TYPOGRAPHY.md`). The native runtime does not: its one exception is the name and
-  monogram of the public-page preview (`BookingProfilePreview`).
+  Manrope, `BRAND_TYPOGRAPHY.md`). The native runtime does not: its one exception is the
+  public-page preview (`BookingProfilePreview`) — Fraunces for its name and monogram, Manrope for
+  its presentation and contact actions. Its default cover is the web's Nacre artwork at rest
+  (`assets/brand/nacre-cover.webp`), under any personal cover photo.
 - Réservation en ligne sets its screen title at the compact 27 / 33 on both platforms (the Android
   values): at the iOS 30 it competed with the preview's display name just below. The role itself
   and every other screen keep §12's sizes.

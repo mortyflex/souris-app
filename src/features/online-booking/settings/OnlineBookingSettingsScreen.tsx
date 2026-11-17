@@ -480,6 +480,7 @@ export function OnlineBookingSettingsScreen() {
         </View>
 
         <BookingProfilePreview
+          contact={{ phone: fields.publicPhone.trim() !== '', email: fields.publicEmail.trim() !== '' }}
           coverUri={coverUri}
           description={fields.description}
           disabled={busy}
