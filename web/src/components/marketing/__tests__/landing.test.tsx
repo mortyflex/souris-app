@@ -102,13 +102,33 @@ describe("the landing page", () => {
     expect(cash).toContain("La Caisse, ce mois-ci : l’argent réellement encaissé.");
   });
 
-  it("the podium's eye is a real toggle that masks client amounts, never leaking them to assistive technologies", async () => {
+  it("the podium's eye is a real toggle; this demonstration of fictional figures starts with the client amounts WRITTEN", async () => {
     const tops = section((await landing()).html, "tendances");
-    // Masked by default, as in the app.
-    expect(tops).toMatch(/<button[^>]*aria-pressed="true"[^>]*aria-label="Masquer les montants des clients"/);
-    expect(tops.match(/<span class="sr-only">Montant masqué<\/span>/g)).toHaveLength(3);
+    // Unlike the app (masked at every opening), the marketing demo shows them: not pressed, amounts readable.
+    expect(tops).toMatch(/<button[^>]*aria-pressed="false"[^>]*aria-label="Masquer les montants des clients"/);
+    for (const amount of ["159,00", "107,00", "76,30"]) expect(text(tops)).toContain(amount);
+    expect(text(tops)).toContain("Les montants des clients sont affichés.");
+    // The three masks wait in place, hidden from sight and from assistive technologies.
+    expect(tops.match(/<span aria-hidden="true" class="[^"]*invisible[^"]*"><span class="sr-only">Montant masqué<\/span>/g)).toHaveLength(3);
     const labels = [...tops.matchAll(/aria-label="([^"]*)"/g)].map(([, label]) => label);
     for (const label of labels) expect(label).not.toMatch(/\d+,\d{2}/);
+  });
+
+  it("the podium's amounts are rendered at their FINAL values (no JavaScript, reduced motion), and count up from there with the scene", async () => {
+    const tops = section((await landing()).html, "tendances");
+    // Each client amount is a DemoNumber: the final value written, its moving digits hidden, spoken once.
+    for (const amount of ["159,00", "107,00", "76,30"]) {
+      expect(tops).toMatch(new RegExp(`<span aria-hidden="true" class="tabular-nums">${amount}[^<]*</span><span class="sr-only">${amount}`));
+    }
+    // Written by default: no amount sits in a hidden layer.
+    expect(tops).not.toMatch(/<span aria-hidden="true" class="[^"]*invisible[^"]*"><span><span aria-hidden="true" class="tabular-nums">/);
+  });
+
+  it("« Revoir » replays a scene without re-rendering it, so a choice made in the demo (masked amounts) survives the replay", () => {
+    const scene = readFileSync(path.join(__dirname, "../../motion/demo-scene.tsx"), "utf8");
+    // The scene only switches `data-demo` on itself: no React state, no remount key.
+    expect(scene).not.toMatch(/useState|useReducer|\bkey=/);
+    expect(scene).toContain('scene.dataset.demo = "play"');
   });
 
   it("Tops & tendances: save or share the GENUINE exported image — services, turnover frosted, never a client ranking pushed to the public", async () => {
@@ -226,6 +246,26 @@ describe("the landing page", () => {
     expect(footer).toContain('alt="BeautIzzy"');
     expect(footer).toContain("Découvrir");
     expect(footer).toContain("L’ouverture au public est en préparation.");
+  });
+});
+
+describe("the podium's eye", () => {
+  it("not pressed while the amounts are written: the open eye is drawn", async () => {
+    const { AmountsEye } = await import("../podium-demo");
+    const html = renderToStaticMarkup(<AmountsEye masked={false} onToggle={() => undefined} />);
+    expect(html).toMatch(/^<button type="button" aria-pressed="false" aria-label="Masquer les montants des clients"/);
+    const [open, crossed] = [...html.matchAll(/<svg[^>]*class="([^"]*)"/g)].map(([, classes]) => classes);
+    expect(open).toContain("opacity-100");
+    expect(crossed).toContain("opacity-0");
+  });
+
+  it("pressed once the amounts are masked: the crossed eye is drawn", async () => {
+    const { AmountsEye } = await import("../podium-demo");
+    const html = renderToStaticMarkup(<AmountsEye masked onToggle={() => undefined} />);
+    expect(html).toMatch(/^<button type="button" aria-pressed="true"/);
+    const [open, crossed] = [...html.matchAll(/<svg[^>]*class="([^"]*)"/g)].map(([, classes]) => classes);
+    expect(open).toContain("opacity-0");
+    expect(crossed).toContain("opacity-100");
   });
 });
 

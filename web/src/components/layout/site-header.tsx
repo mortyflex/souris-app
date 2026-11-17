@@ -8,6 +8,7 @@ import { contactHref } from "@/lib/site";
 import { storeAvailability, type StoreAvailability } from "@/lib/stores";
 
 import { DesktopNav, HeaderScrollState, MobileMenu } from "./header-controls";
+import { HomeLink } from "./home-link";
 
 /** The sections of the landing page the navigation leads to. */
 export const MARKETING_NAV = [
@@ -24,7 +25,8 @@ const LOGO_SIZES = "(min-width: 1024px) 160px, 122px";
 
 /**
  * The bar at the top of every page: the BeautIzzy wordmark (44 px, 58 px from
- * 1024 px; original proportions) and, depending on the page:
+ * 1024 px; original proportions) — a link to the very top of the home page
+ * (`HomeLink`) — and, depending on the page:
  *   - marketing: three zones on desktop — brand, the landing's sections
  *     (centred, the current one marked), ONE action whose destination exists;
  *     on mobile, the brand and a menu. Sticky, reinforced once scrolled;
@@ -45,9 +47,9 @@ export function SiteHeader({ variant, availability = storeAvailability() }: { va
           {variant === "flow" ? (
             <BrandLogo priority className={LOGO_CLASS} sizes={LOGO_SIZES} />
           ) : (
-            <Link href="/" aria-label="BeautIzzy — accueil" className="-ml-1.5 rounded-lg p-1.5">
+            <HomeLink aria-label="BeautIzzy — accueil" className="-ml-1.5 rounded-lg p-1.5">
               <BrandLogo priority className={LOGO_CLASS} sizes={LOGO_SIZES} />
-            </Link>
+            </HomeLink>
           )}
           {variant === "profile" ? (
             <Link
@@ -70,9 +72,9 @@ export function SiteHeader({ variant, availability = storeAvailability() }: { va
     <header className="site-header sticky top-0 z-40">
       <HeaderScrollState />
       <Container className="flex h-16 items-center justify-between gap-4 lg:grid lg:h-20 lg:grid-cols-[1fr_auto_1fr]">
-        <Link href="/" aria-label="BeautIzzy — accueil" className="-ml-1.5 justify-self-start rounded-xl p-1.5 focus-visible:outline-2 focus-visible:outline-accent">
+        <HomeLink aria-label="BeautIzzy — accueil" className="-ml-1.5 justify-self-start rounded-xl p-1.5 focus-visible:outline-2 focus-visible:outline-accent">
           <BrandLogo priority className={LOGO_CLASS} sizes={LOGO_SIZES} />
-        </Link>
+        </HomeLink>
 
         <DesktopNav items={MARKETING_NAV} />
 

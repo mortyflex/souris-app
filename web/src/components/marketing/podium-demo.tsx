@@ -30,10 +30,15 @@ const PLACES: readonly { rank: 1 | 2 | 3; name: string; cents: number; medal: Me
  * one of them — with the same « ••• € » pill on the same line, so nothing
  * moves; the business figures above stay written. The masked values are
  * neither shown nor spoken (`aria-hidden`, `visibility: hidden`).
+ *
+ * Unlike the application — where client amounts start masked at every opening
+ * (src/features/insights) — this demonstration of FICTIONAL figures starts
+ * with them written, so they count up with the podium; the eye masks them.
+ * « Revoir » replays the scene without re-rendering it (DemoScene), so the
+ * visitor's choice stays.
  */
 export function PodiumDemo() {
-  // As in the app: client amounts start hidden at every opening; « Revoir » keeps the choice.
-  const [masked, setMasked] = useState(true);
+  const [masked, setMasked] = useState(false);
   return (
     <ReceiptPaper className="w-full">
       <div className="flex flex-col items-center gap-1 text-center">
@@ -61,16 +66,7 @@ export function PodiumDemo() {
 
       <div className="flex items-center justify-center gap-1">
         <p className="type-caption uppercase tracking-[0.12em] text-accent">Clients qui dépensent le plus</p>
-        <button
-          type="button"
-          aria-pressed={masked}
-          aria-label="Masquer les montants des clients"
-          onClick={() => setMasked((value) => !value)}
-          className="relative grid size-11 shrink-0 place-items-center rounded-full text-accent transition-[background-color,transform] duration-[var(--bz-duration-state)] ease-bz-out hover:bg-lavender-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-90"
-        >
-          <EyeIcon size={19} className={cn("absolute transition-[opacity,transform] duration-[var(--bz-duration-disclosure)] ease-bz-out", masked ? "scale-75 opacity-0" : "opacity-100")} />
-          <EyeOffIcon size={19} className={cn("absolute transition-[opacity,transform] duration-[var(--bz-duration-disclosure)] ease-bz-out", masked ? "opacity-100" : "scale-75 opacity-0")} />
-        </button>
+        <AmountsEye masked={masked} onToggle={() => setMasked((value) => !value)} />
       </div>
 
       <div className="relative mt-4">
@@ -110,6 +106,26 @@ export function PodiumDemo() {
       </div>
       <p className="sr-only">{masked ? "Les montants des clients sont masqués." : "Les montants des clients sont affichés."}</p>
     </ReceiptPaper>
+  );
+}
+
+/**
+ * The eye: a toggle button, pressed while the amounts are masked. It draws the
+ * current state — an open eye while they are written, a crossed one while
+ * they are masked.
+ */
+export function AmountsEye({ masked, onToggle }: { masked: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={masked}
+      aria-label="Masquer les montants des clients"
+      onClick={onToggle}
+      className="relative grid size-11 shrink-0 place-items-center rounded-full text-accent transition-[background-color,transform] duration-[var(--bz-duration-state)] ease-bz-out hover:bg-lavender-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent active:scale-90"
+    >
+      <EyeIcon size={19} className={cn("absolute transition-[opacity,transform] duration-[var(--bz-duration-disclosure)] ease-bz-out", masked ? "scale-75 opacity-0" : "opacity-100")} />
+      <EyeOffIcon size={19} className={cn("absolute transition-[opacity,transform] duration-[var(--bz-duration-disclosure)] ease-bz-out", masked ? "opacity-100" : "scale-75 opacity-0")} />
+    </button>
   );
 }
 

@@ -74,3 +74,32 @@ describe("SiteHeader — marketing layout", () => {
     expect(html).not.toContain("data-scrolled");
   });
 });
+
+describe("SiteHeader — the logo returns to the top of the home page (src/lib/home-scroll.ts)", () => {
+  const logoLinks = (html: string) => html.match(/<a[^>]*aria-label="BeautIzzy — accueil"[^>]*>/g) ?? [];
+
+  it("marketing, desktop and mobile alike: ONE real, keyboard-reachable link to « / » carries the wordmark — the mobile menu adds no other", async () => {
+    const html = await header("marketing", "bonjour@example.test");
+    const links = logoLinks(html);
+    expect(links).toHaveLength(1);
+    expect(links[0]).toContain('href="/"');
+    expect(links[0]).not.toMatch(/tabindex="-1"|target=/);
+    // Desktop (≥ 1024 px) and mobile share it: no breakpoint hides it.
+    expect(links[0]).not.toMatch(/\bhidden\b|lg:hidden/);
+    const menu = html.slice(html.indexOf('data-open="false"'));
+    expect(menu).not.toContain('aria-label="BeautIzzy — accueil"');
+  });
+
+  it("profile: the same link home (another route → the top of « / »)", async () => {
+    const links = logoLinks(await header("profile"));
+    expect(links).toHaveLength(1);
+    expect(links[0]).toContain('href="/"');
+  });
+
+  it("the section links stay plain anchors, untouched", async () => {
+    const html = await header("marketing");
+    for (const anchor of ["/#fonctionnalites", "/#reservation-en-ligne", "/#tarif", "/#questions"]) {
+      expect(html.match(new RegExp(`href="${anchor}"`, "g"))).toHaveLength(2); // desktop navigation + mobile menu
+    }
+  });
+});

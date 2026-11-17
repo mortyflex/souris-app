@@ -64,7 +64,7 @@ export function TrendsSection() {
             className="relative grid justify-items-center gap-6 px-4 pb-8 pt-20 sm:grid-cols-[minmax(0,20.5rem)_minmax(0,12rem)] sm:items-end sm:justify-center sm:gap-5 sm:px-5 sm:pt-6"
             replayClassName="right-4 top-4"
           >
-            {/* 1 · The ticket: the clients' ranking — private, amounts masked by default. */}
+            {/* 1 · The ticket: the clients' ranking — fictional amounts written and counting up; the eye masks them (the app masks them at every opening). */}
             <div className="flex w-full max-w-[20.5rem] flex-col items-center">
               <p className="type-caption mb-3 rounded-full bg-background/85 px-3 py-1.5 uppercase tracking-[0.12em] text-lavender-700 ring-1 ring-lavender-200">
                 Le ticket · vos clients
