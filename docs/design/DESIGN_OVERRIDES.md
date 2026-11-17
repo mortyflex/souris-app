@@ -317,7 +317,7 @@ exported reference keeps Inter as historical documentation.
   (Android). Agenda hour and quarter labels keep their compact operational sizes.
 - Tracking stays gently negative on titles and neutral on body; uppercase eyebrows remain the
   selective brand detail described in §10.
-- The public booking pages and the marketing website use the brand typography (Bodoni Moda +
+- The public booking pages and the marketing website use the brand typography (Fraunces +
   Manrope, `BRAND_TYPOGRAPHY.md`). The native runtime does not: its one exception is the name and
   monogram of the public-page preview (`BookingProfilePreview`).
 - Réservation en ligne sets its screen title at the compact 27 / 33 on both platforms (the Android

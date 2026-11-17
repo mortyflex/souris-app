@@ -25,7 +25,7 @@ export function Eyebrow({
   );
 }
 
-/** Eyebrow, Bodoni title, Manrope lead — the opening of every landing section. */
+/** Eyebrow, Fraunces title, Manrope lead — the opening of every landing section. */
 export function SectionHeading({
   id,
   eyebrow,

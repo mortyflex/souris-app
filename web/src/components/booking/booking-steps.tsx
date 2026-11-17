@@ -908,7 +908,10 @@ export function BookingConfirmation({
   return (
     <section aria-labelledby="booking-step-heading" className="flex flex-col gap-6">
       <div className="flex flex-col items-start gap-3 rounded-[1.75rem] bg-mint-50 p-6 motion-safe:animate-[bz-rise_var(--bz-duration-enter)_var(--bz-ease-emphasized)_both] sm:p-8">
-        <StepHeading headingRef={headingRef}>Votre rendez-vous est réservé.</StepHeading>
+        <StepHeading headingRef={headingRef}>
+          {/* « rendez-vous » never breaks at its hyphen. */}
+          Votre <span className="whitespace-nowrap">rendez-vous</span> est réservé.
+        </StepHeading>
         <p className="type-body text-foreground/80">
           {professional.name} vous attend le {formatLongDate(booking.localDate)} à{" "}
           <span className="tabular-nums">{booking.localTime}</span>.

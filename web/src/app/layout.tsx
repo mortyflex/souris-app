@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bodoni_Moda, Manrope } from "next/font/google";
+import { Fraunces, Manrope } from "next/font/google";
 
 import { siteRobots } from "@/lib/env/indexing";
 import { site } from "@/lib/site";
@@ -17,20 +17,20 @@ const manrope = Manrope({
   subsets: ["latin"],
 });
 
-// Display: the optical-size axis is kept, so hairlines refine as a heading grows.
-const bodoniModa = Bodoni_Moda({
-  variable: "--font-bodoni-moda",
+// Display: the weight axis only. Fraunces' other axes stay at Google Fonts'
+// defaults and are never downloaded — optical size 14 (a sturdy cut at every
+// size, on every screen), SOFT 0 (sharp serifs), WONK 0 (no wonky letters).
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
   subsets: ["latin"],
-  axes: ["opsz"],
 });
 
 // Display italic, for an emphasized word in a display heading only. Not
 // preloaded: the file downloads on the pages that actually set one.
-const bodoniModaItalic = Bodoni_Moda({
-  variable: "--font-bodoni-moda-italic",
+const frauncesItalic = Fraunces({
+  variable: "--font-fraunces-italic",
   subsets: ["latin"],
   style: "italic",
-  axes: ["opsz"],
   preload: false,
 });
 
@@ -48,7 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="fr"
-      className={`${manrope.variable} ${bodoniModa.variable} ${bodoniModaItalic.variable} h-full antialiased`}
+      className={`${manrope.variable} ${fraunces.variable} ${frauncesItalic.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">{children}</body>
     </html>

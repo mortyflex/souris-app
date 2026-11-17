@@ -66,9 +66,13 @@ describe('layoutPreviewName', () => {
   it('gives the first line room for an accented capital', () => {
     // React Native on iOS cuts a line taller than its line height from the
     // top: the first baseline sits at paddingTop + lineHeight − descender.
+    // Fraunces 400: descender 0.255em, highest French accent « Å » 0.905em.
     for (const name of ['Éclat', 'Élégance Éléonore Joséphine Rive Gauche', LONG]) {
-      const { fontSize, lineHeight, paddingTop } = layoutPreviewName(name, IPHONE_17_PRO, 1);
-      expect(paddingTop + lineHeight - 0.4 * fontSize).toBeGreaterThanOrEqual(1.02 * fontSize);
+      for (const fontScale of [1, 1.2]) {
+        const { fontSize, lineHeight, paddingTop } = layoutPreviewName(name, IPHONE_17_PRO, fontScale);
+        const scaled = fontSize * fontScale;
+        expect(paddingTop + lineHeight * fontScale - 0.255 * scaled).toBeGreaterThanOrEqual(0.905 * scaled);
+      }
     }
   });
 

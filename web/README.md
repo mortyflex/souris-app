@@ -105,7 +105,7 @@ public/
 
 The mobile theme (`../src/shared/ui/theme/`) is the source of truth for colors, radii and shadows. `src/styles/tokens.css` mirrors only the tokens the web uses, and each variable names its original token. Add a token when a screen needs it; never invent a brand value.
 
-Typography is the web's own brand system: Bodoni Moda (display) and Manrope (text), self-hosted by `next/font` in `src/app/layout.tsx`. Use the semantic roles of `src/styles/typography.css` (`type-headline`, `type-body`, `type-label`, …), never a raw family and size. Rules and usage: `../docs/design/BRAND_TYPOGRAPHY.md`.
+Typography is the web's own brand system: Fraunces (display) and Manrope (text), self-hosted by `next/font` in `src/app/layout.tsx`. Use the semantic roles of `src/styles/typography.css` (`type-headline`, `type-body`, `type-label`, …), never a raw family and size. Rules and usage: `../docs/design/BRAND_TYPOGRAPHY.md`.
 
 ## Relationship with the mobile application
 

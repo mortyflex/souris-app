@@ -4,7 +4,9 @@ The long-term typographic identity of BeautIzzy's branded surfaces: two families
 semantic roles, and the rules that keep them consistent.
 
 Implementation: `web/src/styles/typography.css` (tokens and roles), `web/src/app/layout.tsx`
-(font loading). Adopted November 2026.
+(font loading). Adopted November 2026; the display family is Fraunces since 17 November 2026.
+Bodoni Moda, the first display family, was removed everywhere by explicit decision — never
+reintroduce it.
 
 ---
 
@@ -16,9 +18,9 @@ Implementation: `web/src/styles/typography.css` (tokens and roles), `web/src/app
 | Marketing website and landing pages (`web/`) | **Brand typography** |
 | Future branded surfaces (e.g. a share image, a printed card) | **Brand typography**, when that surface is built |
 | Native application UI | **Plus Jakarta Sans** — unchanged (`DESIGN_OVERRIDES.md` §12) |
-| Native preview of the public page (`BookingProfilePreview`) | Bodoni Moda for the name and monogram only (§8) |
+| Native preview of the public page (`BookingProfilePreview`) | Fraunces for the name and monogram only (§8) |
 
-The native application's global typography is not part of this system. Never load Bodoni Moda or
+The native application's global typography is not part of this system. Never load Fraunces or
 Manrope into `src/shared/ui/theme/`, and never use them in a native screen other than the
 public-page preview.
 
@@ -32,13 +34,14 @@ recomposed in either family.
 Two families. There is no third — no other serif, no script, no monospace, no system-font
 substitute chosen on purpose.
 
-### Bodoni Moda — display
+### Fraunces — display
 
-A high-contrast Didone with an optical-size axis: refined, editorial, of the beauty and fashion
-world. It carries **identity and emphasis**, never information that has to be scanned.
+A warm, editorial old-style serif: generous x-height, moderate contrast, sturdy strokes. Elegant
+without fragility — every stroke stays visible on a phone. It carries **identity and emphasis**,
+never information that has to be scanned.
 
-- Weights: **500** (display, names, headlines), **600** (titles, the smallest display size).
-  Nothing lighter — its hairlines are already the finest strokes on the page. Nothing heavier.
+- Weights: **400** (display, names, headlines, display figures), **500** (titles, the smallest
+  display size). Nothing lighter, nothing heavier: Fraunces grows loud and playful above 500.
 - Italic: only for one emphasized word inside a display or headline (`<em>`), e.g. « Votre journée,
   *simplement* organisée. » Never a whole italic sentence.
 - Never below 20px. Never for body copy, labels, buttons, prices or times.
@@ -69,16 +72,16 @@ Colour, alignment and spacing stay with the component.
 Sizes are fluid: linear from a 320px to a 1280px viewport, rem-based (they follow the reader's font
 size and zoom).
 
-### Display — Bodoni Moda
+### Display — Fraunces
 
 | Role | Size | Weight | Line height | Use |
 | --- | --- | --- | --- | --- |
-| `type-display` | 36 → 64 | 500 | 1.04 | The hero headline of a page that introduces something (marketing hero) |
-| `type-name` | 36 → 56 | 500 | 1.08 | The professional's name in the profile hero (≤ 24 characters) |
-| `type-name-medium` | 30 → 44 | 500 | 1.10 | … 25 to 48 characters |
-| `type-name-long` | 24 → 32 | 500 | 1.14 | … longer (up to the 120-character limit) |
-| `type-headline` | 28 → 40 | 500 | 1.12 | Page and section headings, notices, editorial statements |
-| `type-title` | 20 → 24 | 600 | 1.20 | Supporting headings inside a page (« Prestation », « Date ») |
+| `type-display` | 36 → 64 | 400 | 1.04 | The hero headline of a page that introduces something (marketing hero) |
+| `type-name` | 36 → 56 | 400 | 1.08 | The professional's name in the profile hero (≤ 24 characters) |
+| `type-name-medium` | 30 → 44 | 400 | 1.10 | … 25 to 48 characters |
+| `type-name-long` | 24 → 32 | 400 | 1.14 | … longer (up to the 120-character limit) |
+| `type-headline` | 28 → 40 | 400 | 1.12 | Page and section headings, notices, editorial statements |
+| `type-title` | 20 → 24 | 500 | 1.20 | Supporting headings inside a page (« Prestation », « Date ») |
 
 Display roles balance their lines (`text-wrap: balance`). Name roles also break an unbreakable
 word rather than overflow (`overflow-wrap: anywhere`).
@@ -105,19 +108,28 @@ role goes in `typography.css` with its comment and in this table.
 
 ---
 
-## 4. Optical sizing
+## 4. The Fraunces cut
 
-Bodoni Moda is loaded with its optical-size axis (`opsz` 6–96): the larger the text, the finer and
-more contrasted its drawing.
+Fraunces is a variable family with four axes: weight, optical size (`opsz` 9–144), softness
+(`SOFT`) and « wonkiness » (`WONK`). Only the **weight axis** is loaded. The three others stay at
+Google Fonts' defaults, so every heading draws the same cut on every screen, at every size:
 
-- **2× screens and denser** (phones, tablets, Retina displays): automatic optical sizing — the
-  optical size follows the font size, for the most refined hairlines.
-- **Standard-density (1×) screens**: above ~30px the automatic cut's hairlines fall below a pixel
-  and break apart (« réser vation »). Each display role draws a fixed, sturdier cut instead:
-  `--bz-opsz-display` 28 (display, names), `--bz-opsz-headline` 24 (headlines, long names),
-  `--bz-opsz-title` 18 (titles).
+| Axis | Value | Why |
+| --- | --- | --- |
+| `wght` | 400 / 500 (roles) | The whole display vocabulary (section 2) |
+| `opsz` | 14, fixed | Sturdy strokes and moderate contrast: readable on any phone, still refined at 64px. The display cuts (automatic optical sizing, above ~22) thin their hairlines and swap in decorative forms — a curled « & » that reads as ®, looped italic « l » |
+| `SOFT` | 0 | Sharp serifs: precise, not rounded |
+| `WONK` | 0 | No leaning « h », « m », « n »: calm, never playful |
 
-Never set `font-variation-settings` on a component: the roles own it.
+These values are chosen from real rendering (phone and desktop, roman and lavender italic), not
+from the type specimen. The plain text-size forms (« & », « h », « m », « n », « s »; in italic
+« b », « d », « h », « k », « l », « v », « w ») come from the font's `rvrn` feature, applied by
+every current browser.
+
+Never set `font-variation-settings` or `font-optical-sizing`: there is nothing to tune, and
+loading another axis would double the file for no visible gain. A composition that uses the bare
+family (`font-display`, for a figure or an accent) keeps the display weight — 400, or 500 at
+title size — never lighter, never bolder.
 
 ---
 
@@ -151,14 +163,15 @@ instead (§8).
 Do:
 
 - build hierarchy from scale, contrast between the two families, weight and whitespace;
-- keep Bodoni Moda for few, short, meaningful lines: a name, a headline, a statement;
+- keep Fraunces for few, short, meaningful lines: a name, a headline, a statement;
 - let Manrope do the work everywhere else;
 - write labels in sentence case (« Téléphone », not « TÉLÉPHONE »).
 
 Don't:
 
-- set Bodoni Moda everywhere, or for anything functional (buttons, prices, times, form fields);
-- use Bodoni Moda below 20px or lighter than 500;
+- set Fraunces everywhere, or for anything functional (buttons, prices, times, form fields);
+- use Fraunces below 20px, lighter than 400 or bolder than 500;
+- load another Fraunces axis (`opsz`, `SOFT`, `WONK`) or set `font-variation-settings`;
 - add bold for emphasis that scale or placement already gives;
 - use uppercase labels or wide letter spacing as decoration — the web system has no uppercase
   role;
@@ -172,12 +185,14 @@ Don't:
 `src/features/online-booking/settings/BookingProfilePreview.tsx` mirrors the web profile hero, so
 the professional sees her page as clients will.
 
-- It loads `BodoniModa_500Medium` (`@expo-google-fonts/bodoni-moda`) for the name and the monogram,
-  in that component only. Until the file is loaded the platform serif stands in.
+- It loads `Fraunces_400Regular` (`@expo-google-fonts/fraunces`) for the name and the monogram,
+  in that component only. It is Google Fonts' static 400 — the very cut the web draws (optical
+  size 14, SOFT 0, WONK 0), so the preview and the page match. Until the file is loaded the
+  platform serif stands in.
 - The name is a preview inside a settings screen, so it is smaller than the web hero, and it is
   always shown whole — no truncation, no line limit. One rule sizes it, `layoutPreviewName`
   (`src/features/online-booking/settings/preview-name-layout.ts`), from the panel's measured width
-  and Bodoni Moda's real glyph advances:
+  and Fraunces' real glyph advances:
 
   ```text
   one line             30 → 24pt   when the name fits on one line there
@@ -188,14 +203,13 @@ the professional sees her page as clients will.
 
   Balanced: the lines are as even as the words allow, never a lone last word. Text size follows
   the reader's setting up to ×1.2.
-- Leading 1.18em, with a top inset from the font's metrics: Bodoni Moda's line box is 1.525em, and
-  under a tighter line height React Native on iOS cuts the first line from the top — the accent of
-  « É » was clipped. The inset (≈ 0.24em) gives it back without moving the name.
-- The monogram's line box is the font's own (61pt for 40pt), so an accented initial keeps its accent.
+- Leading 1.18em. Under a line height tighter than the font's own line box (1.233em), React Native
+  on iOS cuts the first line from the top, so the rule reserves a top inset from the font's
+  metrics (descender 0.255em, highest French accent « Å » 0.905em). With Fraunces the leading
+  already holds every accent: the inset is 0, and the rule stays for safety.
+- The monogram's line box is the font's own (50pt for 40pt), so an accented initial keeps its accent.
 - The description stays in the native UI family (Plus Jakarta Sans), as all native text does.
-- React Native has no `text-wrap: balance` and cannot drive a variable font's optical size: the
-  balanced breaks are computed, and the Expo package's static 500 is the text optical size, so the
-  native name has slightly sturdier hairlines than the web hero on a phone. Accepted.
+- React Native has no `text-wrap: balance`: the balanced breaks are computed.
 
 ---
 
@@ -203,10 +217,10 @@ the professional sees her page as clients will.
 
 - Both families are self-hosted by `next/font/google` at build time: no request to a font CDN at
   runtime. Each is one variable file.
-- The `latin` subset is preloaded (Manrope ≈ 24 KB, Bodoni Moda ≈ 46 KB). It covers French in full:
+- The `latin` subset is preloaded (Manrope ≈ 24 KB, Fraunces ≈ 37 KB). It covers French in full:
   é è ê ë à â î ï ô û ù ç, œ Œ, « », €, and accented capitals (É È Ê À Ç). Rarer accents
   (`latin-ext`, e.g. Ÿ, Ł) download only on a page that uses them.
-- The Bodoni Moda italic is declared but not preloaded: it downloads only on a page that sets an
-  emphasized display word.
-- Fallbacks are metric-adjusted by `next/font` (Times New Roman for Bodoni Moda, Arial for
+- The Fraunces italic (≈ 46 KB) is declared but not preloaded: it downloads only on a page that
+  sets an emphasized display word.
+- Fallbacks are metric-adjusted by `next/font` (Times New Roman for Fraunces, Arial for
   Manrope), then `ui-serif, Georgia, serif` and `ui-sans-serif, system-ui, sans-serif`.

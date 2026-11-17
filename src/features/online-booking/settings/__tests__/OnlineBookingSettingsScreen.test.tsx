@@ -548,9 +548,16 @@ describe('OnlineBookingSettingsScreen — live preview', () => {
       expect(String(nameNode().props.children).replace(/\n/g, ' ')).toBe(long);
       // Read as one name, not as its visual lines.
       expect(nameNode().props.accessibilityLabel).toBe(long);
-      // Room above the first line for « É », taken from the gap above.
-      expect(nameStyle().paddingTop).toBeGreaterThan(0);
-      expect(nameStyle().marginTop).toBe(-(nameStyle().paddingTop as number));
+      // Room above the first line for « É » / « Å » (Fraunces: descender
+      // 0.255em, accent 0.905em); any inset is taken from the gap above.
+      const { fontSize, lineHeight, paddingTop, marginTop } = nameStyle() as {
+        fontSize: number;
+        lineHeight: number;
+        paddingTop: number;
+        marginTop: number;
+      };
+      expect(paddingTop + lineHeight - 0.255 * fontSize).toBeGreaterThanOrEqual(0.905 * fontSize);
+      expect(marginTop).toBe(-paddingTop);
     } finally {
       await act(async () => {
         Dimensions.set({ window: device });

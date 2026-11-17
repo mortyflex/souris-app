@@ -1240,12 +1240,13 @@ Avoid generic SaaS dashboard aesthetics.
 
 Source of truth: `docs/design/BRAND_TYPOGRAPHY.md` — usage, hierarchy, weights and responsive behavior.
 
-- Bodoni Moda is the editorial / display font of BeautIzzy's branded experiences.
+- Fraunces is the editorial / display font of BeautIzzy's branded experiences.
 - Manrope is its complement for customer-facing web content and interface elements.
 - The pairing is the long-term reference for the public booking website, the future landing page and other branded surfaces.
 - It is an intentional exception to the rule that web design values mirror the native theme (§5).
 - The native application keeps its global typography (Plus Jakarta Sans).
 - A native screen or component uses the brand display font only when it explicitly requires it — today, the name and monogram of the public-page preview.
+- Bodoni Moda was removed everywhere by explicit decision (November 2026): never reintroduce it.
 
 Do not introduce a third font family.
 

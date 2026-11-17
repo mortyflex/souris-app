@@ -1,6 +1,6 @@
 // BeautIzzy — the professional's name in the public-page preview
 //
-// The name is set in Bodoni Moda 500 (docs/design/BRAND_TYPOGRAPHY.md §8).
+// The name is set in Fraunces 400 (docs/design/BRAND_TYPOGRAPHY.md §8).
 // Its size comes from the width the preview card actually offers, measured
 // against the font's real glyph advances — never from a character count
 // alone — and it is always shown whole: no truncation, no line limit.
@@ -13,36 +13,42 @@
 // Balanced: the lines are as even as the words allow (no lone last word),
 // the explicit line breaks are part of the returned text.
 //
-// Bodoni Moda's line box is tall (ascender 1.125em + descender 0.4em =
-// 1.525em). A display line height is tighter than that, and React Native on
-// iOS then cuts the line from the top: whatever rises above
-// `lineHeight − 0.4em` on the first line is drawn outside the text frame and
-// clipped — the accent of « É » disappears. `paddingTop` gives the first line
-// that room back, from the font's metrics, on both platforms (Android draws
-// outside instead of clipping; the same inset keeps the two identical).
+// A display line height can be tighter than the font's own line box, and
+// React Native on iOS then cuts the line from the top: whatever rises above
+// `lineHeight − descender` on the first line is drawn outside the text frame
+// and clipped — the accent of « É » would disappear. `paddingTop` gives the
+// first line that room back, from the font's metrics, on both platforms
+// (Android draws outside instead of clipping; the same inset keeps the two
+// identical). Fraunces' accents are low enough that the 1.18em leading
+// already holds them: the inset is 0 — the rule stays, should the leading or
+// the face change.
 //
 // Pure and deterministic: same name, same width, same text scale → same layout.
 
-/** Advance widths of Bodoni Moda 500 (em), read from BodoniModa_500Medium.ttf. */
+/**
+ * Advance widths of Fraunces 400 (em), read from Fraunces_400Regular.ttf. Where
+ * the font substitutes a text-size form (`rvrn`: « & », h, m, n, s), the wider
+ * of the two is kept, so the estimate never falls short.
+ */
 const ADVANCES: Readonly<Record<string, number>> = {
-  a: 0.539, b: 0.617, c: 0.514, d: 0.617, e: 0.526, f: 0.402, g: 0.608, h: 0.605, i: 0.309, j: 0.314, k: 0.616, l: 0.342, m: 0.87,
-  n: 0.605, o: 0.563, p: 0.617, q: 0.617, r: 0.457, s: 0.443, t: 0.345, u: 0.607, v: 0.55, w: 0.78, x: 0.579, y: 0.561, z: 0.472,
-  A: 0.78, B: 0.671, C: 0.718, D: 0.739, E: 0.625, F: 0.604, G: 0.748, H: 0.774, I: 0.399, J: 0.476, K: 0.726, L: 0.612, M: 0.884,
-  N: 0.776, O: 0.757, P: 0.652, Q: 0.757, R: 0.731, S: 0.584, T: 0.68, U: 0.73, V: 0.781, W: 1.036, X: 0.778, Y: 0.738, Z: 0.591,
-  '0': 0.63, '1': 0.451, '2': 0.564, '3': 0.534, '4': 0.607, '5': 0.509, '6': 0.574, '7': 0.514, '8': 0.564, '9': 0.574,
-  '.': 0.216, ',': 0.232, '-': 0.359, '–': 0.54, '—': 0.784, '’': 0.231, "'": 0.216, '&': 0.82, ':': 0.214, ';': 0.232,
-  '!': 0.335, '?': 0.559, '(': 0.365, ')': 0.365, '/': 0.528, '+': 0.529, '"': 0.4, '«': 0.703, '»': 0.704, '@': 1.01,
-  '#': 0.638, '*': 0.631, '°': 0.32, '·': 0.214, œ: 0.879, Œ: 0.979, æ: 0.813, Æ: 1.021,
+  a: 0.541, b: 0.592, c: 0.507, d: 0.605, e: 0.52, f: 0.366, g: 0.558, h: 0.621, i: 0.3, j: 0.3, k: 0.595, l: 0.303, m: 0.936,
+  n: 0.621, o: 0.583, p: 0.607, q: 0.592, r: 0.452, s: 0.468, t: 0.363, u: 0.607, v: 0.549, w: 0.809, x: 0.529, y: 0.553, z: 0.474,
+  A: 0.712, B: 0.677, C: 0.696, D: 0.781, E: 0.645, F: 0.595, G: 0.757, H: 0.828, I: 0.381, J: 0.469, K: 0.758, L: 0.615, M: 0.898,
+  N: 0.776, O: 0.794, P: 0.664, Q: 0.794, R: 0.714, S: 0.59, T: 0.675, U: 0.743, V: 0.701, W: 1.032, X: 0.723, Y: 0.681, Z: 0.636,
+  '0': 0.648, '1': 0.448, '2': 0.594, '3': 0.539, '4': 0.595, '5': 0.565, '6': 0.592, '7': 0.505, '8': 0.581, '9': 0.596,
+  '.': 0.242, ',': 0.253, '-': 0.416, '–': 0.515, '—': 0.819, '’': 0.209, "'": 0.157, '&': 0.96, ':': 0.248, ';': 0.259,
+  '!': 0.308, '?': 0.494, '(': 0.345, ')': 0.345, '/': 0.491, '+': 0.556, '"': 0.336, '«': 0.554, '»': 0.554, '@': 0.884,
+  '#': 0.648, '*': 0.624, '°': 0.395, '·': 0.273, œ: 0.897, Œ: 0.988, æ: 0.824, Æ: 0.974,
 };
-const SPACE_ADVANCE = 0.25;
+const SPACE_ADVANCE = 0.225;
 /** An unknown glyph is taken as a wide capital: the name steps down early rather than overflow. */
 const UNKNOWN_ADVANCE = 0.8;
 /** Every width is over-estimated by this share (kerning, rounding, the fallback serif). */
 const SAFETY = 1.04;
 
-/** Font metrics of Bodoni Moda (em): the descender, and the highest French accent (« Å » 1.02, « É » 0.985). */
-const DESCENDER = 0.4;
-const ACCENT_TOP = 1.02;
+/** Font metrics of Fraunces (em): the descender, and the highest French accent (« Å » 0.905, « É » 0.887). */
+const DESCENDER = 0.255;
+const ACCENT_TOP = 0.905;
 
 export const PREVIEW_NAME_LINE_HEIGHT = 1.18;
 export const PREVIEW_NAME_LETTER_SPACING = -0.01;

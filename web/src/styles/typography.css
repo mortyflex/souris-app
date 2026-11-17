@@ -2,33 +2,32 @@
  * BeautIzzy brand typography — the web's type system.
  *
  * Two families, no third:
- *   - Bodoni Moda (display): identity, hero and editorial headings, 500 / 600;
+ *   - Fraunces (display): identity, hero and editorial headings, 400 / 500;
  *   - Manrope (text): everything that is read, scanned or acted on, 400–700.
  * Both are variable fonts self-hosted by next/font (src/app/layout.tsx).
- * Bodoni Moda keeps its optical-size axis (opsz 6–96): on a 2× screen or
- * denser the browser sizes it automatically (opsz = font size: the finest,
- * most contrasted hairlines); on a standard-density screen, where those
- * hairlines break apart above ~30px, each display role draws a sturdier cut
- * (`--bz-opsz-*`).
+ * Fraunces is loaded on its weight axis only, so every heading draws the same
+ * sturdy cut on every screen: Google Fonts' default instance — optical size 14,
+ * sharp serifs (SOFT 0), no wonky letters (WONK 0), the plain « & ». No
+ * `font-variation-settings` anywhere: there is nothing left to tune.
  *
  * Use the semantic roles below (`type-*`), never a raw family + size pair.
  * Guidelines, scale and the do / don't list: ../../../docs/design/BRAND_TYPOGRAPHY.md
  *
  * Colors, radii and shadows still mirror the mobile theme (tokens.css). The
  * typography does not: the native application keeps Plus Jakarta Sans as its
- * UI family, by decision — only its public-page preview uses Bodoni Moda.
+ * UI family, by decision — only its public-page preview uses Fraunces.
  */
 
 :root {
   /* Families — the next/font variables first, then sensible local fallbacks. */
-  --bz-font-display: var(--font-bodoni-moda), ui-serif, Georgia, serif;
-  --bz-font-display-italic: var(--font-bodoni-moda-italic), ui-serif, Georgia, serif;
+  --bz-font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --bz-font-display-italic: var(--font-fraunces-italic), ui-serif, Georgia, serif;
   --bz-font-text: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
 
-  /* Weights — the whole vocabulary. Bodoni Moda uses 500 and 600 only. */
-  --bz-weight-regular: 400; /* body copy */
-  --bz-weight-medium: 500; /* supporting information, display headings */
-  --bz-weight-semibold: 600; /* buttons, labels, important metadata, small display */
+  /* Weights — the whole vocabulary. Fraunces uses 400 and 500 only. */
+  --bz-weight-regular: 400; /* body copy, display headings */
+  --bz-weight-medium: 500; /* supporting information, small display (titles) */
+  --bz-weight-semibold: 600; /* buttons, labels, important metadata */
   --bz-weight-bold: 700; /* rare, selected strong emphasis */
 
   /*
@@ -50,14 +49,6 @@
   --bz-text-figure: 0.9375rem; /* 15 */
   --bz-text-meta: clamp(0.8125rem, 0.7917rem + 0.1042vw, 0.875rem); /* 13 → 14 */
   --bz-text-caption: 0.75rem; /* 12 */
-
-  /*
-   * Optical size of Bodoni Moda on standard-density (1×) screens only — see
-   * the header. 2× and denser screens use automatic optical sizing.
-   */
-  --bz-opsz-display: 28; /* display, name */
-  --bz-opsz-headline: 24; /* headline, long name */
-  --bz-opsz-title: 18; /* title */
 }
 
 @theme inline {
@@ -67,22 +58,16 @@
   --font-serif: initial;
 }
 
-/* ── Display roles — Bodoni Moda ─────────────────────────────────────────── */
+/* ── Display roles — Fraunces ────────────────────────────────────────────── */
 
 /* Hero headline of a page that introduces something (marketing hero). */
 @utility type-display {
   font-family: var(--bz-font-display);
   font-size: var(--bz-text-display);
-  font-weight: var(--bz-weight-medium);
-  font-optical-sizing: auto;
-  font-variation-settings: "opsz" var(--bz-opsz-display);
+  font-weight: var(--bz-weight-regular);
   line-height: 1.04;
   letter-spacing: -0.02em;
   text-wrap: balance;
-
-  @media (min-resolution: 2dppx) {
-    font-variation-settings: normal;
-  }
 
   & :where(em, i) {
     font-family: var(--bz-font-display-italic);
@@ -98,65 +83,41 @@
 @utility type-name {
   font-family: var(--bz-font-display);
   font-size: var(--bz-text-name);
-  font-weight: var(--bz-weight-medium);
-  font-optical-sizing: auto;
-  font-variation-settings: "opsz" var(--bz-opsz-display);
+  font-weight: var(--bz-weight-regular);
   line-height: 1.08;
   letter-spacing: -0.015em;
   text-wrap: balance;
   overflow-wrap: anywhere;
-
-  @media (min-resolution: 2dppx) {
-    font-variation-settings: normal;
-  }
 }
 
 @utility type-name-medium {
   font-family: var(--bz-font-display);
   font-size: var(--bz-text-name-medium);
-  font-weight: var(--bz-weight-medium);
-  font-optical-sizing: auto;
-  font-variation-settings: "opsz" var(--bz-opsz-display);
+  font-weight: var(--bz-weight-regular);
   line-height: 1.1;
   letter-spacing: -0.01em;
   text-wrap: balance;
   overflow-wrap: anywhere;
-
-  @media (min-resolution: 2dppx) {
-    font-variation-settings: normal;
-  }
 }
 
 @utility type-name-long {
   font-family: var(--bz-font-display);
   font-size: var(--bz-text-name-long);
-  font-weight: var(--bz-weight-medium);
-  font-optical-sizing: auto;
-  font-variation-settings: "opsz" var(--bz-opsz-headline);
+  font-weight: var(--bz-weight-regular);
   line-height: 1.14;
   letter-spacing: -0.005em;
   text-wrap: balance;
   overflow-wrap: anywhere;
-
-  @media (min-resolution: 2dppx) {
-    font-variation-settings: normal;
-  }
 }
 
 /* Page and section headings: a notice, a step, an editorial statement. */
 @utility type-headline {
   font-family: var(--bz-font-display);
   font-size: var(--bz-text-headline);
-  font-weight: var(--bz-weight-medium);
-  font-optical-sizing: auto;
-  font-variation-settings: "opsz" var(--bz-opsz-headline);
+  font-weight: var(--bz-weight-regular);
   line-height: 1.12;
   letter-spacing: -0.01em;
   text-wrap: balance;
-
-  @media (min-resolution: 2dppx) {
-    font-variation-settings: normal;
-  }
 
   & :where(em, i) {
     font-family: var(--bz-font-display-italic);
@@ -165,20 +126,14 @@
 }
 
 /* Supporting headings inside a page (« Prestation », « Date »). The smallest
-   Bodoni Moda size: 600, never lighter. */
+   Fraunces size: 500, a touch firmer than the large headings. */
 @utility type-title {
   font-family: var(--bz-font-display);
   font-size: var(--bz-text-title);
-  font-weight: var(--bz-weight-semibold);
-  font-optical-sizing: auto;
-  font-variation-settings: "opsz" var(--bz-opsz-title);
+  font-weight: var(--bz-weight-medium);
   line-height: 1.2;
   letter-spacing: 0;
   text-wrap: balance;
-
-  @media (min-resolution: 2dppx) {
-    font-variation-settings: normal;
-  }
 }
 
 /* ── Text roles — Manrope ────────────────────────────────────────────────── */

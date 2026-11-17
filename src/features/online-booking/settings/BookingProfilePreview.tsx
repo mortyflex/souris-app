@@ -10,18 +10,21 @@
 // reads nothing and writes nothing. The cover and the logo are the two entry
 // points of the photo sheet, exactly as before.
 //
-// Bodoni Moda is the brand display face of the public pages
+// Fraunces is the brand display face of the public pages
 // (docs/design/BRAND_TYPOGRAPHY.md) and has no place in the mobile type
-// system, which stays Plus Jakarta Sans: it is loaded here, in its 500 weight,
-// for the name and the monogram of this preview only. Until its file is ready
-// the name is drawn in the platform serif, never withheld.
+// system, which stays Plus Jakarta Sans: it is loaded here, in its 400 weight —
+// the web's headings, same cut — for the name and the monogram of this preview
+// only. Until its file is ready the name is drawn in the platform serif, never
+// withheld.
 //
 // The name is always shown whole. Its size and line breaks come from the
 // width the panel really has (measured, estimated before the first layout)
 // and from the font's glyph advances: `layoutPreviewName`. It is smaller than
 // the web hero on purpose — a preview inside a settings screen, not a page.
 
-import { BodoniModa_500Medium, useFonts } from '@expo-google-fonts/bodoni-moda';
+// The weight's own entry point: the package index would bundle all 18 files.
+import { Fraunces_400Regular } from '@expo-google-fonts/fraunces/400Regular';
+import { useFonts } from '@expo-google-fonts/fraunces/useFonts';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
@@ -82,8 +85,8 @@ export function BookingProfilePreview({
   preparingImage,
   onPressImage,
 }: BookingProfilePreviewProps) {
-  const [serifLoaded] = useFonts({ BodoniModa_500Medium });
-  const serif = { fontFamily: serifLoaded ? 'BodoniModa_500Medium' : SERIF_FALLBACK };
+  const [serifLoaded] = useFonts({ Fraunces_400Regular });
+  const serif = { fontFamily: serifLoaded ? 'Fraunces_400Regular' : SERIF_FALLBACK };
   const presentation = description.trim();
   const { width: windowWidth, fontScale } = useWindowDimensions();
   const [panelWidth, setPanelWidth] = useState<number>();
@@ -283,10 +286,10 @@ const styles = StyleSheet.create({
     right: -2,
     width: 26,
   },
-  // The family encodes the weight (500): no fontWeight, as in AppText. The
-  // line box is Bodoni Moda's own (1.525em → 61): React Native then centres
-  // the glyph in it, and an accented initial (« É ») keeps its accent on iOS.
-  monogram: { color: lavender.lav700, fontSize: 40, letterSpacing: 0, lineHeight: 61 },
+  // The family encodes the weight (400): no fontWeight, as in AppText. The
+  // line box is Fraunces' own (1.233em → 50): React Native then centres the
+  // glyph in it, and an accented initial (« É ») keeps its accent on iOS.
+  monogram: { color: lavender.lav700, fontSize: 40, letterSpacing: 0, lineHeight: 50 },
   // Size, leading, tracking and top inset: `layoutPreviewName`.
   name: { alignSelf: 'stretch', color: colors.foreground, textAlign: 'center' },
   // web: border-t pt-5, text-base leading-7, text-foreground/80, centred.
