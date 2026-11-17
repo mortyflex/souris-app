@@ -1607,3 +1607,59 @@ select count(*) from public.online_booking_request_counters;                    
 
 The counters are ephemeral (expired windows are deleted by later calls). To clear them during a
 test session: `delete from public.online_booking_request_counters;` — never needed in operation.
+
+## Online booking location privacy — NOT applied on Staging, NOT applied on Production (waits for the coordinated rollout)
+
+`migrations/20261020120000_add_online_booking_location_privacy.sql` — BY HAND, after the
+request-limit migration. Contract, legacy behavior, old builds and rollout order:
+`docs/architecture/ONLINE_BOOKING.md` §11.
+
+It adds four nullable columns to `business_booking_profiles` (`address_visibility`,
+`address_street`, `address_postal_code`, `address_city` — no default: every existing profile
+becomes unconfigured, i.e. PRIVATE), ONE guarded CHECK backed by `online_booking_location_issue`,
+the owner RPC `online_booking_update_location` (`authenticated`), the internal
+`online_booking_public_location`, and replaces the bodies of `online_booking_owner_profile_json`
+(+ four owner keys) and `online_booking_public_profile` (+ `location`; `address` becomes the
+`FULL_ADDRESS`-only alias and the legacy free-text column is no longer read). No row is
+rewritten — the legacy `address` text is kept — and no other object, flag or grant is touched.
+Safe to re-run.
+
+**Effect at once:** every page online stops showing its address (legacy text) until its
+professional explicitly chooses `FULL_ADDRESS` or `CITY_ONLY` — on Staging, `studio-esthetique`.
+That is the approved behavior — and the reason it is NOT applied yet: the app shipped today
+has no control to choose a level. Order (`ONLINE_BOOKING.md` §11.7, each step separately approved):
+1. the contract committed and verified; 2. the native location settings; 3. compatible
+public-web consumers (read `location`, never fall back to `address`); 4. Staging apply, with
+explicit authorization only; 5. every level verified on Staging; 6. Production separately
+authorized. Never restore the public visibility of a legacy address automatically.
+
+Requires `20261015120000` and `20261018120000` (applied on Staging, not on Production). On
+Production it goes with the online-booking rollout, BEFORE publication is enabled there.
+
+After applying, verify:
+
+```sql
+select column_name, is_nullable, column_default from information_schema.columns
+ where table_schema = 'public' and table_name = 'business_booking_profiles' and column_name like 'address_%'
+ order by 1;                                                    -- 4 rows: YES | NULL
+select count(*) filter (where address_visibility is null) as unconfigured, count(*) as profiles,
+       count(*) filter (where address is not null) as legacy_texts_kept
+  from public.business_booking_profiles;                       -- unconfigured = profiles
+select conname from pg_constraint
+ where conrelid = 'public.business_booking_profiles'::regclass
+   and conname = 'business_booking_profiles_location_rule';     -- 1 row
+select has_function_privilege('anon', 'public.online_booking_update_location(uuid,text,text,text,text)', 'execute'),
+       has_function_privilege('authenticated', 'public.online_booking_update_location(uuid,text,text,text,text)', 'execute'),
+       has_function_privilege('service_role', 'public.online_booking_update_location(uuid,text,text,text,text)', 'execute');
+-- false | true | false
+select has_function_privilege('anon', 'public.online_booking_public_profile(text)', 'execute'),
+       has_function_privilege('authenticated', 'public.online_booking_public_profile(text)', 'execute'),
+       has_function_privilege('service_role', 'public.online_booking_public_profile(text)', 'execute');
+-- false | false | true
+-- The whole public answer of a published page (no legacy text anywhere; location and address NULL):
+select public.online_booking_public_profile('<slug>');
+```
+
+Nothing to roll back in data: the migration writes no row. Any later change of the public
+behavior is a NEW forward migration — never an edit of this one, and never a return to
+publishing the legacy free text (decision 1).

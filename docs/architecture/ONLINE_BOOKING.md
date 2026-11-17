@@ -6,9 +6,19 @@ hours — and Sprint 2 — public profile and booking settings). A customer can 
 `/r/<slug>/reserver` without an account (§10); the website reaches the engine through two
 server-side endpoints protected by request limits counted in the database. The flow is open only
 where `ONLINE_BOOKING_WEB_BOOKING=enabled` and never on the production website; creation stays
-closed by its own operator switch (`ONLINE_BOOKING_CREATION`). No confirmation email exists. The
-Sprint 3C-A migration is applied on Staging (validated); the Sprint 3C-B migration
-(`20261019120000_create_online_booking_request_limits.sql`) is applied to no Supabase project.
+closed by its own operator switch (`ONLINE_BOOKING_CREATION`). No confirmation email exists.
+
+Migration state:
+
+| Migration | Staging | Production |
+| --- | --- | --- |
+| `20261015120000` … `20261018120000` (Sprints 2 – 3C-A) | applied | not applied |
+| `20261019120000_create_online_booking_request_limits.sql` (Sprint 3C-B) | applied | not applied |
+| `20261020120000_add_online_booking_location_privacy.sql` (§11) | **NOT applied** — prepared in the repository | **NOT applied** |
+
+Production states as recorded in `supabase/README.md`. The location privacy migration waits for
+its coordinated rollout (§11.7): once applied, the public read returns a location only as the
+professional's explicit publication level allows, and never the legacy free-text address.
 
 ## 1. Shape
 
@@ -39,7 +49,7 @@ Plus › Horaires              ──RPC──▶  business_working_hours       
 | Caller | Access |
 | --- | --- |
 | `anon` | nothing — no grant on any object of the feature |
-| owner (`authenticated`) | `online_booking_read_profile`, `online_booking_update_profile`, `online_booking_set_state`, `online_booking_read_working_hours`, `online_booking_save_working_day`, `online_booking_read_conflicts` (§9.5); Storage select/insert/delete inside her own media folder |
+| owner (`authenticated`) | `online_booking_read_profile`, `online_booking_update_profile`, `online_booking_set_state`, `online_booking_read_working_hours`, `online_booking_save_working_day`, `online_booking_read_conflicts` (§9.5), `online_booking_update_location` (§11, once its migration is applied); Storage select/insert/delete inside her own media folder |
 | website (`service_role`, secret key, server-only) | `online_booking_public_profile(slug)`, `online_booking_public_availability(slug, service, date)` (§8), `online_booking_create_booking(…)` (§9) and `online_booking_take_request_quota(counters)` (§10) only |
 | operator (SQL Editor) | `online_booking_set_publication_enabled(boolean)`; `online_booking_set_creation_enabled(boolean)` (§9); `online_booking_working_intervals(…)` (§7.4); the internal availability and booking functions and the `business_bookable_services` opt-ins (§8) |
 
@@ -50,7 +60,9 @@ Plus › Horaires              ──RPC──▶  business_working_hours       
 - The public read returns ten fields — `slug`, `name`, `description`, `phone`, `email`, `address`,
   `logo_path`, `cover_path`, `time_zone`, `booking_enabled` — and `NULL` for an unknown, malformed,
   draft, unpublished or offline slug alike. Never a Business id, an owner, a subscription fact, a
-  client, an appointment or an amount.
+  client, an appointment or an amount. Once `20261020120000` is applied it returns eleven: the
+  `location` the professional's publication level allows, and `address` only as the complete
+  address of a `FULL_ADDRESS` page — never the legacy free text (§11).
 - Public image paths start with `media_id`, a random identifier that exists only for that purpose.
   The private `business-media` bucket (Client and Product photos) is untouched and stays private.
 - Bucket `business-public-media`: public, JPEG only, 2 MB. Path
@@ -153,7 +165,9 @@ indexing of public pages, server-side cleanup of unreferenced images; for workin
 hours, exceptional days and time off, overnight intervals, showing the hours on the public page,
 and any effect on the Agenda; for availability: the professional's editor of bookable services
 and of the booking rules, parallel booking during processing time, multi-staff availability,
-booking several services at once.
+booking several services at once; for the location (§11): the app's location settings, the
+website's reading of `location` (city-only rendering included), maps, directions links,
+coordinates, and the location in confirmations, emails or calendar exports.
 
 ## 7. Weekly working hours (Sprint 3A)
 
@@ -690,7 +704,8 @@ counters live in the database every instance shares.
   formatted in the time zone the server returned (`formatTimeInZone`, explicit `timeZone`) —
   never the browser's or the server's zone. « Horaires à l’heure de Paris. » says which clock.
 - The confirmation shows what the engine confirmed: the reference, the service, the local date,
-  start – end, the professional (her published name, and address if published).
+  start – end, the professional (her published name, and address if published — after
+  `20261020120000`, exactly what the profile's location level allows, never more: §11.10).
 - **No price**: the public contract (`online_booking_public_profile`,
   `online_booking_public_availability`, the booking answer) exposes none, and the website does
   not read restricted tables to find one. Showing prices needs a deliberate change of the public
@@ -760,3 +775,222 @@ review step). No migration, no npm dependency.
   on a hosted deployment.
 - The availability reads are NOT challenged (read-only, rate-limited; a single-use token per date
   change would cost the customer for little).
+
+## 11. Location privacy — the server-enforced contract (implementation unit 1)
+
+`supabase/migrations/20261020120000_add_online_booking_location_privacy.sql` — prepared in the
+repository, **NOT applied to Staging, NOT applied to Production** (§11.7 says when it may be).
+Database only: the app's settings, the website's rendering,
+maps, directions, confirmation emails and calendar exports are later units (§11.8 – §11.10).
+
+Where a professional works is HER decision. She chooses ONE publication level; the public SQL
+function alone decides what leaves the database. No client — the app, the website, a future email
+— receives a value and is trusted to hide it.
+
+### 11.1 The four states
+
+| `address_visibility` | What `online_booking_public_profile` returns |
+| --- | --- |
+| `FULL_ADDRESS` | street, postal code, city, and a plain-text directions destination built from them |
+| `CITY_ONLY` | the city name — nothing else: no street, number, postal code, full address, coordinates or directions query |
+| `HIDDEN` | no location |
+| `NULL` — never chosen | no location: the SAME answer as `HIDDEN`, so the public cannot tell them apart |
+
+Approved product decisions (November 2026):
+
+1. A profile without an explicit choice is **private**. Its legacy free-text `address` is kept
+   for the professional and never returned to the website again.
+2. `CITY_ONLY` returns the city name only.
+3. A booking never overrides the choice (§11.10).
+4. No level is preselected: the professional chooses explicitly, and `NULL` can never be chosen
+   back — `HIDDEN` is the explicit private choice.
+
+### 11.2 Storage and THE location rule
+
+Four nullable `text` columns on `business_booking_profiles`, no default (every existing row is
+unconfigured): `address_visibility`, `address_street`, `address_postal_code`, `address_city`. No
+coordinates are stored or computed. The legacy `address` column is kept, unchanged and private.
+
+ONE rule, `online_booking_location_issue(visibility, street, postal code, city)` — NULL or the
+first broken rule — backs the table's CHECK (`business_booking_profiles_location_rule`, so the SQL
+Editor cannot store a level its data cannot honor either) AND the owner save:
+
+| Reason | Meaning |
+| --- | --- |
+| `INVALID_VISIBILITY` | not `FULL_ADDRESS`, `CITY_ONLY` or `HIDDEN` (the save also refuses a missing level) |
+| `INVALID_STREET` | not 1 … 200 characters of plain single-line text in its cleaned form |
+| `INVALID_POSTAL_CODE` | not 3 … 10 letters or digits, single inner spaces or hyphens (`69001`, `1000`, `SW1A 1AA`, `12345-678`) |
+| `INVALID_CITY` | not 1 … 100 characters of plain single-line text in its cleaned form (a line break cannot smuggle a postal code into a city) |
+| `MISSING_STREET`, `MISSING_POSTAL_CODE` | `FULL_ADDRESS` without them |
+| `MISSING_CITY` | `FULL_ADDRESS` or `CITY_ONLY` without a city |
+
+"Plain text" and "cleaned" are the booking engine's own rules (`online_booking_is_plain_text`,
+`online_booking_clean_text`, §9.3): no control character, no line or paragraph separator, no
+bidirectional override, no edge whitespace the device's `trim()` would remove. `HIDDEN` requires
+nothing; what it stores stays private.
+
+### 11.3 The owner save — `online_booking_update_location`
+
+`online_booking_update_location(business, visibility, street, postal_code, city)` — `authenticated`
+only, `SECURITY DEFINER`, `search_path = ''`, ownership checked first (42501 otherwise: another
+professional, a signed-out session, an unknown Business). Everything is sent together; a blank text
+clears the stored value; texts are stored cleaned. Needs no subscription and works whatever the
+publication state — the public read applies the level at its next request.
+
+- `{ status: 'UPDATED', …owner view }`;
+- `{ status: 'INVALID_LOCATION', reason }` — a reason of §11.2. Nothing is written, not even the
+  empty draft.
+
+It never reads nor writes the legacy `address`, the slug or the publication state. The owner view
+(`online_booking_read_profile` and every owner answer) gains `address_visibility`,
+`address_street`, `address_postal_code` and `address_city`; it keeps the legacy `address` (her
+data).
+
+### 11.4 The public contract
+
+`online_booking_public_profile(slug)` keeps its signature, its `service_role`-only grant and its
+gate (published AND `online_booking_may_be_public` at read time — the same NULL for every page that
+is not online). It no longer reads the legacy `address` column. Its answer gains ONE key,
+`location`, built by `online_booking_public_location` (not client-callable), which fails closed: a
+combination THE rule refuses publishes nothing, never a degraded part of it.
+
+```jsonc
+// FULL_ADDRESS
+"location": { "visibility": "FULL_ADDRESS", "street": "12 avenue Jean Jaurès", "postal_code": "69007",
+              "city": "Lyon", "directions_destination": "12 avenue Jean Jaurès, 69007 Lyon" },
+"address": "12 avenue Jean Jaurès\n69007 Lyon"
+// CITY_ONLY
+"location": { "visibility": "CITY_ONLY", "city": "Lyon" },
+"address": null
+// HIDDEN, or never chosen
+"location": null,
+"address": null
+```
+
+- `address` is a **compatibility alias** for a website deployed before the migration: the complete
+  address on two lines under `FULL_ADDRESS`, `NULL` otherwise. It is built from `location`, so it
+  can never say more. New code reads `location` only.
+- `directions_destination` is plain text, never a URL: a client builds a directions link itself,
+  percent-encoding it for a known maps host. It exists under `FULL_ADDRESS` only.
+- Availability (`online_booking_public_availability`) and the booking answer
+  (`online_booking_book`) carry no location, before and after the migration; `online_bookings`
+  stores none.
+
+### 11.5 Legacy profiles — private by default
+
+The migration rewrites no row: every existing profile becomes unconfigured, so its page stays
+online WITHOUT a location. On Staging this is intended for `studio-esthetique`: its address
+disappears from `staging.beautizzy.fr` at the website's next request (the profile fetch is
+`no-store`, no redeploy) and stays hidden until its professional explicitly chooses
+`FULL_ADDRESS`. The free text is never parsed into the new fields (BeautIzzy never invents a
+street or a city); the professional types her address once in the new settings.
+
+### 11.6 Installed builds and deployed websites
+
+- **App builds that predate the location settings** keep working: `online_booking_update_profile`
+  (nine arguments) is unchanged and still stores the free text, the owner view only gains keys
+  (`toBookingProfile` copies the keys it knows), and nothing is refused. But their « Adresse »
+  field — labelled « Adresse postale affichée sur votre page » — is no longer published: those
+  builds say something false until the professional updates. Their preview does not show the
+  address (`BookingProfilePreview`), so no preview misleads. They cannot choose a level, so a page
+  edited only from them shows no location.
+- **A new build that retires the free-text field** must keep sending the stored `address` back
+  through `online_booking_update_profile` (every field is sent; a blank clears): dropping it
+  silently would erase the professional's private text.
+- **A website deployed before the migration** reads `address` only: it shows the complete address
+  of a `FULL_ADDRESS` page and nothing otherwise — a `CITY_ONLY` page shows no city until the
+  website reads `location` (under-disclosure, never over-disclosure).
+- **A website that reads `location`, deployed before the migration**, finds no `location` key and
+  must show no location — it must never fall back to `address` (which still holds the raw legacy
+  text until the migration is applied).
+
+### 11.7 Coordinated rollout — the migration is NOT applied yet
+
+The app shipped today has no control to choose a level. Applying the migration now would hide the
+Staging page's address (§11.5) with no way for its professional to choose one again. So the
+migration waits, in this order — each step separately approved:
+
+1. Commit and verify the privacy contract (this unit: migration, source-level guard, scratch
+   PostgreSQL evidence — §11.11).
+2. Implement the native location privacy settings (§11.8).
+3. Prepare compatible public-web consumers (§11.9, §11.6: read `location`, never fall back to
+   `address`).
+4. Apply the migration to Staging — by hand, with explicit authorization only.
+5. Verify every privacy level on Staging: `FULL_ADDRESS`, `CITY_ONLY`, `HIDDEN` and an unconfigured
+   page, by the checks of `supabase/README.md` › Online booking location privacy and the website.
+6. Production stays separately authorized: `20261015` → `20261019` and then this migration, in
+   the same Production rollout, BEFORE `ONLINE_BOOKING_PUBLICATION` is enabled there — no
+   Production page ever serves the raw free text (`supabase/README.md` records `20261015` –
+   `20261019` as not applied on Production).
+
+Dependencies: the migration requires `20261015120000` (the table, the owner view, the public read)
+and `20261018120000` (`online_booking_clean_text`, `online_booking_is_plain_text`), and sorts
+after `20261019120000` — all three applied on Staging, none on Production.
+
+Until a build with the settings exists, a level can only be chosen through the owner RPC with the
+professional's own session: there is no operator path, and writing the columns from the SQL
+Editor is a hosted data change that needs explicit authorization.
+
+**Never restore the public visibility of a legacy address automatically** — not by a migration,
+not by a backfill, not by an operator default. A location becomes public only through its
+professional's explicit choice.
+
+### 11.8 How the native settings will use the contract (unit 2 — not built)
+
+- Read the four values from `online_booking_read_profile`; show the level chooser with NOTHING
+  selected while `address_visibility` is `NULL`; save through `online_booking_update_location`
+  with the four fields together; map `INVALID_LOCATION` + `reason` to the field; mirror THE rule
+  in the domain (like `validateWorkingDay`) to refuse before calling — the server stays the
+  authority.
+- The legacy free text, when present, is shown as a private hint to retype, never as the published
+  address, and never parsed.
+- The settings say what the page will show, from the same rule (`CITY_ONLY` → the city only).
+- Settings need connectivity, like the rest of the profile: nothing is queued, no sync aggregate.
+
+### 11.9 How the website will consume the contract (unit 3 — not built)
+
+- `parsePublicProfile` validates `location` strictly — exactly the two shapes of §11.4, anything
+  else reads as no location — and stops reading `address`.
+- The profile page, the booking flow (slot summary, review, confirmation) and any metadata take the
+  parsed `location`, never a raw field: `FULL_ADDRESS` → address lines (+ a directions link built
+  from `directions_destination`, percent-encoded, to a known maps host — later, with the map
+  unit); `CITY_ONLY` → the city alone, no pin precision, no directions; nothing otherwise.
+- Every read stays `no-store`, so a level change applies at the next request.
+
+### 11.10 The same level on every channel
+
+A booking never discloses more than the page: the confirmation step shows the same `location` as
+the profile it was booked from. Every future channel — the confirmation email, reminders, a
+calendar export (`.ics` `LOCATION`), structured data or Open Graph, a share card — must resolve the
+location through `online_booking_public_location` (or the public read) at the moment it renders,
+never from the columns, never from the legacy `address`, never from a value captured earlier: a
+professional who hides her address after a booking is respected by every later message.
+`CITY_ONLY` writes the city only; `HIDDEN` and unconfigured write no location (point to contacting
+the professional instead).
+
+### 11.11 Tests
+
+- Mobile (Jest): `src/infrastructure/supabase/__tests__/online-booking-location-migration.test.ts`
+  (source-level guard: ordering, additive nullable columns, no row rewritten, ONE rule behind the
+  CHECK and the save, exact grants, ownership first, owner view keys, public keys, the legacy
+  column never read by the public function, the `CITY_ONLY` shape, no coordinate or URL).
+- Real PostgreSQL (scratch harness outside the repository, populated world built with every
+  earlier migration, legacy addresses published the old way, then this migration applied twice):
+  every existing row untouched and unconfigured; legacy pages online without a location;
+  `FULL_ADDRESS`, `FULL_ADDRESS` → `CITY_ONLY` → `HIDDEN` → back; blank and partial fields; every
+  refusal reason, writing nothing; accepted postal codes of several countries; the CHECK against
+  the table owner; the public shape failing closed; cross-owner, signed-out, `anon`,
+  `service_role` and grant-less callers refused; exact function and table privileges; drafts,
+  unpublished pages and the operator switch; a new profile without a choice; an old build's
+  free-text save after the migration; availability unchanged; a booking, its idempotent replay
+  and its answer carrying no location, the page's level unchanged after it; a leak sweep of
+  every online page in every state — 142 checks. The Sprint 2, 3A, 3B, 3C-A and 3C-B harnesses
+  still pass with the migration on top (182 / 147 / 172 / 255 + 57 concurrency / 43), their
+  exact-shape expectations updated for `location`, the four owner keys and the new grant only.
+- Limitation, deliberate: the repository has no PostgreSQL test harness and no PostgreSQL
+  dependency — SQL behavior is verified by scratch scripts outside it (`CLOUD_SYNC.md` §13
+  policy, followed by every migration since). Retaining these scenarios as executable repository
+  tests would need new test infrastructure (an embedded PostgreSQL or PGlite, a role stub, a
+  runner), out of this unit's scope. The repository keeps the source-level guard; the harness and
+  its logs are preserved outside the repository; `supabase/README.md` › Online booking location
+  privacy lists the checks to run on a hosted project after applying.

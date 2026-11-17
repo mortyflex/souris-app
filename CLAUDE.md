@@ -728,6 +728,16 @@ Implemented (same reference, §10): the PUBLIC booking flow on `/r/<slug>/reserv
 - times are the server's: starts are its labels, ends are formatted in the time zone it returned, never the browser's;
 - no price is shown (the public contract has none) and no confirmation email is sent — the page says so.
 
+Prepared, applied nowhere yet (same reference, §11): the location privacy contract (`20261020120000`) — the professional chooses ONE publication level, and the public SQL function alone decides what leaves the database.
+
+- `FULL_ADDRESS` (street, postal code, city, a plain-text directions destination), `CITY_ONLY` (the city name only), `HIDDEN` and never chosen (`NULL`) — the last two publish no location and answer identically;
+- a profile without an explicit choice is PRIVATE; the legacy free-text `address` is kept for the owner and never returned publicly again; never parse it into the structured fields;
+- no level is preselected: `online_booking_update_location` (owner only) refuses a save without one; ONE rule (`online_booking_location_issue`) backs the table's CHECK and that save;
+- `online_booking_public_location` is THE public shape (fails closed); the public read's `address` is only its `FULL_ADDRESS` alias for older websites — new code reads `location`, never `address`;
+- a booking never discloses more than the page: every confirmation, email, calendar export or share card resolves the location through that same shape when it renders — never from the columns, never from the legacy text;
+- no coordinates, no map provider, no URL built in the database;
+- applying it waits for the coordinated rollout (same reference, §11.7): native settings and compatible web consumers first, then Staging with explicit authorization, Production separately; never restore a legacy address's public visibility automatically.
+
 Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, prices on public pages, holding a slot, customer accounts, payments, the editor of bookable services.
 
 Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
