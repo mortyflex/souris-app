@@ -1768,3 +1768,86 @@ account's call answers 42501.
 
 Nothing to roll back in data: the migration writes no row. A later change of the contract is a
 NEW forward migration — never an edit of this one.
+
+## Online booking multi-service — NOT applied on Staging, NOT applied on Production (prepared in the repository)
+
+`migrations/20261022120000_add_online_booking_multi_service.sql` — BY HAND. Contract, rules,
+answers, races and rollout: `docs/architecture/ONLINE_BOOKING.md` §13.
+
+It adds the database contract of booking an ordered selection of 1 to 8 distinct services as ONE
+appointment: two website functions (`service_role` only) —
+`online_booking_public_selection_availability(slug, service ids, date?)` and
+`online_booking_create_selection_booking(slug, service ids, start, first name, last name, email,
+phone, selection fingerprint, idempotency key)` — and ten internal functions granted to nobody
+(the slot rule by length `online_booking_compute_slots_for_minutes`, its revalidation, the
+selection rules, resolution, fingerprint, answers and THE selection booking transaction
+`online_booking_book_selection`). It replaces IN PLACE ONE function, `online_booking_compute_slots`
+(same signature, same answers: it now hands its catalogue length to the rule by length). On
+`online_bookings` it adds the nullable `services jsonb` (the ordered snapshots of a selection
+booking), drops NOT NULL on `service_id` / `service_name` (NULL on a selection record) and adds
+the CHECK `online_bookings_shape` (exactly one representation per record), which every existing
+row satisfies. No row is written, no flag is flipped, no privilege on a table changes, the offline
+sync and the single-service functions (`online_booking_book`, `online_booking_create_booking`,
+`online_booking_slot_is_available`, `online_booking_public_availability`) are not touched. Safe to
+re-run.
+
+**Order.** Requires `20261021120000` (service publication) — so it is applied only AFTER it, and
+after its **activation gate** (above) is decided. Does NOT need `20261020120000` (location privacy)
+and shares no object with it: either order gives the same result (verified on a real PostgreSQL).
+**Apply it alone: Dashboard › SQL Editor › paste this ONE file › Run** — never `supabase db push`
+on Staging (the recorded history stops at `20261014120000`; a replay would run `20261015` –
+`20261020` again).
+
+**Effect at once:** none that a customer or a professional can see. No website calls the two new
+functions yet (the website unit D2 is not built); the deployed single-service flow keeps its
+endpoints and answers; existing booking records keep their values and replay as before.
+
+After applying, verify:
+
+```sql
+-- Twelve new functions, two of them executable by service_role only; nothing for anon/authenticated.
+select p.proname,
+       has_function_privilege('anon', p.oid, 'execute') as anon,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('online_booking_compute_slots_for_minutes', 'online_booking_minutes_slot_is_available',
+                     'online_booking_selection_rules', 'online_booking_selection_issue', 'online_booking_resolve_selection',
+                     'online_booking_selection_fingerprint', 'online_booking_selection_availability_json',
+                     'online_booking_public_selection_availability', 'online_booking_selection_request_issue',
+                     'online_booking_selection_booking_json', 'online_booking_book_selection',
+                     'online_booking_create_selection_booking', 'online_booking_compute_slots')
+ order by 1;   -- 13 rows; false | false | true for the two *_selection_* website functions, false ×3 elsewhere
+-- The booking record: one new nullable column, two relaxed columns, one CHECK; existing rows untouched.
+select column_name, is_nullable, data_type from information_schema.columns
+ where table_schema = 'public' and table_name = 'online_bookings'
+   and column_name in ('services', 'service_id', 'service_name', 'duration_minutes') order by 1;
+select count(*) filter (where services is null and service_id is not null) as single_service,
+       count(*) filter (where services is not null) as selections
+  from public.online_bookings;                                    -- every existing row: single_service
+select pg_get_constraintdef(oid) from pg_constraint
+ where conrelid = 'public.online_bookings'::regclass and conname = 'online_bookings_shape';
+-- RLS still on, no API privilege on the record.
+select relrowsecurity from pg_class where oid = 'public.online_bookings'::regclass;          -- true
+select count(*) from information_schema.role_table_grants
+ where table_schema = 'public' and table_name = 'online_bookings'
+   and grantee in ('anon', 'authenticated', 'service_role');                                  -- 0
+-- A page online: one service through the selection read answers the single-service starts.
+select public.online_booking_public_selection_availability('<slug>', array['<service id>'], '<YYYY-MM-DD>');
+select public.online_booking_public_availability('<slug>', '<service id>', '<YYYY-MM-DD>');
+```
+
+A test booking is NOT part of the verification: creation stays behind `ONLINE_BOOKING_CREATION`,
+and a booking writes a real appointment into the professional's agenda.
+
+Behaviour (real PostgreSQL, scratch harness kept outside the repository like the others): the
+single-service answers recorded before the migration and compared after it (2 801 answers, no row
+changed); selections of one, two and eight services; the customer's order; the whole span against
+an independent oracle; waiting phases; breaks, closed days, calendar blocks, notice and window;
+every refusal; `SELECTION_TOO_LONG`, `DOES_NOT_FIT`, `SELECTION_CHANGED`; the written appointment,
+items, phases and record; idempotency; rollback on a failure mid-way; six races; both migration
+orders — 133 checks. The earlier online-booking harnesses still pass with it on top.
+
+Nothing to roll back in data: the migration writes no row. A later change of the contract is a
+NEW forward migration — never an edit of this one.

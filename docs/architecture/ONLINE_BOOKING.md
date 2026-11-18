@@ -16,13 +16,17 @@ Migration state:
 | `20261019120000_create_online_booking_request_limits.sql` (Sprint 3C-B) | applied | not applied |
 | `20261020120000_add_online_booking_location_privacy.sql` (§11) | **NOT applied** — prepared in the repository | **NOT applied** |
 | `20261021120000_add_online_booking_service_publication.sql` (§12) | **NOT applied** — prepared in the repository | **NOT applied** |
+| `20261022120000_add_online_booking_multi_service.sql` (§13) | **NOT applied** — prepared in the repository | **NOT applied** |
 
 Production states as recorded in `supabase/README.md`. The location privacy migration waits for
 its coordinated rollout (§11.7): once applied, the public read returns a location only as the
 professional's explicit publication level allows, and never the legacy free-text address. The
 service publication migration (§12) is independent of it — neither needs the other, either may be
 applied first (§12.8): once applied, the professional chooses her bookable services herself and
-each public service carries its price, description and category.
+each public service carries its price, description and category. The multi-service contract (§13)
+needs the service publication migration — so it waits for that activation gate too — and is
+independent of the location one: once applied, the database can offer and book an ordered
+selection of up to eight services as ONE appointment; no website calls it yet.
 
 ## 1. Shape
 
@@ -170,7 +174,8 @@ indexing of public pages, server-side cleanup of unreferenced images; for workin
 hours, exceptional days and time off, overnight intervals, showing the hours on the public page,
 and any effect on the Agenda; for availability: an editor of the booking rules (the screen
 choosing the bookable services is built — §12.6 — and works once `20261021120000` is applied), parallel booking during processing time, multi-staff availability,
-booking several services at once; for the location (§11): the app's location settings, the
+booking several services at once on the website (the database contract exists — §13 — and nothing
+calls it yet), packages, the same service twice in one booking; for the location (§11): the app's location settings, the
 website's reading of `location` (city-only rendering included), maps, directions links,
 coordinates, and the location in confirmations, emails or calendar exports.
 
@@ -1026,7 +1031,7 @@ the professional instead).
 `supabase/migrations/20261021120000_add_online_booking_service_publication.sql` — prepared in the
 repository, **NOT applied to Staging, NOT applied to Production** (§12.8 says how it may be).
 Database only, functions only: the app screen (§12.6), the website's display of descriptions and
-prices, and booking several services at once (§12.9) are later units.
+prices, and booking several services at once (§12.9; its database contract is §13) are later units.
 
 ### 12.1 What it settles
 
@@ -1282,9 +1287,10 @@ written it for herself.
 - The gate holds afterwards for any selection made in the SQL Editor instead of by the
   professional: the app screen (§12.6) is where she sees the public text before she chooses.
 
-### 12.9 Approved decisions for booking several services (NOT built)
+### 12.9 Approved decisions for booking several services
 
-Recorded so the next units implement them as decided (November 2026):
+Recorded so the next units implement them as decided (November 2026). The database contract
+follows them (§13, Unit D1); the website (D2) is not built:
 
 - at most **eight distinct services** per booking, and **twelve hours** of cumulative duration as
   a hard ceiling;
@@ -1326,3 +1332,211 @@ availability of a selection is THE slot rule applied to the sum of its durations
   255 + 57 / 43 / 142), their expectations changed only for the two owner grants, the seven new
   functions and the three public keys; booking creation, concurrency and request limits also pass
   in the Staging order, without `20261020120000` (255 / 57 / 43).
+
+## 13. Booking several services — the database contract (catalogue expansion, Unit D1)
+
+`supabase/migrations/20261022120000_add_online_booking_multi_service.sql` — prepared in the
+repository, **NOT applied to Staging, NOT applied to Production** (§13.10 says how it may be).
+Database and server contract only: the website keeps its single-service flow and its two
+endpoints unchanged; the unit that lets a customer choose several services (D2) is not built.
+
+### 13.1 What it settles
+
+A customer may book an **ordered selection of 1 to 8 distinct bookable services** as **ONE
+Appointment** holding one item per service, in her order, each item with the catalogue phases of
+its service — the Appointment the app itself builds (`build-appointment.ts`), pulled by the device
+through the normal sync. The decisions of §12.9 are implemented as recorded; nothing else is:
+no package, no service twice, nothing booked during a waiting phase.
+
+### 13.2 THE slot rule, by length — the single service unchanged
+
+The slot rule of §8.2 is now written ONCE, by length:
+`online_booking_compute_slots_for_minutes(business, minutes, date, now)` is the Sprint 3B query
+word for word, the service's length a parameter (a source-level test pins the identity). The
+single service uses it with its catalogue length: `online_booking_compute_slots` keeps its
+signature, is replaced in place and only delegates. `online_booking_slot_is_available`,
+`online_booking_availability_json`, `online_booking_public_availability`, `online_booking_book`
+and `online_booking_create_booking` are not touched.
+
+Parity is proven, not assumed: on a populated real database (two Businesses, ten services incl.
+private, inactive, deleted, foreign and unknown ids, two bookings and a calendar block), every
+single-service answer was recorded before the migration and compared after it — the slots of
+every date from the day before the window to beyond its end at three instants, the revalidation of
+the first and last start and of an off-grid one, every availability answer, the public gate of
+four slugs and a replay: **2 801 recorded answers** (each a whole day of slots, a revalidation or
+a whole answer) **identical**, no row of any table changed.
+
+### 13.3 A selection — THE rules
+
+- **Shape** (`online_booking_selection_issue`, reads no table): `EMPTY` (no id), `MALFORMED`
+  (not one list, a null or blank id, edge spaces, more than 200 characters), `TOO_MANY` (more than
+  8), `DUPLICATE` (one occurrence of each service).
+- **Limits** in ONE place (`online_booking_selection_rules`): 8 services; the booking rules'
+  maximum length (`online_booking_rules`, 12 hours) for the whole selection.
+- **Resolution** (`online_booking_resolve_selection`): each id must name a bookable service of
+  THIS Business — selected by the professional AND eligible, through the public service shape of
+  `20261021120000` (§12.2, §12.5). Another professional's, private, inactive, deleted or unknown
+  service is the same `UNKNOWN_SERVICE`, naming the first such id in the customer's order.
+- **Order**: the customer's, never sorted. Items are written `item_order` 0, 1, 2… in the order of
+  the ids sent; the order is part of the request (§13.6).
+- **Length**: the sum of the services' catalogue phases, waiting phases included. An appointment's
+  items run one after the other (`calculateAppointmentTimeline`) and an appointment blocks its full
+  span (§8.2, rule 5): the selection is THE slot rule applied to that sum — the whole span inside
+  one working interval, never across a break, no busy interval met (appointments, calendar
+  blocks), notice, horizon, 15-minute local grid, time zone and DST as for one service.
+
+### 13.4 The availability of a selection
+
+`online_booking_public_selection_availability(slug, service_ids, date?)` — `service_role` only,
+the gate of the single-service read (published, `booking_enabled`, `online_booking_may_be_public`
+at read time; `NULL` otherwise). The answer keeps the single-service envelope (`time_zone`,
+`slot_minutes`, `first_date`, `last_date`, `services` — the public catalogue) and adds:
+
+| `status` | Meaning |
+| --- | --- |
+| `INVALID_SELECTION` + `reason` | the shape rule refused the ids (§13.3) |
+| `UNKNOWN_SERVICE` + `service_id` | the first id that is not a bookable service of this page |
+| `SELECTION_TOO_LONG` + `selection`, `max_minutes` | longer than 12 hours |
+| `DOES_NOT_FIT` + `selection`, `longest_interval_minutes` | longer than every working interval of the window: no date can offer it — said once, without a date |
+| `CHOOSE_DATE` + `selection` | no date asked |
+| `OUT_OF_WINDOW` + `selection`, `date` | outside the booking window |
+| `SLOTS` + `selection`, `date`, `slots` | the starts of THE slot rule for the whole length (may be empty: a closed or full day) |
+
+`selection` = `{ services: [public service shape, in her order], duration_minutes, fingerprint }`.
+A Business with no working interval at all in the window answers empty days, as for one service —
+its agenda is closed, the selection is not "too long".
+
+### 13.5 What the customer was shown — the fingerprint
+
+The prices, names and lengths booked are the catalogue's at the instant of the booking, decided
+under the Business lock; nothing is read from the caller. So that a customer never books something
+other than what she saw, the availability answer carries a `fingerprint`: the sha256 of the
+ordered snapshots `[{ id, name, duration_minutes, price_cents }]` (`'selection-v1'` prefix).
+The booking sends it back; under the lock, the server reads the snapshots ONCE and compares —
+a different name, length or price answers **`SELECTION_CHANGED`** and books nothing; the website
+reads the availability again and shows the new values. A description or category change alters
+nothing booked, so it is not part of it. A client-provided total is never accepted.
+
+### 13.6 The booking transaction
+
+`online_booking_create_selection_booking(slug, service_ids, starts_at, first_name, last_name,
+email, phone, selection_fingerprint, idempotency_key)` → `online_booking_book_selection(…, now)`
+— `service_role` only, behind the same creation switch (`ONLINE_BOOKING_CREATION`). New names;
+the single-service functions are not overloaded. All or nothing, in this order:
+
+1. READ COMMITTED (25001 otherwise); the switch is ON; the request is well-formed —
+   `online_booking_selection_request_issue`: the key, the ids (§13.3), the fingerprint (64 hex
+   digits), then every other field through THE single-service rule (§9.3); the slug names a
+   profile;
+2. the Business is LOCKED — THE lock of §9.2, 3 seconds at most (`BUSY`);
+3. the idempotency key is looked up: the same request answers the stored booking again,
+   byte-identical; another request under the key is `IDEMPOTENCY_KEY_REUSED`;
+4. everything is decided AGAIN, from committed data: published, `booking_enabled`, THE
+   publication rule; every service bookable (`UNKNOWN_SERVICE`); the snapshots read once and
+   compared with the fingerprint (`SELECTION_CHANGED`); the total within 12 hours
+   (`SELECTION_TOO_LONG`); the start still offered by THE slot rule for the whole length
+   (`online_booking_minutes_slot_is_available` — `SLOT_UNAVAILABLE`);
+5. THE Client rule of §9.3 (a reliable match reused, never modified; otherwise identity and
+   contact only);
+6. ONE Appointment (`SCHEDULED`, the app's staff identifier, the « Réservation en ligne » note),
+   then one item per service, `<appointment>-item-<n>` in her order, each written from the
+   snapshot read at step 4 (name, type, price) with its catalogue phases under their own ids;
+   each item's phases must add up to its snapshot length — a catalogue change committed between
+   the read and the copy fails the whole booking (40001, retry with the same key);
+7. the booking record, with the ordered snapshots (§13.7).
+
+| Answer | Meaning |
+| --- | --- |
+| `NULL` | nothing can be booked here (as §9.2) |
+| `INVALID_REQUEST` + `field` (+ `reason` for `service_ids`) | the first unacceptable field |
+| `BUSY`, `IDEMPOTENCY_KEY_REUSED`, `SLOT_UNAVAILABLE` | as §9.2 |
+| `UNKNOWN_SERVICE` + `service_id` | the first id not bookable any more |
+| `SELECTION_CHANGED` | a name, length or price is not what the customer was shown |
+| `SELECTION_TOO_LONG` | longer than 12 hours |
+| `BOOKED` + `booking` | `reference`, `services` (id, name, duration, in order), `duration_minutes` (total), `starts_at`, `ends_at`, `local_date`, `local_time`, `time_zone` — never a Business, Client or Appointment id, never an amount |
+
+### 13.7 The booking record — additive
+
+`online_bookings` gains ONE nullable column, `services jsonb`: the ordered snapshots
+`[{ id, name, duration_minutes, price_cents }]` of a selection booking. `service_id` and
+`service_name` lose their NOT NULL: they name the service of a single-service record and are
+`NULL` on a selection record, which has several. A CHECK (`online_bookings_shape`) keeps exactly
+one representation per record (and 1 to 8 snapshots). `duration_minutes` is the booked length in
+both shapes — the sum, for a selection. Every existing row is a single-service record: it
+satisfies the CHECK, keeps its values, and replays through `online_booking_book` as before. The
+`services` of a selection record hash to the fingerprint it was booked with. No reader of the
+record needs a service column: overlaps (§9.5) read the Appointment's phases, the client re-attach
+trigger reads the contact.
+
+### 13.8 Idempotency, concurrency, rollback
+
+- The request hash covers the ids **in order** (`to_jsonb(ids)`), the fingerprint, the start and
+  the customer key of §9.2: the same services in another order are a different request. A
+  single-service key sent to the selection entry point, or the reverse, is
+  `IDEMPOTENCY_KEY_REUSED` — never an answer built from the other shape.
+- One booking of a Business at a time (THE lock): a single-service booking, a selection booking,
+  the owner's page changes and service selection are serialized together. Twelve identical
+  submissions give ONE appointment and twelve identical answers; twelve customers on one start —
+  selections, or selections and single services mixed on overlapping spans — give exactly ONE
+  booking; an owner withdrawing a selected service and a booking in flight wait for each other.
+- A failure at any step leaves nothing: no Client, Appointment, item, phase or record.
+
+### 13.9 Security
+
+The Sprint 2 – 3C model unchanged: the two website functions are granted to `service_role` only,
+keyed by the public slug, behind the publication gate (and the creation switch); `anon`,
+`authenticated` and any other role have nothing; every internal function is revoked from every API
+role; `search_path` is pinned on all of them; no table privilege changes; RLS on `online_bookings`
+unchanged (enabled, no policy, no grant). Nothing of the offline sync is touched: the Appointment
+reaches the device through the normal pull.
+
+### 13.10 Deployment — after `20261021120000`; independent of `20261020120000`; by hand only
+
+- **Requires `20261021120000`** (the eligibility rule and the public service shape), and through
+  it `20261015` – `20261018`. It therefore waits for the **activation gate of §12.8**: it cannot
+  be applied before the service publication migration is.
+- **Does not need `20261020120000`** and shares no object with it (no function, no address
+  column; a source-level test checks both directions). Verified on a real PostgreSQL: `20261015`
+  … `20261019`, `20261021`, `20261022` (Staging as it would be), then `20261020` on top, compared
+  with the filename order — the same functions, definitions, privileges, columns, constraints and
+  grants.
+- **Apply it alone, by hand** (SQL Editor, one file), after `20261021120000` — never through
+  tooling that replays unrecorded files (§12.8: `supabase db push` on Staging would replay
+  `20261015` – `20261020`). Re-running it is harmless.
+- Nothing to roll back in data: the migration writes no row. The relaxed NOT NULL and the CHECK
+  accept every existing record.
+
+### 13.11 What the website unit (D2) will do — not built
+
+Keep the selected ids in the session; read `online_booking_public_selection_availability`
+through its own endpoint; show the total length, and a total price only when every selected price
+is positive (« Tarif à confirmer » otherwise); send the fingerprint back with the booking and, on
+`SELECTION_CHANGED`, read the availability again; clear the selection after `BOOKED`. Turnstile,
+the request limits, idempotency (ONE key per attempt) and the endpoint checks of §10 apply
+unchanged. The deployed endpoints and the single-service flow are not changed by D1.
+
+### 13.12 Tests
+
+- Mobile (Jest): `online-booking-multi-service-migration.test.ts` — source-level guard: ordering;
+  the only table change; exact function list, ONE function replaced with its signature, no
+  overload; the Sprint 3B query word for word, by length; booking creation, gates, limits and
+  publication not redefined; no object shared with the location migration, both directions; ONE
+  place for the limits; the customer's order kept; the status order of the availability; the
+  booking steps in order under ONE lock; the only writes; items from the snapshot read; per-item
+  lengths; the order-sensitive request hash; no amount in the answer; grants; outside the sync;
+  no caller yet. The five migration-ordering guards list the new file.
+- Real PostgreSQL (scratch harness outside the repository, `supabase/README.md` › Online booking
+  multi-service) — 133 checks: the single-service parity (§13.2); objects and privileges; one,
+  two and eight services; the order; the span against an independent oracle; waiting phases;
+  breaks, closed days, calendar blocks, notice, window; every shape refusal; every ineligible id;
+  `SELECTION_TOO_LONG`, `DOES_NOT_FIT`; the public gates; the written Appointment, items, phases
+  and record; the pull; idempotency (order, start, customer, fingerprint, cross-shape keys,
+  legacy replay); every refusal writing nothing; price, length and name changes
+  (`SELECTION_CHANGED`) — a description change still books; deactivation; the gates; the record
+  CHECK; a failure on the second item and a phase change during the copy, both rolling everything
+  back; a deleted Client; six races on separate connections; both migration orders compared. The
+  Sprint 2, 3A, 3B, 3C-A, 3C-B, location and service publication harnesses still pass with it on
+  top (230 / 147 / 170 / 255 + 57 / 43 / 142 / 234), their expectations changed only for the two
+  new `service_role` grants and the five new functions their filters see; booking creation,
+  concurrency and request limits also pass in the Staging order, without `20261020120000`
+  (255 / 57 / 43).

@@ -748,9 +748,19 @@ Prepared, applied nowhere yet (same reference, §12): the service publication co
 - the app screen « Prestations proposées en ligne » (Plus › Réservation en ligne, `src/features/online-booking/services/`) is implemented: it reads the SERVER's list, never the device's catalogue, saves each switch at once (nothing shown as saved before the server confirms; a failure puts the server's state back), shows the public text before it is published, and reads a project without the migration as « pas encore disponible »;
 - ACTIVATION GATE: applying it is a publication act — the description, price and category of every service ALREADY selected enter the public answer at once, whatever the website shows; never apply it to a hosted project before it is decided how previously selected services are reviewed or consented to (same reference, §12.8);
 - independent of the location privacy migration: it never defines `online_booking_public_profile` nor `online_booking_owner_profile_json`; either may be applied first — by hand, one file, never `supabase db push` on Staging (it would replay `20261020120000`);
-- approved for the multi-service unit, NOT built: at most eight distinct services and twelve hours per booking, one occurrence each, the customer's order kept, one working interval, ONE atomic transaction, session-only selection ids.
+- the multi-service unit's database contract is prepared (§13 below); its website (session-only selection ids) is NOT built.
 
-Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, a price in the booking summary, review or confirmation, holding a slot, customer accounts, payments, booking several services at once.
+Prepared, applied nowhere yet (same reference, §13): the multi-service contract (`20261022120000`) — an ordered selection of 1 to 8 distinct bookable services booked as ONE Appointment, one item per service.
+
+- THE slot rule is written once, by length (`online_booking_compute_slots_for_minutes`): the single service delegates to it (`online_booking_compute_slots`, same signature, same answers — parity proven), a selection uses the sum of its catalogue phases, waiting phases included; never duplicate the slot rule;
+- ONE place for the limits (`online_booking_selection_rules`: 8 services, 12 hours) and ONE shape rule (`online_booking_selection_issue`: no duplicate, one occurrence each); every id is resolved through the public service shape of `20261021120000`, in the customer's order — never sorted;
+- ONE website read, `online_booking_public_selection_availability(slug, ids, date)`, and ONE write, `online_booking_create_selection_booking(…, selection fingerprint, idempotency key)` → `online_booking_book_selection`, `service_role` only, behind the same gates and switch; new names, never an overload — the single-service read and booking functions untouched;
+- under THE Business lock the server decides every service, length, price and slot again; a `fingerprint` of what was shown (names, lengths, prices, in order) answers `SELECTION_CHANGED` when the catalogue changed — never trust a client-provided total; the answer carries no amount;
+- the order is part of the idempotency hash; all or nothing: one Appointment, `<appointment>-item-<n>` in her order, each with its catalogue phases;
+- `online_bookings.services` (nullable jsonb) holds the ordered snapshots of a selection record; `service_id` / `service_name` are NULL on it; ONE CHECK keeps one representation per record; legacy records are untouched;
+- requires `20261021120000` — so it waits for its ACTIVATION GATE —, independent of `20261020120000`; by hand, one file, never `supabase db push` on Staging.
+
+Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, a price in the booking summary, review or confirmation, holding a slot, customer accounts, payments, booking several services at once on the website, packages.
 
 Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
 

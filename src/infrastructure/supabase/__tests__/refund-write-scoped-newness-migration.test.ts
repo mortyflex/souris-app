@@ -48,6 +48,7 @@ describe('sale adjustments — the new refund is the row the write inserted (202
       '20261019120000_create_online_booking_request_limits.sql',
       '20261020120000_add_online_booking_location_privacy.sql',
       '20261021120000_add_online_booking_service_publication.sql',
+      '20261022120000_add_online_booking_multi_service.sql',
     ]);
     for (const name of later) {
       const source = readFileSync(join(MIGRATIONS_DIR, name), 'utf8').replace(/^\s*--.*$/gm, '');

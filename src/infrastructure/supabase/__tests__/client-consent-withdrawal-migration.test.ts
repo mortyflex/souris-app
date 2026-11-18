@@ -51,6 +51,7 @@ describe('Phase 6.5C step 8 — client consent withdrawal migration', () => {
       '20261019120000_create_online_booking_request_limits.sql',
       '20261020120000_add_online_booking_location_privacy.sql',
       '20261021120000_add_online_booking_service_publication.sql',
+      '20261022120000_add_online_booking_multi_service.sql',
     ]);
     expect(names.filter((name) => name.includes('consent_withdrawal'))).toEqual([MIGRATION_NAME]);
     expect(step4).not.toMatch(/sync_withdraw_client_sms_consent/);
