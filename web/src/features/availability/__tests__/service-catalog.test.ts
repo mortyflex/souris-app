@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BookableService } from "../availability";
 import {
+  descriptionParagraphs,
   formatServicePrice,
   groupBookableServices,
   isClamped,
@@ -103,5 +104,28 @@ describe("isClamped", () => {
     expect(isClamped({ scrollHeight: 48, clientHeight: 48 })).toBe(false);
     // Sub-pixel rounding is not truncation.
     expect(isClamped({ scrollHeight: 49, clientHeight: 48 })).toBe(false);
+  });
+});
+
+describe("descriptionParagraphs", () => {
+  it("splits on blank lines and keeps the line breaks inside a paragraph", () => {
+    expect(descriptionParagraphs("Un soin complet.\n\nNettoyage, gommage\npuis masque.")).toEqual(["Un soin complet.", "Nettoyage, gommage\npuis masque."]);
+  });
+
+  it("makes no empty paragraph from runs of blank lines, blank lines with spaces, or edges", () => {
+    expect(descriptionParagraphs("\n\nA.\n \n\n\t\nB.\n\n")).toEqual(["A.", "B."]);
+    expect(descriptionParagraphs("A.\r\n\r\nB.\r\nC.")).toEqual(["A.", "B.\nC."]);
+  });
+
+  it("adds nothing and cuts nothing: the server's words, in order", () => {
+    const text = "Première phrase sans point final\n\nDeuxième — avec « guillemets » et 1 000 caractères au plus";
+    const paragraphs = descriptionParagraphs(text);
+    expect(paragraphs.join("\n\n")).toBe(text);
+    expect(paragraphs.join("")).not.toContain("…");
+  });
+
+  it("keeps a one-paragraph description whole, and reads blank text as nothing", () => {
+    expect(descriptionParagraphs("Rehaussement et teinture des cils.\nVenez sans lentilles.")).toEqual(["Rehaussement et teinture des cils.\nVenez sans lentilles."]);
+    expect(descriptionParagraphs("  \n \n")).toEqual([]);
   });
 });

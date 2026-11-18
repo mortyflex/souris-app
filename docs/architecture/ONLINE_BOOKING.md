@@ -736,10 +736,21 @@ counters live in the database every instance shares.
   - Price: the server's `price_cents` only — « 45 € », « 45,50 € »; `0` reads « Tarif à
     confirmer », never « gratuit »; « Les tarifs affichés sont indicatifs. » once under the list.
     Nothing suggests an online payment (the page takes none).
-  - Description: plain text, rendered as text (never markup), line breaks kept; two lines first,
-    « Voir le détail » / « Réduire » only when the two lines actually hide some of it (measured in
-    the browser); no placeholder without one. The control is a separate button from « Choisir »
-    (`aria-expanded`, `aria-controls`) — never a button inside a button.
+  - Description: plain text, rendered as text (never markup), line breaks kept; the card shows a
+    two-line preview and never grows — « Voir le détail » only when the two lines actually hide some
+    of it (measured in the browser); no placeholder without one. The control is a separate button
+    from « Choisir » / « Ajouter » (`aria-haspopup="dialog"`) — never a button inside a button.
+  - « Voir le détail » opens the whole description in ONE native modal `<dialog>`
+    (`service-detail-dialog.tsx`): a centered modal (about 600 px) from the `sm` breakpoint, a
+    bottom sheet on a phone (as tall as its content, 85 % of the viewport at most, above the safe
+    area). Name (Fraunces), category, duration, price (« Tarif à confirmer » for 0), one paragraph
+    per blank line; the description scrolls inside it, the page behind does not
+    (`data-scroll-lock`). The browser makes the page inert and closes it on Escape; the backdrop
+    closes it too (`src/lib/modal-dialog.ts`), « Fermer le détail » gets the first focus and the
+    focus returns to « Voir le détail ». It changes nothing of the booking: selection, order, date,
+    time, details and fingerprint are untouched.
+  - From `sm`, two columns: the cards of a row share its height and their actions one baseline —
+    a row is at most as tall as its longest name, the description never adding more than two lines.
   - Categories: hers in her order (position, then id), « Autres prestations » last; a catalogue
     with no category, or a single group, keeps the plain list without a heading.
   - In the single-service flow, still ONE service per booking: « Choisir » selects it and moves

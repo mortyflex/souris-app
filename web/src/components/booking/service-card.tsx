@@ -3,10 +3,12 @@
 import { useEffect, useId, useRef, useState, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
-import { CheckIcon, ChevronDownIcon, ClockIcon, CloseIcon, PlusIcon } from "@/components/ui/icons";
+import { CheckIcon, ChevronRightIcon, ClockIcon, CloseIcon, PlusIcon } from "@/components/ui/icons";
 import { formatDuration, type BookableService } from "@/features/availability/availability";
 import { formatServicePrice, isClamped, PRICE_TO_CONFIRM } from "@/features/availability/service-catalog";
 import { cn } from "@/lib/utils";
+
+import { ServiceDetailDialog } from "./service-detail-dialog";
 
 /**
  * ONE bookable service, as a customer chooses it: its name, its duration, its
@@ -15,14 +17,18 @@ import { cn } from "@/lib/utils";
  * actions — never a button inside a button:
  *
  *   * « Choisir » selects the service (the flow then moves on);
- *   * « Voir le détail » / « Réduire » opens and closes the whole description,
+ *   * « Voir le détail » opens the whole description in a dialog (a modal on
+ *     a tablet or a desktop, a bottom sheet on a phone: ServiceDetailDialog),
  *     offered only when the two lines actually hide some of it.
  *
- * The description is plain text rendered as text (React escapes it; it is
- * never interpreted as markup); its line breaks are kept. Collapsed, it is
- * clipped at two lines and, when some of it is hidden, the end of the second
- * line fades out — no ellipsis glyph, so no « lumineux.… ». Without one, the
- * card simply has none — no empty placeholder.
+ * The card never grows: the description stays a two-line preview, so a long
+ * one never makes a row of the grid tall; the cards of a row share its height
+ * and their actions sit at the bottom, on one line. It is plain
+ * text rendered as text (React escapes it; it is never interpreted as
+ * markup); its line breaks are kept. It is clipped at two lines and, when some
+ * of it is hidden, the end of the second line fades out — no ellipsis glyph,
+ * so no « lumineux.… ». Without one, the card simply has none — no empty
+ * placeholder. Opening and closing the detail changes nothing of the booking.
  *
  * When a booking holds several services (`selectionAction`), the action is
  * the only part that changes: « Ajouter » appends the service to the end of
@@ -54,39 +60,48 @@ export interface ServiceCardProps {
 }
 
 export function ServiceCard(props: ServiceCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [truncated, setTruncated] = useState(false);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement>(null);
 
-  // Measured while the two lines are applied — and again whenever the card's
-  // width changes (rotation, window resize). The observer's first callback runs
+  // Measured on the two-line preview — and again whenever the card's width
+  // changes (rotation, window resize). The observer's first callback runs
   // before the next paint, so the control never flickers in.
   useEffect(() => {
     const element = descriptionRef.current;
-    if (element === null || expanded || typeof ResizeObserver === "undefined") return;
+    if (element === null || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => setTruncated(isClamped(element)));
     observer.observe(element);
     return () => observer.disconnect();
-  }, [expanded, props.service.description]);
+  }, [props.service.description]);
 
   return (
-    <ServiceCardView
-      {...props}
-      descriptionRef={descriptionRef}
-      expanded={expanded}
-      truncated={truncated}
-      onToggleDetail={() => setExpanded((current) => !current)}
-    />
+    <>
+      <ServiceCardView
+        {...props}
+        descriptionRef={descriptionRef}
+        detailTriggerRef={detailTriggerRef}
+        detailOpen={detailOpen}
+        truncated={truncated}
+        onOpenDetail={() => setDetailOpen(true)}
+      />
+      {detailOpen ? (
+        <ServiceDetailDialog service={props.service} returnFocusRef={detailTriggerRef} onClosed={() => setDetailOpen(false)} />
+      ) : null}
+    </>
   );
 }
 
 export interface ServiceCardViewProps extends ServiceCardProps {
-  /** The whole description is shown. */
-  readonly expanded: boolean;
   /** The two lines hide part of the description (measured by `ServiceCard`). */
   readonly truncated: boolean;
-  readonly onToggleDetail: () => void;
+  /** The detail dialog is open. */
+  readonly detailOpen?: boolean;
+  readonly onOpenDetail: () => void;
   readonly descriptionRef?: Ref<HTMLParagraphElement>;
+  /** « Voir le détail »: the focus comes back to it when the dialog closes. */
+  readonly detailTriggerRef?: Ref<HTMLButtonElement>;
 }
 
 /** The card itself, without state: what the two measured facts mean on screen. */
@@ -96,10 +111,11 @@ export function ServiceCardView({
   disabled = false,
   headingLevel,
   onChoose,
-  expanded,
   truncated,
-  onToggleDetail,
+  detailOpen = false,
+  onOpenDetail,
   descriptionRef,
+  detailTriggerRef,
   selectionAction,
 }: ServiceCardViewProps) {
   const baseId = useId();
@@ -107,7 +123,7 @@ export function ServiceCardView({
   const descriptionId = `${baseId}-description`;
   const Heading = headingLevel === 3 ? "h3" : "h4";
   const price = formatServicePrice(service.priceCents);
-  const offersDetail = service.description !== undefined && (truncated || expanded);
+  const offersDetail = service.description !== undefined && truncated;
   const position = selectionAction?.position;
   const highlighted = selectionAction === undefined ? selected : position !== undefined;
 
@@ -154,16 +170,14 @@ export function ServiceCardView({
         <p
           ref={descriptionRef}
           id={descriptionId}
-          data-collapsed={expanded ? undefined : ""}
+          data-preview=""
           className={cn(
-            "type-body-small whitespace-pre-line text-foreground/75 [overflow-wrap:anywhere]",
-            // Collapsed: exactly two lines, clipped. Not `line-clamp`: its built-in « … »
-            // landed after the period of a paragraph that ends the second line
-            // (« lumineux.… »). A browser without the `lh` unit shows the whole text.
-            !expanded && "relative max-h-[2lh] overflow-hidden",
+            // Exactly two lines, clipped — never more in the card. Not `line-clamp`: its
+            // built-in « … » landed after the period of a paragraph that ends the second
+            // line (« lumineux.… »). A browser without the `lh` unit shows the whole text.
+            "type-body-small relative max-h-[2lh] overflow-hidden whitespace-pre-line text-foreground/75 [overflow-wrap:anywhere]",
             // Some of it is hidden: the end of the second line fades out instead.
-            !expanded &&
-              truncated &&
+            truncated &&
               "after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:h-[1lh] after:w-16 after:bg-[linear-gradient(to_right,transparent,var(--color-background))]",
           )}
         >
@@ -175,17 +189,16 @@ export function ServiceCardView({
       <div className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         {offersDetail ? (
           <button
+            ref={detailTriggerRef}
             type="button"
-            aria-expanded={expanded}
-            aria-controls={descriptionId}
-            onClick={onToggleDetail}
-            className="type-label inline-flex min-h-11 items-center gap-1.5 rounded-full text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700 focus-visible:outline-2 focus-visible:outline-offset-2"
+            aria-haspopup="dialog"
+            aria-expanded={detailOpen}
+            onClick={onOpenDetail}
+            className="type-label inline-flex min-h-11 items-center gap-1 rounded-full text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700 focus-visible:outline-2 focus-visible:outline-offset-2"
           >
-            {expanded ? "Réduire" : "Voir le détail"}
-            <ChevronDownIcon
-              size={16}
-              className={cn("transition-transform duration-[var(--bz-duration-state)]", expanded && "rotate-180")}
-            />
+            Voir le détail
+            <span className="sr-only"> de {service.name}</span>
+            <ChevronRightIcon size={16} />
           </button>
         ) : null}
         {selectionAction === undefined ? (

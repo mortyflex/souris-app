@@ -42,9 +42,8 @@ describe("the service card — « Ajouter » / « Retirer »", () => {
         selected={false}
         headingLevel={3}
         onChoose={noop}
-        expanded={false}
         truncated
-        onToggleDetail={noop}
+        onOpenDetail={noop}
         selectionAction={{ canAdd: true, limitId: SELECTION_LIMIT_ID, onAdd: noop, onRemove: noop }}
         {...props}
       />,
@@ -55,7 +54,7 @@ describe("the service card — « Ajouter » / « Retirer »", () => {
     expect(text(markup)).toContain("Ajouter Coupe à votre sélection");
     expect(markup).not.toContain("Choisir");
     expect(markup.match(/<button/g)).toHaveLength(2);
-    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('aria-haspopup="dialog"');
   });
 
   it("a selected service shows its place in her order, « Ajoutée » and « Retirer »", () => {

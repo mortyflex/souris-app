@@ -34,6 +34,13 @@
     }
   }
 
+  /* A modal dialog is open (`data-scroll-lock`): the page behind it stays still — only the
+     dialog scrolls. The gutter keeps the page from shifting when its scrollbar goes away. */
+  html:has(dialog[data-scroll-lock][open]) {
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+
   :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;

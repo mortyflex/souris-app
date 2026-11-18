@@ -421,6 +421,8 @@ function ServiceList({
   const chosen = selection?.services.map((service) => service.id) ?? [];
   const canAdd = chosen.length < MAX_SELECTED_SERVICES;
   const cards = (list: readonly BookableService[]) => (
+    // Two columns from `sm`: the cards of a row share its height and their actions one baseline. The
+    // description is a two-line preview (ServiceCard), so a row is never taller than its longest name.
     <ul aria-busy={loading || undefined} className="grid gap-3 sm:grid-cols-2 sm:gap-4">
       {list.map((service) => {
         const index = chosen.indexOf(service.id);

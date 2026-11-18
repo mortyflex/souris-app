@@ -26,7 +26,7 @@ const legacy: BookableService = { id: "svc-coupe", name: "Coupe", durationMinute
 
 const view = (props: Partial<Parameters<typeof ServiceCardView>[0]> = {}) =>
   renderToStaticMarkup(
-    <ServiceCardView service={soin} selected={false} headingLevel={3} onChoose={noop} expanded={false} truncated={false} onToggleDetail={noop} {...props} />,
+    <ServiceCardView service={soin} selected={false} headingLevel={3} onChoose={noop} truncated={false} onOpenDetail={noop} {...props} />,
   );
 
 describe("ServiceCard — what a customer reads", () => {
@@ -48,7 +48,7 @@ describe("ServiceCard — what a customer reads", () => {
     const markup = view({ service: legacy, truncated: true });
     expect(markup).not.toContain("data-price");
     expect(markup).not.toMatch(/€|Tarif/);
-    expect(markup).not.toContain("data-collapsed");
+    expect(markup).not.toContain("data-preview");
     expect(markup).not.toContain("Voir le détail");
     expect(text(markup)).toContain("Coupe");
     expect(text(markup)).toContain("45 min");
@@ -60,27 +60,35 @@ describe("ServiceCard — what a customer reads", () => {
 });
 
 describe("ServiceCard — the description", () => {
-  it("shows two lines first, its line breaks kept, as text", () => {
+  it("shows a two-line preview, its line breaks kept, as text", () => {
     const markup = view();
-    expect(markup).toMatch(/<p[^>]*data-collapsed=""[^>]*class="[^"]*whitespace-pre-line[^"]*max-h-\[2lh\] overflow-hidden[^"]*"[^>]*>Un soin complet/);
+    expect(markup).toMatch(/<p[^>]*data-preview=""[^>]*class="[^"]*max-h-\[2lh\] overflow-hidden whitespace-pre-line[^"]*"[^>]*>Un soin complet/);
     expect(markup).toContain("Un soin complet en trois temps.\n\nNettoyage, gommage puis masque.\nVenez sans maquillage.");
   });
 
-  it("offers « Voir le détail » only when the two lines hide part of it", () => {
+  it("offers « Voir le détail » only when the two lines hide part of it — a dialog trigger named after its service", () => {
     expect(view({ truncated: false })).not.toContain("Voir le détail");
     const markup = view({ truncated: true });
-    expect(markup).toMatch(/<button type="button" aria-expanded="false" aria-controls="([^"]+)"[^>]*>Voir le détail/);
-    // The control points at the description it opens.
-    const controls = /aria-controls="([^"]+)"/.exec(markup)?.[1];
-    expect(markup).toContain(`<p id="${controls}"`);
+    expect(markup).toMatch(
+      /<button type="button" aria-haspopup="dialog" aria-expanded="false"[^>]*>Voir le détail<span class="sr-only"> de Soin du visage avec masque<\/span>/,
+    );
+    // Never the inline expansion of before.
+    expect(markup).not.toMatch(/Réduire|aria-controls/);
   });
 
-  it("shows the whole text once opened, and « Réduire » to close it again", () => {
-    const markup = view({ truncated: true, expanded: true });
-    expect(markup).not.toContain("data-collapsed");
-    expect(markup).not.toContain("max-h-[2lh]");
-    expect(markup).toMatch(/<button type="button" aria-expanded="true"[^>]*>Réduire/);
-    expect(markup).not.toContain("Voir le détail");
+  it("never expands in the card: the preview stays two lines while the detail is open", () => {
+    const markup = view({ truncated: true, detailOpen: true });
+    expect(markup).toMatch(/<p[^>]*data-preview=""[^>]*class="[^"]*max-h-\[2lh\] overflow-hidden/);
+    expect(markup).toMatch(/<button type="button" aria-haspopup="dialog" aria-expanded="true"[^>]*>Voir le détail/);
+    expect(markup).not.toContain("Réduire");
+    // The dialog is not part of the card: the stateful card renders it beside it, in the top layer.
+    expect(markup).not.toContain("<dialog");
+  });
+
+  it("fills its grid row, its actions at the bottom: the cards of a row end, and act, on one line", () => {
+    const markup = view({ truncated: true });
+    expect(markup).toMatch(/^<article[^>]*class="flex h-full flex-col /);
+    expect(markup).toMatch(/<div class="mt-auto flex flex-wrap items-center justify-between[^"]*">/);
   });
 
   it("clips at two lines without the browser's ellipsis, and fades the second line only when text is hidden", () => {
@@ -92,8 +100,7 @@ describe("ServiceCard — the description", () => {
       expect(markup).not.toContain("…");
     }
     expect(view({ truncated: false })).not.toContain("after:bg-[linear-gradient");
-    expect(view({ truncated: true })).toMatch(/<p[^>]*data-collapsed=""[^>]*class="[^"]*after:bg-\[linear-gradient\(to_right,transparent,var\(--color-background\)\)\]/);
-    expect(view({ truncated: true, expanded: true })).not.toContain("after:bg-[linear-gradient");
+    expect(view({ truncated: true })).toMatch(/<p[^>]*data-preview=""[^>]*class="[^"]*after:bg-\[linear-gradient\(to_right,transparent,var\(--color-background\)\)\]/);
     // The text itself is never shortened: the whole description is always in the page.
     expect(view({ truncated: true })).toContain("Venez sans maquillage.");
   });
@@ -105,10 +112,11 @@ describe("ServiceCard — the description", () => {
     expect(markup).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;&lt;b&gt;gras&lt;/b&gt;");
   });
 
-  it("renders no detail control before the browser measured the text (the stateful card)", () => {
+  it("renders no detail control and no dialog before the browser measured the text (the stateful card)", () => {
     const markup = renderToStaticMarkup(<ServiceCard service={soin} selected={false} headingLevel={3} onChoose={noop} />);
     expect(markup).toContain("max-h-[2lh]");
     expect(markup).not.toContain("Voir le détail");
+    expect(markup).not.toContain("<dialog");
   });
 });
 
@@ -141,6 +149,12 @@ describe("ServiceCard — two distinct actions", () => {
 describe("ServiceStep — the list", () => {
   const step = (services: readonly BookableService[], selectedId?: string) =>
     renderToStaticMarkup(<ServiceStep services={services} selectedId={selectedId} professional={professional} onChoose={noop} />);
+
+  it("lays the cards out in rows of equal height from sm (one column, each its own height, on a phone)", () => {
+    const markup = step([soin, brushing]);
+    expect(markup).toMatch(/<ul class="grid gap-3 sm:grid-cols-2 sm:gap-4">/);
+    expect(markup).not.toMatch(/<ul class="grid[^"]*items-start/);
+  });
 
   it("keeps the plain list of an older server: no heading, no price, no description", () => {
     const markup = step([legacy, { id: "svc-balayage", name: "Balayage", durationMinutes: 150 }]);

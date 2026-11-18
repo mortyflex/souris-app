@@ -94,3 +94,18 @@ export function groupBookableServices(services: readonly BookableService[]): rea
 export function isClamped(element: { readonly scrollHeight: number; readonly clientHeight: number }): boolean {
   return element.scrollHeight - element.clientHeight > 1;
 }
+
+/**
+ * A description as the detail dialog reads it: its paragraphs — split where
+ * the text has a blank line —, each with its own line breaks kept. Nothing is
+ * added (no punctuation, no ellipsis) and nothing is cut: the words are the
+ * server's, in order. Empty lines at the edges and runs of blank lines make
+ * no empty paragraph.
+ */
+export function descriptionParagraphs(description: string): string[] {
+  return description
+    .replace(/\r\n?/g, "\n")
+    .split(/\n[ \t]*(?:\n[ \t]*)+/)
+    .map((paragraph) => paragraph.replace(/^\n+|\n+$/g, ""))
+    .filter((paragraph) => paragraph.trim().length > 0);
+}
