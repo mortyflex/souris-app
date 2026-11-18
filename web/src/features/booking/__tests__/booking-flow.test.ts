@@ -251,3 +251,47 @@ describe("definitive answers", () => {
     expect(again.slot).toBeUndefined();
   });
 });
+
+describe("services with their public metadata (20261021120000) — still ONE service per booking", () => {
+  const soin: BookableService = {
+    id: "svc-soin",
+    name: "Soin du visage",
+    durationMinutes: 75,
+    description: "Nettoyage, gommage puis masque.",
+    priceCents: 8900,
+    category: { id: "cat-visage", name: "Soins du visage", position: 0 },
+  };
+
+  it("chooses one service, then another replaces it — never two", () => {
+    const first = run(initialFlowState(), { type: "CHOOSE_SERVICE", service: soin, firstDate: "2026-11-16" });
+    expect(first.step).toBe("slot");
+    expect(first.service).toEqual(soin);
+    const back = run(first, { type: "GO_TO", step: "service" }, { type: "CHOOSE_SERVICE", service: coupe, firstDate: "2026-11-16" });
+    expect(back.service).toEqual(coupe);
+    expect(back.slot).toBeUndefined();
+  });
+
+  it("sends the same request as before: the service id only — never its price, description or category", () => {
+    const state = run(
+      initialFlowState(),
+      { type: "CHOOSE_SERVICE", service: soin, firstDate: "2026-11-16" },
+      { type: "CHOOSE_SLOT", slot: two },
+      { type: "GO_TO", step: "details" },
+      { type: "EDIT_DETAIL", field: "firstName", value: "Marie" },
+      { type: "EDIT_DETAIL", field: "lastName", value: "Dupont" },
+      { type: "EDIT_DETAIL", field: "email", value: "marie@example.test" },
+      { type: "EDIT_DETAIL", field: "phone", value: "06 12 34 56 78" },
+      { type: "REVIEW_DETAILS" },
+    );
+    const plan = planSend(state, () => "key-0000000000000001");
+    expect(plan?.attempt.request).toEqual({
+      serviceId: "svc-soin",
+      startsAt: two.startsAt,
+      firstName: "Marie",
+      lastName: "Dupont",
+      email: "marie@example.test",
+      phone: "06 12 34 56 78",
+    });
+    expect(JSON.stringify(plan)).not.toMatch(/8900|priceCents|description|category/);
+  });
+});

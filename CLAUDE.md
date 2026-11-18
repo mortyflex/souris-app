@@ -726,7 +726,7 @@ Implemented (same reference, §10): the PUBLIC booking flow on `/r/<slug>/reserv
 - a booking also needs a Cloudflare Turnstile token (same reference, §10.8): ONE managed widget on the review step, the single-use token in the `X-Turnstile-Token` header (never in the body), verified server-side with Siteverify — action and the CONFIGURED site's host — BEFORE any counter; fail closed without the keys or when Cloudflare cannot answer; Cloudflare's test keys on a local site only; the secret stays server-only;
 - ONE idempotency key per booking attempt; an unknown outcome freezes the request and is retried with the SAME key and the SAME body; one request in flight at most (`web/src/features/booking/booking-flow.ts`);
 - times are the server's: starts are its labels, ends are formatted in the time zone it returned, never the browser's;
-- no price is shown (the public contract has none until `20261021120000` is applied, and the website reads none) and no confirmation email is sent — the page says so.
+- the service cards show what the server sends — name and duration always; price, description and category once `20261021120000` is applied (« Tarif à confirmer » for 0, never « gratuit »; the description as plain text, « Voir le détail » only when truncated; her categories in her order) — and nothing is invented without them; the summary, the review and the confirmation show no price, and no confirmation email is sent — the page says so.
 
 Prepared, applied nowhere yet (same reference, §11): the location privacy contract (`20261020120000`) — the professional chooses ONE publication level, and the public SQL function alone decides what leaves the database.
 
@@ -750,7 +750,7 @@ Prepared, applied nowhere yet (same reference, §12): the service publication co
 - independent of the location privacy migration: it never defines `online_booking_public_profile` nor `online_booking_owner_profile_json`; either may be applied first — by hand, one file, never `supabase db push` on Staging (it would replay `20261020120000`);
 - approved for the multi-service unit, NOT built: at most eight distinct services and twelve hours per booking, one occurrence each, the customer's order kept, one working interval, ONE atomic transaction, session-only selection ids.
 
-Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, prices, descriptions and categories on public pages (the website reads none yet), holding a slot, customer accounts, payments, booking several services at once.
+Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, a price in the booking summary, review or confirmation, holding a slot, customer accounts, payments, booking several services at once.
 
 Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
 

@@ -2,20 +2,45 @@
  * The availability of a professional, as the website may show it.
  *
  * This is the whole public contract of `online_booking_public_availability`:
- * the bookable services (name and duration), the bookable window, and the
- * start times of one service on one local date — no business identifier, no
- * client, no appointment, no price. The server computes everything; the
- * website only validates the answer and presents it.
+ * the bookable services, the bookable window, and the start times of one
+ * service on one local date — no business identifier, no client, no
+ * appointment. The server computes everything; the website only validates the
+ * answer and presents it.
+ *
+ * A service always has an id, a name and a duration. Since the service
+ * publication migration (supabase/migrations/20261021120000_add_online_booking_
+ * service_publication.sql) it MAY also carry its description, its price and its
+ * category. A server without that migration sends none of them, and the page
+ * shows none — nothing is ever invented. Each of the three is validated on its
+ * own: a malformed one is simply absent, so it can never be shown wrong, and the
+ * service itself stays bookable.
  *
  * Dates are civil dates of the professional's time zone (`YYYY-MM-DD`) and are
  * formatted as such, never through the server's or the browser's time zone.
  * Start times are UTC instants plus the professional's wall-clock label.
  */
 
+/** The professional's own category of a service. */
+export interface ServiceCategory {
+  readonly id: string;
+  readonly name: string;
+  /** Her order of the categories (0, 1, 2…; ties by id). */
+  readonly position: number;
+}
+
 export interface BookableService {
   readonly id: string;
   readonly name: string;
   readonly durationMinutes: number;
+  /** Plain text, line breaks kept; absent when there is none — or the server predates it. */
+  readonly description?: string;
+  /**
+   * The server's price in integer cents. 0 means the price is not confirmed
+   * (« Tarif à confirmer »), never « free ». Absent when the server predates it.
+   */
+  readonly priceCents?: number;
+  /** Absent: uncategorized — or the server predates categories. */
+  readonly category?: ServiceCategory;
 }
 
 export interface AvailableSlot {
@@ -67,12 +92,83 @@ export function isServiceId(value: unknown): value is string {
   return typeof value === "string" && SERVICE_ID.test(value);
 }
 
+// ---------------------------------------------------------------------------
+// Optional service metadata (20261021120000) — each one valid or absent
+// ---------------------------------------------------------------------------
+
+/** The catalogue's own limit of a description (SERVICE_DESCRIPTION_MAX_LENGTH of the app). */
+export const SERVICE_DESCRIPTION_MAX_LENGTH = 1000;
+/** Far above any real price (10 000 €): a larger number is not a price this page shows. */
+const MAX_PRICE_CENTS = 1_000_000;
+const CATEGORY_NAME_MAX_LENGTH = 120;
+
+// Character classes built from code points: no invisible character in the source.
+const BACKSLASH = String.fromCharCode(92);
+const escapeCode = (code: number) => `${BACKSLASH}u{${code.toString(16)}}`;
+const classOf = (points: ReadonlyArray<number | readonly [number, number]>) =>
+  points.map((point) => (typeof point === "number" ? escapeCode(point) : `${escapeCode(point[0])}-${escapeCode(point[1])}`)).join("");
+/** Line breaks of every kind: CR LF, CR, and the Unicode line and paragraph separators. */
+const LINE_BREAKS = new RegExp(`${BACKSLASH}r${BACKSLASH}n?|[${classOf([0x2028, 0x2029])}]`, "gu");
+/** Control characters (the line feed excepted) and bidirectional overrides and isolates. */
+const UNSAFE_CHARACTERS = new RegExp(`[${classOf([[0x00, 0x09], [0x0b, 0x1f], [0x7f, 0x9f], [0x202a, 0x202e], [0x2066, 0x2069]])}]`, "gu");
+/** What JavaScript `trim()` removes, plus the zero-width characters: never « visible ». */
+const VISIBLE = new RegExp(`[^${classOf([[0x09, 0x0d], 0x20, 0xa0, 0x1680, [0x2000, 0x200d], 0x2028, 0x2029, 0x202f, 0x205f, 0x2060, 0x3000, 0xfeff])}]`, "u");
+
+/**
+ * A description as this page shows it: plain text — never markup —, line
+ * breaks normalized to `\n` and kept (at most one blank line in a row), a tab
+ * as a space, control characters and bidirectional overrides removed, trimmed,
+ * at most the catalogue's 1 000 characters. The server already does all of
+ * this; the page does it again rather than trust any answer blindly.
+ */
+export function cleanServiceDescription(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = Array.from(
+    value
+      .replace(LINE_BREAKS, "\n")
+      .replace(/\t/g, " ")
+      .replace(UNSAFE_CHARACTERS, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+  )
+    .slice(0, SERVICE_DESCRIPTION_MAX_LENGTH)
+    .join("")
+    .trim();
+  return VISIBLE.test(cleaned) ? cleaned : undefined;
+}
+
+/** Integer cents within reason, or absent. */
+function parsePriceCents(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= MAX_PRICE_CENTS ? value : undefined;
+}
+
+function parseCategory(value: unknown): ServiceCategory | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, name, position } = value;
+  if (typeof id !== "string" || id.length < 1 || id.length > 200) return undefined;
+  if (typeof name !== "string") return undefined;
+  const label = name.replace(/\s+/g, " ").trim();
+  if (label.length === 0 || label.length > CATEGORY_NAME_MAX_LENGTH || !VISIBLE.test(label)) return undefined;
+  if (typeof position !== "number" || !Number.isInteger(position) || position < 0) return undefined;
+  return { id, name: label, position };
+}
+
 function parseService(value: unknown): BookableService | undefined {
   if (!isRecord(value)) return undefined;
   const { id, name, duration_minutes: minutes } = value;
   if (!isServiceId(id) || typeof name !== "string" || name.trim().length === 0) return undefined;
   if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1 || minutes > 24 * 60) return undefined;
-  return { id, name: name.trim(), durationMinutes: minutes };
+  const description = cleanServiceDescription(value.description);
+  const priceCents = parsePriceCents(value.price_cents);
+  const category = parseCategory(value.category);
+  return {
+    id,
+    name: name.trim(),
+    durationMinutes: minutes,
+    ...(description !== undefined ? { description } : {}),
+    ...(priceCents !== undefined ? { priceCents } : {}),
+    ...(category !== undefined ? { category } : {}),
+  };
 }
 
 function parseSlot(value: unknown): AvailableSlot | undefined {
@@ -139,7 +235,18 @@ export function parseAvailability(data: unknown): Availability | undefined {
  * very same `parseAvailability`.
  */
 export function availabilityToWire(availability: Availability): Record<string, unknown> {
-  const service = (value: BookableService) => ({ id: value.id, name: value.name, duration_minutes: value.durationMinutes });
+  // The optional metadata travels only when the server gave it, so an answer
+  // of a server without it reaches the browser exactly as it was.
+  const service = (value: BookableService) => ({
+    id: value.id,
+    name: value.name,
+    duration_minutes: value.durationMinutes,
+    ...(value.description !== undefined ? { description: value.description } : {}),
+    ...(value.priceCents !== undefined ? { price_cents: value.priceCents } : {}),
+    ...(value.category !== undefined
+      ? { category: { id: value.category.id, name: value.category.name, position: value.category.position } }
+      : {}),
+  });
   return {
     time_zone: availability.timeZone,
     slot_minutes: availability.slotMinutes,

@@ -13,6 +13,7 @@ import {
   type AvailableSlot,
   type BookableService,
 } from "@/features/availability/availability";
+import { groupBookableServices, PRICES_NOTE, showsAnyPrice } from "@/features/availability/service-catalog";
 import type { ConfirmedBooking } from "@/features/booking/booking-answer";
 import type { FlowNotice } from "@/features/booking/booking-flow";
 import type { ChallengeState } from "@/features/booking/challenge";
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 
 import { DateStrip } from "./date-strip";
 import { groupSlotsByPeriod, skeletonCount } from "./date-strip-rules";
+import { ServiceCard } from "./service-card";
 
 /**
  * The screens of the public booking flow — presentation only. State, network
@@ -37,10 +39,6 @@ export interface Professional {
   readonly email?: string;
 }
 
-const choice =
-  "rounded-[1.25rem] border text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60";
-const chosen = "border-accent bg-lavender-50 text-lavender-700";
-const notChosen = "border-border bg-background hover:bg-lavender-25";
 const quiet = "type-body-small text-foreground/70";
 const link =
   "font-medium text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700";
@@ -276,34 +274,65 @@ export function ServiceStep({
           <ContactLinks professional={professional} />
         </div>
       ) : (
-        <ul aria-busy={loading || undefined} className="grid gap-3 sm:grid-cols-2">
-          {services.map((service) => {
-            const selected = service.id === selectedId;
-            return (
-              <li key={service.id}>
-                <button
-                  type="button"
-                  aria-pressed={selected}
-                  disabled={loading}
-                  onClick={() => onChoose(service)}
-                  className={cn(
-                    choice,
-                    "group flex min-h-[4.5rem] w-full items-center justify-between gap-4 px-5 py-4 shadow-card",
-                    selected ? chosen : notChosen,
-                  )}
-                >
-                  <span className="type-subtitle min-w-0 [overflow-wrap:anywhere]">{service.name}</span>
-                  <span className="type-meta inline-flex shrink-0 items-center gap-1.5 rounded-full bg-lavender-50 px-2.5 py-1 tabular-nums text-lavender-700 transition-colors duration-[var(--bz-duration-state)] group-hover:bg-background">
-                    <ClockIcon size={14} />
-                    {formatDuration(service.durationMinutes)}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <ServiceList services={services} selectedId={selectedId} loading={loading} onChoose={onChoose} />
       )}
     </section>
+  );
+}
+
+/**
+ * The services as cards, grouped by the professional's categories when the
+ * server gave some (`groupBookableServices`); a plain list otherwise — the very
+ * list a server without categories always gave. ONE selected service.
+ */
+function ServiceList({
+  services,
+  selectedId,
+  loading,
+  onChoose,
+}: {
+  services: readonly BookableService[];
+  selectedId?: string;
+  loading?: boolean;
+  onChoose: (service: BookableService) => void;
+}) {
+  const groups = groupBookableServices(services);
+  const titled = groups.some((group) => group.title !== undefined);
+  const cards = (list: readonly BookableService[]) => (
+    <ul aria-busy={loading || undefined} className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+      {list.map((service) => (
+        <li key={service.id} className="min-w-0">
+          <ServiceCard
+            service={service}
+            selected={service.id === selectedId}
+            disabled={loading}
+            headingLevel={titled ? 4 : 3}
+            onChoose={() => onChoose(service)}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <div className="flex flex-col gap-7">
+      {groups.map((group) =>
+        group.title === undefined ? (
+          <div key={group.key}>{cards(group.services)}</div>
+        ) : (
+          <section key={group.key} aria-labelledby={`booking-services-${group.key}`} className="flex flex-col gap-3.5">
+            <h3 id={`booking-services-${group.key}`} className="flex items-center gap-2.5 after:h-px after:flex-1 after:bg-border/70">
+              <span className="type-label min-w-0 [overflow-wrap:anywhere]">{group.title}</span>
+              <span className="type-meta shrink-0 text-foreground/55">
+                {group.services.length} prestation{group.services.length > 1 ? "s" : ""}
+              </span>
+            </h3>
+            {cards(group.services)}
+          </section>
+        ),
+      )}
+      {showsAnyPrice(services) ? <p className="type-meta text-foreground/60">{PRICES_NOTE}</p> : null}
+    </div>
   );
 }
 

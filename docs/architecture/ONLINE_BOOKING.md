@@ -161,9 +161,8 @@ Closing again is one statement (`…_enabled(false)`): every page goes offline, 
 ## 6. Not implemented
 
 Confirmation emails and SMS (§10.6), holding a slot, the public booking flow on the production
-website, a challenge (CAPTCHA) in front of it, prices on the public pages (§10.5 — the public
-contract carries them once §12 is applied; the website does not show them yet), service descriptions
-and categories on the public pages (same),
+website, a challenge (CAPTCHA) in front of it, a price in the summary, review or confirmation of a
+booking (the service cards show one since the catalogue unit C — §10.5),
 customer accounts, deposits, Stripe, notifications to the professional, a surface in the app for
 overlaps (§9.5) and for telling an online booking apart, customer cancellation or rescheduling,
 booking requests awaiting approval, slug history or redirects, a time-zone editor, search
@@ -718,12 +717,25 @@ counters live in the database every instance shares.
 - The confirmation shows what the engine confirmed: the reference, the service, the local date,
   start – end, the professional (her published name, and address if published — after
   `20261020120000`, exactly what the profile's location level allows, never more: §11.10).
-- **No price**: the public contract (`online_booking_public_profile`,
-  `online_booking_public_availability`, the booking answer) exposes none, and the website does
-  not read restricted tables to find one. Showing prices needs a deliberate change of the public
-  contract. That change is decided and prepared (§12.5: `price_cents` on each bookable service,
-  `0` meaning « Tarif à confirmer »); the website shows no price until its own unit, and the
-  booking answer still carries none.
+- **The service cards** (catalogue unit C, `web/src/components/booking/service-card.tsx`): each
+  bookable service shows its name, its duration and — only when the server sent them (§12.5, once
+  `20261021120000` is applied) — its price, its description and its category. A server without
+  that migration sends none, and the page shows none: the plain list of before, nothing invented.
+  Each of the three is validated on its own (`parseService`, `availability.ts`): a malformed
+  one is absent, never shown wrong, and the service stays bookable.
+  - Price: the server's `price_cents` only — « 45 € », « 45,50 € »; `0` reads « Tarif à
+    confirmer », never « gratuit »; « Les tarifs affichés sont indicatifs. » once under the list.
+    Nothing suggests an online payment (the page takes none).
+  - Description: plain text, rendered as text (never markup), line breaks kept; two lines first,
+    « Voir le détail » / « Réduire » only when the two lines actually hide some of it (measured in
+    the browser); no placeholder without one. The control is a separate button from « Choisir »
+    (`aria-expanded`, `aria-controls`) — never a button inside a button.
+  - Categories: hers in her order (position, then id), « Autres prestations » last; a catalogue
+    with no category, or a single group, keeps the plain list without a heading.
+  - Still ONE service per booking: « Choisir » selects it and moves on; the availability
+    request (service, date) and the booking request (seven keys, the service id only) are
+    unchanged. The summary, the review and the confirmation show no price, and the booking answer
+    carries none.
 
 ### 10.6 Confirmation email — not built
 
@@ -1208,7 +1220,10 @@ the parsing and error mapping in `online-booking-gateway.test.ts`.
 ### 12.7 Compatibility
 
 - **The website deployed today** reads `id`, `name` and `duration_minutes` of each service and
-  ignores every other key (`parseService`, pinned by a web test): it behaves exactly as before.
+  ignores every other key: it behaves exactly as before. **The website of unit C** (not deployed)
+  reads the three new keys when they are there and shows nothing of them when they are not
+  (pinned by web tests): it may be deployed before or after the migration. Deployed with the
+  migration applied, it SHOWS the descriptions and prices at once — the activation gate of §12.8.
   The single-service booking API — `online_booking_public_availability(slug, service, date)`,
   `online_booking_create_booking(8 arguments)`, the slot rule, the request limits — is not
   redefined; only `online_booking_bookable_services` and `online_booking_availability_json` are

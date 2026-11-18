@@ -1722,10 +1722,11 @@ Known state: Staging, ONE row — a service of `studio-esthetique`, description 
 price 0 (read 2026-11-17). Production: no opt-in table yet (`20261017120000` is recorded above as
 not applied there), so nothing is selected there before its own rollout.
 
-**Effect at once, otherwise:** none that a customer or a professional can see. The website
-deployed today reads `id`, `name`, `duration_minutes` and ignores the new keys; no app build
-calls the owner RPCs yet; the selection made in the SQL Editor (Staging: one service of
-`studio-esthetique`) is kept as it is.
+**Effect at once, otherwise:** none that a customer or a professional can see while the website
+is the one deployed today (it reads `id`, `name`, `duration_minutes` and ignores the new keys);
+the selection made in the SQL Editor (Staging: one service of `studio-esthetique`) is kept as it
+is. A website with the service cards (`ONLINE_BOOKING.md` §10.5) SHOWS the description and the
+price of every bookable service as soon as this migration is applied — the activation gate above.
 
 After applying, verify:
 

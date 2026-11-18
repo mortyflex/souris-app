@@ -61,35 +61,33 @@ describe("parseAvailability", () => {
     }
   });
 
-  it("never copies an unexpected field", () => {
+  it("never copies an unexpected field — only the approved service metadata", () => {
     const parsed = parseAvailability({
       ...slotsAnswer,
       business_id: "10000000-0000-4000-8000-00000000000a",
-      services: [{ ...base.services[0], price_cents: 4500, client: "Léa" }],
+      services: [
+        { ...base.services[0], price_cents: 4500, client: "Léa", type: "TECHNIQUE", active: true, phases: [{ id: "p" }], owner: "u" },
+      ],
       slots: [{ ...slotsAnswer.slots[0], appointment_id: "apt-1" }],
     });
-    expect(JSON.stringify(parsed)).not.toMatch(/business|price|client|appointment|4500/);
+    const json = JSON.stringify(parsed);
+    expect(json).not.toMatch(/business|client|appointment|TECHNIQUE|active|phases|owner/);
+    // The price IS public since 20261021120000 — the only new key copied from this service.
+    expect(parsed?.services[0]).toEqual({ id: "tech-couleur", name: "Couleur", durationMinutes: 90, priceCents: 4500 });
   });
 
-  it("reads the answer of a database that publishes price, description and category exactly as before", () => {
-    // supabase/migrations/20261021120000_add_online_booking_service_publication.sql: every service
-    // GAINS three keys; this website keeps reading the three it knows until it shows the others.
-    const metadata = [
-      { price_cents: 8900, description: "Application, pose, rinçage.\nSéchage non compris.", category: { id: "cat-1", name: "Couleurs", position: 0 } },
-      { price_cents: 0, description: null, category: null },
-    ];
-    const enriched = {
-      ...slotsAnswer,
-      services: base.services.map((service, index) => ({ ...service, ...metadata[index] })),
-      service: { ...slotsAnswer.service, ...metadata[0] },
-    };
-    const parsed = parseAvailability(enriched);
-    expect(parsed).toEqual(parseAvailability(slotsAnswer));
+  it("reads the answer of a server WITHOUT the service metadata exactly as before (the deployed Staging backend)", () => {
+    // A server where 20261021120000 is not applied sends three keys per service.
+    const parsed = parseAvailability(slotsAnswer);
     expect(parsed).toBeDefined();
-    // What the availability endpoint sends to the browser is unchanged too.
+    for (const service of [...parsed!.services, parsed!.service!]) {
+      expect(Object.keys(service).sort()).toEqual(["durationMinutes", "id", "name"]);
+    }
+    // The browser receives the very answer it received before: no key appears.
     expect(availabilityToWire(parsed!)).toEqual(slotsAnswer);
     for (const status of ["CHOOSE_SERVICE", "UNKNOWN_SERVICE", "CHOOSE_DATE", "OUT_OF_WINDOW"]) {
-      expect(parseAvailability({ ...enriched, status, slots: undefined })).toEqual(parseAvailability({ ...slotsAnswer, status, slots: undefined }));
+      const answer = { ...base, status };
+      expect(availabilityToWire(parseAvailability(answer)!)).toEqual(answer);
     }
   });
 
@@ -108,6 +106,99 @@ describe("parseAvailability", () => {
     ["not an object", "SLOTS"],
   ])("rejects %s", (_label, answer) => {
     expect(parseAvailability(answer)).toBeUndefined();
+  });
+});
+
+describe("service metadata (supabase/migrations/20261021120000)", () => {
+  const C = (code: number) => String.fromCharCode(code);
+  const answerWith = (service: Record<string, unknown>) => ({ ...base, status: "CHOOSE_SERVICE", services: [service] });
+  const parsedService = (extra: Record<string, unknown>) => parseAvailability(answerWith({ ...base.services[0], ...extra }))?.services[0];
+
+  it("copies the description, the price and the category the server gave", () => {
+    const service = parsedService({
+      description: "Application, pose, rinçage.\nSéchage non compris.",
+      price_cents: 8900,
+      category: { id: "cat-couleurs", name: "Couleurs", position: 2 },
+    });
+    expect(service).toEqual({
+      id: "tech-couleur",
+      name: "Couleur",
+      durationMinutes: 90,
+      description: "Application, pose, rinçage.\nSéchage non compris.",
+      priceCents: 8900,
+      category: { id: "cat-couleurs", name: "Couleurs", position: 2 },
+    });
+  });
+
+  it("reads null metadata as none — the server's way of saying there is none", () => {
+    expect(parsedService({ description: null, price_cents: null, category: null })).toEqual({
+      id: "tech-couleur",
+      name: "Couleur",
+      durationMinutes: 90,
+    });
+  });
+
+  it("keeps a zero price as 0 (« Tarif à confirmer »), never drops it", () => {
+    expect(parsedService({ price_cents: 0 })?.priceCents).toBe(0);
+  });
+
+  it.each([
+    ["negative", -100],
+    ["decimal", 45.5],
+    ["text", "4500"],
+    ["not a number", Number.NaN],
+    ["infinite", Number.POSITIVE_INFINITY],
+    ["absurdly large", 1_000_000_001],
+    ["an object", { cents: 4500 }],
+  ])("drops a %s price — and keeps the service bookable", (_label, price) => {
+    const service = parsedService({ price_cents: price });
+    expect(service).toEqual({ id: "tech-couleur", name: "Couleur", durationMinutes: 90 });
+  });
+
+  it.each([
+    ["without a position", { id: "cat", name: "Couleurs" }],
+    ["with a negative position", { id: "cat", name: "Couleurs", position: -1 }],
+    ["with an empty name", { id: "cat", name: "  ", position: 0 }],
+    ["with an invisible name", { id: "cat", name: C(0x200b), position: 0 }],
+    ["without an id", { name: "Couleurs", position: 0 }],
+    ["that is a string", "Couleurs"],
+  ])("drops a category %s — and keeps the service", (_label, category) => {
+    expect(parsedService({ category })).toEqual({ id: "tech-couleur", name: "Couleur", durationMinutes: 90 });
+  });
+
+  it("keeps a description as plain text: line breaks kept and normalized, nothing interpreted", () => {
+    expect(parsedService({ description: `Ligne 1${C(13)}${C(10)}Ligne 2${C(13)}Ligne 3${C(0x2028)}Ligne 4` })?.description).toBe(
+      "Ligne 1\nLigne 2\nLigne 3\nLigne 4",
+    );
+    expect(parsedService({ description: "A\n\n\n\n\nB" })?.description).toBe("A\n\nB");
+    expect(parsedService({ description: `Durée${C(9)}45 min` })?.description).toBe("Durée 45 min");
+    expect(parsedService({ description: `Prix ${C(0x202e)}05${C(0x202c)}${C(7)} €` })?.description).toBe("Prix 05 €");
+    // Markup stays text: React escapes it, nothing here ever renders it.
+    expect(parsedService({ description: '<img src=x onerror="alert(1)"> & <b>gras</b>' })?.description).toBe(
+      '<img src=x onerror="alert(1)"> & <b>gras</b>',
+    );
+  });
+
+  it("reads an empty, blank or invisible description as none, and bounds a long one", () => {
+    for (const description of ["", "   ", "\n\n", `${C(0xa0)}${C(0x200b)}`, 42, { text: "x" }]) {
+      expect(parsedService({ description })?.description).toBeUndefined();
+    }
+    expect(Array.from(parsedService({ description: "é".repeat(1500) })?.description ?? "")).toHaveLength(1000);
+    expect(parsedService({ description: `${"a".repeat(998)}  \n\n suite` })?.description).toBe("a".repeat(998));
+  });
+
+  it("sends the metadata on to the browser, which reads the same service again", () => {
+    const answer = {
+      ...slotsAnswer,
+      services: [
+        { ...base.services[0], description: "Texte.\nSuite.", price_cents: 8900, category: { id: "cat-1", name: "Couleurs", position: 0 } },
+        { ...base.services[1], price_cents: 0 },
+      ],
+      service: { ...slotsAnswer.service, description: "Texte.\nSuite.", price_cents: 8900, category: { id: "cat-1", name: "Couleurs", position: 0 } },
+    };
+    const parsed = parseAvailability(answer)!;
+    expect(parseAvailability(availabilityToWire(parsed))).toEqual(parsed);
+    expect(availabilityToWire(parsed)).toEqual(answer);
   });
 });
 
