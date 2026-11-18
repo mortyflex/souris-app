@@ -1798,9 +1798,13 @@ and shares no object with it: either order gives the same result (verified on a 
 on Staging (the recorded history stops at `20261014120000`; a replay would run `20261015` –
 `20261020` again).
 
-**Effect at once:** none that a customer or a professional can see. No website calls the two new
-functions yet (the website unit D2 is not built); the deployed single-service flow keeps its
-endpoints and answers; existing booking records keep their values and replay as before.
+**Effect at once — it depends on the website deployed.** A website WITHOUT the D2 code (the one
+deployed today) never calls the two new functions: nothing changes, the single-service flow keeps
+its endpoints and answers. A website WITH the D2 code (`web/`, unit D2) offers the multi-service
+flow on `/r/<slug>/reserver` as soon as this migration is applied — automatically, at the next page
+render, with NO separate flag (`docs/architecture/ONLINE_BOOKING.md` §10.9 › Activation, with the
+coordinated rollout order). Apply it only when that flow may appear. Existing booking records keep
+their values and replay as before.
 
 After applying, verify:
 

@@ -7,6 +7,9 @@ hours — and Sprint 2 — public profile and booking settings). A customer can 
 server-side endpoints protected by request limits counted in the database. The flow is open only
 where `ONLINE_BOOKING_WEB_BOOKING=enabled` and never on the production website; creation stays
 closed by its own operator switch (`ONLINE_BOOKING_CREATION`). No confirmation email exists.
+Where the database has the multi-service contract (`20261022120000`, §13), the same page offers an
+ordered selection of 1 to 8 services booked as ONE appointment (§10.9); everywhere else — Staging
+today — it keeps the single-service flow, decided by the server's own answer.
 
 Migration state:
 
@@ -174,8 +177,8 @@ indexing of public pages, server-side cleanup of unreferenced images; for workin
 hours, exceptional days and time off, overnight intervals, showing the hours on the public page,
 and any effect on the Agenda; for availability: an editor of the booking rules (the screen
 choosing the bookable services is built — §12.6 — and works once `20261021120000` is applied), parallel booking during processing time, multi-staff availability,
-booking several services at once on the website (the database contract exists — §13 — and nothing
-calls it yet), packages, the same service twice in one booking; for the location (§11): the app's location settings, the
+packages, the same service twice in one booking (several services in ONE booking: §10.9, offered only
+where `20261022120000` is applied); for the location (§11): the app's location settings, the
 website's reading of `location` (city-only rendering included), maps, directions links,
 coordinates, and the location in confirmations, emails or calendar exports.
 
@@ -612,7 +615,7 @@ Status after Sprint 3C-B (§10):
 ## 10. Public booking flow (Sprint 3C-B) — development / Staging only
 
 `web/src/app/r/[slug]/reserver/page.tsx` (the page), `web/src/app/api/booking/[slug]/` (two
-endpoints), `web/src/features/booking/` (every rule), `web/src/components/booking/booking-flow.tsx`
+endpoints — and the two of §10.9 for a selection), `web/src/features/booking/` (every rule), `web/src/components/booking/booking-flow.tsx`
 and `booking-steps.tsx` (the screens), and ONE migration,
 `supabase/migrations/20261019120000_create_online_booking_request_limits.sql`.
 
@@ -641,6 +644,8 @@ and `booking-steps.tsx` (the screens), and ONE migration,
 | --- | --- |
 | `GET /api/booking/<slug>/availability?service=&date=` | `online_booking_public_availability`, validated query (only `service` and `date`), never cached, 120 reads / 10 min per network |
 | `POST /api/booking/<slug>` | `online_booking_create_booking`; the answers of §9.2 forwarded as they are |
+| `GET /api/booking/<slug>/selection/availability?service=…&service=…&date=` | `online_booking_public_selection_availability` — a selection, in order (§10.9) |
+| `POST /api/booking/<slug>/selection` | `online_booking_create_selection_booking` — ONE appointment for a selection (§10.9) |
 
 The POST checks, each BEFORE the next and all before the engine: the gate, the slug shape, the
 origin (an `Origin` equal to the site's own; `Sec-Fetch-Site` cross-site refused), JSON only, at
@@ -737,10 +742,11 @@ counters live in the database every instance shares.
     (`aria-expanded`, `aria-controls`) — never a button inside a button.
   - Categories: hers in her order (position, then id), « Autres prestations » last; a catalogue
     with no category, or a single group, keeps the plain list without a heading.
-  - Still ONE service per booking: « Choisir » selects it and moves on; the availability
-    request (service, date) and the booking request (seven keys, the service id only) are
-    unchanged. The summary, the review and the confirmation show no price, and the booking answer
-    carries none.
+  - In the single-service flow, still ONE service per booking: « Choisir » selects it and moves
+    on; the availability request (service, date) and the booking request (seven keys, the service
+    id only) are unchanged. The summary, the review and the confirmation show no price, and the
+    booking answer carries none. The selection flow (§10.9) shows each selected price and the
+    indicative total in its summary and review — never at the confirmation.
 
 ### 10.6 Confirmation email — not built
 
@@ -806,6 +812,132 @@ review step). No migration, no npm dependency.
   on a hosted deployment.
 - The availability reads are NOT challenged (read-only, rate-limited; a single-use token per date
   change would cost the customer for little).
+
+### 10.9 Several services in ONE booking (catalogue unit D2) — where `20261022120000` is applied
+
+`web/src/features/availability/selection.ts` (the selection rules, totals and the answer parser),
+`web/src/features/booking/{booking-catalog,booking-flow,selection-request,selection-storage,create-selection-booking}.ts`,
+`web/src/app/api/booking/[slug]/selection/` (two endpoints),
+`web/src/components/booking/{selection-summary,service-card,booking-steps,booking-flow}.tsx`.
+No database change; the native application is not touched.
+
+**Which flow — the server's answer, never a guess.** The page reads its catalogue through
+`online_booking_public_selection_availability(slug, null, null)` first (`getBookingCatalog`). An
+answer (INVALID_SELECTION / EMPTY carries the page's services and window) opens the SELECTION
+flow; `null` is the « indisponible » notice; ONLY PostgREST's explicit "no such function" (HTTP
+404, `PGRST202` — the migration is not applied) falls back to the single-service read and flow of
+§10.1 – §10.5, unchanged. Any other failure (network, 5xx, another 404, a missing grant, an answer
+not understood) is the load error — never a reason to offer the older flow. Staging today has no
+`20261022120000`: it keeps the single-service flow. In the selection flow ONE booking path is
+used, even for one service.
+
+**Activation — two independent steps, and NO separate feature flag.**
+
+- Applying `20261022120000` alone changes nothing a customer sees: the website deployed today
+  never calls the multi-service functions. The D2 website code must itself be deployed.
+- The D2 website deployed on a database WITHOUT the migration keeps the single-service flow (the
+  PGRST202 fallback above) — deploying it first is safe.
+- Once BOTH are there, `/r/<slug>/reserver` offers the multi-service flow automatically, at the
+  next page render (after PostgREST's schema-cache reload, usually seconds; until then PGRST202
+  keeps the single-service flow). Nothing else switches it on, and no flag can hold it back.
+- What still holds independently: the deployment gate (`ONLINE_BOOKING_WEB_BOOKING`, never the
+  production website), the publication gates of the database, and creation's own operator switch
+  (`ONLINE_BOOKING_CREATION`: off, the times are shown and every booking answers « indisponible »).
+- Going back needs no migration (they are forward-only): redeploying the previous website build
+  returns the single-service flow, since it never calls the new functions; turning
+  `ONLINE_BOOKING_WEB_BOOKING` off closes the booking flow altogether.
+
+Coordinated Staging rollout, in order, each step separately authorized:
+1. the public-metadata activation gate of `20261021120000` decided (§12.8);
+2. `20261021120000` applied by hand (one file, SQL Editor);
+3. the D2 website deployed to Staging — still the single-service flow, now with the service cards'
+   metadata (§10.5);
+4. `20261022120000` applied by hand, only when the multi-service flow may appear on Staging —
+   it appears at once, for every page that accepts bookings;
+5. the checks of `supabase/README.md` › Online booking multi-service, then a booking end to end
+   (creation switch on for that test only, if it is off).
+Steps 3 and 4 may be swapped: `20261022120000` without the D2 website is invisible.
+
+**Choosing.** « Choisissez vos prestations »: each card offers « Ajouter » (appended at the END of
+her selection — never sorted, one occurrence each), a selected card shows its place in her order
+(1, 2, 3…) with « Ajoutée » and « Retirer »; « Voir le détail » stays a separate control. At 8,
+every other « Ajouter » is disabled and points (`aria-describedby`) to the message saying it is
+the maximum. Categories, descriptions and the card language are Unit C's.
+
+**The summary.** Desktop: « Votre sélection » beside the cards (sticky) — her services in order,
+each with its length and price, « Retirer » on each line, « Durée totale », the indicative total,
+« Tarifs indicatifs · aucun paiement en ligne. », « Choisir un horaire ». Phone: the same panel at
+the end of the list, and a sticky bar (count · combined length, total) with « Choisir un horaire »
+that docks at the end of the step — never over the footer, above the safe area; on a narrow
+phone it stacks so nothing is cut. Prices: `price_cents > 0` formatted; `0` « Tarif à
+confirmer »; absent or invalid: nothing; the total only when EVERY selected price is positive,
+« Total à confirmer » otherwise — never « gratuit », never a made-up amount. Over 12 hours
+(`online_booking_selection_rules`), « Choisir un horaire » is not offered and says why (the server
+checks it too).
+
+**Journey and state** (`booking-flow.ts`, pure). Services → date and time → details → review →
+confirmation. A change of the selection or the date clears the chosen time and its fingerprint
+(and any attempt); her details are kept. « Modifier » at the review, « Modifier la sélection » at
+the times and the browser's Back return to the services without starting over.
+
+**The times of the whole selection.** `GET /api/booking/<slug>/selection/availability`: the
+ids as repeated `service` parameters in her order (the order is part of the question), a date;
+1 to 8 distinct well-formed ids or 400; no other parameter; the availability counters (fail
+closed); never cached. The answers: SLOTS (the server's times, with its reading of the selection —
+the `quote`: names, lengths, prices, fingerprint), OUT_OF_WINDOW, DOES_NOT_FIT and
+SELECTION_TOO_LONG (said ONCE, with the selection's length, the longest opening and « Modifier ma
+sélection » — no date strip to search through), UNKNOWN_SERVICE (that service leaves the
+selection, named, back to the services), INVALID_SELECTION (back to the services), `null` or
+PGRST202 (« indisponible »), an unreadable answer (« Les horaires n'ont pas pu être chargés »,
+never an empty day). The browser never computes a time.
+
+**Booking ONE appointment.** `POST /api/booking/<slug>/selection` with exactly eight keys —
+`service_ids` (in order), `starts_at`, `selection_fingerprint` (the quote's), `first_name`,
+`last_name`, `email`, `phone`, `idempotency_key` — at most 4 KB, the door of §10.2 in the same
+order with the SAME booking counters (a selection is one booking), the Turnstile token in its
+header, then `online_booking_create_selection_booking`. No price, name, length or total is ever
+accepted (an extra key is a 400). Never one booking per service.
+
+**SELECTION_CHANGED.** Nothing is booked. The flow returns to the services with « Votre sélection
+a changé. Rien n'a été réservé… », reads the catalogue again, lists what changed since her review
+(« Coupe : tarif 45 € → 50 € », « durée 1 h → 1 h 15 », a new name, a service no longer offered
+— removed and named), shows the new values in the cards and the summary, and clears the time and
+the fingerprint: she chooses a time again (a new quote, a new fingerprint) and reviews before
+anything is sent. Nothing is ever booked with values she has not seen. A change seen while she
+chooses a time is said the same way (« Les informations de votre sélection ont été mises à
+jour ») and the time is chosen again.
+
+**Retries and idempotency** (the rules of §10.4, unchanged): ONE key per attempt; an unknown
+outcome (network, timeout, 502) freezes the request — the retry sends the SAME key and the SAME
+body with a NEW Turnstile token; one request in flight; any change of what is booked starts a new
+attempt. 40001 (the engine rolled back while copying the phases) is retried BY THE SERVER, with the
+same body and key, within the engine's 10-second budget (Turnstile and the counters are not asked
+again); if every attempt is rolled back the answer is BUSY — nothing booked, her retry sends the
+same request. PGRST202 at booking time (nothing ran) is UNAVAILABLE.
+
+**Review and confirmation.** The review shows the quote — every service in order with its length
+and price (« Tarif à confirmer » for 0), the combined length, the indicative total or « Total à
+confirmer », « Aucun paiement n'est demandé en ligne », the date and time, the professional, her
+details. The confirmation shows what the server confirmed: ONE appointment, every booked service
+in order with its length, the combined length, the start – end, the reference — no amount,
+« Aucun paiement n'a été effectué en ligne ». The address shown is the profile's, as before (§11.10
+when the location contract is applied).
+
+**Session restoration** (`selection-storage.ts`). The selected service IDS only, in the tab's
+session storage, per page (`beautizzy:booking-selection:<slug>`) — never a name, contact or time.
+On reload they are checked against the page's current services; what is no longer offered is
+left out and « Votre sélection a changé depuis votre dernière visite » is said. A storage that is
+missing, full or refused reads as nothing saved. Cleared after a confirmed booking.
+
+**Tests.** Vitest: the selection rules, totals and parser (`selection.test.ts`); the request body
+and the engine's answers (`selection-request.test.ts`); the flow (`selection-flow.test.ts`: order,
+the limit, stale times, fingerprint matching, idempotency, freezes, SELECTION_CHANGED, refusals,
+restoration); the storage (`selection-storage.test.ts`); the capability (`booking-catalog.test.ts`:
+PGRST202 only); the browser client (`selection-client.test.ts`); both endpoints (`selection/**/route.test.ts`:
+the door, the counters, every answer, 40001, PGRST202, unknown outcomes, no leak); the screens
+(`selection-steps.test.tsx`); the page in both server states (`page.test.tsx`).
+Visual QA on an isolated production build with fictional data (320 – 1440 px): evidence outside
+the repository.
 
 ## 11. Location privacy — the server-enforced contract (implementation unit 1)
 
@@ -1290,7 +1422,7 @@ written it for herself.
 ### 12.9 Approved decisions for booking several services
 
 Recorded so the next units implement them as decided (November 2026). The database contract
-follows them (§13, Unit D1); the website (D2) is not built:
+(§13, Unit D1) and the website (§10.9, Unit D2) follow them:
 
 - at most **eight distinct services** per booking, and **twelve hours** of cumulative duration as
   a hard ceiling;
@@ -1337,8 +1469,8 @@ availability of a selection is THE slot rule applied to the sum of its durations
 
 `supabase/migrations/20261022120000_add_online_booking_multi_service.sql` — prepared in the
 repository, **NOT applied to Staging, NOT applied to Production** (§13.10 says how it may be).
-Database and server contract only: the website keeps its single-service flow and its two
-endpoints unchanged; the unit that lets a customer choose several services (D2) is not built.
+Database and server contract. The website's multi-service flow is §10.9 (Unit D2): it calls these
+functions only where they exist, and its single-service endpoints are unchanged.
 
 ### 13.1 What it settles
 
@@ -1505,15 +1637,14 @@ reaches the device through the normal pull.
   `20261015` – `20261020`). Re-running it is harmless.
 - Nothing to roll back in data: the migration writes no row. The relaxed NOT NULL and the CHECK
   accept every existing record.
+- **What applying it switches on:** nothing on a website without the D2 code; with the D2 website
+  deployed, the multi-service flow of every page that accepts bookings — at once, without a
+  separate flag (§10.9 › Activation, and its rollout order).
 
-### 13.11 What the website unit (D2) will do — not built
+### 13.11 The website (unit D2) — §10.9
 
-Keep the selected ids in the session; read `online_booking_public_selection_availability`
-through its own endpoint; show the total length, and a total price only when every selected price
-is positive (« Tarif à confirmer » otherwise); send the fingerprint back with the booking and, on
-`SELECTION_CHANGED`, read the availability again; clear the selection after `BOOKED`. Turnstile,
-the request limits, idempotency (ONE key per attempt) and the endpoint checks of §10 apply
-unchanged. The deployed endpoints and the single-service flow are not changed by D1.
+The public flow of §10.9 calls these two functions through its own endpoints, only where they
+exist. The deployed single-service endpoints and flow are unchanged.
 
 ### 13.12 Tests
 

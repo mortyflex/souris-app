@@ -1,7 +1,8 @@
 /**
- * What a booking attempt can answer — the engine's answers
- * (`online_booking_create_booking`, ONLINE_BOOKING.md §9.2) and the website's
- * own refusals in front of it.
+ * What a booking attempt can answer — the engines' answers
+ * (`online_booking_create_booking`, ONLINE_BOOKING.md §9.2, and the
+ * multi-service `online_booking_create_selection_booking`, §13.6) and the
+ * website's own refusals in front of them.
  *
  * ONE wire vocabulary, the engine's: the server validates the engine's JSON
  * with `parseEngineAnswer` and forwards it in the same form; the browser
@@ -11,16 +12,28 @@
  * Pure: imported by the browser and by the server.
  */
 
-import type { BookableService } from "@/features/availability/availability";
 import { isCivilDate, isServiceId } from "@/features/availability/availability";
+import { MAX_SELECTED_SERVICES } from "@/features/availability/selection";
 
 import { ENGINE_FIELDS, isUtcInstant, type EngineField } from "./booking-request";
 
-/** A booking the server created, exactly as it confirmed it. */
+/** A booked service, as the server confirmed it: its snapshot name and length — never an amount. */
+export interface BookedService {
+  readonly id: string;
+  readonly name: string;
+  readonly durationMinutes: number;
+}
+
+/** A booking the server created, exactly as it confirmed it — ONE appointment. */
 export interface ConfirmedBooking {
+  /** Which engine answered: one service (`booking.service`), or a selection (`booking.services`). */
+  readonly kind: "single" | "selection";
   /** Random reference of the booking record; it grants nothing. */
   readonly reference: string;
-  readonly service: BookableService;
+  /** The booked services, in the order they follow each other (one for a single-service booking). */
+  readonly services: readonly BookedService[];
+  /** The booked length: the sum of the services. */
+  readonly durationMinutes: number;
   /** UTC instants `YYYY-MM-DDTHH:MM:SSZ`. */
   readonly startsAt: string;
   readonly endsAt: string;
@@ -33,8 +46,13 @@ export interface ConfirmedBooking {
 export type EngineAnswer =
   | { readonly status: "BOOKED"; readonly booking: ConfirmedBooking }
   | { readonly status: "SLOT_UNAVAILABLE" }
-  | { readonly status: "UNKNOWN_SERVICE" }
+  /** Not a bookable service (any more); the multi-service engine names the first one. */
+  | { readonly status: "UNKNOWN_SERVICE"; readonly serviceId?: string }
   | { readonly status: "INVALID_REQUEST"; readonly field: EngineField }
+  /** A selected service's name, length or price is not what the customer was shown: nothing was booked. */
+  | { readonly status: "SELECTION_CHANGED" }
+  /** The selection is longer than 12 hours: nothing was booked. */
+  | { readonly status: "SELECTION_TOO_LONG" }
   | { readonly status: "BUSY" }
   | { readonly status: "IDEMPOTENCY_KEY_REUSED" }
   /** The engine's NULL: nothing can be booked here (switch off, paused, offline…). */
@@ -72,28 +90,45 @@ export function isUsableTimeZone(value: unknown): value is string {
   }
 }
 
-function parseBooking(value: unknown): ConfirmedBooking | undefined {
-  if (!isRecord(value) || !isRecord(value.service)) return undefined;
-  const { reference, starts_at: startsAt, ends_at: endsAt, local_date: localDate, local_time: localTime, time_zone: timeZone } = value;
-  const { id, name, duration_minutes: minutes } = value.service;
-  if (typeof reference !== "string" || !UUID.test(reference)) return undefined;
+const isMinutes = (value: unknown, max: number): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= max;
+
+function parseBookedService(value: unknown): BookedService | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, name, duration_minutes: minutes } = value;
   if (!isServiceId(id) || typeof name !== "string" || name.trim().length === 0) return undefined;
-  if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1 || minutes > 24 * 60) return undefined;
+  if (!isMinutes(minutes, 24 * 60)) return undefined;
+  return { id, name: name.trim(), durationMinutes: minutes };
+}
+
+/**
+ * The booking of either engine: `service` (one service) or `services` +
+ * `duration_minutes` (a selection) — exactly one of the two shapes.
+ */
+function parseBooking(value: unknown): ConfirmedBooking | undefined {
+  if (!isRecord(value)) return undefined;
+  const { reference, starts_at: startsAt, ends_at: endsAt, local_date: localDate, local_time: localTime, time_zone: timeZone } = value;
+  if (typeof reference !== "string" || !UUID.test(reference)) return undefined;
   if (!isUtcInstant(startsAt) || !isUtcInstant(endsAt) || endsAt <= startsAt) return undefined;
   if (!isCivilDate(localDate) || typeof localTime !== "string" || !LOCAL_TIME.test(localTime)) return undefined;
   if (!isUsableTimeZone(timeZone)) return undefined;
-  return {
-    reference,
-    service: { id, name: name.trim(), durationMinutes: minutes },
-    startsAt,
-    endsAt,
-    localDate,
-    localTime,
-    timeZone,
-  };
+  const when = { reference, startsAt, endsAt, localDate, localTime, timeZone };
+
+  if ("service" in value && !("services" in value)) {
+    const service = parseBookedService(value.service);
+    return service === undefined ? undefined : { kind: "single", ...when, services: [service], durationMinutes: service.durationMinutes };
+  }
+  if ("services" in value && !("service" in value) && Array.isArray(value.services)) {
+    if (value.services.length < 1 || value.services.length > MAX_SELECTED_SERVICES) return undefined;
+    const services = value.services.map(parseBookedService);
+    if (services.some((service) => service === undefined)) return undefined;
+    if (!isMinutes(value.duration_minutes, MAX_SELECTED_SERVICES * 24 * 60)) return undefined;
+    return { kind: "selection", ...when, services: services as BookedService[], durationMinutes: value.duration_minutes };
+  }
+  return undefined;
 }
 
-const SIMPLE_ENGINE_STATUSES = ["SLOT_UNAVAILABLE", "UNKNOWN_SERVICE", "BUSY", "IDEMPOTENCY_KEY_REUSED"] as const;
+const SIMPLE_ENGINE_STATUSES = ["SLOT_UNAVAILABLE", "BUSY", "IDEMPOTENCY_KEY_REUSED", "SELECTION_CHANGED", "SELECTION_TOO_LONG"] as const;
 const GUARD_STATUSES = ["RATE_LIMITED", "PROTECTION_UNAVAILABLE", "CHALLENGE_FAILED", "REJECTED", "ERROR"] as const;
 
 function parseEngineObject(data: Record<string, unknown>): EngineAnswer | undefined {
@@ -104,6 +139,10 @@ function parseEngineObject(data: Record<string, unknown>): EngineAnswer | undefi
   if (data.status === "INVALID_REQUEST") {
     const field = ENGINE_FIELDS.find((candidate) => candidate === data.field);
     return field === undefined ? undefined : { status: "INVALID_REQUEST", field };
+  }
+  if (data.status === "UNKNOWN_SERVICE") {
+    // The multi-service engine names the service (or answers null); the single-service one does not.
+    return isServiceId(data.service_id) ? { status: "UNKNOWN_SERVICE", serviceId: data.service_id } : { status: "UNKNOWN_SERVICE" };
   }
   const simple = SIMPLE_ENGINE_STATUSES.find((candidate) => candidate === data.status);
   return simple === undefined ? undefined : { status: simple };
@@ -124,11 +163,15 @@ export function toResponseWire(response: BookingResponse): Record<string, unknow
   switch (response.status) {
     case "BOOKED": {
       const { booking } = response;
+      const wire = (service: BookedService) => ({ id: service.id, name: service.name, duration_minutes: service.durationMinutes });
       return {
         status: "BOOKED",
         booking: {
           reference: booking.reference,
-          service: { id: booking.service.id, name: booking.service.name, duration_minutes: booking.service.durationMinutes },
+          // Each engine's own shape, so the single-service endpoint answers exactly as it always did.
+          ...(booking.kind === "single"
+            ? { service: wire(booking.services[0]!) }
+            : { services: booking.services.map(wire), duration_minutes: booking.durationMinutes }),
           starts_at: booking.startsAt,
           ends_at: booking.endsAt,
           local_date: booking.localDate,
@@ -139,6 +182,8 @@ export function toResponseWire(response: BookingResponse): Record<string, unknow
     }
     case "INVALID_REQUEST":
       return { status: "INVALID_REQUEST", field: response.field };
+    case "UNKNOWN_SERVICE":
+      return response.serviceId === undefined ? { status: "UNKNOWN_SERVICE" } : { status: "UNKNOWN_SERVICE", service_id: response.serviceId };
     default:
       return { status: response.status };
   }

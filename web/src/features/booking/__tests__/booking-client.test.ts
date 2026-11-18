@@ -128,7 +128,7 @@ describe("repeated submission and retry after an uncertain response", () => {
       // A double press while in flight sends nothing.
       expect(planSend(state, newKey)).toBeUndefined();
       // Every send spends its token: each one carries a new token.
-      const response = await submitBooking("chez-amelie", plan!.attempt.request, plan!.attempt.key, `token-of-send-${press}`, { fetchImpl });
+      const response = await submitBooking("chez-amelie", plan!.attempt.request as BookingRequest, plan!.attempt.key, `token-of-send-${press}`, { fetchImpl });
       state = flowReducer(state, { type: "ANSWER", response });
       if (state.step === "done") break;
       expect(state.notice).toBe("UNCERTAIN");

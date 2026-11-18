@@ -45,6 +45,7 @@ export const ClockIcon = icon(<><circle cx="12" cy="12" r="8.5" /><path d="M12 7
 export const CalendarIcon = icon(<><rect x="4" y="5.5" width="16" height="14" rx="2.5" /><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" /></>, "CalendarIcon");
 export const UserIcon = icon(<><circle cx="12" cy="8.5" r="3.5" /><path d="M5 19.5c1.2-3.3 3.8-5 7-5s5.8 1.7 7 5" /></>, "UserIcon");
 export const PlusIcon = icon(<path d="M12 5v14M5 12h14" />, "PlusIcon");
+export const CloseIcon = icon(<path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />, "CloseIcon");
 export const ReceiptIcon = icon(<><path d="M6 3.5h12v17l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3Z" /><path d="M9 8h6M9 11.5h6M9 15h4" /></>, "ReceiptIcon");
 export const BagIcon = icon(<><path d="M5.5 8h13l-1 12h-11Z" /><path d="M9 8V6.5a3 3 0 0 1 6 0V8" /></>, "BagIcon");
 export const ChartIcon = icon(<><path d="M4.5 19.5h15" /><path d="M7 16v-4M11 16V8M15 16v-6M19 16V6" /></>, "ChartIcon");

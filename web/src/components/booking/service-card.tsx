@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
-import { CheckIcon, ChevronDownIcon, ClockIcon } from "@/components/ui/icons";
+import { CheckIcon, ChevronDownIcon, ClockIcon, CloseIcon, PlusIcon } from "@/components/ui/icons";
 import { formatDuration, type BookableService } from "@/features/availability/availability";
 import { formatServicePrice, isClamped, PRICE_TO_CONFIRM } from "@/features/availability/service-catalog";
 import { cn } from "@/lib/utils";
@@ -24,9 +24,23 @@ import { cn } from "@/lib/utils";
  * line fades out — no ellipsis glyph, so no « lumineux.… ». Without one, the
  * card simply has none — no empty placeholder.
  *
- * Built to be reused as is when a booking holds several services: the action
- * is the only part that would change.
+ * When a booking holds several services (`selectionAction`), the action is
+ * the only part that changes: « Ajouter » appends the service to the end of
+ * the selection, a selected card shows its place in her order and offers
+ * « Retirer »; when the selection is full (8), « Ajouter » is disabled and
+ * points to the message that says why.
  */
+
+export interface ServiceSelectionAction {
+  /** Its place in her selection (1…8) when selected; absent when not. */
+  readonly position?: number;
+  /** One more service may be added (fewer than eight are selected). */
+  readonly canAdd: boolean;
+  /** The id of the message explaining why « Ajouter » is disabled. */
+  readonly limitId?: string;
+  readonly onAdd: () => void;
+  readonly onRemove: () => void;
+}
 
 export interface ServiceCardProps {
   readonly service: BookableService;
@@ -35,6 +49,8 @@ export interface ServiceCardProps {
   /** 3 for a plain list, 4 under a category heading. */
   readonly headingLevel: 3 | 4;
   readonly onChoose: () => void;
+  /** Several services per booking: add / remove instead of « Choisir ». */
+  readonly selectionAction?: ServiceSelectionAction;
 }
 
 export function ServiceCard(props: ServiceCardProps) {
@@ -84,6 +100,7 @@ export function ServiceCardView({
   truncated,
   onToggleDetail,
   descriptionRef,
+  selectionAction,
 }: ServiceCardViewProps) {
   const baseId = useId();
   const nameId = `${baseId}-name`;
@@ -91,19 +108,32 @@ export function ServiceCardView({
   const Heading = headingLevel === 3 ? "h3" : "h4";
   const price = formatServicePrice(service.priceCents);
   const offersDetail = service.description !== undefined && (truncated || expanded);
+  const position = selectionAction?.position;
+  const highlighted = selectionAction === undefined ? selected : position !== undefined;
 
   return (
     <article
       aria-labelledby={nameId}
       className={cn(
         "flex h-full flex-col gap-4 rounded-[1.4rem] border bg-background p-5 shadow-card transition-[border-color,box-shadow] duration-[var(--bz-duration-state)] sm:p-6",
-        selected ? "border-accent ring-1 ring-accent/25" : "border-border/80",
+        highlighted ? "border-accent ring-1 ring-accent/25" : "border-border/80",
       )}
     >
       <div className="flex flex-col gap-2.5">
-        <Heading id={nameId} className="type-subtitle min-w-0 [overflow-wrap:anywhere]">
-          {service.name}
-        </Heading>
+        <div className="flex items-start justify-between gap-3">
+          <Heading id={nameId} className="type-subtitle min-w-0 [overflow-wrap:anywhere]">
+            {service.name}
+          </Heading>
+          {position !== undefined ? (
+            <span
+              data-position=""
+              className="type-meta grid size-7 shrink-0 place-items-center rounded-full bg-accent font-semibold tabular-nums text-white motion-safe:animate-[bz-rise_var(--bz-duration-state)_var(--bz-ease-out)_both]"
+            >
+              <span aria-hidden="true">{position}</span>
+              <span className="sr-only">{ordinal(position)} prestation de votre sélection</span>
+            </span>
+          ) : null}
+        </div>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <span className="type-meta inline-flex items-center gap-1.5 rounded-full bg-lavender-50 px-2.5 py-1 tabular-nums text-lavender-700">
             <ClockIcon size={14} />
@@ -158,19 +188,51 @@ export function ServiceCardView({
             />
           </button>
         ) : null}
-        <Button
-          type="button"
-          variant={selected ? "primary" : "secondary"}
-          aria-pressed={selected}
-          disabled={disabled}
-          onClick={onChoose}
-          className="ml-auto"
-        >
-          {selected ? <CheckIcon size={16} /> : null}
-          Choisir
-          <span className="sr-only"> {service.name}</span>
-        </Button>
+        {selectionAction === undefined ? (
+          <Button
+            type="button"
+            variant={selected ? "primary" : "secondary"}
+            aria-pressed={selected}
+            disabled={disabled}
+            onClick={onChoose}
+            className="ml-auto"
+          >
+            {selected ? <CheckIcon size={16} /> : null}
+            Choisir
+            <span className="sr-only"> {service.name}</span>
+          </Button>
+        ) : position !== undefined ? (
+          <div className="ml-auto flex items-center gap-2">
+            <span className="type-label inline-flex items-center gap-1.5 text-lavender-700">
+              <CheckIcon size={16} />
+              Ajoutée
+            </span>
+            <Button type="button" variant="ghost" disabled={disabled} onClick={selectionAction.onRemove} className="px-3.5">
+              <CloseIcon size={16} />
+              Retirer
+              <span className="sr-only"> {service.name} de votre sélection</span>
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={disabled || !selectionAction.canAdd}
+            aria-describedby={!selectionAction.canAdd ? selectionAction.limitId : undefined}
+            onClick={selectionAction.onAdd}
+            className="ml-auto"
+          >
+            <PlusIcon size={16} />
+            Ajouter
+            <span className="sr-only"> {service.name} à votre sélection</span>
+          </Button>
+        )}
       </div>
     </article>
   );
+}
+
+/** « 1re », « 2e », « 3e »… */
+export function ordinal(position: number): string {
+  return position === 1 ? "1re" : `${position}e`;
 }

@@ -70,6 +70,12 @@ export type QuotaDecision = "ALLOWED" | "LIMITED" | "UNAVAILABLE";
 
 /** Largest accepted booking body. A legitimate request is about 300 bytes. */
 export const MAX_BOOKING_BODY_BYTES = 2048;
+/**
+ * Largest accepted body of a SELECTION booking: eight service ids of up to
+ * 200 characters, the fingerprint and the same contact — under 3 KB at worst,
+ * about 600 bytes in practice.
+ */
+export const MAX_SELECTION_BODY_BYTES = 4096;
 /** For the whole quota, both steps together. */
 const QUOTA_TIMEOUT_MS = 5_000;
 

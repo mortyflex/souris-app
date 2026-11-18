@@ -9,8 +9,10 @@ import { BookingConfirmation, ReviewStep, ServiceStep, SlotStep, type Profession
 const professional: Professional = { name: "Studio Esthétique", address: "12 rue des Lilas, Lyon", phone: "04 78 00 00 00" };
 const coupe = { id: "svc-coupe", name: "Coupe", durationMinutes: 45 };
 const booking: ConfirmedBooking = {
+  kind: "single",
   reference: "4b0a1d0e-3c1f-4f7a-9d39-2a8f4f1c6e21",
-  service: coupe,
+  services: [coupe],
+  durationMinutes: 45,
   startsAt: "2026-11-16T13:00:00Z",
   endsAt: "2026-11-16T13:45:00Z",
   localDate: "2026-11-16",
@@ -60,7 +62,7 @@ describe("ReviewStep", () => {
     text(
       renderToStaticMarkup(
         <ReviewStep
-          service={coupe}
+          services={[coupe]}
           date="2026-11-16"
           slot={{ startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" }}
           timeZone="Europe/Paris"
@@ -81,7 +83,7 @@ describe("ReviewStep", () => {
   const reviewMarkup = (overrides: Partial<Parameters<typeof ReviewStep>[0]> = {}) =>
     renderToStaticMarkup(
       <ReviewStep
-        service={coupe}
+        services={[coupe]}
         date="2026-11-16"
         slot={{ startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" }}
         timeZone="Europe/Paris"
@@ -127,7 +129,7 @@ describe("ReviewStep — the security check (Cloudflare Turnstile)", () => {
   const reviewMarkup = (overrides: Partial<Parameters<typeof ReviewStep>[0]> = {}) =>
     renderToStaticMarkup(
       <ReviewStep
-        service={coupe}
+        services={[coupe]}
         date="2026-11-16"
         slot={{ startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" }}
         timeZone="Europe/Paris"
@@ -200,7 +202,7 @@ describe("SlotStep", () => {
   it("labels every time with its start and end in the professional's zone", () => {
     const html = renderToStaticMarkup(
       <SlotStep
-        service={coupe}
+        services={[coupe]}
         window={{ firstDate: "2026-11-16", lastDate: "2026-11-18" }}
         date="2026-11-16"
         slots={{ status: "ready", slots: [{ startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" }] }}
@@ -220,7 +222,7 @@ describe("SlotStep", () => {
 
   it("an empty day offers the next one; a failed read offers a retry, never an empty day", () => {
     const base = {
-      service: coupe,
+      services: [coupe],
       window: { firstDate: "2026-11-16", lastDate: "2026-11-18" },
       date: "2026-11-16",
       timeZone: "Europe/Paris",
@@ -240,7 +242,7 @@ describe("SlotStep", () => {
 
 describe("SlotStep — the approved date and time design", () => {
   const base = {
-    service: coupe,
+    services: [coupe],
     window: { firstDate: "2026-11-16", lastDate: "2026-11-30" },
     date: "2026-11-17",
     timeZone: "Europe/Paris",
@@ -293,7 +295,7 @@ describe("SlotStep — the approved date and time design", () => {
 
 describe("ReviewStep — while a request is in flight", () => {
   const props = {
-    service: coupe,
+    services: [coupe],
     date: "2026-11-16",
     slot: { startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" },
     timeZone: "Europe/Paris",

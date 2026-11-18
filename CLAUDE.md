@@ -726,7 +726,18 @@ Implemented (same reference, §10): the PUBLIC booking flow on `/r/<slug>/reserv
 - a booking also needs a Cloudflare Turnstile token (same reference, §10.8): ONE managed widget on the review step, the single-use token in the `X-Turnstile-Token` header (never in the body), verified server-side with Siteverify — action and the CONFIGURED site's host — BEFORE any counter; fail closed without the keys or when Cloudflare cannot answer; Cloudflare's test keys on a local site only; the secret stays server-only;
 - ONE idempotency key per booking attempt; an unknown outcome freezes the request and is retried with the SAME key and the SAME body; one request in flight at most (`web/src/features/booking/booking-flow.ts`);
 - times are the server's: starts are its labels, ends are formatted in the time zone it returned, never the browser's;
-- the service cards show what the server sends — name and duration always; price, description and category once `20261021120000` is applied (« Tarif à confirmer » for 0, never « gratuit »; the description as plain text, « Voir le détail » only when truncated; her categories in her order) — and nothing is invented without them; the summary, the review and the confirmation show no price, and no confirmation email is sent — the page says so.
+- the service cards show what the server sends — name and duration always; price, description and category once `20261021120000` is applied (« Tarif à confirmer » for 0, never « gratuit »; the description as plain text, « Voir le détail » only when truncated; her categories in her order) — and nothing is invented without them; in the single-service flow the summary, the review and the confirmation show no price; no confirmation email is sent — the page says so.
+
+Implemented locally (same reference, §10.9): several services in ONE booking on the same page — offered ONLY where `20261022120000` is applied.
+
+- the flow is the server's answer: the page asks `online_booking_public_selection_availability` first; ONLY PostgREST's "no such function" (404 PGRST202) falls back to the single-service flow (`getBookingCatalog`); any other failure is an error, never the older flow;
+- « Ajouter » appends at the end of HER order (never sorted), one occurrence each, at most 8 (« Ajouter » disabled and explained); « Retirer » anywhere; a change of the selection or the date clears the time and its fingerprint, never her details;
+- the summary (desktop panel, phone sticky bar docking at the end of the step) shows each price, the combined length and the indicative total only when every price is positive, « Total à confirmer » otherwise, « aucun paiement en ligne »;
+- ONE website read and ONE write under `/api/booking/<slug>/selection` (ids in order, the server's fingerprint; no price, name, length or total accepted), the door, Turnstile and the SAME booking counters of §10; ONE appointment, never one per service;
+- SELECTION_CHANGED books nothing: back to the services, read again, what changed listed, a new time and a new review required; 40001 is retried by the server with the same key and body, then BUSY;
+- the review shows the server's quote with prices; the confirmation shows the booked services and the combined length, never an amount;
+- the selected service IDS only survive a reload (session storage, per page, guarded), checked again against the page, cleared after a booking — never a name, contact or time.
+- ACTIVATION: no separate feature flag. `20261022120000` alone changes nothing (the deployed website never calls it); the D2 website alone keeps the single-service flow; with BOTH, the multi-service flow appears at once on every page that accepts bookings. Apply `20261022120000` to a project only when that flow may appear there (after the `20261021120000` gate); going back = redeploying the previous website, never a migration (same reference, §10.9 › Activation).
 
 Prepared, applied nowhere yet (same reference, §11): the location privacy contract (`20261020120000`) — the professional chooses ONE publication level, and the public SQL function alone decides what leaves the database.
 
@@ -748,7 +759,7 @@ Prepared, applied nowhere yet (same reference, §12): the service publication co
 - the app screen « Prestations proposées en ligne » (Plus › Réservation en ligne, `src/features/online-booking/services/`) is implemented: it reads the SERVER's list, never the device's catalogue, saves each switch at once (nothing shown as saved before the server confirms; a failure puts the server's state back), shows the public text before it is published, and reads a project without the migration as « pas encore disponible »;
 - ACTIVATION GATE: applying it is a publication act — the description, price and category of every service ALREADY selected enter the public answer at once, whatever the website shows; never apply it to a hosted project before it is decided how previously selected services are reviewed or consented to (same reference, §12.8);
 - independent of the location privacy migration: it never defines `online_booking_public_profile` nor `online_booking_owner_profile_json`; either may be applied first — by hand, one file, never `supabase db push` on Staging (it would replay `20261020120000`);
-- the multi-service unit's database contract is prepared (§13 below); its website (session-only selection ids) is NOT built.
+- the multi-service unit's database contract is prepared (§13 below); its website flow is implemented locally (§10.9 above).
 
 Prepared, applied nowhere yet (same reference, §13): the multi-service contract (`20261022120000`) — an ordered selection of 1 to 8 distinct bookable services booked as ONE Appointment, one item per service.
 
@@ -760,7 +771,7 @@ Prepared, applied nowhere yet (same reference, §13): the multi-service contract
 - `online_bookings.services` (nullable jsonb) holds the ordered snapshots of a selection record; `service_id` / `service_name` are NULL on it; ONE CHECK keeps one representation per record; legacy records are untouched;
 - requires `20261021120000` — so it waits for its ACTIVATION GATE —, independent of `20261020120000`; by hand, one file, never `supabase db push` on Staging.
 
-Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, a price in the booking summary, review or confirmation, holding a slot, customer accounts, payments, booking several services at once on the website, packages.
+Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, a price in the single-service summary or review, a price at any confirmation, holding a slot, customer accounts, payments, packages, the same service twice in one booking.
 
 Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
 

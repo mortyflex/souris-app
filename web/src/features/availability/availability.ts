@@ -153,7 +153,8 @@ function parseCategory(value: unknown): ServiceCategory | undefined {
   return { id, name: label, position };
 }
 
-function parseService(value: unknown): BookableService | undefined {
+/** One public service of the server's answer — approved fields only, each optional one valid or absent. */
+export function parseBookableService(value: unknown): BookableService | undefined {
   if (!isRecord(value)) return undefined;
   const { id, name, duration_minutes: minutes } = value;
   if (!isServiceId(id) || typeof name !== "string" || name.trim().length === 0) return undefined;
@@ -171,7 +172,8 @@ function parseService(value: unknown): BookableService | undefined {
   };
 }
 
-function parseSlot(value: unknown): AvailableSlot | undefined {
+/** One start of the server's answer. */
+export function parseAvailableSlot(value: unknown): AvailableSlot | undefined {
   if (!isRecord(value)) return undefined;
   const { starts_at: startsAt, ends_at: endsAt, local_time: localTime } = value;
   if (typeof startsAt !== "string" || !UTC_INSTANT.test(startsAt)) return undefined;
@@ -194,12 +196,12 @@ export function parseAvailability(data: unknown): Availability | undefined {
   if (!isCivilDate(firstDate) || !isCivilDate(lastDate) || lastDate < firstDate) return undefined;
   if (!Array.isArray(data.services)) return undefined;
 
-  const services = data.services.map(parseService);
+  const services = data.services.map(parseBookableService);
   if (services.some((service) => service === undefined)) return undefined;
 
   let service: BookableService | undefined;
   if (data.service !== undefined) {
-    service = parseService(data.service);
+    service = parseBookableService(data.service);
     if (service === undefined) return undefined;
   }
   let date: string | undefined;
@@ -211,7 +213,7 @@ export function parseAvailability(data: unknown): Availability | undefined {
   let slots: AvailableSlot[] = [];
   if (status === "SLOTS") {
     if (service === undefined || date === undefined || !Array.isArray(data.slots)) return undefined;
-    const parsed = data.slots.map(parseSlot);
+    const parsed = data.slots.map(parseAvailableSlot);
     if (parsed.some((slot) => slot === undefined)) return undefined;
     slots = parsed as AvailableSlot[];
   }
@@ -234,10 +236,10 @@ export function parseAvailability(data: unknown): Availability | undefined {
  * the website's availability endpoint sends, so the browser reads it with the
  * very same `parseAvailability`.
  */
-export function availabilityToWire(availability: Availability): Record<string, unknown> {
+export function serviceToWire(value: BookableService): Record<string, unknown> {
   // The optional metadata travels only when the server gave it, so an answer
   // of a server without it reaches the browser exactly as it was.
-  const service = (value: BookableService) => ({
+  return {
     id: value.id,
     name: value.name,
     duration_minutes: value.durationMinutes,
@@ -246,7 +248,15 @@ export function availabilityToWire(availability: Availability): Record<string, u
     ...(value.category !== undefined
       ? { category: { id: value.category.id, name: value.category.name, position: value.category.position } }
       : {}),
-  });
+  };
+}
+
+export function slotToWire(slot: AvailableSlot): Record<string, unknown> {
+  return { starts_at: slot.startsAt, ends_at: slot.endsAt, local_time: slot.localTime };
+}
+
+export function availabilityToWire(availability: Availability): Record<string, unknown> {
+  const service = serviceToWire;
   return {
     time_zone: availability.timeZone,
     slot_minutes: availability.slotMinutes,
@@ -256,15 +266,7 @@ export function availabilityToWire(availability: Availability): Record<string, u
     status: availability.status,
     ...(availability.service !== undefined ? { service: service(availability.service) } : {}),
     ...(availability.date !== undefined ? { date: availability.date } : {}),
-    ...(availability.status === "SLOTS"
-      ? {
-          slots: availability.slots.map((slot) => ({
-            starts_at: slot.startsAt,
-            ends_at: slot.endsAt,
-            local_time: slot.localTime,
-          })),
-        }
-      : {}),
+    ...(availability.status === "SLOTS" ? { slots: availability.slots.map(slotToWire) } : {}),
   };
 }
 

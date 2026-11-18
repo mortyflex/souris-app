@@ -158,9 +158,31 @@ describe("the booking flow (development / Staging gate)", () => {
     ],
     status: "CHOOSE_SERVICE",
   };
-  /** The profile, then the availability, from the ONE function each. */
-  const answering = (profile: unknown, availability: unknown) =>
-    vi.fn(async (url: string) => respond(String(url).endsWith("online_booking_public_profile") ? profile : availability));
+  /**
+   * The profile, the multi-service read, then the single-service read. By
+   * default the server is the deployed one: it has NO multi-service function
+   * (PostgREST answers 404 PGRST202), so the single-service flow is offered.
+   */
+  const MISSING_FUNCTION = { status: 404, body: { code: "PGRST202", message: "Could not find the function" } };
+  const answering = (profile: unknown, availability: unknown, selection: { status: number; body: unknown } = MISSING_FUNCTION) =>
+    vi.fn(async (url: string) => {
+      const name = String(url);
+      if (name.endsWith("online_booking_public_profile")) return respond(profile);
+      if (name.endsWith("online_booking_public_selection_availability")) {
+        return new Response(JSON.stringify(selection.body), { status: selection.status });
+      }
+      return respond(availability);
+    });
+  /** A server WITH the multi-service contract (20261022120000): the catalogue read is its read without ids. */
+  const catalogue = {
+    ...choose,
+    services: [
+      { id: "svc-coupe", name: "Coupe", duration_minutes: 45, price_cents: 4500, description: null, category: null },
+      { id: "tech-couleur", name: "Couleur", duration_minutes: 90, price_cents: 0, description: null, category: null },
+    ],
+    status: "INVALID_SELECTION",
+    reason: "EMPTY",
+  };
 
   beforeEach(() => {
     vi.stubEnv("ONLINE_BOOKING_WEB_BOOKING", "enabled");
@@ -189,7 +211,13 @@ describe("the booking flow (development / Staging gate)", () => {
     expect(html).toContain("Étape 1 sur 4");
     expect(html).not.toMatch(/€|sb_secret/);
     expect(html).not.toContain("0x4AAAAAAAsecretKeyOfTheTests00000");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // The profile, the multi-service read (absent: PGRST202), the single-service read.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([url]) => String(url).replace(/^.*\/rpc\//, ""))).toEqual([
+      "online_booking_public_profile",
+      "online_booking_public_selection_availability",
+      "online_booking_public_availability",
+    ]);
     // The public footer closes the flow too, without a link out of the booking.
     expect(html).toMatch(/<footer[\s\S]*Réservation en ligne avec[\s\S]*<\/footer>/);
     expect(html).not.toContain('href="/"');
@@ -213,6 +241,38 @@ describe("the booking flow (development / Staging gate)", () => {
     expect(html).toContain("pas disponible pour le moment");
     expect(html).not.toContain("Choisissez une prestation");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a server WITH the multi-service contract offers several services per booking — one read, no fallback", async () => {
+    const fetchMock = answering(online, choose, { status: 200, body: catalogue });
+    vi.stubGlobal("fetch", fetchMock);
+    const { bookingPage } = await load();
+    const html = renderToStaticMarkup(await bookingPage.default(props("chez-amelie")));
+    expect(html).toContain("Choisissez vos prestations");
+    expect(html).toContain("Jusqu’à 8 prestations");
+    expect(html).toContain("Ajouter");
+    expect(html).toContain("Étape 1 sur 4 · Prestations");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]![0]).toMatch(/online_booking_public_selection_availability$/);
+    const init = (fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1];
+    expect(JSON.parse(String(init.body))).toEqual({ p_slug: "chez-amelie", p_service_ids: null, p_date: null });
+    expect(html).not.toMatch(/sb_secret/);
+  });
+
+  it("a failed multi-service read is an error — never a reason to offer the older flow", async () => {
+    const fetchMock = answering(online, choose, { status: 500, body: { code: "XX000" } });
+    vi.stubGlobal("fetch", fetchMock);
+    const { bookingPage } = await load();
+    const html = renderToStaticMarkup(await bookingPage.default(props("chez-amelie")));
+    expect(html).toContain("Les prestations n’ont pas pu être chargées.");
+    expect(html).not.toContain("Choisissez une prestation");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a page the multi-service read answers nothing for says booking is unavailable", async () => {
+    vi.stubGlobal("fetch", answering(online, choose, { status: 200, body: null }));
+    const { bookingPage } = await load();
+    expect(renderToStaticMarkup(await bookingPage.default(props("chez-amelie")))).toContain("pas disponible pour le moment");
   });
 
   it("a paused page says so, without asking for availability", async () => {

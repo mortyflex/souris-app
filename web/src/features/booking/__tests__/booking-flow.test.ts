@@ -19,8 +19,10 @@ const three: AvailableSlot = { startsAt: "2026-11-16T14:00:00Z", endsAt: "2026-1
 const booked: BookingResponse = {
   status: "BOOKED",
   booking: {
+    kind: "single",
     reference: "4b0a1d0e-3c1f-4f7a-9d39-2a8f4f1c6e21",
-    service: coupe,
+    services: [coupe],
+    durationMinutes: 45,
     startsAt: two.startsAt,
     endsAt: two.endsAt,
     localDate: "2026-11-16",
@@ -199,7 +201,7 @@ describe("definitive answers", () => {
     expect(taken).toMatchObject({ step: "slot", notice: "SLOT_TAKEN", slotsRevision: review.slotsRevision + 1 });
     expect(taken.slot).toBeUndefined();
     expect(taken.details).toEqual(review.details);
-    expect(taken.service).toEqual(coupe);
+    expect(taken.selection).toEqual([coupe]);
 
     // A new time, straight back to the review — and a new attempt under a new key.
     const back = run(taken, { type: "CHOOSE_SLOT", slot: three }, { type: "GO_TO", step: "details" }, { type: "REVIEW_DETAILS" });
@@ -212,7 +214,7 @@ describe("definitive answers", () => {
     const review = atReview();
     const gone = answer(press(review).state, { status: "UNKNOWN_SERVICE" });
     expect(gone).toMatchObject({ step: "service", notice: "SERVICE_GONE", servicesRevision: review.servicesRevision + 1 });
-    expect(gone.service).toBeUndefined();
+    expect(gone.selection).toEqual([]);
     expect(gone.details).toEqual(review.details);
   });
 
@@ -265,9 +267,9 @@ describe("services with their public metadata (20261021120000) — still ONE ser
   it("chooses one service, then another replaces it — never two", () => {
     const first = run(initialFlowState(), { type: "CHOOSE_SERVICE", service: soin, firstDate: "2026-11-16" });
     expect(first.step).toBe("slot");
-    expect(first.service).toEqual(soin);
+    expect(first.selection).toEqual([soin]);
     const back = run(first, { type: "GO_TO", step: "service" }, { type: "CHOOSE_SERVICE", service: coupe, firstDate: "2026-11-16" });
-    expect(back.service).toEqual(coupe);
+    expect(back.selection).toEqual([coupe]);
     expect(back.slot).toBeUndefined();
   });
 

@@ -321,15 +321,40 @@ describe('Online booking multi-service migration', () => {
     expect(code).not.toMatch(/\bto [\w, ]*\b(anon|authenticated|public)\b/);
   });
 
-  it('stays outside the offline sync, and nothing calls it yet (the website unit comes next)', () => {
+  it('stays outside the offline sync; only the website server calls its two website functions (unit D2)', () => {
     expect(code).not.toMatch(/sync_push_aggregate|sync_pull_business_aggregates|sync_count_business_aggregates|sync_outbox/);
-    const sources = [...listFiles(join(ROOT, 'web', 'src')), ...listFiles(join(ROOT, 'src'))].filter(
-      (path) => /\.(ts|tsx)$/.test(path) && !/[\\/]__tests__[\\/]/.test(path),
-    );
-    expect(sources.length).toBeGreaterThan(0);
-    for (const path of sources) {
+    const isSource = (path: string) => /\.(ts|tsx)$/.test(path) && !/[\\/]__tests__[\\/]/.test(path);
+    const codeOf = (path: string) =>
+      readFileSync(path, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+
+    // The native application never names it: the offline sync and the app are untouched.
+    const appSources = listFiles(join(ROOT, 'src')).filter(isSource);
+    expect(appSources.length).toBeGreaterThan(0);
+    for (const path of appSources) {
       expect(readFileSync(path, 'utf8')).not.toMatch(
         /selection_availability|create_selection_booking|book_selection|compute_slots_for_minutes/,
+      );
+    }
+
+    // The website calls the two service_role functions from server-only modules, and nothing else of it.
+    const webSources = listFiles(join(ROOT, 'web', 'src')).filter(isSource);
+    const callers = webSources
+      .filter((path) => /online_booking_(public_selection_availability|create_selection_booking)/.test(codeOf(path)))
+      .map((path) => path.slice(join(ROOT, 'web', 'src').length + 1).replace(/\\/g, '/'))
+      .sort();
+    expect(callers).toEqual([
+      'features/availability/get-selection-availability.ts',
+      'features/booking/create-selection-booking.ts',
+      'features/booking/supabase-rpc.ts',
+    ]);
+    for (const caller of callers) {
+      expect(readFileSync(join(ROOT, 'web', 'src', caller), 'utf8')).toMatch(/^import "server-only";/);
+    }
+    for (const path of webSources) {
+      expect(codeOf(path)).not.toMatch(
+        /online_booking_(book_selection|compute_slots_for_minutes|minutes_slot_is_available|resolve_selection|selection_fingerprint|selection_availability_json|selection_request_issue|selection_booking_json|selection_rules|selection_issue)/,
       );
     }
   });

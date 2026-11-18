@@ -6,10 +6,12 @@
  */
 
 import { parseAvailability, type Availability } from "@/features/availability/availability";
+import { parseSelectionAvailability, type SelectionAvailability } from "@/features/availability/selection";
 
 import { parseResponseWire, type BookingResponse } from "./booking-answer";
 import { toRequestWire, type BookingRequest } from "./booking-request";
 import { CHALLENGE_HEADER } from "./challenge";
+import { toSelectionRequestWire, type SelectionBookingRequest } from "./selection-request";
 
 type Fetch = typeof fetch;
 
@@ -53,7 +55,41 @@ export async function submitBooking(
   request: BookingRequest,
   idempotencyKey: string,
   challengeToken: string,
-  { fetchImpl = fetch, timeoutMs = BOOKING_REQUEST_TIMEOUT_MS }: { fetchImpl?: Fetch; timeoutMs?: number } = {},
+  options: SubmitOptions = {},
+): Promise<BookingResponse> {
+  return postBooking(bookingEndpoint(slug), toRequestWire(request, idempotencyKey), challengeToken, options);
+}
+
+/** The selection booking endpoint: ONE appointment for an ordered selection (`selection/route.ts`). */
+export function selectionBookingEndpoint(slug: string): string {
+  return `${bookingEndpoint(slug)}/selection`;
+}
+
+/**
+ * Sends ONE selection booking request — the ids in her order, the start, the
+ * server's fingerprint, the contact and the key — and reads the answer, with
+ * exactly the rules of `submitBooking` (never rejects; unknown = ERROR).
+ */
+export async function submitSelectionBooking(
+  slug: string,
+  request: SelectionBookingRequest,
+  idempotencyKey: string,
+  challengeToken: string,
+  options: SubmitOptions = {},
+): Promise<BookingResponse> {
+  return postBooking(selectionBookingEndpoint(slug), toSelectionRequestWire(request, idempotencyKey), challengeToken, options);
+}
+
+interface SubmitOptions {
+  readonly fetchImpl?: Fetch;
+  readonly timeoutMs?: number;
+}
+
+async function postBooking(
+  url: string,
+  body: object,
+  challengeToken: string,
+  { fetchImpl = fetch, timeoutMs = BOOKING_REQUEST_TIMEOUT_MS }: SubmitOptions,
 ): Promise<BookingResponse> {
   // A plain timer, not AbortSignal.timeout(): older mobile browsers lack it.
   const controller = new AbortController();
@@ -62,10 +98,10 @@ export async function submitBooking(
   let parsed: BookingResponse | undefined;
   try {
     try {
-      response = await fetchImpl(bookingEndpoint(slug), {
+      response = await fetchImpl(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", [CHALLENGE_HEADER]: challengeToken },
-        body: JSON.stringify(toRequestWire(request, idempotencyKey)),
+        body: JSON.stringify(body),
         cache: "no-store",
         credentials: "same-origin",
         signal: controller.signal,
@@ -86,8 +122,8 @@ export async function submitBooking(
   return refusedAtTheDoor ? { status: "REJECTED" } : { status: "ERROR" };
 }
 
-export type AvailabilityResult =
-  | { readonly status: "OK"; readonly availability: Availability }
+export type AvailabilityResult<T = Availability> =
+  | { readonly status: "OK"; readonly availability: T }
   | { readonly status: "UNAVAILABLE" }
   | { readonly status: "RATE_LIMITED" }
   | { readonly status: "ERROR" }
@@ -108,34 +144,66 @@ export interface AvailabilityQueryInput {
  * times of the date she is looking at.
  */
 export function createAvailabilityReader(slug: string, fetchImpl: Fetch = fetch) {
+  return createReader<AvailabilityQueryInput, Availability>(
+    (query) => {
+      const params = new URLSearchParams();
+      if (query.serviceId !== undefined) params.set("service", query.serviceId);
+      if (query.date !== undefined) params.set("date", query.date);
+      const search = params.toString();
+      return `${bookingEndpoint(slug)}/availability${search ? `?${search}` : ""}`;
+    },
+    parseAvailability,
+    fetchImpl,
+  );
+}
+
+export interface SelectionQueryInput {
+  /** In the customer's order: the order is part of the question. */
+  readonly serviceIds: readonly string[];
+  readonly date?: string;
+}
+
+/** The selection availability endpoint, the ids as repeated `service` parameters in her order. */
+export function selectionAvailabilityUrl(slug: string, query: SelectionQueryInput): string {
+  const params = new URLSearchParams();
+  for (const id of query.serviceIds) params.append("service", id);
+  if (query.date !== undefined) params.set("date", query.date);
+  return `${bookingEndpoint(slug)}/selection/availability?${params.toString()}`;
+}
+
+/** Reads the availability of a selection with the rules of `createAvailabilityReader` (one screen, newest wins). */
+export function createSelectionAvailabilityReader(slug: string, fetchImpl: Fetch = fetch) {
+  return createReader<SelectionQueryInput, SelectionAvailability>(
+    (query) => selectionAvailabilityUrl(slug, query),
+    parseSelectionAvailability,
+    fetchImpl,
+  );
+}
+
+function createReader<Q, T>(urlOf: (query: Q) => string, parse: (data: unknown) => T | undefined, fetchImpl: Fetch) {
   let generation = 0;
   let inFlight: AbortController | undefined;
 
   return {
-    async read(query: AvailabilityQueryInput): Promise<AvailabilityResult> {
+    async read(query: Q): Promise<AvailabilityResult<T>> {
       generation += 1;
       const mine = generation;
       inFlight?.abort();
       const controller = new AbortController();
       inFlight = controller;
 
-      const params = new URLSearchParams();
-      if (query.serviceId !== undefined) params.set("service", query.serviceId);
-      if (query.date !== undefined) params.set("date", query.date);
-      const search = params.toString();
-
       // Plain timer, not AbortSignal.any()/timeout(): older mobile browsers lack them.
       const timer = setTimeout(() => controller.abort(), AVAILABILITY_TIMEOUT_MS);
-      let result: AvailabilityResult;
+      let result: AvailabilityResult<T>;
       try {
-        const response = await fetchImpl(`${bookingEndpoint(slug)}/availability${search ? `?${search}` : ""}`, {
+        const response = await fetchImpl(urlOf(query), {
           headers: { Accept: "application/json" },
           cache: "no-store",
           credentials: "same-origin",
           signal: controller.signal,
         });
         const data: unknown = await response.json();
-        result = readAvailabilityAnswer(data);
+        result = readAvailabilityAnswer(data, parse);
       } catch {
         result = { status: "ERROR" };
       } finally {
@@ -150,12 +218,12 @@ export function createAvailabilityReader(slug: string, fetchImpl: Fetch = fetch)
   };
 }
 
-function readAvailabilityAnswer(data: unknown): AvailabilityResult {
+function readAvailabilityAnswer<T>(data: unknown, parse: (data: unknown) => T | undefined): AvailabilityResult<T> {
   if (typeof data !== "object" || data === null) return { status: "ERROR" };
   const record = data as Record<string, unknown>;
   if (record.status === "UNAVAILABLE") return { status: "UNAVAILABLE" };
   if (record.status === "RATE_LIMITED") return { status: "RATE_LIMITED" };
   if (record.status !== "OK") return { status: "ERROR" };
-  const availability = parseAvailability(record.availability);
+  const availability = parse(record.availability);
   return availability === undefined ? { status: "ERROR" } : { status: "OK", availability };
 }

@@ -3,7 +3,14 @@
 import { useEffect, useReducer, useRef, useState, type RefObject } from "react";
 
 import { formatLongDate, type AvailableSlot, type BookableService } from "@/features/availability/availability";
-import { createAvailabilityReader, newIdempotencyKey, submitBooking } from "@/features/booking/booking-client";
+import type { SelectionQuote } from "@/features/availability/selection";
+import {
+  createAvailabilityReader,
+  createSelectionAvailabilityReader,
+  newIdempotencyKey,
+  submitBooking,
+  submitSelectionBooking,
+} from "@/features/booking/booking-client";
 import {
   canShowStep,
   flowReducer,
@@ -11,11 +18,14 @@ import {
   isAttemptLocked,
   JOURNEY,
   planSend,
+  type BookingMode,
   type FlowAction,
   type FlowStep,
 } from "@/features/booking/booking-flow";
 import type { CustomerField } from "@/features/booking/booking-request";
 import { CHECKING, type ChallengeState } from "@/features/booking/challenge";
+import { isSelectionRequest } from "@/features/booking/selection-request";
+import { clearSavedSelection, readSavedSelection, saveSelection, sessionStore } from "@/features/booking/selection-storage";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -38,8 +48,9 @@ export interface BookingFlowProps {
   readonly profileHref: string;
   /** The Cloudflare Turnstile site key the server configured (public by nature). */
   readonly challengeSiteKey: string;
-  /** What the server read for this page: the bookable services and the bookable window. */
+  /** What the server read for this page: which booking it supports, the bookable services and the bookable window. */
   readonly initial: {
+    readonly mode: BookingMode;
     readonly services: readonly BookableService[];
     readonly firstDate: string;
     readonly lastDate: string;
@@ -60,7 +71,25 @@ const STEP_LABELS: Readonly<Record<Exclude<FlowStep, "done">, string>> = {
 const PREVIOUS: Readonly<Partial<Record<FlowStep, FlowStep>>> = { slot: "service", details: "slot", review: "details" };
 
 /** Notices shown above a step (the review shows its own, next to the button). */
-const STEP_NOTICES = new Set(["SLOT_TAKEN", "SERVICE_GONE", "REQUEST_REFUSED", "CLOSED", "CLOSED_UNCERTAIN", "KEY_REUSED"]);
+const STEP_NOTICES = new Set([
+  "SLOT_TAKEN",
+  "SERVICE_GONE",
+  "REQUEST_REFUSED",
+  "CLOSED",
+  "CLOSED_UNCERTAIN",
+  "KEY_REUSED",
+  "SELECTION_CHANGED",
+  "SELECTION_UPDATED",
+  "SELECTION_TOO_LONG",
+  "SELECTION_RESTORED",
+]);
+
+/** The times of one day — and, for a selection, the server's reading of it that offered them. */
+interface SlotResult {
+  readonly key: string;
+  readonly view: SlotsView;
+  readonly quote?: SelectionQuote;
+}
 
 interface Catalog {
   readonly services: readonly BookableService[];
@@ -71,7 +100,8 @@ interface Catalog {
   readonly revision: number;
 }
 
-function Progress({ current }: { current: Exclude<FlowStep, "done"> }) {
+function Progress({ current, mode }: { current: Exclude<FlowStep, "done">; mode: BookingMode }) {
+  const label = (step: Exclude<FlowStep, "done">) => (step === "service" && mode === "selection" ? "Prestations" : STEP_LABELS[step]);
   const index = JOURNEY.indexOf(current);
   return (
     <nav aria-label="Étapes de la réservation" className="flex flex-col gap-2">
@@ -85,13 +115,13 @@ function Progress({ current }: { current: Exclude<FlowStep, "done"> }) {
                 step === current ? "text-lavender-700" : position < index ? "text-foreground/75" : "text-foreground/55",
               )}
             >
-              {position + 1}. {STEP_LABELS[step]}
+              {position + 1}. {label(step)}
             </span>
           </li>
         ))}
       </ol>
       <p aria-hidden="true" className="type-meta text-lavender-700 sm:hidden">
-        Étape {index + 1} sur {JOURNEY.length} · {STEP_LABELS[current]}
+        Étape {index + 1} sur {JOURNEY.length} · {label(current)}
       </p>
     </nav>
   );
@@ -109,9 +139,16 @@ function focusWithoutJump(element: HTMLElement | null) {
  * returns to the previous step) and the focus (each step's heading).
  */
 export function BookingFlow({ slug, professional, profileHref, challengeSiteKey, initial }: BookingFlowProps) {
-  const [state, dispatch] = useReducer(flowReducer, undefined, () => initialFlowState());
-  const [catalog, setCatalog] = useState<Catalog>({ ...initial, revision: 0 });
-  const [slotResult, setSlotResult] = useState<{ key: string; view: SlotsView }>();
+  const mode = initial.mode;
+  const [state, dispatch] = useReducer(flowReducer, undefined, () => initialFlowState(mode));
+  const [catalog, setCatalog] = useState<Catalog>({
+    services: initial.services,
+    firstDate: initial.firstDate,
+    lastDate: initial.lastDate,
+    timeZone: initial.timeZone,
+    revision: 0,
+  });
+  const [slotResult, setSlotResult] = useState<SlotResult>();
   const [slotRetry, setSlotRetry] = useState(0);
   const [popCount, setPopCount] = useState(0);
   /** The security check of the review step, and a counter that asks it for a new token. */
@@ -135,6 +172,7 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
     phone: useRef<HTMLInputElement>(null),
   };
   const slotsReaderRef = useRef<ReturnType<typeof createAvailabilityReader>>(null);
+  const selectionReaderRef = useRef<ReturnType<typeof createSelectionAvailabilityReader>>(null);
   const catalogReaderRef = useRef<ReturnType<typeof createAvailabilityReader>>(null);
   const sendingRef = useRef(false);
   const historyModeRef = useRef<"push" | "replace">("replace");
@@ -142,14 +180,20 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
   const focusIssuesRef = useRef(false);
   const firstStepRenderRef = useRef(true);
 
-  const { step, date, slot } = state;
-  const serviceId = state.service?.id;
-  // The latest name and duration the server gave for the chosen service, else the one chosen.
-  const service = catalog.services.find((candidate) => candidate.id === serviceId) ?? state.service;
-  const slotKey = serviceId !== undefined && date !== undefined ? `${serviceId}|${date}|${state.slotsRevision}|${slotRetry}` : undefined;
+  const { step, date, slot, selection } = state;
+  const selectionMode = mode === "selection";
+  // In order: the selection IS the question (the same services in another order are another one).
+  const selectionKey = selection.map((service) => service.id).join(",");
+  const serviceId = mode === "single" ? selection[0]?.id : undefined;
+  const slotKey =
+    selection.length > 0 && date !== undefined ? `${selectionKey}|${date}|${state.slotsRevision}|${slotRetry}` : undefined;
   const onSlotStep = step === "slot";
-  const slots: SlotsView = slotResult !== undefined && slotResult.key === slotKey ? slotResult.view : { status: "loading" };
+  const currentSlots = slotResult !== undefined && slotResult.key === slotKey ? slotResult : undefined;
+  const slots: SlotsView = currentSlots?.view ?? { status: "loading" };
   const locked = isAttemptLocked(state);
+  /** What the step shows of the selection: the server's reading of it when there is one (lengths, prices). */
+  const shown: readonly BookableService[] = state.quote?.services ?? currentSlots?.quote?.services ?? selection;
+  const shownMinutes = state.quote?.durationMinutes ?? currentSlots?.quote?.durationMinutes;
 
   /** A step change the customer asked for: a new history entry, so Back returns here. */
   const navigate = (action: FlowAction) => {
@@ -220,9 +264,74 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.issues]);
 
-  // ---- The times of the chosen service and date — read again whenever the key changes.
+  // ---- `selection` mode: the times of the WHOLE selection on the chosen date — read again whenever the key changes.
   useEffect(() => {
-    if (!onSlotStep || slotKey === undefined || serviceId === undefined || date === undefined) return;
+    if (!selectionMode || !onSlotStep || slotKey === undefined || date === undefined || selectionKey === "") return;
+    selectionReaderRef.current ??= createSelectionAvailabilityReader(slug);
+    let active = true;
+    void selectionReaderRef.current.read({ serviceIds: selectionKey.split(","), date }).then((result) => {
+      if (!active || result.status === "STALE") return;
+      if (result.status === "OK") {
+        const availability = result.availability;
+        setCatalog((previous) => ({
+          ...previous,
+          services: availability.services,
+          firstDate: availability.firstDate,
+          lastDate: availability.lastDate,
+          timeZone: availability.timeZone,
+        }));
+        // The selection takes the server's current values; a change is said, never silent.
+        dispatch({ type: "CATALOG", services: availability.services });
+        switch (availability.status) {
+          case "UNKNOWN_SERVICE":
+            dispatch({ type: "SERVICE_UNAVAILABLE", serviceId: availability.serviceId });
+            return;
+          case "INVALID_SELECTION":
+            dispatch({ type: "SELECTION_REFUSED" });
+            return;
+          case "SELECTION_TOO_LONG":
+            setSlotResult({ key: slotKey, view: { status: "too_long", durationMinutes: availability.selection!.durationMinutes } });
+            return;
+          case "DOES_NOT_FIT":
+            setSlotResult({
+              key: slotKey,
+              view: {
+                status: "does_not_fit",
+                durationMinutes: availability.selection!.durationMinutes,
+                longestIntervalMinutes: availability.longestIntervalMinutes ?? 0,
+              },
+            });
+            return;
+          case "OUT_OF_WINDOW":
+            setSlotResult({ key: slotKey, view: { status: "out_of_window" }, quote: availability.selection });
+            return;
+          case "SLOTS":
+            if (availability.slots.length > 0) {
+              const count = availability.slots.length;
+              setLastCounts((previous) => ({ ...previous, [selectionKey]: count }));
+            }
+            setSlotResult({ key: slotKey, view: { status: "ready", slots: availability.slots }, quote: availability.selection });
+            return;
+          case "CHOOSE_DATE":
+            setSlotResult({ key: slotKey, view: { status: "error" } });
+            return;
+        }
+      }
+      if (result.status === "UNAVAILABLE") {
+        dispatch({ type: "CLOSED" });
+        setSlotResult({ key: slotKey, view: { status: "ready", slots: [] } });
+        return;
+      }
+      setSlotResult({ key: slotKey, view: { status: result.status === "RATE_LIMITED" ? "limited" : "error" } });
+    });
+    return () => {
+      active = false;
+    };
+  }, [slug, selectionMode, onSlotStep, slotKey, selectionKey, date]);
+
+  // ---- `single` mode: the times of the chosen service and date — read again whenever the key changes.
+  useEffect(() => {
+    if (selectionMode || !onSlotStep || slotKey === undefined || serviceId === undefined || date === undefined) return;
     slotsReaderRef.current ??= createAvailabilityReader(slug);
     let active = true;
     void slotsReaderRef.current.read({ serviceId, date }).then((result) => {
@@ -236,6 +345,7 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
           lastDate: availability.lastDate,
           timeZone: availability.timeZone,
         }));
+        dispatch({ type: "CATALOG", services: availability.services });
         if (availability.status === "UNKNOWN_SERVICE") {
           dispatch({ type: "SERVICE_UNAVAILABLE" });
           return;
@@ -265,7 +375,7 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
     return () => {
       active = false;
     };
-  }, [slug, onSlotStep, slotKey, serviceId, date]);
+  }, [slug, selectionMode, onSlotStep, slotKey, serviceId, date]);
 
   // ---- The list of services, read again after the server said one is gone.
   useEffect(() => {
@@ -284,6 +394,8 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
           timeZone: availability.timeZone,
           revision,
         });
+        // After SELECTION_CHANGED this lists what changed; a service no longer offered leaves the selection.
+        dispatch({ type: "CATALOG", services: availability.services });
         setCatalogIssue(undefined);
         return;
       }
@@ -317,9 +429,26 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
     return () => window.removeEventListener("beforeunload", guard);
   }, [locked]);
 
+  // ---- `selection` mode: the selection survives a reload of this tab — its ids only, checked again here.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (!selectionMode || restoredRef.current) return;
+    restoredRef.current = true;
+    const ids = readSavedSelection(sessionStore(), slug);
+    if (ids.length > 0) dispatch({ type: "RESTORE", ids, services: initial.services });
+  }, [selectionMode, slug, initial.services]);
+
+  const booked = step === "done";
+  useEffect(() => {
+    if (!selectionMode || !restoredRef.current) return;
+    if (booked) clearSavedSelection(sessionStore(), slug);
+    else saveSelection(sessionStore(), slug, selectionKey === "" ? [] : selectionKey.split(","));
+  }, [selectionMode, slug, selectionKey, booked]);
+
   useEffect(
     () => () => {
       slotsReaderRef.current?.cancel();
+      selectionReaderRef.current?.cancel();
       catalogReaderRef.current?.cancel();
     },
     [],
@@ -340,7 +469,11 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
     setChallengeReset((count) => count + 1);
     dispatch({ type: "SENDING", attempt: plan.attempt });
     try {
-      const response = await submitBooking(slug, plan.attempt.request, plan.attempt.key, challengeToken);
+      const { request, key } = plan.attempt;
+      // ONE request for the whole selection — never one booking per service.
+      const response = isSelectionRequest(request)
+        ? await submitSelectionBooking(slug, request, key, challengeToken)
+        : await submitBooking(slug, request, key, challengeToken);
       historyModeRef.current = "replace";
       dispatch({ type: "ANSWER", response });
     } finally {
@@ -378,17 +511,17 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
           </a>
         )}
         <h1 className="type-headline">{step === "done" ? "Rendez-vous confirmé" : "Prendre rendez-vous"}</h1>
-        {step !== "done" ? <Progress current={step} /> : null}
+        {step !== "done" ? <Progress current={step} mode={mode} /> : null}
       </header>
 
       {stepNotice ? (
         <div className={step === "slot" ? undefined : NARROW}>
-          <FlowNoticeBox notice={stepNotice} professional={professional} />
+          <FlowNoticeBox notice={stepNotice} professional={professional} services={state.noticeServices} changes={state.changes} />
         </div>
       ) : null}
 
       {step === "service" ? (
-        <div className={NARROW}>
+        <div className={selectionMode ? undefined : NARROW}>
           <ServiceStep
             headingRef={headingRef}
             services={catalog.services}
@@ -401,24 +534,36 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
             }}
             professional={professional}
             onChoose={(chosen) => navigate({ type: "CHOOSE_SERVICE", service: chosen, firstDate: catalog.firstDate })}
+            {...(selectionMode
+              ? {
+                  selection: {
+                    services: selection,
+                    onAdd: (added: BookableService) => dispatch({ type: "ADD_SERVICE", service: added }),
+                    onRemove: (removedId: string) => dispatch({ type: "REMOVE_SERVICE", serviceId: removedId }),
+                    onChooseTimes: () => navigate({ type: "CHOOSE_TIMES", firstDate: catalog.firstDate }),
+                  },
+                }
+              : {})}
           />
         </div>
       ) : null}
 
-      {step === "slot" && service !== undefined ? (
+      {step === "slot" && selection.length > 0 ? (
         <SlotStep
           headingRef={headingRef}
-          service={service}
+          services={shown}
+          durationMinutes={shownMinutes}
+          selectionMode={selectionMode}
           window={catalog}
           date={date}
           slot={slot}
           slots={slots}
           timeZone={catalog.timeZone}
           professional={professional}
-          loadingCount={serviceId === undefined ? undefined : lastCounts[serviceId]}
+          loadingCount={lastCounts[selectionKey]}
           onChangeService={back}
           onChooseDate={(chosen) => dispatch({ type: "CHOOSE_DATE", date: chosen })}
-          onChooseSlot={(chosen: AvailableSlot) => dispatch({ type: "CHOOSE_SLOT", slot: chosen })}
+          onChooseSlot={(chosen: AvailableSlot) => dispatch({ type: "CHOOSE_SLOT", slot: chosen, quote: currentSlots?.quote })}
           onRetry={() => setSlotRetry((count) => count + 1)}
           onBack={back}
           onContinue={() => navigate({ type: "GO_TO", step: "details" })}
@@ -442,17 +587,28 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
               }}
             />
           </div>
-          {service !== undefined ? (
-            <AppointmentSummary service={service} professional={professional} date={date} slot={slot} timeZone={catalog.timeZone} className="hidden lg:flex" />
+          {selection.length > 0 ? (
+            <AppointmentSummary
+              services={shown}
+              durationMinutes={shownMinutes}
+              showPrices={selectionMode}
+              professional={professional}
+              date={date}
+              slot={slot}
+              timeZone={catalog.timeZone}
+              className="hidden lg:flex"
+            />
           ) : null}
         </div>
       ) : null}
 
-      {step === "review" && service !== undefined && date !== undefined && slot !== undefined ? (
+      {step === "review" && selection.length > 0 && date !== undefined && slot !== undefined ? (
         <div className={NARROW}>
           <ReviewStep
             headingRef={headingRef}
-            service={service}
+            services={shown}
+            durationMinutes={shownMinutes}
+            selectionMode={selectionMode}
             date={date}
             slot={slot}
             timeZone={catalog.timeZone}

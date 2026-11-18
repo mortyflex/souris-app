@@ -24,11 +24,26 @@ export type CustomerField = (typeof CUSTOMER_FIELDS)[number];
 export type CustomerDetails = Readonly<Record<CustomerField, string>>;
 export const EMPTY_DETAILS: CustomerDetails = { firstName: "", lastName: "", email: "", phone: "" };
 
-/** The engine's field names: INVALID_REQUEST answers one of them. */
-export type EngineField = "idempotency_key" | "service_id" | "starts_at" | "first_name" | "last_name" | "email" | "phone";
+/**
+ * The engines' field names: INVALID_REQUEST answers one of them. `service_ids`
+ * and `selection_fingerprint` are the multi-service engine's
+ * (`selection-request.ts`).
+ */
+export type EngineField =
+  | "idempotency_key"
+  | "service_id"
+  | "service_ids"
+  | "selection_fingerprint"
+  | "starts_at"
+  | "first_name"
+  | "last_name"
+  | "email"
+  | "phone";
 export const ENGINE_FIELDS: readonly EngineField[] = [
   "idempotency_key",
   "service_id",
+  "service_ids",
+  "selection_fingerprint",
   "starts_at",
   "first_name",
   "last_name",

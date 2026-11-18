@@ -11,9 +11,9 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { LinkPendingGlyph } from "@/components/motion/link-pending-glyph";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { parseAvailabilityQuery, type Availability } from "@/features/availability/availability";
-import { getAvailability } from "@/features/availability/get-availability";
+import { parseAvailabilityQuery } from "@/features/availability/availability";
 import { isAvailabilityPreviewEnabled } from "@/features/availability/preview";
+import { getBookingCatalog, type BookingCatalog } from "@/features/booking/booking-catalog";
 import { isBookingFlowEnabled } from "@/features/booking/flow-gate";
 import { challengeSiteKey } from "@/features/booking/turnstile";
 import { getPublicProfile } from "@/features/public-profile/get-public-profile";
@@ -58,6 +58,11 @@ function BookingLoadError({ profile }: { profile: PublicProfile }) {
  * Without a usable bot challenge (Cloudflare Turnstile keys, `turnstile.ts`)
  * the flow is not offered: the page says booking is unavailable (fail closed).
  *
+ * Which booking the flow offers is the database's answer (`getBookingCatalog`):
+ * several services in ONE appointment where the multi-service contract is
+ * applied, the single-service flow where it is not yet — never a guess from a
+ * failure.
+ *
  * Elsewhere the route keeps its notice, or the read-only availability preview
  * (`isAvailabilityPreviewEnabled`).
  */
@@ -90,13 +95,13 @@ async function bookingContent({ params, searchParams }: PageProps<"/r/[slug]/res
     if (!profile.bookingEnabled) return { content: <BookingInactiveNotice profile={profile} reason="paused" />, wide: false };
     const siteKey = challengeSiteKey();
     if (siteKey === undefined) return { content: <BookingInactiveNotice profile={profile} reason="unavailable" />, wide: false };
-    let availability: Availability | null;
+    let catalog: BookingCatalog | null;
     try {
-      availability = await getAvailability(profile.slug, {});
+      catalog = await getBookingCatalog(profile.slug);
     } catch {
       return { content: <BookingLoadError profile={profile} />, wide: false };
     }
-    if (availability === null) return { content: <BookingInactiveNotice profile={profile} reason="unavailable" />, wide: false };
+    if (catalog === null) return { content: <BookingInactiveNotice profile={profile} reason="unavailable" />, wide: false };
     return {
       wide: true,
       content: (
@@ -111,10 +116,11 @@ async function bookingContent({ params, searchParams }: PageProps<"/r/[slug]/res
             ...(profile.email !== undefined ? { email: profile.email } : {}),
           }}
           initial={{
-            services: availability.services,
-            firstDate: availability.firstDate,
-            lastDate: availability.lastDate,
-            timeZone: availability.timeZone,
+            mode: catalog.mode,
+            services: catalog.services,
+            firstDate: catalog.firstDate,
+            lastDate: catalog.lastDate,
+            timeZone: catalog.timeZone,
           }}
         />
       ),

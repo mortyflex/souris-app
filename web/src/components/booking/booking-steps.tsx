@@ -13,6 +13,7 @@ import {
   type AvailableSlot,
   type BookableService,
 } from "@/features/availability/availability";
+import { MAX_SELECTED_SERVICES, type ServiceChange } from "@/features/availability/selection";
 import { groupBookableServices, PRICES_NOTE, showsAnyPrice } from "@/features/availability/service-catalog";
 import type { ConfirmedBooking } from "@/features/booking/booking-answer";
 import type { FlowNotice } from "@/features/booking/booking-flow";
@@ -24,6 +25,16 @@ import { cn } from "@/lib/utils";
 import { DateStrip } from "./date-strip";
 import { groupSlotsByPeriod, skeletonCount } from "./date-strip-rules";
 import { ServiceCard } from "./service-card";
+import {
+  ChangesList,
+  INDICATIVE_NOTE,
+  SELECTION_LIMIT_ID,
+  SelectedServicesList,
+  SelectionLimitNote,
+  SelectionPanel,
+  SelectionStickyBar,
+  SelectionTotals,
+} from "./selection-summary";
 
 /**
  * The screens of the public booking flow — presentation only. State, network
@@ -85,7 +96,11 @@ interface NoticeCopy {
   readonly contact?: boolean;
 }
 
-export function noticeCopy(notice: FlowNotice, professionalName: string): NoticeCopy {
+/**
+ * The words of a notice. `services` names the services it is about, when the
+ * flow knows them (a selection that lost one).
+ */
+export function noticeCopy(notice: FlowNotice, professionalName: string, services: readonly string[] = []): NoticeCopy {
   switch (notice) {
     case "SLOT_TAKEN":
       return {
@@ -94,7 +109,51 @@ export function noticeCopy(notice: FlowNotice, professionalName: string): Notice
         body: "Choisissez un autre horaire : vos coordonnées sont conservées.",
       };
     case "SERVICE_GONE":
+      if (services.length === 1) {
+        return {
+          tone: "danger",
+          title: `« ${services[0]} » n’est plus proposée en ligne.`,
+          body: "Elle a été retirée de votre sélection : vérifiez-la, puis choisissez un horaire.",
+        };
+      }
+      if (services.length > 1) {
+        return {
+          tone: "danger",
+          title: "Certaines prestations ne sont plus proposées en ligne.",
+          body: `Elles ont été retirées de votre sélection (${services.map((name) => `« ${name} »`).join(", ")}) : vérifiez-la, puis choisissez un horaire.`,
+        };
+      }
       return { tone: "danger", title: "Cette prestation n’est plus proposée en ligne.", body: "Choisissez une autre prestation." };
+    case "SELECTION_CHANGED":
+      return {
+        tone: "danger",
+        title: "Votre sélection a changé.",
+        body: `Rien n’a été réservé. Une ou plusieurs prestations ont été modifiées depuis que vous les avez choisies${
+          services.length === 0
+            ? ""
+            : services.length === 1
+              ? `, et « ${services[0]} » n’est plus proposée en ligne : elle a été retirée de votre sélection`
+              : `, et ${services.map((name) => `« ${name} »`).join(", ")} ne sont plus proposées en ligne : elles ont été retirées de votre sélection`
+        }. Vérifiez les informations à jour, puis choisissez à nouveau un horaire.`,
+      };
+    case "SELECTION_UPDATED":
+      return {
+        tone: "neutral",
+        title: "Les informations de votre sélection ont été mises à jour.",
+        body: "Vérifiez-les dans le récapitulatif, puis choisissez à nouveau un horaire.",
+      };
+    case "SELECTION_TOO_LONG":
+      return {
+        tone: "danger",
+        title: "Votre sélection dépasse 12 h.",
+        body: "Rien n’a été réservé. Retirez une ou plusieurs prestations, puis choisissez un horaire.",
+      };
+    case "SELECTION_RESTORED":
+      return {
+        tone: "neutral",
+        title: "Votre sélection a changé depuis votre dernière visite.",
+        body: "Les prestations qui ne sont plus proposées en ligne en ont été retirées. Vérifiez-la avant de choisir un horaire.",
+      };
     case "REQUEST_REFUSED":
       return {
         tone: "danger",
@@ -156,8 +215,20 @@ export function noticeCopy(notice: FlowNotice, professionalName: string): Notice
   }
 }
 
-export function FlowNoticeBox({ notice, professional }: { notice: FlowNotice; professional: Professional }) {
-  const copy = noticeCopy(notice, professional.name);
+export function FlowNoticeBox({
+  notice,
+  professional,
+  services,
+  changes = [],
+}: {
+  notice: FlowNotice;
+  professional: Professional;
+  /** The services the notice is about, by name. */
+  services?: readonly string[];
+  /** What changed in the selection (SELECTION_CHANGED, SELECTION_UPDATED). */
+  changes?: readonly ServiceChange[];
+}) {
+  const copy = noticeCopy(notice, professional.name, services);
   return (
     <div
       role={copy.tone === "danger" ? "alert" : "status"}
@@ -168,6 +239,7 @@ export function FlowNoticeBox({ notice, professional }: { notice: FlowNotice; pr
     >
       <p className="type-subtitle">{copy.title}</p>
       <p className="type-body-small">{copy.body}</p>
+      <ChangesList changes={changes} />
       {copy.contact ? <ContactLinks professional={professional} /> : null}
     </div>
   );
@@ -226,6 +298,14 @@ function Actions({ children }: { children: ReactNode }) {
 // ---------------------------------------------------------------------------
 // 1. Service
 // ---------------------------------------------------------------------------
+/** `selection` mode: her ordered selection and what can be done with it. */
+export interface ServiceSelection {
+  readonly services: readonly BookableService[];
+  readonly onAdd: (service: BookableService) => void;
+  readonly onRemove: (serviceId: string) => void;
+  readonly onChooseTimes: () => void;
+}
+
 export function ServiceStep({
   services,
   selectedId,
@@ -235,6 +315,7 @@ export function ServiceStep({
   onChoose,
   headingRef,
   professional,
+  selection,
 }: {
   services: readonly BookableService[];
   selectedId?: string;
@@ -245,10 +326,22 @@ export function ServiceStep({
   onChoose: (service: BookableService) => void;
   headingRef?: Ref<HTMLHeadingElement>;
   professional: Professional;
+  /** Several services per booking (`selection` mode): add, remove, then « Choisir un horaire ». */
+  selection?: ServiceSelection;
 }) {
-  return (
-    <section aria-labelledby="booking-step-heading" className="flex flex-col gap-5">
-      <StepHeading headingRef={headingRef}>Choisissez une prestation</StepHeading>
+  const content = (
+    <section aria-labelledby="booking-step-heading" className="flex min-w-0 flex-col gap-5">
+      {selection === undefined ? (
+        <StepHeading headingRef={headingRef}>Choisissez une prestation</StepHeading>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <StepHeading headingRef={headingRef}>Choisissez vos prestations</StepHeading>
+          <p className="type-body-small text-foreground/75">
+            Jusqu’à {MAX_SELECTED_SERVICES} prestations pour un même rendez-vous : elles s’enchaînent dans l’ordre où vous les
+            ajoutez.
+          </p>
+        </div>
+      )}
       {loading ? (
         <p role="status" className={cn(quiet, "flex items-center gap-2 text-lavender-700")}>
           <Spinner size={14} />
@@ -274,9 +367,34 @@ export function ServiceStep({
           <ContactLinks professional={professional} />
         </div>
       ) : (
-        <ServiceList services={services} selectedId={selectedId} loading={loading} onChoose={onChoose} />
+        <ServiceList services={services} selectedId={selectedId} loading={loading} onChoose={onChoose} selection={selection} />
       )}
+      {selection !== undefined ? (
+        <>
+          <SelectionPanel
+            services={selection.services}
+            onRemove={selection.onRemove}
+            onChooseTimes={selection.onChooseTimes}
+            disabled={loading}
+            className={cn("flex lg:hidden", selection.services.length === 0 && "hidden")}
+          />
+          <SelectionStickyBar services={selection.services} onChooseTimes={selection.onChooseTimes} disabled={loading} className="lg:hidden" />
+        </>
+      ) : null}
     </section>
+  );
+  if (selection === undefined) return content;
+  return (
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-8">
+      {content}
+      <SelectionPanel
+        services={selection.services}
+        onRemove={selection.onRemove}
+        onChooseTimes={selection.onChooseTimes}
+        disabled={loading}
+        className="sticky top-6 hidden lg:flex"
+      />
+    </div>
   );
 }
 
@@ -290,32 +408,51 @@ function ServiceList({
   selectedId,
   loading,
   onChoose,
+  selection,
 }: {
   services: readonly BookableService[];
   selectedId?: string;
   loading?: boolean;
   onChoose: (service: BookableService) => void;
+  selection?: ServiceSelection;
 }) {
   const groups = groupBookableServices(services);
   const titled = groups.some((group) => group.title !== undefined);
+  const chosen = selection?.services.map((service) => service.id) ?? [];
+  const canAdd = chosen.length < MAX_SELECTED_SERVICES;
   const cards = (list: readonly BookableService[]) => (
     <ul aria-busy={loading || undefined} className="grid gap-3 sm:grid-cols-2 sm:gap-4">
-      {list.map((service) => (
-        <li key={service.id} className="min-w-0">
-          <ServiceCard
-            service={service}
-            selected={service.id === selectedId}
-            disabled={loading}
-            headingLevel={titled ? 4 : 3}
-            onChoose={() => onChoose(service)}
-          />
-        </li>
-      ))}
+      {list.map((service) => {
+        const index = chosen.indexOf(service.id);
+        return (
+          <li key={service.id} className="min-w-0">
+            <ServiceCard
+              service={service}
+              selected={selection === undefined ? service.id === selectedId : index >= 0}
+              disabled={loading}
+              headingLevel={titled ? 4 : 3}
+              onChoose={() => onChoose(service)}
+              {...(selection !== undefined
+                ? {
+                    selectionAction: {
+                      ...(index >= 0 ? { position: index + 1 } : {}),
+                      canAdd,
+                      limitId: SELECTION_LIMIT_ID,
+                      onAdd: () => selection.onAdd(service),
+                      onRemove: () => selection.onRemove(service.id),
+                    },
+                  }
+                : {})}
+            />
+          </li>
+        );
+      })}
     </ul>
   );
 
   return (
     <div className="flex flex-col gap-7">
+      {selection !== undefined ? <SelectionLimitNote count={chosen.length} /> : null}
       {groups.map((group) =>
         group.title === undefined ? (
           <div key={group.key}>{cards(group.services)}</div>
@@ -344,10 +481,16 @@ export type SlotsView =
   | { readonly status: "error" }
   | { readonly status: "limited" }
   | { readonly status: "out_of_window" }
-  | { readonly status: "ready"; readonly slots: readonly AvailableSlot[] };
+  | { readonly status: "ready"; readonly slots: readonly AvailableSlot[] }
+  /** The selection is longer than 12 hours: no date can offer it. */
+  | { readonly status: "too_long"; readonly durationMinutes: number }
+  /** The selection is longer than every working interval of the window: no date can offer it. */
+  | { readonly status: "does_not_fit"; readonly durationMinutes: number; readonly longestIntervalMinutes: number };
 
 export function SlotStep({
-  service,
+  services,
+  durationMinutes,
+  selectionMode = false,
   window,
   date,
   slot,
@@ -363,7 +506,12 @@ export function SlotStep({
   onContinue,
   headingRef,
 }: {
-  service: BookableService;
+  /** What is being booked, in order (one service in the single-service flow). */
+  services: readonly BookableService[];
+  /** The server's combined length when it gave one; the sum of the services otherwise. */
+  durationMinutes?: number;
+  /** Several services per booking: the selection is shown with its prices and can be edited. */
+  selectionMode?: boolean;
   window: { readonly firstDate: string; readonly lastDate: string };
   date?: string;
   slot?: AvailableSlot;
@@ -389,6 +537,11 @@ export function SlotStep({
     requestAnimationFrame(() => timesHeadingRef.current?.focus());
   };
   const selection = slot && date ? `${capitalized(formatShortDate(date))} · ${slot.localTime}` : undefined;
+  const minutes = durationMinutes ?? services.reduce((total, service) => total + service.durationMinutes, 0);
+  const what = selectionMode
+    ? `${services.length} prestation${services.length > 1 ? "s" : ""}`
+    : services[0]?.name ?? "";
+  const cannotFit = slots.status === "too_long" || slots.status === "does_not_fit";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-8">
@@ -400,14 +553,18 @@ export function SlotStep({
           <StepHeading headingRef={headingRef}>Choisissez une date et un horaire</StepHeading>
           <p className="type-body-small flex flex-wrap items-center gap-x-3 text-foreground/75">
             <span>
-              {service.name} · <span className="tabular-nums">{formatDuration(service.durationMinutes)}</span>
+              {what} · <span className="tabular-nums">{formatDuration(minutes)}</span>
             </span>
             <button type="button" onClick={onChangeService} className={cn(link, "min-h-11")}>
-              Changer de prestation
+              {selectionMode ? "Modifier la sélection" : "Changer de prestation"}
             </button>
           </p>
         </div>
 
+        {cannotFit ? (
+          <CannotFit view={slots} professional={professional} onChangeService={onChangeService} />
+        ) : (
+        <>
         <DateStrip dates={dates} selected={date} onChoose={onChooseDate} />
 
         <div className="flex flex-col gap-4">
@@ -463,7 +620,7 @@ export function SlotStep({
               <p className="type-subtitle">Cette date n’est plus ouverte à la réservation.</p>
               <p className={quiet}>Choisissez une autre date.</p>
             </div>
-          ) : slots.slots.length === 0 ? (
+          ) : slots.status !== "ready" ? null : slots.slots.length === 0 ? (
             <div className="flex flex-col items-start gap-3.5 rounded-[1.4rem] bg-lavender-25 p-5 ring-1 ring-inset ring-lavender-100" role="status">
               <span aria-hidden="true" className="grid size-14 place-items-center rounded-full bg-background text-lavender-700 shadow-card">
                 <CalendarIcon size={22} />
@@ -524,18 +681,21 @@ export function SlotStep({
             Un horaire n’est réservé qu’une fois votre rendez-vous confirmé.
           </p>
         </div>
+        </>
+        )}
 
         <Button type="button" variant="ghost" onClick={onBack} className="self-start lg:hidden">
           Retour
         </Button>
 
-        {/* Phone: the selection and « Continuer » follow the reader, then dock at the end of the step. */}
-        <div data-sticky-cta="" className="sticky bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-20 lg:hidden">
+        {/* Phone: the selection and « Continuer » follow the reader, then dock at the end of the step —
+            never when no date can offer the selection. */}
+        <div data-sticky-cta="" className={cn("sticky bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-20 lg:hidden", cannotFit && "hidden")}>
           <div className="flex items-center gap-3 rounded-[1.5rem] bg-background py-2.5 pl-5 pr-2.5 shadow-[0_0_0_1px_rgb(223_222_228_/_0.7),0_12px_32px_rgba(31,28,61,0.14)]">
             <div className="min-w-0 flex-1" aria-live="polite">
               <p className="type-subtitle truncate">{selection ?? "Choisissez un horaire"}</p>
               <p className="type-meta truncate text-foreground/60">
-                {service.name} · {formatDuration(service.durationMinutes)}
+                {what} · {formatDuration(minutes)}
               </p>
             </div>
             <Button type="button" size="lg" disabled={slot === undefined} onClick={onContinue}>
@@ -545,7 +705,16 @@ export function SlotStep({
         </div>
       </section>
 
-      <AppointmentSummary service={service} professional={professional} date={date} slot={slot} timeZone={timeZone} className="hidden lg:flex">
+      <AppointmentSummary
+        services={services}
+        durationMinutes={minutes}
+        showPrices={selectionMode}
+        professional={professional}
+        date={date}
+        slot={slot}
+        timeZone={timeZone}
+        className="hidden lg:flex"
+      >
         <div className="flex flex-col gap-2">
           <Button type="button" size="lg" disabled={slot === undefined} onClick={onContinue} className="w-full">
             Continuer
@@ -559,6 +728,45 @@ export function SlotStep({
   );
 }
 
+/**
+ * A selection no date can offer — said once, with the way out (change the
+ * selection), instead of letting her search through empty days.
+ */
+function CannotFit({
+  view,
+  professional,
+  onChangeService,
+}: {
+  view: Extract<SlotsView, { status: "too_long" | "does_not_fit" }>;
+  professional?: Professional;
+  onChangeService: () => void;
+}) {
+  // « chez <nom> » reads naturally whatever the name (no elision to guess); without one, no name at all.
+  const where = professional !== undefined ? `chez ${professional.name}, ` : "";
+  return (
+    <div role="alert" className="flex flex-col items-start gap-3.5 rounded-[1.4rem] bg-lavender-25 p-5 ring-1 ring-inset ring-lavender-100 sm:p-6">
+      <span aria-hidden="true" className="grid size-14 place-items-center rounded-full bg-background text-lavender-700 shadow-card">
+        <ClockIcon size={22} />
+      </span>
+      <div className="flex flex-col gap-1">
+        <p className="type-subtitle">
+          {view.status === "too_long" ? "Votre sélection dépasse 12 h." : "Votre sélection est trop longue pour un seul rendez-vous."}
+        </p>
+        <p className={quiet}>
+          {view.status === "too_long"
+            ? `Elle dure ${formatDuration(view.durationMinutes)}, au-delà de la durée maximale d’un rendez-vous en ligne.`
+            : `Elle dure ${formatDuration(view.durationMinutes)}, alors que ${where}les plages d’ouverture durent au plus ${formatDuration(view.longestIntervalMinutes)}.`}{" "}
+          Retirez une ou plusieurs prestations pour trouver un horaire.
+        </p>
+      </div>
+      <Button type="button" variant="secondary" onClick={onChangeService}>
+        Modifier ma sélection
+      </Button>
+      {professional ? <ContactLinks professional={professional} /> : null}
+    </div>
+  );
+}
+
 /** The skeleton draws the day as two parts, as the times will be grouped. */
 function splitForSkeleton(count: number): number[] {
   const first = Math.max(3, Math.round(count * 0.4));
@@ -567,11 +775,14 @@ function splitForSkeleton(count: number): number[] {
 
 /**
  * What is being booked, as the customer has chosen it so far — a sticky card
- * beside the step on a desktop (date and time, details). Never a price: the
- * public contract has none.
+ * beside the step on a desktop (date and time, details). With several
+ * services: each one in her order with its length and price, the combined
+ * length and the indicative total (`showPrices`).
  */
 export function AppointmentSummary({
-  service,
+  services,
+  durationMinutes,
+  showPrices = false,
   professional,
   date,
   slot,
@@ -579,7 +790,9 @@ export function AppointmentSummary({
   className,
   children,
 }: {
-  service: BookableService;
+  services: readonly BookableService[];
+  durationMinutes?: number;
+  showPrices?: boolean;
   professional?: Professional;
   date?: string;
   slot?: AvailableSlot;
@@ -587,6 +800,7 @@ export function AppointmentSummary({
   className?: string;
   children?: ReactNode;
 }) {
+  const single = services.length === 1 && !showPrices ? services[0] : undefined;
   return (
     <aside
       aria-labelledby="booking-summary-title"
@@ -599,9 +813,17 @@ export function AppointmentSummary({
         Votre rendez-vous
       </h2>
       <dl className="flex flex-col">
-        <SummaryLine icon={<CheckIcon size={17} />} label="Prestation">
-          <strong className="font-semibold">{service.name}</strong> · {formatDuration(service.durationMinutes)}
-        </SummaryLine>
+        {single !== undefined ? (
+          <SummaryLine icon={<CheckIcon size={17} />} label="Prestation">
+            <strong className="font-semibold">{single.name}</strong> · {formatDuration(single.durationMinutes)}
+          </SummaryLine>
+        ) : (
+          <SummaryLine icon={<CheckIcon size={17} />} label={services.length > 1 ? `Prestations (${services.length})` : "Prestation"}>
+            <SelectedServicesList services={services} showPrices={showPrices} className="pt-1.5" />
+            <SelectionTotals services={services} durationMinutes={durationMinutes} showPrices={showPrices} className="mt-3 border-t border-border/70 pt-3" />
+            {showPrices ? <span className="type-meta mt-1.5 block text-foreground/55">{INDICATIVE_NOTE}</span> : null}
+          </SummaryLine>
+        )}
         {professional ? (
           <SummaryLine icon={<UserIcon size={17} />} label="Avec">
             <strong className="font-semibold">{professional.name}</strong>
@@ -768,7 +990,7 @@ export function DetailsStep({
 function SummaryRow({ label, children, action }: { label: string; children: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 border-t border-border/70 py-4 first:border-t-0 first:pt-0">
-      <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <dt className="type-meta text-foreground/65">{label}</dt>
         <dd className="type-body min-w-0 [overflow-wrap:anywhere]">{children}</dd>
       </div>
@@ -798,7 +1020,9 @@ function EditButton({ label, onClick, state }: { label: string; onClick: () => v
 }
 
 export function ReviewStep({
-  service,
+  services,
+  durationMinutes,
+  selectionMode = false,
   date,
   slot,
   timeZone,
@@ -817,7 +1041,12 @@ export function ReviewStep({
   slow = false,
   headingRef,
 }: {
-  service: BookableService;
+  /** What is confirmed, in order: in the selection mode, the server's reading of it (its fingerprint is sent). */
+  services: readonly BookableService[];
+  /** The server's combined length. */
+  durationMinutes?: number;
+  /** Several services per booking: each with its price, the combined length and the indicative total. */
+  selectionMode?: boolean;
   date: string;
   slot: AvailableSlot;
   timeZone: string;
@@ -847,12 +1076,24 @@ export function ReviewStep({
     <section aria-labelledby="booking-step-heading" className="flex flex-col gap-6">
       <StepHeading headingRef={headingRef}>Vérifiez votre rendez-vous</StepHeading>
       <dl className="rounded-[1.5rem] border border-border/80 bg-background px-5 py-5 sm:px-7">
-        <SummaryRow
-          label="Prestation"
-          action={<EditButton label="Modifier la prestation" state={editState} onClick={() => onEdit("service")} />}
-        >
-          {service.name} <span className="text-foreground/65 tabular-nums">· {formatDuration(service.durationMinutes)}</span>
-        </SummaryRow>
+        {selectionMode ? (
+          <SummaryRow
+            label={services.length > 1 ? `Vos prestations (${services.length})` : "Votre prestation"}
+            action={<EditButton label="Modifier vos prestations" state={editState} onClick={() => onEdit("service")} />}
+          >
+            <SelectedServicesList services={services} className="pt-2" />
+            <SelectionTotals services={services} durationMinutes={durationMinutes} className="mt-4 border-t border-border/70 pt-3" />
+            <span className="type-meta mt-1.5 block text-foreground/55">{INDICATIVE_NOTE}</span>
+          </SummaryRow>
+        ) : (
+          <SummaryRow
+            label="Prestation"
+            action={<EditButton label="Modifier la prestation" state={editState} onClick={() => onEdit("service")} />}
+          >
+            {services[0]?.name}{" "}
+            <span className="text-foreground/65 tabular-nums">· {formatDuration(services[0]?.durationMinutes ?? 0)}</span>
+          </SummaryRow>
+        )}
         <SummaryRow label="Date et horaire" action={<EditButton label="Modifier la date et l’horaire" state={editState} onClick={() => onEdit("slot")} />}>
           {capitalized(formatLongDate(date))}
           <span className="block tabular-nums">{formatTimeRange(slot.localTime, slot.endsAt, timeZone)}</span>
@@ -874,8 +1115,9 @@ export function ReviewStep({
       {notice ? <FlowNoticeBox notice={notice} professional={professional} /> : null}
 
       <p className={quiet}>
-        En confirmant, vous réservez ce créneau auprès de {professional.name}. Vos coordonnées lui sont transmises pour ce
-        rendez-vous.
+        En confirmant, vous réservez ce créneau auprès de {professional.name}
+        {selectionMode && services.length > 1 ? `, pour vos ${services.length} prestations à la suite` : ""}. Vos coordonnées lui
+        sont transmises pour ce rendez-vous.{selectionMode ? " Aucun paiement n’est demandé en ligne." : ""}
       </p>
 
       <div className="flex min-w-0 flex-col gap-3">
@@ -943,7 +1185,15 @@ export function BookingConfirmation({
         </StepHeading>
         <p className="type-body text-foreground/80">
           {professional.name} vous attend le {formatLongDate(booking.localDate)} à{" "}
-          <span className="tabular-nums">{booking.localTime}</span>.
+          <span className="tabular-nums">{booking.localTime}</span>
+          {booking.services.length > 1 ? (
+            <>
+              {" "}
+              pour vos {booking.services.length} prestations, soit{" "}
+              <span className="tabular-nums">{formatDuration(booking.durationMinutes)}</span> en tout
+            </>
+          ) : null}
+          .
         </p>
       </div>
 
@@ -951,10 +1201,20 @@ export function BookingConfirmation({
         <SummaryRow label="Référence">
           <span className="type-figure break-all">{booking.reference}</span>
         </SummaryRow>
-        <SummaryRow label="Prestation">
-          {booking.service.name}{" "}
-          <span className="text-foreground/65 tabular-nums">· {formatDuration(booking.service.durationMinutes)}</span>
-        </SummaryRow>
+        {booking.services.length === 1 ? (
+          <SummaryRow label="Prestation">
+            {booking.services[0]!.name}{" "}
+            <span className="text-foreground/65 tabular-nums">· {formatDuration(booking.services[0]!.durationMinutes)}</span>
+          </SummaryRow>
+        ) : (
+          <SummaryRow label={`Prestations (${booking.services.length})`}>
+            <SelectedServicesList services={booking.services} showPrices={false} className="pt-2" />
+            <span className="type-body-small mt-3 flex items-baseline justify-between gap-4 border-t border-border/70 pt-3">
+              <span className="text-foreground/70">Durée totale</span>
+              <span className="type-label tabular-nums">{formatDuration(booking.durationMinutes)}</span>
+            </span>
+          </SummaryRow>
+        )}
         <SummaryRow label="Date">{capitalized(formatLongDate(booking.localDate))}</SummaryRow>
         <SummaryRow label="Horaire">
           <span className="tabular-nums">{formatTimeRange(booking.localTime, booking.endsAt, booking.timeZone)}</span>
@@ -972,6 +1232,7 @@ export function BookingConfirmation({
         <p className={quiet}>
           Aucun e-mail de confirmation n’est envoyé pour le moment : conservez ces informations (une capture d’écran
           suffit). Pour modifier ou annuler ce rendez-vous, contactez {professional.name}.
+          {booking.kind === "selection" ? " Aucun paiement n’a été effectué en ligne." : ""}
         </p>
         <ContactLinks professional={professional} />
       </div>
