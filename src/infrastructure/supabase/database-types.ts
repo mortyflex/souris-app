@@ -156,6 +156,16 @@ export type Database = {
         };
         Returns: Json;
       };
+      /** 20261021120000 — absent on a project where that migration is not applied (PGRST202). */
+      online_booking_read_service_publication: {
+        Args: { p_business_id: string };
+        Returns: Json;
+      };
+      online_booking_set_service_publication: {
+        /** 1 to 200 catalogue service ids of THIS Business; all or nothing. */
+        Args: { p_business_id: string; p_service_ids: string[]; p_selected: boolean };
+        Returns: Json;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

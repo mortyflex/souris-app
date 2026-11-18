@@ -1,8 +1,9 @@
 // BeautIzzy — OnlineBookingGateway bound to the owner RPCs and the public bucket
 //
-// Five SECURITY DEFINER owner RPCs and one PUBLIC Storage bucket
+// Seven SECURITY DEFINER owner RPCs and one PUBLIC Storage bucket
 // (supabase/migrations/20261015120000_create_online_booking_profiles.sql,
-// 20261016120000_create_online_booking_working_hours.sql). Uses the ONE
+// 20261016120000_create_online_booking_working_hours.sql,
+// 20261021120000_add_online_booking_service_publication.sql). Uses the ONE
 // publishable-key client with the signed-in owner's session. The public read
 // of the website (`online_booking_public_profile`) is service_role only and
 // is never called from the app.
@@ -11,6 +12,9 @@
 // never overwritten (`upsert: false`) — a replaced image is a new path.
 // Working hours: one day per write, sent in its saved form; the answer is
 // the whole week, parsed strictly (seven days, Monday first, whole minutes).
+// Services offered online: the owner view is parsed strictly and fails closed
+// (`bookable` must be `selected AND eligible`, the counts must add up); a
+// project without 20261021120000 answers UNAVAILABLE, never a fake state.
 // Remote errors are reduced to stable codes; their text never reaches the UI.
 
 import type { PostgrestError } from '@supabase/supabase-js';
@@ -25,12 +29,18 @@ import {
 import {
   BOOKING_IMAGE_MAX_BYTES,
   OnlineBookingGatewayError,
+  SERVICE_PUBLICATION_MAX_IDS,
   type BookingImageKind,
   type BookingProfile,
   type BookingProfileServerField,
   type OnlineBookingGateway,
+  type PublishableService,
+  type PublishableServiceCategory,
   type SaveWorkingDayResult,
+  type ServicePublication,
+  type ServicePublicationIssue,
   type SetBookingStateResult,
+  type SetServicePublicationResult,
   type UpdateBookingProfileResult,
   type WorkingDayServerIssue,
   type WorkingHours,
@@ -155,6 +165,89 @@ export function toWorkingHours(data: unknown): WorkingHours {
   };
 }
 
+const SERVICE_PUBLICATION_ISSUES: readonly ServicePublicationIssue[] = [
+  'DELETED',
+  'INACTIVE',
+  'NO_DURATION',
+  'TOO_LONG',
+];
+
+const isWholeNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+function badResult(): never {
+  throw new OnlineBookingGatewayError('UNKNOWN', 'BADRESULT');
+}
+
+function toPublishableServiceCategory(value: unknown): PublishableServiceCategory | undefined {
+  if (value === null || value === undefined) return undefined;
+  const row = asObject(value);
+  if (typeof row.id !== 'string' || row.id.length === 0 || typeof row.name !== 'string' || !isWholeNumber(row.position)) {
+    badResult();
+  }
+  return { id: row.id, name: row.name, position: row.position };
+}
+
+function toPublishableService(value: unknown): PublishableService {
+  const row = asObject(value);
+  const { id, name, type, active, price_cents: priceCents, duration_minutes: durationMinutes } = row;
+  const { description, selected, eligible, bookable } = row;
+  if (typeof id !== 'string' || id.length === 0 || typeof name !== 'string') badResult();
+  if (type !== 'SERVICE' && type !== 'TECHNIQUE') badResult();
+  if (typeof active !== 'boolean' || !isWholeNumber(priceCents) || !isWholeNumber(durationMinutes)) badResult();
+  if (description !== null && description !== undefined && typeof description !== 'string') badResult();
+  if (typeof selected !== 'boolean' || typeof eligible !== 'boolean' || typeof bookable !== 'boolean') badResult();
+  // Fail closed: an answer that contradicts THE rule is not an answer.
+  if (bookable !== (selected && eligible)) badResult();
+  const category = toPublishableServiceCategory(row.category);
+  const reason = eligible
+    ? undefined
+    : SERVICE_PUBLICATION_ISSUES.find((candidate) => candidate === row.ineligible_reason);
+  return {
+    id,
+    name,
+    type,
+    active,
+    priceCents,
+    durationMinutes,
+    selected,
+    eligible,
+    bookable,
+    ...(typeof description === 'string' && description.length > 0 ? { description } : {}),
+    ...(category !== undefined ? { category } : {}),
+    ...(reason !== undefined ? { ineligibleReason: reason } : {}),
+  };
+}
+
+/** Exported for tests: jsonb owner view of the catalogue → validated publication. */
+export function toServicePublication(data: unknown): ServicePublication {
+  const row = asObject(data);
+  const { max_service_minutes: maxServiceMinutes, selected_count: selectedCount, bookable_count: bookableCount } = row;
+  if (!isWholeNumber(maxServiceMinutes) || !isWholeNumber(selectedCount) || !isWholeNumber(bookableCount)) badResult();
+  if (!Array.isArray(row.services)) badResult();
+  const services = row.services.map(toPublishableService);
+  if (new Set(services.map((service) => service.id)).size !== services.length) badResult();
+  if (
+    selectedCount !== services.filter((service) => service.selected).length ||
+    bookableCount !== services.filter((service) => service.bookable).length
+  ) {
+    badResult();
+  }
+  return { maxServiceMinutes, selectedCount, bookableCount, services };
+}
+
+/**
+ * A project where 20261021120000 is not applied has no such function:
+ * PostgREST answers PGRST202 (not in its schema cache), Postgres 42883.
+ * Only the service-publication calls read it as UNAVAILABLE.
+ */
+function mapServicePublicationError(error: Pick<PostgrestError, 'code' | 'message'>): OnlineBookingGatewayError {
+  if (error.code === 'PGRST202' || error.code === '42883') {
+    return new OnlineBookingGatewayError('UNAVAILABLE', error.code);
+  }
+  return mapOnlineBookingPostgrestError(error);
+}
+
 /** A JPEG file starts with the SOI marker FF D8 FF. */
 export function isJpeg(bytes: ArrayBuffer): boolean {
   const head = new Uint8Array(bytes.slice(0, 3));
@@ -277,6 +370,41 @@ export function createSupabaseOnlineBookingGateway(
       }
       if (row.status !== 'UPDATED') throw new OnlineBookingGatewayError('UNKNOWN', 'BADRESULT');
       return { status: 'UPDATED', workingHours: toWorkingHours(data) };
+    },
+
+    async readServicePublication(businessId) {
+      const { data, error } = await client.rpc('online_booking_read_service_publication', {
+        p_business_id: businessId,
+      });
+      if (error) throw mapServicePublicationError(error);
+      return toServicePublication(data);
+    },
+
+    async setServicePublication(businessId, serviceIds, selected): Promise<SetServicePublicationResult> {
+      const ids = [...new Set(serviceIds)];
+      // The server refuses these too (22023); nothing malformed is ever sent.
+      if (
+        ids.length === 0 ||
+        ids.length > SERVICE_PUBLICATION_MAX_IDS ||
+        ids.some((id) => typeof id !== 'string' || id.length === 0 || id.length > 200)
+      ) {
+        throw new OnlineBookingGatewayError('UNKNOWN', 'BADREQUEST');
+      }
+      const { data, error } = await client.rpc('online_booking_set_service_publication', {
+        p_business_id: businessId,
+        p_service_ids: ids,
+        p_selected: selected,
+      });
+      if (error) throw mapServicePublicationError(error);
+      const row = asObject(data);
+      if (row.status === 'UNKNOWN_SERVICE' || row.status === 'NOT_ELIGIBLE') {
+        if (typeof row.service_id !== 'string' || row.service_id.length === 0) badResult();
+        if (row.status === 'UNKNOWN_SERVICE') return { status: 'UNKNOWN_SERVICE', serviceId: row.service_id };
+        const reason = SERVICE_PUBLICATION_ISSUES.find((candidate) => candidate === row.reason);
+        return { status: 'NOT_ELIGIBLE', serviceId: row.service_id, ...(reason !== undefined ? { reason } : {}) };
+      }
+      if (row.status !== 'UPDATED') badResult();
+      return { status: 'UPDATED', publication: toServicePublication(data) };
     },
   };
 }

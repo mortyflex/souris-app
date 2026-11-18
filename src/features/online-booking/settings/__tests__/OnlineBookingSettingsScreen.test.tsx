@@ -22,8 +22,11 @@ jest.spyOn(haptics, 'success').mockImplementation();
 jest.spyOn(haptics, 'warning').mockImplementation();
 
 const mockBack = jest.fn();
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: mockBack }),
+  useRouter: () => ({ back: mockBack, push: mockPush }),
+  // The « Prestations proposées en ligne » entry reads its count on focus.
+  useIsFocused: () => true,
 }));
 
 // The latest removal guard of the screen: a test plays the iOS back gesture /
@@ -146,6 +149,7 @@ beforeEach(() => {
   delete process.env.EXPO_PUBLIC_WEB_URL;
   mockSetStringAsync.mockReset().mockResolvedValue(true);
   mockBack.mockReset();
+  mockPush.mockReset();
 });
 
 afterAll(() => {
@@ -947,5 +951,71 @@ describe('OnlineBookingSettingsScreen — connectivity', () => {
 
     expect(view.getByText(/n’a pas été pris en compte/)).toBeTruthy();
     expect(view.getByTestId('online-booking-publish-switch').props.value).toBe(false);
+  });
+});
+
+describe('OnlineBookingSettingsScreen — « Prestations proposées en ligne »', () => {
+  function gatewayWithServices() {
+    const gateway = createFakeOnlineBookingGateway(testBusiness.name);
+    gateway.seedServicePublication(testBusiness.id, {
+      services: [
+        { id: 'svc-coupe', name: 'Coupe femme', durationMinutes: 45, priceCents: 4500 },
+        { id: 'svc-brushing', name: 'Brushing', durationMinutes: 30 },
+        { id: 'tech-couleur', name: 'Couleur', type: 'TECHNIQUE', durationMinutes: 90, priceCents: 6500 },
+        // Chosen but inactive: neither offered nor available.
+        { id: 'svc-chignon', name: 'Chignon', durationMinutes: 60, active: false },
+      ],
+      selected: ['tech-couleur', 'svc-chignon'],
+    });
+    return gateway;
+  }
+
+  it('shows the server’s count and what it means, above the publication switches', async () => {
+    const view = await renderSettings(gatewayWithServices());
+
+    expect(view.getByText('Prestations proposées en ligne')).toBeTruthy();
+    expect(view.getByTestId('online-booking-services-summary').props.children).toBe('1 sur 3 proposée en ligne');
+    expect(
+      view.getByText('Seules les prestations proposées et disponibles apparaissent sur votre page.'),
+    ).toBeTruthy();
+    const rendered = JSON.stringify(view.toJSON());
+    expect(rendered.indexOf('online-booking-services-entry')).toBeGreaterThan(-1);
+    expect(rendered.indexOf('online-booking-services-entry')).toBeLessThan(rendered.indexOf('online-booking-publication'));
+    const entry = view.getByTestId('online-booking-services-open');
+    expect(entry.props.accessibilityRole).toBe('button');
+    expect(entry.props.accessibilityLabel).toBe('Prestations proposées en ligne, 1 sur 3 proposée en ligne');
+  });
+
+  it('opens the dedicated screen, and takes no part in the profile form or the page state', async () => {
+    const gateway = gatewayWithServices();
+    const view = await renderSettings(gateway);
+
+    await press(view, 'online-booking-services-open');
+    expect(mockPush).toHaveBeenCalledWith('/online-booking-services');
+    expect(isDisabled(view, 'online-booking-save')).toBe(true);
+    expect(mockRemovalGuard.enabled).toBe(false);
+    expect(gateway.calls.update).toBe(0);
+    expect(gateway.calls.setState).toBe(0);
+    expect(gateway.calls.setServices).toBe(0);
+  });
+
+  it('reads « Bientôt disponible » where the server does not offer it yet — the page itself works as before', async () => {
+    const gateway = publishableGateway();
+    gateway.setServicePublicationFailure('UNAVAILABLE');
+    const view = await renderSettings(gateway);
+
+    expect(view.getByTestId('online-booking-services-summary').props.children).toBe('Bientôt disponible');
+    await toggle(view, 'online-booking-publish', true);
+    expect(view.getByTestId('online-booking-publish-switch').props.value).toBe(true);
+    expect(view.getByText('En ligne')).toBeTruthy();
+  });
+
+  it('never stays a spinner when the count cannot be read', async () => {
+    const gateway = gatewayWithServices();
+    gateway.setServicePublicationFailure('NETWORK');
+    const view = await renderSettings(gateway);
+    expect(view.getByTestId('online-booking-services-summary').props.children).toBe(
+      'Choisissez celles que vos clients peuvent réserver',
+    );
   });
 });

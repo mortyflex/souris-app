@@ -745,11 +745,12 @@ Prepared, applied nowhere yet (same reference, §12): the service publication co
 - ONE owner write, `online_booking_set_service_publication(business, service ids, selected)` (ownership first, no subscription needed, all or nothing, under the Business lock of booking creation), and ONE owner read, `online_booking_read_service_publication`;
 - ONE public shape (`online_booking_public_services`): `id`, `name`, `duration_minutes` unchanged, plus `price_cents`, `description` (the existing Service description as bounded plain text — never a second public text) and `category`; bookable services only;
 - a price of `0` is never « free »: clients show « Tarif à confirmer », and a total only when every selected price is positive;
+- the app screen « Prestations proposées en ligne » (Plus › Réservation en ligne, `src/features/online-booking/services/`) is implemented: it reads the SERVER's list, never the device's catalogue, saves each switch at once (nothing shown as saved before the server confirms; a failure puts the server's state back), shows the public text before it is published, and reads a project without the migration as « pas encore disponible »;
 - ACTIVATION GATE: applying it is a publication act — the description, price and category of every service ALREADY selected enter the public answer at once, whatever the website shows; never apply it to a hosted project before it is decided how previously selected services are reviewed or consented to (same reference, §12.8);
 - independent of the location privacy migration: it never defines `online_booking_public_profile` nor `online_booking_owner_profile_json`; either may be applied first — by hand, one file, never `supabase db push` on Staging (it would replay `20261020120000`);
 - approved for the multi-service unit, NOT built: at most eight distinct services and twelve hours per booking, one occurrence each, the customer's order kept, one working interval, ONE atomic transaction, session-only selection ids.
 
-Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, prices, descriptions and categories on public pages (the website reads none yet), holding a slot, customer accounts, payments, the app screen for choosing bookable services, booking several services at once.
+Not implemented: confirmation emails, an app surface for online bookings and their overlaps, the booking flow on the production website, prices, descriptions and categories on public pages (the website reads none yet), holding a slot, customer accounts, payments, booking several services at once.
 
 Build each part of it — booking creation, payments, database changes — only in the phase that explicitly requests it.
 

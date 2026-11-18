@@ -1,11 +1,12 @@
 // BeautIzzy — online booking gateway boundary
 //
-// The narrow app surface of the public booking profile and of the weekly
-// working hours. The server is authoritative for everything here: the app
-// reads and edits ONE owner-scoped profile, asks for its publication, and
-// reads and saves the working hours one day at a time. Nothing goes through
-// the offline sync — every call needs connectivity, and a failed call
-// changes nothing.
+// The narrow app surface of the public booking profile, of the weekly
+// working hours and of the services offered online. The server is
+// authoritative for everything here: the app reads and edits ONE
+// owner-scoped profile, asks for its publication, reads and saves the working
+// hours one day at a time, and reads and changes which catalogue services are
+// offered online. Nothing goes through the offline sync — every call needs
+// connectivity, and a failed call changes nothing.
 
 import type { WorkingDay } from '@/domain/online-booking';
 
@@ -92,6 +93,69 @@ export type SaveWorkingDayResult =
   /** Nothing was written. */
   | { readonly status: 'INVALID_DAY'; readonly reason?: WorkingDayServerIssue };
 
+/**
+ * Why a catalogue service cannot be offered online (THE server rule,
+ * online_booking_service_issue — docs/architecture/ONLINE_BOOKING.md §12.2).
+ */
+export type ServicePublicationIssue = 'DELETED' | 'INACTIVE' | 'NO_DURATION' | 'TOO_LONG';
+
+/** The professional's own category of a service, as the server holds it. */
+export interface PublishableServiceCategory {
+  readonly id: string;
+  readonly name: string;
+  readonly position: number;
+}
+
+/**
+ * One live catalogue service, as the SERVER sees it for online booking. The
+ * catalogue Service stays the only record: nothing here is stored on the
+ * device or synchronized.
+ */
+export interface PublishableService {
+  readonly id: string;
+  readonly name: string;
+  readonly type: 'SERVICE' | 'TECHNIQUE';
+  readonly active: boolean;
+  /** The catalogue price in cents. 0 is « Tarif à confirmer », never « free ». */
+  readonly priceCents: number;
+  /** The sum of its catalogue phases. */
+  readonly durationMinutes: number;
+  /** The description exactly as a customer would read it (the server's public form); absent when none. */
+  readonly description?: string;
+  readonly category?: PublishableServiceCategory;
+  /** The professional's choice — kept while the service is inactive. */
+  readonly selected: boolean;
+  /** THE eligibility rule, decided by the server at this instant. */
+  readonly eligible: boolean;
+  /** Absent when eligible (or when the server names a reason this build does not know). */
+  readonly ineligibleReason?: ServicePublicationIssue;
+  /** Selected AND eligible: exactly what the public page may offer. */
+  readonly bookable: boolean;
+}
+
+export interface ServicePublication {
+  /** The server's length limit of a bookable service (12 hours today). */
+  readonly maxServiceMinutes: number;
+  readonly selectedCount: number;
+  readonly bookableCount: number;
+  /** Every live service of the Business, by name then id. */
+  readonly services: readonly PublishableService[];
+}
+
+/** The server's limit of one selection change (online_booking_set_service_publication). */
+export const SERVICE_PUBLICATION_MAX_IDS = 200;
+
+export type SetServicePublicationResult =
+  | { readonly status: 'UPDATED'; readonly publication: ServicePublication }
+  /** Not a live service of this Business (deleted meanwhile, or never hers): nothing was written. */
+  | { readonly status: 'UNKNOWN_SERVICE'; readonly serviceId: string }
+  /** Selecting needs a service THE rule accepts now: nothing was written. */
+  | {
+      readonly status: 'NOT_ELIGIBLE';
+      readonly serviceId: string;
+      readonly reason?: ServicePublicationIssue;
+    };
+
 export type BookingImageKind = 'logo' | 'cover';
 
 /** The server limit of one public image (bucket `business-public-media`). */
@@ -104,6 +168,8 @@ export type OnlineBookingFailureCode =
   | 'IMAGE_TOO_LARGE'
   /** The file is not a JPEG; nothing was sent. */
   | 'IMAGE_INVALID'
+  /** The server does not offer this function yet (its migration is not applied there). */
+  | 'UNAVAILABLE'
   | 'UNKNOWN';
 
 export class OnlineBookingGatewayError extends Error {
@@ -136,4 +202,15 @@ export interface OnlineBookingGateway {
   readWorkingHours(businessId: string): Promise<WorkingHours>;
   /** Replaces the open state and the intervals of ONE weekday; answers the whole week. */
   saveWorkingDay(businessId: string, day: WorkingDay): Promise<SaveWorkingDayResult>;
+  /** The owner's live catalogue with her online-booking choices and the server's eligibility. */
+  readServicePublication(businessId: string): Promise<ServicePublication>;
+  /**
+   * Selects (or withdraws) the given services for online booking, all or
+   * nothing (1 to SERVICE_PUBLICATION_MAX_IDS ids); answers the whole view.
+   */
+  setServicePublication(
+    businessId: string,
+    serviceIds: readonly string[],
+    selected: boolean,
+  ): Promise<SetServicePublicationResult>;
 }

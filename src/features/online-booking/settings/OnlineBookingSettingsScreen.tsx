@@ -2,7 +2,9 @@
 //
 // Plus › Réservation en ligne: the professional prepares her public page
 // (web/, /r/<slug>) — images, name, presentation, contact, address of the
-// page — and asks for its publication.
+// page — and asks for its publication. Above the publication switches, one
+// row opens « Prestations proposées en ligne » (services/), with the count the
+// server holds; it never takes part in « Enregistrer ».
 //
 // The server is authoritative and nothing here goes through the offline
 // sync: the screen needs connectivity to load and to save, a failed call
@@ -91,6 +93,7 @@ import {
   type BookingPublicationKind,
 } from '../presentation';
 import { publicPageLinkOf, readPublicWebOrigin } from '../public-page-url';
+import { ServicePublicationEntry } from '../services/ServicePublicationEntry';
 import { useOnlineBookingGateway } from '../session/OnlineBookingGatewayProvider';
 
 import { BookingProfilePreview } from './BookingProfilePreview';
@@ -639,6 +642,12 @@ export function OnlineBookingSettingsScreen() {
             {notice.text}
           </AppText>
         )}
+
+        <ServicePublicationEntry
+          businessId={business.id}
+          gateway={gateway}
+          onOpen={() => router.push('/online-booking-services')}
+        />
 
         <GroupedSurface testID="online-booking-publication">
           <SwitchRow

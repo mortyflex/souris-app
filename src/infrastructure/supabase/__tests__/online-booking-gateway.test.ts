@@ -8,6 +8,7 @@ import {
   isJpeg,
   mapOnlineBookingPostgrestError,
   toBookingProfile,
+  toServicePublication,
   toWorkingHours,
   type SupabaseOnlineBookingApi,
 } from '../online-booking-gateway';
@@ -342,5 +343,184 @@ describe('Supabase online booking gateway — working hours', () => {
     await expect(
       stranger.gateway.saveWorkingDay(BUSINESS_ID, { weekday: 1, isOpen: false, intervals: [] }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe('Supabase online booking gateway — services offered online', () => {
+  const service = (overrides: Record<string, unknown> = {}) => ({
+    id: 'svc-coupe',
+    name: 'Coupe',
+    type: 'SERVICE',
+    active: true,
+    price_cents: 4500,
+    duration_minutes: 45,
+    description: 'Shampooing inclus.\nSéchage naturel.',
+    category: { id: 'cat-coupes', name: 'Coupes', position: 1 },
+    selected: true,
+    eligible: true,
+    ineligible_reason: null,
+    bookable: true,
+    ...overrides,
+  });
+  const view = (services: readonly Record<string, unknown>[] = [service()]) => ({
+    max_service_minutes: 720,
+    selected_count: services.filter((row) => row.selected === true).length,
+    bookable_count: services.filter((row) => row.bookable === true).length,
+    services,
+  });
+
+  it('reads the owner view through ONE owner RPC and keeps the server values', async () => {
+    const { gateway, rpc } = createClient({
+      data: view([
+        service(),
+        service({
+          id: 'svc-off',
+          name: 'Soin',
+          type: 'TECHNIQUE',
+          active: false,
+          price_cents: 0,
+          description: null,
+          category: null,
+          selected: true,
+          eligible: false,
+          ineligible_reason: 'INACTIVE',
+          bookable: false,
+        }),
+      ]),
+      error: null,
+    });
+
+    const publication = await gateway.readServicePublication(BUSINESS_ID);
+
+    expect(rpc).toHaveBeenCalledWith('online_booking_read_service_publication', { p_business_id: BUSINESS_ID });
+    expect(publication).toEqual({
+      maxServiceMinutes: 720,
+      selectedCount: 2,
+      bookableCount: 1,
+      services: [
+        {
+          id: 'svc-coupe',
+          name: 'Coupe',
+          type: 'SERVICE',
+          active: true,
+          priceCents: 4500,
+          durationMinutes: 45,
+          description: 'Shampooing inclus.\nSéchage naturel.',
+          category: { id: 'cat-coupes', name: 'Coupes', position: 1 },
+          selected: true,
+          eligible: true,
+          bookable: true,
+        },
+        {
+          id: 'svc-off',
+          name: 'Soin',
+          type: 'TECHNIQUE',
+          active: false,
+          // A price of 0 stays 0: never dropped, never read as free.
+          priceCents: 0,
+          durationMinutes: 45,
+          selected: true,
+          eligible: false,
+          ineligibleReason: 'INACTIVE',
+          bookable: false,
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ['bookable without being selected', [service({ selected: false, bookable: true })]],
+    ['bookable while not eligible', [service({ eligible: false, ineligible_reason: 'INACTIVE', bookable: true })]],
+    ['a negative price', [service({ price_cents: -1 })]],
+    ['a decimal price', [service({ price_cents: 45.5 })]],
+    ['an unknown type', [service({ type: 'PACKAGE' })]],
+    ['a missing switch value', [service({ selected: undefined })]],
+    ['a description that is not text', [service({ description: 42 })]],
+    ['a malformed category', [service({ category: { id: 'cat', name: 'X' } })]],
+    ['a duplicated service', [service(), service()]],
+    ['an empty id', [service({ id: '' })]],
+  ])('fails closed on %s', (_label, services) => {
+    expect(() => toServicePublication(view(services))).toThrow(OnlineBookingGatewayError);
+  });
+
+  it('fails closed when the counts do not add up', () => {
+    expect(() => toServicePublication({ ...view(), selected_count: 3 })).toThrow(OnlineBookingGatewayError);
+    expect(() => toServicePublication({ ...view(), bookable_count: 0 })).toThrow(OnlineBookingGatewayError);
+    expect(() => toServicePublication({ ...view(), services: 'none' })).toThrow(OnlineBookingGatewayError);
+  });
+
+  it('reads a reason this build does not know as « not eligible », without one', () => {
+    const publication = toServicePublication(
+      view([service({ selected: false, eligible: false, ineligible_reason: 'SOMETHING_NEW', bookable: false })]),
+    );
+    expect(publication.services[0]).toMatchObject({ eligible: false, bookable: false });
+    expect(publication.services[0]!.ineligibleReason).toBeUndefined();
+  });
+
+  it('sends the ids once each, with the choice, and answers the new view', async () => {
+    const { gateway, rpc } = createClient({ data: { status: 'UPDATED', ...view() }, error: null });
+
+    const result = await gateway.setServicePublication(BUSINESS_ID, ['svc-coupe', 'svc-coupe', 'svc-soin'], true);
+
+    expect(rpc).toHaveBeenCalledWith('online_booking_set_service_publication', {
+      p_business_id: BUSINESS_ID,
+      p_service_ids: ['svc-coupe', 'svc-soin'],
+      p_selected: true,
+    });
+    expect(result).toMatchObject({ status: 'UPDATED', publication: { bookableCount: 1 } });
+  });
+
+  it('answers the two refusals with the service they name', async () => {
+    const unknown = createClient({ data: { status: 'UNKNOWN_SERVICE', service_id: 'svc-gone' }, error: null });
+    await expect(unknown.gateway.setServicePublication(BUSINESS_ID, ['svc-gone'], true)).resolves.toEqual({
+      status: 'UNKNOWN_SERVICE',
+      serviceId: 'svc-gone',
+    });
+    const refused = createClient({
+      data: { status: 'NOT_ELIGIBLE', service_id: 'svc-off', reason: 'INACTIVE' },
+      error: null,
+    });
+    await expect(refused.gateway.setServicePublication(BUSINESS_ID, ['svc-off'], true)).resolves.toEqual({
+      status: 'NOT_ELIGIBLE',
+      serviceId: 'svc-off',
+      reason: 'INACTIVE',
+    });
+  });
+
+  it.each([
+    ['no id', []],
+    ['an empty id', ['']],
+    ['an id of 201 characters', ['x'.repeat(201)]],
+    ['201 ids', Array.from({ length: 201 }, (_, index) => `svc-${index}`)],
+  ])('never sends %s', async (_label, ids) => {
+    const { gateway, rpc } = createClient();
+    await expect(gateway.setServicePublication(BUSINESS_ID, ids, true)).rejects.toMatchObject({ code: 'UNKNOWN' });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('reads a project without the migration as UNAVAILABLE, and keeps the other failures', async () => {
+    for (const code of ['PGRST202', '42883']) {
+      const missing = createClient({ data: null, error: { code, message: 'Could not find the function' } });
+      await expect(missing.gateway.readServicePublication(BUSINESS_ID)).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+      await expect(missing.gateway.setServicePublication(BUSINESS_ID, ['svc'], true)).rejects.toMatchObject({
+        code: 'UNAVAILABLE',
+      });
+    }
+    const offline = createClient({ data: null, error: { code: '', message: 'TypeError: Network request failed' } });
+    await expect(offline.gateway.readServicePublication(BUSINESS_ID)).rejects.toMatchObject({ code: 'NETWORK' });
+    const foreign = createClient({ data: null, error: { code: '42501', message: 'not the owner' } });
+    await expect(foreign.gateway.setServicePublication(BUSINESS_ID, ['svc'], false)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    // The profile calls keep their own mapping: PGRST202 is not « unavailable » there.
+    const profile = createClient({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    await expect(profile.gateway.readProfile(BUSINESS_ID)).rejects.toMatchObject({ code: 'UNKNOWN' });
+  });
+
+  it('refuses an answer it does not understand', async () => {
+    const { gateway } = createClient({ data: { status: 'MAYBE' }, error: null });
+    await expect(gateway.setServicePublication(BUSINESS_ID, ['svc'], true)).rejects.toMatchObject({ code: 'UNKNOWN' });
+    const noId = createClient({ data: { status: 'NOT_ELIGIBLE', reason: 'INACTIVE' }, error: null });
+    await expect(noId.gateway.setServicePublication(BUSINESS_ID, ['svc'], true)).rejects.toMatchObject({ code: 'UNKNOWN' });
   });
 });

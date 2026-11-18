@@ -1760,8 +1760,8 @@ select public.online_booking_public_availability('<slug>', null, null);
 select public.online_booking_service_publication_json('<business id>');
 ```
 
-Then, as the signed-in owner (the app, once its screen exists — or a session-authenticated RPC
-call): `online_booking_read_service_publication` lists her live services; selecting an eligible
+Then, as the signed-in owner (Plus › Réservation en ligne › « Prestations proposées en ligne »,
+or a session-authenticated RPC call): `online_booking_read_service_publication` lists her live services; selecting an eligible
 one answers `UPDATED` and adds it to the public answer above; withdrawing it removes it; another
 account's call answers 42501.
 

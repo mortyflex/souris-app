@@ -169,8 +169,8 @@ overlaps (§9.5) and for telling an online booking apart, customer cancellation 
 booking requests awaiting approval, slug history or redirects, a time-zone editor, search
 indexing of public pages, server-side cleanup of unreferenced images; for working hours: per-staff
 hours, exceptional days and time off, overnight intervals, showing the hours on the public page,
-and any effect on the Agenda; for availability: the app screen where the professional chooses
-her bookable services (§12.6 — its RPCs are prepared), an editor of the booking rules, parallel booking during processing time, multi-staff availability,
+and any effect on the Agenda; for availability: an editor of the booking rules (the screen
+choosing the bookable services is built — §12.6 — and works once `20261021120000` is applied), parallel booking during processing time, multi-staff availability,
 booking several services at once; for the location (§11): the app's location settings, the
 website's reading of `location` (city-only rendering included), maps, directions links,
 coordinates, and the location in confirmations, emails or calendar exports.
@@ -1143,17 +1143,67 @@ push of anything else, and a withdrawal, wait for nothing.
   its type, its phases, its `active` flag, a category's description, a Business or owner id.
 - The booking answer (`online_booking_create_booking`) is untouched: ONE service, no price.
 
-### 12.6 The app screen that will consume it (Unit B — not built)
+### 12.6 The app screen (Unit B — implemented locally, needs this migration to show anything)
 
-« Prestations proposées en ligne », reached from Réservation en ligne. It reads the SERVER's list
-(`online_booking_read_service_publication`) — what she toggles is exactly what would be
-published — and saves each change at once through `online_booking_set_service_publication`
-(connectivity required, nothing queued, no sync aggregate). It groups like her catalogue, shows
-duration and price, renders an ineligible service disabled with its reason, warns for a price of
-0 (« Tarif à confirmer » on her page) and a missing description, and offers « Tout proposer » /
-« Tout retirer » with the ids on screen. It must say that a selected service she deactivates
-leaves her page, and comes back when she reactivates it. A service created on the device and not
-synchronized yet is absent from the server's list until the push.
+« Prestations proposées en ligne » (`src/features/online-booking/services/`, route
+`/online-booking-services`), opened from ONE row of Réservation en ligne placed above the
+publication switches: « N sur M proposées en ligne » (offered over available, read from the
+server when the screen is focused) and « Seules les prestations proposées et disponibles
+apparaissent sur votre page. ». The row never takes part in « Enregistrer » or in the page state.
+
+- **The server's list is the source of truth** (`readServicePublication`, parsed strictly by the
+  gateway: `bookable` must equal `selected AND eligible` and the counts must add up, or the
+  answer is refused). The device's catalogue is read for two things only: which services the
+  editor can open, and how many local services the server does not list yet (« … s'affichera
+  après la synchronisation »). The list is read again when the screen regains focus (back from
+  the editor); it reads no sync state (`production-boundary.test.ts`).
+- **Grouping** follows her catalogue (`catalogue-presentation.ts`): Services / Techniques,
+  subdivided by her categories when she assigned some (hairdressing and the established
+  activities); her categories in her order then « Sans catégorie » (nails, esthetics, wellness).
+  Every unavailable service is gathered last under « Indisponibles en ligne ».
+- **Each row**: the family pictogram, the name, « durée · prix » — « Tarif à confirmer » for a
+  price of 0, never « gratuit » —, the first two lines of the description or a discreet
+  « Description non renseignée », the reason when unavailable, « Aperçu en ligne », and the
+  native switch.
+- **Transparency**: « Aperçu en ligne » opens a sheet with exactly what a customer reads — the
+  duration, the price (with the 0 € explanation), the category, the WHOLE description as the
+  server publishes it (selectable text), a reminder that it comes from her catalogue and must
+  contain nothing personal, its own « Proposer en ligne » switch, and « Modifier dans mon
+  catalogue » (the existing editor, `/services/[serviceId]`, opened once the sheet is gone) — or,
+  for a service not on this device yet, why it cannot be edited here. Nothing is stored here.
+- **Saving**: a switch saves at once. While the request is in flight the switch shows the asked
+  value with a spinner, every other control waits, and nothing says « proposée » until the
+  server answered. The answer of a success is the new list (another device's changes included);
+  a refusal (`UNKNOWN_SERVICE`, `NOT_ELIGIBLE`) or a failure puts the server's state back, says
+  why in plain French and, for a refusal, reads the list again. Never retried on its own.
+- **Unavailable services**: a service never chosen cannot be switched on; a chosen one that
+  became unavailable keeps its switch on with « Proposée, mais désactivée … Réactivez-la … » and
+  can be withdrawn — withdrawn, it can only be chosen again once available.
+- **« Tout proposer » / « Tout retirer »**: a confirmation first (what becomes public, and
+  when), then ONE all-or-nothing change naming exactly the ids of the list (available ones only
+  for « Tout proposer »; every chosen one for « Tout retirer »); not offered beyond 200 ids.
+- **One line of context** from the page state: draft (choices saved, visible once published),
+  offline, bookings paused, or online — a chosen service is never presented as visible by itself.
+  No subscription is needed to prepare the selection.
+- **Offline / without this migration**: no list, a notice and « Réessayer » — never a spinner
+  that does not end, never a fake state. A project without `20261021120000` answers PGRST202,
+  which the gateway reads as `UNAVAILABLE` (« pas encore disponible sur votre compte »; the entry
+  row reads « Bientôt disponible »): the build can ship before the migration.
+
+Tests: `src/features/online-booking/services/__tests__/` (the screen against the fake server,
+the grouping and bulk plans, the copy), the entry in `OnlineBookingSettingsScreen.test.tsx`, and
+the parsing and error mapping in `online-booking-gateway.test.ts`.
+
+**Staging activation of Unit B — in this order, each step separately authorized (NOT done):**
+
+1. Review the public description of the service already selected on Staging (`studio-esthetique`,
+   one row, read 2026-11-17) with its professional: nothing private or inappropriate.
+2. Confirm its price of 0 reads « Tarif à confirmer » (never « Gratuit ») wherever it is shown.
+3. Authorize applying `20261021120000` ALONE to Staging, by hand (§12.8) — never
+   `20261020120000` with it.
+4. Run the checks of `supabase/README.md` › Online booking service publication.
+5. Test this screen against Staging on a device (selection, withdrawal, bulk, offline, an
+   inactive service), then the website's reading.
 
 ### 12.7 Compatibility
 

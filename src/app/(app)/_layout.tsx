@@ -67,6 +67,7 @@ export default function AppLayout() {
                       <Stack.Screen name="reminder-settings" options={pushedScreen} />
                       <Stack.Screen name="lifecycle-sms-settings" options={pushedScreen} />
                       <Stack.Screen name="online-booking-settings" options={pushedScreen} />
+                      <Stack.Screen name="online-booking-services" options={pushedScreen} />
                       <Stack.Screen name="working-hours-settings" options={pushedScreen} />
                       <Stack.Screen name="services/new" options={editorSheet} />
                       <Stack.Screen name="services/[serviceId]" options={editorSheet} />
