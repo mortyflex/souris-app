@@ -1,3 +1,5 @@
+import { parsePublicLocation, type PublicLocation } from "@/features/location/public-location";
+
 /**
  * The public profile of a professional, as the website may show it.
  *
@@ -11,7 +13,13 @@ export interface PublicProfile {
   readonly description?: string;
   readonly phone?: string;
   readonly email?: string;
-  readonly address?: string;
+  /**
+   * Where she receives her clients, at the level SHE chose (migration
+   * 20261020120000): a complete address, a city, or nothing. Absent for a
+   * hidden location, one never chosen, and a database that predates the
+   * contract — the legacy free-text `address` of the answer is never read.
+   */
+  readonly location?: PublicLocation;
   /** Object paths in the public branding bucket; turned into URLs by `publicMediaUrl`. */
   readonly logoPath?: string;
   readonly coverPath?: string;
@@ -41,6 +49,12 @@ function mediaPath(value: unknown, kind: "logo" | "cover"): string | undefined {
  * anything that is not a well-formed profile both read as "no profile": the
  * page then answers 404 rather than rendering something half-known. Only the
  * approved fields are copied — an unexpected extra field never reaches a page.
+ *
+ * The location is the `location` key alone, validated strictly
+ * (`parsePublicLocation`). The `address` key — the complete address again
+ * for websites deployed before the location contract, and the RAW legacy text
+ * on a database that predates it — is NOT read: a page never shows a place its
+ * professional did not explicitly publish.
  */
 export function parsePublicProfile(data: unknown): PublicProfile | null {
   if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
@@ -52,7 +66,7 @@ export function parsePublicProfile(data: unknown): PublicProfile | null {
   const description = text(row.description);
   const phone = text(row.phone);
   const email = text(row.email);
-  const address = text(row.address);
+  const location = parsePublicLocation(row.location);
   const logoPath = mediaPath(row.logo_path, "logo");
   const coverPath = mediaPath(row.cover_path, "cover");
 
@@ -64,7 +78,7 @@ export function parsePublicProfile(data: unknown): PublicProfile | null {
     ...(description !== undefined ? { description } : {}),
     ...(phone !== undefined ? { phone } : {}),
     ...(email !== undefined ? { email } : {}),
-    ...(address !== undefined ? { address } : {}),
+    ...(location !== undefined ? { location } : {}),
     ...(logoPath !== undefined ? { logoPath } : {}),
     ...(coverPath !== undefined ? { coverPath } : {}),
   };

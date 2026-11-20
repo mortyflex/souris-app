@@ -5,6 +5,7 @@ import { PublicProfileView } from "@/components/booking/public-profile-view";
 import { PublicFooter } from "@/components/layout/public-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { isBookingFlowEnabled } from "@/features/booking/flow-gate";
+import { getLocationView } from "@/features/location/get-location-view";
 import { getPublicProfile } from "@/features/public-profile/get-public-profile";
 import { publicMediaUrl } from "@/features/public-profile/public-profile";
 import { publicEnv } from "@/lib/env/public";
@@ -28,6 +29,8 @@ export default async function PublicProfilePage({ params }: PageProps<"/r/[slug]
   const { slug } = await params;
   const profile = await getPublicProfile(slug);
   if (profile === null) notFound();
+  // The location as the server published it, for this visitor: directions, and the map when one can be signed.
+  const location = await getLocationView(profile.location);
 
   return (
     <>
@@ -37,6 +40,7 @@ export default async function PublicProfilePage({ params }: PageProps<"/r/[slug]
           profile={profile}
           logoUrl={profile.logoPath ? publicMediaUrl(publicEnv.supabaseUrl, profile.logoPath) : undefined}
           coverUrl={profile.coverPath ? publicMediaUrl(publicEnv.supabaseUrl, profile.coverPath) : undefined}
+          location={location}
           bookingOpen={isBookingFlowEnabled()}
         />
       </main>

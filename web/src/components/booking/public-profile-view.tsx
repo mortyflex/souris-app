@@ -5,13 +5,15 @@ import { LinkPendingGlyph } from "@/components/motion/link-pending-glyph";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { CheckIcon, MailIcon, PhoneIcon, PinIcon } from "@/components/ui/icons";
+import { CheckIcon, MailIcon, PhoneIcon } from "@/components/ui/icons";
 import { describeTimeZone } from "@/features/availability/availability";
+import type { LocationView } from "@/features/location/location-view";
 import type { PublicProfile } from "@/features/public-profile/public-profile";
 import { bookingPath } from "@/features/public-profile/slug";
 import { cn } from "@/lib/utils";
 
 import { CoverPhoto } from "./cover-photo";
+import { LocationRow } from "./location-card";
 import { profileNameRole } from "./profile-name";
 
 interface PublicProfileViewProps {
@@ -19,6 +21,12 @@ interface PublicProfileViewProps {
   /** Public URLs of the branding images; absent when the professional has none. */
   logoUrl?: string;
   coverUrl?: string;
+  /**
+   * What the page shows of her location (`getLocationView`): the published
+   * address with its directions and its map, a city, or — absent — nothing.
+   * Never read from the profile here: the level was applied by the server.
+   */
+  location?: LocationView;
   /**
    * Whether this deployment offers the booking flow (`isBookingFlowEnabled`).
    * With it, a page that accepts bookings invites to book; without it, the
@@ -48,12 +56,14 @@ function initialOf(name: string): string {
  *   - the booking card: sticky beside the identity on desktop, a sticky
  *     action at the bottom of the screen on a phone that docks in place
  *     (CSS only); or why booking is not possible here;
- *   - contact and location: the published details; the address as text only —
- *     no map, no coordinates, no directions link until an explicit address
- *     privacy setting exists (a separate milestone).
+ *   - contact and location: the published details; the location exactly as
+ *     the professional chose to publish it (`LocationRow`) — a complete
+ *     address with its directions and its map, a city alone, or nothing.
  */
-function PublicProfileView({ profile, logoUrl, coverUrl, bookingOpen = false }: PublicProfileViewProps) {
-  const hasContact = Boolean(profile.phone || profile.email || profile.address);
+function PublicProfileView({ profile, logoUrl, coverUrl, location, bookingOpen = false }: PublicProfileViewProps) {
+  // A way to reach her: a phone, an e-mail, or an address to go to — a city alone is none.
+  const hasContact = Boolean(profile.phone || profile.email || location?.kind === "address");
+  const hasDetails = hasContact || location !== undefined;
   const canBook = profile.bookingEnabled && bookingOpen;
 
   return (
@@ -110,7 +120,7 @@ function PublicProfileView({ profile, logoUrl, coverUrl, bookingOpen = false }: 
 
           <BookingCard profile={profile} canBook={canBook} hasContact={hasContact} />
 
-          {hasContact ? (
+          {hasDetails ? (
             <section aria-labelledby="contact" className="flex flex-col gap-4 px-2.5 pt-4 lg:col-start-1 lg:row-start-2 lg:px-2 lg:pt-0">
               <h2 id="contact" className="type-title">
                 Contact
@@ -130,29 +140,7 @@ function PublicProfileView({ profile, logoUrl, coverUrl, bookingOpen = false }: 
                     </a>
                   </ContactRow>
                 ) : null}
-                {profile.address ? (
-                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3.5 gap-y-4 border-t border-border/60 py-5 first:border-t-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_10rem] lg:col-span-2">
-                    <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-[0.875rem] bg-lavender-50 text-lavender-700">
-                      <PinIcon size={18} />
-                    </span>
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <dt className="type-meta text-foreground/65">Adresse</dt>
-                      <dd className="type-body max-w-[48ch] whitespace-pre-line break-words">{profile.address}</dd>
-                    </div>
-                    {/*
-                      Reserved for the location view of a later milestone: decorative only, no map, no coordinates.
-                      One vignette on every screen: under the address on a phone (full row width), beside it from 640 px.
-                    */}
-                    <div aria-hidden="true" className="relative col-span-2 h-28 overflow-hidden rounded-[1.1rem] ring-1 ring-lavender-100 sm:col-span-1 sm:h-24">
-                      <NacreCover animated={false} idPrefix="place" />
-                      <span className="absolute inset-0 grid place-items-center">
-                        <span className="grid size-10 place-items-center rounded-full bg-background/90 text-lavender-700 shadow-card">
-                          <PinIcon size={18} />
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
+                {location !== undefined ? <LocationRow location={location} /> : null}
               </dl>
             </section>
           ) : null}

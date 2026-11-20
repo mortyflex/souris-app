@@ -45,6 +45,9 @@ Copy `.env.example` to `.env.local` (gitignored). The marketing pages need nothi
 | `ONLINE_BOOKING_REQUEST_LIMIT_SECRET` | server only | Random string of 32+ characters, distinct per environment: the HMAC key of the request counters. **Required by the booking flow**: without it every booking endpoint refuses (fail closed) |
 | `TURNSTILE_SITE_KEY` | server (handed to the page; public by nature) | Site key of this environment's Cloudflare Turnstile widget (managed mode, hostname = this site's). **Required by the booking flow**: without it the flow is not offered (fail closed). Cloudflare's test keys are honoured on a local site only |
 | `TURNSTILE_SECRET_KEY` | server only | The widget's secret, for Cloudflare Siteverify. **Required by the booking flow**: without it every booking is refused (fail closed). Never `NEXT_PUBLIC_`, never committed |
+| `APPLE_MAPS_TEAM_ID` | server only | Apple Developer Team ID (ten letters or digits) — the map of a published location (Apple Maps Web Snapshots). **Optional**: without the three `APPLE_MAPS_*` values, or with a malformed one, pages show the Nacre artwork instead of a map; the address and the directions work the same |
+| `APPLE_MAPS_KEY_ID` | server only | Key ID of an Apple key with the MapKit JS service enabled |
+| `APPLE_MAPS_PRIVATE_KEY` | server only | That key's private key: the text of its `.p8` file (a one-line value may write its line breaks as `\n`). It only signs snapshot URLs on the server. Never `NEXT_PUBLIC_`, never committed, never logged |
 
 Rules:
 
@@ -66,11 +69,13 @@ Rules:
 
 Public profiles live under `/r/` so that a slug can never collide with a marketing or legal page. Future legal pages (privacy, terms, legal notice) go in `src/app/(marketing)/` and inherit the marketing header and footer.
 
-`/r/[slug]` shows only what the professional published in the mobile application (name, description, contact, logo, cover) and whether she accepts online bookings — with « Prendre rendez-vous » where the booking flow is open. Both routes answer a real HTTP 404 when no page is online at the address — unknown, malformed, draft, unpublished, or offline for lack of a verified subscription — and an error (never a 404) when the lookup itself fails. They are excluded from search indexing for now.
+`/r/[slug]` shows only what the professional published in the mobile application (name, description, contact, logo, cover) and whether she accepts online bookings — with « Prendre rendez-vous » where the booking flow is open. Her location appears at the level SHE chose, applied by the database (`location` of the public answer, migration `20261020120000`): a complete address with « Itinéraire » and a map, a city alone, or nothing. The legacy free-text `address` of the answer is never read: where that migration is not applied, no location is shown. Both routes answer a real HTTP 404 when no page is online at the address — unknown, malformed, draft, unpublished, or offline for lack of a verified subscription — and an error (never a 404) when the lookup itself fails. They are excluded from search indexing for now.
 
 The lookup (`src/features/public-profile/get-public-profile.ts`) is server-only: it calls the one database function reserved to the website, `online_booking_public_profile`, with the secret key. Contract and security model: `../docs/architecture/ONLINE_BOOKING.md`.
 
 The booking flow (`src/features/booking/`, `src/components/booking/booking-flow.tsx`, `src/app/api/booking/`) is a four-step journey — service, date and time, details, review — then the server's confirmation. The browser calls the endpoints above only; they check the origin, the content type, the size and every field, then (booking only) the Cloudflare Turnstile token of the review step — header `X-Turnstile-Token`, verified with Siteverify, fail closed — then take the request quota in the database (`online_booking_take_request_quota`, migration `20261019120000`; fail closed when it is missing), and only then call `online_booking_create_booking` with the secret key. One idempotency key per booking attempt; an unknown outcome is retried with the same key and the same request. No confirmation email is sent. Where the database has the multi-service contract, the page offers several services in ONE booking instead (the server decides: only a "no such function" answer keeps the single-service flow), with indicative prices in its summary and review and the selected service ids — nothing else — kept for a reload. Contract, limits and rules: `../docs/architecture/ONLINE_BOOKING.md` §10 and §10.9.
+
+The location (`src/features/location/`, `src/components/booking/location-card.tsx`) is the same on the profile and through the booking flow — its summary, its review, its confirmation: a booking never shows more than the page. `public-location.ts` accepts exactly the two public shapes; `directions.ts` builds the Apple Plans and Google Maps links of a complete address (the visitor's probable application first, from the request's headers; the other always beside it; no origin, no geolocation); `map-snapshot.ts` (server-only) signs an Apple Maps Web Snapshot URL that the visitor's browser loads from Apple — never downloaded, proxied or stored here — and builds none without the three `APPLE_MAPS_*` values: the Nacre artwork then stands in, as it does when the image cannot be loaded. Contract and rules: `../docs/architecture/ONLINE_BOOKING.md` §11.
 
 The availability preview (`src/features/availability/`, `src/components/booking/availability-preview.tsx`) calls `online_booking_public_availability` the same way. It shows services, dates and start times as labels only — no form, nothing to book — and only when the page accepts bookings. A displayed time is never a guarantee (`../docs/architecture/ONLINE_BOOKING.md` §8).
 
@@ -88,9 +93,10 @@ src/
     ui/                   accessible primitives (shadcn/ui conventions)
     brand/                the official logo
     marketing/            marketing sections
-    booking/              public profile view, booking notice
+    booking/              public profile view, location card, booking flow, booking notice
   features/
     public-profile/       slug rules, the public profile contract, the server lookup
+    location/             the public location contract, directions links, the signed map snapshot
     booking/              the booking flow: request rules, answers, flow state, endpoints' protection
   lib/
     env/                  public and server-only environment contracts

@@ -198,6 +198,8 @@ describe("the booking flow (development / Staging gate)", () => {
     expect(html).toContain("Prendre rendez-vous");
     expect(html).toContain('href="/r/chez-amelie/reserver"');
     expect(html).not.toContain("arrive bientôt");
+    // This server predates the location contract: its raw `address` is never shown (location.test.tsx).
+    expect(html).not.toContain("Bellecour");
   });
 
   it("the booking route renders the flow with the server's services — no price, no secret", async () => {

@@ -11,7 +11,8 @@ import "server-only";
  * (src/features/public-profile/get-public-profile.ts), the availability
  * lookup and its preview switch (src/features/availability/), the booking
  * flow gate, booking creation, its request protection and its bot challenge
- * (src/features/booking/).
+ * (src/features/booking/), the map snapshot signature
+ * (src/features/location/map-snapshot.ts).
  */
 
 export class MissingServerEnvError extends Error {
@@ -83,4 +84,17 @@ export const serverEnv = {
   turnstileSiteKey: () => optional("TURNSTILE_SITE_KEY"),
   /** The widget's SECRET key: Siteverify only, from server-only code. Never prefixed NEXT_PUBLIC_. */
   turnstileSecretKey: () => optional("TURNSTILE_SECRET_KEY"),
+  /**
+   * Apple Maps Web Snapshots (src/features/location/map-snapshot.ts): the map
+   * image of a published location. Three values of ONE Apple Developer
+   * account — the Team ID, the Key ID of a key with the MapKit JS service, and
+   * that key's private key (the .p8 file's text). All three, or no snapshot:
+   * absent, mixed or malformed, the page shows its own artwork instead (the
+   * address and the directions keep working). Optional by design — never
+   * required by a page.
+   */
+  appleMapsTeamId: () => optional("APPLE_MAPS_TEAM_ID"),
+  appleMapsKeyId: () => optional("APPLE_MAPS_KEY_ID"),
+  /** The SECRET signing key (PEM). Server-only: never prefixed NEXT_PUBLIC_, never logged, never sent to a page. */
+  appleMapsPrivateKey: () => optional("APPLE_MAPS_PRIVATE_KEY"),
 } as const;

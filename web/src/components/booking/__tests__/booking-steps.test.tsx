@@ -3,10 +3,26 @@ import { describe, expect, it } from "vitest";
 
 import type { ConfirmedBooking } from "@/features/booking/booking-answer";
 import type { ChallengeState } from "@/features/booking/challenge";
+import type { LocationView } from "@/features/location/location-view";
 
-import { BookingConfirmation, ReviewStep, ServiceStep, SlotStep, type Professional } from "../booking-steps";
+import { AppointmentSummary, BookingConfirmation, ReviewStep, ServiceStep, SlotStep, type Professional } from "../booking-steps";
 
-const professional: Professional = { name: "Studio Esthétique", address: "12 rue des Lilas, Lyon", phone: "04 78 00 00 00" };
+const DESTINATION = "12%20rue%20des%20Lilas%2C%2069001%20Lyon";
+/** A published complete address, as the server hands it to the flow (a visitor on Android). */
+const address: LocationView = {
+  kind: "address",
+  lines: ["12 rue des Lilas", "69001 Lyon"],
+  spoken: "12 rue des Lilas, 69001 Lyon",
+  directions: {
+    primary: { provider: "google", providerName: "Google Maps", url: `https://www.google.com/maps/dir/?api=1&destination=${DESTINATION}` },
+    alternative: { provider: "apple", providerName: "Plans", url: `https://maps.apple.com/directions?destination=${DESTINATION}` },
+  },
+};
+const cityOnly: LocationView = { kind: "city", city: "Lyon" };
+const professional: Professional = { name: "Studio Esthétique", location: address, phone: "04 78 00 00 00" };
+/** The same professional on a page that publishes a city, and on one that publishes no place. */
+const inCity: Professional = { ...professional, location: cityOnly };
+const withoutPlace: Professional = { name: professional.name, phone: professional.phone };
 const coupe = { id: "svc-coupe", name: "Coupe", durationMinutes: 45 };
 const booking: ConfirmedBooking = {
   kind: "single",
@@ -33,7 +49,8 @@ describe("BookingConfirmation", () => {
     expect(html).toContain("14:00 – 14:45");
     expect(html).toContain("à l’heure de Paris");
     expect(html).toContain("Studio Esthétique");
-    expect(html).toContain("12 rue des Lilas, Lyon");
+    expect(html).toContain("12 rue des Lilas");
+    expect(html).toContain("69001 Lyon");
   });
 
   it("follows the professional's time zone, not the reader's", () => {
@@ -346,5 +363,126 @@ describe("ServiceStep — the list read again", () => {
     const html = text(renderToStaticMarkup(<ServiceStep services={services} issue="error" onRetry={noop} professional={professional} onChoose={noop} />));
     expect(html).toContain("La liste des prestations n’a pas pu être mise à jour.");
     expect(html).toContain("Réessayer");
+  });
+});
+
+describe("the location through the booking flow — a booking never shows more than the page publishes", () => {
+  const slot = { startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" };
+  const summary = (who: Professional) =>
+    renderToStaticMarkup(<AppointmentSummary services={[coupe]} professional={who} date="2026-11-16" slot={slot} timeZone="Europe/Paris" />);
+  const review = (who: Professional) =>
+    renderToStaticMarkup(
+      <ReviewStep
+        services={[coupe]}
+        date="2026-11-16"
+        slot={slot}
+        timeZone="Europe/Paris"
+        details={details}
+        professional={who}
+        sending={false}
+        retrying={false}
+        locked={false}
+        challenge={ready}
+        onEdit={noop}
+        onBack={noop}
+        onConfirm={noop}
+        onRetryChallenge={noop}
+      />,
+    );
+  const confirmation = (who: Professional, confirmed: ConfirmedBooking = booking) =>
+    renderToStaticMarkup(<BookingConfirmation booking={confirmed} professional={who} profileHref="/r/studio" />);
+  const multi: ConfirmedBooking = {
+    ...booking,
+    kind: "selection",
+    services: [coupe, { id: "tech-couleur", name: "Couleur", durationMinutes: 90 }],
+    durationMinutes: 135,
+  };
+  const steps = (who: Professional) => ({ summary: summary(who), review: review(who), confirmation: confirmation(who), multi: confirmation(who, multi) });
+  const GOOGLE = `href="https://www.google.com/maps/dir/?api=1&amp;destination=${DESTINATION}"`;
+  const APPLE = `href="https://maps.apple.com/directions?destination=${DESTINATION}"`;
+  /** Anything that would be a place, a map or a way to one. */
+  const PLACE = /Lilas|69001|Lyon|maps\.apple|google\.com\/maps|apple-mapkit|Itinéraire|data-location|data-directions|latitude|longitude/;
+
+  describe("a complete published address", () => {
+    const pages = steps(professional);
+
+    it("the appointment summary: « Adresse », its two lines, « Itinéraire »", () => {
+      const html = text(pages.summary);
+      expect(html).toMatch(/Avec Studio Esthétique Adresse 12 rue des Lilas 69001 Lyon Itinéraire Ouvrir dans Plans/);
+      expect(pages.summary).toContain(GOOGLE);
+      expect(pages.summary).toContain(APPLE);
+    });
+
+    it("the review: the same address under « Adresse », with its directions — and nothing the customer could edit there", () => {
+      expect(text(pages.review)).toMatch(/Avec Studio Esthétique Adresse 12 rue des Lilas 69001 Lyon Itinéraire Ouvrir dans Plans Vos coordonnées/);
+      expect(pages.review).toContain(GOOGLE);
+      // Still three « Modifier »: the service, the time, her own details — never the professional's place.
+      expect(pages.review.match(/>Modifier<\/button>/g)).toHaveLength(3);
+    });
+
+    it("the confirmation: « Lieu du rendez-vous », the address, the directions, the map — in ONE or several services alike", () => {
+      for (const page of [pages.confirmation, pages.multi]) {
+        expect(page).toMatch(/<section aria-labelledby="booking-location-heading" data-location="address"/);
+        expect(text(page)).toMatch(/Lieu du rendez-vous 12 rue des Lilas 69001 Lyon Itinéraire Ouvrir dans Plans/);
+        expect(page).toContain(GOOGLE);
+        expect(page).toContain("booking-place-lilac");
+        expect(text(page)).not.toContain("Pour connaître le lieu");
+        expect(text(page)).not.toContain("Pour l’adresse exacte");
+      }
+    });
+
+    it("opens directions in a new tab everywhere: the flow — and a request in flight — is never left", () => {
+      for (const page of Object.values(pages)) {
+        const links = [...page.matchAll(/<a ([^>]*maps[^>]*)>/g)].map((match) => match[1] ?? "");
+        expect(links.length).toBeGreaterThan(0);
+        for (const link of links) expect(link).toMatch(/target="_blank" rel="noopener noreferrer"/);
+      }
+    });
+  });
+
+  describe("a published city", () => {
+    const pages = steps(inCity);
+
+    it("every step says the city under « Lieu » — never a street, a postal code, a destination or a link", () => {
+      for (const page of Object.values(pages)) {
+        expect(text(page)).toContain("Lyon");
+        expect(page).not.toMatch(/Lilas|69001|maps\.apple|google\.com\/maps|Itinéraire|data-directions|Adresse /);
+      }
+      expect(text(pages.summary)).toMatch(/Avec Studio Esthétique Lieu Lyon/);
+      expect(text(pages.review)).toMatch(/Avec Studio Esthétique Lieu Lyon Vos coordonnées/);
+    });
+
+    it("the confirmation says whom to ask for the exact address", () => {
+      for (const page of [pages.confirmation, pages.multi]) {
+        expect(page).toContain('data-location="city"');
+        expect(text(page)).toContain("Pour l’adresse exacte, contactez Studio Esthétique.");
+        expect(text(page)).not.toContain("Pour connaître le lieu");
+      }
+    });
+  });
+
+  describe("no published location — hidden, or never chosen", () => {
+    const pages = steps(withoutPlace);
+
+    it("no step shows a place, a map, a marker or a way to one", () => {
+      for (const page of Object.values(pages)) expect(page).not.toMatch(PLACE);
+      expect(text(pages.summary)).not.toMatch(/Adresse|Lieu/);
+      expect(text(pages.review)).toMatch(/Avec Studio Esthétique Vos coordonnées/);
+    });
+
+    it("the confirmation points to the professional — never to a location", () => {
+      for (const page of [pages.confirmation, pages.multi]) {
+        expect(text(page)).toContain("Pour connaître le lieu du rendez-vous, contactez Studio Esthétique.");
+        expect(page).not.toContain("booking-location-heading");
+        expect(page).not.toMatch(PLACE);
+      }
+    });
+
+    it("everything else of the booking is unchanged", () => {
+      expect(text(pages.confirmation)).toContain("4b0a1d0e-3c1f-4f7a-9d39-2a8f4f1c6e21");
+      expect(text(pages.confirmation)).toContain("14:00 – 14:45");
+      expect(text(pages.multi)).toContain("Durée totale");
+      expect(text(pages.review)).toContain("Confirmer le rendez-vous");
+    });
   });
 });

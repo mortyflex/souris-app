@@ -4,6 +4,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { LocationView } from "@/features/location/location-view";
 import type { PublicProfile } from "@/features/public-profile/public-profile";
 
 import { BookingInactiveNotice } from "../booking-inactive-notice";
@@ -21,22 +22,39 @@ const complete: PublicProfile = {
   description: "Coiffure sur rendez-vous.\nDu mardi au samedi.",
   phone: "06 00 00 00 00",
   email: "salon@example.test",
-  address: "1 rue de la Paix, 75002 Paris",
   bookingEnabled: true,
 };
+
+const DESTINATION = "1%20rue%20de%20la%20Paix%2C%2075002%20Paris";
+const APPLE_URL = `https://maps.apple.com/directions?destination=${DESTINATION}`;
+const GOOGLE_URL = `https://www.google.com/maps/dir/?api=1&destination=${DESTINATION}`;
+/** What the server made of a published complete address, for a visitor on an iPhone. */
+const address: LocationView = {
+  kind: "address",
+  lines: ["1 rue de la Paix", "75002 Paris"],
+  spoken: "1 rue de la Paix, 75002 Paris",
+  directions: {
+    primary: { provider: "apple", providerName: "Plans", url: APPLE_URL },
+    alternative: { provider: "google", providerName: "Google Maps", url: GOOGLE_URL },
+  },
+};
+const city: LocationView = { kind: "city", city: "Paris" };
+/** How many times a text appears in a page. */
+const count = (html: string, text: string) => html.split(text).length - 1;
 
 const render = (props: Parameters<typeof PublicProfileView>[0]) => renderToStaticMarkup(<PublicProfileView {...props} />);
 
 describe("PublicProfileView", () => {
   it("shows a published profile: name, description, contact, images", () => {
-    const html = render({ profile: complete, logoUrl: "https://media.test/logo.jpg", coverUrl: "https://media.test/cover.jpg" });
+    const html = render({ profile: complete, location: address, logoUrl: "https://media.test/logo.jpg", coverUrl: "https://media.test/cover.jpg" });
 
     expect(html).toContain("<h1");
     expect(html).toContain("Chez Amélie");
     expect(html).toContain("Coiffure sur rendez-vous.\nDu mardi au samedi.");
     expect(html).toContain('href="tel:0600000000"');
     expect(html).toContain('href="mailto:salon@example.test"');
-    expect(html).toContain("1 rue de la Paix, 75002 Paris");
+    expect(html).toContain("1 rue de la Paix");
+    expect(html).toContain("75002 Paris");
     expect(html).toContain('src="https://media.test/logo.jpg"');
     expect(html).toContain('src="https://media.test/cover.jpg"');
   });
@@ -91,6 +109,7 @@ describe("PublicProfileView", () => {
     expect(html).toContain('href="tel:+33600000000"');
     expect(html).not.toContain("E-mail");
     expect(html).not.toContain("Adresse");
+    expect(html).not.toContain("data-location");
   });
 
   it("lets a long business name wrap instead of overflowing, at a smaller display size", () => {
@@ -137,29 +156,50 @@ describe("PublicProfileView — the Nacre design", () => {
     expect(html.indexOf("nacre")).toBeLessThan(html.indexOf('src="https://media.test/cover.jpg"'));
   });
 
-  it("shows no map, no coordinates and no directions until an explicit address privacy setting exists", () => {
-    const html = render({ profile: complete });
-    expect(html).not.toMatch(/<iframe|maps\.|google|apple\.com|geo:|Itinéraire|latitude|longitude/i);
-    expect(html).toContain("1 rue de la Paix, 75002 Paris");
-  });
-
-  it("a published address gets its decorative location vignette on every screen: under the address on a phone, beside it from 640 px", () => {
-    const html = render({ profile: complete });
-    // One vignette (its Nacre ids stay unique on the page), at rest, hidden from assistive technologies.
-    expect(html.match(/id="place-lilac"/g)).toHaveLength(1);
-    const vignette = html.match(/<div aria-hidden="true" class="([^"]*)"><div aria-hidden="true" data-animated="false" class="nacre/)?.[1]?.split(" ") ?? [];
-    expect(vignette).toEqual(expect.arrayContaining(["col-span-2", "h-28", "sm:col-span-1", "sm:h-24"]));
-    expect(vignette).not.toContain("hidden"); // never hidden on a phone again
-    // Text first, then the vignette, in reading order.
-    expect(html.indexOf("1 rue de la Paix")).toBeLessThan(html.indexOf("place-lilac"));
-  });
-
-  it("no published address: no address row and no vignette", () => {
-    for (const profile of [minimal, { ...minimal, phone: "06 00 00 00 00", email: "a@example.test" }]) {
+  it("no published location — hidden, or never chosen: no place, no map, no directions, no coordinates, nothing to open", () => {
+    for (const profile of [minimal, complete, { ...minimal, phone: "06 00 00 00 00", email: "a@example.test" }]) {
       const html = render({ profile });
-      expect(html).not.toContain("Adresse");
-      expect(html).not.toContain("place-lilac");
+      expect(html).not.toMatch(/<iframe|maps\.|google|apple\.com|apple-mapkit|geo:|Itinéraire|latitude|longitude|Adresse|Lieu|data-location/i);
+      expect(html).not.toContain("profile-place-lilac");
     }
+  });
+
+  it("a published address: its two lines, « Itinéraire », the other application, and ONE map vignette that opens the same directions", () => {
+    const html = render({ profile: complete, location: address });
+
+    expect(html).toContain('data-location="address"');
+    expect(html).toMatch(/<dt[^>]*>Adresse<\/dt>/);
+    expect(html).toContain('<span class="block">1 rue de la Paix</span><span class="block">75002 Paris</span>');
+    // « Itinéraire » — the visitor's probable application — and the map both open it; the alternative is beside.
+    expect(count(html, `href="${APPLE_URL}"`)).toBe(2);
+    expect(count(html, `href="${GOOGLE_URL.replace("&", "&amp;")}"`)).toBe(1);
+    expect(html).toContain("Itinéraire</a>");
+    expect(html).toContain("Ouvrir dans Google Maps</a>");
+    // One vignette (its Nacre ids stay unique on the page): under the address on a phone, beside it from 640 px.
+    expect(count(html, 'id="profile-place-lilac"')).toBe(1);
+    expect(html).toContain('<dd class="col-span-2 sm:col-span-1">');
+    // Text first, then the actions, then the vignette, in reading order.
+    expect(html.indexOf("1 rue de la Paix")).toBeLessThan(html.indexOf("Itinéraire</a>"));
+    expect(html.indexOf("Itinéraire</a>")).toBeLessThan(html.indexOf("profile-place-lilac"));
+  });
+
+  it("a published city: the city alone — a quiet picture, no marker, no link, no directions", () => {
+    const html = render({ profile: complete, location: city });
+
+    expect(html).toContain('data-location="city"');
+    expect(html).toMatch(/<dt[^>]*>Lieu<\/dt>/);
+    expect(html).toMatch(/<dd[^>]*>Paris<\/dd>/);
+    expect(html).not.toMatch(/Itinéraire|maps\.apple|google\.com\/maps|Ouvrir dans|rue de la Paix|75002|data-directions/);
+    expect(count(html, 'id="profile-place-lilac"')).toBe(1);
+    expect(html).toMatch(/data-map-kind="city"[^>]*><div aria-hidden="true"/);
+  });
+
+  it("a city is a place, not a way to reach her: alone, it never promises a contact", () => {
+    const paused = { ...minimal, bookingEnabled: false };
+    expect(render({ profile: paused, location: city })).not.toContain("contacter");
+    expect(render({ profile: paused, location: address })).toContain("Vous pouvez contacter Chez Amélie directement.");
+    // The section is still there for the city.
+    expect(render({ profile: paused, location: city })).toContain('<h2 id="contact"');
   });
 
   it("offers a contact action only for what is published", () => {

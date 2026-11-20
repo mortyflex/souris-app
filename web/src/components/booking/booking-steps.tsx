@@ -1,7 +1,7 @@
 import { useRef, type ReactNode, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, CheckIcon, ClockIcon, UserIcon } from "@/components/ui/icons";
+import { CalendarIcon, CheckIcon, ClockIcon, PinIcon, UserIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -20,9 +20,11 @@ import type { FlowNotice } from "@/features/booking/booking-flow";
 import type { ChallengeState } from "@/features/booking/challenge";
 import type { CustomerDetails, CustomerField, FieldIssue } from "@/features/booking/booking-request";
 import { formatTimeInZone, formatTimeRange } from "@/features/booking/local-time";
+import type { LocationView } from "@/features/location/location-view";
 import { cn } from "@/lib/utils";
 
 import { DateStrip } from "./date-strip";
+import { LocationLines, LocationPanel } from "./location-card";
 import { groupSlotsByPeriod, skeletonCount } from "./date-strip-rules";
 import { ServiceCard } from "./service-card";
 import {
@@ -40,12 +42,20 @@ import {
  * The screens of the public booking flow — presentation only. State, network
  * and history live in `booking-flow.tsx`; every rule lives in
  * `src/features/booking/`. Nothing here computes a time: starts are the
- * server's labels, ends are formatted in the professional's time zone.
+ * server's labels, ends are formatted in the professional's time zone. Nothing
+ * here decides what is shown of her location either: it is the view the
+ * server made from the level she chose (`LocationView`) — the same on every
+ * step, the confirmation included — or nothing at all.
  */
 
 export interface Professional {
   readonly name: string;
-  readonly address?: string;
+  /**
+   * Her location as her page publishes it: a complete address (with its
+   * directions and its map), a city, or — absent — nothing. A booking never
+   * shows more than the page it was made from.
+   */
+  readonly location?: LocationView;
   readonly phone?: string;
   readonly email?: string;
 }
@@ -829,7 +839,11 @@ export function AppointmentSummary({
         {professional ? (
           <SummaryLine icon={<UserIcon size={17} />} label="Avec">
             <strong className="font-semibold">{professional.name}</strong>
-            {professional.address ? <span className="block whitespace-pre-line text-foreground/60">{professional.address}</span> : null}
+          </SummaryLine>
+        ) : null}
+        {professional?.location ? (
+          <SummaryLine icon={<PinIcon size={17} />} label={professional.location.kind === "address" ? "Adresse" : "Lieu"}>
+            <LocationLines location={professional.location} />
           </SummaryLine>
         ) : null}
         <SummaryLine icon={<CalendarIcon size={17} />} label="Date et horaire">
@@ -1101,12 +1115,12 @@ export function ReviewStep({
           <span className="block tabular-nums">{formatTimeRange(slot.localTime, slot.endsAt, timeZone)}</span>
           <span className="type-body-small block text-foreground/65">Horaires {describeTimeZone(timeZone)}</span>
         </SummaryRow>
-        <SummaryRow label="Avec">
-          {professional.name}
-          {professional.address ? (
-            <span className="type-body-small block whitespace-pre-line text-foreground/65">{professional.address}</span>
-          ) : null}
-        </SummaryRow>
+        <SummaryRow label="Avec">{professional.name}</SummaryRow>
+        {professional.location ? (
+          <SummaryRow label={professional.location.kind === "address" ? "Adresse" : "Lieu"}>
+            <LocationLines location={professional.location} />
+          </SummaryRow>
+        ) : null}
         <SummaryRow label="Vos coordonnées" action={<EditButton label="Modifier vos coordonnées" state={editState} onClick={() => onEdit("details")} />}>
           {details.firstName} {details.lastName}
           <span className="type-body-small block text-foreground/65">{details.email}</span>
@@ -1222,18 +1236,20 @@ export function BookingConfirmation({
           <span className="tabular-nums">{formatTimeRange(booking.localTime, booking.endsAt, booking.timeZone)}</span>
           <span className="type-body-small block text-foreground/65">Horaires {describeTimeZone(booking.timeZone)}</span>
         </SummaryRow>
-        <SummaryRow label="Avec">
-          {professional.name}
-          {professional.address ? (
-            <span className="type-body-small block whitespace-pre-line text-foreground/65">{professional.address}</span>
-          ) : null}
-        </SummaryRow>
+        <SummaryRow label="Avec">{professional.name}</SummaryRow>
       </dl>
+
+      {/* Where to go — exactly what her page publishes: an address with its directions, a city, or nothing. */}
+      {professional.location ? (
+        <LocationPanel location={professional.location} professionalName={professional.name} headingId="booking-location-heading" />
+      ) : null}
 
       <div className="flex flex-col gap-2">
         <p className={quiet}>
           Aucun e-mail de confirmation n’est envoyé pour le moment : conservez ces informations (une capture d’écran
           suffit). Pour modifier ou annuler ce rendez-vous, contactez {professional.name}.
+          {/* Her page shows no place: the customer is pointed to her, never to a location. */}
+          {professional.location ? "" : ` Pour connaître le lieu du rendez-vous, contactez ${professional.name}.`}
           {booking.kind === "selection" ? " Aucun paiement n’a été effectué en ligne." : ""}
         </p>
         <ContactLinks professional={professional} />

@@ -16,6 +16,7 @@ import { isAvailabilityPreviewEnabled } from "@/features/availability/preview";
 import { getBookingCatalog, type BookingCatalog } from "@/features/booking/booking-catalog";
 import { isBookingFlowEnabled } from "@/features/booking/flow-gate";
 import { challengeSiteKey } from "@/features/booking/turnstile";
+import { getLocationView } from "@/features/location/get-location-view";
 import { getPublicProfile } from "@/features/public-profile/get-public-profile";
 import type { PublicProfile } from "@/features/public-profile/public-profile";
 import { bookingPath, profilePath } from "@/features/public-profile/slug";
@@ -102,6 +103,8 @@ async function bookingContent({ params, searchParams }: PageProps<"/r/[slug]/res
       return { content: <BookingLoadError profile={profile} />, wide: false };
     }
     if (catalog === null) return { content: <BookingInactiveNotice profile={profile} reason="unavailable" />, wide: false };
+    // The same location as the profile page, at the same level: a booking never shows more than the page.
+    const location = await getLocationView(profile.location);
     return {
       wide: true,
       content: (
@@ -111,7 +114,7 @@ async function bookingContent({ params, searchParams }: PageProps<"/r/[slug]/res
           challengeSiteKey={siteKey}
           professional={{
             name: profile.name,
-            ...(profile.address !== undefined ? { address: profile.address } : {}),
+            ...(location !== undefined ? { location } : {}),
             ...(profile.phone !== undefined ? { phone: profile.phone } : {}),
             ...(profile.email !== undefined ? { email: profile.email } : {}),
           }}
