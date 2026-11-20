@@ -15,7 +15,6 @@ const address: LocationView = {
   spoken: "12 rue des Lilas, 69001 Lyon",
   directions: {
     primary: { provider: "google", providerName: "Google Maps", url: `https://www.google.com/maps/dir/?api=1&destination=${DESTINATION}` },
-    alternative: { provider: "apple", providerName: "Plans", url: `https://maps.apple.com/directions?destination=${DESTINATION}` },
   },
 };
 const cityOnly: LocationView = { kind: "city", city: "Lyon" };
@@ -399,22 +398,22 @@ describe("the location through the booking flow — a booking never shows more t
   };
   const steps = (who: Professional) => ({ summary: summary(who), review: review(who), confirmation: confirmation(who), multi: confirmation(who, multi) });
   const GOOGLE = `href="https://www.google.com/maps/dir/?api=1&amp;destination=${DESTINATION}"`;
-  const APPLE = `href="https://maps.apple.com/directions?destination=${DESTINATION}"`;
   /** Anything that would be a place, a map or a way to one. */
-  const PLACE = /Lilas|69001|Lyon|maps\.apple|google\.com\/maps|apple-mapkit|Itinéraire|data-location|data-directions|latitude|longitude/;
+  const PLACE = /Lilas|69001|Lyon|maps\.apple|google\.com\/maps|waze\.com|apple-mapkit|Itinéraire|data-location|data-directions|latitude|longitude/;
 
   describe("a complete published address", () => {
     const pages = steps(professional);
 
     it("the appointment summary: « Adresse », its two lines, « Itinéraire »", () => {
       const html = text(pages.summary);
-      expect(html).toMatch(/Avec Studio Esthétique Adresse 12 rue des Lilas 69001 Lyon Itinéraire Ouvrir dans Plans/);
+      expect(html).toMatch(/Avec Studio Esthétique Adresse 12 rue des Lilas 69001 Lyon Itinéraire/);
       expect(pages.summary).toContain(GOOGLE);
-      expect(pages.summary).toContain(APPLE);
+      // An Android visitor: Google Maps directly — never Apple Plans, never a second link.
+      expect(pages.summary).not.toMatch(/maps\.apple\.com|Apple Plans|Ouvrir dans|waze/i);
     });
 
     it("the review: the same address under « Adresse », with its directions — and nothing the customer could edit there", () => {
-      expect(text(pages.review)).toMatch(/Avec Studio Esthétique Adresse 12 rue des Lilas 69001 Lyon Itinéraire Ouvrir dans Plans Vos coordonnées/);
+      expect(text(pages.review)).toMatch(/Avec Studio Esthétique Adresse 12 rue des Lilas 69001 Lyon Itinéraire Vos coordonnées/);
       expect(pages.review).toContain(GOOGLE);
       // Still three « Modifier »: the service, the time, her own details — never the professional's place.
       expect(pages.review.match(/>Modifier<\/button>/g)).toHaveLength(3);
@@ -423,7 +422,8 @@ describe("the location through the booking flow — a booking never shows more t
     it("the confirmation: « Lieu du rendez-vous », the address, the directions, the map — in ONE or several services alike", () => {
       for (const page of [pages.confirmation, pages.multi]) {
         expect(page).toMatch(/<section aria-labelledby="booking-location-heading" data-location="address"/);
-        expect(text(page)).toMatch(/Lieu du rendez-vous 12 rue des Lilas 69001 Lyon Itinéraire Ouvrir dans Plans/);
+        expect(text(page)).toMatch(/Lieu du rendez-vous 12 rue des Lilas 69001 Lyon Itinéraire/);
+        expect(text(page)).not.toMatch(/Ouvrir dans|Waze/);
         expect(page).toContain(GOOGLE);
         expect(page).toContain("booking-place-lilac");
         expect(text(page)).not.toContain("Pour connaître le lieu");
@@ -446,7 +446,7 @@ describe("the location through the booking flow — a booking never shows more t
     it("every step says the city under « Lieu » — never a street, a postal code, a destination or a link", () => {
       for (const page of Object.values(pages)) {
         expect(text(page)).toContain("Lyon");
-        expect(page).not.toMatch(/Lilas|69001|maps\.apple|google\.com\/maps|Itinéraire|data-directions|Adresse /);
+        expect(page).not.toMatch(/Lilas|69001|maps\.apple|google\.com\/maps|waze\.com|Itinéraire|data-directions|Adresse /);
       }
       expect(text(pages.summary)).toMatch(/Avec Studio Esthétique Lieu Lyon/);
       expect(text(pages.review)).toMatch(/Avec Studio Esthétique Lieu Lyon Vos coordonnées/);

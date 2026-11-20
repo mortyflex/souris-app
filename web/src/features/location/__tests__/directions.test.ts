@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import * as directionsModule from "../directions";
 import {
   appleDirectionsUrl,
   directionsLinks,
   googleDirectionsUrl,
   MAX_DIRECTIONS_URL_LENGTH,
-  preferredMapsProvider,
+  PLATFORM_DIRECTIONS,
+  visitorPlatform,
 } from "../directions";
 
 const DESTINATION = "12 avenue Jean Jaurès, 69007 Lyon";
@@ -66,6 +68,16 @@ describe("Google Maps — Maps URLs", () => {
   });
 });
 
+describe("two applications, never a third", () => {
+  it("builds Apple Plans and Google Maps links only — no other provider, no application scheme", () => {
+    expect(Object.keys(directionsModule).filter((name) => /DirectionsUrl$/.test(name)).sort()).toEqual(["appleDirectionsUrl", "googleDirectionsUrl"]);
+    for (const userAgent of Object.values(UA)) {
+      const text = JSON.stringify(directionsLinks(DESTINATION, { userAgent }));
+      expect(text).not.toMatch(/waze|comgooglemaps|maps:\/\/|geo:|intent:/i);
+    }
+  });
+});
+
 describe("encoding — a destination can never become another parameter, another host or a script", () => {
   it.each([
     ["an ampersand", "Salon Léa & Co, 3 rue de l’Église, 75001 Paris"],
@@ -73,24 +85,29 @@ describe("encoding — a destination can never become another parameter, another
     ["an equals sign and a plus", "Bât. A=B + C, 10 rue Haute, 1000 Bruxelles"],
     ["a slash and a backslash", "1/2 rue du Port \\ Quai, 17000 La Rochelle"],
     ["a percent sign", "100% Beauté, 2 rue Basse, 59000 Lille"],
-    ["an attempt at a second parameter", "x&destination=evil&dir_action=navigate, 75001 Paris"],
+    ["an attempt at a second parameter", "x&destination=evil&dir_action=navigate&q=evil&navigate=no, 75001 Paris"],
     ["an attempt at a URL", "https://evil.example/?q=, 75001 Paris"],
     ["quotes and angle brackets", `"><script>alert(1)</script>, 75001 Paris`],
     ["non-Latin letters", "東京都渋谷区 1-2-3, 150-0002 東京"],
     ["an emoji", "🌸 Institut, 4 rue des Fleurs, 31000 Toulouse"],
   ])("%s survives as ONE destination value", (_label, destination) => {
-    for (const build of [appleDirectionsUrl, googleDirectionsUrl]) {
+    for (const [build, parameter, host] of [
+      [appleDirectionsUrl, "destination", "maps.apple.com"],
+      [googleDirectionsUrl, "destination", "www.google.com"],
+    ] as const) {
       const built = build(destination);
       expect(built).toBeDefined();
       const url = new URL(built ?? "");
-      expect(url.searchParams.get("destination")).toBe(destination);
-      expect(url.searchParams.getAll("destination")).toHaveLength(1);
-      expect(["maps.apple.com", "www.google.com"]).toContain(url.hostname);
+      expect(url.searchParams.get(parameter)).toBe(destination);
+      expect(url.searchParams.getAll(parameter)).toHaveLength(1);
+      expect(url.hostname).toBe(host);
       expect(url.protocol).toBe("https:");
       // Nothing of the destination leaves the query.
       expect(built).not.toMatch(/[<>"\\ ]/);
       expect(url.hash).toBe("");
     }
+    // Google keeps its own « api=1 » whatever the text says.
+    expect(new URL(googleDirectionsUrl(destination) ?? "").searchParams.getAll("api")).toEqual(["1"]);
   });
 
   it("builds nothing from a text that is not a plain single line", () => {
@@ -98,6 +115,7 @@ describe("encoding — a destination can never become another parameter, another
       expect(appleDirectionsUrl(destination)).toBeUndefined();
       expect(googleDirectionsUrl(destination)).toBeUndefined();
       expect(directionsLinks(destination)).toBeUndefined();
+      expect(directionsLinks(destination, { userAgent: UA.iphoneSafari })).toBeUndefined();
     }
   });
 
@@ -113,16 +131,22 @@ describe("encoding — a destination can never become another parameter, another
   });
 });
 
-describe("the visitor's probable maps application", () => {
+describe("the visitor's platform", () => {
   it.each([
     ["an iPhone (Safari)", UA.iphoneSafari],
     ["an iPhone (Chrome)", UA.iphoneChrome],
     ["an iPad", UA.ipadSafari],
-    ["an iPad asking for desktop websites", UA.ipadDesktopClass],
+  ])("%s → iOS", (_label, userAgent) => {
+    expect(visitorPlatform({ userAgent })).toBe("ios");
+  });
+
+  it.each([
     ["a Mac (Safari)", UA.macSafari],
     ["a Mac (Chrome)", UA.macChrome],
-  ])("%s → Apple Plans", (_label, userAgent) => {
-    expect(preferredMapsProvider({ userAgent })).toBe("apple");
+    // iPadOS asks for desktop websites by default: it presents itself as a Mac — the browser tells them apart (below).
+    ["an iPad asking for desktop websites", UA.ipadDesktopClass],
+  ])("%s → macOS", (_label, userAgent) => {
+    expect(visitorPlatform({ userAgent })).toBe("macos");
   });
 
   it.each([
@@ -131,8 +155,8 @@ describe("the visitor's probable maps application", () => {
     ["an Android tablet", UA.androidTablet],
     ["an Android phone without Google services", UA.huawei],
     ["a device that names both Android and iPhone", UA.windowsPhone],
-  ])("%s → Google Maps", (_label, userAgent) => {
-    expect(preferredMapsProvider({ userAgent })).toBe("google");
+  ])("%s → Android", (_label, userAgent) => {
+    expect(visitorPlatform({ userAgent })).toBe("android");
   });
 
   it.each([
@@ -146,60 +170,107 @@ describe("the visitor's probable maps application", () => {
     ["no user agent at all", undefined],
     ["a null user agent", null],
     ["nonsense", "\u0000\u0001 ???"],
-  ])("%s → Google Maps, whose website opens in any browser", (_label, userAgent) => {
-    expect(preferredMapsProvider({ userAgent })).toBe("google");
+  ])("%s → other", (_label, userAgent) => {
+    expect(visitorPlatform({ userAgent })).toBe("other");
   });
 
-  it("with no request at all, the universal default", () => {
-    expect(preferredMapsProvider()).toBe("google");
+  it("with no request at all: other", () => {
+    expect(visitorPlatform()).toBe("other");
   });
 
   it("trusts the platform client hint over the user agent when a browser sends one", () => {
     // Chrome on Android asking for the desktop site presents a Linux desktop user agent.
-    expect(preferredMapsProvider({ userAgent: UA.linuxFirefox, platformHint: '"Android"' })).toBe("google");
-    expect(preferredMapsProvider({ userAgent: UA.windowsEdge, platformHint: '"macOS"' })).toBe("apple");
-    expect(preferredMapsProvider({ userAgent: UA.macChrome, platformHint: '"Windows"' })).toBe("google");
-    expect(preferredMapsProvider({ userAgent: UA.windowsEdge, platformHint: '"iOS"' })).toBe("apple");
-    expect(preferredMapsProvider({ userAgent: UA.macChrome, platformHint: '"Chrome OS"' })).toBe("google");
-    expect(preferredMapsProvider({ userAgent: UA.macChrome, platformHint: '"Linux"' })).toBe("google");
+    expect(visitorPlatform({ userAgent: UA.linuxFirefox, platformHint: '"Android"' })).toBe("android");
+    expect(visitorPlatform({ userAgent: UA.windowsEdge, platformHint: '"macOS"' })).toBe("macos");
+    expect(visitorPlatform({ userAgent: UA.macChrome, platformHint: '"Windows"' })).toBe("other");
+    expect(visitorPlatform({ userAgent: UA.windowsEdge, platformHint: '"iOS"' })).toBe("ios");
+    expect(visitorPlatform({ userAgent: UA.macChrome, platformHint: '"Chrome OS"' })).toBe("other");
+    expect(visitorPlatform({ userAgent: UA.macChrome, platformHint: '"Chromium OS"' })).toBe("other");
+    expect(visitorPlatform({ userAgent: UA.macChrome, platformHint: '"Linux"' })).toBe("other");
     // A hint it does not know decides nothing: the user agent does.
-    expect(preferredMapsProvider({ userAgent: UA.iphoneSafari, platformHint: '"Unknown"' })).toBe("apple");
-    expect(preferredMapsProvider({ userAgent: UA.iphoneSafari, platformHint: "" })).toBe("apple");
+    expect(visitorPlatform({ userAgent: UA.iphoneSafari, platformHint: '"Unknown"' })).toBe("ios");
+    expect(visitorPlatform({ userAgent: UA.iphoneSafari, platformHint: "" })).toBe("ios");
   });
 });
 
-describe("directionsLinks — the probable application first, the other one always beside it", () => {
-  it("an Apple device: « Itinéraire » opens Plans, Google Maps is the alternative", () => {
-    expect(directionsLinks(DESTINATION, { userAgent: UA.iphoneSafari })).toEqual({
-      primary: { provider: "apple", providerName: "Plans", url: `https://maps.apple.com/directions?destination=${ENCODED}` },
-      alternative: { provider: "google", providerName: "Google Maps", url: `https://www.google.com/maps/dir/?api=1&destination=${ENCODED}` },
-    });
-  });
+describe("what « Itinéraire » and the map do on each platform", () => {
+  const APPLE = { provider: "apple", providerName: "Apple Plans", url: `https://maps.apple.com/directions?destination=${ENCODED}` } as const;
+  const GOOGLE = { provider: "google", providerName: "Google Maps", url: `https://www.google.com/maps/dir/?api=1&destination=${ENCODED}` } as const;
+  const on = (userAgent: string | undefined, platformHint?: string) => directionsLinks(DESTINATION, { userAgent, platformHint });
 
-  it("an Android device: « Itinéraire » opens Google Maps, Plans is the alternative", () => {
-    const links = directionsLinks(DESTINATION, { userAgent: UA.androidChrome });
-    expect(links?.primary.provider).toBe("google");
-    expect(links?.alternative?.provider).toBe("apple");
-  });
-
-  it("a desktop that is not a Mac, or an unknown platform: a link that works in any browser, and the alternative", () => {
-    for (const userAgent of [UA.windowsEdge, UA.linuxFirefox, UA.bot, undefined]) {
-      const links = directionsLinks(DESTINATION, { userAgent });
-      expect(links?.primary.url).toBe(`https://www.google.com/maps/dir/?api=1&destination=${ENCODED}`);
-      expect(links?.alternative?.url).toBe(`https://maps.apple.com/directions?destination=${ENCODED}`);
+  it("iPhone and iPad (Safari, Chrome): « Ouvrir avec » — exactly Apple Plans, then Google Maps; Apple Plans without JavaScript", () => {
+    for (const userAgent of [UA.iphoneSafari, UA.iphoneChrome, UA.ipadSafari]) {
+      expect(on(userAgent)).toEqual({ primary: APPLE, chooser: { links: [APPLE, GOOGLE], offer: "always" } });
     }
   });
 
-  it("both links lead to the SAME destination, whatever the platform", () => {
+  it("an iPad presenting itself as a Mac: the same two applications — offered once the browser finds a touch screen", () => {
+    expect(on(UA.ipadDesktopClass)).toEqual({ primary: APPLE, chooser: { links: [APPLE, GOOGLE], offer: "touch-screen" } });
+  });
+
+  it("a Mac: Apple Plans, directly — its page carries the chooser only for an iPad that looks like it", () => {
+    for (const userAgent of [UA.macSafari, UA.macChrome]) {
+      const links = on(userAgent);
+      expect(links?.primary).toEqual(APPLE);
+      expect(links?.chooser?.offer).toBe("touch-screen");
+    }
+  });
+
+  it("Android — phone, tablet, Firefox, without Google services, « desktop site » mode: Google Maps, directly — NEVER a chooser, NEVER Apple Plans", () => {
+    for (const links of [
+      on(UA.androidChrome),
+      on(UA.androidFirefox),
+      on(UA.androidTablet),
+      on(UA.huawei),
+      on(UA.windowsPhone),
+      // Chrome on Android asking for the desktop site: a Linux desktop user agent, an Android platform hint.
+      on("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", '"Android"'),
+    ]) {
+      expect(links).toEqual({ primary: GOOGLE });
+      expect(JSON.stringify(links)).not.toMatch(/apple|Plans|chooser/i);
+    }
+  });
+
+  it("Windows, Linux, ChromeOS, a crawler, no request: Google Maps, directly — never Apple Plans", () => {
+    for (const userAgent of [UA.windowsEdge, UA.windowsFirefox, UA.linuxFirefox, UA.chromeOs, UA.bot, UA.curl, undefined]) {
+      expect(on(userAgent)).toEqual({ primary: GOOGLE });
+    }
+    // Firefox on Android in « desktop site » mode sends no hint: a Linux desktop to the server — the same Google Maps link.
+    expect(on(UA.linuxFirefox)).toEqual({ primary: GOOGLE });
+  });
+
+  it("Apple Plans only on an Apple platform; the chooser only on iPhone and iPad (or what may be one)", () => {
+    for (const [platform, { primary, chooser }] of Object.entries(PLATFORM_DIRECTIONS)) {
+      const apple = platform === "ios" || platform === "macos";
+      expect(primary === "apple").toBe(apple);
+      expect(chooser !== undefined).toBe(apple);
+    }
+    expect(PLATFORM_DIRECTIONS.ios.chooser).toBe("always");
+    expect(PLATFORM_DIRECTIONS.macos.chooser).toBe("touch-screen");
+  });
+
+  it("an Apple device whose Google link cannot be built keeps Apple Plans, alone; elsewhere nothing replaces Google Maps", () => {
+    // Apple's base is five characters shorter than Google's: a destination can fit one (2 044) and not the other (2 049).
+    const destination = `${"€".repeat(220)}${"a".repeat(18)}`;
+    expect(appleDirectionsUrl(destination)).toBeDefined();
+    expect(googleDirectionsUrl(destination)).toBeUndefined();
+    expect(directionsLinks(destination, { userAgent: UA.iphoneSafari })).toEqual({ primary: expect.objectContaining({ provider: "apple" }) });
+    expect(directionsLinks(destination, { userAgent: UA.androidChrome })).toBeUndefined();
+  });
+
+  it("every link leads to the SAME published destination, whatever the platform", () => {
     for (const userAgent of Object.values(UA)) {
-      const links = directionsLinks(DESTINATION, { userAgent });
-      const destinations = [links?.primary.url, links?.alternative?.url].map((url) => new URL(url ?? "").searchParams.get("destination"));
-      expect(destinations).toEqual([DESTINATION, DESTINATION]);
+      const links = on(userAgent);
+      for (const link of [links!.primary, ...(links!.chooser?.links ?? [])]) {
+        expect(new URL(link.url).searchParams.get("destination")).toBe(DESTINATION);
+      }
     }
   });
 
   it("never carries the visitor's position, nor asks a maps service for one", () => {
-    const text = JSON.stringify(directionsLinks(DESTINATION, { userAgent: UA.iphoneSafari }));
-    expect(text).not.toMatch(/origin|source|saddr|sll|geolocation|current|lat|lng/i);
+    for (const userAgent of [UA.iphoneSafari, UA.androidChrome, UA.windowsEdge, UA.macSafari]) {
+      const text = JSON.stringify(on(userAgent));
+      expect(text).not.toMatch(/origin|source|saddr|sll|[?&]ll=|geolocation|current|lat=|lng=/i);
+    }
   });
 });

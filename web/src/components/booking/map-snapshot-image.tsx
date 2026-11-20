@@ -9,13 +9,12 @@ import { useEffect, useRef } from "react";
  * artwork, which shows while it loads and stays if it cannot be read — an
  * expired or refused signature (401), a quota (429), an outage, no network:
  * the image hides itself and its frame (`[data-location-map]`) is marked
- * `failed`, which also withdraws the map's credit. Never a broken image,
- * never a retry, never another source.
+ * `failed`. Never a broken image, never a retry, never another source.
  *
  * Shown whole, never cropped: the image is asked in the frame's own 2 : 1, so
- * the marks Apple draws on its map stay visible. A plain `<img>` on purpose:
- * the image optimizer would download, transform and cache Apple's image on
- * this server.
+ * the attribution Apple draws on its map stays visible — the page adds no
+ * caption of its own. A plain `<img>` on purpose: the image optimizer would
+ * download, transform and cache Apple's image on this server.
  */
 export function MapSnapshotImage({ src, width, height }: { src: string; width: number; height: number }) {
   const ref = useRef<HTMLImageElement>(null);

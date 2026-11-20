@@ -22,6 +22,10 @@ const MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.1
 const DESTINATION = "12%20avenue%20Jean%20Jaur%C3%A8s%2C%2069007%20Lyon";
 const APPLE = `href="https://maps.apple.com/directions?destination=${DESTINATION}"`;
 const GOOGLE = `href="https://www.google.com/maps/dir/?api=1&amp;destination=${DESTINATION}"`;
+/** iPadOS Safari asking for desktop websites (its default): a Mac to the server. */
+const IPAD_AS_MAC = MAC;
+const ANDROID_DESKTOP_SITE = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const LINUX = "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0";
 
 const FULL = {
   visibility: "FULL_ADDRESS",
@@ -130,14 +134,14 @@ afterEach(() => {
 });
 
 describe("/r/[slug] — the location, at the level the server applied", () => {
-  it("a complete published address: its lines, « Itinéraire », the alternative, and the map vignette", async () => {
+  it("a complete published address: its lines, « Itinéraire » and the map vignette — nothing under the map", async () => {
     const html = await profileHtml(fullPage);
 
     expect(html).toContain('data-location="address"');
     expect(html).toContain('<span class="block">12 avenue Jean Jaurès</span><span class="block">69007 Lyon</span>');
     expect(html).toContain("Itinéraire</a>");
-    expect(html).toContain("Ouvrir dans Google Maps</a>");
     expect(count(html, 'id="profile-place-lilac"')).toBe(1);
+    expect(html).not.toMatch(/Ouvrir dans|data-directions-secondary/);
   });
 
   it("a published city: the city under « Lieu » — no street, no postal code, no destination, no link to a map", async () => {
@@ -193,46 +197,64 @@ describe("/r/[slug] — the location, at the level the server applied", () => {
   });
 });
 
-describe("directions — the visitor's probable application first, the other one beside it", () => {
-  it("an iPhone: « Itinéraire » and the map open Apple Plans; Google Maps is offered beside", async () => {
+describe("directions — what « Itinéraire » and the map open, for the visitor's platform", () => {
+  /** The map and « Itinéraire » of a page: how many links lead to each application. */
+  const links = (html: string) => [count(html, APPLE), count(html, GOOGLE)];
+
+  it("an iPhone: « Itinéraire » and the map are the Apple Plans link the chooser takes over in the browser — Google Maps waits in it", async () => {
     visit(IPHONE);
     const html = await profileHtml(fullPage);
-    expect(count(html, APPLE)).toBe(2);
-    expect(count(html, GOOGLE)).toBe(1);
+    expect(links(html)).toEqual([2, 0]);
     expect(html).toMatch(/data-provider="apple"[^>]*>(<svg[\s\S]*?<\/svg>)?Itinéraire<\/a>/);
-    expect(html).toContain("Ouvrir dans Google Maps</a>");
+    // The chooser's list is the browser's to draw once tapped: nothing of it in the server's page.
+    expect(html).not.toMatch(/<dialog|Ouvrir avec/);
   });
 
-  it("an Android phone: « Itinéraire » and the map open Google Maps; Plans is offered beside", async () => {
+  it("an iPad presenting itself as a Mac, and a Mac: Apple Plans — the browser alone tells the iPad by its touch screen", async () => {
+    visit(IPAD_AS_MAC);
+    expect(links(await profileHtml(fullPage))).toEqual([2, 0]);
+  });
+
+  it("an Android phone: Google Maps, directly — NEVER Apple Plans", async () => {
     visit(ANDROID);
     const html = await profileHtml(fullPage);
-    expect(count(html, GOOGLE)).toBe(2);
-    expect(count(html, APPLE)).toBe(1);
-    expect(html).toContain("Ouvrir dans Plans</a>");
+    expect(links(html)).toEqual([0, 2]);
+    expect(html).not.toMatch(/maps\.apple\.com|Apple Plans|data-provider="apple"/);
   });
 
-  it("a Mac: Apple Plans; a Windows desktop: Google Maps, which opens in any browser", async () => {
-    visit(MAC);
-    expect(count(await profileHtml(fullPage), APPLE)).toBe(2);
-    visit(WINDOWS);
-    expect(count(await profileHtml(fullPage), GOOGLE)).toBe(2);
+  it("Android in « desktop site » mode: its platform hint still says Android — Google Maps, directly", async () => {
+    visit(ANDROID_DESKTOP_SITE, { "sec-ch-ua-platform": '"Android"' });
+    expect(links(await profileHtml(fullPage))).toEqual([0, 2]);
+  });
+
+  it("Windows and Linux desktops: Google Maps, directly — never Apple Plans", async () => {
+    for (const userAgent of [WINDOWS, LINUX]) {
+      visit(userAgent);
+      const html = await profileHtml(fullPage);
+      expect(links(html)).toEqual([0, 2]);
+      expect(html).not.toMatch(/maps\.apple\.com|Apple Plans/);
+    }
   });
 
   it("trusts the browser's platform hint over its user agent", async () => {
-    // Chrome on Android asking for the desktop site: a Linux desktop user agent, an Android platform.
-    visit("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", { "sec-ch-ua-platform": '"Android"' });
-    expect(count(await profileHtml(fullPage), GOOGLE)).toBe(2);
     visit(WINDOWS, { "sec-ch-ua-platform": '"macOS"' });
-    expect(count(await profileHtml(fullPage), APPLE)).toBe(2);
+    expect(links(await profileHtml(fullPage))).toEqual([2, 0]);
   });
 
-  it("an unknown platform, no user agent, or no request at all: a link that works everywhere — and still both", async () => {
+  it("an unknown platform, no user agent, or no request at all: Google Maps, which opens in any browser", async () => {
     for (const setup of [() => visit("curl/8.7.1"), () => visit(undefined), () => (request.headers = undefined)]) {
       setup();
       const html = await profileHtml(fullPage);
-      expect(count(html, GOOGLE)).toBe(2);
-      expect(count(html, APPLE)).toBe(1);
+      expect(links(html)).toEqual([0, 2]);
       expect(html).toContain("Itinéraire</a>");
+    }
+  });
+
+  it("no platform shows Waze, nor a second link under the map", async () => {
+    for (const userAgent of [IPHONE, MAC, ANDROID, WINDOWS, LINUX, undefined]) {
+      visit(userAgent);
+      const html = await profileHtml(fullPage);
+      expect(html).not.toMatch(/waze|Ouvrir dans|data-directions-secondary/i);
     }
   });
 
@@ -266,7 +288,7 @@ describe("the map — an Apple Maps snapshot when this deployment can sign one",
     for (const profile of [fullPage, page(CITY)]) {
       const html = await profileHtml(profile);
       expect(mainOf(html)).not.toContain("<img");
-      expect(html).not.toMatch(/apple-mapkit|Apple Plans|data-map-credit/);
+      expect(html).not.toMatch(/apple-mapkit|Plan : Apple Plans|data-map-credit/);
       expect(html).toContain("profile-place-lilac");
     }
   });
@@ -281,7 +303,8 @@ describe("the map — an Apple Maps snapshot when this deployment can sign one",
     const signed = url.slice("https://snapshot.apple-mapkit.com".length, at);
     const signature = Buffer.from(url.slice(at + "&signature=".length), "base64url");
     expect(verify("sha256", Buffer.from(signed, "utf8"), { key: publicKey, dsaEncoding: "ieee-p1363" }, signature)).toBe(true);
-    expect(html).toContain("Plan : Apple Plans");
+    // Apple's own marks on the image are the map's attribution: no caption of the page's own.
+    expect(html).not.toMatch(/Plan : Apple Plans|data-map-credit/);
     // The artwork stays underneath, and the directions stay links of their own.
     expect(html).toContain("profile-place-lilac");
     expect(count(html, APPLE)).toBe(2);
@@ -337,7 +360,7 @@ describe("/r/[slug]/reserver — the booking flow receives the SAME location, an
     vi.stubEnv("TURNSTILE_SECRET_KEY", "0x4AAAAAAAsecretKeyOfTheTests00000");
   });
 
-  it("a complete published address: its lines and both directions links, for this visitor", async () => {
+  it("a complete published address: its lines and the directions of this visitor's platform (Android: Google Maps alone)", async () => {
     visit(ANDROID);
     const professional = await bookingProfessional(fullPage);
     expect(professional).toEqual({
@@ -348,10 +371,23 @@ describe("/r/[slug]/reserver — the booking flow receives the SAME location, an
         spoken: "12 avenue Jean Jaurès, 69007 Lyon",
         directions: {
           primary: { provider: "google", providerName: "Google Maps", url: `https://www.google.com/maps/dir/?api=1&destination=${DESTINATION}` },
-          alternative: { provider: "apple", providerName: "Plans", url: `https://maps.apple.com/directions?destination=${DESTINATION}` },
         },
       },
     });
+  });
+
+  it("an iPhone: the flow receives Apple Plans and the chooser's two applications — as plain data", async () => {
+    visit(IPHONE);
+    const professional = await bookingProfessional(fullPage);
+    const apple = { provider: "apple", providerName: "Apple Plans", url: `https://maps.apple.com/directions?destination=${DESTINATION}` };
+    const google = { provider: "google", providerName: "Google Maps", url: `https://www.google.com/maps/dir/?api=1&destination=${DESTINATION}` };
+    expect(professional?.location).toEqual({
+      kind: "address",
+      lines: ["12 avenue Jean Jaurès", "69007 Lyon"],
+      spoken: "12 avenue Jean Jaurès, 69007 Lyon",
+      directions: { primary: apple, chooser: { links: [apple, google], offer: "always" } },
+    });
+    expect(JSON.parse(JSON.stringify(professional))).toEqual(professional);
   });
 
   it("a published city: the city — the flow never receives a street, a postal code or a destination", async () => {

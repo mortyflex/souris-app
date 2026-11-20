@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import { NacreCover } from "@/components/brand/nacre-cover";
 import { DirectionsIcon, PinIcon } from "@/components/ui/icons";
 import type { DirectionsLinks } from "@/features/location/directions";
+import { DIRECTIONS_LABEL } from "@/features/location/directions-chooser";
 import type { LocationView } from "@/features/location/location-view";
 import { SNAPSHOT_FRAME } from "@/features/location/snapshot-frame";
 import { cn } from "@/lib/utils";
 
+import { DirectionsTrigger } from "./directions-chooser";
 import { MapSnapshotImage } from "./map-snapshot-image";
 
 /**
@@ -16,20 +18,27 @@ import { MapSnapshotImage } from "./map-snapshot-image";
  * into a `LocationView`; nothing here reads a profile, and nothing here can
  * show more than the view holds.
  *
- *   a complete address   its two lines; « Itinéraire » in the visitor's
- *                        probable maps application, the other one beside it;
- *                        the map — a link to the same directions
+ *   a complete address   on the left, its two lines and « Itinéraire »; on
+ *                        the right, the map — the same action as
+ *                        « Itinéraire », and nothing under it
  *   a city               the city name; a town-level map without a marker;
  *                        no link, no directions, nothing to open
  *   no location          these components are not rendered at all
  *
+ * « Itinéraire » and the map do the same thing, decided by the visitor's
+ * platform (`directions.ts`, `directions-chooser.tsx`): « Ouvrir avec »
+ * — Apple Plans or Google Maps — on an iPhone or an iPad, Apple Plans
+ * directly on a Mac, Google Maps directly on Android and everywhere else.
+ * Never another application, and never a second link beside them.
+ *
  * The map is an Apple Maps snapshot when the server could sign one, over the
  * Nacre artwork that stands in for it — while it loads, when it cannot be
- * read, or when there is none. The artwork never pretends to be a map, and
- * the directions never depend on the image.
+ * read, or when there is none. Apple's own marks are drawn on its image, which
+ * is shown whole; the artwork never pretends to be a map, and the directions
+ * never depend on the image.
  *
- * Every link opens a new tab (or the maps application): the booking flow
- * keeps its state. Nothing asks for the visitor's position.
+ * Every link opens a new tab (or the application): the booking flow keeps its
+ * state. Nothing asks for the visitor's position.
  */
 
 const quietLink =
@@ -38,23 +47,7 @@ const quietLink =
 const directionsButton =
   "type-label inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-lavender-200 bg-lavender-25 px-4 text-lavender-700 transition-colors duration-[var(--bz-duration-state)] hover:bg-lavender-50";
 
-const external = { target: "_blank", rel: "noopener noreferrer" } as const;
-
-export const DIRECTIONS_LABEL = "Itinéraire";
-
-function alternativeLabel(providerName: string): string {
-  return `Ouvrir dans ${providerName}`;
-}
-
-/** What a screen reader hears on a directions link: where to, and in which application. */
-function directionsName(spoken: string, providerName: string): string {
-  return `${DIRECTIONS_LABEL} vers ${spoken} (${providerName}, nouvel onglet)`;
-}
-
-/**
- * « Itinéraire » and the other provider beside it. Works without the map
- * image, without JavaScript, and never knows where the visitor is.
- */
+/** « Itinéraire » — a button, or a quiet link inside a summary (`compact`). The only directions action there is. */
 export function DirectionsActions({
   directions,
   spoken,
@@ -64,43 +57,29 @@ export function DirectionsActions({
   directions: DirectionsLinks;
   /** The address in one line. */
   spoken: string;
-  /** Inside a summary: two quiet links instead of a button. */
+  /** Inside a summary: quiet links instead of a button. */
   compact?: boolean;
   className?: string;
 }) {
-  const { primary, alternative } = directions;
   return (
     <span data-directions="" className={cn("flex flex-wrap items-center gap-x-4 gap-y-1", className)}>
-      <a
-        href={primary.url}
-        {...external}
-        aria-label={directionsName(spoken, primary.providerName)}
-        data-provider={primary.provider}
+      <DirectionsTrigger
+        directions={directions}
+        spoken={spoken}
         className={compact ? cn(quietLink, "type-body-small inline-flex min-h-11 items-center gap-1.5") : directionsButton}
       >
         <DirectionsIcon size={compact ? 16 : 18} />
         {DIRECTIONS_LABEL}
-      </a>
-      {alternative ? (
-        <a
-          href={alternative.url}
-          {...external}
-          aria-label={`${alternativeLabel(alternative.providerName)} : ${directionsName(spoken, alternative.providerName)}`}
-          data-provider={alternative.provider}
-          className={cn(quietLink, "type-body-small inline-flex min-h-11 items-center")}
-        >
-          {alternativeLabel(alternative.providerName)}
-        </a>
-      ) : null}
+      </DirectionsTrigger>
     </span>
   );
 }
 
 /**
  * The map of a location: the snapshot over the Nacre artwork, in the
- * snapshot's own 2 : 1. A complete address makes it a link to its directions
- * (the artwork then carries a pin); a city makes it a quiet picture — no
- * marker, no link.
+ * snapshot's own 2 : 1. A complete address makes it the same action as
+ * « Itinéraire » (the artwork then carries a pin), with nothing under it; a
+ * city makes it a quiet picture — no marker, no link.
  */
 export function LocationMap({ location, idPrefix, className }: { location: LocationView; idPrefix: string; className?: string }) {
   const exact = location.kind === "address";
@@ -120,28 +99,20 @@ export function LocationMap({ location, idPrefix, className }: { location: Locat
   );
   const frame = "relative block aspect-[2/1] w-full overflow-hidden rounded-[1.1rem] bg-lavender-100 ring-1 ring-lavender-100";
   return (
-    <div data-location-map="" data-map-kind={exact ? "address" : "city"} className={cn("group/map flex flex-col gap-1.5", className)}>
+    <div data-location-map="" data-map-kind={exact ? "address" : "city"} className={cn("flex flex-col gap-1", className)}>
       {exact && directions !== undefined ? (
-        <a
-          href={directions.primary.url}
-          {...external}
-          aria-label={directionsName(location.spoken, directions.primary.providerName)}
-          data-provider={directions.primary.provider}
+        <DirectionsTrigger
+          directions={directions}
+          spoken={location.spoken}
           className={cn(frame, "transition-shadow duration-[var(--bz-duration-state)] hover:shadow-raised hover:ring-lavender-200")}
         >
           {picture}
-        </a>
+        </DirectionsTrigger>
       ) : (
         <div aria-hidden="true" className={frame}>
           {picture}
         </div>
       )}
-      {location.mapUrl !== undefined ? (
-        // The provider of the map, said in words beside the marks Apple draws on its image; gone with the image.
-        <p data-map-credit="" className="type-meta text-foreground/55 group-data-[map-state=failed]/map:hidden">
-          Plan : Apple Plans
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -156,8 +127,8 @@ function Tile({ children }: { children: ReactNode }) {
 
 /**
  * The location among the contact details of a public profile — a row of its
- * `<dl>`: the address (or the city) and its actions, the map under them on a
- * phone and beside them from 640 px.
+ * `<dl>`: the address (or the city) and « Itinéraire », the map under them on
+ * a phone and beside them from 640 px.
  */
 export function LocationRow({ location, idPrefix = "profile" }: { location: LocationView; idPrefix?: string }) {
   const exact = location.kind === "address";

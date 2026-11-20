@@ -1,23 +1,45 @@
 import { isPlainLine } from "./public-location";
 
 /**
- * Directions to a professional's published address, in the visitor's own maps
- * application — two official, key-less URL schemes:
+ * Directions to a professional's published address — two official, key-less
+ * universal links, each opening the provider's application where the device
+ * has it and its website otherwise:
  *
- *   Apple   https://maps.apple.com/directions?destination=…
- *           (unified Maps URLs — developer.apple.com/documentation/mapkit/unified-map-urls)
- *   Google  https://www.google.com/maps/dir/?api=1&destination=…
- *           (Maps URLs — developers.google.com/maps/documentation/urls/get-started)
+ *   Apple Plans   https://maps.apple.com/directions?destination=…
+ *                 (unified Maps URLs, iOS 18.4 / macOS 15.4 and later —
+ *                 developer.apple.com/documentation/mapkit/unified-map-urls)
+ *   Google Maps   https://www.google.com/maps/dir/?api=1&destination=…
+ *                 (Maps URLs — developers.google.com/maps/documentation/urls/get-started)
  *
- * Both take the destination as plain text, percent-encoded here. No origin is
+ * Each takes the destination as plain text, percent-encoded here. No origin is
  * sent: each application starts from where the visitor is, which IT knows —
- * this website never asks for a position. No travel mode either: the visitor
- * keeps her own.
+ * this website never asks for a position. No travel mode, no tracking
+ * parameter either, and never an application scheme.
+ *
+ * WHAT « Itinéraire » and the map do depends on the visitor's platform, read
+ * from the request (never from the visitor's device, never a promise of what
+ * is installed — a website cannot know):
+ *
+ *   iPhone, iPad             « Ouvrir avec »: Apple Plans, then Google Maps
+ *   Mac                      Apple Plans, directly
+ *   Android                  Google Maps, directly — never Apple Plans
+ *   Windows, Linux, unknown  Google Maps, directly
+ *
+ * An iPad asking for desktop websites (iPadOS Safari's default) presents
+ * itself as a Mac, and sends no client hint: the request cannot tell the two
+ * apart. Its page therefore carries the chooser too, offered only where the
+ * browser finds a touch screen (`directions-chooser.ts`); a Mac never shows it.
  *
  * Only a COMPLETE published address has a destination (`FULL_ADDRESS`). A city
  * or a hidden location never reaches this module.
  */
 export type MapsProvider = "apple" | "google";
+
+/** The visitor's platform, as far as the request says it. */
+export type VisitorPlatform = "ios" | "macos" | "android" | "other";
+
+/** When « Itinéraire » asks which application to open: on every iPhone and iPad, or only behind a Mac's user agent with a touch screen. */
+export type ChooserOffer = "always" | "touch-screen";
 
 const APPLE_DIRECTIONS = "https://maps.apple.com/directions";
 const GOOGLE_DIRECTIONS = "https://www.google.com/maps/dir/";
@@ -34,7 +56,7 @@ function directionsUrl(base: string, destination: string): string | undefined {
   return url.length <= MAX_DIRECTIONS_URL_LENGTH ? url : undefined;
 }
 
-/** Apple Plans: the Maps application on an Apple device, Apple Maps on the web elsewhere. */
+/** Apple Plans: the Maps application of an Apple device. */
 export function appleDirectionsUrl(destination: string): string | undefined {
   return directionsUrl(`${APPLE_DIRECTIONS}?destination=`, destination);
 }
@@ -44,7 +66,7 @@ export function googleDirectionsUrl(destination: string): string | undefined {
   return directionsUrl(`${GOOGLE_DIRECTIONS}?api=1&destination=`, destination);
 }
 
-export interface VisitorPlatform {
+export interface VisitorHeaders {
   /** The request's `User-Agent`. */
   readonly userAgent?: string | null;
   /** The request's `Sec-CH-UA-Platform` client hint (Chromium), quoted as sent: `"Android"`, `"macOS"`… */
@@ -52,63 +74,80 @@ export interface VisitorPlatform {
 }
 
 /**
- * The maps application a visitor most probably has:
+ * The visitor's platform, from the request's own headers:
  *
- *   iPhone, iPad, Mac          Apple Plans
- *   Android                    Google Maps
- *   everything else, unknown   Google Maps — its website opens in any browser
- *
- * A guess from the request, never a promise: the page always offers the other
- * provider beside it. An Android device always wins (some present both names).
+ *   the client hint, when a browser sends one it knows (Chromium: even in
+ *   « desktop site » mode, Android says Android);
+ *   else the user agent — an Android device always wins (some name both
+ *   Android and iPhone); an iPad asking for desktop websites presents itself
+ *   as a Mac;
+ *   else `other`.
  */
-export function preferredMapsProvider({ userAgent, platformHint }: VisitorPlatform = {}): MapsProvider {
+export function visitorPlatform({ userAgent, platformHint }: VisitorHeaders = {}): VisitorPlatform {
   const hint = (platformHint ?? "").replace(/"/g, "").trim().toLowerCase();
-  if (hint === "android") return "google";
-  if (hint === "ios" || hint === "macos") return "apple";
-  if (hint === "windows" || hint === "linux" || hint === "chrome os" || hint === "chromeos") return "google";
+  if (hint === "android") return "android";
+  if (hint === "ios") return "ios";
+  if (hint === "macos") return "macos";
+  if (hint === "windows" || hint === "linux" || hint === "chrome os" || hint === "chromeos" || hint === "chromium os") return "other";
 
   const agent = userAgent ?? "";
-  if (/Android/i.test(agent)) return "google";
-  if (/\b(iPhone|iPad|iPod)\b/.test(agent)) return "apple";
-  if (/Macintosh|Mac OS X/.test(agent)) return "apple";
-  return "google";
+  if (/Android/i.test(agent)) return "android";
+  if (/\b(iPhone|iPad|iPod)\b/.test(agent)) return "ios";
+  if (/Macintosh|Mac OS X/.test(agent)) return "macos";
+  return "other";
 }
+
+/**
+ * What « Itinéraire » and the map open on each platform: the application they
+ * link to, and whether they first ask (« Ouvrir avec »: Apple Plans, then
+ * Google Maps). Apple Plans is only ever offered on an Apple platform; the
+ * chooser only ever on an iPhone or an iPad.
+ */
+export const PLATFORM_DIRECTIONS: Readonly<Record<VisitorPlatform, { readonly primary: MapsProvider; readonly chooser?: ChooserOffer }>> = {
+  ios: { primary: "apple", chooser: "always" },
+  macos: { primary: "apple", chooser: "touch-screen" },
+  android: { primary: "google" },
+  other: { primary: "google" },
+};
+
+/** The name of each application, as French speakers know it. */
+export const PROVIDER_NAMES: Readonly<Record<MapsProvider, string>> = { apple: "Apple Plans", google: "Google Maps" };
 
 export interface DirectionsLink {
   readonly provider: MapsProvider;
   readonly url: string;
-  /** The name of the application, as French speakers know it. */
   readonly providerName: string;
 }
 
 export interface DirectionsLinks {
-  /** « Itinéraire »: the visitor's most probable application. */
+  /** « Itinéraire » and the map, as the server renders them — and without JavaScript: ONE application, directly. */
   readonly primary: DirectionsLink;
-  /** The other provider, always offered beside it. */
-  readonly alternative?: DirectionsLink;
+  /** iPhone and iPad: « Ouvrir avec », exactly Apple Plans then Google Maps. Absent: « Itinéraire » is the direct link. */
+  readonly chooser?: { readonly links: readonly [DirectionsLink, DirectionsLink]; readonly offer: ChooserOffer };
 }
 
-const PROVIDER_NAMES: Readonly<Record<MapsProvider, string>> = { apple: "Plans", google: "Google Maps" };
+function link(provider: MapsProvider, destination: string): DirectionsLink | undefined {
+  const url = provider === "apple" ? appleDirectionsUrl(destination) : googleDirectionsUrl(destination);
+  return url === undefined ? undefined : { provider, url, providerName: PROVIDER_NAMES[provider] };
+}
 
 /**
- * The two directions links of a destination, the visitor's probable
- * application first. `undefined` when no link can be built for it (a text
- * that is not a plain line, or a URL beyond the documented limit): the page
- * then shows the address alone.
+ * The directions of a destination for a visitor's platform. `undefined` when
+ * no link can be built (a text that is not a plain line, or a URL beyond the
+ * documented limit): the page then shows the address alone.
  */
-export function directionsLinks(destination: string, platform: VisitorPlatform = {}): DirectionsLinks | undefined {
-  const urls: Readonly<Record<MapsProvider, string | undefined>> = {
-    apple: appleDirectionsUrl(destination),
-    google: googleDirectionsUrl(destination),
-  };
-  const link = (provider: MapsProvider): DirectionsLink | undefined => {
-    const url = urls[provider];
-    return url === undefined ? undefined : { provider, url, providerName: PROVIDER_NAMES[provider] };
-  };
-  const preferred = preferredMapsProvider(platform);
-  const other: MapsProvider = preferred === "apple" ? "google" : "apple";
-  const primary = link(preferred) ?? link(other);
+export function directionsLinks(destination: string, headers: VisitorHeaders = {}): DirectionsLinks | undefined {
+  const { primary: provider, chooser: offer } = PLATFORM_DIRECTIONS[visitorPlatform(headers)];
+  if (provider === "google") {
+    // Android and every other platform: Google Maps or nothing — never Apple Plans in its stead.
+    const google = link("google", destination);
+    return google === undefined ? undefined : { primary: google };
+  }
+  const apple = link("apple", destination);
+  const google = link("google", destination);
+  const primary = apple ?? google;
   if (primary === undefined) return undefined;
-  const alternative = primary.provider === preferred ? link(other) : undefined;
-  return { primary, ...(alternative !== undefined ? { alternative } : {}) };
+  return apple !== undefined && google !== undefined && offer !== undefined
+    ? { primary, chooser: { links: [apple, google], offer } }
+    : { primary };
 }

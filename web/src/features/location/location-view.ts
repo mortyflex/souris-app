@@ -1,4 +1,4 @@
-import { directionsLinks, type DirectionsLinks, type VisitorPlatform } from "./directions";
+import { directionsLinks, type DirectionsLinks, type VisitorHeaders } from "./directions";
 import { addressLines, type PublicLocation } from "./public-location";
 
 /**
@@ -6,8 +6,8 @@ import { addressLines, type PublicLocation } from "./public-location";
  * already decided, as plain data (it crosses from the server to the booking
  * flow in the browser):
  *
- *   address   the two address lines, the directions links, the map when one
- *             can be made
+ *   address   the two address lines, the directions links of the visitor's
+ *             platform, the map when one can be made
  *   city      the city name, and a town-level map when one can be made —
  *             never a marker, never a destination, never a link
  *
@@ -31,7 +31,7 @@ export type LocationView =
       readonly mapUrl?: string;
     };
 
-export interface LocationViewContext extends VisitorPlatform {
+export interface LocationViewContext extends VisitorHeaders {
   /** Makes the map URL of a location, or nothing (`mapSnapshotUrl` on the server). */
   readonly mapUrl?: (location: PublicLocation) => string | undefined;
 }

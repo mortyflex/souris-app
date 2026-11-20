@@ -43,6 +43,8 @@ export const MailIcon = icon(<><rect x="3.5" y="5.5" width="17" height="13" rx="
 export const PinIcon = icon(<><path d="M12 21s-6.5-5.6-6.5-10.6a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21Z" /><circle cx="12" cy="10.3" r="2.3" /></>, "PinIcon");
 // « Itinéraire »: a road that turns, then points ahead.
 export const DirectionsIcon = icon(<><path d="M5 19.5V13a4 4 0 0 1 4-4h10" /><path d="m15 5 4 4-4 4" /></>, "DirectionsIcon");
+// Leaves the page: an application or another website opens.
+export const ArrowUpRightIcon = icon(<><path d="M7 17 17 7" /><path d="M8.5 7H17v8.5" /></>, "ArrowUpRightIcon");
 export const ClockIcon = icon(<><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>, "ClockIcon");
 export const CalendarIcon = icon(<><rect x="4" y="5.5" width="16" height="14" rx="2.5" /><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" /></>, "CalendarIcon");
 export const UserIcon = icon(<><circle cx="12" cy="8.5" r="3.5" /><path d="M5 19.5c1.2-3.3 3.8-5 7-5s5.8 1.7 7 5" /></>, "UserIcon");

@@ -21,7 +21,7 @@ describe("buildLocationView", () => {
     expect(mapUrl).not.toHaveBeenCalled();
   });
 
-  it("a complete address: its two lines, both directions links, the map", () => {
+  it("a complete address on an iPhone: its two lines, Apple Plans and the « Ouvrir avec » chooser (Apple Plans, Google Maps), the map", () => {
     const view = buildLocationView(FULL, { userAgent: IPHONE, mapUrl: () => MAP });
     expect(view).toEqual({
       kind: "address",
@@ -29,10 +29,18 @@ describe("buildLocationView", () => {
       spoken: "12 avenue Jean Jaurès, 69007 Lyon",
       directions: {
         primary: expect.objectContaining({ provider: "apple" }),
-        alternative: expect.objectContaining({ provider: "google" }),
+        chooser: { links: [expect.objectContaining({ provider: "apple" }), expect.objectContaining({ provider: "google" })], offer: "always" },
       },
       mapUrl: MAP,
     });
+  });
+
+  it("an Android visitor: Google Maps, directly — no chooser, never Apple Plans", () => {
+    const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36";
+    const view = buildLocationView(FULL, { userAgent: ANDROID, mapUrl: () => MAP });
+    expect(view).toMatchObject({ kind: "address", directions: { primary: { provider: "google" } } });
+    expect(view).not.toHaveProperty("directions.chooser");
+    expect(JSON.stringify(view)).not.toMatch(/maps\.apple\.com|Apple Plans|waze/i);
   });
 
   it("a city: the name and a map — never a destination, a link, a street or a postal code", () => {

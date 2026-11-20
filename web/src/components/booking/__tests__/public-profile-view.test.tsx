@@ -28,15 +28,14 @@ const complete: PublicProfile = {
 const DESTINATION = "1%20rue%20de%20la%20Paix%2C%2075002%20Paris";
 const APPLE_URL = `https://maps.apple.com/directions?destination=${DESTINATION}`;
 const GOOGLE_URL = `https://www.google.com/maps/dir/?api=1&destination=${DESTINATION}`;
+const APPLE = { provider: "apple", providerName: "Apple Plans", url: APPLE_URL } as const;
+const GOOGLE = { provider: "google", providerName: "Google Maps", url: GOOGLE_URL } as const;
 /** What the server made of a published complete address, for a visitor on an iPhone. */
 const address: LocationView = {
   kind: "address",
   lines: ["1 rue de la Paix", "75002 Paris"],
   spoken: "1 rue de la Paix, 75002 Paris",
-  directions: {
-    primary: { provider: "apple", providerName: "Plans", url: APPLE_URL },
-    alternative: { provider: "google", providerName: "Google Maps", url: GOOGLE_URL },
-  },
+  directions: { primary: APPLE, chooser: { links: [APPLE, GOOGLE], offer: "always" } },
 };
 const city: LocationView = { kind: "city", city: "Paris" };
 /** How many times a text appears in a page. */
@@ -164,23 +163,24 @@ describe("PublicProfileView — the Nacre design", () => {
     }
   });
 
-  it("a published address: its two lines, « Itinéraire », the other application, and ONE map vignette that opens the same directions", () => {
+  it("a published address: its two lines, « Itinéraire », ONE map vignette that opens the same directions, the next applications under it", () => {
     const html = render({ profile: complete, location: address });
 
     expect(html).toContain('data-location="address"');
     expect(html).toMatch(/<dt[^>]*>Adresse<\/dt>/);
     expect(html).toContain('<span class="block">1 rue de la Paix</span><span class="block">75002 Paris</span>');
-    // « Itinéraire » — the visitor's probable application — and the map both open it; the alternative is beside.
+    // « Itinéraire » and the map: the same link (Apple Plans on an iPhone; the chooser comes in the browser) — nothing else.
     expect(count(html, `href="${APPLE_URL}"`)).toBe(2);
-    expect(count(html, `href="${GOOGLE_URL.replace("&", "&amp;")}"`)).toBe(1);
+    expect(count(html, `href="${GOOGLE_URL.replace("&", "&amp;")}"`)).toBe(0);
     expect(html).toContain("Itinéraire</a>");
-    expect(html).toContain("Ouvrir dans Google Maps</a>");
+    expect(html).not.toMatch(/Ouvrir dans|data-directions-secondary|waze/i);
     // One vignette (its Nacre ids stay unique on the page): under the address on a phone, beside it from 640 px.
     expect(count(html, 'id="profile-place-lilac"')).toBe(1);
     expect(html).toContain('<dd class="col-span-2 sm:col-span-1">');
-    // Text first, then the actions, then the vignette, in reading order.
+    // Text first, then « Itinéraire », then the vignette — in reading order.
     expect(html.indexOf("1 rue de la Paix")).toBeLessThan(html.indexOf("Itinéraire</a>"));
     expect(html.indexOf("Itinéraire</a>")).toBeLessThan(html.indexOf("profile-place-lilac"));
+    expect(html).not.toContain("Plan : Apple Plans");
   });
 
   it("a published city: the city alone — a quiet picture, no marker, no link, no directions", () => {
