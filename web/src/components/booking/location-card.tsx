@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 import { DirectionsTrigger } from "./directions-chooser";
 import { MapSnapshotImage } from "./map-snapshot-image";
+import { TEXT_LINK } from "./text-link";
 
 /**
  * Where a professional receives her clients, as her page may show it — the
@@ -41,8 +42,7 @@ import { MapSnapshotImage } from "./map-snapshot-image";
  * state. Nothing asks for the visitor's position.
  */
 
-const quietLink =
-  "font-medium text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700";
+const quietLink = TEXT_LINK;
 /** « Itinéraire »: a 44 px target, the contact chips' own lavender. */
 const directionsButton =
   "type-label inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-lavender-200 bg-lavender-25 px-4 text-lavender-700 transition-colors duration-[var(--bz-duration-state)] hover:bg-lavender-50";

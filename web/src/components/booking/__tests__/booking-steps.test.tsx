@@ -5,7 +5,7 @@ import type { ConfirmedBooking } from "@/features/booking/booking-answer";
 import type { ChallengeState } from "@/features/booking/challenge";
 import type { LocationView } from "@/features/location/location-view";
 
-import { AppointmentSummary, BookingConfirmation, ReviewStep, ServiceStep, SlotStep, type Professional } from "../booking-steps";
+import { AppointmentSummary, BookingConfirmation, DetailsStep, ReviewStep, ServiceStep, SlotStep, type Professional } from "../booking-steps";
 
 const DESTINATION = "12%20rue%20des%20Lilas%2C%2069001%20Lyon";
 /** A published complete address, as the server hands it to the flow (a visitor on Android). */
@@ -484,5 +484,110 @@ describe("the location through the booking flow — a booking never shows more t
       expect(text(pages.multi)).toContain("Durée totale");
       expect(text(pages.review)).toContain("Confirmer le rendez-vous");
     });
+  });
+});
+
+describe("the date step on a phone or a tablet says WHERE (Step 196) — the line the desktop summary holds", () => {
+  const slot = { startsAt: booking.startsAt, endsAt: booking.endsAt, localTime: "14:00" };
+  const dateStep = (who: Professional) =>
+    renderToStaticMarkup(
+      <SlotStep
+        services={[coupe]}
+        window={{ firstDate: "2026-11-16", lastDate: "2026-11-18" }}
+        date="2026-11-16"
+        slots={{ status: "ready", slots: [slot] }}
+        timeZone="Europe/Paris"
+        professional={who}
+        onChangeService={noop}
+        onChooseDate={noop}
+        onChooseSlot={noop}
+        onRetry={noop}
+        onBack={noop}
+        onContinue={noop}
+      />,
+    );
+  /** The phone's line: a <dl> under the heading, hidden from the desktop breakpoint up. */
+  const phoneLine = (markup: string) => /<dl data-location-summary="(\w+)" class="([^"]*)">([\s\S]*?)<\/dl>/.exec(markup);
+  /** The desktop summary beside the step, hidden below that breakpoint. */
+  const desktopSummary = (markup: string) => markup.slice(markup.indexOf('<aside aria-labelledby="booking-summary-title"'));
+
+  it("a complete address: « Adresse », its two lines and « Itinéraire » — under the heading, before the dates", () => {
+    const markup = dateStep(professional);
+    const line = phoneLine(markup)!;
+    expect(line[1]).toBe("address");
+    expect(line[2].split(" ")).toContain("lg:hidden");
+    expect(text(line[3])).toMatch(/Adresse 12 rue des Lilas 69001 Lyon Itinéraire/);
+    expect(line[3]).toContain(`href="https://www.google.com/maps/dir/?api=1&amp;destination=${DESTINATION}"`);
+    expect(line[3]).toMatch(/<a [^>]*maps[^>]*target="_blank" rel="noopener noreferrer"/);
+    const heading = markup.indexOf("Choisissez une date et un horaire");
+    expect(heading).toBeLessThan(markup.indexOf("data-location-summary"));
+    expect(markup.indexOf("data-location-summary")).toBeLessThan(markup.indexOf("Horaires du"));
+  });
+
+  it("the same words as the desktop summary — each shown on its own screens only, so never twice", () => {
+    const markup = dateStep(professional);
+    const summary = desktopSummary(markup);
+    expect(summary).toMatch(/^<aside [^>]*class="[^"]*hidden lg:flex/);
+    const said = (html: string) => text(html).match(/Adresse 12 rue des Lilas 69001 Lyon Itinéraire/)?.[0];
+    expect(said(phoneLine(markup)![3])).toBe(said(summary));
+  });
+
+  it("a city: « Lieu » and the city alone — no street, no postal code, no link, no directions", () => {
+    const line = phoneLine(dateStep(inCity))!;
+    expect(line[1]).toBe("city");
+    expect(text(line[3]).trim()).toBe("Lieu Lyon");
+    expect(line[3]).not.toMatch(/Lilas|69001|maps\.apple|google\.com\/maps|<a |Itinéraire|data-directions/);
+  });
+
+  it("no published location: no line at all, nothing that would be a place", () => {
+    const markup = dateStep(withoutPlace);
+    expect(phoneLine(markup)).toBeNull();
+    expect(markup).not.toMatch(/data-location-summary|Lilas|69001|maps\.apple|google\.com\/maps|Itinéraire|data-directions/);
+  });
+
+  it("the date step keeps everything else: the dates, the times, « Continuer »", () => {
+    const html = text(dateStep(professional));
+    expect(html).toContain("Horaires du");
+    expect(html).toContain("Continuer");
+  });
+});
+
+describe("the details step on a phone or a tablet says WHERE too (Step 197) — the line the desktop summary holds beside it", () => {
+  const empty = { firstName: "", lastName: "", email: "", phone: "" };
+  const detailsStep = (who: Professional, values = empty) =>
+    renderToStaticMarkup(<DetailsStep details={values} issues={{}} professional={who} onEdit={noop} onBack={noop} onContinue={noop} />);
+  const line = (markup: string) => /<dl data-location-summary="(\w+)" class="([^"]*)">([\s\S]*?)<\/dl>/.exec(markup);
+
+  it("a complete address: the same compact line as the date step — under the heading, before the form, phone and tablet only", () => {
+    const markup = detailsStep(professional);
+    const found = line(markup)!;
+    expect(found[1]).toBe("address");
+    expect(found[2].split(" ")).toContain("lg:hidden");
+    expect(text(found[3])).toMatch(/Adresse 12 rue des Lilas 69001 Lyon Itinéraire/);
+    expect(found[3]).toContain(`href="https://www.google.com/maps/dir/?api=1&amp;destination=${DESTINATION}"`);
+    expect(markup.indexOf("Vos coordonnées")).toBeLessThan(markup.indexOf("data-location-summary"));
+    expect(markup.indexOf("data-location-summary")).toBeLessThan(markup.indexOf("<form"));
+    // Compact: no map, no artwork, ONE line.
+    expect(markup.match(/data-location-summary/g)).toHaveLength(1);
+    expect(markup).not.toMatch(/data-location-map|apple-mapkit|nacre/i);
+  });
+
+  it("a city: « Lieu » and the city alone — no street, no postal code, no link", () => {
+    const found = line(detailsStep(inCity))!;
+    expect(found[1]).toBe("city");
+    expect(text(found[3]).trim()).toBe("Lieu Lyon");
+    expect(found[3]).not.toMatch(/Lilas|69001|<a |Itinéraire|data-directions/);
+  });
+
+  it("no published location: nothing that would be a place", () => {
+    const markup = detailsStep(withoutPlace);
+    expect(line(markup)).toBeNull();
+    expect(markup).not.toMatch(/data-location-summary|Lilas|69001|maps\.apple|google\.com\/maps|Itinéraire/);
+  });
+
+  it("the form keeps what she typed and every field: the line is presentation only", () => {
+    const markup = detailsStep(professional, { firstName: "Marie", lastName: "Dupont", email: "marie@example.test", phone: "06 12 34 56 78" });
+    for (const value of ["Marie", "Dupont", "marie@example.test", "06 12 34 56 78"]) expect(markup).toContain(`value="${value}"`);
+    expect(markup.match(/<input /g)).toHaveLength(4);
   });
 });

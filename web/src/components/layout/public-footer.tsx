@@ -12,7 +12,7 @@ interface FooterLink {
 }
 
 const linkClass =
-  "type-body-small inline-flex min-h-10 items-center text-foreground/70 underline-offset-4 transition-colors duration-[var(--bz-duration-state)] hover:text-lavender-700 hover:underline";
+  "type-body-small inline-flex min-h-10 items-center text-foreground/70 transition-colors duration-[var(--bz-duration-state)] hover:text-lavender-700";
 
 /**
  * The footer of the public booking pages — a professional's page and the

@@ -9,6 +9,7 @@ import { formatServicePrice, isClamped, PRICE_TO_CONFIRM } from "@/features/avai
 import { cn } from "@/lib/utils";
 
 import { ServiceDetailDialog } from "./service-detail-dialog";
+import { LINK_FEEDBACK } from "./text-link";
 
 /**
  * ONE bookable service, as a customer chooses it: its name, its duration, its
@@ -194,7 +195,7 @@ export function ServiceCardView({
             aria-haspopup="dialog"
             aria-expanded={detailOpen}
             onClick={onOpenDetail}
-            className="type-label inline-flex min-h-11 items-center gap-1 rounded-full text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700 focus-visible:outline-2 focus-visible:outline-offset-2"
+            className={cn("type-label inline-flex min-h-11 items-center gap-1 rounded-full text-lavender-700 focus-visible:outline-2 focus-visible:outline-offset-2", LINK_FEEDBACK)}
           >
             Voir le détail
             <span className="sr-only"> de {service.name}</span>

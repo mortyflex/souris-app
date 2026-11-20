@@ -31,6 +31,16 @@ describe("PublicFooter", () => {
     expect(text(html)).toMatch(/Pour les professionnels .*Contacter BeautIzzy/);
   });
 
+  it("its links are never underlined, not even on hover — their colour answers (Step 196)", async () => {
+    const html = await footer("profile", "bonjour@example.test");
+    const classes = [...html.matchAll(/<a [^>]*class="([^"]*)"/g)].map(([, value]) => value.split(" "));
+    expect(classes).toHaveLength(2);
+    for (const names of classes) {
+      expect(names.filter((name) => /underline|decoration-/.test(name))).toEqual([]);
+      expect(names).toContain("hover:text-lavender-700");
+    }
+  });
+
   it("booking flow: nothing pulls a customer out of a booking — no link to the website", async () => {
     expect(hrefs(await footer("flow", "bonjour@example.test"))).toEqual(["mailto:bonjour@example.test"]);
     const bare = await footer("flow");

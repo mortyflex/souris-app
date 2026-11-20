@@ -12,6 +12,8 @@ import type { PublicProfile } from "@/features/public-profile/public-profile";
 import { bookingPath } from "@/features/public-profile/slug";
 import { cn } from "@/lib/utils";
 
+import { TEXT_LINK } from "./text-link";
+
 import { CoverPhoto } from "./cover-photo";
 import { LocationRow } from "./location-card";
 import { profileNameRole } from "./profile-name";
@@ -35,8 +37,7 @@ interface PublicProfileViewProps {
   bookingOpen?: boolean;
 }
 
-const quietLink =
-  "font-medium text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700";
+const quietLink = TEXT_LINK;
 const actionChip =
   "type-label inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-lavender-200 bg-lavender-25 px-4 text-lavender-700 transition-colors duration-[var(--bz-duration-state)] hover:border-lavender-200 hover:bg-lavender-50 max-lg:min-h-[66px] max-lg:flex-col max-lg:gap-1.5 max-lg:rounded-[1.1rem] max-lg:px-2 max-lg:text-[0.8125rem]";
 

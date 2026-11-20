@@ -30,11 +30,10 @@
 /* ── Keyframes ───────────────────────────────────────────────────────── */
 @keyframes bz-sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @keyframes bz-rise { from { opacity: 0; transform: translate3d(0, 12px, 0); } }
+/* Also the entrance of a dialog's panel — a bottom sheet or a centred modal: it fades in WHERE IT
+   STAYS, never travelling, so its first frame is already its place and nothing moves under a finger. */
 @keyframes bz-fade { from { opacity: 0; } }
 @keyframes bz-float { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -9px, 0); } }
-/* A bottom sheet rising from the edge of a phone; a modal settling in on a larger screen. */
-@keyframes bz-sheet-in { from { transform: translate3d(0, 100%, 0); } }
-@keyframes bz-dialog-in { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.98); } }
 
 /* ── Skeleton: a placeholder on the real grid, a 1.4 s sheen (DESIGN.md §6) ── */
 @utility skeleton {

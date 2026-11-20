@@ -144,20 +144,26 @@ export function SelectionLimitNote({ count, className }: { count: number; classN
 
 /**
  * The selection beside the services (a sticky card on a desktop; at the end of
- * the step on a phone): her services in order with « Retirer », the totals,
- * and « Choisir un horaire ».
+ * the step on a phone or a tablet): her services in order with « Retirer », the
+ * totals, and — on a desktop — « Choisir un horaire ». ONE « Choisir un
+ * horaire » per screen: below the desktop breakpoint the sticky bar carries it
+ * (`SelectionStickyBar`), so the card there shows the selection only
+ * (`offersChooseTimes={false}`) and ends with its totals — no gap left behind.
  */
 export function SelectionPanel({
   services,
   onRemove,
   onChooseTimes,
   disabled = false,
+  offersChooseTimes = true,
   className,
 }: {
   services: readonly BookableService[];
   onRemove: (serviceId: string) => void;
   onChooseTimes: () => void;
   disabled?: boolean;
+  /** False where the sticky bar already offers « Choisir un horaire » (phone, tablet). */
+  offersChooseTimes?: boolean;
   className?: string;
 }) {
   const tooLong = isSelectionTooLong(services);
@@ -194,9 +200,11 @@ export function SelectionPanel({
         </>
       )}
       {tooLong ? <TooLongNote /> : null}
-      <Button type="button" size="lg" disabled={disabled || services.length === 0 || tooLong} onClick={onChooseTimes} className="w-full">
-        Choisir un horaire
-      </Button>
+      {offersChooseTimes ? (
+        <Button type="button" size="lg" disabled={disabled || services.length === 0 || tooLong} onClick={onChooseTimes} className="w-full">
+          Choisir un horaire
+        </Button>
+      ) : null}
     </aside>
   );
 }

@@ -23,8 +23,10 @@ import { cn } from "@/lib/utils";
  * The browser makes the page behind it inert and closes it on Escape;
  * `presentModalDialog` adds the first focus (« Fermer le détail »), the
  * backdrop press and the focus back on « Voir le détail ». While it is open the
- * page does not scroll (`data-scroll-lock`, globals.css); the description
- * scrolls inside the panel (keyboard included: it is a focusable region). It
+ * page does not scroll — a swipe on it is stopped (`presentModalDialog`), and
+ * with a mouse the page's scrollbar goes away (`data-scroll-lock`, globals.css);
+ * the description scrolls inside the panel (keyboard included: it is a
+ * focusable region). It fades in where it stays, never travelling. It
  * touches nothing of the booking: no selection, date, time or detail changes.
  */
 export function ServiceDetailDialog({
@@ -89,13 +91,14 @@ export function ServiceDetailDialogView({
       <div
         data-dialog-panel=""
         className={cn(
-          // Phone: a bottom sheet, as tall as its content, 85 % of the viewport at most.
-          "flex max-h-[85vh] w-full flex-col overflow-hidden bg-background supports-[height:100dvh]:max-h-[85dvh]",
+          // Phone: a bottom sheet, as tall as its content, 85 % of the viewport at most — the SMALL
+          // viewport (svh): its size never follows Safari's toolbars while it is open.
+          "flex max-h-[85vh] w-full flex-col overflow-hidden bg-background supports-[height:100svh]:max-h-[85svh]",
           "rounded-t-[1.75rem] pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(31,28,61,0.18)]",
-          "motion-safe:animate-[bz-sheet-in_var(--bz-duration-panel)_var(--bz-ease-out)_both]",
+          // It fades in where it stays — never travelling: its first frame is already its place.
+          "motion-safe:animate-[bz-fade_var(--bz-duration-disclosure)_var(--bz-ease-out)_both]",
           // Tablet and desktop: a centered modal, its reading width kept.
-          "sm:max-h-[min(85vh,46rem)] sm:max-w-[38rem] sm:rounded-[1.75rem] sm:pb-0 sm:shadow-[0_24px_64px_rgba(31,28,61,0.24)] sm:supports-[height:100dvh]:max-h-[min(85dvh,46rem)]",
-          "sm:motion-safe:animate-[bz-dialog-in_var(--bz-duration-disclosure)_var(--bz-ease-out)_both]",
+          "sm:max-h-[min(85vh,46rem)] sm:max-w-[38rem] sm:rounded-[1.75rem] sm:pb-0 sm:shadow-[0_24px_64px_rgba(31,28,61,0.24)] sm:supports-[height:100svh]:max-h-[min(85svh,46rem)]",
         )}
       >
         <div aria-hidden="true" className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-foreground/15 sm:hidden" />

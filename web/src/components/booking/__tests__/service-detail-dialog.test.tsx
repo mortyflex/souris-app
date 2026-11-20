@@ -54,14 +54,22 @@ describe("ServiceDetailDialog — a real dialog", () => {
     expect(markup.indexOf("Fermer le détail")).toBeLessThan(markup.indexOf('role="region"'));
   });
 
-  it("locks the page's scroll while it is open (globals.css), and scrolls its own description", () => {
+  it("keeps the page still while it is open, and scrolls its own description", () => {
     const markup = dialog();
     expect(markup).toMatch(/<dialog[^>]*data-scroll-lock=""/);
     expect(markup).toMatch(/<div role="region" aria-label="Description de la prestation" tabindex="0" class="[^"]*overflow-y-auto overscroll-contain/);
     // The end of a long text fades out over the bottom padding (at least 1.5rem), never over a last line.
     expect(markup).toMatch(/role="region"[^>]*class="[^"]*pb-7 \[mask-image:linear-gradient\(to_bottom,#000_calc\(100%-1\.5rem\),transparent\)\][^"]*sm:pb-8/);
+  });
+
+  it("globals.css: never a smooth scroll behind it; the root's scrolling switched off ONLY with a mouse or a trackpad", () => {
     const globals = readFileSync(path.join(__dirname, "../../../app/globals.css"), "utf8");
-    expect(globals).toMatch(/html:has\(dialog\[data-scroll-lock\]\[open\]\) \{\s*overflow: hidden;\s*scrollbar-gutter: stable;\s*\}/);
+    expect(globals).toMatch(/html:has\(dialog\[data-scroll-lock\]\[open\]\) \{\s*scroll-behavior: auto;\s*\}/);
+    // The root's overflow changes only inside the fine-pointer query: on a touch screen (iOS Safari) the page's own
+    // scrolling — and with it the browser's toolbars and every fixed element — is left alone.
+    const media = /@media \(hover: hover\) and \(pointer: fine\) \{\s*html:has\(dialog\[data-scroll-lock\]\[open\]\) \{\s*overflow: hidden;\s*scrollbar-gutter: stable;\s*\}\s*\}/;
+    expect(globals).toMatch(media);
+    expect(globals.replace(media, "").match(/overflow: hidden/g)).toBeNull();
   });
 });
 
@@ -120,7 +128,7 @@ describe("ServiceDetailDialog — a bottom sheet on a phone, a modal from the sm
     const markup = dialog();
     expect(attribute(markup, "dialog", "class")?.split(" ")).toEqual(expect.arrayContaining(["items-end", "justify-center"]));
     expect(panel(markup)).toEqual(
-      expect.arrayContaining(["w-full", "max-h-[85vh]", "supports-[height:100dvh]:max-h-[85dvh]", "rounded-t-[1.75rem]", "pb-[max(0.5rem,env(safe-area-inset-bottom))]"]),
+      expect.arrayContaining(["w-full", "max-h-[85vh]", "supports-[height:100svh]:max-h-[85svh]", "rounded-t-[1.75rem]", "pb-[max(0.5rem,env(safe-area-inset-bottom))]"]),
     );
     // A discreet handle, decorative only, never on a larger screen.
     expect(markup).toMatch(/<div aria-hidden="true" class="[^"]*h-1\.5 w-10[^"]*sm:hidden"><\/div>/);
@@ -129,19 +137,26 @@ describe("ServiceDetailDialog — a bottom sheet on a phone, a modal from the sm
   it("tablet and desktop: centered, about 600 px wide, rounded all around", () => {
     const markup = dialog();
     expect(attribute(markup, "dialog", "class")?.split(" ")).toEqual(expect.arrayContaining(["sm:items-center", "sm:p-6"]));
-    expect(panel(markup)).toEqual(expect.arrayContaining(["sm:max-w-[38rem]", "sm:rounded-[1.75rem]", "sm:max-h-[min(85vh,46rem)]", "sm:pb-0"]));
+    expect(panel(markup)).toEqual(
+      expect.arrayContaining(["sm:max-w-[38rem]", "sm:rounded-[1.75rem]", "sm:max-h-[min(85vh,46rem)]", "sm:supports-[height:100svh]:max-h-[min(85svh,46rem)]", "sm:pb-0"]),
+    );
   });
 
-  it("moves only when motion is welcome: every entrance is motion-safe", () => {
+  it("its height never follows Safari's toolbars: the SMALL viewport (svh), never the dynamic one (dvh)", () => {
+    expect(panel(dialog()).filter((name) => name.includes("dvh"))).toEqual([]);
+  });
+
+  it("appears WHERE IT STAYS: one fade, motion-safe — never a travel from the screen's edge, on any screen", () => {
     const markup = dialog();
     const animations = [...markup.matchAll(/(\S*)animate-\[[^\]]+\]/g)].map((match) => match[0]);
-    expect(animations.length).toBeGreaterThanOrEqual(3);
     for (const animation of animations) expect(animation).toMatch(/motion-safe:/);
-    expect(markup).toContain("animate-[bz-sheet-in_");
-    expect(markup).toContain("animate-[bz-dialog-in_");
+    // The panel: ONE entrance for the sheet and the modal alike; the backdrop: its own fade.
+    expect(panel(markup).filter((name) => name.includes("animate-"))).toEqual(["motion-safe:animate-[bz-fade_var(--bz-duration-disclosure)_var(--bz-ease-out)_both]"]);
+    expect(markup).not.toMatch(/bz-sheet-in|bz-dialog-in|translate/);
     const motion = readFileSync(path.join(__dirname, "../../../styles/motion.css"), "utf8");
-    expect(motion).toMatch(/@keyframes bz-sheet-in \{/);
-    expect(motion).toMatch(/@keyframes bz-dialog-in \{/);
+    expect(motion).not.toMatch(/bz-sheet-in|bz-dialog-in/);
+    // bz-fade only changes the opacity: the first frame is the final place.
+    expect(motion).toMatch(/@keyframes bz-fade \{ from \{ opacity: 0; \} \}/);
   });
 
   it("the stateful dialog renders the same markup (the browser shows it, then focuses « Fermer le détail »)", () => {

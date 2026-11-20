@@ -151,7 +151,13 @@ describe("« Ouvrir avec » — a bottom sheet on a phone, a small panel on a ta
   it("phone: anchored to the bottom, above the home indicator (safe area), as tall as its rows", () => {
     const markup = chooser();
     expect(attribute(markup.match(/<dialog ([^>]*)>/)![1]!, "class")?.split(" ")).toEqual(expect.arrayContaining(["items-end", "justify-center"]));
-    expect(panel(markup)).toEqual(expect.arrayContaining(["w-full", "rounded-t-[1.75rem]", "pb-[max(0.75rem,env(safe-area-inset-bottom))]", "max-h-[85vh]"]));
+    // The last row stays clear of the screen's bottom edge (the note under it, then at least 1rem); its height
+    // never follows Safari's toolbars: the SMALL viewport (svh), never the dynamic one (dvh).
+    expect(panel(markup)).toEqual(
+      expect.arrayContaining(["w-full", "rounded-t-[1.75rem]", "pb-[max(1rem,env(safe-area-inset-bottom))]", "max-h-[85vh]", "supports-[height:100svh]:max-h-[85svh]"]),
+    );
+    expect(panel(markup).filter((name) => name.includes("dvh"))).toEqual([]);
+    expect(markup.indexOf('data-provider="google"')).toBeLessThan(markup.indexOf("L’application s’ouvre"));
     expect(markup).toMatch(/<div aria-hidden="true" class="[^"]*h-1\.5 w-10[^"]*sm:hidden"><\/div>/);
   });
 
@@ -161,11 +167,13 @@ describe("« Ouvrir avec » — a bottom sheet on a phone, a small panel on a ta
     expect(panel(markup)).toEqual(expect.arrayContaining(["sm:max-w-[26rem]", "sm:rounded-[1.75rem]"]));
   });
 
-  it("moves only when motion is welcome: every entrance is motion-safe", () => {
+  it("appears WHERE IT STAYS — one fade, only when motion is welcome: a row is where a finger lands from the first frame", () => {
     const markup = chooser();
     const animations = [...markup.matchAll(/(\S*)animate-\[[^\]]+\]/g)].map((match) => match[0]);
-    expect(animations.length).toBeGreaterThanOrEqual(3);
     for (const animation of animations) expect(animation).toMatch(/motion-safe:/);
+    // ONE entrance for the sheet and the tablet panel alike — never a travel from the screen's edge.
+    expect(panel(markup).filter((name) => name.includes("animate-"))).toEqual(["motion-safe:animate-[bz-fade_var(--bz-duration-disclosure)_var(--bz-ease-out)_both]"]);
+    expect(markup).not.toMatch(/bz-sheet-in|bz-dialog-in|translate/);
   });
 });
 

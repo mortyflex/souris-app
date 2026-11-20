@@ -40,6 +40,7 @@ import {
   type Professional,
   type SlotsView,
 } from "./booking-steps";
+import { LINK_FEEDBACK } from "./text-link";
 import { TurnstileWidget } from "./turnstile-widget";
 
 export interface BookingFlowProps {
@@ -504,7 +505,13 @@ export function BookingFlow({ slug, professional, profileHref, challengeSiteKey,
         ) : (
           <a
             href={profileHref}
-            className="type-body-small inline-flex min-h-8 items-center gap-2 self-start font-semibold text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700"
+            className={cn(
+              // A 44 × 44 target drawn where the old 32 px link was: 6 px more above and below, 8 px on each side —
+              // the negative margins give that room back, so the arrow, the name and the heading never move. A small
+              // radius (8 px) for the focus ring only: the whole rectangle stays tappable, corners included.
+              "type-body-small -my-1.5 -ml-2 inline-flex min-h-11 min-w-11 items-center gap-2 self-start rounded-sm px-2 font-semibold text-lavender-700",
+              LINK_FEEDBACK,
+            )}
           >
             <ArrowLeftIcon size={16} />
             {professional.name}

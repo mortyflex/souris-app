@@ -51,7 +51,9 @@ import { ProviderTile } from "./provider-mark";
  * behind it is inert, Escape, « Fermer » and a press on the backdrop close it,
  * the first focus goes to « Fermer » and the focus comes back to the trigger.
  * A bottom sheet on a phone (above the safe area), a small centred panel on a
- * tablet; it moves only when motion is welcome. Each row is a link to one
+ * tablet; it fades in where it stays — never travelling, so a row is where the
+ * finger lands from the first frame — and only when motion is welcome; a swipe
+ * on it never scrolls the page behind (`presentModalDialog`). Each row is a link to one
  * application in a new tab: the booking flow behind keeps every choice. It
  * never redirects by itself, never tries an application scheme, never asks
  * for a position.
@@ -234,13 +236,14 @@ export function DirectionsChooserView({
       <div
         data-dialog-panel=""
         className={cn(
-          // Phone: a bottom sheet as tall as its few rows, above the home indicator.
-          "flex max-h-[85vh] w-full flex-col overflow-y-auto overscroll-contain bg-background supports-[height:100dvh]:max-h-[85dvh]",
-          "rounded-t-[1.75rem] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(31,28,61,0.18)]",
-          "motion-safe:animate-[bz-sheet-in_var(--bz-duration-panel)_var(--bz-ease-out)_both]",
+          // Phone: a bottom sheet as tall as its few rows, above the home indicator, its last row kept
+          // clear of the screen's bottom edge; its height never follows Safari's toolbars (svh).
+          "flex max-h-[85vh] w-full flex-col overflow-y-auto overscroll-contain bg-background supports-[height:100svh]:max-h-[85svh]",
+          "rounded-t-[1.75rem] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(31,28,61,0.18)]",
+          // It fades in where it stays — it never travels: from the first frame its rows are where a finger lands.
+          "motion-safe:animate-[bz-fade_var(--bz-duration-disclosure)_var(--bz-ease-out)_both]",
           // Tablet: a small centred panel.
           "sm:max-w-[26rem] sm:rounded-[1.75rem] sm:pb-2 sm:shadow-[0_24px_64px_rgba(31,28,61,0.24)]",
-          "sm:motion-safe:animate-[bz-dialog-in_var(--bz-duration-disclosure)_var(--bz-ease-out)_both]",
         )}
       >
         <div aria-hidden="true" className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-foreground/15 sm:hidden" />

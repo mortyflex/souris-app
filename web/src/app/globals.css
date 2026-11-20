@@ -35,10 +35,21 @@
   }
 
   /* A modal dialog is open (`data-scroll-lock`): the page behind it stays still — only the
-     dialog scrolls. The gutter keeps the page from shifting when its scrollbar goes away. */
+     dialog scrolls. Never a smooth scroll meanwhile: a browser adjustment (focus, restoration)
+     would otherwise glide the page visibly behind the dialog. */
   html:has(dialog[data-scroll-lock][open]) {
-    overflow: hidden;
-    scrollbar-gutter: stable;
+    scroll-behavior: auto;
+  }
+
+  /* With a mouse or a trackpad, the page's scrollbar also goes away — its gutter kept, so nothing
+     shifts. On a touch screen the root's scrolling is never switched off: a change of the root's
+     overflow there can make Safari re-lay out its toolbars and every fixed element, the dialog
+     included (iOS). `presentModalDialog` stops the swipes that would scroll the page instead. */
+  @media (hover: hover) and (pointer: fine) {
+    html:has(dialog[data-scroll-lock][open]) {
+      overflow: hidden;
+      scrollbar-gutter: stable;
+    }
   }
 
   :focus-visible {

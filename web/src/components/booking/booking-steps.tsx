@@ -27,6 +27,7 @@ import { DateStrip } from "./date-strip";
 import { LocationLines, LocationPanel } from "./location-card";
 import { groupSlotsByPeriod, skeletonCount } from "./date-strip-rules";
 import { ServiceCard } from "./service-card";
+import { TEXT_LINK } from "./text-link";
 import {
   ChangesList,
   INDICATIVE_NOTE,
@@ -61,8 +62,7 @@ export interface Professional {
 }
 
 const quiet = "type-body-small text-foreground/70";
-const link =
-  "font-medium text-lavender-700 underline decoration-lavender-200 decoration-2 underline-offset-4 hover:decoration-lavender-700";
+const link = TEXT_LINK;
 
 /** « Lundi 16 novembre » */
 export function capitalized(text: string): string {
@@ -381,11 +381,14 @@ export function ServiceStep({
       )}
       {selection !== undefined ? (
         <>
+          {/* Phone and tablet: the selection at the end of the step, and ONE « Choisir un horaire » —
+              the sticky bar's, which follows the reader then docks right under this card. */}
           <SelectionPanel
             services={selection.services}
             onRemove={selection.onRemove}
             onChooseTimes={selection.onChooseTimes}
             disabled={loading}
+            offersChooseTimes={false}
             className={cn("flex lg:hidden", selection.services.length === 0 && "hidden")}
           />
           <SelectionStickyBar services={selection.services} onChooseTimes={selection.onChooseTimes} disabled={loading} className="lg:hidden" />
@@ -572,6 +575,8 @@ export function SlotStep({
             </button>
           </p>
         </div>
+
+        {professional?.location ? <StepLocation location={professional.location} /> : null}
 
         {cannotFit ? (
           <CannotFit view={slots} professional={professional} onChangeService={onChangeService} />
@@ -841,11 +846,7 @@ export function AppointmentSummary({
             <strong className="font-semibold">{professional.name}</strong>
           </SummaryLine>
         ) : null}
-        {professional?.location ? (
-          <SummaryLine icon={<PinIcon size={17} />} label={professional.location.kind === "address" ? "Adresse" : "Lieu"}>
-            <LocationLines location={professional.location} />
-          </SummaryLine>
-        ) : null}
+        {professional?.location ? <LocationSummaryLine location={professional.location} /> : null}
         <SummaryLine icon={<CalendarIcon size={17} />} label="Date et horaire">
           {date ? <span className={cn("block", slot ? "font-semibold" : "text-foreground/60")}>{capitalized(formatLongDate(date))}</span> : null}
           {slot ? (
@@ -857,6 +858,34 @@ export function AppointmentSummary({
       </dl>
       {children}
     </aside>
+  );
+}
+
+/**
+ * Phone and tablet: where the appointment takes place, under the heading of the
+ * date step and of the details step — the very line the desktop summary holds
+ * beside those steps, hidden from the desktop breakpoint up so it is never said
+ * twice. Compact: no map, the published lines and « Itinéraire » only.
+ */
+function StepLocation({ location }: { location: LocationView }) {
+  return (
+    <dl data-location-summary={location.kind} className="rounded-[1.25rem] bg-lavender-25 px-4 pt-3.5 ring-1 ring-lavender-100 lg:hidden">
+      <LocationSummaryLine location={location} />
+    </dl>
+  );
+}
+
+/**
+ * Where the appointment takes place, as ONE line of a summary — what the page
+ * publishes and nothing more (`LocationView`): « Adresse », its two lines and
+ * « Itinéraire » (the visitor's own platform behaviour), or « Lieu » and the
+ * city alone, without any link. A page without a location renders none.
+ */
+function LocationSummaryLine({ location }: { location: LocationView }) {
+  return (
+    <SummaryLine icon={<PinIcon size={17} />} label={location.kind === "address" ? "Adresse" : "Lieu"}>
+      <LocationLines location={location} />
+    </SummaryLine>
   );
 }
 
@@ -934,6 +963,7 @@ export function DetailsStep({
           ce rendez-vous.
         </p>
       </div>
+      {professional.location ? <StepLocation location={professional.location} /> : null}
       <form
         noValidate
         className="flex flex-col gap-5"
@@ -1027,7 +1057,7 @@ function EditButton({ label, onClick, state }: { label: string; onClick: () => v
       type="button"
       onClick={onClick}
       disabled={state === "busy"}
-      className={cn(link, "type-body-small min-h-11 shrink-0 disabled:cursor-default disabled:opacity-40 disabled:no-underline")}
+      className={cn(link, "type-body-small min-h-11 shrink-0 disabled:cursor-default disabled:opacity-40")}
       aria-label={label}
     >
       Modifier

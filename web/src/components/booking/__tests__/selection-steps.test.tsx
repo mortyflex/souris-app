@@ -135,6 +135,80 @@ describe("the services step — several services", () => {
   });
 });
 
+/** The asides and the sticky bar of a services step, each with what it holds and where it shows. */
+function screensOf(markup: string) {
+  const screen = (kind: "panel" | "sticky-bar", body: string) => {
+    const classes = /class="([^"]*)"/.exec(body.slice(0, body.indexOf(">") + 1))?.[1].split(" ") ?? [];
+    const where = classes.includes("lg:hidden") ? "phone-tablet" : classes.includes("hidden") && classes.includes("lg:flex") ? "desktop" : "everywhere";
+    return { kind, where, ctas: (body.match(/>Choisir un horaire<\/button>/g) ?? []).length, body };
+  };
+  const screens = [...markup.matchAll(/<aside\b/g)].map((match) => {
+    const from = match.index ?? 0;
+    return screen("panel", markup.slice(from, markup.indexOf("</aside>", from) + "</aside>".length));
+  });
+  const bar = markup.indexOf("<div data-sticky-cta");
+  // The sticky bar is the last thing of the step's section.
+  if (bar >= 0) screens.push(screen("sticky-bar", markup.slice(bar, markup.indexOf("</section>", bar))));
+  return screens;
+}
+
+describe("ONE « Choisir un horaire » per screen (Step 196)", () => {
+  const markup = serviceStep([coupe, couleur, diagnostic], [couleur, coupe]);
+  const screens = screensOf(markup);
+
+  it("phone and tablet: the sticky bar's — the selection card above it no longer repeats it", () => {
+    const below = screens.filter((screen) => screen.where === "phone-tablet");
+    expect(below.map((screen) => [screen.kind, screen.ctas])).toEqual([
+      ["panel", 0],
+      ["sticky-bar", 1],
+    ]);
+  });
+
+  it("desktop: the selection card's — and no sticky bar there", () => {
+    const desktop = screens.filter((screen) => screen.where === "desktop");
+    expect(desktop.map((screen) => [screen.kind, screen.ctas])).toEqual([["panel", 1]]);
+    expect(screens.filter((screen) => screen.where === "everywhere")).toEqual([]);
+  });
+
+  it("the phone's card keeps everything else: her services in order, « Retirer », the totals — and ends with them", () => {
+    const card = screens.find((screen) => screen.where === "phone-tablet" && screen.kind === "panel")!.body;
+    const words = text(card);
+    expect(words.indexOf("Couleur")).toBeLessThan(words.indexOf("Coupe"));
+    expect(card.match(/Retirer/g)?.length).toBe(2);
+    expect(words).toContain("Durée totale 2 h 15");
+    expect(words).toContain("Total indicatif 134,50 €");
+    // Nothing after the totals' note: no empty space where the button was.
+    expect(card).toMatch(/Tarifs indicatifs · aucun paiement en ligne\.<\/p><\/div><\/aside>$/);
+  });
+
+  it("the sticky bar says the count, the combined length and the total beside its button", () => {
+    const bar = text(screens.find((screen) => screen.kind === "sticky-bar")!.body);
+    expect(bar).toContain("2 prestations · 2 h 15");
+    expect(bar).toContain("134,50 €");
+  });
+
+  it("while the list is read again, the one button of each screen waits — disabled, never hidden", () => {
+    const loading = renderToStaticMarkup(
+      <ServiceStep services={[coupe, couleur]} professional={professional} onChoose={noop} loading selection={selection([coupe])} />,
+    );
+    const buttons = loading.match(/<button[^>]*>Choisir un horaire<\/button>/g) ?? [];
+    expect(buttons).toHaveLength(2); // the sticky bar's (phone, tablet) and the card's (desktop)
+    for (const button of buttons) expect(button).toMatch(/disabled=""/);
+  });
+
+  it("over 12 hours: the phone's one button is disabled, and the card above it says why", () => {
+    const long = [
+      { ...coupe, durationMinutes: 400 },
+      { ...couleur, durationMinutes: 400 },
+    ];
+    const below = screensOf(serviceStep(long, long)).filter((screen) => screen.where === "phone-tablet");
+    expect(text(below.find((screen) => screen.kind === "panel")!.body)).toContain("Votre sélection dépasse 12 h");
+    const bar = below.find((screen) => screen.kind === "sticky-bar")!.body;
+    expect(text(bar)).toContain("Plus de 12 h");
+    expect(bar).toMatch(/<button[^>]*disabled=""[^>]*>Choisir un horaire<\/button>/);
+  });
+});
+
 describe("the times of a selection", () => {
   const base = {
     services: [couleur, coupe],
